@@ -17,6 +17,16 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 - Deployment is a self-hosted Docker Compose package: no Kubernetes, no multi-tenancy, Postgres is the only datastore, Git is the source of truth for documents (ADR-0006/0007/0010). Do not add infrastructure dependencies without an ADR.
 - Keep the engine small (ADR-0014): no code graph or language parsers, no unit-discovery configuration, no runtime-agent configuration in repos. Built-in agents are defined in `services/runtime`.
 
+## Backend rules (apps/api)
+
+- Feature modules follow the DDD anatomy in [`apps/api/README.md`](apps/api/README.md): `domain/` (entity + port), `application/` (use cases), `infrastructure/` (adapters), `interface/` (controllers + zod DTOs), plus the `<feature>.module.ts` wiring.
+- Dependencies point **inward only**: `interface → application → domain`; `infrastructure` implements `domain` ports. Never import `interface` from `application`/`domain`, never import another module's internals — use its module exports.
+- Reuse the shared kernel in `apps/api/src/common/` (`Repository`, `CrudService`, `InMemoryRepository`, zod helpers, pagination, response envelope, `retry`/`sleep`/`chunk`, `nowIso`, Postgres pool, secret crypto). If two modules need the same logic, it goes to `common/` or `@kintsugi/domain` — never duplicated per module.
+- **Common-first, both directions**: before implementing anything reusable (≥2 call sites, extensible by design), build the common piece first and implement on top of it. Before writing any logic, scan `common/` and `@kintsugi/domain` — if something fits, use it instead of writing new code.
+- Every response uses the uniform envelope: `{ success: true, data }` / `{ success: false, statusCode, error, message, timestamp, path }`. Controllers return plain values; do not hand-wrap responses.
+- Database: one database, **one schema per domain** (`core`, `admin`, `delivery`, `monitoring`, `governance`, `knowledge`, `workflow`). Migrations (`apps/api/migrations/*.sql`) create their schema and fully qualify table names — no `search_path` reliance.
+- Credentials (LLM keys, Git tokens) are stored **encrypted** (ADR-0009, `KINTSUGI_SECRET_KEY`) and never returned by the API. Provider settings live in the database and are managed in the portal — not in environment variables.
+
 ## Commits
 - Follow [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<optional scope>): <subject>`, with a lowercase imperative subject.
   - Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
