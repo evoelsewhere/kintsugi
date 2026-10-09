@@ -1,7 +1,16 @@
+// Wiring of the reviews module: interface + application + the
+// infrastructure adapter bound to the domain port.
+
 import { Module } from "@nestjs/common";
-import { ReviewsController } from "./reviews.controller.js";
-import { ReviewsService } from "./reviews.service.js";
+import { ReviewsService } from "./application/reviews.service.js";
+import { ReviewRepository } from "./domain/review.repository.js";
+import { InMemoryReviewRepository } from "./infrastructure/in-memory-review.repository.js";
+import { ReviewsController } from "./interface/reviews.controller.js";
 
 /** governance · review & approval — docs/architecture/05-building-block-view.md. */
-@Module({ controllers: [ReviewsController], providers: [ReviewsService], exports: [ReviewsService] })
+@Module({
+  controllers: [ReviewsController],
+  providers: [ReviewsService, { provide: ReviewRepository, useClass: InMemoryReviewRepository }],
+  exports: [ReviewsService, ReviewRepository],
+})
 export class ReviewsModule {}

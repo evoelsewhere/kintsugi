@@ -3,19 +3,32 @@
 // same container; this process owns the /api routes.
 
 import "reflect-metadata";
-import { StandardSchemaValidationPipe } from "@nestjs/common";
+import { existsSync } from "node:fs";
+import { Logger, StandardSchemaValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
 import { loadEnv } from "./common/config/env.js";
+import { ensureSchema } from "./common/db/pool.js";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter.js";
+import { ResponseInterceptor } from "./common/interface/response.js";
+
+/** Local development configuration lives in .env (gitignored); the compose package passes env directly. */
+if (existsSync(".env")) process.loadEnvFile(".env");
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
   const app = await NestFactory.create(AppModule, { logger: [env.logLevel] });
 
+  try {
+    await ensureSchema();
+  } catch (error) {
+    new Logger("Bootstrap").error(`database schema check failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   app.setGlobalPrefix("api");
   app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalPipes(new StandardSchemaValidationPipe());
 
   const openApi = new DocumentBuilder()
