@@ -1,7 +1,8 @@
 // Secret encryption for credentials stored in Postgres (ADR-0009, data model:
-// LlmProvider(config, secretRef)). The master key comes from the installation
-// environment (deploy/compose/.env.example → KINTSUGI_SECRET_KEY) — it is deployment
-// configuration, never provider configuration.
+// LlmProvider(config, secretRef)). Shared by apps/api (registry management) and
+// services/runtime (the launcher resolving job credentials).
+// The master key comes from the installation environment (deploy/compose/.env.example
+// → KINTSUGI_SECRET_KEY) — deployment configuration, never provider configuration.
 
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
