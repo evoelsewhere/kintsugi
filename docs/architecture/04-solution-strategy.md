@@ -20,13 +20,13 @@
 | Concern | Choice | Status |
 |---|---|---|
 | Language / monorepo | TypeScript, pnpm + Turborepo | ✅ [0002](../decisions/0002-typescript-monorepo.md) |
-| Agent runtime | pi SDK (`@earendil-works/pi-coding-agent`, pinned) in a Node runner | ✅ [0001](../decisions/0001-pi-as-kintsugi-runtime.md), [0004](../decisions/0004-runner-container-per-job.md) |
+| Agent runtime | pi SDK (`@earendil-works/pi-coding-agent`, exact pin, currently 1.1.0) in a Node runner | ✅ [0001](../decisions/0001-pi-as-kintsugi-runtime.md), [0004](../decisions/0004-runner-container-per-job.md), [0018](../decisions/0018-pin-pi-exact-version.md) |
 | Orchestration | pg-boss + state machine in Postgres | ✅ [0003](../decisions/0003-postgres-job-queue.md) |
 | Data | PostgreSQL 16+ with pgvector (text KB, no graph) | ✅ [0010](../decisions/0010-postgres-only.md), [0014](../decisions/0014-no-code-graph-no-agent-config.md) |
 | Live updates | Outbox + `LISTEN/NOTIFY` → SSE | ✅ [0010](../decisions/0010-postgres-only.md) |
 | Auth | Local username/password (argon2id), sessions, PATs; Entra ID later | ✅ [0008](../decisions/0008-authentication.md) |
-| API | REST + OpenAPI; NestJS or Fastify | 🟡 D10 |
-| Portal | React SPA (Vite) + shadcn/ui | 🟡 D11 |
+| API | REST + OpenAPI; NestJS 12 (ESM) + Standard Schema validation | ✅ [0016](../decisions/0016-nestjs-api-framework.md) |
+| Portal | React 19 SPA (Vite) + shadcn/ui on Tailwind v4, static build served by `kintsugi-app` | ✅ [0017](../decisions/0017-portal-vite-react-shadcn.md) |
 | Code analysis | None: agents read source files directly + text KB search | ✅ [0014](../decisions/0014-no-code-graph-no-agent-config.md) |
 | Document conversion | Python sidecar (docling / markitdown) for xlsx/docx → md | ⬜ D15 |
 
