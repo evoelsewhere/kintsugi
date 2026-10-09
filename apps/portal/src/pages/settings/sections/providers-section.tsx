@@ -1,6 +1,6 @@
 // Providers — the LLM provider registry UI (Settings → Providers).
-// Full CRUD against /api/admin/llm-providers (ADR-0009): credentials are write-only,
-// settings live in the database. Includes agent → model bindings.
+// Full CRUD against /api/admin/llm-providers (ADR-0009): providers as list rows,
+// agent → model bindings as a compact editor. Credentials are write-only.
 
 import { RUNTIME_AGENTS, type ThinkingLevel } from "@kintsugi/domain";
 import { PlugZap, Plus, Settings2, Trash2 } from "lucide-react";
@@ -8,6 +8,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
+import { ProviderIcon } from "../../../components/ui/provider-icon";
+import { Select, type SelectOption } from "../../../components/ui/select";
 import { StatusDot } from "../../../components/ui/status-dot";
 import {
   providersApi,
@@ -17,9 +19,13 @@ import {
   type ReplaceProviderInput,
   type TestConnectionResult,
 } from "../../../lib/api/providers";
+import { cn } from "../../../lib/utils";
 import { ProviderFormDialog } from "./provider-form-dialog";
 
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+
+const AGENT_OPTIONS: SelectOption[] = RUNTIME_AGENTS.map((agent) => ({ value: agent, label: agent }));
+const THINKING_OPTIONS: SelectOption[] = [{ value: "", label: "Default" }, ...THINKING_LEVELS.map((level) => ({ value: level, label: level }))];
 
 export function ProvidersSection(): React.JSX.Element {
   const [providers, setProviders] = useState<ProviderView[]>([]);
@@ -74,16 +80,17 @@ export function ProvidersSection(): React.JSX.Element {
     }
   }
 
+  const providerOptions: SelectOption[] = providers.map((provider) => ({ value: provider.id, label: provider.id, hint: provider.kind }));
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex flex-col gap-5">
+      {/* Toolbar */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="h-subtitle text-text">LLM providers</h2>
-          <p className="mt-1 text-[13px] text-text-secondary">
-            Registry used by the Kintsugi runtime (ADR-0009). Settings are stored in the database; credentials are encrypted at rest.
-          </p>
+          <h2 className="text-[15px] font-medium text-text">LLM providers</h2>
+          <p className="mt-0.5 text-[12px] text-text-muted">Registry used by the Kintsugi runtime (ADR-0009) — credentials are encrypted at rest.</p>
         </div>
-        <Button variant="solid" onClick={() => setDialog({ open: true, provider: null })}>
+        <Button size="small" variant="solid" onClick={() => setDialog({ open: true, provider: null })}>
           <Plus className="size-4" />
           Add provider
         </Button>
@@ -91,165 +98,122 @@ export function ProvidersSection(): React.JSX.Element {
 
       {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
 
-      {providers.length === 0 ? (
-        <Card>
-          <CardContent>
-            <p className="text-[13px] text-text-secondary">No providers configured yet. Add one to let runtime agents call models.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {providers.map((provider) => {
-            const test_ = tests[provider.id];
+      {/* Provider list */}
+      <Card className="overflow-hidden p-0">
+        {providers.length === 0 ? (
+          <p className="px-4 py-8 text-center text-[13px] text-text-secondary">No providers configured yet — add one to let runtime agents call models.</p>
+        ) : (
+          providers.map((provider, index) => {
+            const testResult = tests[provider.id];
             return (
-              <Card key={provider.id}>
-                <CardHeader>
-                  <div>
-                    <CardTitle>{provider.id}</CardTitle>
-                    <CardDescription>
+              <div key={provider.id}>
+                <div className={cn("flex items-center gap-3 px-4 py-2.5", index > 0 && "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]")}>
+                  <ProviderIcon id={provider.kind === "builtin" ? (provider.piProvider ?? provider.id) : provider.id} label={provider.id} className="size-5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] text-text">{provider.id}</p>
+                    <p className="truncate text-[12px] text-text-muted">
                       {provider.kind === "builtin"
                         ? `pi catalog · ${provider.piProvider ?? "—"}`
                         : `${provider.api ?? "—"} · ${provider.baseUrl ?? "—"}`}
-                    </CardDescription>
+                    </p>
                   </div>
-                  <StatusDot tone={provider.hasApiKey ? "green" : "orange"} />
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
-                    <span className="rounded-[var(--geist-pill-radius)] bg-recessed px-2 py-0.5">{provider.kind}</span>
-                    <span className="rounded-[var(--geist-pill-radius)] bg-recessed px-2 py-0.5">
-                      {provider.kind === "custom" ? `${provider.models?.length ?? 0} models` : (provider.enabledModels?.length ?? 0) === 0 ? "all models" : `${provider.enabledModels?.length} models`}
-                    </span>
-                    <span className="rounded-[var(--geist-pill-radius)] bg-recessed px-2 py-0.5">{provider.hasApiKey ? "key stored" : "no key"}</span>
-                    {provider.enabled ? null : <span className="rounded-[var(--geist-pill-radius)] bg-recessed px-2 py-0.5">disabled</span>}
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-2">
-                    <Button size="small" onClick={() => setDialog({ open: true, provider })}>
+                  <span className="hidden shrink-0 items-center gap-1.5 text-[12px] text-text-secondary sm:inline-flex">
+                    <StatusDot tone={provider.hasApiKey ? "green" : "orange"} />
+                    {provider.hasApiKey ? "key stored" : "no key"}
+                  </span>
+                  {provider.enabled ? null : <span className="shrink-0 text-[12px] text-text-muted">disabled</span>}
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button size="small" variant="ghost" onClick={() => setDialog({ open: true, provider })}>
                       <Settings2 className="size-4" />
                       Configure
                     </Button>
-                    <Button size="small" onClick={() => void test(provider)}>
+                    <Button size="small" variant="ghost" onClick={() => void test(provider)}>
                       <PlugZap className="size-4" />
                       Test
                     </Button>
-                    <Button size="small" variant="danger" onClick={() => void remove(provider)}>
+                    <Button size="icon" variant="danger" aria-label={`Remove ${provider.id}`} onClick={() => void remove(provider)}>
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
-
-                  {test_ === undefined ? null : (
-                    <p className="mt-3 text-[12px] text-text-secondary">
-                      <StatusDot tone={test_.ok ? "green" : "red"} className="mr-1.5 align-middle" />
-                      {test_.message}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+                </div>
+                {testResult === undefined ? null : (
+                  <p className="flex items-center gap-1.5 px-4 pb-2.5 text-[12px] text-text-secondary">
+                    <StatusDot tone={testResult.ok ? "green" : "red"} />
+                    {testResult.message}
+                  </p>
+                )}
+              </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </Card>
 
+      {/* Agent model bindings */}
       <Card>
         <CardHeader>
           <div>
             <CardTitle>Agent model bindings</CardTitle>
-            <CardDescription>Which provider and model each runtime agent uses (blank project = installation default).</CardDescription>
+            <CardDescription>Provider and model per runtime agent — blank = installation default.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              size="small"
-              onClick={() =>
-                setBindings((prev) => [...prev, { agent: "assessment", provider: providers[0]?.id ?? "", model: "" }])
-              }
-            >
+            <Button size="small" variant="ghost" onClick={() => setBindings((prev) => [...prev, { agent: "assessment", provider: providers[0]?.id ?? "", model: "" }])}>
               <Plus className="size-4" />
               Add binding
             </Button>
-            <Button size="small" variant="solid" onClick={() => void saveBindings()}>
+            <Button size="small" variant="solid" onClick={() => void saveBindings()} disabled={bindings.length === 0}>
               Save bindings
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-1 gap-2 text-[11px] tracking-wider text-text-muted uppercase sm:grid-cols-[1.2fr_1fr_1fr_0.8fr_auto]">
-              <span>Agent</span>
-              <span>Provider</span>
-              <span>Model</span>
-              <span>Thinking</span>
-              <span className="w-9" />
+          {bindings.length === 0 ? (
+            <p className="text-[13px] text-text-muted">No bindings yet — agents fall back to the installation default.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {bindings.map((binding, index) => (
+                <div key={index} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1.1fr_1fr_1fr_0.8fr_auto]">
+                  <Select
+                    value={binding.agent}
+                    options={AGENT_OPTIONS}
+                    onChange={(value) =>
+                      setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, agent: value as AgentModelBindingInput["agent"] } : row)))
+                    }
+                  />
+                  <Select
+                    value={binding.provider}
+                    placeholder="Default"
+                    options={providerOptions}
+                    onChange={(value) => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, provider: value } : row)))}
+                  />
+                  <Input
+                    value={binding.model}
+                    placeholder="model id"
+                    className="h-[var(--geist-form-height)] text-[14px]"
+                    onChange={(event) => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, model: event.target.value } : row)))}
+                  />
+                  <Select
+                    value={binding.thinking ?? ""}
+                    options={THINKING_OPTIONS}
+                    onChange={(value) =>
+                      setBindings((prev) =>
+                        prev.map((row, i) => (i === index ? { ...row, thinking: (value === "" ? undefined : value) as ThinkingLevel | undefined } : row)),
+                      )
+                    }
+                  />
+                  <Button size="icon" variant="danger" aria-label="Remove binding" onClick={() => setBindings((prev) => prev.filter((_, i) => i !== index))}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
             </div>
-            {bindings.map((binding, index) => (
-              <div key={index} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1.2fr_1fr_1fr_0.8fr_auto]">
-                <select
-                  value={binding.agent}
-                  onChange={(event) =>
-                    setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, agent: event.target.value as AgentModelBindingInput["agent"] } : row)))
-                  }
-                  className="shadow-border h-9 rounded-[var(--geist-radius)] bg-transparent px-2 text-[13px] text-text focus-visible:outline-1 focus-visible:outline-[var(--ds-input-focus-color)] focus-visible:shadow-none"
-                >
-                  {RUNTIME_AGENTS.map((agent) => (
-                    <option key={agent} value={agent}>
-                      {agent}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={binding.provider}
-                  onChange={(event) => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, provider: event.target.value } : row)))}
-                  className="shadow-border h-9 rounded-[var(--geist-radius)] bg-transparent px-2 text-[13px] text-text focus-visible:outline-1 focus-visible:outline-[var(--ds-input-focus-color)] focus-visible:shadow-none"
-                >
-                  <option value="">—</option>
-                  {providers.map((provider) => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.id}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  value={binding.model}
-                  placeholder="model id"
-                  className="h-9 text-[13px]"
-                  onChange={(event) => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, model: event.target.value } : row)))}
-                />
-                <select
-                  value={binding.thinking ?? ""}
-                  onChange={(event) =>
-                    setBindings((prev) =>
-                      prev.map((row, i) =>
-                        i === index ? { ...row, thinking: (event.target.value === "" ? undefined : event.target.value) as ThinkingLevel | undefined } : row,
-                      ),
-                    )
-                  }
-                  className="shadow-border h-9 rounded-[var(--geist-radius)] bg-transparent px-2 text-[13px] text-text focus-visible:outline-1 focus-visible:outline-[var(--ds-input-focus-color)] focus-visible:shadow-none"
-                >
-                  <option value="">—</option>
-                  {THINKING_LEVELS.map((level) => (
-                    <option key={level} value={level}>
-                      {level}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  size="icon"
-                  variant="danger"
-                  aria-label="Remove binding"
-                  onClick={() => setBindings((prev) => prev.filter((_, i) => i !== index))}
-                >
-                  ×
-                </Button>
-              </div>
-            ))}
-            {bindings.length === 0 ? <p className="text-[13px] text-text-secondary">No bindings yet.</p> : null}
-          </div>
+          )}
         </CardContent>
       </Card>
 
       <ProviderFormDialog
         open={dialog.open}
         provider={dialog.provider}
+        existingIds={providers.map((entry) => entry.id)}
         onClose={() => setDialog({ open: false, provider: null })}
         onSubmit={save}
       />

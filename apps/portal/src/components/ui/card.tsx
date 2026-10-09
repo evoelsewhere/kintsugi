@@ -4,7 +4,7 @@ import * as React from "react";
 import { cn } from "../../lib/utils";
 
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>): React.JSX.Element {
-  return <div className={cn("shadow-border-medium rounded-xl bg-surface p-6", className)} {...props} />;
+  return <div className={cn("shadow-border-medium rounded-xl bg-surface p-4", className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>): React.JSX.Element {
@@ -16,13 +16,13 @@ export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHead
 }
 
 export function CardDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>): React.JSX.Element {
-  return <p className={cn("text-caption mt-1 text-text-secondary", className)} {...props} />;
+  return <p className={cn("text-caption mt-0.5 text-text-secondary", className)} {...props} />;
 }
 
 export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>): React.JSX.Element {
-  return <div className={cn("mt-4", className)} {...props} />;
+  return <div className={cn("mt-3", className)} {...props} />;
 }
 
 export function CardFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>): React.JSX.Element {
-  return <div className={cn("mt-4 flex items-center gap-2", className)} {...props} />;
+  return <div className={cn("mt-3 flex items-center gap-2", className)} {...props} />;
 }
