@@ -15,17 +15,20 @@ src/
   main.tsx               entry
   App.tsx                routes (react-router)
   layout/
-    app-shell.tsx        header + sidebar + content (max --geist-page-width)
-    header.tsx           64px header, shadow-as-border bottom edge
-    sidebar.tsx          primary navigation
+    panel-shell.tsx      sidebar + content column (max --geist-page-width); owns the settings modal
+    sidebar.tsx          logo + app name + version, search, grouped nav, user card; collapsible
+    nav-config.tsx       config-driven navigation — add pages here
   components/
-    page-header.tsx      page title + description
+    page-header.tsx      breadcrumb + title + actions row
+    modal.tsx            dialog (shadow-modal, swift entrance)
     metric-card.tsx      dashboard metric (Prompt 1 in DESIGN.md)
     area-card.tsx        functional-area placeholder card
     ui/                  shadcn-style primitives (owned in-repo): button, card,
-                         input, badge, status-dot
+                         input, badge, status-dot, modal
   lib/
-    api.ts               typed fetch wrapper (uniform error envelope)
+    app-info.ts          app name + version shown in the sidebar
+    api.ts               typed fetch wrapper (uniform response envelope)
+    api/providers.ts     LLM provider registry client (Settings → Providers)
     use-health.ts        API liveness hook
     utils.ts             cn() class helper
   pages/
@@ -34,6 +37,15 @@ src/
     delivery.tsx         B1–B7
     monitoring.tsx       C1–C5
     governance.tsx       D1–D6
+    settings/
+      settings-modal.tsx           modal opened from the user card / Settings nav entry
+      settings-tabs.tsx            section tab bar
+      sections/
+        providers-section.tsx      LLM provider registry (full CRUD + bindings)
+        provider-form-dialog.tsx   per-provider form (supported list from the API)
+        appearance-section.tsx     theme (light / dark / system)
+        diagnostics-section.tsx    installation health snapshot
+        placeholder-section.tsx    reusable "not implemented yet" skeleton
 ```
 
 ## Design rules (DESIGN.md)
@@ -58,8 +70,20 @@ src/
   mappings (`bg-surface`, `text-text-secondary`, …) and the `--ds-*` / `--geist-*` CSS vars.
 - shadcn-style primitives live in `src/components/ui/` and are owned by this repo —
   edit them freely, keep them aligned with DESIGN.md.
-- API access goes through `src/lib/api.ts` (uniform error envelope from the API's
-  `HttpExceptionFilter`). Live job/event streams will use SSE on `/api`.
+- **Navigation is config-driven**: add or reorder entries in `layout/nav-config.tsx`
+  and register the route in `App.tsx`. The sidebar renders groups, icons, badges and
+  search filtering from that config.
+- **Settings opens as a modal** from the sidebar user card or the Settings nav entry
+  (`pages/settings/settings-modal.tsx`). Sections are self-contained components under
+  `pages/settings/sections/`; register them in `settings-tabs.tsx` (`TABS`).
+- **Provider forms adapt per provider**: `GET /api/admin/llm-providers/supported`
+  returns the builtin providers + models (read from the pinned pi catalog) and the
+  custom wire protocols; `provider-form-dialog.tsx` renders fields accordingly.
+- API access goes through `src/lib/api.ts` (uniform envelope: `{ success, data }` /
+  `{ success: false, statusCode, … }`). Feature clients (e.g. `lib/api/providers.ts`)
+  wrap their endpoints. Live job/event streams will use SSE on `/api`.
+- Provider settings (Settings → Providers) are stored in the database through the API;
+  credentials are write-only and encrypted server-side (ADR-0009) — never shown again.
 - Deep links rely on the `kintsugi-app` serving `index.html` for unknown paths.
 
 ## Commands
