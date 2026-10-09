@@ -34,6 +34,9 @@ This page has two parts:
 | [0013](0013-composable-open-rulebook.md) | Composable, open rulebook | Accepted (decisions 7–8 superseded by 0014) |
 | [0014](0014-no-code-graph-no-agent-config.md) | No code graph or parsing, no unit-discovery config, built-in runtime agents fixed in code | Accepted |
 | [0015](0015-member-assets-as-agent-plugins.md) | Member-harness assets are agent plugins (Claude Code plugin format) | Accepted |
+| [0016](0016-nestjs-api-framework.md) | NestJS is the API framework for `apps/api` | Accepted |
+| [0017](0017-portal-vite-react-shadcn.md) | Portal is a Vite + React SPA with shadcn/ui | Accepted |
+| [0018](0018-pin-pi-exact-version.md) | Pin pi to an exact version; track the latest release | Accepted |
 
 ## Decision register
 
@@ -48,8 +51,8 @@ This page has two parts:
 | D07 | Sandbox | 🔴 | One Docker container per job, no Kubernetes; hardening + egress proxy; gVisor when available | M0 | ✅ [0004](0004-runner-container-per-job.md) |
 | D08 | Orchestration | 🔴 | pg-boss + state machine in the DB; no Temporal | M0 | ✅ [0003](0003-postgres-job-queue.md) |
 | D09 | Sign-in | 🔴 | Username/password + PATs; Entra ID later behind `AuthProvider` | M0 | ✅ [0008](0008-authentication.md) |
-| D10 | API | 🟠 | REST + OpenAPI; NestJS or Fastify | M0 | 🟡 |
-| D11 | Portal | 🟢 | React SPA (Vite) + shadcn/ui, static build served by `kintsugi-app` | M0 | 🟡 |
+| D10 | API | 🟠 | REST + OpenAPI; NestJS 12 (ESM, Standard Schema validation) | M0 | ✅ [0016](0016-nestjs-api-framework.md) |
+| D11 | Portal | 🟢 | React SPA (Vite) + shadcn/ui, static build served by `kintsugi-app` | M0 | ✅ [0017](0017-portal-vite-react-shadcn.md) |
 | D12 | Vector store | — | pgvector | — | ✅ [0010](0010-postgres-only.md) |
 | D13 | Graph store | — | None: no code / KB graph | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D14 | Source-code analysis | — | None: agents read source files directly; KB is text chunks + embeddings | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
@@ -65,7 +68,7 @@ This page has two parts:
 | D24 | Observability | 🟢 | Usage/cost/events in Postgres, shown in the portal; optional OTel export | M0 | 🟡 |
 | D25 | Policy engine | 🟢 | TypeScript rules + policy in `kintsugi.yaml`; consider OPA/Cedar in M4 | M4 | 🟡 |
 | D26 | Audit log | 🟢 | Append-only, hash-chained table in Postgres | M4 | 🟡 |
-| D27 | pi versioning | 🟢 | Pin exact version in the runner image; upgrade when the eval suite passes | M0 | 🟡 |
+| D27 | pi versioning | 🟢 | Track latest pi, pin exact versions of `@earendil-works/*` in the runner image; deliberate upgrades | M0 | ✅ [0018](0018-pin-pi-exact-version.md) |
 | D28 | Runtime agent definitions | 🟢 | Built-in, stack-agnostic, fixed in code (prompt, skills, tools, policy); no agent configuration in any repo | M1 | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D29 | Workspace repo layout + how the runtime writes to Git | 🔴 | One workspace repo per project; worker commits on `kintsugi/*` branches + PR; configurable auto-commit paths ([reference](../reference/workspace-repo.md)) | M0 | 🟡 |
 | D30 | Webhooks vs. polling | 🟠 | Polling by default (1–5 min); webhooks when reachable | M2 | 🟡 |
