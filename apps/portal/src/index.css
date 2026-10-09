@@ -1,0 +1,190 @@
+/* Design tokens — Kintsugi Portal design language (DESIGN.md).
+   Achromatic Vercel/Geist system: shadow-as-border, blue only for interactivity,
+   status colors only as indicator dots, font weights 400/500/600. */
+
+@import "tailwindcss";
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-mono/500.css";
+
+:root {
+  /* Surfaces */
+  --ds-background-100: #fafafa;
+  --ds-background-200: #f2f2f2;
+  --ds-background-300: #ebebeb;
+  --ds-surface: #ffffff;
+
+  /* Text */
+  --ds-text-primary: #171717;
+  --ds-text-secondary: #4d4d4d;
+  --ds-text-muted: #8f8f8f;
+
+  /* Interactive */
+  --ds-accent: #0072f5;
+  --ds-focus-color: #0072f5;
+  --ds-input-focus-color: #005fcc;
+
+  /* Status & category indicators — only at dot scale, never as fills */
+  --ds-status-blue: #0062d1;
+  --ds-status-cyan: #52aeff;
+  --ds-status-teal-light: #45dec5;
+  --ds-status-teal-dark: #067a6e;
+  --ds-status-green-dark: #398e4a;
+  --ds-status-green: #45a557;
+  --ds-status-green-light: #6cda75;
+  --ds-status-orange: #ff990a;
+  --ds-status-red: #e5484d;
+  --ds-status-pink: #ea3e83;
+  --ds-status-purple-dark: #7820bc;
+  --ds-status-purple-light: #bf89ec;
+
+  /* Shadows replace CSS borders (shadow-as-border technique) */
+  --ds-shadow-border-base: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  --ds-shadow-border: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--ds-background-200);
+  --ds-shadow-border-small: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 2px 2px rgba(0, 0, 0, 0.04);
+  --ds-shadow-border-medium:
+    0 0 0 1px rgba(0, 0, 0, 0.08), 0 2px 2px rgba(0, 0, 0, 0.04), 0 8px 8px -8px rgba(0, 0, 0, 0.04);
+  --ds-shadow-menu:
+    0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.02), 0 4px 8px -4px rgba(0, 0, 0, 0.04),
+    0 16px 24px -8px rgba(0, 0, 0, 0.06);
+  --ds-shadow-modal:
+    0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.02), 0 8px 16px -4px rgba(0, 0, 0, 0.04),
+    0 24px 32px -8px rgba(0, 0, 0, 0.06);
+
+  /* Double-ring focus: white gap + blue indicator */
+  --ds-focus-ring: 0 0 0 2px var(--ds-surface), 0 0 0 4px var(--ds-focus-color);
+  --header-border-bottom: 0 1px 0 0 rgba(0, 0, 0, 0.1);
+
+  /* Spacing — 4px base unit */
+  --geist-space: 4px;
+  --geist-space-2x: 8px;
+  --geist-space-3x: 12px;
+  --geist-space-4x: 16px;
+  --geist-space-6x: 24px;
+  --geist-space-8x: 32px;
+  --geist-space-10x: 40px;
+  --geist-space-16x: 64px;
+  --geist-space-24x: 96px;
+  --geist-space-small: 32px;
+  --geist-space-medium: 40px;
+  --geist-space-large: 48px;
+  --geist-space-gap: 24px;
+  --geist-space-gap-half: 12px;
+  --geist-space-gap-quarter: 8px;
+
+  /* Radius */
+  --geist-radius: 6px;
+  --geist-card-radius: 12px;
+  --geist-pill-radius: 9999px;
+
+  /* Forms */
+  --geist-form-height: 40px;
+  --geist-form-small-height: 32px;
+  --geist-form-large-height: 48px;
+  --geist-form-font: 14px;
+  --geist-form-line-height: 20px;
+
+  /* Layout */
+  --geist-page-width: 1200px;
+  --ds-page-width: 1400px;
+  --geist-page-margin: 24px;
+  --header-height: 64px;
+
+  /* Motion */
+  --ds-motion-timing-swift: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  --ds-motion-overlay-duration: 0.3s;
+  --ds-motion-popover-duration: 0.2s;
+}
+
+@theme inline {
+  --color-background: var(--ds-background-100);
+  --color-recessed: var(--ds-background-200);
+  --color-hover: var(--ds-background-300);
+  --color-surface: var(--ds-surface);
+  --color-text: var(--ds-text-primary);
+  --color-text-secondary: var(--ds-text-secondary);
+  --color-text-muted: var(--ds-text-muted);
+  --color-accent: var(--ds-accent);
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, "Roboto Mono", monospace;
+  --radius-md: var(--geist-radius);
+  --radius-xl: var(--geist-card-radius);
+}
+
+@layer base {
+  body {
+    background: var(--ds-background-100);
+    color: var(--ds-text-primary);
+    font-family: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 400;
+    font-feature-settings: "liga";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Three-weight rule: 400 / 500 / 600 only — never 700. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  strong {
+    font-weight: 600;
+  }
+
+  code,
+  pre {
+    font-family: "Geist Mono", ui-monospace, SFMono-Regular, "Roboto Mono", monospace;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.54;
+  }
+}
+
+@layer components {
+  /* Type hierarchy (DESIGN.md §3) */
+  .h-display {
+    font-size: 48px;
+    line-height: 1;
+    letter-spacing: -2.28px;
+    font-weight: 600;
+  }
+
+  .h-title {
+    font-size: 32px;
+    line-height: 1.25;
+    letter-spacing: -1.28px;
+    font-weight: 600;
+  }
+
+  .h-subtitle {
+    font-size: 14px;
+    line-height: 1.43;
+    letter-spacing: -0.28px;
+    font-weight: 500;
+  }
+
+  .text-caption {
+    font-size: 12px;
+    line-height: 1.33;
+    font-weight: 400;
+  }
+
+  /* Double-ring keyboard focus (visible only for keyboard focus) */
+  .focus-ring {
+    outline: none;
+  }
+
+  .focus-ring:focus-visible {
+    box-shadow: var(--ds-focus-ring);
+  }
+
+  .shadow-border {
+    box-shadow: var(--ds-shadow-border);
+  }
+
+  .shadow-border-medium {
+    box-shadow: var(--ds-shadow-border-medium);
+  }
+}
