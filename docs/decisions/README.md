@@ -37,6 +37,8 @@ This page has two parts:
 | [0016](0016-nestjs-api-framework.md) | NestJS is the API framework for `apps/api` | Accepted |
 | [0017](0017-portal-vite-react-shadcn.md) | Portal is a Vite + React SPA with shadcn/ui | Accepted |
 | [0018](0018-pin-pi-exact-version.md) | Pin pi to an exact version; track the latest release | Accepted |
+| [0019](0019-workspace-repo-write-path.md) | One workspace repo per project; the worker writes as `kintsugi-bot` | Accepted |
+| [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Accepted |
 
 ## Decision register
 
@@ -70,10 +72,10 @@ This page has two parts:
 | D26 | Audit log | 🟢 | Append-only, hash-chained table in Postgres | M4 | 🟡 |
 | D27 | pi versioning | 🟢 | Track latest pi, pin exact versions of `@earendil-works/*` in the runner image; deliberate upgrades | M0 | ✅ [0018](0018-pin-pi-exact-version.md) |
 | D28 | Runtime agent definitions | 🟢 | Built-in, stack-agnostic, fixed in code (prompt, skills, tools, policy); no agent configuration in any repo | M1 | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
-| D29 | Workspace repo layout + how the runtime writes to Git | 🔴 | One workspace repo per project; worker commits on `kintsugi/*` branches + PR; configurable auto-commit paths ([reference](../reference/workspace-repo.md)) | M0 | 🟡 |
+| D29 | Workspace repo layout + how the runtime writes to Git | 🔴 | One workspace repo per project; worker commits on `kintsugi/*` branches + PR as `kintsugi-bot`; `autoCommitPaths` (`units/**`, `tasks/**`, `knowledge/**/generated/**`) commit directly to the default branch ([reference](../reference/workspace-repo.md)) | M0 | ✅ [0019](0019-workspace-repo-write-path.md) |
 | D30 | Webhooks vs. polling | 🟠 | Polling by default (1–5 min); webhooks when reachable | M2 | 🟡 |
 | D31 | Large binaries (recordings, video, scanned PDFs) | 🟠 | Git LFS where supported; otherwise the `kintsugi-data` volume + a link file in Git | M1 | ⬜ |
-| D32 | Worker's Docker API access | 🔴 | docker-socket-proxy limited to container lifecycle; worker accepts only `kintsugi-runner` (runtime jobs) and images on `KINTSUGI_JOB_IMAGE_ALLOWLIST` (runners), mounts only inside the job directory | M0 | 🟡 |
+| D32 | Worker's Docker API access | 🔴 | docker-socket-proxy limited to container lifecycle; worker accepts only `kintsugi-runner` (runtime jobs) and images on `KINTSUGI_JOB_IMAGE_ALLOWLIST` (runners), mounts only inside the job directory | M0 | ✅ [0020](0020-docker-api-via-socket-proxy.md) |
 | D34 | Project-specific knowledge | 🔴 | Each project builds a rulebook in its workspace repo; Kintsugi ships only a neutral starter template; reuse = deliberate copy/adapt (`derivedFrom`) | M0 | ✅ [0011](0011-project-rulebook.md) |
 | D35 | Capability maturity & readiness gating | 🔴 | `template` → `draft` → `ready` / `suspended`, scoped per kind / application; all providing layers must allow; waivers with scope + expiry; G3 requires pipeline capabilities `ready`; promotion by PR with evidence | M0 | ✅ [0011](0011-project-rulebook.md), [0013](0013-composable-open-rulebook.md) |
 | D36 | Rulebook structure | 🔴 | Packs + layered overrides; open capabilities; declarative pipelines; scoped maturity + `suspended` + waivers; one rule per file with `appliesTo`; single version; `x-*` extensions; JSON Schema from domain types; `rulebook migrate` | M0 | ✅ [0013](0013-composable-open-rulebook.md) |
@@ -112,6 +114,6 @@ A list of priority stacks is needed to choose parsers. Common candidates:
 - spreadsheet-based design documents, often non-English
 
 ## Next decisions
-1. **Now**: D29, D32.
+1. **Now**: (D29 and D32 are decided — [0019](0019-workspace-repo-write-path.md), [0020](0020-docker-api-via-socket-proxy.md).)
 2. **Before M1**: D15, D16, D31.
 3. **Before M2**: D17–D20, D30.

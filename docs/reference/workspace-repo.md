@@ -1,6 +1,6 @@
 # Workspace repository
 
-> Status: 🟡 proposed (D29). Layout and file formats are drafts.
+> Status: ✅ decided ([ADR-0019](../decisions/0019-workspace-repo-write-path.md), D29). File formats are still drafts.
 
 Each project has one workspace repo holding everything except source code ([ADR-0007](../decisions/0007-git-as-source-of-truth.md)). It is created from the [starter template](../../templates/workspace/) or joined when it already exists ([build a project](../guides/build-project.md)).
 
@@ -101,7 +101,7 @@ One file per work item ([ADR-0012](../decisions/0012-work-items-as-files-in-git.
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 
-## Open questions (D29)
+## Resolved by ADR-0019
 
-- A dedicated repo (proposed) or a `kintsugi/` folder inside an existing repo.
-- Which paths are auto-committed by default.
+- **Dedicated repo, or a `kintsugi/` folder inside an existing repo?** A dedicated workspace repo per project.
+- **Which paths are auto-committed by default?** `units/**`, `tasks/**`, `knowledge/**/generated/**` (`autoCommitPaths` in `kintsugi.yaml`); everything else lands on `kintsugi/<agent>/<job-id>` branches as pull requests.
