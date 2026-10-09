@@ -19,15 +19,20 @@ src/
   app.module.ts            root module; imports every feature module
   common/                  shared kernel — import from here, never duplicate
     config/env.ts          typed environment access (deployment config only)
-    db/                    Postgres pool + migrations runner + secret encryption
+    db/                    Postgres pool + migrations runner
     domain/repository.ts   generic repository port (DDD)
     application/           generic CRUD use cases over the port
     infrastructure/        in-memory repository adapter (dev skeletons)
-    interface/dto.ts       request-schema helpers (zod)
+    security/password.ts   scrypt password hashing (ADR-0008)
+    auth/decorators.ts     @Public() / @RequirePermission("code")
+    interface/             response envelope + zod helpers (idSchema, stringField)
     filters/               uniform error envelope (HttpExceptionFilter)
   modules/
     system/health/         liveness endpoint
-    admin/                 A1–A7 (llm-providers is the full DDD exemplar)
+    core/auth/             sessions, global guards, bootstrap admin
+    admin/                 A1–A7: projects, users (members), roles & permissions,
+                           connectors, llm-providers (full DDD exemplar), harnesses,
+                           templates, project-build
     delivery/              B1–B7
     monitoring/            C1–C5 (read-only routes)
     governance/            D1–D6
@@ -116,6 +121,27 @@ values; `ResponseInterceptor` and `HttpExceptionFilter` do the wrapping):
   `search_path`. Applied automatically at startup, recorded in `core.schema_migrations`.
 - Secrets are encrypted (AES-256-GCM, `KINTSUGI_SECRET_KEY`) and referenced from
   configs as `{ secretId }`; the API never returns credential values.
+
+## Identity & access (ADR-0008)
+
+Local username/password sessions first (Entra ID later behind `AuthProvider`):
+
+- **Sign-in** `POST /api/auth/login` → session token (stored as a SHA-256 hash in
+  `core.session`, 7-day expiry). `POST /api/auth/logout` revokes it; `GET /api/auth/me`
+  returns the user with roles and effective permissions.
+- **Route protection** is global (`AuthGuard` + `PermissionsGuard` in `modules/core/auth`):
+  every route needs a bearer token unless marked `@Public()` (login, health); routes can
+  require one permission code with `@RequirePermission("code")`.
+- **Roles**: primary roles (`admin`, `contribute`, `user`) and admin-defined sub-roles
+  (`dev`, `ba`, `tester`, …). A member holds one primary role plus optional sub-roles.
+- **Permissions are dynamic**: codes live in `core.permission` and are added by
+  **migration** — the portal's matrix reads the table, so new codes appear automatically
+  and are granted per role there. Grants are stored in `core.role_permission`.
+- **Bootstrap admin**: created on startup when no users exist —
+  `admin / admin@1234` in dev; override with `KINTSUGI_BOOTSTRAP_ADMIN_USER` /
+  `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` and change it after first sign-in.
+- **Known behaviors**: `members.manage` implies the power to assign any role (treat it as
+  privileged); passwords use scrypt; no login rate limiting yet (M0 hardening).
 
 ## Adding a feature module
 
