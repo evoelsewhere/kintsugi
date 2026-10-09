@@ -3,10 +3,10 @@
 // the stored config as { secretId } — plaintext never leaves this adapter.
 
 import { Injectable } from "@nestjs/common";
+import { decryptSecret, encryptSecret } from "@kintsugi/secrets";
 import type { AgentModelBinding, CustomModelConfig, LlmProviderConfig } from "@kintsugi/runtime-sdk";
 import type { ThinkingLevel } from "@kintsugi/domain";
 import type { Pool } from "pg";
-import { decryptSecret, encryptSecret } from "../../../../common/db/crypto.js";
 import { getPool } from "../../../../common/db/pool.js";
 import type { LlmProviderRecord, ProviderConfigInput, ProviderCredentials, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";

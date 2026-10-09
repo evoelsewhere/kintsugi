@@ -86,7 +86,7 @@ Rules (enforced by review — see AGENTS.md):
 | `sleep()`, `retry()`, `chunk()` | `common/util/async.js` | async utilities |
 | `nowIso()` | `common/util/time.js` | one clock format (ISO-8601 UTC) |
 | `getPool`, `ensureSchema` | `common/db/pool.js` | Postgres access + migrations |
-| `encryptSecret`, `decryptSecret` | `common/db/crypto.js` | AES-256-GCM with `KINTSUGI_SECRET_KEY` |
+| `encryptSecret`, `decryptSecret` | `@kintsugi/secrets` | AES-256-GCM with `KINTSUGI_SECRET_KEY` (shared with services/runtime) |
 | `HttpExceptionFilter` | `common/filters/…` | uniform error envelope |
 
 If two modules need the same logic, it belongs in `common/` (or in `@kintsugi/domain`
