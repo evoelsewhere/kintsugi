@@ -1,16 +1,16 @@
-// Wiring of the users module: interface + application + the
-// infrastructure adapter bound to the domain port.
+// Wiring of the members module (Admin · Identity & Access, A2).
 
 import { Module } from "@nestjs/common";
+import { RolesModule } from "../roles/roles.module.js";
 import { UsersService } from "./application/users.service.js";
 import { UserRepository } from "./domain/user.repository.js";
-import { InMemoryUserRepository } from "./infrastructure/in-memory-user.repository.js";
+import { PgUserRepository } from "./infrastructure/pg-user.repository.js";
 import { UsersController } from "./interface/users.controller.js";
 
-/** admin · identity & access — docs/architecture/05-building-block-view.md. */
 @Module({
+  imports: [RolesModule],
   controllers: [UsersController],
-  providers: [UsersService, { provide: UserRepository, useClass: InMemoryUserRepository }],
-  exports: [UsersService, UserRepository],
+  providers: [UsersService, { provide: UserRepository, useClass: PgUserRepository }],
+  exports: [UsersService],
 })
 export class UsersModule {}

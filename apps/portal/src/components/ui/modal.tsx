@@ -41,7 +41,7 @@ export function Modal({ open, title, description, onClose, children, footer, wid
         className={cn(
           "relative mt-6 w-full rounded-xl bg-surface p-5 sm:mt-10 sm:p-6",
           wide ? "max-w-2xl" : "max-w-md",
-          page && "flex h-[85vh] w-[90vw] max-w-[1280px] flex-col overflow-hidden p-0",
+          page && "flex h-[92vh] w-[95vw] max-w-none flex-col overflow-hidden p-0",
         )}
         style={{
           boxShadow: "var(--ds-shadow-modal)",
@@ -65,7 +65,7 @@ export function Modal({ open, title, description, onClose, children, footer, wid
           </button>
         </div>
 
-        <div className={cn("mt-4", page && "mt-0 min-h-0 flex-1 overflow-hidden")}>{children}</div>
+        <div className={cn("mt-4", page && "mt-0 min-h-0 flex-1 overflow-y-auto")}>{children}</div>
 
         {footer === undefined ? null : <div className="mt-4 flex items-center justify-end gap-2">{footer}</div>}
       </div>

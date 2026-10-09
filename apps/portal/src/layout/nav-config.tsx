@@ -47,7 +47,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "admin", label: "Admin", icon: Settings, to: "/admin" },
       { id: "harnesses", label: "Harnesses", icon: Puzzle, to: "/admin" , badge: "soon" },
-      { id: "roles", label: "Roles & Permissions", icon: Users, to: "/admin", badge: "soon" },
+      { id: "members", label: "Members & Permissions", icon: Users, to: "/members" },
       { id: "settings", label: "Settings", icon: Settings, to: "/settings", action: "open-settings" },
     ],
   },

@@ -4,8 +4,10 @@ import { HarnessesModule } from "./modules/admin/harnesses/harnesses.module.js";
 import { LlmProvidersModule } from "./modules/admin/llm-providers/llm-providers.module.js";
 import { ProjectBuildsModule } from "./modules/admin/project-build/project-builds.module.js";
 import { ProjectsModule } from "./modules/admin/projects/projects.module.js";
+import { RolesModule } from "./modules/admin/roles/roles.module.js";
 import { TemplatesModule } from "./modules/admin/templates/templates.module.js";
 import { UsersModule } from "./modules/admin/users/users.module.js";
+import { AuthModule } from "./modules/core/auth/auth.module.js";
 import { ArchitectureViewsModule } from "./modules/delivery/architecture/architecture-views.module.js";
 import { CutoverChecklistsModule } from "./modules/delivery/cutover/cutover-checklists.module.js";
 import { FactorySetupsModule } from "./modules/delivery/factory/factory-setups.module.js";
@@ -33,11 +35,14 @@ import { HealthModule } from "./modules/system/health/health.module.js";
  */
 @Module({
   imports: [
+    // core: auth + identity
+    AuthModule,
     // system
     HealthModule,
     // admin
     ProjectsModule,
     UsersModule,
+    RolesModule,
     ConnectorsModule,
     LlmProvidersModule,
     HarnessesModule,

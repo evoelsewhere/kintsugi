@@ -3,6 +3,8 @@
 //   success → { success: true, data }
 //   error   → { success: false, statusCode, error, message, timestamp, path }
 
+import { getToken } from "./auth";
+
 export interface ApiSuccess<T> {
   success: true;
   data: T;
@@ -34,9 +36,15 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = getToken();
   const response = await fetch(path, {
     ...init,
-    headers: { accept: "application/json", ...(init.body === undefined ? {} : { "content-type": "application/json" }), ...init.headers },
+    headers: {
+      accept: "application/json",
+      ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+      ...(token === null ? {} : { authorization: `Bearer ${token}` }),
+      ...init.headers,
+    },
   });
   const body = (await response.json().catch(() => null)) as ApiSuccess<T> | ApiErrorBody | null;
 
