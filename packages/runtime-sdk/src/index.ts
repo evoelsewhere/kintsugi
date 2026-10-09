@@ -3,7 +3,7 @@
 // The runner reads a read-only git checkout and writes only to /out; the worker
 // commits /out to the workspace repo (ADR-0007). See docs/reference/runtime-agents.md.
 
-import type { CapabilityName, Phase, RulebookRef, RunnerSpec, RuntimeAgentId } from "@kintsugi/domain";
+import type { CapabilityName, Phase, RulebookRef, RunnerSpec, RuntimeAgentId, ThinkingLevel } from "@kintsugi/domain";
 
 export interface JobContext {
   projectId: string;
@@ -52,7 +52,7 @@ export interface JobSpec {
   /** Task-specific instruction appended to the agent's own prompt and skills. */
   instruction?: string;
   /** Resolved from AgentModelBinding; provider refers to an LlmProviderConfig id. */
-  model: { provider: string; id: string; thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" };
+  model: { provider: string; id: string; thinking?: ThinkingLevel };
   policy: ToolPolicy;
   outputs: JobOutputRule[];
   budget: { maxCostUsd?: number; maxTurns?: number; timeoutSec: number };
@@ -162,5 +162,5 @@ export interface AgentModelBinding {
   projectId?: string; // undefined = installation default
   provider: string; // LlmProviderConfig.id
   model: string;
-  thinking?: JobSpec["model"]["thinking"];
+  thinking?: ThinkingLevel;
 }

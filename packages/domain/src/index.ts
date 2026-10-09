@@ -75,6 +75,9 @@ export const RUNTIME_AGENTS = [
 ] as const;
 export type RuntimeAgentId = (typeof RUNTIME_AGENTS)[number];
 
+/** Reasoning effort for a runtime agent's model binding (mirrors pi's thinking levels). */
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
 /** Work item status as stored in the unit file frontmatter. */
 export type WorkItemStatus =
   | "pending"
