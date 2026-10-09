@@ -2,6 +2,18 @@
 
 **Kintsugi Runtime**: executes Kintsugi's built-in agents on [pi](https://github.com/earendil-works/pi). Implements `AgentRuntime` from `packages/runtime-sdk`.
 
+## Current code (scaffold)
+
+- `src/agent-runtime.ts` — `createAgentRuntime({ mode })`, the `AgentRuntime` contract with two backends.
+- `src/pi-runtime.ts` — pi backend: one `AgentSession` per job (`createAgentSession`, `@earendil-works/pi-coding-agent` pinned exact, ADR-0018), pi events mapped onto `JobEvent`s.
+- `src/mock-agent.ts` — deterministic simulated backend (no LLM) so orchestrator and telemetry can build against the contract.
+- `src/event-stream.ts`, `src/job-inputs.ts` — event queue and input descriptions.
+- `src/version.ts` — the pi pin and `engine` string (`pi@<version>`).
+
+The runner/launcher split below is the target shape; the wiring lands with the Docker image work.
+
+## Planned layout
+
 - **Agents** (`agents/<id>/`): one directory per built-in agent.
   - Each agent's prompt, skills (`SKILL.md`), tools, policy and default budget are **fixed in code** and versioned with the Kintsugi release.
   - There is no agent configuration in any repo (ADR-0014).
