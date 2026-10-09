@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { AppShell } from "./layout/app-shell";
+import { PanelShell } from "./layout/panel-shell";
 import { AdminPage } from "./pages/admin";
 import { DeliveryPage } from "./pages/delivery";
 import { GovernancePage } from "./pages/governance";
@@ -10,7 +10,7 @@ export function App(): React.JSX.Element {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<AppShell />}>
+        <Route element={<PanelShell />}>
           <Route index element={<OverviewPage />} />
           <Route path="admin" element={<AdminPage />} />
           <Route path="delivery" element={<DeliveryPage />} />
