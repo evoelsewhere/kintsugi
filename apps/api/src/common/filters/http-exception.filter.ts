@@ -1,14 +1,6 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, HttpStatus, Logger } from "@nestjs/common";
 import type { Request, Response } from "express";
-
-/** Uniform error envelope for every API error response. */
-export interface ErrorBody {
-  statusCode: number;
-  error: string;
-  message: string | string[];
-  timestamp: string;
-  path: string;
-}
+import type { ApiFailure } from "../interface/response.js";
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -32,7 +24,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.#logger.error(`${request.method} ${request.url} → ${status}`, exception instanceof Error ? exception.stack : undefined);
     }
 
-    const errorBody: ErrorBody = {
+    // Uniform error envelope (pair of the success envelope in common/interface/response.ts).
+    const errorBody: ApiFailure = {
+      success: false,
       statusCode: status,
       error: HttpStatus[status] ?? "Error",
       message,
