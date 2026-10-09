@@ -17,6 +17,13 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 - Deployment is a self-hosted Docker Compose package: no Kubernetes, no multi-tenancy, Postgres is the only datastore, Git is the source of truth for documents (ADR-0006/0007/0010). Do not add infrastructure dependencies without an ADR.
 - Keep the engine small (ADR-0014): no code graph or language parsers, no unit-discovery configuration, no runtime-agent configuration in repos. Built-in agents are defined in `services/runtime`.
 
+## Commits
+- Follow [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<optional scope>): <subject>`, with a lowercase imperative subject.
+  - Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+  - Breaking changes: `!` after the type/scope, or a `BREAKING CHANGE:` footer.
+- Example: `feat(rulebook): add scoped capability maturity`.
+- Do not add AI co-author or attribution trailers.
+
 ## Commands
 - `pnpm install` · `pnpm typecheck` · `pnpm build` · `pnpm test`
 
