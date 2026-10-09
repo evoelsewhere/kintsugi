@@ -34,7 +34,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 | 5 | [Building block view](architecture/05-building-block-view.md) |
 | 6 | [Runtime view](architecture/06-runtime-view.md) |
 | 7 | [Deployment view](architecture/07-deployment-view.md) |
-| 8 | [Crosscutting concepts](architecture/08-crosscutting-concepts.md) (runtime & harnesses, Git as source of truth, security, identity, LLM configuration, observability) |
+| 8 | [Crosscutting concepts](architecture/08-crosscutting-concepts.md) (project rulebook, runtime & harnesses, Git as source of truth, security, identity, LLM configuration, observability) |
 | 9 | [Decisions](decisions/README.md) |
 | 10 | [Quality requirements](architecture/10-quality-requirements.md) |
 | 11 | [Risks and technical debt](architecture/11-risks-and-technical-debt.md) |
@@ -46,6 +46,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 
 **Reference**
 - [Glossary](reference/glossary.md)
+- [Rulebook](reference/rulebook.md): layout, `rulebook.yaml`, capabilities and maturity
 - [Runtime agents](reference/runtime-agents.md)
 - [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
 - [Data model](reference/data-model.md)
@@ -54,6 +55,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 
 **Guides**
 - [Install Kintsugi](guides/installation.md)
+- [Build a project (shape the rulebook)](guides/build-project.md)
 - [Configure LLM providers for the runtime](guides/configure-llm-providers.md)
 - [Work on a migration task as a member](guides/member-workflow.md)
 

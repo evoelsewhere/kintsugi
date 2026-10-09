@@ -21,14 +21,19 @@ This page has two parts:
 |---|---|---|
 | [0001](0001-pi-as-kintsugi-runtime.md) | pi is the Kintsugi Runtime; members implement with their own harnesses | Accepted |
 | [0002](0002-typescript-monorepo.md) | TypeScript monorepo (pnpm + Turborepo) | Proposed |
-| [0003](0003-postgres-job-queue.md) | pg-boss (Postgres-backed job queue) for orchestration | Accepted |
+| [0003](0003-postgres-job-queue.md) | pg-boss (Postgres-backed job queue) for orchestration | Accepted (state persistence amended by 0012) |
 | [0004](0004-runner-container-per-job.md) | One Docker container per runtime job, with a pi SDK runner inside | Accepted |
-| [0005](0005-canonical-asset-format.md) | Canonical asset format = Agent Skills + AGENTS.md | Proposed |
+| [0005](0005-canonical-asset-format.md) | Canonical asset format = Agent Skills + AGENTS.md | Superseded by 0015 |
 | [0006](0006-self-hosted-package.md) | Kintsugi is distributed as a self-hosted package | Accepted |
 | [0007](0007-git-as-source-of-truth.md) | Git is the source of truth for code, documents and assets | Accepted |
 | [0008](0008-authentication.md) | Local username/password first, Azure AD (Entra ID) later | Accepted |
 | [0009](0009-llm-provider-config.md) | LLM provider configuration for the pi runtime | Accepted |
-| [0010](0010-postgres-only.md) | PostgreSQL is the only datastore | Accepted |
+| [0010](0010-postgres-only.md) | PostgreSQL is the only datastore | Accepted (graph tables removed by 0014) |
+| [0011](0011-project-rulebook.md) | Every project builds its own rulebook before running the pipeline | Accepted |
+| [0012](0012-work-items-as-files-in-git.md) | Work items are files in the workspace repo; Postgres indexes them | Accepted |
+| [0013](0013-composable-open-rulebook.md) | Composable, open rulebook | Accepted (decisions 7–8 superseded by 0014) |
+| [0014](0014-no-code-graph-no-agent-config.md) | No code graph or parsing, no unit-discovery config, built-in runtime agents fixed in code | Accepted |
+| [0015](0015-member-assets-as-agent-plugins.md) | Member-harness assets are agent plugins (Claude Code plugin format) | Accepted |
 
 ## Decision register
 
@@ -46,14 +51,14 @@ This page has two parts:
 | D10 | API | 🟠 | REST + OpenAPI; NestJS or Fastify | M0 | 🟡 |
 | D11 | Portal | 🟢 | React SPA (Vite) + shadcn/ui, static build served by `kintsugi-app` | M0 | 🟡 |
 | D12 | Vector store | — | pgvector | — | ✅ [0010](0010-postgres-only.md) |
-| D13 | Graph store | — | Edge tables in Postgres + recursive CTE | — | ✅ [0010](0010-postgres-only.md) |
-| D14 | Source-code analysis | 🟠 | tree-sitter + SCIP/LSP indexes; LLM for summaries. Needs the list of priority legacy stacks | M1 | ⬜ |
-| D15 | Document parsing (xlsx/docx, multilingual) | 🟠 | Python sidecar (docling / markitdown + Excel → Markdown); adds one container | M1 | ⬜ |
+| D13 | Graph store | — | None: no code / KB graph | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
+| D14 | Source-code analysis | — | None: agents read source files directly; KB is text chunks + embeddings | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
+| D15 | Document conversion (xlsx/docx → md, multilingual) | 🟠 | Python sidecar (docling / markitdown + Excel → Markdown); adds one container | M1 | ⬜ |
 | D16 | Embedding model | 🟠 | Configured like LLM providers; must offer a local option | M1 | ⬜ |
 | D17 | MCP transport + auth | 🟠 | Remote Streamable HTTP on `kintsugi-app`, PAT auth; OAuth with Entra ID | M2 | 🟡 |
 | D18 | Priority member harness + license tier | 🟠 | Copilot first, Claude Code second | M2 | ⬜ |
-| D19 | Asset distribution to harnesses | 🟠 | `kintsugi assets pull` renders into repos under managed paths + MCP for dynamic content | M2 | 🟡 |
-| D20 | Source of truth for work items | 🟠 | Work items in Kintsugi (DB) + task packs in Git; status sync with Jira / Azure DevOps | M2 | ⬜ |
+| D19 | Asset distribution to harnesses | 🟠 | Agent plugins via marketplaces generated in the workspace repo (vendored built-in plugin + rulebook plugins, relative paths); `kintsugi plugins setup`; fallback rendering for harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D20 | Source of truth for work items | 🟠 | One file per unit in the workspace repo (`units/**`), state in frontmatter; Postgres is a rebuildable index; single write path through the Kintsugi API (bot commits with actor trailer); Jira / Azure DevOps are mirrors | M2 | ✅ [0012](0012-work-items-as-files-in-git.md) |
 | D21 | Measuring "AI-generated" | 🟠 | Mandatory declaration (commit trailer + PR template); telemetry for cross-checking | M3 | 🟡 |
 | D22 | Git servers & repositories | 🔴 | Many Git servers and many repos; plain git everywhere; API adapters GitHub → Azure DevOps → GitLab → Bitbucket → Gitea | M0 | ✅ [0007](0007-git-as-source-of-truth.md) |
 | D23 | Events | — | Postgres outbox + `LISTEN/NOTIFY` → SSE | — | ✅ [0010](0010-postgres-only.md) |
@@ -61,11 +66,21 @@ This page has two parts:
 | D25 | Policy engine | 🟢 | TypeScript rules + policy in `kintsugi.yaml`; consider OPA/Cedar in M4 | M4 | 🟡 |
 | D26 | Audit log | 🟢 | Append-only, hash-chained table in Postgres | M4 | 🟡 |
 | D27 | pi versioning | 🟢 | Pin exact version in the runner image; upgrade when the eval suite passes | M0 | 🟡 |
-| D28 | Runtime agent definitions | 🟢 | Defaults in the image; projects override via `.kintsugi/assets/` | M1 | 🟡 |
+| D28 | Runtime agent definitions | 🟢 | Built-in, stack-agnostic, fixed in code (prompt, skills, tools, policy); no agent configuration in any repo | M1 | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D29 | Workspace repo layout + how the runtime writes to Git | 🔴 | One workspace repo per project; worker commits on `kintsugi/*` branches + PR; configurable auto-commit paths ([reference](../reference/workspace-repo.md)) | M0 | 🟡 |
 | D30 | Webhooks vs. polling | 🟠 | Polling by default (1–5 min); webhooks when reachable | M2 | 🟡 |
 | D31 | Large binaries (recordings, video, scanned PDFs) | 🟠 | Git LFS where supported; otherwise the `kintsugi-data` volume + a link file in Git | M1 | ⬜ |
-| D32 | Worker's Docker API access | 🔴 | docker-socket-proxy limited to container lifecycle; or rootless Docker | M0 | 🟡 |
+| D32 | Worker's Docker API access | 🔴 | docker-socket-proxy limited to container lifecycle; worker accepts only `kintsugi-runner` (runtime jobs) and images on `KINTSUGI_JOB_IMAGE_ALLOWLIST` (runners), mounts only inside the job directory | M0 | 🟡 |
+| D34 | Project-specific knowledge | 🔴 | Each project builds a rulebook in its workspace repo; Kintsugi ships only a neutral starter template; reuse = deliberate copy/adapt (`derivedFrom`) | M0 | ✅ [0011](0011-project-rulebook.md) |
+| D35 | Capability maturity & readiness gating | 🔴 | `template` → `draft` → `ready` / `suspended`, scoped per kind / application; all providing layers must allow; waivers with scope + expiry; G3 requires pipeline capabilities `ready`; promotion by PR with evidence | M0 | ✅ [0011](0011-project-rulebook.md), [0013](0013-composable-open-rulebook.md) |
+| D36 | Rulebook structure | 🔴 | Packs + layered overrides; open capabilities; declarative pipelines; scoped maturity + `suspended` + waivers; one rule per file with `appliesTo`; single version; `x-*` extensions; JSON Schema from domain types; `rulebook migrate` | M0 | ✅ [0013](0013-composable-open-rulebook.md) |
+| D37 | Reuse across projects | 🟢 | `extends` = vendored, pinned snapshots + `rulebook upgrade` via PR; an organization library is just a Git repo used as `source` | M4 | ✅ [0013](0013-composable-open-rulebook.md) |
+| D38 | Runner images | 🔴 | Runners declare their image; installation image allowlist; same hardening; network `none` by default; no LLM credentials | M0 | ✅ [0013](0013-composable-open-rulebook.md) |
+| D39 | Project runtime agents & runtime MCP | — | Not supported (removed) | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
+| D43 | Member asset packaging | 🟠 | Claude Code plugin format (skills, agents, commands, hooks, MCP, `userConfig`); built-in `kintsugi` plugin with MCP + guardrail/telemetry hooks; project plugins in rulebook packs gated by `convert` maturity | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D42 | Unit discovery | — | No discovery config; unit files declared by people or proposed by `assessment` via PR; `dependsOn` written, not computed | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
+| D40 | Member harness registry | 🟠 | Open harness ids; plugin support per harness (native / converted / none); declarative fallback renderers (built-in / installation / project); transformer plugins installed by admins | M2 | ✅ [0013](0013-composable-open-rulebook.md), [0015](0015-member-assets-as-agent-plugins.md) |
+| D41 | Stale units on rule change | 🟠 | Units record `rulesApplied`; changed rules mark units `stale` → re-review queue | M3 | ✅ [0013](0013-composable-open-rulebook.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
 ## Notes on open points
@@ -95,5 +110,5 @@ A list of priority stacks is needed to choose parsers. Common candidates:
 
 ## Next decisions
 1. **Now**: D29, D32.
-2. **Before M1**: D14, D15, D16, D31.
+2. **Before M1**: D15, D16, D31.
 3. **Before M2**: D17–D20, D30.

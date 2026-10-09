@@ -54,11 +54,13 @@ export type Performer =
   | { kind: "member"; role: Role; harness?: MemberHarnessId }
   // A Kintsugi runtime agent (pi-based, server-side, never writes to project repos).
   | { kind: "runtime-agent"; agentId: RuntimeAgentId }
+  | { kind: "runner"; runnerId: string; pack: string }
   | { kind: "tool"; toolId: string };
 
 /** AI harnesses members use on their own machines to do the actual work. */
+/** Harnesses with built-in renderers. The id is open: installations and projects can register more (ADR-0013). */
 export const MEMBER_HARNESSES = ["claude-code", "copilot", "codex", "chatgpt"] as const;
-export type MemberHarnessId = (typeof MEMBER_HARNESSES)[number];
+export type MemberHarnessId = (typeof MEMBER_HARNESSES)[number] | (string & {});
 
 /** Kintsugi's own agents, executed on the pi runtime. */
 export const RUNTIME_AGENTS = [
@@ -73,14 +75,62 @@ export const RUNTIME_AGENTS = [
 ] as const;
 export type RuntimeAgentId = (typeof RUNTIME_AGENTS)[number];
 
-/** Unit of migration work: a feature, screen, module, DB object, … */
-export interface WorkItem {
-  id: string;
-  projectId: string;
-  applicationId: string;
-  kind: "feature" | "screen" | "module" | "api" | "db-object" | "job" | "infra";
+/** Work item status as stored in the unit file frontmatter. */
+export type WorkItemStatus =
+  | "pending"
+  | "in-progress"
+  | "awaiting-review"
+  | "approved"
+  | "rejected"
+  | "blocked"
+  | "done"
+  | "skipped";
+
+/**
+ * Frontmatter of `units/<application>/<module>/<unit>.md` in the workspace repo (ADR-0012).
+ * This file is the source of truth; Postgres only indexes it.
+ */
+export interface WorkItemFile {
+  id: string; // "<application>/<module>/<unit>"
+  application: string;
+  module: string;
+  kind: string; // one of the rulebook's units.kinds
   title: string;
-  wave?: string;
+  wave?: number | string;
+  pilot?: boolean;
+  phase: Phase;
+  stage?: string;
+  status: WorkItemStatus;
+  assignee?: string;
+  harness?: MemberHarnessId;
+  complexity?: "low" | "medium" | "high";
+  dependsOn?: string[];
+  source?: { repo: string; paths: string[] }[];
+  target?: { repo: string; paths: string[] }[];
+  links?: {
+    taskPack?: string;
+    asIs?: string;
+    mappings?: string[];
+    uiPatterns?: string[];
+    businessRules?: string[];
+    pullRequests?: string[];
+  };
+  gates?: Partial<Record<GateId | string, { status: "pending" | "approved" | "rejected"; by?: string; at?: string; review?: string }>>;
+  /** Packs resolved for this unit (defaults + application packs). */
+  packs?: string[];
+  /** Rule IDs applied when the unit was last planned / reviewed; drives impact analysis. */
+  rulesApplied?: string[];
+  /** Set when a rule in `rulesApplied` changed after the unit was processed. */
+  stale?: { since: string; rules: string[] };
+  /** Waivers relied on by the last run, if any. */
+  waivers?: string[];
+  rulebook?: RulebookRef;
+}
+
+/** Index row derived from a unit file; rebuildable from Git. */
+export interface WorkItem extends WorkItemFile {
+  projectId: string;
+  file: GitLocation;
   stages: StageRun[];
 }
 
@@ -138,12 +188,12 @@ export interface GitServer {
   credentialRef: string;
 }
 
-/** A project has one workspace repo and any number of code repos, possibly on different servers. */
+/** A project has one workspace repo and any number of source (read-only) and target repos, possibly on different servers. */
 export interface Repository {
   id: string;
   serverId: string;
   path: string; // e.g. "org/app-legacy"
-  role: "workspace" | "code";
+  role: "workspace" | "source" | "target";
   defaultBranch: string;
   credentialRef?: string; // overrides the server credential
 }
@@ -159,6 +209,7 @@ export interface Provenance {
   /** Declared or measured share of AI-generated content, 0–1. */
   aiShare?: number;
   assetVersion?: string; // skill / task-pack template version used
+  rulebook?: RulebookRef;
   author?: string;
   reviewedBy?: string;
 }
@@ -189,4 +240,196 @@ export function recommendDispositions(total: number): {
     priority: "high",
     candidates: ["retire", "rearchitect", "rebuild", "repurchase"],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Project rulebook (ADR-0011, ADR-0013). Lives in the workspace repo under rulebook/;
+// these types mirror rulebook.yaml / pack.yaml / pipelines/*.yaml / waivers (schemaVersion 1, draft).
+// JSON Schema for rulebook files is generated from these types. Unknown `x-*` keys are allowed.
+// ---------------------------------------------------------------------------
+
+/** Capabilities Kintsugi knows about; rulebooks may declare custom ones (open set). */
+export const WELL_KNOWN_CAPABILITIES = [
+  "understand",
+  "conventions",
+  "mapping",
+  "convert",
+  "review",
+  "compare",
+  "cutover",
+] as const;
+export type CapabilityName = (typeof WELL_KNOWN_CAPABILITIES)[number] | (string & {});
+
+/** template → draft → ready; `suspended` blocks a capability that was found wrong. */
+export type CapabilityMaturity = "template" | "draft" | "ready" | "suspended";
+
+export interface ScopedMaturity {
+  default: CapabilityMaturity;
+  byKind?: Record<string, CapabilityMaturity>;
+  byApplication?: Record<string, CapabilityMaturity>;
+}
+
+export interface CapabilityDecl {
+  maturity: CapabilityMaturity | ScopedMaturity;
+  uses: string[];
+  /** Units, reviews or eval results supporting the current maturity. */
+  evidence?: string[];
+}
+
+export interface RulebookRef {
+  version: string;
+  /** Workspace-repo commit the rulebook was read from. */
+  commit?: string;
+}
+
+export interface StackSpec {
+  name: string;
+  version?: string;
+  frameworks?: string[];
+}
+
+export interface RunnerSpec {
+  /** Container image; must match the installation image allowlist. */
+  image: string;
+  command: string[];
+  resources?: { cpus?: number; memory?: string; timeoutSec?: number };
+  network?: "none" | "allowlist";
+}
+
+export interface PackManifest {
+  id: string;
+  version?: string; // present on vendored packs
+  description?: string;
+  stacks: { source: StackSpec[]; target: StackSpec[] };
+  /** Unit kinds only; unit files are declared or agent-proposed in units/** (ADR-0014). */
+  units: { kinds: string[] };
+  capabilities: Record<CapabilityName, CapabilityDecl>;
+  runners?: Record<string, RunnerSpec>;
+  compare?: { defaultProfile?: string; comparators?: Record<string, string> };
+}
+
+export interface RulebookManifest {
+  schemaVersion: 1;
+  id: string;
+  version: string;
+  owners: Role[];
+  extends?: {
+    id: string;
+    version: string;
+    source: string;
+    path: string; // vendor/<id>@<version>
+    /** The project's own maturity for vendored capabilities (default draft). */
+    capabilities?: Record<CapabilityName, Omit<CapabilityDecl, "uses"> & { uses?: string[] }>;
+  }[];
+  packs: string[];
+  /** Registry of custom capabilities (well-known ones need no entry). */
+  capabilities?: Record<string, { description: string }>;
+  pipelines: string[];
+  harnesses?: string[];
+}
+
+export interface Waiver {
+  id: string; // W-###
+  capability: CapabilityName;
+  packs?: string[];
+  scope: { kinds?: string[]; units?: string[]; applications?: string[] };
+  reason: string;
+  approvedBy: Role[];
+  expires: string; // ISO date, inclusive
+}
+
+export type StagePerformer =
+  | { agent: RuntimeAgentId } // built-in agents only; fixed in code (ADR-0014)
+  | { member: Role[] }
+  | { runner: string; then?: "compare" };
+
+export interface PipelineDefinition {
+  id: string;
+  appliesTo?: { dispositions?: Disposition[] };
+  phases: {
+    id: Phase | (string & {});
+    /** Required for custom phases: built-in phase used for reporting. */
+    category?: Phase;
+    perUnit?: boolean;
+    stages: { id: string; performer: StagePerformer; requires?: CapabilityName[]; gate?: GateId | (string & {}) }[];
+  }[];
+  gates?: Record<string, { require: string[] }>;
+}
+
+/** Frontmatter of mappings, UI patterns and review rules (one rule per file). */
+export interface RuleFrontmatter {
+  id: string;
+  title: string;
+  appliesTo?: { kinds?: string[]; packs?: string[]; applications?: string[]; globs?: string[] };
+  severity?: "block" | "warn";
+  check?: string[];
+  relatesTo?: string[];
+}
+
+/** One layer providing a capability for a unit, after composition (vendor → packs → overrides). */
+export interface CapabilityProvider {
+  layer: string; // e.g. "vendor/org-baseline@2.1.0", "packs/webforms-to-aspnetcore"
+  decl: CapabilityDecl;
+}
+
+export interface UnitScope {
+  id: string;
+  kind: string;
+  application: string;
+  pilot?: boolean;
+}
+
+export function resolveMaturity(
+  maturity: CapabilityMaturity | ScopedMaturity,
+  unit: Pick<UnitScope, "kind" | "application">,
+): CapabilityMaturity {
+  if (typeof maturity === "string") return maturity;
+  return maturity.byApplication?.[unit.application] ?? maturity.byKind?.[unit.kind] ?? maturity.default;
+}
+
+function waiverCovers(w: Waiver, capability: CapabilityName, layer: string, unit: UnitScope, today: string): boolean {
+  if (w.capability !== capability || w.expires < today) return false;
+  if (w.packs?.length && !w.packs.some((p) => layer === p || layer.endsWith("/" + p))) return false;
+  const { kinds, units, applications } = w.scope;
+  if (units?.length) return units.includes(unit.id);
+  if (applications?.length && !applications.includes(unit.application)) return false;
+  return !kinds?.length || kinds.includes(unit.kind);
+}
+
+export interface ReadinessResult {
+  ok: boolean;
+  missing: { capability: CapabilityName; layer?: string; maturity?: CapabilityMaturity }[];
+  waived: { capability: CapabilityName; layer: string; waiver: string }[];
+}
+
+/**
+ * Can a stage requiring `required` run for `unit`? Every provider of every required capability
+ * must allow it: `ready`, or `draft` for pilot units; otherwise a valid (non-expired) waiver must
+ * cover it. `suspended` can never be waived. Capabilities with no provider are reported as missing.
+ */
+export function checkReadiness(
+  providers: Record<CapabilityName, CapabilityProvider[]>,
+  required: CapabilityName[],
+  unit: UnitScope,
+  waivers: Waiver[] = [],
+  today: string = new Date().toISOString().slice(0, 10),
+): ReadinessResult {
+  const result: ReadinessResult = { ok: true, missing: [], waived: [] };
+  for (const capability of required) {
+    const list = providers[capability] ?? [];
+    if (list.length === 0) {
+      result.missing.push({ capability });
+      continue;
+    }
+    for (const { layer, decl } of list) {
+      const maturity = resolveMaturity(decl.maturity, unit);
+      if (maturity === "ready" || (maturity === "draft" && unit.pilot)) continue;
+      const waiver =
+        maturity === "suspended" ? undefined : waivers.find((w) => waiverCovers(w, capability, layer, unit, today));
+      if (waiver) result.waived.push({ capability, layer, waiver: waiver.id });
+      else result.missing.push({ capability, layer, maturity });
+    }
+  }
+  result.ok = result.missing.length === 0;
+  return result;
 }

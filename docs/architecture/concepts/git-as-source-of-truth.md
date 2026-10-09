@@ -15,8 +15,9 @@ Decision: [ADR-0007](../../decisions/0007-git-as-source-of-truth.md).
 
 | Repo role | Content | Who writes |
 |---|---|---|
-| **Code repo** (many per project: per application, as-is / to-be, per service) | Source code | Members, via branches/PRs |
-| **Workspace repo** (one per project) | Project configuration, inventory, assessment, ADRs, AS-IS/TO-BE docs, task packs, deliverables, asset overrides | Members + Kintsugi (worker) |
+| **Source repo** (legacy; many per project) | Legacy source code | Nobody through Kintsugi: always read-only |
+| **Target repo** (scaffolded target base) | New source code | Members, via branches/PRs |
+| **Workspace repo** (one per project) | Project manifest, **rulebook**, inventory, assessment, ADRs, AS-IS/TO-BE docs, task packs, deliverables, golden cases | Members + Kintsugi (worker) |
 
 Layout and conventions: [workspace repository reference](../../reference/workspace-repo.md).
 
@@ -37,9 +38,22 @@ Deliverables are **never uploaded** to Kintsugi:
 
 ## What Postgres keeps
 
-- **Operational state**: users, memberships, work item status, gate decisions, jobs, events, usage/cost, audit.
-- **Indexes rebuildable from Git**: KB chunks/embeddings, entities/edges, file → artifact mapping.
+- **Operational state**: users, memberships, job queue and executions, events, usage/cost, audit.
+- **Indexes rebuildable from Git**: work items and their status / gate results (from `units/**`, [ADR-0012](../../decisions/0012-work-items-as-files-in-git.md)), rulebook capabilities, KB chunks/embeddings, file → artifact mapping.
 - **Not** the primary copy of any document. If the DB is lost, the KB can be rebuilt from Git; only operational history is lost.
+
+## Work item state
+
+Each work item is a file, `units/<app>/<module>/<unit>.md`, whose frontmatter holds its state ([format](../../reference/workspace-repo.md#unit-files)).
+
+- **One write path**:
+  1. Portal, CLI, MCP and runtime agents call the Kintsugi API.
+  2. The API validates the role and the transition, then updates the index immediately.
+  3. The worker commits the change as `kintsugi-bot` with a `Kintsugi-Actor` trailer.
+  4. If the commit fails, the index change is rolled back.
+- **Concurrency**: commits use fetch → rebase → retry. A second concurrent change to the same unit fails fast and the error is shown.
+- **Direct edits** go through PRs and are validated on sync.
+- **Trackers** (Jira / Azure DevOps) only mirror the status pushed by Kintsugi.
 
 ## Sync and change detection
 

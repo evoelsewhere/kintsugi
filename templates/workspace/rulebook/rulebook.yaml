@@ -1,0 +1,20 @@
+# Rulebook root manifest — see docs/reference/rulebook.md
+# The only place the rulebook version is declared. Every capability in the starter pack
+# is at `template`, so dependent pipeline stages stay blocked until the project adapts
+# (draft) and verifies (ready) them.
+schemaVersion: 1
+id: my-project-rulebook     # TODO
+version: 0.1.0
+owners: [architect, ai-champion]
+
+extends: []                 # vendored snapshots: {id, version, source, path: vendor/<id>@<version>, capabilities}
+
+packs:
+  - packs/main              # TODO: rename, or add one pack per stack pair / concern
+
+capabilities: {}            # custom capabilities, e.g. data-migration: {description: ...}
+
+pipelines:
+  - pipelines/refactor.yaml # copy and adapt one pipeline per 7R strategy you use
+
+harnesses: []               # extra member-harness renderers, e.g. [harnesses/cursor.yaml]

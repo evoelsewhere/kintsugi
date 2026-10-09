@@ -32,11 +32,11 @@ Kintsugi has two kinds of agents with separate roles ([ADR-0001](../../decisions
 
 1. **Runtime prepares.** It pulls AS-IS context from the KB and produces a task pack. The worker commits the task pack to the workspace repo.
 2. **The member implements** in their own harness. The harness uses the KB through the Kintsugi MCP server or CLI.
-3. **The member delivers.** Code goes to code repos and deliverables go to the workspace repo, both through PRs. The artifacts are then registered.
+3. **The member delivers.** Code goes to target repos and deliverables go to the workspace repo, both through PRs. The artifacts are then registered.
 4. **Runtime reviews** the PR against the gate. A human approves.
 5. **After merge**, the runtime enriches the TO-BE KB and the metrics are updated.
 
-Flow details: [runtime view §6.2](../06-runtime-view.md#62-work-item-loop-member--harness).
+Flow details: [runtime view §6.3](../06-runtime-view.md#63-work-item-loop-member--harness).
 
 ## Why pi for the runtime
 
@@ -57,7 +57,7 @@ Survey as of 2026-10-09:
 ## Why members keep their own harnesses
 
 - Teams already use Copilot, Claude Code or ChatGPT/Codex under existing licenses and habits.
-- The same task pack and skills work across harnesses ([ADR-0005](../../decisions/0005-canonical-asset-format.md)).
+- The same task pack and the same agent plugins (skills, agents, hooks, MCP) work across harnesses: natively in Claude Code and Copilot CLI, converted for Codex, and rendered elsewhere ([ADR-0015](../../decisions/0015-member-assets-as-agent-plugins.md)).
 - `gate-reviewer` evaluates the **result** (the PR), not how it was produced, so behavior differences between harnesses matter less.
 
 Reference: [runtime agents](../../reference/runtime-agents.md) · [harness integration](../../reference/harness-integration.md).

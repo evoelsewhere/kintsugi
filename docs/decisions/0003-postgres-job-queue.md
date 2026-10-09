@@ -1,6 +1,6 @@
 # ADR-0003: pg-boss (Postgres-backed job queue) for orchestration
 
-- Status: Accepted (supersedes an earlier Temporal proposal)
+- Status: Accepted (supersedes an earlier Temporal proposal). State persistence amended by [ADR-0012](0012-work-items-as-files-in-git.md): unit / stage / gate state is persisted in the workspace repo and indexed in Postgres; the queue and job execution stay in Postgres.
 - Date: 2026-10-09
 
 ## Context

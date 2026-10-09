@@ -23,6 +23,7 @@ services:
       DATABASE_URL: postgres://kintsugi:${POSTGRES_PASSWORD}@postgres:5432/kintsugi
       DOCKER_HOST: tcp://docker-proxy:2375
       KINTSUGI_RUNNER_IMAGE: ${KINTSUGI_REGISTRY:-registry.example.com/kintsugi}/kintsugi-runner:${KINTSUGI_VERSION:-latest}
+      KINTSUGI_JOB_IMAGE_ALLOWLIST: ${KINTSUGI_JOB_IMAGE_ALLOWLIST:-}   # images rulebook runners may use
       KINTSUGI_JOBS_NETWORK: kintsugi_jobs
       KINTSUGI_JOBS_VOLUME: kintsugi_jobs-data   # per-job /src (ro) and /out via volume-subpath (Docker 26+)
     volumes:
