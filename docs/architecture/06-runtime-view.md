@@ -15,36 +15,58 @@ User ─► API ─enqueue─► pg-boss ─► Worker ─fetch─► Git server
 
 1. A user clicks "Assess". The API enqueues a pg-boss job.
 2. The worker fetches the latest commits of the relevant code repos and the workspace repo, then prepares a checkout directory for the job.
-3. The worker resolves the agent (`runtime/agents/assessment@version`) and its bound provider/model, then starts `kintsugi-runner` through the Docker API:
+3. The worker resolves the inputs:
+   - the pipeline stage being run, and the built-in agent it names (fixed in code);
+   - the agent's bound provider/model;
+   - the rulebook at the fetched commit, composed for the job's units (vendor → packs → overrides).
+
+   It then **checks readiness** for each unit, against every layer providing each capability the stage `requires`:
+   - `ready` passes, and `draft` passes for pilot units;
+   - otherwise an unexpired waiver is needed;
+   - `suspended` always blocks.
+
+   If the check fails, the job is refused and the missing capability and layer are shown. If it passes, the worker starts `kintsugi-runner` through the Docker API. For runner stages it starts the runner's own allowlisted image instead, with network `none` and no LLM credentials. Container settings:
    - mounts: `/src` read-only, `/out` writable;
    - environment: only the credentials of the LLM provider in use, plus a short-lived job token;
    - network: internal `jobs` network, which reaches only `kintsugi-app` and `egress-proxy`.
 4. The runner creates a pi session through the SDK (`createAgentSession`, tools per policy, `kintsugi` extension). Each event goes `POST /internal/jobs/:id/events` → Postgres → `NOTIFY` → SSE to the portal.
-5. The runner's `kb.search` / `kb.graph` tools call the Kintsugi API with the job token (read-only, scoped to the project).
+5. The agent reads source files directly in `/src`. Its `kb.search` tool calls the Kintsugi API with the job token (read-only, scoped to the project).
 6. When the job ends (`agent_settled`), the worker reads `/out`, validates it (allowed paths, size, secret scan), commits or opens a PR in the workspace repo according to the agent's `outputs`, and removes the container.
 
-## 6.2 Work item loop (member + harness)
+## 6.2 Project build
 
-1. `task-planner` produces the task pack; the worker commits `tasks/<id>.md` to the workspace repo.
-2. The member runs `kintsugi task start <id>` (or MCP `task.next`) and gets the task pack plus skills rendered for their harness.
+1. **Create / join / copy-from.** An admin or architect creates the project in the portal.
+   - The worker scaffolds the workspace repo from `templates/workspace/` (or reads an existing `kintsugi.yaml`).
+   - It registers the source and target repos, then commits through a PR. That PR is gate G0.
+2. **Shape.** The team adapts `rulebook/` through normal PRs, helped by `knowledge-ingest` dry runs and `to-be-analyst`. After each merge, the rulebook is re-validated: schema, declared paths, id/version pin. Its capability maturity is then shown on the readiness board.
+3. **Verify.** Pilot units run through task-planner → member → gate-reviewer (→ compare) on `draft` capabilities. Owners then promote capabilities to `ready` by PR, which is gate G3.
+
+Guide: [build a project](../guides/build-project.md).
+
+## 6.3 Work item loop (member + harness)
+
+1. `task-planner` produces the task pack. The worker commits `tasks/<id>.md` and sets the unit file's `stage` / `status` in the workspace repo.
+2. The member runs `kintsugi task start <id>` (or MCP `task.next`).
+   - Kintsugi claims the unit: it sets `assignee`, `harness` and `status: in-progress` through the API, committed as `kintsugi-bot` with `Kintsugi-Actor`.
+   - The member works with the task pack and the project plugins installed in their harness (built-in `kintsugi` + stack plugins from the project marketplace).
 3. The member works in Claude Code / Copilot / ChatGPT-Codex:
    - queries the KB through MCP;
-   - commits code to the code repo;
+   - commits code to the target repo;
    - commits deliverables to the workspace repo;
    - opens PRs;
    - registers artifacts with `artifact.register`.
-4. The worker detects the PR (webhook or polling) and runs a `gate-reviewer` job, which posts PR comments, writes a review record and updates the gate.
-5. A human approves and merges. Git sync triggers `knowledge-ingest` to enrich the TO-BE KB, and Monitoring updates the AI metrics.
+4. The worker detects the PR (webhook or polling) and sets the unit to `awaiting-review`. It then runs a `gate-reviewer` job, which posts PR comments and writes a review record.
+5. A human approves and merges. The approval is recorded in the unit file's `gates`. Git sync triggers `knowledge-ingest` to enrich the TO-BE KB, and Monitoring updates the AI metrics.
 
 Step-by-step instructions for members: [member workflow guide](../guides/member-workflow.md).
 
-## 6.3 KB question & answer
+## 6.4 KB question & answer
 
 Questions come from the portal chat or from a member's harness (MCP `kb.ask`).
 1. `kb-assistant` runs as an interactive runtime job; follow-up messages are passed with `followUp`.
 2. It answers with citations (`repo@commit:path`, `path:line`).
 
-## 6.4 Git sync and change detection
+## 6.5 Git sync and change detection
 
 1. Per repository, the worker keeps the last seen commit (`GitSyncState`).
 2. **Detecting changes**:
@@ -52,5 +74,6 @@ Questions come from the portal chat or from a member's harness (MCP `kb.ask`).
    - When the Git server can reach the installation, provider webhooks trigger the same sync immediately.
 3. **Reacting to changes**:
    - New commits on tracked branches enqueue `knowledge-ingest` (incremental).
+   - Changes under `rulebook/` re-validate the rulebook and refresh capability readiness.
    - New or updated PRs enqueue `gate-reviewer`.
    - Servers without a provider adapter get sync and branch polling only.

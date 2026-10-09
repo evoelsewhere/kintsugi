@@ -12,7 +12,23 @@ An as-is → to-be migration project combines three layers:
 | **Lifecycle** | Discover → Requirement / Preparation → Migrate → Refine → Test → Go-live / Hypercare | Workflow engine: phase → stage → task, with quality gates |
 | **Workforce** | Humans and AI working together: AI does the first pass, humans review and finish. New AI roles join the RACI (AI champion, AI engineer, prompt engineer, KM lead/engineer, AI practice owner) | RACI-based permissions and human-in-the-loop. The Kintsugi Runtime prepares and reviews; members implement with their own AI harnesses |
 
-The key idea: **invest first in the knowledge base and the skill/prompt library, then run migration at scale** ("design for auto-migration").
+The key idea: **invest first in the knowledge base and the project's rules, then run migration at scale** ("design for auto-migration").
+
+## 0. Building the project
+
+Kintsugi is a common engine. Before a project can run the pipeline below, the team **builds** it.
+- The build encodes everything stack- and project-specific in the project's **rulebook**: stack pair, unit kinds, source notes, target conventions, mappings, review rules, compare profiles.
+- The rulebook lives in the workspace repo.
+- Each rulebook capability matures from `template` to `draft` to `ready`. A stage that depends on a capability runs only once it is `ready`.
+
+| Build step | Runs during | Done when |
+|---|---|---|
+| **Bootstrap**: create or join the workspace repo, register source and target repos, pin the rulebook | P0 | Gate G0 |
+| **Shape**: adapt the rulebook capabilities (`template` → `draft`) | P1–P2 | Capabilities needed by the pipeline template are `draft` |
+| **Verify**: exercise them on pilot units, promote to `ready` by PR | P3 | Gate G3 |
+| **Evolve**: feed lessons learned back as rulebook PRs (version bumps) | P4–P7 | Continuous |
+
+Details: [project rulebook](../architecture/concepts/project-rulebook.md) · how-to: [build a project](../guides/build-project.md).
 
 ## 2. Standard pipeline (P0 → P7)
 
@@ -29,14 +45,15 @@ P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare
   - set up the program/project, team and RACI;
   - choose the SDLC template;
   - define the AI strategy (scope, tools, KPIs);
-  - choose the allowed harnesses and models.
-- **Inputs**: statement of work, system list, customer constraints (security, data residency).
-- **Outputs**: project charter, RACI, AI strategy for engineering, KPI baseline.
-- **Gate G0**: AI usage policy and tool list approved.
+  - choose the allowed harnesses and models;
+  - **bootstrap the project build**: workspace repo, source and target repos, rulebook pinned.
+- **Inputs**: statement of work, system list, customer constraints (security, data residency), scaffolded target base (or the plan to build it).
+- **Outputs**: project charter, RACI, AI strategy for engineering, KPI baseline, workspace repo with `kintsugi.yaml` and starter rulebook.
+- **Gate G0**: AI usage policy and tool list approved; workspace repo and rulebook pinned.
 
 ### P1 — Discover & Assess
 - **Activities**:
-  - Auto-discovery of the environment: apps, infrastructure, dependencies, databases.
+  - Inventory of the environment (apps, infrastructure, dependencies, databases) and of the migration units: drafted by agents from repos and documents, confirmed by people.
   - AS-IS ingestion into the **AS-IS knowledge base**: source code, documents (xlsx/docx → md), knowledge-transfer recordings (transcribed), DB schemas.
   - Generate requirements from KT recordings and the running application. Detect the **gap list** between docs, code and app.
   - Score the **transformation scorecard** (business value, technical value, feasibility, cost, risk; weighted) to get a priority.
@@ -54,17 +71,18 @@ P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare
   - cost-benefit;
   - POC plan;
   - prototype or first working version.
-- **Outputs**: target architecture blueprint, ADRs, co-existence strategy, data migration strategy, POC plan, initial TO-BE KB.
+- **Outputs**: target architecture blueprint, ADRs, co-existence strategy, data migration strategy, POC plan, initial TO-BE KB, **rulebook capabilities shaped** (target and UI conventions, mappings, UI patterns, review rules at `draft`).
 - **Gate G2**: approved by the **Architecture Review Board**.
 
 ### P3 — Prepare Factory
 - **Activities**:
   - base source / skeleton, landing zone and IaC, CI/CD;
   - deliverable creation guidelines;
-  - **skill packs, prompt libraries and task-pack templates** for members' harnesses, per type of work (reverse design, version upgrade, language transformation, unit-test generation, test-case generation, data migration);
-  - configure the runtime agents (task-planner, gate-reviewer) and their eval sets.
-- **Outputs**: runnable base source, CI/CD pipeline, piloted skill packs and task-pack templates, configured runtime agents, complete TO-BE KB.
-- **Gate G3**: a pilot of 1–2 features done in members' harnesses meets quality; runtime agents pass their eval thresholds.
+  - **agent plugins (skills, agents, hooks), prompt libraries and task-pack templates** for members' harnesses, per type of work (reverse design, version upgrade, language transformation, unit-test generation, test-case generation, data migration);
+  - configure the runtime agents (task-planner, gate-reviewer) and their eval sets;
+  - verify the rulebook on pilot units and promote capabilities to `ready`.
+- **Outputs**: runnable base source, CI/CD pipeline, piloted agent plugins and task-pack templates, configured runtime agents, complete TO-BE KB.
+- **Gate G3**: a pilot of 1–2 units per unit kind meets quality, and **every rulebook capability required by the pipeline template is `ready`**.
 
 ### P4 — Migrate (by wave / feature)
 - **Activities**: reverse design (code → detail design), new design generation, code migration/porting, data migration, design ↔ code sync, fixing static-check and runtime errors.
@@ -108,9 +126,13 @@ P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare
 
 ## 4. Pipeline ↔ 7R
 
-Not every application goes through all of P0–P7. The 7R strategy selects the pipeline template:
+Not every application goes through all of P0–P7.
+- Each application follows a **pipeline definition** from the project's rulebook (`rulebook/pipelines/*.yaml`): its phases, stages, performers, required capabilities and gates.
+- Kintsugi ships one built-in definition per 7R strategy as a starting template. Projects copy and adapt these definitions: they can add custom phases (mapped to a built-in category for reporting), add custom capabilities, or remove stages.
 
-| 7R | Heavy phases | Main skill packs (member harness) / runtime agents |
+Typical shape of the built-in templates:
+
+| 7R | Heavy phases | Main plugin skills (member harness) / runtime agents |
 |---|---|---|
 | Retire | P1 → P6 (decommission) | `assessment`, dependency analysis (runtime) |
 | Retain | P1 | — |
@@ -135,9 +157,9 @@ The weighted total maps to a priority and candidate dispositions:
 ## 5. Implications for Kintsugi
 
 1. **The pipeline is a configurable template** (per 7R and project type), not hard-coded.
-2. **The unit of work is a work item** (feature / screen / module / DB object) moving through stages. Each stage is performed by a member (with an AI harness), a runtime agent (preparation / review) or a tool.
+2. **The unit of work is a work item** (feature / screen / module / DB object) moving through stages. Each work item is a file in the workspace repo whose frontmatter holds its state (ADR-0012). Each stage is performed by a member (with an AI harness), a runtime agent (preparation / review) or a tool.
 3. **The knowledge base is first-class.** Runtime agents and members' harnesses both read it, and merged results flow back into it (continuous TO-BE KB enrichment).
-4. **Assets need versioning and evaluation**: skill packs, prompt libraries, task-pack templates and runtime agents are reused across projects.
+4. **Project knowledge is built, versioned and verified**: the rulebook is shaped per project, promoted capability by capability, and only deliberately copied to other projects.
 5. **AI metrics are measured from day one.**
 6. **Separate the "brain" from the "hands".** Platform intelligence runs on the Kintsugi Runtime; implementation stays in the harnesses members already use.
 7. **Every output is a file in Git**, referenced as `repo@commit:path` ([ADR-0007](../decisions/0007-git-as-source-of-truth.md)).

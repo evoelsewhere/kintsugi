@@ -3,7 +3,7 @@
 // The runner reads a read-only git checkout and writes only to /out; the worker
 // commits /out to the workspace repo (ADR-0007). See docs/reference/runtime-agents.md.
 
-import type { Phase, RuntimeAgentId } from "@kintsugi/domain";
+import type { CapabilityName, Phase, RulebookRef, RunnerSpec, RuntimeAgentId } from "@kintsugi/domain";
 
 export interface JobContext {
   projectId: string;
@@ -22,11 +22,9 @@ export type JobInput =
   | { kind: "kb-query"; kb: "as-is" | "to-be"; query: string };
 
 export interface ToolPolicy {
-  /** pi built-ins plus Kintsugi tools (kb.search, kb.graph, write-out, pr.comment, …). */
+  /** Derived from the built-in agent definition in code; not configurable per project. */
   allowTools: string[];
   denyBashPatterns?: string[];
-  /** Egress is always via egress-proxy; this lists extra hosts beyond the job's LLM provider. */
-  extraEgressHosts?: string[];
 }
 
 /** A file the job wants persisted; the worker validates it and commits it to the workspace repo. */
@@ -37,8 +35,19 @@ export interface JobOutputRule {
 }
 
 export interface JobSpec {
+  /** Built-in agent; its prompt, skills, tools and policy are fixed in code (ADR-0014). */
   agent: { id: RuntimeAgentId; version: string };
   context: JobContext;
+  /** Project rulebook the job runs against (ADR-0011); readiness of `requires` is checked before launch. */
+  rulebook: RulebookRef;
+  /** Packs resolved for the job's units; rules and skills come from these layers. */
+  packs: string[];
+  /** From the pipeline stage definition (rulebook pipelines/*.yaml), not hard-coded per agent. */
+  requires: CapabilityName[];
+  /** Waivers the readiness check relied on, recorded for audit. */
+  waivers?: string[];
+  /** True when every unit in the job is a pilot unit (allows `draft` capabilities). */
+  pilot?: boolean;
   inputs: JobInput[];
   /** Task-specific instruction appended to the agent's own prompt and skills. */
   instruction?: string;
@@ -66,6 +75,24 @@ export interface JobHandle {
   followUp?(message: string): Promise<void>;
   abort(reason: string): Promise<void>;
   done: Promise<Extract<JobEvent, { type: "job.completed" }>>;
+}
+
+/** A rulebook runner executed in its own isolated container (no LLM credentials). */
+export interface RunnerJobSpec {
+  runner: { id: string; pack: string; spec: RunnerSpec };
+  context: JobContext;
+  rulebook: RulebookRef;
+  inputs: JobInput[];
+  /** Optional comparator run after the runner, producing the standard compare report. */
+  thenCompare?: { profile?: string; comparator?: string };
+}
+
+/** Standard compare report contract, produced by the built-in compare engine or a custom comparator. */
+export interface CompareReport {
+  verdict: "pass" | "fail";
+  diffCount: number;
+  clusters: { id: string; files: string[]; summary: string }[];
+  reportPath: string;
 }
 
 export interface AgentRuntime {

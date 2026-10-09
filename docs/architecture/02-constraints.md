@@ -12,6 +12,10 @@
 | TypeScript on Node ≥ 22; the runner follows pi's requirement (Node ≥ 22.19) | [ADR-0002](../decisions/0002-typescript-monorepo.md) |
 | pi is pinned to an exact version; only its MIT core packages are used | [ADR-0001](../decisions/0001-pi-as-kintsugi-runtime.md) |
 | The runtime never writes to repositories; runner containers are read-only except `/out` | [ADR-0004](../decisions/0004-runner-container-per-job.md) |
+| Kintsugi ships no stack-specific content; projects build their rulebook, and dependent stages are blocked until capabilities are `ready` (or waived) | [ADR-0011](../decisions/0011-project-rulebook.md), [ADR-0013](../decisions/0013-composable-open-rulebook.md) |
+| Extensions that run project code (runner images, harness transformer plugins) require installation-level allowlists | [ADR-0013](../decisions/0013-composable-open-rulebook.md) |
+| No code graph or language parsing; no unit-discovery configuration; built-in runtime agents are fixed in code (no agent configuration in any repo) | [ADR-0014](../decisions/0014-no-code-graph-no-agent-config.md) |
+| Source repos are always read-only; the target base is scaffolded by the project before convert | [ADR-0011](../decisions/0011-project-rulebook.md) |
 
 ## 2.2 Organizational constraints
 
@@ -26,4 +30,4 @@
 
 - **Documentation**: English and company-neutral ([docs conventions](../README.md#conventions)).
 - **Decisions**: architecture changes go through ADRs ([template](../decisions/template.md)).
-- **Assets**: canonical formats are Agent Skills (`SKILL.md`) + `AGENTS.md`; harness-specific files are rendered, never hand-written ([ADR-0005](../decisions/0005-canonical-asset-format.md)).
+- **Assets**: member-harness assets are agent plugins in the Claude Code plugin format (skills, agents, commands, hooks, MCP), distributed through generated marketplaces; harness-specific files are generated, never hand-written ([ADR-0015](../decisions/0015-member-assets-as-agent-plugins.md)).

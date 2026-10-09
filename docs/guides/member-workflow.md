@@ -11,10 +11,13 @@ You implement work items in **your own AI harness** (Claude Code, GitHub Copilot
    ```bash
    kintsugi login --url https://kintsugi.example.internal --token <PAT>
    ```
-3. Connect your harness to the Kintsugi MCP server. The command below writes the MCP configuration and skills in your harness's format:
+3. Install the project's plugins. They include the built-in `kintsugi` plugin (task workflow, Kintsugi MCP server, guardrail hooks) and the project's stack plugins.
    ```bash
-   kintsugi assets pull --harness <claude-code|copilot|codex|chatgpt>
+   kintsugi plugins setup --harness <claude-code|copilot|codex|chatgpt>
    ```
+   This adds the workspace repo as a plugin marketplace and installs from it with your harness's own commands. In Claude Code you can also run `/plugin marketplace add <workspace-repo-url>` and `/plugin install kintsugi@<project>`.
+
+   When prompted, enter the Kintsugi URL and your PAT. The PAT is stored in the harness's secure storage. Harnesses without plugin support get an equivalent rendering of skills and MCP, without hooks.
 
 ## For each work item
 
@@ -22,10 +25,10 @@ You implement work items in **your own AI harness** (Claude Code, GitHub Copilot
    ```bash
    kintsugi task start <work-item-id>
    ```
-   This creates a branch in the code repo and fetches the task pack (`tasks/<id>.md` in the workspace repo).
-2. **Work in your harness.** Point it at the task pack. Use the suggested skills, and query the KB through MCP (`kb.search`, `kb.ask`).
+   This claims the unit for you, so the board shows you as assignee. It also creates a branch in the target repo and fetches the task pack (`tasks/<id>.md` in the workspace repo).
+2. **Work in your harness.** Point it at the task pack. Follow the rulebook mappings, UI patterns and review rules it cites, use the suggested skills, and query the KB through MCP (`kb.search`, `kb.ask`). If a rule is missing or wrong, propose a rulebook PR instead of deciding locally.
 3. **Commit.**
-   - Put code in the code repo.
+   - Put code in the target repo. Source (legacy) repos are read-only.
    - Put deliverables (detail design, test report…) in the workspace repo, at the paths listed in the task pack.
    - Add `Assisted-by: <harness>` to AI-assisted commits.
 4. **Open PRs.** Reference the work item id and fill in the AI-usage section of the PR template.

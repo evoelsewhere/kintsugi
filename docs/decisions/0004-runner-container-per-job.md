@@ -1,6 +1,6 @@
 # ADR-0004: One Docker container per runtime job, with a pi SDK runner inside
 
-- Status: Accepted
+- Status: Accepted. Amended by [ADR-0013](0013-composable-open-rulebook.md): rulebook runners use their own allowlisted images (see Amendment).
 - Date: 2026-10-09
 
 ## Context
@@ -28,3 +28,13 @@ pi has no sandbox and no permission system, and its "project trust" is explicitl
 ## Consequences
 - The worker needs Docker API access. Restrict it with a socket proxy that allows only container lifecycle calls (D32).
 - Node's built-in `fetch` does not honor `HTTPS_PROXY` by default. Verify that `NODE_USE_ENV_PROXY=1` works for pi-ai's providers, or configure an agent explicitly.
+
+## Amendment (ADR-0013)
+- **Runtime jobs** (pi) still run only in the `kintsugi-runner` image.
+- **Rulebook runners and custom comparators** run in the container image declared by the runner. The image must match the installation **image allowlist** (`KINTSUGI_JOB_IMAGE_ALLOWLIST`).
+- **Hardening** is the same for both: non-root, read-only root filesystem, `cap-drop ALL`, `no-new-privileges`, resource limits, gVisor when available.
+- **Runner restrictions**:
+  - mounts limited to the job directory;
+  - network `none` unless the runner declares `allowlist` and the hosts are admin-approved;
+  - never any LLM credentials.
+- **Worker checks**: the worker refuses images outside the allowlist and mounts outside the job directory.
