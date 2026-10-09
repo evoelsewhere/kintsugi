@@ -90,7 +90,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
   return (
     <aside
       className={cn(
-        "sticky top-0 flex h-screen shrink-0 flex-col gap-4 px-3 py-5 transition-[width] duration-200",
+        "sticky top-0 flex h-screen shrink-0 flex-col gap-4 bg-surface px-3 py-5 transition-[width] duration-200 [box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]",
         rail ? "w-16" : "w-72",
       )}
     >
@@ -98,9 +98,12 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
       <div className={cn("flex items-center gap-2 px-2", rail && "justify-center px-0")}>
         <BrandMark className="size-8" />
         {rail ? null : (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-[15px] font-medium tracking-tight text-text">Kintsugi</span>
-            <span className="rounded-[var(--geist-pill-radius)] bg-recessed px-1.5 py-0.5 text-[11px] leading-4 text-text-muted">{APP_VERSION}</span>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-[15px] font-medium tracking-tight text-text">Kintsugi</span>
+              <span className="rounded-[var(--geist-pill-radius)] bg-recessed px-1.5 py-0.5 text-[11px] leading-4 text-text-muted">{APP_VERSION}</span>
+            </div>
+            <span className="truncate text-[10px] leading-3 text-text-muted">Migration &amp; modernization portal</span>
           </div>
         )}
         {rail ? null : (
