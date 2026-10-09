@@ -8,6 +8,7 @@ import { NavLink } from "react-router-dom";
 import { BrandMark } from "../components/brand-mark";
 import { StatusDot } from "../components/ui/status-dot";
 import { APP_VERSION } from "../lib/app-info";
+import { useAuth } from "../lib/auth";
 import { useHealth } from "../lib/use-health";
 import { useMediaQuery } from "../lib/use-media-query";
 import { cn } from "../lib/utils";
@@ -58,8 +59,17 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const health = useHealth();
+  const { user, logout } = useAuth();
   // Narrow screens always use the icon rail so content keeps its width.
   const rail = collapsed || !isDesktop;
+
+  const displayName = user?.displayName || user?.username || "Account";
+  const initials = displayName
+    .split(/\s+/)
+    .map((part) => part.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -164,11 +174,11 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
             title="Account menu"
             className="flex w-full items-center gap-2.5 rounded-[10px] p-1.5 text-left hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
           >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-text text-[11px] font-medium text-background">AD</div>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-text text-[11px] font-medium text-background">{initials}</div>
             {rail ? null : (
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium text-text">Admin</p>
-                <p className="truncate text-[11px] text-text-muted">admin@kintsugi.local</p>
+                <p className="truncate text-[13px] font-medium text-text">{displayName}</p>
+                <p className="truncate text-[11px] text-text-muted">{user?.username ?? ""}</p>
               </div>
             )}
             {rail ? null : <MoreHorizontal className="size-4 shrink-0 text-text-muted" strokeWidth={1.75} />}
@@ -192,7 +202,10 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
               </button>
               <button
                 type="button"
-                onClick={() => setMenuOpen(false)}
+                onClick={() => {
+                  setMenuOpen(false);
+                  void logout();
+                }}
                 className="flex w-full items-center gap-2 rounded-[var(--geist-radius)] px-2.5 py-2 text-left text-[14px] text-[var(--ds-status-red)] hover:bg-hover"
               >
                 <LogOut className="size-4" strokeWidth={1.75} />

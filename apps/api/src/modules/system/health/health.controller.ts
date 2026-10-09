@@ -1,5 +1,6 @@
 import { Controller, Get } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Public } from "../../../common/auth/decorators.js";
 
 export interface HealthResponse {
   status: "ok";
@@ -11,6 +12,7 @@ export interface HealthResponse {
 @Controller("health")
 export class HealthController {
   @Get()
+  @Public()
   @ApiOperation({ summary: "Liveness of the API process" })
   @ApiOkResponse({ description: "The API process is up." })
   health(): HealthResponse {

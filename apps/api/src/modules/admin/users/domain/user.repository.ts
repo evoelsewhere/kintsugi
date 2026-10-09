@@ -1,6 +1,17 @@
-// Port of Users — the DI token of this module (shared kernel: common/domain/repository.ts).
+// Port of members. Implemented by infrastructure adapters; the application layer
+// depends only on this contract.
 
-import { Repository } from "../../../../common/domain/repository.js";
-import type { CreateUser, User } from "./user.js";
+import type { PasswordHash } from "../../../../common/security/password.js";
+import type { CreateUser, UpdateUser, UserRecord } from "./user.js";
 
-export abstract class UserRepository extends Repository<User, CreateUser> {}
+export abstract class UserRepository {
+  abstract list(): Promise<UserRecord[]>;
+  abstract get(id: string): Promise<UserRecord | undefined>;
+  abstract findByUsername(username: string): Promise<UserRecord | undefined>;
+  abstract count(): Promise<number>;
+  abstract create(id: string, user: CreateUser, password: PasswordHash): Promise<UserRecord>;
+  abstract update(id: string, input: UpdateUser): Promise<UserRecord | undefined>;
+  abstract setPassword(id: string, password: PasswordHash): Promise<void>;
+  abstract remove(id: string): Promise<boolean>;
+  abstract passwordOf(id: string): Promise<PasswordHash | undefined>;
+}

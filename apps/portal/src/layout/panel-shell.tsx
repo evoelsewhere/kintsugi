@@ -13,7 +13,7 @@ export function PanelShell(): React.JSX.Element {
     <div className="flex min-h-screen bg-background">
       <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
       <main className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-[var(--geist-page-width)] px-4 py-6 sm:px-6 md:px-8 md:py-8">
+        <div className="w-full px-4 py-6 sm:px-6 md:px-8 md:py-8">
           <Outlet />
         </div>
       </main>

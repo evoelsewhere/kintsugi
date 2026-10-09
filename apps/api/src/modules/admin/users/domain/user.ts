@@ -1,14 +1,28 @@
-// Domain of Users: entity and commands. Pure types — no framework, no I/O.
+// Domain of members (Admin · Identity & Access, A2): users and their role assignments.
+// Pure types — no framework, no I/O.
 
-export interface User {
+export interface UserRecord {
   id: string;
   username: string;
-  role: string;
-  status?: string;
+  email: string;
+  displayName: string;
+  enabled: boolean;
+  /** Role ids: one primary role plus optional sub-roles. */
+  roleIds: string[];
+  createdAt: string;
 }
 
 export interface CreateUser {
   username: string;
-  role: string;
-  status?: string;
+  password: string;
+  email?: string;
+  displayName?: string;
+  roleIds?: string[];
+}
+
+export interface UpdateUser {
+  email?: string;
+  displayName?: string;
+  enabled?: boolean;
+  roleIds?: string[];
 }
