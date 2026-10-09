@@ -1,4 +1,4 @@
-// Navigation configuration — the single place to add or reorder panel entries.
+﻿// Navigation configuration â€” the single place to add or reorder panel entries.
 // Adding a page: append an item here and register its route in App.tsx.
 import {
   Activity,
@@ -48,7 +48,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: "admin", label: "Admin", icon: Settings, to: "/admin" },
       { id: "harnesses", label: "Harnesses", icon: Puzzle, to: "/admin" , badge: "soon" },
       { id: "members", label: "Members & Permissions", icon: Users, to: "/members" },
-      { id: "settings", label: "Settings", icon: Settings, to: "/settings", action: "open-settings" },
     ],
   },
 ];

@@ -1,4 +1,4 @@
-// Login — local username/password sign-in (ADR-0008). Dev default: admin / admin@1234.
+﻿// Login â€” local username/password sign-in (ADR-0008). Dev default: admin / admin@1234.
 
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -56,11 +56,11 @@ export function LoginPage(): React.JSX.Element {
               <Input value={username} autoComplete="username" placeholder="admin" onChange={(event) => setUsername(event.target.value)} />
             </Field>
             <Field label="Password">
-              <Input type="password" value={password} autoComplete="current-password" placeholder="••••••••" onChange={(event) => setPassword(event.target.value)} />
+              <Input type="password" value={password} autoComplete="current-password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" onChange={(event) => setPassword(event.target.value)} />
             </Field>
             {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
             <Button type="submit" variant="solid" disabled={submitting || username === "" || password === ""}>
-              {submitting ? "Signing in…" : "Sign in"}
+              {submitting ? "Signing inâ€¦" : "Sign in"}
             </Button>
             <p className="text-[11px] text-text-muted">Dev default: admin / admin@1234</p>
           </form>

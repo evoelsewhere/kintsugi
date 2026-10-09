@@ -1,14 +1,14 @@
+﻿import { Breadcrumbs } from "../components/breadcrumbs";
 import { MetricCard } from "../components/metric-card";
-import { PageHeader } from "../components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { StatusDot, type StatusTone } from "../components/ui/status-dot";
 import { useHealth } from "../lib/use-health";
 
 const METRICS = [
-  { title: "Units in flight", value: "24", subtitle: "12 awaiting review · 6 in progress", tone: "green" },
+  { title: "Units in flight", value: "24", subtitle: "12 awaiting review Â· 6 in progress", tone: "green" },
   { title: "Gate status", value: "G3 pending", subtitle: "Prepare factory readiness", tone: "orange" },
   { title: "AI-generated share", value: "38%", subtitle: "Declared via commit trailers", tone: "blue" },
-  { title: "Runtime cost (MTD)", value: "$412", subtitle: "pi jobs · 6 runtime agents", tone: "cyan" },
+  { title: "Runtime cost (MTD)", value: "$412", subtitle: "pi jobs Â· 6 runtime agents", tone: "cyan" },
 ] as const satisfies ReadonlyArray<{ title: string; value: string; subtitle: string; tone: StatusTone }>;
 
 const PIPELINE = [
@@ -26,11 +26,8 @@ export function OverviewPage(): React.JSX.Element {
   const health = useHealth();
 
   return (
-    <div className="flex flex-col gap-8">
-      <PageHeader
-        title="Overview"
-        description="Programme health across the delivery pipeline — Mobilize → Discover & Assess → Define To-Be → Prepare Factory → Migrate → Verify → Cutover → Hypercare."
-      />
+    <div className="flex flex-col gap-5">
+      <Breadcrumbs items={["Overview"]} />
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {METRICS.map((metric) => (
