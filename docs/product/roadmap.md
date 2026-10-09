@@ -20,3 +20,7 @@
   - prompt libraries (version upgrade, unit-test generation, test-case generation, detail-design generation);
   - document converters (Excel → Markdown);
   - AI code-review tooling (IDE extension, CI action).
+
+## Accepted follow-ups
+
+- **Portal Settings UI refactor**: the Settings modal + Providers section work but need a visual pass — tighten spacing rhythm (modal, sections, cards), provider brand icons, macOS-style collapsible sidebar. Tracked from implementation feedback; land as part of M0 portal work.
