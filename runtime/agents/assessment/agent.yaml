@@ -1,0 +1,28 @@
+# Runtime agent definition (draft schema). Executed on pi by services/runtime.
+id: assessment
+version: 0.1.0
+phase: discover-assess
+description: Draft the transformation scorecard and a 7R recommendation for one application.
+model:
+  provider: anthropic        # default binding; admins rebind per project (ADR-0009)
+  id: claude-sonnet-5-5
+  thinking: medium
+skills: [app-assessment]
+tools:
+  allow: [read, grep, find, ls, write-out, kb.search, kb.graph, inventory.get]   # write-out: /out only
+network: default             # kintsugi-app + egress-proxy (LLM hosts) only
+inputs: [repo, kb-query]     # repo is mounted read-only
+outputs:
+  - path: assessment/{app}/scorecard.md   # written to /out, committed by the worker
+    commit: pull-request
+triggers:
+  - manual                   # "Assess" button on the application page
+  - event: kb.ingest.completed
+budget:
+  max_cost_usd: 3
+  timeout_sec: 1800
+review:
+  approver_role: architect   # draft only; humans confirm scores and disposition (gate G1)
+eval:
+  set: evals/assessment
+  pass_threshold: 0.8
