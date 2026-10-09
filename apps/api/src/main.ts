@@ -1,0 +1,32 @@
+// `kintsugi-app` REST + OpenAPI surface (ADR-0016: NestJS 12, ESM).
+// The portal's static build and the Harness Hub MCP endpoint are served by the
+// same container; this process owns the /api routes.
+
+import "reflect-metadata";
+import { StandardSchemaValidationPipe } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { AppModule } from "./app.module.js";
+import { loadEnv } from "./common/config/env.js";
+import { HttpExceptionFilter } from "./common/filters/http-exception.filter.js";
+
+async function bootstrap(): Promise<void> {
+  const env = loadEnv();
+  const app = await NestFactory.create(AppModule, { logger: [env.logLevel] });
+
+  app.setGlobalPrefix("api");
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalPipes(new StandardSchemaValidationPipe());
+
+  const openApi = new DocumentBuilder()
+    .setTitle("Kintsugi API")
+    .setDescription("REST API of the Kintsugi migration & modernization portal.")
+    .setVersion("0.0.0")
+    .addBearerAuth()
+    .build();
+  SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, openApi));
+
+  await app.listen(env.port);
+}
+
+void bootstrap();
