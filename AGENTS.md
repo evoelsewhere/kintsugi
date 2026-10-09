@@ -26,6 +26,7 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 - Every response uses the uniform envelope: `{ success: true, data }` / `{ success: false, statusCode, error, message, timestamp, path }`. Controllers return plain values; do not hand-wrap responses.
 - Database: one database, **one schema per domain** (`core`, `admin`, `delivery`, `monitoring`, `governance`, `knowledge`, `workflow`). Migrations (`apps/api/migrations/*.sql`) create their schema and fully qualify table names — no `search_path` reliance.
 - Credentials (LLM keys, Git tokens) are stored **encrypted** (ADR-0009, `KINTSUGI_SECRET_KEY`) and never returned by the API. Provider settings live in the database and are managed in the portal — not in environment variables.
+- **Identity & access** (ADR-0008): permission codes live in `core.permission` and are added by **migration** (they appear in the UI automatically); route protection is global — mark public routes `@Public()` and gate the rest with `@RequirePermission("<code>")`. Never hardcode permission lists outside the catalog.
 
 ## Commits
 - Follow [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<optional scope>): <subject>`, with a lowercase imperative subject.

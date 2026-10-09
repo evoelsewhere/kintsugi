@@ -27,16 +27,22 @@ src/
                          input, badge, status-dot, modal
   lib/
     app-info.ts          app name + version shown in the sidebar
-    api.ts               typed fetch wrapper (uniform response envelope)
+    api.ts               typed fetch wrapper (uniform response envelope + Bearer token)
     api/providers.ts     LLM provider registry client (Settings → Providers)
+    api/identity.ts      members, roles and permission catalog client
+    auth.tsx             AuthProvider: session token, current user, can(permission)
     use-health.ts        API liveness hook
+    use-media-query.ts   responsive breakpoints (sidebar auto-rail)
     utils.ts             cn() class helper
   pages/
+    login.tsx            username/password sign-in (ADR-0008)
     overview.tsx         programme health, pipeline P0–P7
     admin.tsx            A1–A7
     delivery.tsx         B1–B7
     monitoring.tsx       C1–C5
     governance.tsx       D1–D6
+    members-permissions.tsx   members table + filters; roles matrix opens in a modal
+    roles-permissions/        members-tab (table/dialogs), roles-tab (permission matrix)
     settings/
       settings-modal.tsx           modal opened from the user card / Settings nav entry
       settings-tabs.tsx            section tab bar
@@ -85,6 +91,13 @@ src/
 - Provider settings (Settings → Providers) are stored in the database through the API;
   credentials are write-only and encrypted server-side (ADR-0009) — never shown again.
 - Deep links rely on the `kintsugi-app` serving `index.html` for unknown paths.
+
+- **Auth**: every request carries the session token from `lib/auth.tsx` (localStorage,
+  Bearer header). Routes are guarded by `RequireAuth`; page sections use
+  `can("<permission.code>")` — permission codes come from the API catalog
+  (`core.permission`, added by migration), never hardcode them in the portal.
+- **Members & Permissions** (`/members`): members table with filters; the roles ×
+  permissions matrix lives in a modal and saves grants immediately on toggle.
 
 ## Commands
 
