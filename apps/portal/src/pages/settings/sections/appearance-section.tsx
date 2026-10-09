@@ -37,7 +37,7 @@ export function AppearanceSection(): React.JSX.Element {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {OPTIONS.map((option) => {
             const Icon = option.icon;
             return (
@@ -46,7 +46,7 @@ export function AppearanceSection(): React.JSX.Element {
                 type="button"
                 onClick={() => setTheme(option.id)}
                 className={cn(
-                  "shadow-border flex items-center gap-2.5 rounded-[var(--geist-radius)] p-3 text-left text-[14px] text-text-secondary hover:bg-hover hover:text-text",
+                  "shadow-border flex items-center gap-2 rounded-[var(--geist-radius)] px-2.5 py-2 text-left text-[13px] text-text-secondary hover:bg-hover hover:text-text",
                   theme === option.id && "bg-hover text-text",
                 )}
                 style={theme === option.id ? { boxShadow: "var(--ds-shadow-border), 0 0 0 2px var(--ds-focus-color)" } : undefined}
