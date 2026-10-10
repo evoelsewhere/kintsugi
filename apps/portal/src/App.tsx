@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { subscribeToSystemAppearance } from "./lib/appearance";
 import { PanelShell } from "./layout/panel-shell";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { AdminPage } from "./pages/admin";
@@ -20,6 +22,8 @@ function RequireAuth({ children }: { children: React.ReactNode }): React.JSX.Ele
 }
 
 export function App(): React.JSX.Element {
+  useEffect(() => subscribeToSystemAppearance(), []);
+
   return (
     <AuthProvider>
       <BrowserRouter>

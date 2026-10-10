@@ -38,11 +38,11 @@ export function SettingsTabs({ initial = "general" }: { initial?: string }): Rea
   const Section = current.component;
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col md:flex-row">
       {/* Sidebar navigation */}
       <nav
         aria-label="Settings sections"
-        className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-transparent p-1 [box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]"
+        className="flex w-full shrink-0 gap-0.5 overflow-x-auto border-b border-transparent p-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)] md:w-44 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:border-r md:border-b-0 md:[box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]"
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -52,7 +52,7 @@ export function SettingsTabs({ initial = "general" }: { initial?: string }): Rea
               type="button"
               onClick={() => setActive(tab.id)}
               className={cn(
-                "flex h-8 items-center gap-2 rounded-[var(--geist-radius)] px-2 text-left text-[13px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
+                "flex h-8 w-auto shrink-0 items-center gap-2 rounded-[var(--geist-radius)] px-2 text-left text-[13px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] md:w-full",
                 tab.id === active && "bg-hover font-medium text-text",
               )}
             >
