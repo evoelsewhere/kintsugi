@@ -13,10 +13,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const body = exception instanceof HttpException ? exception.getResponse() : undefined;
+    // Only HttpExceptions carry client-facing messages; anything else (driver errors,
+    // missing configuration…) is logged below and answered generically.
     const message =
       typeof body === "object" && body !== null && "message" in body
         ? (body as { message: string | string[] }).message
-        : exception instanceof Error
+        : exception instanceof HttpException
           ? exception.message
           : "Internal server error";
 

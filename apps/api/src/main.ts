@@ -20,11 +20,8 @@ async function bootstrap(): Promise<void> {
   const env = loadEnv();
   const app = await NestFactory.create(AppModule, { logger: [env.logLevel] });
 
-  try {
-    await ensureSchema();
-  } catch (error) {
-    new Logger("Bootstrap").error(`database schema check failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  // Never serve on a partly migrated schema: a failed migration stops startup.
+  await ensureSchema();
 
   app.setGlobalPrefix("api");
   app.useGlobalFilters(new HttpExceptionFilter());
@@ -42,4 +39,7 @@ async function bootstrap(): Promise<void> {
   await app.listen(env.port);
 }
 
-void bootstrap();
+bootstrap().catch((error: unknown) => {
+  new Logger("Bootstrap").error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});
