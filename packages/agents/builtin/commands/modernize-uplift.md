@@ -134,13 +134,16 @@ produced it); regenerate only if missing or stale.
 
 **Preferred, with the Workflow tool** (this invocation authorizes it):
 
-Call it by name (the plugin registers it); if the tool does not know the name, pass `scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/uplift-deltas.js"` instead:
+Call it by name; Kintsugi's orchestrator runs `workflows/uplift-deltas.js`, and its finder and referee steps are runtime jobs (read-only kernel tools, no shell):
 
 ```
 Workflow({
   name: "kintsugi:modernize-uplift-deltas",
   args: { app: "$app",
-          source: "$source_version", target: "$target_version", projectPattern: "$project_pattern" }
+          source: "$source_version", target: "$target_version",
+          sourceDir: "<path of the pinned source checkout, read-only>",
+          targetDir: "<path of the working copy in the target repository>",
+          workspaceDir: "<workspace repository root that holds assessment/$app/>", projectPattern: "$project_pattern" }
 })
 ```
 
@@ -151,9 +154,10 @@ verifies each delta against the cited code, and returns delta cards. Tell the us
 first. The finders are read-only: **you** write `DELTA_CATALOG.md`. Surface `injectionFlags`, and read
 `upliftVsRewriteSignal` (see the end of this file).
 
-**Fallback:** spawn the **version-delta-analyst** agent: "Build the delta catalog for uplifting the source repository
-of $app (read-only, at the recorded commit) from $source_version to $target_version. Run the ecosystem migration tool
-in report mode against the working copy in the target repository, intersect its findings and the known breaking
+**Fallback:** spawn the **version-delta-analyst** runtime job: "Build the delta catalog for uplifting the source repository
+of $app (read-only, at the recorded commit) from $source_version to $target_version. Record the ecosystem migration tool
+that applies to this stack as `coverage not run: <tool>` — this job has no shell, so name the tool and leave the
+report-mode run to the member session on a disposable scratch copy — intersect the known breaking
 changes with what this code uses, cover all four categories, cite file:line, flag silent-behavioral deltas as
 test-before-touch, never under-report dependency deltas."
 
@@ -227,12 +231,15 @@ Only after the pilot approval gate is approved. With a handful of units left, re
 in dependency order, in-session. For many units **the playbook is the prompt**: brief agents from what the
 pilot proved about this codebase, not from general knowledge. With the Workflow tool:
 
-Call it by name (the plugin registers it); if the tool does not know the name, pass `scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/uplift-migrate.js"` instead:
+Call it by name; the orchestrator runs `workflows/uplift-migrate.js`, one agent per unit inside the target repository:
 
 ```
 Workflow({
   name: "kintsugi:modernize-uplift-migrate",
   args: { app: "$app", source: "$source_version", target: "$target_version",
+          sourceDir: "<path of the pinned source checkout, read-only>",
+          targetDir: "<path of the working copy in the target repository>",
+          workspaceDir: "<workspace repository root that holds assessment/$app/>",
           units: [ { name: "<unit>", path: "<dir relative to the root of the working copy in the target repository>",
                      deps: ["<sibling unit this one depends on>", ...] }, ... ] }
 })
@@ -279,7 +286,7 @@ in `BASELINE.md`. A test that passed before and fails now is a regression; one t
 passes is a behavior change to adjudicate (intended fix or accident: a person decides it in the portal, never you).
 Triage **every** result delta; unexplained changes block the project. **Report `tests executed: N` for each leg**: a leg
 that executed zero tests, or skipped its cases, proved nothing. Where outputs (not just pass/fail) can be compared, use
-`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compare.py"` as `transform` does, and let the script decide.
+`scripts/compare.py` as `transform` does, and let the script decide.
 The independent re-check is `/kintsugi:modernize-verify $app`: it re-runs the suite, diffs it against
 `BASELINE.md` with `scripts/baseline_diff.py`, and gives one verdict.
 
