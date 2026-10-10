@@ -17,15 +17,32 @@ export interface ModalProps {
   size?: "default" | "page";
 }
 
+/**
+ * Open modals, innermost last. Escape closes only the top one — a dialog opened from
+ * another dialog (or from the Settings modal) must not take its parent down with it.
+ */
+const openModals: symbol[] = [];
+
 export function Modal({ open, title, description, onClose, children, footer, wide, size = "default" }: ModalProps): React.JSX.Element | null {
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
+
   React.useEffect(() => {
     if (!open) return;
+    const self = Symbol("modal");
+    openModals.push(self);
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") onClose();
+      // A nested control (e.g. an open Select) that handled Escape marks it as consumed.
+      if (event.key !== "Escape" || event.defaultPrevented || openModals.at(-1) !== self) return;
+      event.preventDefault();
+      onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      openModals.splice(openModals.indexOf(self), 1);
+    };
+  }, [open]);
 
   if (!open) return null;
 

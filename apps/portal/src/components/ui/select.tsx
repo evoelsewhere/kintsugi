@@ -34,7 +34,10 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
       if (rootRef.current !== null && !rootRef.current.contains(event.target as Node)) setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      // Consumed: the surrounding modal must stay open (see Modal).
+      event.preventDefault();
+      setOpen(false);
     };
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
