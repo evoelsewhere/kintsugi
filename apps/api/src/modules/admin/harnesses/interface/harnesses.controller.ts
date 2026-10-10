@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { Harness } from "../domain/harness.js";
 import { HarnessesService } from "../application/harnesses.service.js";
 import {
@@ -33,6 +34,7 @@ export class HarnessesController {
     return this.harnesses.get(id);
   }
 
+  @RequirePermission("setup.manage")
   @Post()
   @ApiOperation({ summary: "Create a harness" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class HarnessesController {
     return this.harnesses.create(toCreateCommand(input));
   }
 
+  @RequirePermission("setup.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a harness" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class HarnessesController {
     return this.harnesses.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("setup.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a harness" })

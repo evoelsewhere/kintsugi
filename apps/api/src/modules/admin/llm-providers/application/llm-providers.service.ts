@@ -1,11 +1,11 @@
 // Application layer: use cases of the LLM provider registry (Settings → Providers).
 // Depends on the domain port only; knows nothing about HTTP or Postgres.
 
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { AgentModelBinding, CustomModelConfig } from "@kintsugi/runtime-sdk";
 import type { Page, PageQuery } from "../../../../common/application/pagination.js";
 import { toPage } from "../../../../common/application/pagination.js";
-import type { LlmProviderRecord, ProviderKind, RegisterLlmProvider } from "../domain/llm-provider.js";
+import type { LlmProviderRecord, ProviderConfigInput, ProviderKind, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";
 import { ProviderCatalog } from "../domain/provider-catalog.js";
@@ -55,6 +55,11 @@ function toView(record: LlmProviderRecord): LlmProviderView {
   };
 }
 
+/** Where a provider's credential is sent: the pi catalog entry, or the custom wire protocol + base URL. */
+function endpointOf(config: ProviderConfigInput): string {
+  return config.kind === "builtin" ? `builtin:${config.piProvider}` : `custom:${config.api}:${config.baseUrl.replace(/\/$/, "")}`;
+}
+
 @Injectable()
 export class LlmProvidersService {
   constructor(
@@ -89,6 +94,13 @@ export class LlmProvidersService {
   }
 
   async replace(id: string, input: RegisterLlmProvider): Promise<LlmProviderView> {
+    const existing = await this.#mustGet(id);
+    const hasNewCredentials = input.credentials.apiKey !== undefined || input.credentials.env !== undefined;
+    // A stored credential stays bound to the endpoint it was entered for; otherwise
+    // repointing the provider would send the kept key to an arbitrary host.
+    if (!hasNewCredentials && endpointOf(existing.config) !== endpointOf(input.config)) {
+      throw new BadRequestException("Changing the provider endpoint requires re-entering its credential");
+    }
     const updated = await this.providers.replace(id, input);
     if (updated === undefined) throw new NotFoundException(`LLM provider ${id} not found`);
     return toView(updated);

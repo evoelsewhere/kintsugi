@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { VerificationRun } from "../domain/verification-run.js";
 import { VerificationRunsService } from "../application/verification-runs.service.js";
 import {
@@ -33,6 +34,7 @@ export class VerificationRunsController {
     return this.verificationRuns.get(id);
   }
 
+  @RequirePermission("workitems.manage")
   @Post()
   @ApiOperation({ summary: "Create a verification run" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class VerificationRunsController {
     return this.verificationRuns.create(toCreateCommand(input));
   }
 
+  @RequirePermission("workitems.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a verification run" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class VerificationRunsController {
     return this.verificationRuns.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("workitems.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a verification run" })

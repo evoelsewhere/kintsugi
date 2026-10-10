@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { Connector } from "../domain/connector.js";
 import { ConnectorsService } from "../application/connectors.service.js";
 import {
@@ -33,6 +34,7 @@ export class ConnectorsController {
     return this.connectors.get(id);
   }
 
+  @RequirePermission("setup.manage")
   @Post()
   @ApiOperation({ summary: "Create a connector" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class ConnectorsController {
     return this.connectors.create(toCreateCommand(input));
   }
 
+  @RequirePermission("setup.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a connector" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class ConnectorsController {
     return this.connectors.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("setup.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a connector" })

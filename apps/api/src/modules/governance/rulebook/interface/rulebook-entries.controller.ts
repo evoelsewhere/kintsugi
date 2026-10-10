@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { RulebookEntry } from "../domain/rulebook-entry.js";
 import { RulebookEntriesService } from "../application/rulebook-entries.service.js";
 import {
@@ -33,6 +34,7 @@ export class RulebookEntriesController {
     return this.rulebookEntries.get(id);
   }
 
+  @RequirePermission("governance.manage")
   @Post()
   @ApiOperation({ summary: "Create a rulebook entry" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class RulebookEntriesController {
     return this.rulebookEntries.create(toCreateCommand(input));
   }
 
+  @RequirePermission("governance.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a rulebook entry" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class RulebookEntriesController {
     return this.rulebookEntries.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("governance.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a rulebook entry" })
