@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Trace every business rule to the code and the tests that name it, and to the tests that ran.
 
-    python3 trace_rules.py <system> [--workspace DIR] [--json] [--all] [--module NAME --results PATH ...]
+    python3 trace_rules.py <app> --source <checkout> --assessment <assessment/app> \\
+        --target <checkout> --out <folder> [--module NAME] [--runs <run-folder> ...]
 
-Reads analysis/<system>/BUSINESS_RULES.md (rule cards: "### RULE-NNN: name" with **Priority:**,
-**Confidence:** and **Source:** lines), then scans the built code under modernized/<system>,
-modernized/<system>-uplifted and modernized/<system>-reimagined (never build output: target/,
-build/, dist/, node_modules/, bin/, obj/, __pycache__/, or any folder starting with a dot) for
+Reads assessment/<app>/BUSINESS_RULES.md (rule cards: "### RULE-NNN: name" with **Priority:**,
+**Confidence:** and **Source:** lines), then scans the read-only target checkout (never build output:
+target/, build/, dist/, node_modules/, bin/, obj/, __pycache__/, or any folder starting with a dot) for
 mentions of each rule id, and sorts every file into "test" or "main" code. One row per rule.
 
 Evidence, strongest first:
-  tested          executed evidence backs it, from the per-test results of that run (JUnit or TRX XML; --results
+  tested          executed evidence backs it, from the per-test results of that run (JUnit or TRX XML; --runs
                   reads them here, the proof pack passes them in): a test that ran and passed names the rule in
                   its test or class name, or a test file names it on a line not marked skipped and that file's
                   name is the class or file of a test that ran and passed. Without per-test results nothing is
@@ -46,6 +46,7 @@ import json
 import os
 import re
 import sys
+from typing import Any
 
 SKIP_DIRS = {"target", "build", "dist", "node_modules", "bin", "obj", "__pycache__", "venv"}
 DOC_EXT = {".md", ".markdown", ".rst", ".txt", ".adoc"}
@@ -65,7 +66,7 @@ PATH = re.compile(r"[A-Za-z0-9_@][A-Za-z0-9_@./+-]{0,199}\.[A-Za-z][A-Za-z0-9]{0
 SKIPPED_LINE = re.compile(r"@Disabled|@Ignore|\[Ignore\]|#\[ignore\]|xit\(|xdescribe|skip|pending|todo", re.I)    # "skip" also covers @Skip, t.Skip, it.skip, test.skip, describe.skip, @pytest.mark.skip
 MARK_LINES = 3                          # a mention is skipped when its own line, or one of this many lines above it, holds a marker
 NOT_RUN = "named, not run"
-NO_RUN = {"known": False, "ids": frozenset(), "keys": frozenset()}
+NO_RUN: dict[str, Any] = {"known": False, "ids": frozenset(), "keys": frozenset()}
 TOOLING_NAMES = {"pom.xml", "mvnw", "mvnw.cmd", "gradlew", "gradlew.bat", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "gradle.properties",
                  "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml", "uv.lock", "poetry.lock", "conftest.py",
                  "cargo.toml", "cargo.lock", "go.mod", "go.sum", "composer.json", "composer.lock", "phpunit.xml", "phpunit.xml.dist", "cmakelists.txt", "makefile", "dockerfile"}
@@ -136,7 +137,7 @@ def run_evidence(results):
     return out
 
 
-def line_marks(body):
+def line_marks(body: str) -> tuple[list[int], list[bool]]:
     """([offset where each line starts], [whether the line holds a skip marker]) for one test file's text."""
     starts, flags, pos = [], [], 0
     for line in body.split("\n"):
@@ -146,7 +147,7 @@ def line_marks(body):
     return starts, flags
 
 
-def is_live(marks, at):
+def is_live(marks: tuple[list[int], list[bool]], at: int) -> bool:
     """True when the mention at text offset `at` is not marked skipped: its own line and the 3 lines above hold no marker."""
     starts, flags = marks
     i = bisect.bisect_right(starts, at) - 1
@@ -166,7 +167,12 @@ def field(lines, name):
 
 def parse_rules(text):
     """-> ([rule dicts in file order], [notes]). A duplicate id keeps its first card."""
-    rules, notes, seen, card, fence, rows = [], [], set(), None, "", {}
+    rules: list[dict[str, Any]] = []
+    notes: list[str] = []
+    seen: set[int] = set()
+    card: dict[str, Any] | None = None
+    fence = ""
+    rows: dict[int, dict[str, str]] = {}
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     for line in lines:
         if line.lstrip().startswith("|"):
@@ -225,8 +231,37 @@ def is_real_dir(path):
     return os.path.isdir(path) and not os.path.islink(path)
 
 
-def discover_modules(workspace, system):
-    """[{name, track, path, rel}] for every built module under modernized/."""
+def discover_modules(workspace, system, target_root=None, module_name=None):
+    """[{name, track, path, rel}] for every built module."""
+    if target_root is not None:
+        try:
+            subs = sorted(d for d in os.listdir(target_root) if not d.startswith(".") and d not in SKIP_DIRS and is_real_dir(os.path.join(target_root, d)))
+        except OSError:
+            subs = []
+        files, _, _ = walk_module(target_root, MAX_FILES)
+        if not files:
+            return []
+        # A checkout with a conventional source tree is one module; a module workspace
+        # without a root source tree is a set of immediate module directories.
+        if not subs or any(d.lower() in ("src", "source", "app") for d in subs):
+            label = module_name or system
+            return [{"name": label, "track": "rewrite", "path": target_root, "rel": label}]
+        module_dirs = []
+        for name in subs:
+            path = os.path.join(target_root, name)
+            try:
+                child_dirs = os.listdir(path)
+                has_source_tree = any(d.lower() in ("src", "source", "app") and is_real_dir(os.path.join(path, d)) for d in child_dirs)
+                has_root_code = any(os.path.isfile(os.path.join(path, f)) and file_kind(f) == "main" for f in child_dirs)
+            except OSError:
+                continue
+            if has_source_tree or has_root_code:
+                module_dirs.append(name)
+        if not module_dirs:
+            label = module_name or system
+            return [{"name": label, "track": "rewrite", "path": target_root, "rel": label}]
+        candidates = [{"name": d, "track": "rewrite", "path": os.path.join(target_root, d), "rel": d} for d in module_dirs]
+        return [m for m in candidates if m["name"].lower() == module_name.lower()] if module_name else candidates
     out = []
     for track, suffix in TRACKS:
         root = os.path.join(workspace, "modernized", system + suffix)
@@ -324,22 +359,24 @@ def blank():
     return {"main": 0, "tests": 0, "live": 0, "claimed": False, "named": False, "by": "", "at": ""}
 
 
-def trace(workspace, system, ran=None):
+def trace(workspace, system, ran: dict[str, dict[str, Any]] | None = None, assessment_dir=None, target_dir=None, module_name=None):
     """-> the trace. Raises OSError when BUSINESS_RULES.md cannot be read.
     ran: {module folder (as "path" in the modules list): run_evidence(...)}: what ran, per module. Without it no rule is "tested"."""
-    rules_path = os.path.join(workspace, "analysis", system, "BUSINESS_RULES.md")
+    assessment_was_explicit = assessment_dir is not None
+    assessment_dir = assessment_dir or os.path.join(workspace, "analysis", system)
+    rules_path = os.path.join(assessment_dir, "BUSINESS_RULES.md")
     if os.path.islink(rules_path):
-        raise OSError("analysis/%s/BUSINESS_RULES.md is a symbolic link" % system)
+        raise OSError("BUSINESS_RULES.md is a symbolic link")
     text = read_text(rules_path, RULES_CAP)
     if text is None:
-        raise OSError("analysis/%s/BUSINESS_RULES.md is missing or is not text" % system)
+        raise OSError("BUSINESS_RULES.md is missing or is not text")
     rules, notes = parse_rules(text)
     by_n = {r["n"]: r for r in rules}
     per = {r["n"]: {} for r in rules}
     samples = {r["n"]: {"main": [], "tests": []} for r in rules}
     modules, budget = [], MAX_FILES
     scan = {"files": 0, "textFiles": 0, "linksSkipped": 0, "cut": False}
-    for mod in discover_modules(workspace, system):
+    for mod in discover_modules(workspace, system, target_dir, module_name):
         files, skipped, cut = walk_module(mod["path"], budget)
         budget -= len(files)
         names = collections.defaultdict(list)
@@ -351,7 +388,7 @@ def trace(workspace, system, ran=None):
             ntext = read_text(os.path.join(mod["path"], notes_name), NOTES_CAP)
             if ntext is not None:
                 claimed, unresolved, named = claims_of(ntext, names)
-        ev = (ran or {}).get(mod["rel"]) or NO_RUN
+        ev: dict[str, Any] = (ran or {}).get(mod["rel"]) or NO_RUN
         test_files = 0
         for rel, full in files:
             kind = file_kind(rel)
@@ -363,19 +400,25 @@ def trace(workspace, system, ran=None):
             scan["textFiles"] += body is not None
             hits = [(n, None) for n, _ in find_ids(os.path.basename(rel))] + [(n, at) for n, at in find_ids(body or "")]
             # a test file backs the rules it names (on lines not marked skipped) when its name is the class or file of a test that ran and passed here
-            marks, backed = None, kind == "test" and bool(ev.get("known")) and os.path.splitext(os.path.basename(rel))[0].lower() in (ev.get("keys") or ())
+            marks: tuple[list[int], list[bool]] | None = None
+            backed = kind == "test" and bool(ev.get("known")) and os.path.splitext(os.path.basename(rel))[0].lower() in (ev.get("keys") or ())
             for n, at in hits:
                 if n not in by_n:
                     continue
                 slot = per[n].setdefault(mod["rel"], blank())
                 slot[key] += 1
                 if kind == "test":
-                    if at is not None and marks is None:
-                        marks = line_marks(body)
-                    if at is None or is_live(marks, at):
+                    line_number = 0
+                    live = True
+                    if at is not None:
+                        if marks is None:
+                            marks = line_marks(body or "")
+                        line_number = bisect.bisect_right(marks[0], at)
+                        live = is_live(marks, at)
+                    if live:
                         slot["live"] += 1
                         if backed and not slot["by"]:
-                            slot["by"], slot["at"] = "test file", "%s/%s:%d" % (mod["rel"], rel, 0 if at is None else bisect.bisect_right(marks[0], at))
+                            slot["by"], slot["at"] = "test file", "%s/%s:%d" % (mod["rel"], rel, line_number)
                 place = "%s/%s" % (mod["rel"], rel)
                 if len(samples[n][key]) < SAMPLES and not any(s.rsplit(":", 1)[0] == place for s in samples[n][key]):
                     samples[n][key].append("%s:%d" % (place, 0 if at is None else body.count("\n", 0, at) + 1))
@@ -405,8 +448,9 @@ def trace(workspace, system, ran=None):
     if scan["linksSkipped"]:
         notes.append("%d symbolic link(s) were not followed." % scan["linksSkipped"])
     if not modules:
-        notes.append("No built code was found under modernized/%s, %s-uplifted or %s-reimagined." % (system, system, system))
-    return {"system": clean(system, 100), "rulesFile": "analysis/%s/BUSINESS_RULES.md" % system, "modules": modules, "rules": out,
+        notes.append("No built code was found in the target checkout." if target_dir else "No built code was found under modernized/%s, %s-uplifted or %s-reimagined." % (system, system, system))
+    rules_file = "assessment/%s/BUSINESS_RULES.md" % system if assessment_was_explicit else "analysis/%s/BUSINESS_RULES.md" % system
+    return {"system": clean(system, 100), "rulesFile": rules_file, "modules": modules, "rules": out,
             "totals": totals(out), "p0NoTests": [r["id"] for r in out if r["priority"] == "P0" and r["status"] != "tested"],
             "scan": scan, "notes": notes}
 
@@ -470,47 +514,109 @@ def render(result, everything=False, view=None, module=None):
     return "\n".join(lines)
 
 
+def checked_directory(label, value):
+    path = os.path.abspath(value)
+    if os.path.islink(path) or not os.path.isdir(path):
+        raise ValueError("%s must be an existing directory, not a symbolic link" % label)
+    return os.path.realpath(path)
+
+
+def prepare_output(path, *roots):
+    path = os.path.abspath(path)
+    if os.path.lexists(path) and os.path.islink(path):
+        raise ValueError("--out must not be a symbolic link")
+    resolved = os.path.realpath(path)
+    for root in roots:
+        try:
+            if os.path.commonpath([root, resolved]) == root:
+                raise ValueError("--out must not be inside a source or target checkout")
+        except ValueError as err:
+            if str(err).startswith("--out"):
+                raise
+    os.makedirs(path, exist_ok=True)
+    resolved = os.path.realpath(path)
+    for root in roots:
+        try:
+            if os.path.commonpath([root, resolved]) == root:
+                raise ValueError("--out must not be inside a source or target checkout")
+        except ValueError as err:
+            if str(err).startswith("--out"):
+                raise
+    return resolved
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Trace business rules to the code and tests that name them, and to the tests that ran.")
-    ap.add_argument("system", help="the system's folder name under analysis/")
-    ap.add_argument("--workspace", default=".", help="the project root holding analysis/ and modernized/ (default: current folder)")
+    ap = argparse.ArgumentParser(description="Trace the application's business rules to source code and test evidence.",
+                                 usage="%(prog)s app --source DIR --assessment DIR --target DIR --out DIR [options]",
+                                 formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
+    ap.add_argument("app", help="application label used in the trace")
+    ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only source checkout")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--target", required=True, metavar="CHECKOUT", help="target checkout to scan")
+    ap.add_argument("--out", required=True, metavar="DIR", help="folder for RULE_TRACE.json")
+    ap.add_argument("--runs", action="append", default=[], metavar="DIR", help="test-result file or folder from a run of the target (repeatable)")
     ap.add_argument("--json", action="store_true", help="print the full trace as JSON")
     ap.add_argument("--all", action="store_true", help="list every rule, not just P0 and the first 40 others")
-    ap.add_argument("--module", metavar="NAME", help="only the rules this built module answers for (a folder under modernized/<system>/)")
-    ap.add_argument("--results", action="append", default=[], metavar="PATH",
-                    help="a JUnit or TRX result file, or a folder of them, from a run of the module named by --module (repeatable); only tests that ran and passed there make a rule 'tested'")
+    ap.add_argument("--module", metavar="NAME", help="label for the target module in the trace")
     args = ap.parse_args(argv)
-    if not args.system or args.system in (".", "..") or re.search(r"[\\/\x00]", args.system):
-        print("trace_rules.py: the system must be a folder name under analysis/, not a path", file=sys.stderr)
+    if not args.app or args.app in (".", "..") or os.path.basename(args.app) != args.app or chr(0) in args.app:
+        print("trace_rules.py: app must be a plain application label, not a path", file=sys.stderr)
         return 2
-    if args.results and not args.module:
-        print("trace_rules.py: --results goes with --module: say which module's run the results are from", file=sys.stderr)
+    if args.runs and not args.module:
+        print("trace_rules.py: --runs requires --module so result evidence has an owner", file=sys.stderr)
         return 2
-    ran, read_notes = None, []
-    if args.results:
-        found = next((m for m in discover_modules(args.workspace, args.system) if m["name"].lower() == args.module.lower()), None)
-        if found is not None:
-            sys.dont_write_bytecode = True    # importing a sibling script must not leave __pycache__ in the plugin folder
-            import baseline_diff              # only this command line reads result files itself; the proof pack passes them in
-            res = baseline_diff.read_results(args.results)
-            ran = {found["rel"]: run_evidence([res])}
-            read_notes = ["%d result file(s) read: %d test(s), %d passed." % (res["files"], len(res["tests"]), sum(1 for s in res["tests"].values() if s == "PASS"))]
-            read_notes += ["result file not used: " + u for u in res["unreadable"][:3]] + [clean(p, 200) for p in res["problems"][:3]]
     try:
-        result = trace(args.workspace, args.system, ran)
+        source = checked_directory("--source", args.source)
+        assessment = checked_directory("--assessment", args.assessment)
+        target = checked_directory("--target", args.target)
+        out = prepare_output(args.out, source, target)
+        for run_path in args.runs:
+            if os.path.islink(os.path.abspath(run_path)) or not os.path.exists(run_path):
+                raise ValueError("--runs must name an existing file or directory and must not be a symbolic link")
+    except (OSError, ValueError) as err:
+        print("trace_rules.py: %s" % err, file=sys.stderr)
+        return 2
+    module = args.module or args.app
+    modules = discover_modules(os.path.dirname(assessment), args.app, target, args.module)
+    if args.module and not modules:
+        print("trace_rules.py: no built module called %s" % clean(args.module, 60), file=sys.stderr)
+        return 2
+    run_key = modules[0]["rel"] if args.module and modules else module
+    ran, read_notes = None, []
+    if args.runs:
+        sys.dont_write_bytecode = True
+        import baseline_diff
+        res = baseline_diff.read_results(args.runs)
+        ran = {run_key: run_evidence([res])}
+        read_notes = ["%d result file(s) read: %d test(s), %d passed." % (res["files"], len(res["tests"]), sum(1 for status in res["tests"].values() if status == "PASS"))]
+        read_notes += ["result file not used: " + u for u in res["unreadable"][:3]] + [clean(p, 200) for p in res["problems"][:3]]
+    try:
+        result = trace(os.path.dirname(assessment), args.app, ran, assessment_dir=assessment, target_dir=target, module_name=args.module)
     except OSError as err:
         print("trace_rules.py: %s" % err, file=sys.stderr)
         return 2
-    result["notes"] += read_notes or ["No test results were given, so no rule can be 'tested' here: the proof pack reads them from the result files (or add --module NAME --results PATH)."]
+    result["notes"] += read_notes or ["No test results were given, so no rule can be 'tested' here: the proof pack reads them from the result files (or add --runs DIR)."]
     view, mod = None, None
     if args.module:
         mod = next((m for m in result["modules"] if m["name"].lower() == args.module.lower()), None)
         if mod is None:
-            print("trace_rules.py: no built module called %s (found: %s)" % (clean(args.module, 60), ", ".join(clean(m["name"], 40) for m in result["modules"]) or "none"), file=sys.stderr)
+            print("trace_rules.py: no built module called %s" % clean(args.module, 60), file=sys.stderr)
             return 2
         view = module_view(result, mod["path"])
+    payload = dict(result, moduleView=view) if view else result
+    output = os.path.join(out, "RULE_TRACE.json")
+    if os.path.lexists(output) and os.path.islink(output):
+        print("trace_rules.py: RULE_TRACE.json must not be a symbolic link", file=sys.stderr)
+        return 2
+    try:
+        with open(output, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(payload, fh, indent=1, ensure_ascii=True)
+            fh.write("\n")
+    except OSError as err:
+        print("trace_rules.py: cannot write RULE_TRACE.json (%s)" % err.__class__.__name__, file=sys.stderr)
+        return 2
     if args.json:
-        print(json.dumps(dict(result, moduleView=view) if view else result, indent=1, ensure_ascii=True))
+        print(json.dumps(payload, indent=1, ensure_ascii=True))
     else:
         print(render(result, args.all, view, mod["name"] if mod else None))
     return 1 if (view["p0NoTests"] if view else result["p0NoTests"]) else 0

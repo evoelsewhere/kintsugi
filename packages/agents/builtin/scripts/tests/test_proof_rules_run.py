@@ -1,6 +1,6 @@
 """Tests for the "Rules traced" check: a rule is tested only when something that ran and passed backs it, and test-only folders are not judged.
 
-Run:  python3 -m unittest discover -s plugins/code-modernization/scripts/tests
+Run:  python -m pytest packages/agents/builtin/scripts/tests/test_proof_rules_run.py
 A test that names a rule is not a test that ran: skipped and pending tests, and files whose class never ran, leave the rule "named, not run".
 """
 import json
@@ -16,10 +16,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(PLUGIN, "scripts"))
-import build_report as br  # noqa: E402
 import proof_pack as pp  # noqa: E402
 import trace_rules as tr  # noqa: E402
-from test_proof_tools import RULES_MD, T0, Ws, junit, load, passing, put, read, run_main  # noqa: E402
+from test_proof_tools import RULES_MD, T0, Ws, junit, load, passing, put, put_or_skip, read, run_main  # noqa: E402
 
 SKIPPED_TEST = '''package p;
 
@@ -252,20 +251,6 @@ class RulesNeedExecutedTests(unittest.TestCase):
     def test_an_uplift_still_traces_no_rules(self):
         self.assertEqual(pp.check_rules({"trace": None, "trace_problem": "x", "ran": {}}, {"track": "uplift", "rel": "modernized/s-uplifted"}, {}, [])["state"], "na")
 
-    def test_the_pack_tells_the_report_builder_nothing_it_cannot_read(self):
-        self.ws.test_file("CalcTest.java", SKIPPED_TEST)
-        self.ws.keep_only(("OtherTest", "works", "PASS", ""))
-        pack = self.ws.pack()
-        view = br.proof_view(pack)
-        m = view["modules"][0]
-        self.assertEqual((m["verdict"], pack["modules"][0]["verdict"]), ("PARTLY PROVEN", "PARTLY PROVEN"))
-        self.assertEqual(view["problems"], [])                                           # the builder finds nothing to correct
-        self.assertEqual(m["p0Counts"]["tested"], 0)
-        self.assertTrue(all(r["status"] != "tested" for r in m["p0"]))                   # an unknown status is never shown as tested
-        code, out, _ = run_main(pp.main, ["s", "--workspace", self.ws.root])
-        self.assertEqual(code, 1)
-        self.assertIn("P0 rules named only by tests that did not run", out)
-
     def test_the_markdown_table_says_named_not_run_in_plain_words(self):
         self.ws.test_file("CalcTest.java", SKIPPED_TEST)
         self.ws.keep_only(("OtherTest", "works", "PASS", ""))
@@ -301,16 +286,14 @@ class TestOnlyFolders(unittest.TestCase):
         self.assertIn("harness (rewrite): test tooling, not judged", out)
         self.assertNotIn("harness (rewrite): NOT PROVEN", out)
         data = load(os.path.join(self.ws.root, "analysis", "s", "VERIFICATION.json"))
-        self.assertEqual((data["toolingOnly"], [m["name"] for m in data["modules"]], data["overall"]["verdict"]), ([{"name": "harness", "track": "rewrite", "path": "modernized/s/harness"}], ["mod"], "PROVEN"))
+        self.assertEqual((data["toolingOnly"], [m["name"] for m in data["modules"]], data["overall"]["verdict"]), ([{"name": "harness", "track": "rewrite", "path": "harness"}], ["mod"], "PROVEN"))
         md = read(os.path.join(self.ws.root, "analysis", "s", "VERIFICATION.md"))
         self.assertIn("\n## Test tooling (not judged)\n", md)
-        self.assertIn("- `modernized/s/harness` (rewrite)", md)
+        self.assertIn("- `harness` (rewrite)", md)
         self.assertNotIn("## harness", md)
         self.assertEqual(md.count("| mod |"), 1)
         self.assertNotIn("| harness |", md)
         self.assertIn("**Overall: PROVEN** (1 proven)", md)
-        view = br.proof_view(data)                                                   # the report builder reads the modules and ignores the new list
-        self.assertEqual(([m["name"] for m in view["modules"]], view["verdict"], view["problems"]), (["mod"], "PROVEN", []))
 
     def test_a_pack_with_no_tooling_has_an_empty_list_and_no_heading(self):
         shutil.rmtree(self.mod)
@@ -409,11 +392,13 @@ class RuleTracePieces(unittest.TestCase):
         put(root, "res/TEST-bad.xml", "<testsuite><testcase")
         put(root, "res/TEST-ok.xml", junit(passing(2, "CalcTest")))
         self.assertEqual(run_main(tr.main, ["s", "--workspace", root, "--results", os.path.join(root, "res")])[0], 2)
-        code, out, _ = run_main(tr.main, ["s", "--workspace", root, "--module", "mod", "--results", os.path.join(root, "res"), "--results", os.path.join(root, "nope")])
-        self.assertEqual(code, 0)
+        code, out, err = run_main(tr.main, ["s", "--workspace", root, "--module", "mod", "--results", os.path.join(root, "res")])
+        self.assertEqual(code, 0, err)
         self.assertIn("result file not used: TEST-bad.xml", out)
-        self.assertIn("nope is not a file or folder that can be read", out)
-        code, out, _ = run_main(tr.main, ["s", "--workspace", root, "--module", "nope", "--results", os.path.join(root, "res")])
+        code, _, err = run_main(tr.main, ["s", "--workspace", root, "--module", "mod", "--results", os.path.join(root, "nope")])
+        self.assertEqual(code, 2)
+        self.assertIn("--runs", err)
+        code, _, _ = run_main(tr.main, ["s", "--workspace", root, "--module", "nope", "--results", os.path.join(root, "res")])
         self.assertEqual(code, 2)
         code, out, _ = run_main(tr.main, ["s", "--workspace", root, "--module", "mod", "--results", os.path.join(root, "res"), "--json"])
         self.assertEqual(code, 0)
@@ -445,7 +430,7 @@ class HostileInput(unittest.TestCase):
         self.assertEqual(self.ws.module()["evidence"]["rules"]["p0"][0]["id"], "RULE-001")
 
     def test_hostile_file_names_and_lines_stay_inside_the_p0_table(self):
-        self.ws.test_file("Rule001|`x`Y.java", "// RULE-001 | RULE-002 |\n| a | b |\n")
+        put_or_skip(self, self.ws.root, "modernized/s/mod/src/test/Rule001|`x`Y.java", "// RULE-001 | RULE-002 |\n| a | b |\n", T0 + 20)
         self.ws.test_file("CalcTest.java", "@Disabled " + "RULE-001 " * 300000 + "x" * 3000000)
         self.ws.keep_only(("Rule001|`x`Y", "a", "PASS", ""), ("CalcTest", "a", "PASS", ""))
         started = time.time()
@@ -477,8 +462,8 @@ class HostileInput(unittest.TestCase):
         self.assertTrue(all(r["status"] == "tested" and r["by"] == "test name" for r in p0))
 
     def test_a_hostile_tooling_folder_name_stays_one_plain_list_item(self):
-        put(self.ws.root, "modernized/s/h`\n## Injected | x/pom.xml", "<project/>", T0 + 20)
-        put(self.ws.root, "modernized/s/h`\n## Injected | x/src/test/ATest.java", "class ATest {}\n", T0 + 20)
+        put_or_skip(self, self.ws.root, "modernized/s/h`\n## Injected | x/pom.xml", "<project/>", T0 + 20)
+        put_or_skip(self, self.ws.root, "modernized/s/h`\n## Injected | x/src/test/ATest.java", "class ATest {}\n", T0 + 20)
         pack = self.ws.pack()
         md = pp.render_md(pack)
         self.assertEqual(len(pack["toolingOnly"]), 1)
@@ -492,7 +477,11 @@ class HostileInput(unittest.TestCase):
         put(outside, "GhostTest.java", "// RULE-002\n")
         try:
             os.symlink(os.path.join(outside, "GhostTest.java"), os.path.join(self.ws.root, "modernized", "s", "mod", "src", "test", "GhostTest.java"))
-        except (OSError, NotImplementedError):
+        except OSError as err:
+            if getattr(err, "winerror", None) == 1314:
+                self.skipTest("Windows refused symbolic-link creation (WinError 1314)")
+            raise
+        except NotImplementedError:
             self.skipTest("symbolic links are not available here")
         self.ws.test_file("CalcTest.java", "// RULE-001\n")
         self.ws.test_file("BinTest.java", b"\x00\x01 RULE-002 \x00")

@@ -105,9 +105,9 @@ While iterating, run only this module's tests; run the whole suite once before S
    run both systems on the same inputs: save each input and its legacy output under `golden/$module/cases/<id>/`
    and each new output in your scratch folder, list the pairs in `golden/$module/cases.json` (legacy paths relative
    to `golden/$module/`, new paths relative to the scratch folder; the schema is at the top of `scripts/compare.py`),
-   and run `scripts/compare.py` on `golden/$module/cases.json` with the scratch folder as the new side
-   (`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compare.py" --help` gives the exact arguments), writing
-   `runs/$module/<run-id>/EQUIVALENCE.json`, from the root of the workspace checkout.
+   and run, from the root of the workspace checkout,
+   `python3 scripts/compare.py $app --source <source clone> --assessment assessment/$app --target <target checkout> --cases golden/$module/cases.json --runs <scratch folder> --out runs/$module/<run-id>`,
+   which writes `runs/$module/<run-id>/EQUIVALENCE.json`.
    That script, not your judgment, decides same or different. Mask only fields that legitimately vary
    (timestamps, generated ids) and say what each mask hides. A difference you accept is recorded with a
    reason in the case's `approvedDifference`, and only a person accepts it, at a gate in the portal: list the

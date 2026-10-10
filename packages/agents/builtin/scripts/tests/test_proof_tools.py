@@ -1,6 +1,6 @@
-"""Tests for scripts/trace_rules.py, baseline_diff.py, proof_pack.py and the Proof section of the report.
+"""Tests for the trace, baseline-diff and verification evidence scripts.
 
-Run:  python3 -m unittest discover -s plugins/code-modernization/scripts/tests
+Run:  python -m pytest packages/agents/builtin/scripts/tests/test_proof_tools.py
 Every input here stands in for untrusted text from a legacy code base, so the hostile cases matter as much as the good ones.
 """
 import contextlib
@@ -19,14 +19,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(PLUGIN, "scripts"))
 import baseline_diff as bd  # noqa: E402
-import build_report as br  # noqa: E402
 import compare as cmp  # noqa: E402
 import proof_pack as pp  # noqa: E402
 import trace_rules as tr  # noqa: E402
 import uplift_checks as uc  # noqa: E402
 
-TEMPLATE = os.path.join(PLUGIN, "assets", "report-template.html")
-NODE = shutil.which("node")
 T0 = 1_700_000_000
 
 
@@ -40,10 +37,89 @@ def put(root, rel, data, when=None):
     return path
 
 
+def put_or_skip(test, root, rel, data, when=None):
+    try:
+        return put(root, rel, data, when)
+    except OSError as err:
+        if os.name == "nt" and (getattr(err, "winerror", None) == 123 or err.errno == 22):
+            test.skipTest("Windows does not permit this hostile file name")
+        raise
+
+
 def run_main(fn, argv):
+    argv = list(argv)
+    if fn in (tr.main, pp.main) and "--workspace" in argv:
+        i = argv.index("--workspace")
+        root = argv[i + 1]
+        del argv[i:i + 2]
+        app = argv[0]
+        source, assessment, target = (os.path.join(root, "legacy", app), os.path.join(root, "analysis", app), os.path.join(root, "modernized", app))
+        for path in (source, assessment, target):
+            os.makedirs(path, exist_ok=True)
+        if fn is pp.main:
+            module = argv[1] if len(argv) > 1 and not argv[1].startswith("-") else None
+            if module:
+                argv.pop(1)
+            argv.extend(["--source", source, "--assessment", assessment, "--target", target, "--out", assessment])
+            if module:
+                argv.insert(1, module)
+        else:
+            runs = []
+            while "--results" in argv:
+                i = argv.index("--results")
+                runs.extend(["--runs", argv[i + 1]])
+                del argv[i:i + 2]
+            if "--module" in argv:
+                i = argv.index("--module")
+                argv[i] = "--module"
+            argv.extend(["--source", source, "--assessment", assessment, "--target", target, "--out", os.path.join(root, "trace-out")])
+            argv.extend(runs)
+    elif fn is bd.main and argv and os.path.isfile(argv[0]):
+        baseline = argv.pop(0)
+        assessment = os.path.dirname(os.path.abspath(baseline))
+        parent = os.path.basename(os.path.dirname(assessment)).lower()
+        if parent in ("analysis", "assessment"):
+            root = os.path.dirname(os.path.dirname(assessment))
+            app = os.path.basename(assessment)
+        else:
+            root = os.path.dirname(assessment)
+            app = "s"
+        source, target, out = (os.path.join(root, "legacy", app), os.path.join(root, "modernized", app), os.path.join(root, "baseline-out"))
+        for path in (source, target):
+            os.makedirs(path, exist_ok=True)
+        old = []
+        i = 0
+        while i < len(argv):
+            if argv[i] in ("--junit", "--trx", "--baseline-evidence"):
+                flag, value = argv[i], argv[i + 1]
+                if flag in ("--junit", "--trx") and os.path.isdir(value):
+                    old.extend(["--runs", value])
+                else:
+                    old.extend([flag, value])
+                i += 2
+            else:
+                old.append(argv[i])
+                i += 1
+        argv = [app, "--source", source, "--assessment", assessment, "--target", target, "--out", out, "--baseline", baseline] + old
+    elif fn is uc.main and len(argv) >= 2 and not argv[0].startswith("-"):
+        source, target = argv[:2]
+        catalog = argv[2] if len(argv) > 2 and not argv[2].startswith("-") else None
+        rest = argv[3:] if catalog else argv[2:]
+        root = os.path.dirname(source)
+        assessment = os.path.join(root, "assessment", "app")
+        os.makedirs(assessment, exist_ok=True)
+        if catalog and os.path.isfile(catalog):
+            with open(catalog, "rb") as inp:
+                put(assessment, "DELTA_CATALOG.md", inp.read())
+            catalog = os.path.join(assessment, "DELTA_CATALOG.md")
+        out = os.path.join(root, "uplift-out")
+        argv = ["app", "--source", source, "--assessment", assessment, "--target", target, "--out", out] + (["--catalog", catalog] if catalog else []) + rest
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = fn(argv)
+        try:
+            code = fn(argv)
+        except SystemExit as exc:
+            code = exc.code
     return code, out.getvalue(), err.getvalue()
 
 
@@ -64,7 +140,11 @@ def dump(path, obj):
 def make_symlink(test, target, link):
     try:
         os.symlink(target, link)
-    except (OSError, NotImplementedError, AttributeError):
+    except OSError as err:
+        if getattr(err, "winerror", None) == 1314:
+            test.skipTest("Windows refused symbolic-link creation (WinError 1314)")
+        raise
+    except (NotImplementedError, AttributeError):
         test.skipTest("symbolic links are not available here")
 
 
@@ -454,7 +534,7 @@ class BaselineDiff(unittest.TestCase):
 BRIEF_MD = """# Brief
 
 #### Phase 1 - Pilot
-Command: /code-modernization:modernize-transform
+Command: /kintsugi:modernize-transform
 Modules: mod, extra
 Exit criteria:
 - [x] All P0 rules pass
@@ -462,7 +542,7 @@ Exit criteria:
 - [ ] Row counts match
 
 #### Phase 2 - Later
-Command: /code-modernization:modernize-transform
+Command: /kintsugi:modernize-transform
 Modules: other
 Exit criteria:
 - [ ] Phase 2 only criterion
@@ -980,6 +1060,7 @@ class RunnerLogs(unittest.TestCase):
         for name, text, want in RUNNER_LOGS:
             got = pp.parse_runner_log(text)
             self.assertIsNotNone(got, name)
+            assert got is not None
             self.assertEqual(got[:3], want, name)
 
     def test_a_log_with_no_summary_line_is_no_evidence(self):
@@ -996,7 +1077,9 @@ class RunnerLogs(unittest.TestCase):
                      "Tests:" + " 1 failed," * 100000 + " 5 total\n", "Ran " * 500000, "\r" * 1000000):
             pp.parse_runner_log(text)
         self.assertLess(time.time() - started, 30)
-        self.assertEqual(pp.parse_runner_log("Tests run: 999999999999999999999, Failures: 0, Errors: 0, Skipped: 0\n")[0], 999999999999999999999)
+        huge_count = pp.parse_runner_log("Tests run: 999999999999999999999, Failures: 0, Errors: 0, Skipped: 0\n")
+        assert huge_count is not None
+        self.assertEqual(huge_count[0], 999999999999999999999)
 
     def test_read_logs_refuses_links_huge_files_and_binary_text(self):
         root = tempfile.mkdtemp()
@@ -1024,7 +1107,7 @@ class BaselineEvidence(unittest.TestCase):
         self.per_test = json.dumps({"A#pass1": "PASS", "A#pass2": "PASS", "A#failed": "FAIL", "A#skipped": "SKIP", "B#flip": "PASS", "B#gone": "PASS"})
 
     def found(self, text=""):
-        return [os.path.relpath(p, os.path.join(self.root, "analysis", "s")) for p in bd.evidence_paths(self.base, BASELINE_MD + text)]
+        return [os.path.relpath(p, os.path.join(self.root, "analysis", "s")).replace(os.sep, "/") for p in bd.evidence_paths(self.base, BASELINE_MD + text)]
 
     def test_per_test_json_shapes_are_read_and_counts_or_prose_are_not(self):
         self.assertEqual(bd.parse_results_json({"A#x": "PASS", "A#y": "failed", "A#z": "Skipped"}), {"A#x": "PASS", "A#y": "FAIL", "A#z": "SKIP"})
@@ -1121,8 +1204,8 @@ class BaselineEvidence(unittest.TestCase):
         put(self.root, "analysis/s/baseline/old.json", self.per_test)
         code, out, _ = run_main(bd.main, [self.base, "--junit", folder])
         self.assertIn("baseline evidence: measured (machine-readable results old.json)", out)
-        evidence = os.path.join(self.root, "elsewhere.json")
-        put(self.root, "elsewhere.json", self.per_test)
+        evidence = os.path.join(self.root, "analysis", "s", "elsewhere.json")
+        put(self.root, "analysis/s/elsewhere.json", self.per_test)
         code, out, _ = run_main(bd.main, [self.base, "--junit", folder, "--baseline-evidence", evidence, "--json"])
         self.assertEqual(json.loads(out)["baseline"]["assessment"]["kind"], "measured")
 
@@ -1217,7 +1300,9 @@ class UpliftChecks(unittest.TestCase):
         self.assertNotRegex(json.dumps(uc.tests_changed(self.old, self.new)), "\x1b")
 
     def test_a_hostile_file_name_is_cleaned(self):
-        self.both("t/ev\x1b[31mil\nTest.java", "a", "b")
+        rel = "t/ev\x1b[31mil\nTest.java"
+        put_or_skip(self, self.old, rel, "a")
+        put_or_skip(self, self.new, rel, "b")
         got = uc.tests_changed(self.old, self.new)
         self.assertNotRegex(got["changed"][0]["path"], r"[\x00-\x1f]")
 
@@ -1337,6 +1422,16 @@ class ProofOutputs(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("NOT PROVEN", out)
         self.assertEqual(sorted(f for f in os.listdir(self.adir) if f.startswith("VERIFICATION")), ["VERIFICATION.json", "VERIFICATION.md"])
+
+    def test_uplift_flag_includes_the_three_uplift_checks(self):
+        source = os.path.join(self.ws.root, "source")
+        target = os.path.join(self.ws.root, "modernized", "s")
+        os.makedirs(source, exist_ok=True)
+        code, _, err = run_main(pp.main, ["s", "--source", source, "--assessment", self.adir, "--target", target,
+                                         "--out", os.path.join(self.ws.root, "cli-out"), "--uplift"])
+        self.assertIn(code, (0, 1), err)
+        data = load(os.path.join(self.ws.root, "cli-out", "VERIFICATION.json"))
+        self.assertTrue({"baseline", "kept", "deltas"}.issubset({c["id"] for m in data["modules"] for c in m["checks"]}))
 
     def test_bad_names_are_refused(self):
         for argv in (["..", "--workspace", self.ws.root], ["a/b"], ["s", "../x"], ["s", "a\\b"], [""]):
@@ -1487,7 +1582,7 @@ class ProofUplift(unittest.TestCase):
         self.assertEqual((m["verdict"], self.states()["baseline"], self.states()["same"]), ("PARTLY PROVEN", "gap", "pass"))
         detail = next(c["detail"] for c in m["checks"] if c["id"] == "baseline")
         self.assertIn("typed by hand", detail)
-        self.assertIn("analysis/<system>/baseline/", detail)
+        self.assertIn("assessment/<app>/baseline/", detail)
         self.assertIn("Recorded:", detail)
         self.assertIn("### Baseline evidence", pp.render_md(pp.overall(pp.build("s", self.root, now="x"))))
 
@@ -1510,7 +1605,7 @@ class ProofUplift(unittest.TestCase):
         put(self.root, "analysis/s/BASELINE.md", self.BASE + "\n- **Recorded:** 2026-09-24. Machine-readable per-test results: `analysis/s/harness/stray.json`\n", T0 + 10)
         self.assertEqual(self.states()["baseline"], "pass")
         put(self.root, "analysis/s/BASELINE.md", self.BASE + "\nMachine-readable: harness/stray.json\n", T0 + 10)
-        self.assertEqual(self.states()["baseline"], "pass")                              # relative to analysis/<system>/
+        self.assertEqual(self.states()["baseline"], "pass")                              # relative to the assessment folder
 
     def test_evidence_outside_analysis_or_through_a_link_is_never_used(self):
         outside = tempfile.mkdtemp()
@@ -1660,334 +1755,63 @@ class ProofUplift(unittest.TestCase):
             pp.build("s", self.root, "nosuchunit")
 
 
-# ---------------------------------------------------------------- the Proof section of the report
-def page_data(html):
-    return json.loads(re.search(r'<script type="application/json" id="report-data">(.*?)</script>', html, re.S).group(1))
-
-
-def good_pack(**module_change):
-    checks = [{"id": cid, "label": label, "state": "pass", "detail": "fine"} for cid, label in br.PROOF_CHECKS]
-    m = {"name": "mod", "track": "rewrite", "verdict": "PROVEN", "checks": checks, "verifiedAt": "2026-09-24 00:00 UTC",
-         "evidence": {"tests": {"executed": 5, "failed": 0, "skipped": 0},
-                      "rules": {"p0": [{"id": "RULE-001", "name": "Total", "confidence": "High", "status": "tested", "tests": 3, "main": 1, "where": "src/test/A.java:9"}]},
-                      "fresh": {"inputs": 12, "executed": 20, "same": 20, "differs": 0, "missing": 0}, "equivalence": {"cases": 4, "executed": 4, "same": 4, "differs": 0, "missing": 0, "approved": [], "masks": []}},
-         "notProven": ["It does not prove inputs nobody tried."], "brief": {"found": True, "items": [{"text": "A person accepts it", "where": "Phase 1 exit criterion"}], "count": 1}}
-    m.update(module_change)
-    return {"v": 1, "system": "s", "generated": "2026-09-24 00:00 UTC", "problems": [], "legacy": {"path": "legacy/s", "ran": True}, "modules": [m], "signoff": {}, "rules": ["PROVEN needs all six checks."]}
-
-
-def good_uplift_pack(**evidence):
-    """A pack for an uplift whose nine checks all pass, with the evidence that backs them; a test changes the evidence and looks at the view."""
-    pack = good_pack()
-    m = pack["modules"][0]
-    m.update(name="s-uplifted", track="uplift")
-    m["checks"] = [c for c in m["checks"] if c["id"] != "rules"] + [{"id": "rules", "label": "Rules traced", "state": "na", "detail": "An uplift keeps the code."}] + [
-        {"id": cid, "label": label, "state": "pass", "detail": "fine"} for cid, label in br.UPLIFT_CHECKS]
-    m["evidence"].pop("rules", None)
-    m["evidence"].update(baselineEvidence={"kind": "measured", "sources": [{"kind": "machine-readable results", "name": "base.json", "tests": 40}], "disagree": 0, "conflict": 0, "examples": [], "considered": ["base.json"]},
-                         testsChanged={"checked": True, "why": "", "legacyTests": 8, "workTests": 9, "counts": {"added": 1, "removed": 0, "changed": 1}, "share": 0.125,
-                                       "removed": [], "added": [{"path": "t/NewTest.java", "lines": 12}], "changed": [{"path": "t/OldTest.java", "added": 3, "removed": 1, "note": ""}]},
-                         deltas={"parsed": 5, "silent": 2, "covered": [{"id": "1"}, {"id": "2"}], "uncovered": [], "config": [{"id": "4", "title": "Bundle plugin", "sites": ["pom.xml:9"]}], "other": 3, "gap": False})
-    m["evidence"].update(evidence)
-    return pack
-
-
-class ProofReport(unittest.TestCase):
-    def setUp(self):
-        self.root = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.root, True)
-        put(self.root, "analysis/s/PREFLIGHT.md", "# Preflight\n")
-        self.out = os.path.join(self.root, "out", "REPORT.html")
-
-    def report(self, pack):
-        put(self.root, "analysis/s/VERIFICATION.json", pack if isinstance(pack, (str, bytes)) else json.dumps(pack, indent=1))       # like proof_pack.py: short lines
-        code, _, err = run_main(br.main, ["s", "--workspace", self.root, "--out", self.out])
-        self.assertEqual(code, 0, err)
-        with open(self.out, encoding="utf-8") as fh:
-            return fh.read()
-
-    def proof(self, html):
-        data = page_data(html)
-        return data, next((p["proof"] for s in data["sections"] if s["id"] == "proof" for p in s["parts"] if p["t"] == "proof"), None)
-
-    def test_the_section_the_banner_and_the_order(self):
-        put(self.root, "analysis/s/EQUIVALENCE.json", "{}")
-        put(self.root, "modernized/s/mod/TRANSFORMATION_NOTES.md", "# n")
-        data, pv = self.proof(self.report(good_pack()))
-        self.assertEqual([s["id"] for s in data["sections"]][-3:], ["build", "proof", "equivalence"])
-        self.assertEqual((pv["verdict"], pv["counts"]["PROVEN"], pv["modules"][0]["p0Counts"]["tested"]), ("PROVEN", 1, 1))
-        self.assertEqual(data["glance"]["proof"]["verdict"], "PROVEN")
-        self.assertEqual(data["glance"]["proof"]["modules"], [{"name": "mod", "verdict": "PROVEN"}])
-        self.assertEqual(pv["signoff"], {"name": "", "role": "", "date": "", "decision": ""})
-        self.assertEqual(pv["modules"][0]["people"][0]["text"], "A person accepts it")
-
-    def test_a_rule_named_only_by_tests_that_did_not_run_is_counted_and_tooling_folders_are_listed(self):
-        pack = good_pack()
-        pack["modules"][0]["evidence"]["rules"]["p0"].append({"id": "RULE-002", "name": "Skipped", "confidence": "High", "status": "named, not run", "tests": 1, "main": 0, "where": "T.java:3"})
-        pack["toolingOnly"] = [{"name": "parity-harness", "path": "modernized/s/parity-harness"}, "not a dict", {"name": "x" * 500, "path": 5}]
-        html = self.report(pack)
-        _, pv = self.proof(html)
-        self.assertEqual(pv["modules"][0]["p0Counts"], {"tested": 1, "claimedOnly": 0, "notRun": 1, "none": 0})
-        self.assertEqual(pv["modules"][0]["verdict"], "PARTLY PROVEN")         # a pass cannot stand next to a rule that no test ran
-        self.assertEqual([t["name"] for t in pv["tooling"]][0], "parity-harness")
-        self.assertEqual(len(pv["tooling"]), 2)
-        self.assertLessEqual(len(pv["tooling"][1]["name"]), 120)
-        self.assertEqual(self.proof(self.report(good_pack()))[1]["tooling"], [])
-
-    def test_no_pack_means_no_section_and_the_older_reports_are_unchanged(self):
-        code, _, _ = run_main(br.main, ["s", "--workspace", self.root, "--out", self.out])
-        data = page_data(read(self.out))
-        self.assertIsNone(data["glance"]["proof"])
-        self.assertNotIn("proof", [s["id"] for s in data["sections"]])
-
-    def test_the_verdict_is_recomputed_from_the_checks_never_taken_from_the_file(self):
-        pack = good_pack()
-        pack["modules"][0]["checks"][3]["state"] = "gap"
-        _, pv = self.proof(self.report(pack))
-        self.assertEqual(pv["modules"][0]["verdict"], "PARTLY PROVEN")
-        self.assertTrue(any("recorded PROVEN" in p and "PARTLY PROVEN" in p for p in pv["problems"]))
-        pack["modules"][0]["checks"][0]["state"] = "fail"
-        pack["modules"][0]["verdict"] = "PROVEN"
-        data, pv = self.proof(self.report(pack))
-        self.assertEqual((pv["verdict"], data["glance"]["proof"]["verdict"]), ("NOT PROVEN", "NOT PROVEN"))
-        self.assertEqual(pv["modules"][0]["reasons"][0], "Tests ran: fine")
-
-    def test_a_pack_that_contradicts_its_own_numbers_is_downgraded(self):
-        for change, check, want in (({"evidence": {"tests": {"executed": 3, "failed": 2}}}, 0, "fail"),
-                                    ({"evidence": {"tests": {"executed": 3}, "equivalence": {"differs": 1}, "fresh": {"inputs": 12}}}, 2, "fail"),
-                                    ({"evidence": {"tests": {"executed": 3}, "fresh": {"inputs": 12, "missing": 1}}}, 3, "fail"),
-                                    ({"evidence": {"tests": {"executed": 0}}}, 0, "fail"),
-                                    ({"evidence": {"tests": {"executed": 3}, "rules": {"p0": [{"id": "R", "status": "none"}]}}}, 1, "gap"),
-                                    ({"evidence": {"tests": {"executed": 3}, "fresh": {"inputs": 3}}}, 3, "gap"),
-                                    ({"evidence": {"tests": {"executed": 3}}}, 3, "gap")):
-            _, pv = self.proof(self.report(good_pack(**change)))
-            self.assertEqual(pv["modules"][0]["checks"][check]["state"], want, change)
-            self.assertNotEqual(pv["modules"][0]["verdict"], "PROVEN")
-        pack = good_pack()
-        pack["modules"][0]["checks"] = pack["modules"][0]["checks"][:5]
-        _, pv = self.proof(self.report(pack))
-        self.assertEqual(pv["modules"][0]["verdict"], "PARTLY PROVEN")
-        self.assertIn("missing from VERIFICATION.json", pv["modules"][0]["reasons"][0])
-        self.assertEqual(self.proof(self.report(dict(good_pack(), modules=[])))[1]["verdict"], "NOT PROVEN")
-
-    def test_an_uplift_needs_its_three_extra_checks_and_a_rewrite_does_not(self):
-        _, pv = self.proof(self.report(good_uplift_pack()))
-        m = pv["modules"][0]
-        self.assertEqual((m["verdict"], [c["id"] for c in m["checks"]]), ("PROVEN", ["tests", "rules", "same", "fresh", "canary", "source", "baseline", "kept", "deltas"]))
-        self.assertEqual(m["uplift"]["testsChanged"]["counts"], {"added": 1, "removed": 0, "changed": 1})
-        self.assertEqual(m["uplift"]["deltas"]["coveredCount"], 2)
-        pack = good_uplift_pack()
-        pack["modules"][0]["checks"] = [c for c in pack["modules"][0]["checks"] if c["id"] != "kept"]
-        _, pv = self.proof(self.report(pack))
-        self.assertEqual(pv["modules"][0]["verdict"], "PARTLY PROVEN")
-        self.assertIn("tests kept check is missing", " ".join(pv["problems"]))
-        _, pv = self.proof(self.report(good_pack()))                                     # a rewrite never needs them
-        self.assertEqual((pv["modules"][0]["verdict"], len(pv["modules"][0]["checks"]), pv["modules"][0]["uplift"]), ("PROVEN", 6, None))
-
-    def test_forged_uplift_passes_are_downgraded_by_the_evidence_beside_them(self):
-        cases = (("baseline", {"baselineEvidence": {"kind": "typed"}}), ("baseline", {"baselineEvidence": {"kind": "measured", "disagree": 2}}), ("baseline", {"baselineEvidence": {"kind": "measured", "conflict": 1}}),
-                 ("kept", {"testsChanged": {"checked": False}}), ("kept", {"testsChanged": {"checked": True, "legacyTests": 0, "counts": {}}}),
-                 ("kept", {"testsChanged": {"checked": True, "legacyTests": 8, "counts": {"removed": 1, "changed": 0, "added": 0}}}),
-                 ("kept", {"testsChanged": {"checked": True, "legacyTests": 8, "counts": {"removed": 0, "changed": 3, "added": 0}}}),
-                 ("deltas", {"deltas": {"parsed": 4, "silent": 1, "covered": [], "uncovered": [{"id": "9"}]}}), ("deltas", {"deltas": {"parsed": 0}}), ("deltas", {"deltas": "nope"}))
-        for cid, change in cases:
-            _, pv = self.proof(self.report(good_uplift_pack(**change)))
-            m = pv["modules"][0]
-            self.assertEqual({c["id"]: c["state"] for c in m["checks"]}[cid], "gap", (cid, change))
-            self.assertEqual(m["verdict"], "PARTLY PROVEN", (cid, change))
-        for state in ("na", "gap"):                                                        # "not applicable" is no way out for the kept and deltas checks
-            pack = good_uplift_pack(testsChanged={"checked": False}, deltas={"parsed": 0})
-            for c in pack["modules"][0]["checks"]:
-                if c["id"] in ("kept", "deltas"):
-                    c["state"] = state
-            self.assertEqual(self.proof(self.report(pack))[1]["modules"][0]["verdict"], "PARTLY PROVEN")
-        pack = good_uplift_pack(baselineEvidence={"kind": "target-only"})
-        for c in pack["modules"][0]["checks"]:
-            if c["id"] == "baseline":
-                c["state"] = "na"
-        self.assertEqual(self.proof(self.report(pack))[1]["modules"][0]["checks"][6]["state"], "na")      # a target-only baseline may say so
-
-    def test_the_uplift_evidence_is_cut_and_cleaned(self):
-        evil = "<script>alert(1)</script>" + chr(0x2028)
-        _, pv = self.proof(self.report(good_uplift_pack(
-            baselineEvidence={"kind": evil, "sources": [{"kind": evil * 5, "name": evil}] * 50, "disagree": "x", "examples": [evil * 20] * 20, "considered": [evil] * 50},
-            testsChanged={"checked": True, "legacyTests": 8, "workTests": 8, "counts": {"added": 1, "removed": 0, "changed": 0}, "share": "x", "added": [{"path": evil * 20, "lines": "x"}] * 300, "removed": "x", "changed": [1, None]},
-            deltas={"parsed": 3, "silent": 1, "covered": [], "uncovered": [{"id": evil * 5, "title": evil * 10, "why": evil * 10, "sites": [evil] * 20}] * 300, "config": "x"})))
-        up = pv["modules"][0]["uplift"]
-        self.assertEqual(up["baseline"]["kind"], "none")
-        self.assertLessEqual((len(up["baseline"]["sources"]), len(up["baseline"]["examples"]), len(up["testsChanged"]["added"]), len(up["deltas"]["uncovered"])), (10, 5, 40, 40))
-        self.assertEqual((up["testsChanged"]["share"], up["testsChanged"]["added"][0]["lines"], up["testsChanged"]["removed"], up["deltas"]["config"]), (0.0, 0, [], []))
-        self.assertGreater(up["deltas"]["uncoveredCount"], 0)
-        self.assertEqual(pv["modules"][0]["verdict"], "PARTLY PROVEN")
-
-    def test_a_real_uplift_pack_from_proof_pack_carries_its_evidence_to_the_report(self):
-        base = ProofUplift("test_all_nine_checks_pass_for_a_clean_uplift")
-        base.setUp()
-        base.addCleanup(shutil.rmtree, base.root, True)
-        put(base.root, "modernized/s-uplifted/unit/src/test/NewCharacterizationTest.java", "class NewCharacterizationTest { Main m; }\n", T0 + 20)
-        run_main(pp.main, ["s", "--workspace", base.root])
-        run_main(br.main, ["s", "--workspace", base.root])
-        data = page_data(read(os.path.join(base.root, "analysis", "s", "REPORT.html")))
-        pv = next(p["proof"] for sec in data["sections"] if sec["id"] == "proof" for p in sec["parts"])
-        m = pv["modules"][0]
-        self.assertEqual((pv["verdict"], len(m["checks"])), ("PROVEN", 9))
-        self.assertEqual(m["uplift"]["testsChanged"]["added"][0]["path"], "unit/src/test/NewCharacterizationTest.java")
-        self.assertEqual(m["uplift"]["baseline"]["kind"], "measured")
-        self.assertEqual(m["uplift"]["deltas"]["silent"], 1)
-
-    def test_a_real_pack_written_by_proof_pack_renders_the_same_verdict(self):
+class CheckIds(unittest.TestCase):
+    def test_emitted_check_ids_match_the_independent_expectation_table(self):
+        expected_proof = {"tests", "rules", "same", "fresh", "canary", "source", "baseline", "kept", "deltas"}
+        expected_uplift = {"baseline", "kept", "deltas"}
+        self.assertEqual({cid for cid, _ in pp.CHECKS}, expected_proof)
+        self.assertEqual({cid for cid, _ in pp.UPLIFT_CHECKS}, expected_uplift)
         ws = Ws(self)
-        put(ws.root, "modernized/s/mod/src/test/CalcTest.java", "// RULE-001\n", T0 + 20)
-        run_main(pp.main, ["s", "--workspace", ws.root])
-        code, _, _ = run_main(br.main, ["s", "--workspace", ws.root])
-        data = page_data(read(os.path.join(ws.root, "analysis", "s", "REPORT.html")))
-        mod = data["glance"]["proof"]["modules"][0]
-        self.assertEqual(mod, {"name": "mod", "verdict": "PARTLY PROVEN"})
-        pv = next(p["proof"] for s in data["sections"] if s["id"] == "proof" for p in s["parts"])
-        self.assertEqual(pv["modules"][0]["p0Counts"], {"tested": 1, "claimedOnly": 0, "notRun": 0, "none": 1})
-        self.assertTrue(pv["modules"][0]["reasons"][0].startswith("Rules traced: 1 of 2 P0"))
-
-    def test_hostile_values_stay_data_and_the_page_keeps_its_rules(self):
-        evil = "<script>window.__pwned=1</script></script><img src=x onerror=1> &amp; " + chr(0x2028)
-        pack = good_pack(name=evil * 5, track=evil, notProven=[evil * 20] * 60, verdict=["PROVEN"], checks="nope",
-                         evidence={"tests": {"executed": "many", "failed": -1, "skipped": 10 ** 30}, "rules": {"p0": [evil, {"id": evil, "status": evil, "tests": evil}] * 150},
-                                   "fresh": [1], "equivalence": {"approved": evil, "masks": [evil]}, "baseline": 5, "canary": [evil]},
-                         brief={"items": [{"text": evil * 9, "where": evil}] * 100, "count": "x", "found": 1})
-        pack.update(problems=[evil] * 20, signoff="x", legacy=[], rules="x")
-        html = self.report(pack)
-        block = re.search(r'<script type="application/json" id="report-data">(.*?)</script>', html, re.S).group(1)
-        for bad in ("<", ">", "&", chr(0x2028)):
-            self.assertNotIn(bad, block)
-        data, pv = self.proof(html)
-        m = pv["modules"][0]
-        self.assertLessEqual(len(m["name"]), 120)
-        self.assertEqual((m["tests"], m["verdict"]), ({"executed": 0, "failed": 0, "skipped": 0}, "PARTLY PROVEN"))       # no usable checks: nothing is proven
-        self.assertLessEqual(len(m["p0"]), 200)
-        self.assertLessEqual(len(m["people"]), 40)
-        self.assertLessEqual(len(pv["problems"]), 10 + 1)
-        self.assertEqual(html.count("<script"), 2)
-        self.assertNotRegex(html.replace(block, "").split('<script id="app">')[0].split("</style>")[1], r"__pwned|onerror=")
-        policy = re.search(r'http-equiv="Content-Security-Policy" content="([^"]*)"', html).group(1)
-        self.assertIn("default-src 'none'", policy)
-
-    def test_malformed_or_foreign_verification_files_are_reported_not_raised(self):
-        for text in ("[1, 2", "{}", '{"modules": "x"}', "[]", "null", b"\x00\x01"):
-            data = page_data(self.report(text))
-            self.assertEqual(data["glance"]["proof"]["verdict"], "NOT PROVEN" if text != "[1, 2" else "NOT PROVEN", text)
-        html = self.report("[1, 2")
-        self.assertTrue(any("VERIFICATION.json could not be parsed" in json.dumps(p) for s in page_data(html)["sections"] for p in s["parts"]))
-
-    def test_a_linked_verification_file_is_not_read(self):
-        outside = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, outside, True)
-        put(outside, "V.json", json.dumps(good_pack()))
-        make_symlink(self, os.path.join(outside, "V.json"), os.path.join(self.root, "analysis", "s", "VERIFICATION.json"))
-        code, _, _ = run_main(br.main, ["s", "--workspace", self.root, "--out", self.out])
-        data = page_data(read(self.out))
-        self.assertIsNone(data["glance"]["proof"])
+        emitted = {check["id"] for module in ws.pack()["modules"] for check in module["checks"]}
+        self.assertLessEqual(emitted, expected_proof | expected_uplift)
 
 
-NODE_PROOF = r"""
-const fs = require('fs'), vm = require('vm');
-const tpl = fs.readFileSync(process.env.TEMPLATE, 'utf8');
-const grab = function (re) { return re.exec(tpl)[1] !== undefined ? re.exec(tpl)[1] : re.exec(tpl)[0]; };
-const core = /\/\* core:start[^\n]*\n([\s\S]*?)\/\* core:end \*\//.exec(tpl)[1];
-const proof = /\/\* proof:start[^\n]*\n([\s\S]*?)\/\* proof:end \*\//.exec(tpl)[1];
-const helpers = /function fmt\(n\)[^\n]*\n/.exec(tpl)[0] + /function chip\([^\n]*\n/.exec(tpl)[0];
-class Text { constructor(t) { this.text = String(t); } }
-class El { constructor(t) { this.tag = t; this.attrs = {}; this.kids = []; }
-  setAttribute(k, v) { this.attrs[k] = String(v); } appendChild(c) { this.kids.push(c); return c; } }
-const ctx = { document: { createElement: t => new El(t), createTextNode: t => new Text(t) } };
-vm.createContext(ctx);
-const api = vm.runInContext('(function(){"use strict";' + core + helpers + proof + ';return {partProof:partProof,own:own};})()', ctx);
-function walk(n, acc, top) {
-  if (n instanceof Text) { acc.text += n.text + '\n'; return; }
-  acc.tags.add(n.tag); Object.keys(n.attrs).forEach(k => { acc.attrs.add(k); });
-  if (top && n.tag === 'div' && /banner/.test(n.attrs.class || '')) acc.banners.push(n.attrs.class);
-  n.kids.forEach(c => walk(c, acc, false));
-}
-const input = JSON.parse(fs.readFileSync(0, 'utf8')), out = [];
-for (const pv of input) {
-  const t0 = Date.now(), acc = { tags: new Set(), attrs: new Set(), text: '', banners: [] };
-  api.partProof(pv).forEach(n => walk(n, acc, true));
-  out.push({ ms: Date.now() - t0, tags: [...acc.tags], attrs: [...acc.attrs], text: acc.text, banners: acc.banners });
-}
-out.push({ own: [api.own({a: 'x'}, 'a', 'd'), api.own({a: 'x'}, '__proto__', 'd'), api.own({a: 'x'}, 'constructor', 'd'), api.own({a: 'x'}, 'toString', 'd')] });
-process.stdout.write(JSON.stringify(out));
-"""
+class SourceNotModified(unittest.TestCase):
+    def test_git_source_check_clean_dirty_mismatch_and_unknown_outcomes(self):
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        source, assessment = os.path.join(root, "source"), os.path.join(root, "assessment", "app")
+        os.makedirs(source)
+        os.makedirs(assessment)
+        def git(*args):
+            return subprocess.run(["git", "-C", source] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True).stdout.strip()
+        git("init", "--quiet")
+        git("config", "user.email", "test@example.invalid")
+        git("config", "user.name", "Test")
+        put(source, "source.txt", "baseline")
+        git("add", "source.txt")
+        git("commit", "--quiet", "-m", "baseline")
+        recorded = git("rev-parse", "HEAD")
+        put(assessment, "inventory.json", json.dumps({"sourceCommit": recorded}))
+        self.assertEqual(pp.git_source_check(source, assessment)["state"], "clean")
+        put(source, "source.txt", "dirty")
+        dirty = pp.git_source_check(source, assessment)
+        self.assertEqual((dirty["state"], dirty["method"]), ("changed", "git"))
+        git("add", "source.txt")
+        git("commit", "--quiet", "-m", "changed")
+        self.assertEqual(pp.git_source_check(source, assessment)["state"], "changed")
+        put(assessment, "inventory.json", json.dumps({"sourceCommit": None}))
+        unknown = pp.git_source_check(source, assessment)
+        self.assertEqual((unknown["state"], unknown["method"]), ("unknown", "NO_VCS"))
+        self.assertIn("not contain a valid recorded sourceCommit", unknown["detail"])
+        put(assessment, "inventory.json", json.dumps({"sourceCommit": recorded}))
+        missing = pp.git_source_check(os.path.join(root, "missing"), assessment)
+        self.assertEqual(missing["state"], "unknown")
+        self.assertIn("unavailable", missing["detail"])
 
 
-@unittest.skipUnless(NODE, "node is not installed")
-class ProofScript(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        evil = "<script>alert(1)</script></script><img src=x onerror=alert(2)> [x](javascript:alert(3))"
-        packs = [good_pack(),
-                 good_pack(checks=[{"id": "tests", "label": "Tests ran", "state": "gap", "detail": "x"}]),
-                 good_pack(checks=[{"id": "tests", "label": "Tests ran", "state": "fail", "detail": "x"}]),
-                 good_pack(name=evil, track=evil, notProven=[evil], brief={"found": True, "count": 900, "items": [{"text": evil, "where": evil}]},
-                           evidence={"tests": {"executed": 1}, "rules": {"p0": [{"id": evil, "name": evil, "status": "__proto__", "tests": 1, "main": 1, "where": evil}] * 200}}),
-                 dict(good_pack(), legacy={"path": evil, "target": evil, "ran": False}, problems=[evil], signoff={"name": evil, "role": "", "date": "", "decision": ""})]
-        packs.append(good_uplift_pack(deltas={"parsed": 5, "silent": 2, "covered": [{"id": "1"}], "uncovered": [{"id": "2", "title": "Rounding changed", "why": "no test names Money", "sites": ["Money.java:4"]}],
-                                                  "config": [{"id": "4", "title": "Bundle plugin", "sites": ["pom.xml:9"]}]},
-                                      testsChanged={"checked": True, "legacyTests": 8, "workTests": 8, "counts": {"added": 0, "removed": 1, "changed": 0}, "share": 0.0,
-                                                    "removed": [{"path": "t/GoneTest.java", "lines": 7}], "added": [], "changed": []},
-                                      baselineEvidence={"kind": "typed", "sources": [], "disagree": 0, "conflict": 0, "examples": [], "considered": [], "ignored": ["counts.json"]}))
-        views = [br.proof_view(p) for p in packs]
-        views[3]["verdict"] = "__proto__"
-        views[3]["modules"][0]["verdict"] = "constructor"
-        proc = subprocess.run([NODE, "-e", NODE_PROOF], input=json.dumps(views), capture_output=True, text=True, env=dict(os.environ, TEMPLATE=TEMPLATE), timeout=120)
-        assert proc.returncode == 0, proc.stderr
-        cls.out, cls.evil = json.loads(proc.stdout), evil
+class CliContract(unittest.TestCase):
+    def test_help_is_side_effect_free_and_missing_common_roots_exit_two(self):
+        for script in (cmp.main, tr.main, pp.main, uc.main, bd.main):
+            code, out, err = run_main(script, ["--help"])
+            self.assertEqual((code, err), (0, ""))
+            for flag in ("--source", "--assessment", "--target", "--out"):
+                self.assertIn(flag, out)
+            code, _, err = run_main(script, ["app"])
+            self.assertEqual(code, 2)
+            self.assertEqual(len(err.splitlines()), 2)
+            self.assertTrue(err.splitlines()[0].startswith("usage: "))
 
-    def test_only_safe_elements_and_attributes_are_built(self):
-        allowed_tags = {"div", "table", "thead", "tbody", "tr", "th", "td", "span", "p", "h3", "h4", "ul", "li", "details", "summary"}
-        allowed_attrs = {"class", "role", "tabindex", "aria-label", "scope"}
-        for doc in self.out[:-1]:
-            self.assertLessEqual(set(doc["tags"]), allowed_tags)
-            self.assertLessEqual(set(doc["attrs"]), allowed_attrs)
-            self.assertLess(doc["ms"], 3000)
 
-    def test_hostile_text_is_shown_as_text_never_as_markup_or_a_link(self):
-        doc = self.out[3]
-        self.assertIn("<script>alert(1)</script>", doc["text"])
-        self.assertIn("[x](javascript:alert(3))", doc["text"])
-        self.assertNotIn("a", doc["tags"])
-        self.assertNotIn("img", doc["tags"])
-
-    def test_the_banner_says_the_verdict_in_words_symbols_and_colour(self):
-        self.assertIn("✓ Proof: 1 PROVEN", self.out[0]["text"])
-        self.assertEqual(self.out[0]["banners"], ["banner ok", "banner ok"])
-        self.assertEqual(self.out[1]["banners"], ["banner warn", "banner warn"])
-        self.assertEqual(self.out[2]["banners"], ["banner bad", "banner bad"])
-        self.assertIn("◐ ", self.out[1]["text"])
-        self.assertIn("✗ ", self.out[2]["text"])
-
-    def test_unknown_verdicts_and_prototype_names_fall_back_to_red(self):
-        self.assertEqual(self.out[3]["banners"], ["banner bad", "banner bad"])
-        self.assertEqual(self.out[-1]["own"], ["x", "d", "d", "d"])
-
-    def test_the_page_shows_the_matrix_what_is_not_proven_and_a_blank_sign_off(self):
-        text = self.out[0]["text"]
-        for needle in ("What this does not prove", "It does not prove inputs nobody tried.", "P0 business rules: 1 tested, 0 named but not run, 0 claimed only, 0 with no test", "RULE-001",
-                       "Waiting for a person", "A person accepts it", "Sign-off", "________________", "accept / accept with conditions / reject", "How the verdict is computed",
-                       "Fresh inputs: 12 new input(s)", "tests executed: 5"):
-            self.assertIn(needle, text)
-        self.assertIn("It could not run here, so the proof is trace-based.", self.out[4]["text"])
-
-    def test_an_uplift_shows_its_baseline_test_files_and_deltas(self):
-        text = self.out[5]["text"]
-        for needle in ("Baseline evidence: typed by hand", "Test files: 8 in the legacy tree, 8 in the working copy: 1 removed, 0 added, 0 changed", "Removed test files", "t/GoneTest.java (7 lines)",
-                       "2 Behavioral-silent: 1 have a test naming their site, 1 do not", "Not named by any test", "2 Rounding changed (no test names Money)",
-                       "At a build or configuration file (for a person)", "4 Bundle plugin (pom.xml:9)", "Baseline measured", "Tests kept", "Deltas covered"):
-            self.assertIn(needle, text)
-        self.assertNotIn("Baseline evidence: typed by hand", self.out[0]["text"])
-
-    def test_the_template_keeps_its_own_contract(self):
-        with open(TEMPLATE, encoding="utf-8") as fh:
-            text = fh.read()
-        app = re.search(r'<script id="app">(.*?)</script>', text, re.S).group(1)
-        self.assertEqual(len(re.findall(r"/\* proof:start", app)), 1)
-        self.assertNotRegex(app, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|fetch\(|XMLHttpRequest")
-        self.assertNotRegex(text, r"https?://")
-        self.assertIn("case 'proof': return partProof(p.proof);", app)
+if __name__ == "__main__":
+    unittest.main()

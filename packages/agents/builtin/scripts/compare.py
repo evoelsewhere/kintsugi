@@ -1,27 +1,39 @@
 #!/usr/bin/env python3
 """Deterministic judge of "does the new system give the same output as the legacy one".
 
-    python3 compare.py <cases.json> [--out EQUIVALENCE.json] [--quiet] [--allow-outside]
+    python3 compare.py <app> --source <checkout> --assessment <assessment/app> --target <checkout> \\
+        --cases <cases.json> --golden <golden/unit> --runs <scratch folder> --out <runs/unit/run-id>
 
-The verdict comes from comparing bytes, never from a model's opinion. Input:
+The verdict comes from comparing bytes, never from a model's opinion. Evidence roots are explicit; the
+source is read-only and only EQUIVALENCE.json is written under --out:
+
+    golden/<unit>/cases.json, golden/<unit>/cases/<id>/   development cases: inputs and legacy outputs
+    golden/<unit>/fresh-cases.json, golden/<unit>/fresh/<id>/   fresh inputs a verification invented
+    runs/<unit>/<run-id>/EQUIVALENCE.json                 the report of one run (--out; <run-id> is
+                                                          <YYYYMMDD-HHMM>-<short target commit>)
+    --runs                                                the new side's actual outputs for this run, in a
+                                                          scratch folder outside the source and target checkouts;
+                                                          they are never committed
+
+Input:
 
     {"system": "carddemo",
      "legacy": {"label": "COBOL, GnuCOBOL 3.2", "command": "optional free text"},
      "new":    {"label": "Java 17",             "command": "optional free text"},
      "cases": [{"id": "C01", "title": "Interest posting, normal account",
-                "legacy": "out/legacy/C01.out", "new": "out/new/C01.out",
+                "legacy": "cases/C01/out.txt", "new": "C01/out.txt",
                 "mask": [{"bytes": "278-330", "why": "run timestamp"},
                          {"regex": "\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}"}],
                 "approvedDifference": "optional: why a person accepted a difference",
                 "note": "optional"}]}
 
-Paths are relative to the cases file's folder and may not leave it unless --allow-outside is
-given. `bytes` ranges are 0-based and inclusive; `regex` runs on the bytes decoded as latin-1.
+Legacy paths are relative to --golden and new paths to --runs; paths outside those roots and symlink
+escapes are refused. `system` is the application id. `bytes` ranges are 0-based and inclusive; `regex` runs on the bytes decoded as latin-1.
 Every masked span, on both sides, is replaced by one fixed marker, so masks never hide the
 position of a difference and a variable-length match still compares equal. A case is:
   same      identical after masking
   differs   different; the first difference is recorded (a person may approve it: differs-approved)
-  missing   a file is absent, unreadable or outside the cases folder. Never a pass.
+  missing   a file is absent, unreadable or outside its folder. Never a pass.
 
 A person who accepts a difference records it on the case (`"approvedDifference": "why"`), or once for every
 case that shares an `input` label with a top-level `"approvedInputs": {"F23": "why"}`. A reason is required either way, and an approved difference is still listed as a
@@ -38,12 +50,11 @@ dotted run like 1.2.3 must match exactly. The case is `same`, with the largest r
 recorded; anything outside the tolerance is `differs`. A relative tolerance above 1% or an absolute one
 above 1e-6 is refused: that is a different result, not rounding.
 
-Writes EQUIVALENCE.json (default: next to the cases file). Exit 0 only when at least one case
+Writes EQUIVALENCE.json to --out (a run folder, never the golden folder). Exit 0 only when at least one case
 executed, none is missing or differs (approved differences are allowed), the self-check did not
 fail and some compared output was not empty; 1 otherwise; 2 for unusable input.
 """
 import argparse
-import bisect
 import datetime
 import hashlib
 import decimal
@@ -56,6 +67,7 @@ import tempfile
 
 MARK = b"\x00<MASK>\x00"
 MAX_BYTES = 256 * 1024 * 1024
+CASES_CAP = 8 << 20
 MAX_TOLERANT_BYTES = 32 * 1024 * 1024
 # A dotted run such as 1.2.3 or 10.0.0.1 is an identifier, not a number: it is left inside the text around it.
 NUMBER = re.compile(rb"(?P<dotted>\d+(?:\.\d+){2,})|(?P<num>[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?)")
@@ -247,14 +259,17 @@ def read_file(rel, base, allow_outside):
     path = os.path.join(base, rel)
     try:
         real, root = os.path.realpath(path), os.path.realpath(base)
-        if not allow_outside and os.path.commonpath([root, real]) != root:
-            return None, "the path leaves the cases folder (pass --allow-outside if that is intended)"
+        if os.path.commonpath([root, real]) != root:
+            return None, "the path leaves its permitted evidence folder"
         if not os.path.exists(path):
             return None, "the file does not exist"
         if os.path.getsize(path) > MAX_BYTES:
             return None, "the file is larger than %d MB" % (MAX_BYTES >> 20)
         with open(path, "rb") as fh:
-            return fh.read(), None
+            data = fh.read(MAX_BYTES + 1)
+        if len(data) > MAX_BYTES:
+            return None, "the file is larger than %d MB" % (MAX_BYTES >> 20)
+        return data, None
     except (OSError, ValueError) as err:
         return None, "the file could not be read (%s)" % err.__class__.__name__
 
@@ -266,7 +281,7 @@ def rel_to(path, folder):
         return path
 
 
-def judge(case, index, base, out_dir, allow_outside, default_tolerance=None, approved_inputs=None):
+def judge(case, index, base, out_dir, allow_outside, default_tolerance=None, approved_inputs=None, new_base=None):
     """-> (case record, legacy bytes or None, masks)."""
     cid = clip(str(case.get("id") or "C%02d" % (index + 1)), 80)
     masks = parse_masks(case.get("mask"), cid)
@@ -279,8 +294,9 @@ def judge(case, index, base, out_dir, allow_outside, default_tolerance=None, app
     data, problems = {}, []
     for side in ("legacy", "new"):
         given = case.get(side)
-        rec[side + "Path"] = rel_to(os.path.join(base, given), out_dir) if isinstance(given, str) and given else ""
-        data[side], why = read_file(given, base, allow_outside)
+        side_base = new_base if side == "new" and new_base else base
+        rec[side + "Path"] = rel_to(os.path.join(side_base, given), out_dir) if isinstance(given, str) and given else ""
+        data[side], why = read_file(given, side_base, allow_outside)
         if why:
             problems.append("The %s output was not compared: %s (%s)." % (side, why, clip(str(given), 200)))
     if problems:
@@ -350,7 +366,8 @@ def self_check(items):
         if not free:
             return False, "case %s: the masks hide every byte, so no difference could ever be seen" % cid
         biggest = max(free, key=lambda f: f[1] - f[0])
-        flip = lambda p: data[:p] + bytes([data[p] ^ 1]) + data[p + 1:]
+        def flip(p):
+            return data[:p] + bytes([data[p] ^ 1]) + data[p + 1:]
         spots = [free[0][0], free[-1][1] - 1, (biggest[0] + biggest[1]) // 2]
         caught = any(differs_under(flip(p), data, masks, tol) for p in spots)
         if tol and caught:
@@ -381,23 +398,36 @@ def totals(records, executed, count):
     return t
 
 
-def run(cases_path, out_path=None, allow_outside=False):
+def run(cases_path, out_path=None, allow_outside=False, new_root=None, golden_root=None):
     """-> the EQUIVALENCE record. Raises InputError for a cases file that cannot be used."""
     try:
+        if os.path.getsize(cases_path) > CASES_CAP:
+            raise InputError("cases file is larger than %d MB" % (CASES_CAP >> 20))
         with open(cases_path, "rb") as fh:
-            spec = json.loads(fh.read().decode("utf-8-sig"))
+            raw = fh.read(CASES_CAP + 1)
+        if len(raw) > CASES_CAP:
+            raise InputError("cases file is larger than %d MB" % (CASES_CAP >> 20))
+        spec = json.loads(raw.decode("utf-8-sig"))
+    except InputError:
+        raise
     except (OSError, ValueError) as err:
-        raise InputError("cannot read %s: %s" % (cases_path, err))
+        raise InputError("cannot read cases file (%s)" % err.__class__.__name__)
     if not isinstance(spec, dict) or not isinstance(spec.get("cases"), list):
-        raise InputError("%s must be a JSON object with a 'cases' list" % cases_path)
-    base = os.path.dirname(os.path.abspath(cases_path))
+        raise InputError("cases file must be a JSON object with a 'cases' list")
+    base = os.path.realpath(golden_root or os.path.dirname(os.path.abspath(cases_path)))
+    try:
+        if os.path.commonpath([base, os.path.realpath(cases_path)]) != base:
+            raise InputError("cases file must be inside --golden")
+    except ValueError:
+        raise InputError("cases file must be inside --golden")
+    new_base = os.path.realpath(new_root) if new_root else base
     out_dir = os.path.dirname(os.path.abspath(out_path)) if out_path else base
     records, items, ids = [], [], set()
     approved = {str(k): v for k, v in spec["approvedInputs"].items() if isinstance(v, str) and v.strip()} if isinstance(spec.get("approvedInputs"), dict) else {}
     for i, case in enumerate(spec["cases"]):
         if not isinstance(case, dict):
             raise InputError("case %d is not an object" % (i + 1))
-        rec, data, masks, tol = judge(case, i, base, out_dir, allow_outside, spec.get("tolerance"), approved)
+        rec, data, masks, tol = judge(case, i, base, out_dir, allow_outside, spec.get("tolerance"), approved, new_base)
         if rec["id"] in ids:
             raise InputError("duplicate case id %r" % rec["id"])
         ids.add(rec["id"])
@@ -405,8 +435,14 @@ def run(cases_path, out_path=None, allow_outside=False):
         if data is not None:
             items.append((rec["id"], data, masks, tol))
     passed, detail = self_check(items)
-    count = lambda v: sum(1 for r in records if r["verdict"] == v)
-    ends = lambda key: {k: clip(spec.get(key, {}).get(k), 300) for k in ("label", "command")} if isinstance(spec.get(key), dict) else {"label": "", "command": ""}
+    def count(verdict):
+        return sum(1 for record in records if record["verdict"] == verdict)
+
+    def ends(key):
+        endpoint = spec.get(key)
+        if not isinstance(endpoint, dict):
+            return {"label": "", "command": ""}
+        return {name: clip(endpoint.get(name), 300) for name in ("label", "command")}
     return {"system": clip(spec.get("system"), 200), "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "legacy": ends("legacy"), "new": ends("new"), "selfCheck": {"passed": passed, "detail": detail},
             "totals": totals(records, len(items), count), "cases": records}
@@ -449,37 +485,85 @@ def write_atomic(path, text):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Compare legacy and new outputs byte for byte.")
-    ap.add_argument("cases", help="cases.json (see the module docstring for the schema)")
-    ap.add_argument("--out", help="where to write EQUIVALENCE.json (default: next to the cases file)")
-    ap.add_argument("--quiet", action="store_true", help="write the file, print nothing")
-    ap.add_argument("--allow-outside", action="store_true", help="allow case paths that leave the cases folder")
+    ap = argparse.ArgumentParser(description="Compare golden legacy outputs with new outputs from a scratch run.",
+                                 usage="%(prog)s app --source DIR --assessment DIR --target DIR --out DIR --cases FILE --runs DIR [--golden DIR] [options]",
+                                 formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
+    ap.add_argument("app", help="application label stored in the equivalence evidence")
+    ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only source checkout")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--target", required=True, metavar="CHECKOUT", help="target checkout")
+    ap.add_argument("--out", required=True, metavar="DIR", help="folder for EQUIVALENCE.json")
+    ap.add_argument("--cases", required=True, metavar="FILE", help="cases.json evidence file")
+    ap.add_argument("--golden", metavar="DIR", help="golden/<unit> root for legacy case files (default: cases file folder)")
+    ap.add_argument("--runs", required=True, metavar="DIR", help="scratch folder holding the new side's outputs for this run (never committed)")
+    ap.add_argument("--quiet", action="store_true", help="write EQUIVALENCE.json without printing the report")
+    ap.add_argument("--json", action="store_true", help="print the full report as JSON")
     args = ap.parse_args(argv)
-    out = args.out or os.path.join(os.path.dirname(os.path.abspath(args.cases)), "EQUIVALENCE.json")
+    if not args.app or args.app in (".", "..") or os.path.basename(args.app) != args.app or chr(0) in args.app:
+        print("compare.py: app must be a plain application label, not a path", file=sys.stderr)
+        return 2
+    def directory(label, value):
+        path = os.path.abspath(value)
+        if os.path.islink(path) or not os.path.isdir(path):
+            raise InputError("%s must be an existing directory, not a symbolic link" % label)
+        return os.path.realpath(path)
     try:
-        result = run(args.cases, out, args.allow_outside)
-    except InputError as err:
+        source = directory("--source", args.source)
+        directory("--assessment", args.assessment)
+        target = directory("--target", args.target)
+        golden = directory("--golden", args.golden) if args.golden else os.path.realpath(os.path.dirname(os.path.abspath(args.cases)))
+        runs = directory("--runs", args.runs)
+        cases = os.path.realpath(args.cases)
+        if not os.path.isfile(cases) or os.path.islink(os.path.abspath(args.cases)) or os.path.commonpath([golden, cases]) != golden:
+            raise InputError("--cases must be a regular file inside --golden")
+        out = os.path.abspath(args.out)
+        resolved_out = os.path.realpath(out)
+        for root in (source, target):
+            try:
+                if os.path.commonpath([root, resolved_out]) == root:
+                    raise InputError("--out must not be inside a source or target checkout")
+            except ValueError:
+                pass
+        if os.path.lexists(out) and os.path.islink(out):
+            raise InputError("--out must not be a symbolic link")
+        os.makedirs(out, exist_ok=True)
+        for root in (source, target):
+            try:
+                inside_checkout = os.path.commonpath([root, os.path.realpath(out)]) == root
+            except ValueError:
+                inside_checkout = False
+            if inside_checkout:
+                raise InputError("--out must not be inside a source or target checkout")
+        output = os.path.join(out, "EQUIVALENCE.json")
+        if os.path.lexists(output) and os.path.islink(output):
+            raise InputError("EQUIVALENCE.json must not be a symbolic link")
+        report = run(cases, output, False, runs, golden)
+        report["system"] = args.app
+        problem = verdict_of(report)
+        write_atomic(output, json.dumps(report, indent=1, ensure_ascii=True) + "\n")
+    except (InputError, OSError, ValueError) as err:
         print("compare.py: %s" % err, file=sys.stderr)
         return 2
-    try:
-        write_atomic(out, json.dumps(result, indent=2, ensure_ascii=True) + "\n")
-    except InputError as err:
-        print("compare.py: %s" % err, file=sys.stderr)
-        return 2
-    problem = verdict_of(result)
     if not args.quiet:
-        t, plain = result["totals"], lambda s: re.sub(r"[\x00-\x1f\x7f-\x9f]", "?", s)
-        print("equivalence cases executed: %d" % t["executed"])
-        print("same %d%s | differs %d | differs but approved %d | missing %d | of %d cases" %
-              (t["same"], " (%d within a declared tolerance)" % t["sameWithinTolerance"] if t.get("sameWithinTolerance") else "",
-               t["differs"], t["differsApproved"], t["missing"], t["cases"]))
-        sc = result["selfCheck"]
-        print("self-check: %s - %s" % ({True: "passed", False: "FAILED", None: "not applicable"}[sc["passed"]], plain(sc["detail"])))
-        for r in result["cases"]:
-            if r["verdict"] != "same" or r.get("withinTolerance"):
-                print("  %s  %s: %s" % (plain(r["id"]), r["verdict"], plain(r["reason"])[:200]))
-        print(("NOT PROVEN: %s" % problem) if problem else "PROVEN: %d case(s) executed, none differ" % t["executed"])
-        print("wrote %s" % out)
+        if args.json:
+            print(json.dumps(report, indent=1, ensure_ascii=True))
+        else:
+            totals = report["totals"]
+
+            def plain(value):
+                return re.sub(r"[\x00-\x1f\x7f-\x9f]", "?", str(value))
+
+            print("equivalence cases executed: %d" % totals["executed"])
+            print("same %d%s | differs %d | differs but approved %d | missing %d | of %d cases" %
+                  (totals["same"], " (%d within a declared tolerance)" % totals["sameWithinTolerance"] if totals.get("sameWithinTolerance") else "",
+                   totals["differs"], totals["differsApproved"], totals["missing"], totals["cases"]))
+            check = report["selfCheck"]
+            print("self-check: %s - %s" % ({True: "passed", False: "FAILED", None: "not applicable"}[check["passed"]], plain(check["detail"])))
+            for record in report["cases"]:
+                if record["verdict"] != "same" or record.get("withinTolerance"):
+                    print("  %s  %s: %s" % (plain(record["id"]), record["verdict"], plain(record["reason"])[:200]))
+            print(("NOT PROVEN: %s" % problem) if problem else "PROVEN: %d case(s) executed, none differ" % totals["executed"])
+            print("wrote EQUIVALENCE.json under --out")
     return 1 if problem else 0
 
 

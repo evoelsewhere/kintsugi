@@ -12,3 +12,7 @@ coverage/
 .pi/sessions/
 # local Claude Code preview config
 .claude/launch.json
+# Python caches: the built-in content ships scripts and their tests
+__pycache__/
+*.py[cod]
+.pytest_cache/

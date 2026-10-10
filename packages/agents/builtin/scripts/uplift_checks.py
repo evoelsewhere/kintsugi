@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Two checks that only an uplift needs, for the proof pack (proof_pack.py imports this; it also runs on its own).
 
-    python3 uplift_checks.py <legacy folder> <working copy> [DELTA_CATALOG.md]
+    python3 uplift_checks.py <app> --source <checkout> --assessment <assessment/app> \\
+        --target <checkout> --out <folder> [--catalog <DELTA_CATALOG.md>]
 
 An uplift keeps the code and the tests and changes the version underneath. A green test run then proves less than it seems to in two ways:
 
@@ -314,42 +315,96 @@ def delta_coverage(catalog_text, work_root):
 
 # ---------------------------------------------------------------- command line
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Uplift-only checks: test files changed since the legacy tree, and silent deltas no test names.")
-    ap.add_argument("legacy", help="the untouched legacy folder (legacy/<system>)")
-    ap.add_argument("work", help="the uplifted working copy (modernized/<system>-uplifted)")
-    ap.add_argument("catalog", nargs="?", help="analysis/<system>/DELTA_CATALOG.md")
+    ap = argparse.ArgumentParser(description="Check whether an uplift keeps tests and covers behaviorally silent version deltas.",
+                                 usage="%(prog)s app --source DIR --assessment DIR --target DIR --out DIR [options]",
+                                 formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
+    ap.add_argument("app", help="application label used in the result")
+    ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only legacy source checkout")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--target", required=True, metavar="CHECKOUT", help="uplifted target checkout")
+    ap.add_argument("--out", required=True, metavar="DIR", help="folder for UPLIFT_CHECKS.json")
+    ap.add_argument("--catalog", metavar="FILE", help="DELTA_CATALOG.md inside the assessment directory (default: DELTA_CATALOG.md)")
     ap.add_argument("--json", action="store_true", help="print the full result as JSON")
     args = ap.parse_args(argv)
-    for path in (args.legacy, args.work):
-        if not os.path.isdir(path):
-            print("uplift_checks.py: %s is not a folder" % path, file=sys.stderr)
-            return 2
-    text = None
-    if args.catalog:
-        try:
-            text = baseline_diff.read_capped(args.catalog, CATALOG_CAP).decode("utf-8", "replace")
-        except baseline_diff.InputError as err:
-            print("uplift_checks.py: %s" % err, file=sys.stderr)
-            return 2
-    changed = tests_changed(os.path.realpath(args.legacy), os.path.realpath(args.work))
-    deltas = delta_coverage(text, os.path.realpath(args.work)) if args.catalog else None
+    if not args.app or args.app in (".", "..") or re.search(r"[\/\x00]", args.app):
+        print("uplift_checks.py: app must be a plain application label, not a path", file=sys.stderr)
+        return 2
+    def directory(label, value):
+        path = os.path.abspath(value)
+        if os.path.islink(path) or not os.path.isdir(path):
+            raise ValueError("%s must be an existing directory, not a symbolic link" % label)
+        return os.path.realpath(path)
+    try:
+        source = directory("--source", args.source)
+        assessment = directory("--assessment", args.assessment)
+        target = directory("--target", args.target)
+        out = os.path.abspath(args.out)
+        resolved_out = os.path.realpath(out)
+        for root in (source, target):
+            try:
+                if os.path.commonpath([root, resolved_out]) == root:
+                    raise ValueError("--out must not be inside a source or target checkout")
+            except ValueError as err:
+                if str(err).startswith("--out"):
+                    raise
+        if os.path.lexists(out) and os.path.islink(out):
+            raise ValueError("--out must not be a symbolic link")
+        os.makedirs(out, exist_ok=True)
+        for root in (source, target):
+            try:
+                inside_checkout = os.path.commonpath([root, os.path.realpath(out)]) == root
+            except ValueError:
+                inside_checkout = False
+            if inside_checkout:
+                raise ValueError("--out must not be inside a source or target checkout")
+        catalog = os.path.join(assessment, "DELTA_CATALOG.md") if not args.catalog else os.path.abspath(args.catalog)
+        if os.path.commonpath([assessment, os.path.realpath(catalog)]) != assessment or os.path.islink(catalog):
+            raise ValueError("--catalog must stay inside --assessment and must not be a symbolic link")
+        text = None
+        if os.path.isfile(catalog):
+            raw_catalog = baseline_diff.read_capped(catalog, CATALOG_CAP)
+            if raw_catalog is None or len(raw_catalog) > CATALOG_CAP:
+                raise ValueError("DELTA_CATALOG.md is unreadable or exceeds the size limit")
+            text = raw_catalog.decode("utf-8", "replace")
+        elif args.catalog:
+            raise ValueError("--catalog does not name a readable file")
+    except (OSError, ValueError, baseline_diff.InputError) as err:
+        print("uplift_checks.py: %s" % err, file=sys.stderr)
+        return 2
+    changed = tests_changed(source, target)
+    deltas = delta_coverage(text, target) if text is not None else None
+    result = {"app": args.app, "testsChanged": changed, "deltas": deltas}
+    output = os.path.join(out, "UPLIFT_CHECKS.json")
+    if os.path.lexists(output) and os.path.islink(output):
+        print("uplift_checks.py: UPLIFT_CHECKS.json must not be a symbolic link", file=sys.stderr)
+        return 2
+    try:
+        with open(output, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(result, fh, indent=1, ensure_ascii=True)
+            fh.write("\n")
+    except OSError as err:
+        print("uplift_checks.py: cannot write UPLIFT_CHECKS.json (%s)" % err.__class__.__name__, file=sys.stderr)
+        return 2
     if args.json:
-        print(json.dumps({"testsChanged": changed, "deltas": deltas}, indent=1, ensure_ascii=True))
+        print(json.dumps(result, indent=1, ensure_ascii=True))
     else:
         c = changed["counts"]
         print("test files: %d in the legacy tree, %d in the working copy; %d removed, %d added, %d changed (%.0f%% of the legacy test files)" % (
             changed["legacyTests"], changed["workTests"], c["removed"], c["added"], c["changed"], 100 * changed["share"]))
         for key in ("removed", "changed", "added"):
-            for e in changed[key][:10]:
-                print("  %s: %s%s" % (key, e["path"], " (+%d -%d lines)" % (e["added"], e["removed"]) if key == "changed" else ""))
-        print("tests kept: " + ("GAP" if changed["gap"] else "ok") + ("" if not changed["why"] else " (" + changed["why"] + ")"))
-        if deltas is not None:
+            for entry in changed[key][:10]:
+                print("  %s: %s%s" % (key, entry["path"], " (+%d -%d lines)" % (entry["added"], entry["removed"]) if key == "changed" else ""))
+        print("tests kept: " + ("GAP" if changed["gap"] else "ok") + (" (" + changed["why"] + ")" if changed["why"] else ""))
+        if deltas is None:
+            print("deltas covered: not checked (DELTA_CATALOG.md is missing)")
+        else:
             print("deltas: %d parsed, %d behavioral-silent, %d covered, %d not named by any test, %d at a build or configuration file" % (
                 deltas["parsed"], deltas["silent"], len(deltas["covered"]), len(deltas["uncovered"]), len(deltas["config"])))
             for d in deltas["uncovered"][:10]:
                 print("  uncovered: %s %s (%s)" % (d["id"], d["title"], d.get("why", "")))
             print("deltas covered: " + ("GAP" if deltas["gap"] else "ok") + ("" if not deltas["why"] else " (" + deltas["why"] + ")"))
-    return 1 if changed["gap"] or (deltas is not None and deltas["gap"]) else 0
+        print("wrote UPLIFT_CHECKS.json under --out")
+    return 1 if changed["gap"] or deltas is None or deltas["gap"] else 0
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Compare a fresh test run with the baseline recorded before a same-stack uplift.
 
-    python3 baseline_diff.py <BASELINE.md> --junit DIR_OR_FILE [--junit ...] [--json] [--max-list N]
+    python3 baseline_diff.py <app> --source <checkout> --assessment <assessment/app> \\
+        --target <checkout> --out <folder> [--runs <runs/unit/run-id>] [--junit FILE] [--trx FILE]
 
-BASELINE.md (analysis/<system>/BASELINE.md) records how the tests behaved on the OLD version. This
+BASELINE.md (assessment/<app>/BASELINE.md) records how the tests behaved on the OLD version. This
 script reads it and the fresh results, and reports what changed. Nothing is judged by a model.
 
 Baseline, any of these (the most detailed one found is used):
@@ -14,7 +15,7 @@ Baseline, any of these (the most detailed one found is used):
   a line                target-only: <why the old version could not run here>   (nothing to compare)
 
 Measured or typed: a baseline typed by hand proves nothing about the old version. The old version's own evidence is looked for in
-analysis/<system>/baseline/ and at the paths on a "Recorded:" or "Machine-readable:" line of BASELINE.md inside analysis/<system>/ (JUnit or .trx XML, a per-test JSON map of test ids to
+assessment/<app>/baseline/ and at the paths on a "Recorded:" or "Machine-readable:" line of BASELINE.md inside assessment/<app>/ (JUnit or .trx XML, a per-test JSON map of test ids to
 outcomes, or a raw runner log with a known summary line; a file that only holds counts is ignored, and sources that disagree are a conflict). When it exists, it is what the fresh results are compared with,
 and the typed table must agree with it; when it does not, the report says "typed table only".
 
@@ -38,6 +39,7 @@ import os
 import re
 import stat
 import sys
+from typing import Any
 from xml.parsers import expat
 
 BAD = ("FAIL", "ERROR")
@@ -393,7 +395,7 @@ UNITTEST_RAN = re.compile(r"^Ran (\d+) tests? in [\d.]+s\s*$")
 UNITTEST_END = re.compile(r"^(?:OK|FAILED)(?: \(([^)]*)\))?\s*$")
 
 
-def parse_runner_log(text):
+def parse_runner_log(text) -> tuple[int, int, int, list[str]] | None:
     """(executed, failed, skipped, runners) from the runner's own summary lines, summed over the log; None when no line is recognised.
     Recognised: Maven/Gradle, cargo, pytest, unittest, go test (-v or -json), dotnet test, jest, vitest, ctest, phpunit."""
     passed = failed = skipped = 0
@@ -422,9 +424,9 @@ def parse_runner_log(text):
     return (passed + failed, failed, skipped, sorted(set(seen))) if seen else None
 
 
-def read_logs(paths):
+def read_logs(paths) -> dict[str, Any]:
     """Saved runner logs -> {"files", "executed", "failed", "skipped", "runners", "oldest", "newest", "unrecognised"}. A log without a summary line of a known runner is no evidence."""
-    out = {"files": 0, "executed": 0, "failed": 0, "skipped": 0, "runners": [], "oldest": None, "newest": None, "unrecognised": []}
+    out: dict[str, Any] = {"files": 0, "executed": 0, "failed": 0, "skipped": 0, "runners": [], "oldest": None, "newest": None, "unrecognised": []}
     for path in paths:
         try:
             st = os.lstat(path)
@@ -456,10 +458,10 @@ RECORDED = re.compile(r"^[ \t>*-]*\**[ \t]*(?:recorded|machine-readable)\b[^:\n]
 
 
 def evidence_paths(baseline_path, text):
-    """Where the old version's measured results are kept: the folder analysis/<system>/baseline/, and the paths on a line of BASELINE.md
+    """Where the old version's measured results are kept: the folder assessment/<app>/baseline/, and the paths on a line of BASELINE.md
     that starts with "Recorded:" or "Machine-readable:" (a folder, or a file ending in .xml .trx .json .txt .log .out). Paths mentioned
-    anywhere else in the file are prose, not evidence. A path with a `..`, a link anywhere below the analysis folder, or a place outside
-    analysis/<system>/ is never used. -> the existing paths, at most 50."""
+    anywhere else in the file are prose, not evidence. A path with a `..`, a link anywhere below the assessment folder, or a place outside
+    assessment/<app>/ is never used. -> the existing paths, at most 50."""
     adir = os.path.dirname(os.path.abspath(baseline_path))
     system, real_adir, found, seen = os.path.basename(adir), os.path.realpath(adir), [], set()
 
@@ -727,7 +729,7 @@ def render(rep, limit=10):
         elif a["disagree"]:
             lines.append("  but the typed table disagrees with it on %d test(s): %s" % (a["disagree"], "; ".join(a["examples"][:3])))
     elif a and a["kind"] == "typed":
-        lines.append("baseline evidence: typed table only. No result file, per-test results file or raw log that this script can read was found in analysis/<system>/baseline/ or on a Recorded: or Machine-readable: line of BASELINE.md.%s" % (
+        lines.append("baseline evidence: typed table only. No result file, per-test results file or raw log that this script can read was found in assessment/<app>/baseline/ or on a Recorded: or Machine-readable: line of BASELINE.md.%s" % (
             " Ignored (counts only): " + ", ".join(a["ignored"][:3]) if a["ignored"] else ""))
 
     def block(title, key, fmt=lambda x: clean(x, 160)):
@@ -779,30 +781,93 @@ def run(baseline_path, paths, measured="auto"):
         found = evidence_paths(baseline_path, text)
         measured = read_baseline_evidence(found) if found else None
     base["assessment"] = assess_baseline(base, measured)
-    if base["assessment"]["kind"] == "measured" and measured["tests"]:
+    if isinstance(measured, dict) and base["assessment"]["kind"] == "measured" and measured["tests"]:
         base["tests"], base["measuredTests"] = measured["tests"], True
     return compare(base, read_results(paths))
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Compare a fresh test run with BASELINE.md.")
-    ap.add_argument("baseline", help="analysis/<system>/BASELINE.md")
-    ap.add_argument("--junit", "--trx", action="append", default=[], metavar="PATH", help="a results file or a folder to search (repeat for several)")
-    ap.add_argument("--baseline-evidence", action="append", default=[], metavar="PATH",
-                    help="a file or folder with the old version's own results (XML, JSON map, raw log); default: analysis/<system>/baseline/ and the paths BASELINE.md names")
+    ap = argparse.ArgumentParser(description="Compare a fresh test run with the baseline recorded before an uplift.",
+                                 usage="%(prog)s app --source DIR --assessment DIR --target DIR --out DIR [options]",
+                                 formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
+    ap.add_argument("app", help="application label used in the report")
+    ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only source checkout")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--target", required=True, metavar="CHECKOUT", help="uplifted target checkout")
+    ap.add_argument("--out", required=True, metavar="DIR", help="folder for BASELINE_DIFF.json")
+    ap.add_argument("--baseline", metavar="FILE", help="baseline document (default: BASELINE.md in --assessment)")
+    ap.add_argument("--baseline-evidence", action="append", default=[], metavar="PATH", help="saved old-run evidence file or folder")
+    ap.add_argument("--runs", action="append", default=[], metavar="DIR", help="runs/<unit>/<run-id> directory containing current results (repeatable)")
+    ap.add_argument("--junit", action="append", default=[], metavar="FILE", help="fresh JUnit result file")
+    ap.add_argument("--trx", action="append", default=[], metavar="FILE", help="fresh TRX result file")
     ap.add_argument("--json", action="store_true", help="print the full report as JSON")
-    ap.add_argument("--max-list", type=int, default=10, help="how many entries to print per list (default 10)")
+    ap.add_argument("--max-list", type=int, default=40, help="maximum rows to print per section (default: 40)")
     args = ap.parse_args(argv)
-    if not args.junit:
-        print("baseline_diff.py: give at least one --junit file or folder", file=sys.stderr)
+    if not (args.runs or args.junit or args.trx):
+        ap.error("at least one of --runs, --junit or --trx is required")
+    if not args.app or args.app in (".", "..") or os.path.basename(args.app) != args.app or chr(0) in args.app:
+        print("baseline_diff.py: app must be a plain application label, not a path", file=sys.stderr)
         return 2
+    def directory(label, value):
+        path = os.path.abspath(value)
+        if os.path.islink(path) or not os.path.isdir(path):
+            raise InputError("%s must be an existing directory, not a symbolic link" % label)
+        return os.path.realpath(path)
+    def bounded_input(label, value, roots, files_only=False):
+        path = os.path.abspath(value)
+        real = os.path.realpath(path)
+        valid_kind = os.path.isfile(real) if files_only else (os.path.isfile(real) or os.path.isdir(real))
+        if not valid_kind or not any(os.path.commonpath([root, real]) == root for root in roots):
+            raise InputError("%s must stay inside the supplied evidence roots" % label)
+        return real
     try:
-        rep = run(args.baseline, args.junit, read_baseline_evidence(args.baseline_evidence) if args.baseline_evidence else "auto")
-    except InputError as err:
+        source = directory("--source", args.source)
+        assessment = directory("--assessment", args.assessment)
+        target = directory("--target", args.target)
+        runs = [directory("--runs", path) for path in args.runs]
+        out = os.path.abspath(args.out)
+        resolved_out = os.path.realpath(out)
+        for root in (source, target):
+            try:
+                if os.path.commonpath([root, resolved_out]) == root:
+                    raise InputError("--out must not be inside a source or target checkout")
+            except ValueError:
+                pass
+        if os.path.lexists(out) and os.path.islink(out):
+            raise InputError("--out must not be a symbolic link")
+        baseline = bounded_input("--baseline", args.baseline, [assessment], True) if args.baseline else bounded_input("--baseline", os.path.join(assessment, "BASELINE.md"), [assessment], True)
+        evidence = [bounded_input("--baseline-evidence", p, [assessment]) for p in args.baseline_evidence]
+        paths = [bounded_input("--junit/--trx", p, [assessment, target] + runs) for p in args.junit + args.trx]
+        paths.extend(runs)
+        os.makedirs(out, exist_ok=True)
+        for root in (source, target):
+            try:
+                inside_checkout = os.path.commonpath([root, os.path.realpath(out)]) == root
+            except ValueError:
+                inside_checkout = False
+            if inside_checkout:
+                raise InputError("--out must not be inside a source or target checkout")
+        report = run(baseline, paths, "auto")
+        report["app"] = args.app
+        report["baselineEvidence"] = read_baseline_evidence(evidence) if evidence else report.get("baselineEvidence")
+    except (InputError, OSError, ValueError) as err:
         print("baseline_diff.py: %s" % err, file=sys.stderr)
         return 2
-    print(json.dumps(rep, indent=1, ensure_ascii=True) if args.json else render(rep, max(1, args.max_list)))
-    return 0 if rep["ok"] else 1
+    output = os.path.join(out, "BASELINE_DIFF.json")
+    if os.path.lexists(output) and os.path.islink(output):
+        print("baseline_diff.py: BASELINE_DIFF.json must not be a symbolic link", file=sys.stderr)
+        return 2
+    try:
+        with open(output, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, indent=1, ensure_ascii=True)
+            fh.write("\n")
+    except OSError as err:
+        print("baseline_diff.py: cannot write BASELINE_DIFF.json (%s)" % err.__class__.__name__, file=sys.stderr)
+        return 2
+    print(json.dumps(report, indent=1, ensure_ascii=True) if args.json else render(report, max(1, args.max_list)))
+    if not args.json:
+        print("wrote BASELINE_DIFF.json under --out")
+    return 0 if report["ok"] else 1
 
 
 if __name__ == "__main__":

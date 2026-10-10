@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Independent proof pack: one plain verdict per built module, computed from the evidence files.
 
-    python3 proof_pack.py <system> [module] [--workspace DIR]
+    python3 proof_pack.py <app> [module] --source <checkout> --assessment <assessment/app> \\
+        --target <checkout> --out <folder> [--runs <runs/unit/run-id>] [--uplift]
 
-Writes analysis/<system>/VERIFICATION.md (for people) and VERIFICATION.json (for the report). The
+Writes VERIFICATION.md (for people) and VERIFICATION.json under --out. The
 verdict is computed here by fixed rules, never by a model's opinion, and every rule is written into
 the output so an auditor can follow it:
 
@@ -34,18 +35,17 @@ the output so an auditor can follow it:
                        traces and the best possible verdict is PARTLY PROVEN.
   5  Canary            a deliberate one-line break whose own result file or saved runner log, parsed
                        here, shows failing tests. A "Canary:" line in the notes is a claim, not evidence.
-  6  Source untouched  no file under legacy/<system> is newer than the analysis (PREFLIGHT.md); a plain
-                       file walk, no version-control tool is run inside the untrusted tree.
+  6  Source untouched  the source checkout is clean and HEAD matches `sourceCommit` in inventory.json.
+                       Git read-only status checks run against the explicit source checkout; unavailable evidence is UNKNOWN.
 
 Open questions, unticked criteria and the sign-off are for a person: they never change the verdict.
 A built folder that holds only test code and the files that build it (a parity harness, for one) is not a
 module: it is listed as "Test tooling (not judged)", under "toolingOnly" in the JSON, and not counted.
 
-Evidence read (under analysis/<system>/, or as named): equivalence/test-runs.json (written by the
-modernize-verify command), equivalence/[<module>/]cases.json and fresh-cases.json (judged again here,
-not read from EQUIVALENCE.json), BASELINE.md, BUSINESS_RULES.md with the code under modernized/,
-MODERNIZATION_BRIEF.md, the notes files, and legacy/<system>. Everything read is untrusted text: it is
-never run, links out of the workspace are refused, sizes are capped. Exit 0 when every verdict is
+Evidence read from assessment/<app>/, the source checkout, and the target checkout: equivalence/test-runs.json,
+equivalence/[<module>/]cases.json and fresh-cases.json (judged again here, not read from EQUIVALENCE.json),
+BASELINE.md, BUSINESS_RULES.md, MODERNIZATION_BRIEF.md, and the notes files. Everything read is untrusted
+text: it is never run, links outside the supplied roots are refused, and sizes are capped. Exit 0 when every verdict is
 PROVEN, 1 when not, 2 for input that cannot be used.
 """
 import argparse
@@ -55,6 +55,8 @@ import os
 import re
 import stat
 import sys
+import subprocess
+from typing import Any
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.dont_write_bytecode = True          # importing the sibling scripts must not leave __pycache__ in the plugin folder
@@ -70,7 +72,7 @@ UPLIFT_CHECKS = (("baseline", "Baseline measured"), ("kept", "Tests kept"), ("de
 CHECKS = (("tests", "Tests ran"), ("rules", "Rules traced"), ("same", "Same behavior"), ("fresh", "Fresh inputs"),
           ("canary", "Canary"), ("source", "Source untouched")) + UPLIFT_CHECKS
 RULES_TEXT = (
-    "PROVEN needs every check to pass: the six below, and for an uplift three more (7 to 9). NOT PROVEN when any check fails. PARTLY PROVEN when nothing failed but a check could not pass.",
+    "PROVEN needs every required check to pass: the six below, and for an uplift three more (7 to 9). A source check that is UNKNOWN is shown with its reason and does not fail the run. NOT PROVEN when any check fails. PARTLY PROVEN when nothing failed but a required check could not pass.",
     "1. Tests ran: at least one test executed in a fresh run, none failed, none was skipped without a reason, and every result file is newer than the code. "
     "The counts must be read by this script from result files or a saved raw runner log; counts only typed in cannot reach PROVEN.",
     "2. Rules traced (rewrite and reimagine): every P0 rule the module answers for is backed by a test that ran and passed: its id is in the test or class name of a result this script parsed, "
@@ -80,16 +82,16 @@ RULES_TEXT = (
     "4. Fresh inputs: at least 10 new inputs, none with the same output as a development case, ran on the legacy and the new code with no difference. Needed whenever the legacy could run here; "
     "when it could not, the proof is trace-based and the best verdict is PARTLY PROVEN.",
     "5. Canary: a deliberate one-line break whose own result file or saved runner log shows failing tests. A line in the notes is a claim.",
-    "6. Source untouched: no file under legacy/<system> is newer than the analysis (PREFLIGHT.md), by a plain file walk; no version-control tool is run.",
+    "6. Source untouched: Git reports a clean source checkout with HEAD equal to `sourceCommit` in inventory.json; missing evidence or Git is UNKNOWN.",
     "7. Baseline measured (uplift): the old version's numbers in BASELINE.md come from per-test result files, a per-test results file or a raw runner log that this script parsed "
-    "(in analysis/<system>/baseline/, or on a Recorded: or Machine-readable: line of BASELINE.md), and the typed table agrees with them. A table typed by hand, or sources that disagree, cannot reach PROVEN.",
+    "(in assessment/<app>/baseline/, or on a Recorded: or Machine-readable: line of BASELINE.md), and the typed table agrees with them. A table typed by hand, or sources that disagree, cannot reach PROVEN.",
     "8. Tests kept (uplift): no test file of the untouched legacy tree is missing from the working copy, no more than 25% of them changed, and the legacy tree has test files to compare against "
     "(walked by file, no process is run). The list is for a person to review; weakened assertions cannot be detected, only that files changed.",
     "9. Deltas covered (uplift): every Behavioral-silent delta in DELTA_CATALOG.md has its site's file named, as a whole word, by some test file of the working copy. A name is not proof that the test exercises the change.",
     "Open questions, unticked criteria and the sign-off are for a person. They never change the verdict.",
     "A folder that holds only test code and the files that build it is test tooling: it is listed, not judged, and not counted.",
 )
-WORDS = {"pass": "pass", "gap": "not proven", "fail": "FAIL", "na": "not applicable"}
+WORDS = {"pass": "pass", "gap": "not proven", "fail": "FAIL", "na": "not applicable", "unknown": "unknown"}
 CANARY = re.compile(r"Canary[^:\n|]{0,20}:\s*(.{1,300}?)\s*(?:→|->|=>|,)\s*(\d[\d,]*)\s+tests?\s+(?:failed|went red|failing)", re.I)
 CHECKBOX = re.compile(r"^\s*[-*]\s*\[( |x|X)\]\s*(.*)$")
 NOTE_NAMES = trace_rules.NOTES_NAMES
@@ -216,7 +218,7 @@ def utc(ts):
 def suite_evidence(suite, workspace):
     """-> (counts for one suite, its parsed JUnit-style results or None). Evidence, best first: result files, a saved raw runner log,
     and only then the counts the command typed, which are never enough for PROVEN."""
-    ev = {"name": suite["name"], "command": suite["command"], "date": suite["date"], "note": suite["note"], "notes": [], "source": "reported" if suite["executed"] is not None else "none",
+    ev: dict[str, Any] = {"name": suite["name"], "command": suite["command"], "date": suite["date"], "note": suite["note"], "notes": [], "source": "reported" if suite["executed"] is not None else "none",
           "files": 0, "newest": None, "oldest": None, "written": "", "executed": suite["executed"] or 0, "failed": suite["failed"] or 0, "skipped": suite["skipped"] or 0,
           "skippedNoReason": (suite["skipped"] or 0) if not suite["skippedReason"] else 0}
     said = {"executed": suite["executed"], "failed": suite["failed"], "skipped": suite["skipped"]}
@@ -268,10 +270,11 @@ def module_run(ctx, subject):
 # ---------------------------------------------------------------- the source check
 SOURCE_CAP, EXAMPLES = 400000, 20
 NO_VCS = "by modification time, and no version-control tool was run"
+NO_VCS_RESULT = "NO_VCS"
 
 
 def reference_time(adir):
-    """When the analysis began: the modification time of PREFLIGHT.md, else that of the oldest file in analysis/<system>/."""
+    """The assessment start time: PREFLIGHT.md, or the oldest file in assessment/<app>/."""
     def mtime(path):
         try:
             st = os.lstat(path)
@@ -289,9 +292,8 @@ def reference_time(adir):
 
 
 def source_check(workspace, system, adir):
-    """-> {"state": clean|changed|unknown, "method", "detail", "files", "path", "target"} for legacy/<system>.
-    A plain file walk, never following a link and never running a program in the tree: any regular file newer than the
-    analysis is reported as changed. A walk that cannot finish is "not checked", never "untouched"."""
+    """Compatibility fallback for workspace-shaped unit fixtures; the CLI uses git_source_check().
+    This returns the same reporting shape and never follows a link or runs a program in the legacy tree."""
     link = os.path.join(workspace, "legacy", system)
     target = os.path.realpath(link) if os.path.lexists(link) else ""
     out = {"state": "unknown", "method": NO_VCS, "detail": "", "files": [], "path": "legacy/" + system, "target": clean(target if os.path.islink(link) else "", 300)}
@@ -335,13 +337,65 @@ def source_check(workspace, system, adir):
     return out
 
 
+def recorded_source_commit(adir):
+    """Read the preflight-pinned source revision from the bounded inventory evidence."""
+    inventory, problem = read_json(os.path.join(adir, "inventory.json"), 1 << 20)
+    if problem:
+        return None, "inventory.json could not be used (%s)" % problem
+    if not isinstance(inventory, dict):
+        return None, "the source commit is not recorded in inventory.json"
+    commit = inventory.get("sourceCommit")
+    if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-fA-F]{40,64}", commit):
+        return None, "inventory.json does not contain a valid recorded sourceCommit"
+    return commit.lower(), None
+
+
+
+
+def git_source_check(source, adir):
+    """Check source checkout cleanliness and recorded HEAD without exposing paths or evidence values."""
+    result = {"state": "unknown", "method": NO_VCS_RESULT, "detail": "", "files": [],
+              "path": "source checkout", "target": ""}
+    expected, reason = recorded_source_commit(adir)
+    if reason:
+        result["detail"] = reason + ", so the source was not checked"
+        return result
+    git_env = os.environ.copy()
+    git_env["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        status = subprocess.run(["git", "-C", source, "status", "--porcelain"],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=10, text=True, env=git_env)
+        actual = subprocess.run(["git", "-C", source, "rev-parse", "--verify", "HEAD^{commit}"],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=10, text=True, env=git_env)
+    except (OSError, subprocess.SubprocessError):
+        result["detail"] = "git or the source checkout is unavailable, so the source was not checked"
+        return result
+    if status.returncode or actual.returncode:
+        result["detail"] = "git or the source checkout is unavailable, so the source was not checked"
+        return result
+    result["method"] = "git"
+    if actual.stdout.strip().lower() != expected:
+        result["state"] = "changed"
+        result["detail"] = "HEAD does not match the source commit recorded for this application"
+        return result
+    changes = [line for line in status.stdout.splitlines() if line.strip()]
+    if changes:
+        result["state"] = "changed"
+        result["detail"] = "%d tracked or untracked path(s) changed in the source checkout" % len(changes)
+        return result
+    result["state"] = "clean"
+    result["detail"] = "source checkout is clean and HEAD matches the recorded source commit"
+    return result
+
+
 # ---------------------------------------------------------------- the brief
 def brief_items(text, module, track):
     """Unticked criteria a person decides: the exit criteria of the module's phase, and the open questions of section 7."""
     if not text:
         return {"found": False, "phase": "", "items": [], "count": 0}
     lines = [ln[:2000] for ln in text.split("\n")]
-    phases, cur = [], None
+    phases: list[dict[str, Any]] = []
+    cur: dict[str, Any] | None = None
     for line in lines:
         m = re.match(r"#{2,5}\s+Phase\s+(\d+)\b", line)
         if m:
@@ -576,7 +630,7 @@ def check_baseline_measured(info, evidence):
     if info["kind"] in ("typed", "none"):
         ignored = " Files that only hold counts were ignored: %s." % ", ".join(info["ignored"][:3]) if info["ignored"] else ""
         return row("baseline", "gap", "BASELINE.md is a table typed by hand: no per-test result file, per-test results file or raw runner log that this script can read backs it, so nothing shows the old "
-                                      "version really produced those numbers. Save the old version's results in analysis/<system>/baseline/ (or name them on a Recorded: line of BASELINE.md) "
+                                      "version really produced those numbers. Save the old version's results in assessment/<app>/baseline/ (or name them on a Recorded: line of BASELINE.md) "
                                       "and run this again.%s" % ignored)
     names = ", ".join("%s%s" % (x["kind"], " " + x["name"] if x.get("name") else "") for x in info["sources"][:3])
     if info["conflict"]:
@@ -752,11 +806,17 @@ def check_canary(subject, module, runs, evidence, workspace, others, clean_ids, 
 
 def check_source(ctx):
     """Check 6."""
-    src, name = ctx["source"], "legacy/" + ctx["system"]
+    src = ctx["source"]
+    name = "source checkout" if src.get("method") == "git" or src.get("state") == "unknown" else "legacy/" + ctx["system"]
     if src["state"] == "clean":
         return row("source", "pass", "%s is untouched: %s. Checked %s." % (name, src["detail"], src["method"]))
     if src["state"] == "changed":
-        return row("source", "gap", "%s has changed since the analysis began: %s. Checked %s.%s" % (name, src["detail"], src["method"], " First: %s." % ", ".join(src["files"][:3]) if src["files"] else ""))
+        state = "fail" if src.get("method") == "git" else "gap"
+        when = "the recorded source revision" if ctx.get("source_git") else "the analysis began"
+        return row("source", state, "%s has changed since %s: %s. Checked %s.%s" % (name, when, src["detail"], src["method"], " First: %s." % ", ".join(src["files"][:3]) if src["files"] else ""))
+    if src["state"] == "unknown":
+        state = "unknown" if ctx.get("source_git") else "gap"
+        return row("source", state, "%s: %s. Checked %s." % (name, src["detail"], src["method"]))
     return row("source", "gap", "%s: %s. Checked %s." % (name, src["detail"], src["method"]))
 
 
@@ -823,7 +883,7 @@ def evaluate(subject, ctx):
         catalog = read_text(os.path.join(ctx["adir"], "DELTA_CATALOG.md"))
         evidence["deltas"] = uplift_checks.delta_coverage(catalog, subject["path"])
         checks += [check_baseline_measured(binfo, evidence), check_tests_kept(evidence["testsChanged"], person), check_deltas(evidence["deltas"], person)]
-    states = [c["state"] for c in checks]
+    states = [c["state"] for c in checks if c["state"] != "unknown"]
     label = dict(CHECKS)
     return {"name": module, "track": subject["track"], "path": subject["rel"], "verdict": "NOT PROVEN" if "fail" in states else "PARTLY PROVEN" if "gap" in states else "PROVEN",
             "reasons": ["%s: %s" % (label[c["id"]], c["detail"]) for c in checks if c["state"] in ("fail", "gap")],
@@ -833,29 +893,32 @@ def evaluate(subject, ctx):
 
 
 # ---------------------------------------------------------------- putting the pack together
-def build(system, workspace, module=None, now=None):
+def build(system, workspace, module=None, now=None, assessment_dir=None, target_dir=None, source_dir=None, runs_dir=None, uplift=False):
     """-> the pack (a dict). Raises InputError when nothing is built to verify."""
     workspace = os.path.abspath(workspace)
-    adir = os.path.join(workspace, "analysis", system)
+    adir = assessment_dir or os.path.join(workspace, "analysis", system)
     now = now or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    everything = trace_rules.discover_modules(workspace, system)
+    everything = trace_rules.discover_modules(workspace, system, target_dir)
+    if target_dir and uplift:
+        for subject in everything:
+            subject["track"] = "uplift"
     if not everything:
-        raise InputError("nothing is built under modernized/ for %s: run transform, uplift or reimagine first" % system)
+        raise InputError("nothing is built in the target checkout for %s: run transform, uplift or reimagine first" % system)
     unit = None
     if module and not any(m["name"].lower() == module.lower() for m in everything):
         # not a module: it may be a unit inside an uplifted working copy, which narrows that copy's suites
         if not any(m["track"] == "uplift" and os.path.isdir(os.path.join(m["path"], module)) and not os.path.islink(os.path.join(m["path"], module)) for m in everything):
-            raise InputError("nothing is built under modernized/ for %s module %s (built: %s)" % (system, module, ", ".join(clean(m["name"], 40) for m in everything[:10])))
+            raise InputError("nothing is built in the target checkout for %s module %s (built: %s)" % (system, module, ", ".join(clean(m["name"], 40) for m in everything[:10])))
         unit = module
     runs = load_test_runs(adir)
     brief = read_text(os.path.join(adir, "MODERNIZATION_BRIEF.md"))
-    ctx = {"workspace": workspace, "adir": adir, "system": system, "runs": runs, "subjects": everything, "unit": unit, "trace": None, "trace_problem": "", "now": now, "parsed": {}, "ran": {},
-           "source": source_check(workspace, system, adir), "brief": lambda mod, track: brief_items(brief, mod, track)}
+    ctx = {"workspace": runs_dir or workspace, "adir": adir, "system": system, "runs": runs, "subjects": everything, "unit": unit, "trace": None, "trace_problem": "", "now": now, "parsed": {}, "ran": {},
+           "source": git_source_check(source_dir, adir) if source_dir else source_check(workspace, system, adir), "source_git": bool(source_dir), "brief": lambda mod, track: brief_items(brief, mod, track)}
     ctx["ran"] = {s["rel"]: module_run(ctx, s) for s in everything if s["track"] != "uplift"}       # what ran, per module: a rule is traced against it
     try:
-        ctx["trace"] = trace_rules.trace(workspace, system, ctx["ran"])
+        ctx["trace"] = trace_rules.trace(workspace, system, ctx["ran"], assessment_dir=adir, target_dir=target_dir)
     except OSError as err:
-        ctx["trace_problem"] = "%s, so no rule can be traced (run /code-modernization:modernize-extract-rules %s)." % (clean(str(err), 200), system)
+        ctx["trace_problem"] = "%s, so no rule can be traced; complete the rule-extraction stage for %s." % (clean(str(err), 200), system)
     # a folder of only test code and the files that build it (a parity harness) is not a module: listed, not judged, not counted
     tooling = [s for s in everything if s["track"] != "uplift" and trace_rules.tooling_only(s["path"])]
     mods = [evaluate(s, ctx) for s in sorted(everything, key=lambda s: s["name"].lower()) if s not in tooling]
@@ -988,22 +1051,61 @@ def write_outputs(pack, adir):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Compute a verdict per built module from the evidence files and write VERIFICATION.md and VERIFICATION.json.")
-    ap.add_argument("system", help="the system's folder name under analysis/")
-    ap.add_argument("module", nargs="?", help="the module you re-tested (or a unit of an uplifted copy); every built module is judged from its current evidence either way")
-    ap.add_argument("--workspace", default=".", help="the project root holding analysis/ and modernized/ (default: current folder)")
+    ap = argparse.ArgumentParser(description="Compute a verdict per built module from the evidence files and write VERIFICATION.md and VERIFICATION.json.",
+                                 usage="%(prog)s app [module] --source DIR --assessment DIR --target DIR --out DIR [options]",
+                                 formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
+    ap.add_argument("app", help="application label for the verification evidence")
+    ap.add_argument("module", nargs="?", help="module or unit label; all modules are still judged from their current evidence")
+    ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only source checkout")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--target", required=True, metavar="CHECKOUT", help="target checkout to verify")
+    ap.add_argument("--out", required=True, metavar="DIR", help="folder for VERIFICATION.md and VERIFICATION.json")
+    ap.add_argument("--runs", metavar="DIR", help="runs/<unit>/<run-id> result directory")
+    ap.add_argument("--uplift", action="store_true", help="include the three same-stack uplift checks")
     args = ap.parse_args(argv)
-    for name in (args.system, args.module or "x"):
+    for name in (args.app, args.module or "x"):
         if not name or name in (".", "..") or re.search(r"[\\/\x00]", name):
-            print("proof_pack.py: the system and module must be folder names, not paths", file=sys.stderr)
+            print("proof_pack.py: app and module must be labels, not paths", file=sys.stderr)
             return 2
-    adir = os.path.join(os.path.abspath(args.workspace), "analysis", args.system)
+    def input_dir(label, value):
+        path = os.path.abspath(value)
+        if os.path.islink(path) or not os.path.isdir(path):
+            raise InputError("%s must be an existing directory, not a symbolic link" % label)
+        return os.path.realpath(path)
     try:
-        pack = overall(build(args.system, args.workspace, args.module))
-        os.makedirs(adir, exist_ok=True)
-        write_outputs(pack, adir)
+        source = input_dir("--source", args.source)
+        assessment = input_dir("--assessment", args.assessment)
+        target = input_dir("--target", args.target)
+        runs = input_dir("--runs", args.runs) if args.runs else None
+        out = os.path.abspath(args.out)
+        for read_root in (source, target):
+            try:
+                if os.path.commonpath([read_root, os.path.realpath(out)]) == read_root:
+                    raise InputError("--out must not be inside a source or target checkout")
+            except ValueError:
+                pass
+        if os.path.lexists(out) and os.path.islink(out):
+            raise InputError("--out must not be a symbolic link")
+        os.makedirs(out, exist_ok=True)
+        for read_root in (source, target):
+            try:
+                inside_checkout = os.path.commonpath([read_root, os.path.realpath(out)]) == read_root
+            except ValueError:
+                inside_checkout = False
+            if inside_checkout:
+                raise InputError("--out must not be inside a source or target checkout")
+        assessment_parent = os.path.dirname(assessment)
+        workspace = os.path.dirname(assessment_parent) if os.path.basename(assessment_parent).lower() in ("assessment", "analysis") else assessment_parent
+        pack = overall(build(args.app, workspace, args.module, assessment_dir=assessment, target_dir=target, source_dir=source, runs_dir=runs, uplift=args.uplift))
+        for filename in ("VERIFICATION.md", "VERIFICATION.json"):
+            if os.path.lexists(os.path.join(out, filename)) and os.path.islink(os.path.join(out, filename)):
+                raise InputError("%s must not be a symbolic link" % filename)
+        write_outputs(pack, out)
     except InputError as err:
         print("proof_pack.py: %s" % err, file=sys.stderr)
+        return 2
+    except OSError as err:
+        print("proof_pack.py: cannot read or write evidence (%s)" % err.__class__.__name__, file=sys.stderr)
         return 2
     print("%s: %s" % (pack["system"], pack["overall"]["verdict"]))
     for m in pack["modules"]:
@@ -1012,7 +1114,7 @@ def main(argv=None):
             print("    - " + clean(r, 300))
     for t in pack["toolingOnly"]:
         print("  %s (%s): test tooling, not judged" % (clean(t["name"], 60), t["track"]))
-    print("wrote analysis/%s/VERIFICATION.md and VERIFICATION.json" % args.system)
+    print("wrote VERIFICATION.md and VERIFICATION.json under --out")
     return 0 if pack["overall"]["verdict"] == "PROVEN" else 1
 
 
