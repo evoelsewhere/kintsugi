@@ -13,7 +13,7 @@ Kintsugi uses the word “role” for two distinct concepts. Installation identi
 Kintsugi keeps **access roles** and **project roles** as separate concepts. Neither is reconciled with, inferred from, or substituted for the other. Literal values can overlap (for example, `admin`, `dev`, or `ba`); equal strings do not create a mapping or make the concepts interchangeable.
 
 - **Access roles** are installation-wide permission bundles. The primary roles are `admin`, `contribute`, and `user`; admins may also define access sub-roles such as `dev`, `ba`, and `tester`. `core.role`, `core.role_permission`, and `core.user_role` store the roles, permission grants, and user assignments. Admins manage them in **Admin → Members & Permissions**. An access role answers what a user may do in the Kintsugi installation.
-- **Project roles** are the RACI vocabulary in `@kintsugi/domain`, named `PROJECT_ROLES` and `ProjectRole`. Values such as `pm`, `architect`, `ba`, `dev`, `qc`, and `ai-*` describe project responsibilities. They are used by RACI data, `Performer`/`StagePerformer`, and waiver approvals; they do not grant installation permissions.
+- **Project roles** are the RACI vocabulary in `@kintsugi/domain`: the type `ProjectRole`, an open set whose well-known values (`WELL_KNOWN_PROJECT_ROLES`: `pm`, `core-team`, `architect`, `ba`, `dev`, `qc`, `ai-champion`) are the ones the starter rulebook uses. A project may name its own roles in its rulebook. They are used by RACI data, `Performer`/`StagePerformer`, and waiver approvals; they do not grant installation permissions.
 - Project-role assignment is future work for **M0 project persistence**. Once project membership is persisted, a project role may be assigned per membership. Until then, the vocabulary describes project responsibilities but there is no persisted project-role assignment mechanism.
 - Identity-provider claims authenticate or identify a user; they do not define either Kintsugi access roles or project roles. The “Roles (RACI)” wording in ADR-0008 means **project roles**, not access roles.
 
@@ -22,7 +22,7 @@ Documentation, APIs, and code comments use “access role” for the installatio
 ## Consequences
 
 - Access-role administration and authorization behavior remain unchanged; no permission codes or grants, database tables, migrations, routes, or UI behavior change as part of this decision.
-- The exported domain symbols are renamed from `ROLES`/`Role` to `PROJECT_ROLES`/`ProjectRole`. This is a source-level breaking rename; the literal values and serialized data remain unchanged.
+- The exported domain symbols `ROLES`/`Role` become `WELL_KNOWN_PROJECT_ROLES`/`ProjectRole`, and `ProjectRole` becomes an open set. Values no rulebook or code used (`admin`, which also collided with the access role, and organisation-specific titles) are dropped from the well-known list; existing rulebook values stay valid. The unused `Raci` type is removed.
 - Project-role membership and assignment are not implemented by this ADR. They remain planned work with M0 project persistence.
 - ADR-0008 is amended to clarify that its RACI wording refers to project roles and that identity providers do not supply Kintsugi's access roles.
 

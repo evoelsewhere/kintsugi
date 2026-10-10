@@ -28,7 +28,7 @@ Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord �
 
 | Package | Main types |
 |---|---|
-| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `ProjectRole`, `Raci`, `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `ScorecardCriterion`, `RulebookRef`, `RulebookManifest`, `PackManifest`, `PipelineDefinition`, `Waiver`, `RuleFrontmatter`, `RunnerSpec`, `RunnerJobSpec`, `CompareReport`, `CapabilityName` (open), `CapabilityMaturity`, `checkReadiness()` |
+| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `ProjectRole` (open), `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `ScorecardCriterion`, `RulebookRef`, `RulebookManifest`, `PackManifest`, `PipelineDefinition`, `Waiver`, `RuleFrontmatter`, `RunnerSpec`, `RunnerJobSpec`, `CompareReport`, `CapabilityName` (open), `CapabilityMaturity`, `checkReadiness()` |
 | [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts) | `JobSpec`, `AgentDefinition`, `AgentSkill`, `JobLimits`, `JobEvent`, `JobFailureReason`, `JobHandle`, `AgentRuntime`, `LlmProviderConfig`, `AgentModelBinding` |
 | [`packages/harness-sdk`](../../packages/harness-sdk/src/index.ts) | `TaskPack`, `PluginManifest`, `PublishedPlugin`, `MarketplaceFile`, `HarnessPluginSupport`, `MarketplaceGenerator`, `HarnessRendererConfig`, `AssetRenderer`, `HarnessActivity`, `TelemetryNormalizer`, `HarnessPolicy` |
 

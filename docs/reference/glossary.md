@@ -18,7 +18,7 @@
 | **Pipeline definition** | `rulebook/pipelines/<id>.yaml`: the phases, stages, performers, required capabilities and gates an application follows |
 | **Pilot unit** | A unit flagged `pilot: true`, used to verify `draft` rulebook capabilities before promoting them |
 | **Project build** | Shaping a project before running the pipeline: bootstrap the workspace repo, then shape and verify the rulebook |
-| **Project role** | RACI responsibility from `@kintsugi/domain`, such as `pm`, `architect`, `ba`, `dev`, `qc`, or an `ai-*` role; assignment per project membership is planned with M0 project persistence |
+| **Project role** | RACI responsibility from `@kintsugi/domain`, such as `pm`, `architect`, `dev`, `qc` or `ai-champion`; rulebooks may name their own; assignment per project membership is planned with M0 project persistence |
 | **PAT** | Personal Access Token, used by the CLI and MCP clients |
 | **Resolved view** | The rules that apply to one unit after composing vendored content, packs and overrides, each with the layer it came from |
 | **Rulebook** | The project's rules in `rulebook/` of the workspace repo: packs (stack pairs, unit kinds, conventions, mappings, review rules, runners), pipelines, harness renderers, waivers |

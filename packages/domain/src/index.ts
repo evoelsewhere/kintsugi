@@ -28,25 +28,13 @@ export const DISPOSITIONS = [
 ] as const;
 export type Disposition = (typeof DISPOSITIONS)[number];
 
-/** Project roles, aligned with the reference RACI. */
-export const PROJECT_ROLES = [
-  "admin",
-  "pm",
-  "core-team",
-  "architect",
-  "ba",
-  "dev",
-  "qc",
-  "ai-practice-owner",
-  "ai-champion",
-  "ai-engineer",
-  "prompt-engineer",
-  "km-lead",
-  "km-engineer",
-] as const;
-export type ProjectRole = (typeof PROJECT_ROLES)[number];
-
-export type Raci = "R" | "A" | "C" | "I";
+/**
+ * Project roles: RACI responsibilities named in rulebooks (performers, owners, waiver
+ * approvers). Not access roles (ADR-0024). The well-known ones are those the starter
+ * rulebook uses; a project may name its own (open set).
+ */
+export const WELL_KNOWN_PROJECT_ROLES = ["pm", "core-team", "architect", "ba", "dev", "qc", "ai-champion"] as const;
+export type ProjectRole = (typeof WELL_KNOWN_PROJECT_ROLES)[number] | (string & {});
 
 /** Who performs a stage of a work item. */
 export type Performer =
