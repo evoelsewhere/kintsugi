@@ -148,6 +148,12 @@ describe("credentials", () => {
     expect(`${(error as GitError).message}\n${(error as GitError).stderr}`).not.toContain(token);
   });
 
+  it("never sends credentials over plain http", async () => {
+    await expect(lsRemote("http://git.example.invalid/org/repo.git", { credential: { kind: "token", token }, allowHttp: true })).rejects.toThrow(
+      /plain http/,
+    );
+  });
+
   it("requires pinned host keys for SSH keys", async () => {
     await expect(lsRemote("git@git.example.invalid:org/repo.git", { credential: { kind: "ssh-key", privateKey: "key" } })).rejects.toThrow(
       /knownHosts/,
