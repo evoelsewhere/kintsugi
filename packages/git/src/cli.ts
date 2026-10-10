@@ -13,14 +13,14 @@ export type GitCredential =
   | { kind: "none" }
   /** HTTPS token. `username` defaults to "kintsugi"; most servers ignore it for tokens. */
   | { kind: "token"; token: string; username?: string }
-  /** SSH private key (OpenSSH format); host keys are checked against `knownHostsFile`. */
+  /** SSH private key (OpenSSH format); the server's host keys are checked against `knownHosts`. */
   | { kind: "ssh-key"; privateKey: string };
 
 export interface GitRunOptions {
   cwd?: string;
   credential?: GitCredential;
-  /** Pinned SSH host keys; required with an `ssh-key` credential. */
-  knownHostsFile?: string;
+  /** Pinned SSH host keys (known_hosts lines), stored with the Git server; required for SSH. */
+  knownHosts?: string;
   /** Allows file:// and local paths — tests and one-off imports only. */
   allowFileProtocol?: boolean;
   /** Milliseconds; default 10 minutes. */
@@ -115,28 +115,34 @@ export async function runGit(args: readonly string[], options: GitRunOptions = {
     LC_ALL: "C",
   });
 
-  let keyFile: string | undefined;
   if (credential.kind === "token") {
     secrets.push(credential.token);
     env["KINTSUGI_GIT_USERNAME"] = credential.username ?? "kintsugi";
     env["KINTSUGI_GIT_TOKEN"] = credential.token;
   }
-  const sshBase = "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes";
-  if (credential.kind === "ssh-key") {
-    if (options.knownHostsFile === undefined) throw new GitError("An ssh-key credential needs pinned host keys (knownHostsFile).", null, "");
-    keyFile = join(box.root, `key-${randomBytes(8).toString("hex")}`);
-    await writeFile(keyFile, credential.privateKey.endsWith("\n") ? credential.privateKey : `${credential.privateKey}\n`, { mode: 0o600 });
-    env["GIT_SSH_COMMAND"] = `${sshBase} -o IdentitiesOnly=yes -o UserKnownHostsFile=${shPath(options.knownHostsFile)} -i ${shPath(keyFile)}`;
-  } else {
-    env["GIT_SSH_COMMAND"] =
-      options.knownHostsFile === undefined ? sshBase : `${sshBase} -o UserKnownHostsFile=${shPath(options.knownHostsFile)}`;
+  // SSH never trusts a host on first use: only the server's pinned keys, never ~/.ssh.
+  if (credential.kind === "ssh-key" && (options.knownHosts ?? "").trim() === "") {
+    throw new GitError("An ssh-key credential needs the server's pinned host keys (knownHosts).", null, "");
   }
 
-  const fullArgs = [...config.flatMap((entry) => ["-c", entry]), ...args];
+  // Short-lived 0600 files (SSH key, known_hosts), removed when the call ends.
+  const tempFiles: string[] = [];
+  const tempFile = async (prefix: string, content: string): Promise<string> => {
+    const path = join(box.root, `${prefix}-${randomBytes(8).toString("hex")}`);
+    tempFiles.push(path);
+    await writeFile(path, content.endsWith("\n") ? content : `${content}\n`, { mode: 0o600 });
+    return path;
+  };
   try {
+    const knownHostsFile = await tempFile("known-hosts", options.knownHosts ?? "");
+    const ssh = `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile=${shPath(knownHostsFile)}`;
+    env["GIT_SSH_COMMAND"] =
+      credential.kind === "ssh-key" ? `${ssh} -o IdentitiesOnly=yes -i ${shPath(await tempFile("key", credential.privateKey))}` : ssh;
+
+    const fullArgs = [...config.flatMap((entry) => ["-c", entry]), ...args];
     return await spawnGit(fullArgs, env, options, (text) => redact(text, secrets), args);
   } finally {
-    if (keyFile !== undefined) await rm(keyFile, { force: true });
+    await Promise.all(tempFiles.map((path) => rm(path, { force: true })));
   }
 }
 

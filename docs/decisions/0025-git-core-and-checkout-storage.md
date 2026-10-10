@@ -40,7 +40,6 @@ Constraints:
 <data>/git/workspaces/<project-id>/             the worker's clone of the workspace repo (writer only)
 <data>/jobs/<job-id>/src                        per-job worktree at a fixed commit, mounted read-only
 <data>/jobs/<job-id>/out                        per-job output
-<data>/ssh/known_hosts                          pinned SSH host keys
 ```
 
 - **Mirrors and worktrees.**
@@ -56,8 +55,8 @@ Constraints:
   - It does not use libgit2 or isomorphic-git, because they lack full support for partial clone, LFS, worktrees and SSH, and members' tools use real Git anyway.
 - **Credentials never touch the repository or the disk in plaintext:**
   - HTTPS tokens are passed for one invocation through an inline credential helper that reads an environment variable of that call; the helper only answers `get`. Tokens are never put in URLs, remote config, the process arguments or a credential store, and they are redacted from error messages.
-  - SSH keys are written to a mode-0600 temporary file that lives only for the invocation. `GIT_SSH_COMMAND` sets `IdentitiesOnly=yes` and `StrictHostKeyChecking=yes`, and uses `<data>/ssh/known_hosts`.
-  - The host key is shown to the admin and pinned when the server is registered.
+  - SSH keys are written to a mode-0600 temporary file that lives only for the invocation. `GIT_SSH_COMMAND` sets `IdentitiesOnly=yes` and `StrictHostKeyChecking=yes`.
+  - Host keys are pinned per Git server: the admin enters them when registering the server, they are stored with it in Postgres, and each call gets them as a temporary known_hosts file. Kintsugi never trusts a host on first use and never reads `~/.ssh`.
 - **Hardened environment on every call:**
   - `GIT_TERMINAL_PROMPT=0`, `GIT_CONFIG_NOSYSTEM=1` and an isolated `HOME`.
   - `core.hooksPath` pointed at an empty directory, so repository hooks never run.

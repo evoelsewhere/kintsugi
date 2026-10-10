@@ -150,7 +150,7 @@ describe("credentials", () => {
 
   it("requires pinned host keys for SSH keys", async () => {
     await expect(lsRemote("git@git.example.invalid:org/repo.git", { credential: { kind: "ssh-key", privateKey: "key" } })).rejects.toThrow(
-      /knownHostsFile/,
+      /knownHosts/,
     );
   });
 });
