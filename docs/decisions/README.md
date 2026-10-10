@@ -42,6 +42,7 @@ This page has two parts:
 | [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Proposed |
 | [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Superseded by 0023 |
 | [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted |
+| [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
 
 ## Decision register
 
@@ -51,7 +52,7 @@ This page has two parts:
 | D02 | Where code & documents live | 🔴 | Git is the source of truth; Postgres keeps state + rebuildable indexes | M0 | ✅ [0007](0007-git-as-source-of-truth.md) |
 | D03 | Cloud / hosting | — | Not applicable: each project chooses its host; one Docker host is enough | — | ✅ [0006](0006-self-hosted-package.md) |
 | D04 | LLMs for the pi runtime | 🔴 | Provider registry covering every pi provider + custom providers; credentials encrypted in the DB | M0 | ✅ [0009](0009-llm-provider-config.md) |
-| D05 | Data isolation | 🔴 | No multi-tenancy; authorization by project + role | M0 | ✅ [0006](0006-self-hosted-package.md) |
+| D05 | Data isolation | 🔴 | No multi-tenancy; installation access-role permissions and project scope are separate; project-role assignment follows M0 project persistence | M0 | ✅ [0006](0006-self-hosted-package.md) |
 | D06 | How pi is embedded | 🔴 | Node runner using the pi SDK inside a container, streaming `JobEvent`s out | M0 | ✅ [0004](0004-runner-container-per-job.md) |
 | D07 | Sandbox | 🔴 | One Docker container per job, no Kubernetes; hardening + egress proxy; gVisor when available | M0 | ✅ [0004](0004-runner-container-per-job.md) |
 | D08 | Orchestration | 🔴 | pg-boss + state machine in the DB; no Temporal | M0 | ✅ [0003](0003-postgres-job-queue.md) |
@@ -86,6 +87,7 @@ This page has two parts:
 | D38 | Runner images | 🔴 | Runners declare their image; installation image allowlist; same hardening; network `none` by default; no LLM credentials | M0 | ✅ [0013](0013-composable-open-rulebook.md) |
 | D39 | Project runtime agents & runtime MCP | — | Not supported (removed) | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D43 | Member asset packaging | 🟠 | Claude Code plugin format (skills, agents, commands, hooks, MCP, `userConfig`); built-in `kintsugi` plugin with MCP + guardrail/telemetry hooks; project plugins in rulebook packs gated by `convert` maturity | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D44 | Access roles vs. project roles | 🔴 | Keep installation-wide permission-bundle access roles separate from project RACI roles; assign project roles per membership after M0 project persistence | M0 | ✅ [0024](0024-access-roles-vs-project-roles.md) |
 | D42 | Unit discovery | — | No discovery config; unit files declared by people or proposed by `assessment` via PR; `dependsOn` written, not computed | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D40 | Member harness registry | 🟠 | Open harness ids; plugin support per harness (native / converted / none); declarative fallback renderers (built-in / installation / project); transformer plugins installed by admins | M2 | ✅ [0013](0013-composable-open-rulebook.md), [0015](0015-member-assets-as-agent-plugins.md) |
 | D41 | Stale units on rule change | 🟠 | Units record `rulesApplied`; changed rules mark units `stale` → re-review queue | M3 | ✅ [0013](0013-composable-open-rulebook.md) |

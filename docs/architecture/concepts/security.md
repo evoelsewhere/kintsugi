@@ -51,7 +51,7 @@
 - **The PAT** for the Kintsugi MCP server is a sensitive `userConfig` value, kept in the harness's secure storage, not in files.
 - `HarnessPolicy` distribution covers allowed models, allowed MCP servers, content exclusions for sensitive files, required commit trailers and required plugins.
 - Gates check trailers and AI-usage declarations on PRs.
-- The MCP server authenticates every call with the member's PAT and checks project and role permissions.
+- The MCP server authenticates every call with the member's PAT and checks project scope plus the member's effective installation access-role permissions.
 
 ## Audit
 

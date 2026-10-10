@@ -26,7 +26,7 @@ Measurable scenarios for these goals are in [10. Quality requirements](10-qualit
 
 ## 1.3 Stakeholders
 
-| Role | Expectations |
+| Stakeholder persona | Expectations |
 |---|---|
 | Installation admin / ops | Easy install, upgrade and backup; clear host requirements; restricted blast radius |
 | PM / program manager | Pipeline progress, gates, AI metrics, risks in one place |

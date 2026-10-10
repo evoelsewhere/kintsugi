@@ -97,7 +97,7 @@ One file per work item ([ADR-0012](../decisions/0012-work-items-as-files-in-git.
 | `rulebook` | `version` and `commit` the unit was last processed with |
 
 **Rules**:
-- **Write path**: state changes go through the Kintsugi API (portal, CLI, MCP, runtime agents). The API validates the role and the allowed transition, updates the index, and the worker commits as `kintsugi-bot` with `Kintsugi-Actor`.
+- **Write path**: state changes go through the Kintsugi API (portal, CLI, MCP, runtime agents). The API validates the actor's effective access-role permissions and the allowed transition, updates the index, and the worker commits as `kintsugi-bot` with `Kintsugi-Actor`.
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 

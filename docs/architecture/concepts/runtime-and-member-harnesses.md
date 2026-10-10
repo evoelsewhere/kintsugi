@@ -1,6 +1,6 @@
 # Runtime and member harnesses
 
-Kintsugi has two kinds of agents with separate roles ([ADR-0001](../../decisions/0001-pi-as-kintsugi-runtime.md)).
+Kintsugi has two kinds of agents with separate execution models ([ADR-0001](../../decisions/0001-pi-as-kintsugi-runtime.md)).
 
 | | **Kintsugi Runtime (pi)** | **Member harnesses** (Claude Code, GitHub Copilot, ChatGPT/Codex) |
 |---|---|---|
