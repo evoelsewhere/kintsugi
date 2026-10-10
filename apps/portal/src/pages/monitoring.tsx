@@ -1,35 +1,35 @@
-﻿import { Breadcrumbs } from "../components/breadcrumbs";
+import { Breadcrumbs } from "../components/breadcrumbs";
 import { AreaCard, type AreaCardProps } from "../components/area-card";
 
-/** Functional areas C1â€“C5 (docs/architecture/05-building-block-view.md). */
+/** Functional areas C1–C5 (docs/architecture/05-building-block-view.md). */
 const AREAS = [
   {
-    title: "C1 Â· Agent Observability",
+    title: "C1 · Agent Observability",
     description: "Runtime job traces (tool calls, tokens, cost, outputs), session replay, normalized member-harness activity.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "C2 Â· Delivery Dashboard",
+    title: "C2 · Delivery Dashboard",
     description: "Progress by phase / wave / work item, burn-down, gate status.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "C3 Â· AI Metrics",
+    title: "C3 · AI Metrics",
     description: "AI share, rework and review metrics computed from harness activity, artifact provenance and the tracker.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "C4 Â· Cost & FinOps",
+    title: "C4 · Cost & FinOps",
     description: "Runtime LLM cost by project / agent / model, harness usage and licenses, to-be cloud cost.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "C5 Â· Target System Health",
-    description: "Health and incidents of the migrated system (P6â€“P7).",
+    title: "C5 · Target System Health",
+    description: "Health and incidents of the migrated system (P6–P7).",
     status: "not implemented yet",
     tone: "muted",
   },

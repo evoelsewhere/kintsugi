@@ -1,40 +1,40 @@
-﻿import { Breadcrumbs } from "../components/breadcrumbs";
+import { Breadcrumbs } from "../components/breadcrumbs";
 import { AreaCard, type AreaCardProps } from "../components/area-card";
 
-/** Functional areas D1â€“D6 (docs/architecture/05-building-block-view.md). */
+/** Functional areas D1–D6 (docs/architecture/05-building-block-view.md). */
 const AREAS = [
   {
-    title: "D1 Â· Policy Engine",
+    title: "D1 · Policy Engine",
     description: "Runtime policy (model allowlist, tools, network, budget), HarnessPolicy distribution, data residency, PII / secret redaction.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "D2 Â· Quality Gates",
-    description: "Gates G0â€“G6 plus per-work-item gates, defined in kintsugi.yaml (Git).",
+    title: "D2 · Quality Gates",
+    description: "Gates G0–G6 plus per-work-item gates, defined in kintsugi.yaml (Git).",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "D3 Â· Review & Approval",
+    title: "D3 · Review & Approval",
     description: "ARB, design review, PR approval, go / no-go, with SLAs.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "D4 Â· Audit & Traceability",
-    description: "Append-only audit (hash chain), requirement â†’ design â†’ code â†’ test traceability, AI provenance.",
+    title: "D4 · Audit & Traceability",
+    description: "Append-only audit (hash chain), requirement → design → code → test traceability, AI provenance.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "D5 Â· Risk & Change",
+    title: "D5 · Risk & Change",
     description: "Risk register, change requests, decision log.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
-    title: "D6 Â· Rulebook & Asset Governance",
+    title: "D6 · Rulebook & Asset Governance",
     description: "Scoped capability maturity, readiness checks, waivers with expiry, evidence-backed promotions, stale-unit detection.",
     status: "not implemented yet",
     tone: "muted",
