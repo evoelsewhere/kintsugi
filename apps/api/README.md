@@ -30,7 +30,7 @@ src/
   modules/
     system/health/         liveness endpoint
     core/auth/             sessions, global guards, bootstrap admin
-    admin/                 A1–A7: projects, users (members), roles & permissions,
+    admin/                 A1–A7: projects, users (members), access roles & permissions,
                            connectors, llm-providers (full DDD exemplar), harnesses,
                            templates, project-build
     delivery/              B1–B7
@@ -72,7 +72,7 @@ Rules (enforced by review — see AGENTS.md):
   (`NotFoundException`, `ConflictException`). Storage-agnostic.
 - **`infrastructure/` owns I/O**: Postgres adapters (see `admin/llm-providers`),
   in-memory adapters for skeletons. No HTTP types here.
-- **Shared vocabulary** (Phase, Disposition, Role, `ThinkingLevel`, `RuntimeAgentId`, …)
+- **Shared vocabulary** (Phase, Disposition, ProjectRole, `ThinkingLevel`, `RuntimeAgentId`, …)
   comes from `@kintsugi/domain`; provider/agent contracts from `@kintsugi/runtime-sdk`.
   Never redefine them in this app.
 
@@ -133,7 +133,7 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
   (`kintsugi_session`, path `/api`, `Secure` when `KINTSUGI_PUBLIC_URL` is https). The
   token is stored as a SHA-256 hash in `core.session` (7-day expiry) and never appears in
   a response body. `POST /api/auth/logout` revokes it and clears the cookie;
-  `GET /api/auth/me` returns the user with roles and effective permissions. Non-browser
+  `GET /api/auth/me` returns the user with access roles and effective permissions. Non-browser
   clients may send the token as `Authorization: Bearer` instead.
 - **CSRF**: unsafe requests (anything but GET/HEAD/OPTIONS) that are not
   bearer-authenticated must send `x-kintsugi-csrf: 1` (`CsrfGuard`) — sign-in included.
@@ -146,22 +146,22 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
   method-level decorator overrides the class-level one). Every write route is gated;
   reads of shared catalogs only need a session. Use cases that depend on who calls
   receive the caller via `@CurrentActor()`.
-- **Roles**: primary roles (`admin`, `contribute`, `user`) and admin-defined sub-roles
-  (`dev`, `ba`, `tester`, …). A member holds one primary role plus optional sub-roles.
+- **Access roles**: primary access roles (`admin`, `contribute`, `user`) and admin-defined
+  access sub-roles (`dev`, `ba`, `tester`, …). A member holds one primary access role plus optional access sub-roles.
 - **Permissions are dynamic**: codes live in `core.permission` and are added by
   **migration** — the portal's matrix reads the table, so new codes appear automatically
-  and are granted per role there. Grants are stored in `core.role_permission`.
+  and are granted per access role there. Grants are stored in `core.role_permission`.
 - **Bootstrap admin**: created on startup when no users exist, from
   `KINTSUGI_BOOTSTRAP_ADMIN_USER` (default `admin`) and `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD`
   (required, at least 8 characters — there is no default; startup fails without it).
   Change the password after first sign-in.
-- **Guard rails** (members & roles use cases):
-  - you can only assign roles, grant permissions, and manage members whose permissions
+- **Guard rails** (members & access-role use cases):
+  - you can only assign access roles, grant permissions, and manage members whose permissions
     you hold yourself — `members.manage` / `roles.manage` do not allow self-escalation or
     taking over a stronger account;
-  - the installation keeps at least one enabled `admin`, the `admin` role keeps
+  - the installation keeps at least one enabled `admin` access role, which keeps
     `members.manage` and `roles.manage`, and nobody removes or disables themselves;
-  - a member holds exactly one primary role;
+  - a member holds exactly one primary access role;
   - resetting a password or disabling a member ends their sessions.
 - **Password hashing**: argon2id (`@node-rs/argon2`, 19 MiB / 2 passes / 1 lane) stored as a
   PHC string. Older scrypt hashes, or argon2id hashes with other parameters, are re-hashed
@@ -190,7 +190,7 @@ pnpm --filter @kintsugi/api test     # vitest
 ## Tests
 
 - `test/unit/`: pure units (password hashing, sign-in throttle, error filter, environment).
-- `test/integration/`: the real `AppModule`, booted like `src/main.ts` on an ephemeral port and driven over HTTP: session cookie and CSRF, guard order, lockout, member and role guard rails, session revocation, hash upgrades, LLM provider permissions and credential confidentiality.
+- `test/integration/`: the real `AppModule`, booted like `src/main.ts` on an ephemeral port and driven over HTTP: session cookie and CSRF, guard order, lockout, member and access-role guard rails, session revocation, hash upgrades, LLM provider permissions and credential confidentiality.
 - Integration tests need Postgres: the server comes from `DATABASE_URL` (environment, else the repo-root `.env`). Each test file creates its own `kintsugi_api_test_*` database and drops it afterwards; the database named in `DATABASE_URL` is never touched. Without `DATABASE_URL` the integration suites are skipped.
 - NestJS injection needs decorator metadata: `vitest.config.ts` enables it in Vite's oxc transform.
 - Known gaps are pinned with `it.fails` (the test passes while the gap exists); turn them into plain `it` when fixing the gap.

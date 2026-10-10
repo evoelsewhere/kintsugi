@@ -34,7 +34,7 @@ rulebook/
 schemaVersion: 1
 id: billing-modernization
 version: 0.4.0                       # the only place the version is declared
-owners: [architect, ai-champion]     # roles that approve promotions, waivers, harness renderers
+owners: [architect, ai-champion]     # project roles that approve promotions, waivers, harness renderers
 
 extends:                             # vendored snapshots (§4.2)
   - id: org-baseline
@@ -157,7 +157,7 @@ gates:
 | `performer.agent` | A runtime agent id ([runtime agents](runtime-agents.md)); the agent definition is supplied with each job, and none ships with Kintsugi yet (ADR-0023) |
 | `phases[].id` | A built-in phase id (`mobilize` … `hypercare-operate`), or a custom id with `category` |
 | `perUnit` | Stages run per work item; otherwise once per application / project |
-| `performer` | `{agent}` (runtime agent id), `{member: [roles]}`, or `{runner}` (optionally `then: compare`) |
+| `performer` | `{agent}` (runtime agent id), `{member: [project roles]}`, or `{runner}` (optionally `then: compare`) |
 | `requires` | Capability names (well-known or custom) checked before the stage runs |
 | `gate` | Gate this stage closes |
 
@@ -234,7 +234,7 @@ displayName: Cursor
 render:
   skills:         {path: ".cursor/rules/{name}.mdc", format: markdown-frontmatter}
   projectContext: {path: AGENTS.md,                  format: markdown}
-  roles:          {path: ".cursor/agents/{role}.md", format: markdown}
+  roles:          {path: ".cursor/agents/{role}.md", format: markdown} # agent-profile templates, not access-role grants or project RACI assignments
   mcp:            {path: .cursor/mcp.json,           format: json-mcp}
 telemetry: [kintsugi-mcp, git]
 ```

@@ -5,7 +5,7 @@ The core entities, abridged. Postgres holds operational state and rebuildable in
 Entities marked *(index)* are derived from files in the workspace repo and can be rebuilt from Git.
 
 ```
-GitServer(kind, baseUrl, credentialRef) 1─* Repository(path, role, defaultBranch, credentialRef?)
+GitServer(kind, baseUrl, credentialRef) 1─* Repository(path, role [repository purpose], defaultBranch, credentialRef?)
 Project 1─* Application 1─* WorkItem (index of units/**) 1─* StageRun ─0..1 RuntimeJob 1─* JobEvent
    │             │              │
    │             │              └─ TaskPack(repo@commit:path) ─ PullRequest ─ GateReview
@@ -17,8 +17,8 @@ Project 1─* Application 1─* WorkItem (index of units/**) 1─* StageRun ─0
    │     ├─ Rule(id, appliesTo, severity, layer) · PipelineDefinition · Waiver(scope, expires)
    │     └─ RunnerSpec(image) · HarnessRendererConfig
    ├─ PipelineTemplate (phase/stage/gate) ─ GateDecision (index of unit frontmatter `gates`)
-   └─ Membership(user, role, harnesses[])
-User · Session · AccessToken · AuthIdentity(provider: local | entra-id)
+   └─ ProjectMembership(user, projectRole, harnesses[]) — planned with M0 project persistence
+User · AccessRole(core.role/core.user_role) · Permission(core.permission) · Session · AccessToken · AuthIdentity(provider: local | entra-id)
 LlmProvider(config, secretRef) · LlmModel · AgentModelBinding(agent → provider/model)
 KbDocument(repo@commit:path) ─* KbChunk(text, embedding)          (no code graph, ADR-0014)
 Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord · AuditEvent (append-only)
@@ -28,7 +28,7 @@ Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord �
 
 | Package | Main types |
 |---|---|
-| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `Role`, `Raci`, `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `ScorecardCriterion`, `RulebookRef`, `RulebookManifest`, `PackManifest`, `PipelineDefinition`, `Waiver`, `RuleFrontmatter`, `RunnerSpec`, `RunnerJobSpec`, `CompareReport`, `CapabilityName` (open), `CapabilityMaturity`, `checkReadiness()` |
+| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `ProjectRole`, `Raci`, `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `ScorecardCriterion`, `RulebookRef`, `RulebookManifest`, `PackManifest`, `PipelineDefinition`, `Waiver`, `RuleFrontmatter`, `RunnerSpec`, `RunnerJobSpec`, `CompareReport`, `CapabilityName` (open), `CapabilityMaturity`, `checkReadiness()` |
 | [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts) | `JobSpec`, `AgentDefinition`, `AgentSkill`, `JobLimits`, `JobEvent`, `JobFailureReason`, `JobHandle`, `AgentRuntime`, `LlmProviderConfig`, `AgentModelBinding` |
 | [`packages/harness-sdk`](../../packages/harness-sdk/src/index.ts) | `TaskPack`, `PluginManifest`, `PublishedPlugin`, `MarketplaceFile`, `HarnessPluginSupport`, `MarketplaceGenerator`, `HarnessRendererConfig`, `AssetRenderer`, `HarnessActivity`, `TelemetryNormalizer`, `HarnessPolicy` |
 

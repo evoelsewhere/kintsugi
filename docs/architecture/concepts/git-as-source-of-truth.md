@@ -48,7 +48,7 @@ Each work item is a file, `units/<app>/<module>/<unit>.md`, whose frontmatter ho
 
 - **One write path**:
   1. Portal, CLI, MCP and runtime agents call the Kintsugi API.
-  2. The API validates the role and the transition, then updates the index immediately.
+  2. The API validates the actor's effective access-role permissions and the transition, then updates the index immediately.
   3. The worker commits the change as `kintsugi-bot` with a `Kintsugi-Actor` trailer.
   4. If the commit fails, the index change is rolled back.
 - **Concurrency**: commits use fetch → rebase → retry. A second concurrent change to the same unit fails fast and the error is shown.

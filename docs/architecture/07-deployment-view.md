@@ -29,7 +29,7 @@ Kintsugi ships as a self-hosted Docker Compose package ([ADR-0006](../decisions/
 
 ## 7.1 Containers
 
-| Container | Role | Exposure |
+| Container | Responsibility | Exposure |
 |---|---|---|
 | `kintsugi-app` | API, portal (static SPA), MCP server, CLI API, job gateway | The only published port, behind the project's reverse proxy / TLS |
 | `kintsugi-worker` | pg-boss consumer, state machine, Git sync & writer, ingestion, job launcher | Outbound to Git servers |

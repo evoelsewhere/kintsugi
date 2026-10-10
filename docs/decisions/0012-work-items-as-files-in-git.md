@@ -19,7 +19,7 @@ Git is the source of truth for code, documents and the rulebook (ADR-0007, ADR-0
 - **Postgres keeps an index of the unit files** for the board, queries and metrics. It is rebuilt from Git at any time, and refreshed on every sync of the workspace repo.
 - **Single write path**:
   - Portal actions, CLI / MCP calls (`task start`, `task.update`) and runtime agents change state through the Kintsugi API.
-  - The API validates the role and the allowed transition, updates the index, and the worker commits the file change as `kintsugi-bot` with an actor trailer (`Kintsugi-Actor: <user>`).
+  - The API validates the actor's effective access-role permissions and the allowed transition, updates the index, and the worker commits the file change as `kintsugi-bot` with an actor trailer (`Kintsugi-Actor: <user>`).
   - If the commit fails, the index change is rolled back.
 - **Direct edits** of unit files are allowed only through PRs. On sync, Kintsugi validates them (schema, transitions). Invalid changes are flagged on the board and are not applied to the index.
 - **History**: Git history is the unit's history. Kintsugi does not keep a separate transition log, apart from the audit events of who triggered what.

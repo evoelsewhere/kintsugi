@@ -2,12 +2,14 @@
 
 | Term | Meaning |
 |---|---|
+| **Access role** | Installation-wide permission bundle, such as `admin`, `contribute`, `user`, or an admin-defined access sub-role; managed in Admin → Members & Permissions |
+| **Project role** | RACI responsibility from `@kintsugi/domain`, such as `pm`, `architect`, `ba`, `dev`, `qc`, or an `ai-*` role; assignment per project membership is planned with M0 project persistence |
 | **7R** | Retire, Retain, Rehost, Replatform, Refactor, Re-architect, Rebuild, Repurchase: the transformation strategies for an application |
 | **Capability** | A group of rulebook content a pipeline stage depends on. Seven are well-known; projects can add custom ones |
 | **Capability maturity** | `template` → `draft` → `ready` (or `suspended`): how far a capability has been adapted and verified, optionally scoped per unit kind / application |
 | **AS-IS / TO-BE KB** | Knowledge base of the current / target system. Sources are in Git; the index (vector + graph) is in Postgres |
 | **Code repo** | Umbrella term for source and target repos. A project usually has many, possibly on different Git servers |
-| **Digital worker** | An AI role such as reverse design, version upgrade or unit-test generation. In Kintsugi it is an agent plugin plus a task-pack template, run in a member's harness, with runtime agents preparing and reviewing the work |
+| **Digital worker** | An AI work profile such as reverse design, version upgrade or unit-test generation. In Kintsugi it is an agent plugin plus a task-pack template, run in a member's harness, with runtime agents preparing and reviewing the work |
 | **Gate** | Quality / approval checkpoint: G0–G6 per phase, plus per-work-item gates |
 | **Harness** | An environment that runs an AI agent (pi, Claude Code, GitHub Copilot, Codex…) |
 | **Installation** | One self-hosted Kintsugi instance (Docker Compose), serving one organization |

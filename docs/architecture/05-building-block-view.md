@@ -24,7 +24,7 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 | Sub-module | Function | Notes |
 |---|---|---|
 | A1 Projects & Applications | Programs, projects, applications, code repos, workspace repo | One installation = one organization |
-| A2 Identity & Access | Username/password sign-in; PATs for CLI/MCP (Entra ID later); users; RACI roles; project-scoped RBAC | [Identity and access](concepts/identity-and-access.md) |
+| A2 Identity & Access | Username/password sign-in; PATs for CLI/MCP (Entra ID later); installation access roles and permission bundles; project-role assignment with M0 project membership persistence | [Identity and access](concepts/identity-and-access.md) |
 | A3 Connectors | Git servers (any number and kind), Jira / Confluence / SharePoint, source databases (read-only), observability tools | Credentials encrypted in Postgres |
 | A4 LLM Providers & Harness Registry | Runtime LLM providers (every pi provider + custom), credentials, test connection, model binding per runtime agent id, allowlist, budget; member harness registry (plugin support per harness, built-in + installation fallback renderers, transformer plugins) | [LLM configuration](concepts/llm-configuration.md) |
 | A7 Extension Allowlists | Runner image allowlist; harness transformer plugins | [Security](concepts/security.md) |
@@ -67,7 +67,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 
 ### E. Core platform
 
-| Component | Role |
+| Component | Responsibility |
 |---|---|
 | E1 Workflow Orchestrator | pg-boss job queue + phase / stage / gate state machine driven by the application's **pipeline definition** from the rulebook. Transitions are validated by the API, persisted as unit-file commits and indexed in Postgres (ADR-0012); retries; fan-out per wave |
 | E2 Knowledge Hub | AS-IS / TO-BE KB: sources in Git, text chunks + embeddings (pgvector) in Postgres, no code graph; ingestion; search API |
@@ -80,7 +80,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 
 ### Who uses what
 
-| Role | Main modules |
+| Project role / persona | Main modules |
 |---|---|
 | PM / program manager | B (all), C2, C3, D3, D5 |
 | BA | B1, B2, E2 (AS-IS chatbot) |
@@ -103,7 +103,7 @@ Shared libraries and assets:
 
 | Path | Content |
 |---|---|
-| `packages/domain` | Shared vocabulary: phases, 7R, roles, work items, provenance, Git servers / repositories, scorecard |
+| `packages/domain` | Shared vocabulary: phases, 7R, project roles, work items, provenance, Git servers / repositories, scorecard |
 | `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `AgentDefinition`, `JobEvent`, LLM provider configuration types |
 | `packages/harness-sdk` | `TaskPack`, `AssetRenderer`, `HarnessActivity`, `HarnessPolicy` |
 | `plugins/` | Built-in agent plugin `kintsugi` for member harnesses (skills, hooks, Kintsugi MCP server) |
