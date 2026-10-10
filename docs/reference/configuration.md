@@ -17,7 +17,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` | yes (first start) | — | First admin password, at least 8 characters; startup fails without it while the installation has no users. Change it after first sign-in |
 | `POSTGRES_PASSWORD` | yes | — | Password of the `kintsugi` database user |
 | `KINTSUGI_DATA_DIR` | yes | — | Host directory for Git mirrors, workspace clones and per-job checkouts ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)); size it for every registered repository plus running jobs. Without Docker (development) it defaults to `./.kintsugi/data` |
-| `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between Git polls (when webhooks are not used) |
+| `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between full Git re-syncs of every repository (minimum 30); new repositories are cloned within seconds |
 | `KINTSUGI_JOB_MAX_CONCURRENCY` | no | `2` | Parallel runtime jobs |
 | `KINTSUGI_JOB_DEFAULT_TIMEOUT` | no | `1800` | Default job timeout (seconds) |
 | `KINTSUGI_JOB_MEMORY` | no | `4g` | Memory limit per runner container |
