@@ -14,7 +14,7 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 │          │ · Verify · Cutover · Operate         │            │            │
 └──────────┴──────────────────────────────────────┴────────────┴────────────┘
 ┌──────────────────────────── Core platform ────────────────────────────────────────┐
-│ Workflow Orchestrator │ Knowledge Hub     │ Rulebook & Assets │ Kintsugi Runtime (pi) │
+│ Workflow Orchestrator │ Knowledge Hub     │ Standards & Assets│ Kintsugi Runtime (pi) │
 │ Harness Hub (MCP/CLI) │ Git Sync & Writer │ Postgres (state, KB index, queue, events) │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -23,13 +23,13 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 
 | Sub-module | Function | Notes |
 |---|---|---|
-| A1 Projects & Applications | Programs, projects, applications, code repos, workspace repo | One installation = one organization |
+| A1 Projects & Applications | Programs, projects, applications, code repos, document repo | One installation = one organization |
 | A2 Identity & Access | Username/password sign-in; PATs for CLI/MCP (Entra ID later); installation access roles and permission bundles; project-role assignment with M0 project membership persistence | [Identity and access](concepts/identity-and-access.md) |
 | A3 Connectors | Git servers (any number and kind), Jira / Confluence / SharePoint, source databases (read-only), observability tools | Credentials encrypted in Postgres |
 | A4 LLM Providers & Harness Registry | Runtime LLM providers (every pi provider + custom), credentials, test connection, model binding per runtime agent id, allowlist, budget; member harness registry (plugin support per harness, built-in + installation fallback renderers, transformer plugins) | [LLM configuration](concepts/llm-configuration.md) |
 | A7 Extension Allowlists | Runner image allowlist; harness transformer plugins | [Security](concepts/security.md) |
-| A5 Templates | SDLC / pipeline templates per 7R, deliverable templates, RACI templates, the workspace starter template | Shipped stack-agnostic; project specifics go into the rulebook |
-| A6 Project Build | Create / join / copy-from a workspace repo; register source and target repos; packs and pipelines per application; rulebook editor and **resolved view** per unit; readiness board (per pack / kind / application); promote, suspend and waiver PR flows; `rulebook upgrade` for vendored content | [Build a project](../guides/build-project.md) |
+| A5 Templates | SDLC / pipeline templates per 7R, deliverable templates, RACI templates, the document repo starter template | Shipped stack-agnostic; project specifics go into the project's document repo (`standards/`, `plugins/`) |
+| A6 Project Build | Create / join a document repo; register per application the AS-IS repos (`legacy`, `legacy-data`) and TO-BE repos (`target` per architecture component); choose or declare pipelines | [Build a project](../guides/build-project.md) |
 
 ### B. Delivery
 Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/delivery-pipeline.md)). The runtime agents named here (`assessment`, `task-planner`, `gate-reviewer`, …) are planned, not shipped; each will be an agent definition supplied per job ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)).
@@ -63,18 +63,17 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | D3 Review & Approval | ARB, design review, PR approval, go / no-go, with SLAs |
 | D4 Audit & Traceability | Append-only audit (hash chain); requirement → design → code → test → defect via `repo@commit:path`; AI provenance |
 | D5 Risk & Change | Risk register, change requests, decision log |
-| D6 Rulebook & Asset Governance | Scoped capability maturity (incl. `suspended`), readiness checks per stage and unit, waivers with expiry, evidence-backed promotions approved by rulebook owners, stale-unit detection on rule changes, rulebook version + commit in provenance; lifecycle of built-in assets |
 
 ### E. Core platform
 
 | Component | Responsibility |
 |---|---|
-| E1 Workflow Orchestrator | pg-boss job queue + phase / stage / gate state machine driven by the application's **pipeline definition** from the rulebook. Transitions are validated by the API, persisted as unit-file commits and indexed in Postgres (ADR-0012); retries; fan-out per wave |
+| E1 Workflow Orchestrator | pg-boss job queue + phase / stage / gate state machine driven by the application's **pipeline definition** (built-in, or declared in `kintsugi.yaml`). Transitions are validated by the API, persisted as unit-file commits and indexed in Postgres (ADR-0012); retries; fan-out per wave |
 | E2 Knowledge Hub | AS-IS / TO-BE KB: sources in Git, text chunks + embeddings (pgvector) in Postgres, no code graph; ingestion; search API |
-| E3 Rulebook & Assets | Validates and **composes** the project rulebook (vendor → packs → overrides), indexes rules, capabilities, pipelines and waivers, computes the resolved view per unit and readiness per stage, and combines it with built-in assets for runtime jobs and harness rendering ([rulebook reference](../reference/rulebook.md)) |
+| E3 Standards & Assets | Reads `kintsugi.yaml`, `standards/` and `plugins/` from the document repo at a fixed commit, and combines them with built-in assets for runtime jobs and harness rendering ([document repository](../reference/document-repo.md)) |
 | E4 Kintsugi Runtime (pi) | Generic agent kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)): runs one agent job whose [agent definition](../reference/runtime-agents.md) is supplied with the job, one sandbox per job; knows no agent. Built-in and custom agents are installation data managed in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
-| E5 Harness Hub | MCP server, CLI backend, plugin validation and **marketplace generation** (vendored built-in plugin + publishable rulebook plugins), fallback rendering, policy distribution, telemetry ingest ([harness integration](../reference/harness-integration.md)) |
-| E6 Git Sync & Writer | Sync many repos across many Git servers; commit / PR runtime results and unit state changes to the workspace repo (fetch → rebase → retry) |
+| E5 Harness Hub | MCP server, CLI backend, plugin validation and **marketplace generation** (vendored built-in plugin + project plugins from `plugins/`), fallback rendering, policy distribution, telemetry ingest ([harness integration](../reference/harness-integration.md)) |
+| E6 Git Sync & Writer | Sync many repos across many Git servers; commit / PR runtime results and unit state changes to the document repo (fetch → rebase → retry) |
 | E7 Events | Domain events (job.started, pr.opened, gate.passed, artifact.registered…) via outbox + `LISTEN/NOTIFY` |
 | E8 Connectors | Git provider APIs (PRs, comments, webhooks), trackers, wikis, observability |
 
@@ -110,5 +109,5 @@ Shared libraries and assets:
 | `packages/harness-sdk` | `TaskPack`, `AssetRenderer`, `HarnessActivity`, `HarnessPolicy` |
 | `plugins/` | Built-in agent plugin `kintsugi` for member harnesses (skills, hooks, Kintsugi MCP server) |
 | `.claude-plugin/marketplace.json` | Marketplace listing the built-in plugin, for local testing |
-| `templates/workspace` | Workspace repo starter template, including the neutral starter rulebook |
+| `templates/document-repo` | Document repo starter template: `kintsugi.yaml`, neutral `standards/` and `plugins/` samples |
 | `deploy/compose` | The Docker Compose package |

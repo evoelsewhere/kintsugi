@@ -13,7 +13,7 @@ Migration and modernization at portfolio scale (tens to hundreds of applications
 
 **An application portal that orchestrates the whole migration lifecycle from as-is to to-be architecture.**
 
-1. **A project build step**: Kintsugi is a common engine, so each project first builds its **rulebook**, the stack-specific rules it will follow, and verifies it before the pipeline runs. See [project rulebook](../architecture/concepts/project-rulebook.md).
+1. **A project build step**: Kintsugi is a common engine, so each project first registers its AS-IS and TO-BE repos and writes its **standards** (target conventions, mappings, review rules) in its single document repo. See [build a project](../guides/build-project.md).
 2. **A configurable delivery pipeline**: P0 Mobilize → P1 Discover & Assess → P2 Define To-Be → P3 Prepare Factory → P4 Migrate → P5 Verify → P6 Cutover → P7 Hypercare. See [delivery pipeline](../methodology/delivery-pipeline.md).
 3. **Four pillars** (Admin · Delivery · Monitoring · Governance) on a shared core platform. See [building block view](../architecture/05-building-block-view.md).
 4. **Two kinds of agents.** See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).

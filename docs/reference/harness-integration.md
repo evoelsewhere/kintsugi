@@ -2,7 +2,7 @@
 
 How Kintsugi connects to members' harnesses (Claude Code, GitHub Copilot, ChatGPT/Codex, …). Implemented by `services/harness-hub`. Contracts are in [`packages/harness-sdk`](../../packages/harness-sdk/src/index.ts).
 
-Everything Kintsugi gives to a harness is packaged as an **agent plugin** in the Claude Code plugin format and distributed through a **marketplace** generated in the project's workspace repo ([ADR-0015](../decisions/0015-member-assets-as-agent-plugins.md)).
+Everything Kintsugi gives to a harness is packaged as an **agent plugin** in the Claude Code plugin format and distributed through a **marketplace** generated in the project's document repo ([ADR-0015](../decisions/0015-member-assets-as-agent-plugins.md)).
 
 ## 1. Plugins
 
@@ -22,40 +22,34 @@ Everything Kintsugi gives to a harness is packaged as an **agent plugin** in the
 **Authoring rules:**
 - **Names**: component names are namespaced `<plugin>:<name>` (e.g. `kintsugi:kintsugi-task`). Project plugins are named `<project-id>-<topic>`, and reserved prefixes (`claude-`, `anthropic-`, …) are rejected.
 - **Paths**: every path in a manifest starts with `./` and stays inside the plugin root.
-- **Validation**: Kintsugi validates plugins on every rulebook change with the same rules as `claude plugin validate`.
+- **Validation**: Kintsugi validates plugins on every change to the document repo's `plugins/` with the same rules as `claude plugin validate`.
 
 ### 1.2 Built-in plugin `kintsugi`
 
-Source: [`plugins/kintsugi/`](../../plugins/kintsugi/). It is versioned with Kintsugi and vendored into each workspace repo at `.kintsugi/plugins/kintsugi@<version>/`.
+Source: [`plugins/kintsugi/`](../../plugins/kintsugi/). It is versioned with Kintsugi and vendored into each document repo at `.kintsugi/plugins/kintsugi@<version>/`.
 
 | Component | Content |
 |---|---|
 | `userConfig` | `kintsugi_url` and `kintsugi_token` (sensitive, stored in the harness's secure storage) |
 | `.mcp.json` | The Kintsugi MCP server (§2), authenticated with the PAT |
-| `skills/kintsugi-task` | How to work a task pack: cited rules, read-only source repos, trailers, PRs, registration |
+| `skills/kintsugi-task` | How to work a task pack: cited standards, read-only legacy repos, trailers, PRs, registration |
 | `skills/reverse-design` | Stack-agnostic reverse-design method |
 | `hooks/hooks.json` | Calls the `kintsugi` CLI (see below) |
 
 | Hook | Event | Effect |
 |---|---|---|
-| `kintsugi hook session-start` | `SessionStart` | Adds the active task pack and its cited rules to the session context |
+| `kintsugi hook session-start` | `SessionStart` | Adds the active task pack and its cited standards to the session context |
 | `kintsugi hook guard-write` | `PreToolUse` (`Write\|Edit`) | Refuses writes to paths in source (legacy) repos |
 | `kintsugi hook activity` | `PostToolUse` (`Write\|Edit`) | Reports activity (`plugin-hook` source) for AI metrics |
 | `kintsugi hook session-end` | `Stop` | Closes the activity record |
 
 ### 1.3 Project plugins
 
-Project plugins live in the rulebook at `packs/<pack>/plugins/<plugin>/` ([rulebook](rulebook.md)), and the `convert` capability's `uses` references them. They hold stack-specific skills, reviewer agents, commands, and hooks such as running the target formatter.
-
-| `convert` maturity | Published to |
-|---|---|
-| `ready` | All members |
-| `draft` | Pilot units only |
-| `template` / `suspended` | Not published |
+Project plugins live in the document repo at `plugins/<plugin>/` ([document repository](document-repo.md)). They hold stack-specific skills, reviewer agents, commands, and hooks such as running the target formatter. Every valid plugin is published to the project marketplace; there is no maturity gate.
 
 ### 1.4 Marketplaces
 
-After every rulebook change, the worker auto-commits the generated files below to the workspace repo. All plugin sources are **relative paths**: the vendored built-in plugin and the rulebook plugins. This works on any Git server.
+After every change to `plugins/`, the worker auto-commits the generated files below to the document repo. All plugin sources are **relative paths**: the vendored built-in plugin and the project plugins. This works on any Git server.
 
 | File | Read by |
 |---|---|
@@ -63,9 +57,9 @@ After every rulebook change, the worker auto-commits the generated files below t
 | `.github/plugin/marketplace.json` | GitHub Copilot CLI |
 | `.agents/plugins/marketplace.json` + `.codex-plugin/plugin.json` per plugin (converted) | Codex |
 
-**Install.** Members add the workspace repo as a marketplace once, then install the plugins:
-- **Claude Code**: `/plugin marketplace add <workspace-repo-url>` then `/plugin install kintsugi@<project>`.
-- **Copilot CLI**: `copilot plugin marketplace add <workspace-repo-url>`.
+**Install.** Members add the document repo as a marketplace once, then install the plugins:
+- **Claude Code**: `/plugin marketplace add <document-repo-url>` then `/plugin install kintsugi@<project>`.
+- **Copilot CLI**: `copilot plugin marketplace add <document-repo-url>`.
 - **Codex**: through its repo marketplace.
 - **All harnesses**: `kintsugi plugins setup --harness <id>` runs these commands.
 
@@ -84,7 +78,7 @@ After every rulebook change, the worker auto-commits the generated files below t
 
 ### 1.6 Fallback renderers
 
-For harnesses without plugin support, declarative renderer configs (built-in, Admin → Harnesses, or `rulebook/harnesses/<id>.yaml`; see [format](rulebook.md#8-harness-renderers--harnessesidyaml)) flatten the published plugins into native paths:
+For harnesses without plugin support, declarative renderer configs (built-in, Admin → Harnesses, or declared in `kintsugi.yaml`) flatten the published plugins into native paths:
 
 | Plugin component | Typical fallback target |
 |---|---|
@@ -119,7 +113,7 @@ The built-in plugin bundles this server.
 |---|---|
 | `kintsugi login` | Store a PAT for an installation |
 | `kintsugi plugins setup [--harness <id>]` | Add the project marketplace and install the plugins with the harness's own commands; run the fallback renderer for harnesses without plugin support |
-| `kintsugi task start <id>` | Claim the unit (assignee, harness, `in-progress`), create a branch in the target repo, and fetch the task pack from the workspace repo |
+| `kintsugi task start <id>` | Claim the unit (assignee, harness, `in-progress`), create a branch in the target repo, and fetch the task pack from the document repo |
 | `kintsugi task status <id> <status>` | Update work item status |
 | `kintsugi artifact register <path> --type <type>` | Register a committed deliverable |
 | `kintsugi kb ask "<question>"` | Ask the KB |
@@ -127,8 +121,8 @@ The built-in plugin bundles this server.
 
 ## 4. Task pack
 
-The `task-planner` runtime agent produces a task pack for each work item and commits it to `tasks/<work-item-id>.md` in the workspace repo.
-- Template: [`services/runtime/agents/task-planner/task-pack.template.md`](../../services/runtime/agents/task-planner/task-pack.template.md); packs can override it per unit kind.
+The `task-planner` runtime agent produces a task pack for each work item and commits it to `tasks/<work-item-id>.md` in the document repo.
+- Template: `task-pack.template.md`, shipped with the `task-planner` agent.
 - Type: `TaskPack`.
 
 | Field | Description |
@@ -138,9 +132,9 @@ The `task-planner` runtime agent produces a task pack for each work item and com
 | `context` | AS-IS excerpts with sources (from the KB) |
 | `relevantPaths` | Files in the source and target repos to start from |
 | `suggestedSkills` | Plugin skills to use, namespaced `<plugin>:<skill>` |
-| `deliverables` | Type, description, target repo (`workspace` / `target`) and path |
-| `rulebook` | `version@commit` the task pack was generated with |
-| `packs`, `rulesApplied` | Packs resolved for the unit and the rules whose `appliesTo` matches it (with the layer each came from). Only these rules are included |
+| `deliverables` | Type, description, target repo (`document` / `target`) and path |
+| `documentRepoCommit` | Document repo commit the task pack was generated against |
+| `standards` | The standards (paths under `standards/`) that apply to the unit |
 
 ## 5. Harness policy
 

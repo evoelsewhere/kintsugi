@@ -9,8 +9,8 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
   - **Kintsugi Runtime** (`services/runtime`): a generic agent kernel on pi, behind `packages/runtime-sdk` (ADR-0023). Agents are data supplied whole with each job: five built-in read-only agents for the understanding phases plus admin-created ones, packaged as Claude Code agent files + Agent Skills with their commands, workflows, scripts and hooks (`packages/agents/builtin/`, adapted from the upstream code-modernization content, ADR-0027) and managed in the Agent Builder (ADR-0026). There is no agent configuration in project repos. Runtime jobs never write to project repos; implementation belongs to members.
   - **Member harnesses** (Claude Code, Copilot, ChatGPT/Codex), served by `services/harness-hub` through `packages/harness-sdk`. Kintsugi supplies context and ingests results; it does not drive them.
 - pi-specific code lives only in `services/runtime`. Harness-specific rendering and telemetry code lives only in `services/harness-hub`.
-- Kintsugi ships no stack-specific content. Stack/project specifics belong in a project's rulebook (`rulebook/` in its workspace repo, ADR-0011); the neutral starter lives in `templates/workspace/`.
-- Member-harness assets are **agent plugins in the Claude Code plugin format** (ADR-0015): the built-in plugin lives in `plugins/kintsugi/`, and stack-specific plugins live in project rulebooks (`packs/<pack>/plugins/`). Validate with `claude plugin validate --strict`. Do not hand-write harness-specific copies (`.claude/skills`, `.github/agents`, …); marketplaces and fallback renderings are generated.
+- Kintsugi ships no stack-specific content. Stack/project specifics belong in the project's single document repo (everything except code, ADR-0028), as plain documents under `standards/` (conventions, mappings, review rules) and member plugins under `plugins/`; the neutral starter lives in `templates/document-repo/`.
+- Member-harness assets are **agent plugins in the Claude Code plugin format** (ADR-0015): the built-in plugin lives in `plugins/kintsugi/`, and stack-specific plugins live in each project's document repo (`plugins/`). Validate with `claude plugin validate --strict`. Do not hand-write harness-specific copies (`.claude/skills`, `.github/agents`, …); marketplaces and fallback renderings are generated.
 - Pin `@earendil-works/*` packages to exact versions.
 - Architecture decisions go in `docs/decisions/NNNN-title.md` (copy `docs/decisions/template.md`); update the decision register in `docs/decisions/README.md`.
 - Documentation follows Diátaxis + arc42 (see `docs/README.md` → Conventions): English, company-neutral, one purpose per page, facts in one place.
@@ -32,7 +32,7 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 - Follow [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<optional scope>): <subject>`, with a lowercase imperative subject.
   - Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
   - Breaking changes: `!` after the type/scope, or a `BREAKING CHANGE:` footer.
-- Example: `feat(rulebook): add scoped capability maturity`.
+- Example: `feat(templates): add standards samples`.
 - Do not add AI co-author or attribution trailers.
 
 ## Commands

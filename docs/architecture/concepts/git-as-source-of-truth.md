@@ -15,18 +15,18 @@ Decision: [ADR-0007](../../decisions/0007-git-as-source-of-truth.md).
 
 | Repo role | Content | Who writes |
 |---|---|---|
-| **Source repo** (legacy; many per project) | Legacy source code | Nobody through Kintsugi: always read-only |
+| **Legacy repo** (many per application) | Legacy source code | Nobody through Kintsugi: always read-only |
 | **Target repo** (scaffolded target base) | New source code | Members, via branches/PRs |
-| **Workspace repo** (one per project) | Project manifest, **rulebook**, inventory, assessment, ADRs, AS-IS/TO-BE docs, task packs, deliverables, golden cases | Members + Kintsugi (worker) |
+| **Document repo** (one per project) | Everything except code: project manifest, assessment, ADRs, AS-IS/TO-BE docs, **standards**, plugins, units, task packs, reviews, deliverables, golden cases | Members + Kintsugi (worker) |
 
-Layout and conventions: [workspace repository reference](../../reference/workspace-repo.md).
+Layout and conventions: [document repository reference](../../reference/document-repo.md).
 
 ## How runtime results reach Git
 
 The runner never writes to repositories:
 1. The runner writes only to `/out` inside its container.
 2. When the job ends, the **worker** (outside the sandbox) validates `/out`: allowed paths, size, secret scan.
-3. The worker commits to the workspace repo on `kintsugi/<agent>/<job-id>` and opens a PR. Paths configured as `auto-commit` are committed directly ❓ (D29).
+3. The worker commits to the document repo on `kintsugi/<agent>/<job-id>` and opens a PR. Paths configured as `auto-commit` are committed directly ❓ (D29).
 4. On code repos the runtime only reads and comments on PRs.
 
 ## Member deliverables
@@ -39,12 +39,12 @@ Deliverables are **never uploaded** to Kintsugi:
 ## What Postgres keeps
 
 - **Operational state**: users, memberships, job queue and executions, events, usage/cost, audit.
-- **Indexes rebuildable from Git**: work items and their status / gate results (from `units/**`, [ADR-0012](../../decisions/0012-work-items-as-files-in-git.md)), rulebook capabilities, KB chunks/embeddings, file → artifact mapping.
+- **Indexes rebuildable from Git**: work items and their status / gate results (from `units/**`, [ADR-0012](../../decisions/0012-work-items-as-files-in-git.md)), KB chunks/embeddings, file → artifact mapping.
 - **Not** the primary copy of any document. If the DB is lost, the KB can be rebuilt from Git; only operational history is lost.
 
 ## Work item state
 
-Each work item is a file, `units/<app>/<module>/<unit>.md`, whose frontmatter holds its state ([format](../../reference/workspace-repo.md#unit-files)).
+Each work item is a file, `units/<app>/<module>/<unit>.md`, whose frontmatter holds its state ([format](../../reference/document-repo.md#unit-files)).
 
 - **One write path**:
   1. Portal, CLI, MCP and runtime agents call the Kintsugi API.
@@ -68,4 +68,4 @@ Each work item is a file, `units/<app>/<module>/<unit>.md`, whose frontmatter ho
 
 - Traceability for free: every KB entry, artifact and gate references `repo@commit:path`.
 - Large binaries need Git LFS or a side volume (D31).
-- The workspace repo layout is a contract, versioned by `kintsugi.yaml` `schemaVersion`.
+- The document repo layout is a contract, versioned by `kintsugi.yaml` `schemaVersion`.

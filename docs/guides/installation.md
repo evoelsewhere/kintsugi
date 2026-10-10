@@ -42,11 +42,10 @@ Point your reverse proxy at `KINTSUGI_HTTP_PORT`. Sign in with the bootstrap adm
 Do these in order:
 1. **LLM providers** for the runtime: Admin → LLM Providers. See [configure LLM providers](configure-llm-providers.md).
 2. **Extension allowlists**, only if projects need them:
-   - runner images (`KINTSUGI_JOB_IMAGE_ALLOWLIST`);
    - extra harness renderers and transformer plugins (Admin → Harnesses).
 3. **Git servers and credentials**: Admin → Connectors. Register as many servers as the project uses (GitHub, Azure DevOps, GitLab, Bitbucket, Gitea, or plain git).
 4. **Users and roles**: Admin → Users.
-5. **Projects**: create or join each project and build its rulebook. See [build a project](build-project.md).
+5. **Projects**: create or join each project, register its repos and write its standards. See [build a project](build-project.md).
 
 ## Air-gapped installation
 

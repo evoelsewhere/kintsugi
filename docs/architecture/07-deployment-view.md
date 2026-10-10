@@ -34,7 +34,6 @@ Kintsugi ships as a self-hosted Docker Compose package ([ADR-0006](../decisions/
 | `kintsugi-app` | API, portal (static SPA), MCP server, CLI API, job gateway | The only published port, behind the project's reverse proxy / TLS |
 | `kintsugi-worker` | pg-boss consumer, state machine, Git sync & writer, ingestion, job launcher | Outbound to Git servers |
 | `kintsugi-runner` | One container per runtime job; Node + pi SDK | Internal `jobs` network only |
-| Rulebook runner containers | One per runner execution; image declared by the runner and on `KINTSUGI_JOB_IMAGE_ALLOWLIST` | Network `none` by default |
 | `postgres` | `pgvector/pgvector:pg16`; the only stateful service | Internal |
 | `docker-proxy` | Restricted Docker API for the worker ❓ D32 | Internal |
 | `egress-proxy` | Allowlist of LLM provider hosts; the runner's only route to the internet | Internal + outbound |
@@ -47,7 +46,7 @@ Kintsugi ships as a self-hosted Docker Compose package ([ADR-0006](../decisions/
 | `jobs` network (`internal: true`) | runner containers, app (job gateway), egress-proxy |
 | `egress` network | egress-proxy → internet |
 | `pg-data` volume | Postgres data (back this up) |
-| `kintsugi-data` volume | Backed by the host directory `KINTSUGI_DATA_DIR`: Git mirrors, the workspace clones, per-job `/src` (read-only worktree) and `/out` mounted via volume subpaths ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
+| `kintsugi-data` volume | Backed by the host directory `KINTSUGI_DATA_DIR`: Git mirrors, the document repo clones, per-job `/src` (read-only worktree) and `/out` mounted via volume subpaths ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
 
 ## 7.3 Runner container hardening
 
