@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
 import type { CreateVerificationRun, VerificationRun } from "../domain/verification-run.js";
-import { VerificationRunRepository } from "../domain/verification-run.repository.js";
 
 @Injectable()
 export class InMemoryVerificationRunRepository extends InMemoryRepository<VerificationRun, CreateVerificationRun> {

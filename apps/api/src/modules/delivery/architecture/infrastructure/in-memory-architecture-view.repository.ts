@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
 import type { CreateArchitectureView, ArchitectureView } from "../domain/architecture-view.js";
-import { ArchitectureViewRepository } from "../domain/architecture-view.repository.js";
 
 @Injectable()
 export class InMemoryArchitectureViewRepository extends InMemoryRepository<ArchitectureView, CreateArchitectureView> {

@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
 import type { CreateDashboardStat, DashboardStat } from "../domain/dashboard-stat.js";
-import { DashboardStatRepository } from "../domain/dashboard-stat.repository.js";
 
 @Injectable()
 export class InMemoryDashboardStatRepository extends InMemoryRepository<DashboardStat, CreateDashboardStat> {

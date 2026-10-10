@@ -77,7 +77,7 @@ export async function ensureSchema(): Promise<void> {
           await tx.query("insert into core.schema_migrations (version) values ($1)", [file]);
         }, client);
       } catch (error) {
-        throw new Error(`migration ${file} failed: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`migration ${file} failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
       }
     }
   } finally {
