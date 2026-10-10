@@ -47,6 +47,15 @@ export function listSupportedProviders(): SupportedProviders {
   };
 }
 
+/** A builtin provider's single wire protocol and base URL; undefined when it has several or none. */
+export function builtinEndpoint(providerId: string): { api: string; baseUrl: string } | undefined {
+  const models = getBuiltinModels(providerId as Parameters<typeof getBuiltinModels>[0]) as unknown as Array<{ api?: string; baseUrl?: string }>;
+  const endpoints = new Set(models.map((model) => `${model.api ?? ""} ${model.baseUrl ?? ""}`));
+  if (endpoints.size !== 1) return undefined;
+  const [api, baseUrl] = [...endpoints][0]!.split(" ");
+  return api && baseUrl ? { api, baseUrl } : undefined;
+}
+
 function modelsOf(providerId: string): SupportedModel[] {
   const models = getBuiltinModels(providerId as Parameters<typeof getBuiltinModels>[0]) as unknown as Array<{
     id: string;
