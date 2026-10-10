@@ -2,7 +2,7 @@
 
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
-import { getPool } from "../../../../common/db/pool.js";
+import { getPool, withTransaction } from "../../../../common/db/pool.js";
 import type { CreateSubRole, PermissionRecord, RoleRecord } from "../domain/role.js";
 import { RoleRepository } from "../domain/role.repository.js";
 
@@ -45,20 +45,12 @@ export class PgRoleRepository extends RoleRepository {
   }
 
   async setPermissions(roleId: string, codes: string[]): Promise<RoleRecord | undefined> {
-    const client = await this.#pool.connect();
-    try {
-      await client.query("begin");
+    await withTransaction(async (client) => {
       await client.query("delete from core.role_permission where role_id = $1", [roleId]);
       for (const code of codes) {
         await client.query("insert into core.role_permission (role_id, permission_code) values ($1, $2) on conflict do nothing", [roleId, code]);
       }
-      await client.query("commit");
-    } catch (error) {
-      await client.query("rollback");
-      throw error;
-    } finally {
-      client.release();
-    }
+    });
     return this.get(roleId);
   }
 
