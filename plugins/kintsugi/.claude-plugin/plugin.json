@@ -2,7 +2,7 @@
   "name": "kintsugi",
   "displayName": "Kintsugi",
   "version": "0.1.0",
-  "description": "Work on Kintsugi migration tasks: task packs, knowledge-base access, deliverable registration, write guardrails for read-only source repos, and activity reporting.",
+  "description": "Work on Kintsugi migration tasks: task packs, knowledge-base access, deliverable registration, write guardrails for read-only legacy repos, and activity reporting.",
   "author": {
     "name": "Kintsugi"
   },

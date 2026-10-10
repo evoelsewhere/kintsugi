@@ -6,7 +6,7 @@ metadata:
   audience: runtime
   upstream: commands/modernize-assess.md
   agents: [legacy-analyst, security-auditor]
-  reads: [kintsugi.yaml, assessment/<app>/INTENT.md, assessment/<app>/telemetry/]
+  reads: [standards/, kintsugi.yaml, assessment/<app>/INTENT.md, assessment/<app>/telemetry/]
   writes: [assessment/<app>/inventory.json, assessment/<app>/ASSESSMENT.md, assessment/<app>/ARCHITECTURE.mmd, assessment/portfolio.md, assessment/portfolio.json]
 ---
 
@@ -16,17 +16,17 @@ structure job, a **legacy-analyst** debt job, a **security-auditor** scan job), 
 synthesis job that writes `assessment/$app/ASSESSMENT.md` and `assessment/$app/ARCHITECTURE.mmd`. Portfolio
 mode: per application, the `scripts/inventory.py` script step and one **legacy-analyst** survey job (workflow
 `workflows/portfolio-assess.js`), then a synthesis job that writes `assessment/portfolio.md` and
-`assessment/portfolio.json`. Every job reads the application's source repository read-only at a fixed commit
-and writes only through `outputs_write`; the worker commits the outputs to the workspace repository as
+`assessment/portfolio.json`. Every job reads the application's legacy repository read-only at a fixed commit
+and writes only through `outputs_write`; the worker commits the outputs to the document repository as
 `kintsugi-bot`, and the portal shows them.
 
 **Mode.** If `$ARGUMENTS` starts with `--portfolio`, run **Portfolio mode** over every application of the
 project. Otherwise run **Single-application mode** on `$app`, the first token: the application id from
 `kintsugi.yaml`.
 
-The code is the **source repository** of `$app`, registered on the application in `kintsugi.yaml`
-(`role: source`); each job reads it at the commit the orchestrator pinned for this run. Say which repository and
-commit were read in one line at the top of every artifact. If the application has no source repository, the
+The code is the **legacy repository** of `$app`, registered on the application in `kintsugi.yaml`
+(`role: legacy`); each job reads it at the commit the orchestrator pinned for this run. Say which repository and
+commit were read in one line at the top of every artifact. If the application has no legacy repository, the
 stage cannot start: the orchestrator says so, and the fix is registering one on the application in the portal.
 
 ---
@@ -38,10 +38,10 @@ can use to sequence a multi-year program.
 
 The orchestrator lists the applications from `kintsugi.yaml` (the workflow has no filesystem access) and the
 portal shows the count before the stage starts (30 applications means 30 survey jobs). Per application it runs
-the `scripts/inventory.py` script step on that application's source repository, then the orchestrator runs
+the `scripts/inventory.py` script step on that application's legacy repository, then the orchestrator runs
 workflow `workflows/portfolio-assess.js`, one **legacy-analyst** survey job per application, all independent,
 with `args: { apps: ["<app1>", "<app2>", ...], inventories: ["<path of each application's inventory.json>", ...] }` and each job reading its own
-application's source repository. Each job is given its application's `inventory.json` and fills in the parts
+application's legacy repository. Each job is given its application's `inventory.json` and fills in the parts
 that need reading the code (dependency freshness, documentation coverage, risk notes); runtime jobs have no
 shell, so the measured figures (lines, file count, complexity, the tool that produced them) come from the
 script step, never from the job. Each job returns a metrics row and the workflow computes the COCOMO index in
@@ -60,7 +60,7 @@ person-months, a date or a duration.
 A **legacy-analyst** synthesis job writes, from the workflow's returned rows:
 
 - `assessment/portfolio.json`: the rows as returned (one object per application, plus `unmeasured` and
-  `complexityIndexFormula`), the source repository and commit each row was measured at, and the date. The
+  `complexityIndexFormula`), the legacy repository and commit each row was measured at, and the date. The
   portal's portfolio view reads this file.
 - `assessment/portfolio.md`: one row per application, columns **Application · Lang · KSLOC · Files ·
   Complexity per KSLOC · Most complex file · Dep Freshness · Doc Coverage % · Complexity index · Risk**, the
@@ -73,7 +73,7 @@ The portal renders the heat-map from `portfolio.json` (index and Risk cells grad
 
 # Single-application mode
 
-Assess the source repository of `$app` so a VP of Engineering could take a fact-grounded brief into a
+Assess the legacy repository of `$app` so a VP of Engineering could take a fact-grounded brief into a
 budget meeting.
 
 ## Step 1 — Inventory
@@ -96,17 +96,17 @@ and rough coverage signal. This is part of the structure job's task (Step 3, job
 
 ## Step 3 — Deep analysis (three jobs, in parallel)
 
-1. **legacy-analyst** — "Build a structural map of the source repository of $app: the 5–12 major
+1. **legacy-analyst** — "Build a structural map of the legacy repository of $app: the 5–12 major
    functional domains (group optional subsystems under one umbrella), which
    files belong to each, and how they depend on each other (control flow and
    shared data). Return a markdown table and a Mermaid `graph TD` of the
    domains, clustered with `subgraph`, at most ~40 edges. Cite repo-relative
    paths. Flag dangling references." Also: the technology fingerprint of Step 2.
-2. **legacy-analyst** — "Identify technical debt in the source repository of $app: dead code,
+2. **legacy-analyst** — "Identify technical debt in the legacy repository of $app: dead code,
    deprecated APIs, duplication, god objects, missing error handling, hardcoded
    config. Return the top 10 by remediation value, each with file:line. Mask any
    credential value per your secret-handling rules."
-3. **security-auditor** — "Scan the source repository of $app for vulnerabilities: injection, auth
+3. **security-auditor** — "Scan the legacy repository of $app for vulnerabilities: injection, auth
    weaknesses, hardcoded secrets, vulnerable dependencies, missing input
    validation. Return a CWE-tagged table with file:line and severity. Mask every
    credential (file:line plus a 2–4 character preview, never the value)."
@@ -116,7 +116,7 @@ The orchestrator waits for all three and hands their outputs to the synthesis jo
 ## Step 4 — Production runtime overlay (optional)
 
 Runtime jobs have no network and no MCP servers, so telemetry reaches this stage only as exports a person
-supplied (APM exports, batch logs) in the workspace repository under `assessment/$app/telemetry/`, attached
+supplied (APM exports, batch logs) in the document repository under `assessment/$app/telemetry/`, attached
 through the portal. If they exist, the synthesis job gathers p50/p95/p99 for the key jobs or routes, tags each
 domain with its wall-clock cost and p99/p50 variance, and calls out the highest-variance domain as
 the operational risk. Include a small Runtime Profile table. If none exists, say
@@ -138,7 +138,7 @@ credential values never appear in it. If credentials were found:
 1. Kintsugi never commits raw credentials. The credential inventory is a **restricted portal record**: the job
    writes it to `restricted/SECRETS.local.md` in its output directory, and the worker stores everything under
    `restricted/` as the restricted record (visible only to people with the permission for it) and never commits
-   it to the workspace repository.
+   it to the document repository.
 2. The record holds, per credential, a masked preview, `file:line`, type,
    what it grants, production or test guess, rotation advice. It never holds a raw value: the source file at
    the cited line is the canonical location for anyone who legitimately needs it.
@@ -148,7 +148,7 @@ credential values never appear in it. If credentials were found:
 
 Write `assessment/$app/ASSESSMENT.md` with: **Executive Summary** (3–4 sentences:
 what it is, how big, how risky, the headline recommendation) · **System
-Inventory** (from `inventory.json`, saying which method measured it, and the source repository and commit
+Inventory** (from `inventory.json`, saying which method measured it, and the legacy repository and commit
 read) · **Architecture at a Glance** (domain table, refer to the diagram) ·
 **Production Runtime Profile** (or "no telemetry available") · **Technical Debt**
 (top 10) · **Security Findings** (CWE table) · **Documentation Gaps** (top 5) ·

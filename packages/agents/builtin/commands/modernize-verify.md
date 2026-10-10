@@ -16,15 +16,15 @@ verdict: **PROVEN**, **PARTLY PROVEN** or **NOT PROVEN**. Run it after `transfor
 fresh session if you can: what the build left behind is a claim, and this command re-runs it. **A script computes
 the verdict, not you** (fixed rules, written into the output), and it counts tests only from files it parses
 itself: **keep the result file or the raw log of every test run and every canary run, and never type a count into
-`test-runs.json`.** You write nothing in the source repository, never hand-edit the built code, the tests, an output or a
+`test-runs.json`.** You write nothing in the legacy repository, never hand-edit the built code, the tests, an output or a
 result to improve a verdict, and never tick or approve anything a person owns. Run every command from the root of your
-**workspace repository** checkout, with your clone of the **source repository** of `$app` (read-only: Kintsugi's member hooks
+**document repository** checkout, with your clone of the **legacy repository** of `$app` (read-only: Kintsugi's member hooks
 refuse writes to it) and your checkout of the **target repository** of `$app` (the branch being verified) beside it.
 
 This command runs in your own harness through Kintsugi's member plugin. Say in one line which source commit you compare
 against (the one the assessment recorded for `$app`, named in `assessment/$app/PREFLIGHT.md` and in the portal; check out
 exactly that commit) and which target branch and commit you verify. Everything this command writes goes to
-`assessment/$app/` on your own branch of the workspace repository and reaches the project through a pull request. Run any
+`assessment/$app/` on your own branch of the document repository and reaches the project through a pull request. Run any
 subagent in the foreground and wait for its result: never end your turn while one is still running. Stop any server or other
 process you started before you finish, and say you did. Before running any suite or the legacy code, read its configuration
 for the databases and services it connects to: if any is not a local or throwaway instance, stop and ask which environment to use.
@@ -49,7 +49,7 @@ neither is tested. The pack repeats this: read it to know the gaps, and do not f
 
 ## 3 — Run the tests again from clean, and run your own canary
 
-Equivalence data follows the workspace repository's layout: development cases (inputs and the legacy outputs)
+Equivalence data follows the document repository's layout: development cases (inputs and the legacy outputs)
 live in `golden/<module>/cases/<id>/`, listed in `golden/<module>/cases.json`; each comparison run writes its small
 reports to `runs/<module>/<run-id>/` (`<run-id>` is `<YYYYMMDD-HHMM>-<short target commit>`). The new side's raw
 outputs are never committed: keep them in a scratch folder outside the three checkouts. Start one run folder per module now and write every report of this verification into it.
@@ -151,7 +151,7 @@ a rule is wrong, say so and leave the file as it is.
 
 ## Finish
 
-Open (or update) the workspace pull request with everything this command wrote under `assessment/$app/`, `golden/`
+Open (or update) the document repo pull request with everything this command wrote under `assessment/$app/`, `golden/`
 and `runs/` (never the scratch folder); the portal shows the
 verification once it is merged. Then name the next step. **PARTLY PROVEN or NOT PROVEN:** turn each reason, in order, into a
 command. A failure caused by this machine: run the suite where the tool works (a terminal outside the sandbox, or CI), then run this

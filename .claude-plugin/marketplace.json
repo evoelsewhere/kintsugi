@@ -1,6 +1,6 @@
 {
   "name": "kintsugi",
-  "description": "Built-in Kintsugi agent plugins (for local testing; projects install from the marketplace generated in their workspace repo)",
+  "description": "Built-in Kintsugi agent plugins (for local testing; projects install from the marketplace generated in their document repo)",
   "owner": {
     "name": "Kintsugi"
   },

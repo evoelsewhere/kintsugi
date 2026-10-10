@@ -18,8 +18,8 @@ estate), one **legacy-analyst** citation-referee job per candidate rule, **legac
 two **business-rules-extractor** judge jobs per surviving P0 rule, and one **legacy-analyst** DTO-catalog job;
 the orchestrator saves the returned object as `assessment/$app/rules_result.json`; script step
 `scripts/render_rules.py` writes `assessment/$app/BUSINESS_RULES.md` and `assessment/$app/DATA_OBJECTS.md`.
-Every job reads the source repository of `$app` read-only at the commit the orchestrator pinned and writes
-only through `outputs_write`; the worker commits the outputs to the workspace repository as `kintsugi-bot`, and
+Every job reads the legacy repository of `$app` read-only at the commit the orchestrator pinned and writes
+only through `outputs_write`; the worker commits the outputs to the document repository as `kintsugi-bot`, and
 the portal shows them.
 
 Extract the **business rules** embedded in the application into a structured, testable
@@ -28,9 +28,9 @@ engineers about to retire. If a module pattern was given (`$module_pattern`), fo
 there; otherwise cover the whole application. Prioritize calculation, validation, eligibility
 and state-transition logic over plumbing.
 
-The code is the **source repository** of `$app`, registered on the application in `kintsugi.yaml`
-(`role: source`); every job and script step reads it at the same pinned commit, and `BUSINESS_RULES.md` says
-which repository and commit were read. If the application has no source repository, the stage cannot start:
+The code is the **legacy repository** of `$app`, registered on the application in `kintsugi.yaml`
+(`role: legacy`); every job and script step reads it at the same pinned commit, and `BUSINESS_RULES.md` says
+which repository and commit were read. If the application has no legacy repository, the stage cannot start:
 the orchestrator says so, and the fix is registering one on the application in the portal.
 
 ## Method A — Workflow
@@ -42,7 +42,7 @@ rule is confirmed by a two-judge panel before it can anchor the behavior contrac
 
 ### 1. Build the shard list
 
-Script step `scripts/make_shards.py $app "$module_pattern" --source <source checkout> --assessment assessment/$app --out assessment/$app`, over the source repository.
+Script step `scripts/make_shards.py $app "$module_pattern" --source <source checkout> --assessment assessment/$app --out assessment/$app`, over the legacy repository.
 
 It reads `assessment/$app/topology.json` when `map` has run (one shard per module, small
 ones merged; the better shards) and otherwise the directory tree, and writes
@@ -52,7 +52,7 @@ estate**, omit `modules` (lens mode: three whole-estate extractors in rounds unt
 rounds find nothing new; `modulePattern` narrows them). Source that is not a module (SQL,
 shared includes, config-held tables) is read only when a shard references it; if the
 assessment says logic lives there, a person adds shards for those files to `extract-rules.modules.json`
-(through a pull request to the workspace repository) and restarts the stage.
+(through a pull request to the document repository) and restarts the stage.
 
 ### 2. Estimate, confirm if large, launch
 
@@ -124,7 +124,7 @@ which rules use them, location) in this format:
 ### RULE-NNN: <plain-English name>
 **Category:** Calculation | Validation | Lifecycle | Policy
 **Priority:** P0 | P1 | P2
-**Source:** `path/to/file.ext:line-line`   (ONE range, path relative to the source repository root)
+**Source:** `path/to/file.ext:line-line`   (ONE range, path relative to the legacy repository root)
 **Plain English:** One sentence a business analyst would recognize.
 **Specification:**
   Given <precondition>

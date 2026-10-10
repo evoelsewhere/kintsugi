@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Batched fan-out of /kintsugi:modernize-uplift Step 5b: one migrator agent per project/module, in dependency-aware escalating batches behind a per-batch circuit breaker',
   whenToUse:
-    'Invoked by /kintsugi:modernize-uplift (Kintsugi member plugin) ONLY after the pilot unit is migrated in-session, assessment/<app>/PLAYBOOK.md is written in the workspace repository checkout, and the pilot approval gate is approved in the portal. Requires args {app, source, target, sourceDir, targetDir, units: [{name, path, deps?}], batchSize?, workspaceDir?} — sourceDir is the read-only local clone of the source repository (never written), targetDir the working copy of the target repository on the branch of the member (where the code is edited), workspaceDir the workspace repository checkout holding assessment/<app>/ (default: the session working directory); unit paths are relative to targetDir. Each unit\'s optional `deps` lists the sibling unit NAMES it depends on; a unit is only batched once every listed dep has BUILT, so a unit and its dependency never run in the same batch. Agents write only inside their own unit directory under targetDir — disjoint directories, so no worktree isolation is needed; solution/workspace-level shared files are owned by the calling session. Returns per-unit results plus three RE-PASSABLE unit lists ({name, path, deps}) — remainingUnits (never attempted), failedUnits (attempted, build failed), blockedUnits (skipped because a dependency failed) — any of which can be passed straight back as the next invocation\'s `units`. The calling session applies the returned sharedFileNeeds and folds playbookGaps into the playbook before re-invoking.',
+    'Invoked by /kintsugi:modernize-uplift (Kintsugi member plugin) ONLY after the pilot unit is migrated in-session, assessment/<app>/PLAYBOOK.md is written in the document repository checkout, and the pilot approval gate is approved in the portal. Requires args {app, source, target, sourceDir, targetDir, units: [{name, path, deps?}], batchSize?, workspaceDir?} — sourceDir is the read-only local clone of the source repository (never written), targetDir the working copy of the target repository on the branch of the member (where the code is edited), workspaceDir the document repository checkout holding assessment/<app>/ (default: the session working directory); unit paths are relative to targetDir. Each unit\'s optional `deps` lists the sibling unit NAMES it depends on; a unit is only batched once every listed dep has BUILT, so a unit and its dependency never run in the same batch. Agents write only inside their own unit directory under targetDir — disjoint directories, so no worktree isolation is needed; solution/workspace-level shared files are owned by the calling session. Returns per-unit results plus three RE-PASSABLE unit lists ({name, path, deps}) — remainingUnits (never attempted), failedUnits (attempted, build failed), blockedUnits (skipped because a dependency failed) — any of which can be passed straight back as the next invocation\'s `units`. The calling session applies the returned sharedFileNeeds and folds playbookGaps into the playbook before re-invoking.',
   phases: [
     {
       title: 'Migrate',
@@ -25,7 +25,7 @@ const target = ARGS && ARGS.target
 const units = ARGS && ARGS.units
 if (!app || !source || !target || !(ARGS && ARGS.sourceDir) || !(ARGS && ARGS.targetDir) || !Array.isArray(units) || units.length === 0) {
   throw new Error(
-    'kintsugi:modernize-uplift-migrate requires args: {app, source, target, sourceDir, targetDir, units: [{name, path, deps?}], batchSize?, workspaceDir?} — e.g. {app:"billing", source:".NET Framework 4.8", target:".NET 8", sourceDir:"../billing-source", targetDir:"../billing-target", units:[{name:"Billing.Core", path:"src/Billing.Core"}, {name:"Billing.Api", path:"src/Billing.Api", deps:["Billing.Core"]}]}. Run it only AFTER the pilot unit is migrated in-session and assessment/<app>/PLAYBOOK.md exists in the workspace repository checkout.',
+    'kintsugi:modernize-uplift-migrate requires args: {app, source, target, sourceDir, targetDir, units: [{name, path, deps?}], batchSize?, workspaceDir?} — e.g. {app:"billing", source:".NET Framework 4.8", target:".NET 8", sourceDir:"../billing-source", targetDir:"../billing-target", units:[{name:"Billing.Core", path:"src/Billing.Core"}, {name:"Billing.Api", path:"src/Billing.Api", deps:["Billing.Core"]}]}. Run it only AFTER the pilot unit is migrated in-session and assessment/<app>/PLAYBOOK.md exists in the document repository checkout.',
   )
 }
 
@@ -57,9 +57,9 @@ const workspaceDir = ARGS.workspaceDir == null || ARGS.workspaceDir === '' ? '' 
     throw new Error(`targetDir ${JSON.stringify(targetDir)} overlaps sourceDir ${JSON.stringify(sourceDir)} — the source clone is read-only; edit a separate working copy of the target repository`)
   }
 }
-// Inputs from the analysis live in the workspace repository checkout.
+// Inputs from the analysis live in the document repository checkout.
 const assessmentDir = `${workspaceDir ? `${workspaceDir}/` : ''}assessment/${app}`
-const workspaceNote = workspaceDir ? `the workspace repository checkout at ${workspaceDir}` : 'the workspace repository checkout (the session working directory)'
+const workspaceNote = workspaceDir ? `the document repository checkout at ${workspaceDir}` : 'the document repository checkout (the session working directory)'
 
 // Unit names label agents; unit paths land in agent prompts as the write-scope
 // boundary. Reject anything that could traverse out of the working copy or

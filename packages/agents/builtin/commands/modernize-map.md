@@ -17,17 +17,17 @@ a script step runs it in the standard script environment and writes `topology.js
 architect observations; unless `--no-describe`, a script step `scripts/node_packets.py $app --source <source checkout> --assessment assessment/$app --out assessment/$app` builds one packet per
 chosen node, one **legacy-analyst** description job per node writes its paragraph, and a script step
 `scripts/merge_topology.py` checks and merges the paragraphs (it also merges chunks and the flows); last, a
-**legacy-analyst** diagrams job writes the three Mermaid files. Every job reads the source repository of `$app`
+**legacy-analyst** diagrams job writes the three Mermaid files. Every job reads the legacy repository of `$app`
 read-only at the commit the orchestrator pinned and writes only through `outputs_write`; the worker commits the
-outputs to the workspace repository as `kintsugi-bot`, and the portal's map view renders `topology.json`.
+outputs to the document repository as `kintsugi-bot`, and the portal's map view renders `topology.json`.
 
 Build a **dependency and topology map** of the application for the portal's
 interactive map view. The assessment found the domains; this goes one level down:
 how do the *pieces* connect? It is the map an engineer needs before touching anything.
 
-The code is the **source repository** of `$app`, registered on the application in `kintsugi.yaml`
-(`role: source`); every job and script step reads it at the same pinned commit. Say which repository and commit
-were read in the extraction summary. If the application has no source repository, the stage cannot start: the
+The code is the **legacy repository** of `$app`, registered on the application in `kintsugi.yaml`
+(`role: legacy`); every job and script step reads it at the same pinned commit. Say which repository and commit
+were read in the extraction summary. If the application has no legacy repository, the stage cannot start: the
 orchestrator says so, and the fix is registering one on the application in the portal.
 
 ## Start from what already exists
@@ -36,8 +36,8 @@ Do not reinvent a dependency graph the customer or the ecosystem already has:
 
 - **`--graph <file>`** — if `$ARGUMENTS` names an existing dependency export (a
   compiler index, an MSBuild or Roslyn graph, an NDepend or `jdeps` export, a call
-  graph in JSON, CSV, DOT or GraphML) committed to the workspace repository under `assessment/$app/graph/` (a
-  person attaches it in the portal) or present in the source repository, the topology job reads it and its
+  graph in JSON, CSV, DOT or GraphML) committed to the document repository under `assessment/$app/graph/` (a
+  person attaches it in the portal) or present in the legacy repository, the topology job reads it and its
   script maps the nodes and edges into `topology.json` instead of parsing the code. The job spot-checks about
   ten edges against the source, says what the file did not cover, and the script still adds what graphs
   omit: entry points from deployment config, data stores, business flows.
@@ -52,15 +52,15 @@ Do not reinvent a dependency graph the customer or the ecosystem already has:
 **Big estates (more than about 2,000 source files or 500k lines, from `inventory.json` when `assess` ran) are
 mapped in chunks**, not in one pass: one domain or top-level directory at a time, each chunk a topology job
 plus a script step writing `assessment/$app/map/<chunk>.json` (its modules and the edges it originates). The
-orchestrator skips chunks whose file already exists in the workspace repository, so an interrupted map
+orchestrator skips chunks whose file already exists in the document repository, so an interrupted map
 resumes. When all exist, script step `scripts/merge_topology.py` merges them into `topology.json`; an edge into
 another chunk resolves by id, and an unresolved one becomes an observation. The summary says which chunks ran
 and which are missing.
 
 ## What to extract
 
-The **legacy-analyst** topology job reads the source repository and writes, via `outputs_write`, a
-standard-library-only Python script that parses the source repository and extracts the datasets below. Three
+The **legacy-analyst** topology job reads the legacy repository and writes, via `outputs_write`, a
+standard-library-only Python script that parses the legacy repository and extracts the datasets below. Three
 principles matter across stacks:
 
 1. **Edges live in two places**: direct calls in source, *and* dispatcher calls
@@ -97,7 +97,7 @@ environment** (ADR-0027), the same one every script step uses: Python 3 and Node
 read-only source, output directory and a scratch directory only, no network, no credentials, CPU, memory and time
 limits. The script is committed with the results, so anyone can read what produced the map.
 
-The orchestrator runs it as a **script step** and saves the summary, headed by the source repository and commit
+The orchestrator runs it as a **script step** and saves the summary, headed by the legacy repository and commit
 read, as `assessment/$app/topology.summary.txt`. If the script fails, the orchestrator gives the error to the
 topology job once to fix the script, then reruns it; a second failure stops the stage and the portal shows the
 error.
@@ -152,7 +152,7 @@ error.
 
 ## Persona flows
 
-A **legacy-analyst** flows job, given `topology.json` and the source repository, traces **2–4 end-to-end
+A **legacy-analyst** flows job, given `topology.json` and the legacy repository, traces **2–4 end-to-end
 business flows**, each anchored to a persona who *experiences*
 the system, not one who maintains it (for benefits: the claimant, the caseworker,
 the auditor). Each has a `name` and one-sentence `description` a steering-committee

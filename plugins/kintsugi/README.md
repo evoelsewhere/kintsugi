@@ -1,6 +1,6 @@
 # `kintsugi` plugin (built-in)
 
-Agent plugin in the Claude Code plugin format (ADR-0015). It is versioned with Kintsugi and vendored into each project's workspace repo, so members install it from the project's marketplace.
+Agent plugin in the Claude Code plugin format (ADR-0015). It is versioned with Kintsugi and vendored into each project's document repo, so members install it from the project's marketplace.
 
 | Component | Content |
 |---|---|
@@ -12,7 +12,7 @@ Agent plugin in the Claude Code plugin format (ADR-0015). It is versioned with K
 
 The hooks do four things:
 - `SessionStart`: load the current task context;
-- `PreToolUse` on writes: refuse writes to source repos;
+- `PreToolUse` on writes: refuse writes to legacy repos;
 - `PostToolUse` on writes: report activity;
 - `Stop`: close the activity record.
 

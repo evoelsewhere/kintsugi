@@ -6,14 +6,14 @@ metadata:
   audience: portal
   upstream: commands/modernize-review.md
   agents: []
-  reads: [assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/MODERNIZATION_BRIEF.md]
+  reads: [standards/, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/MODERNIZATION_BRIEF.md]
   writes: [assessment/<app>/RULE_REVIEWS.json, assessment/<app>/RULE_REVIEWS.md]
   gates: [a person decides each flagged rule as right or wrong or not sure]
 ---
 
 **The portal implements this command** as its rule review screen. The content below is the specification of what
 the screen asks and records. The person's answers are written by the worker on their behalf: it commits
-`RULE_REVIEWS.json` and `RULE_REVIEWS.md` to the workspace repository as `kintsugi-bot`, with a
+`RULE_REVIEWS.json` and `RULE_REVIEWS.md` to the document repository as `kintsugi-bot`, with a
 `Kintsugi-Actor: <user>` trailer naming the reviewer.
 
 Ask a person to decide the business rules in `assessment/$app/BUSINESS_RULES.md` that depend on judgement, and record each answer so the plan and the build honor it. Agents mined the rules and a second agent checked every citation, but only someone who knows the business can say whether a rule is *right*: whether a truncation is intended or a defect, whether a threshold is still the policy. This screen asks in the portal and never edits `BUSINESS_RULES.md`.
@@ -29,7 +29,7 @@ Say how many rules will be asked (about a minute per ten). If none is left, say 
 
 ## 2 — Ask
 
-Ask in the portal as structured choices, never as free chat text, one card per rule (the screen may group a few per page). One question per rule: its id as the header; the title, the plain-English statement, its Given/When/Then in one line, the cited lines (`file:line`, linked to the source repository at the commit the rules were extracted from) and the suspected defect or SME question if it has one as the question; and three options: **Right** (the rule is correct and wanted), **Wrong, or not wanted** (it misdescribes the code, or the code does this today but should not), **Not sure** (needs a discussion). The person can type a note instead of choosing: what is right, or the question that needs answering. Keep it, in their words. Stop when they say to: undecided rules stay open as a portal task. Verdicts given through the API in one request (`RULE-004 wrong: it truncates on purpose`) are recorded as given, with no card for those rules. Without a person and without given verdicts (an automated run) do not guess: leave every rule unreviewed and say so.
+Ask in the portal as structured choices, never as free chat text, one card per rule (the screen may group a few per page). One question per rule: its id as the header; the title, the plain-English statement, its Given/When/Then in one line, the cited lines (`file:line`, linked to the legacy repository at the commit the rules were extracted from) and the suspected defect or SME question if it has one as the question; and three options: **Right** (the rule is correct and wanted), **Wrong, or not wanted** (it misdescribes the code, or the code does this today but should not), **Not sure** (needs a discussion). The person can type a note instead of choosing: what is right, or the question that needs answering. Keep it, in their words. Stop when they say to: undecided rules stay open as a portal task. Verdicts given through the API in one request (`RULE-004 wrong: it truncates on purpose`) are recorded as given, with no card for those rules. Without a person and without given verdicts (an automated run) do not guess: leave every rule unreviewed and say so.
 
 ## 3 — Record
 

@@ -231,7 +231,7 @@ class TraceRules(unittest.TestCase):
         self.assertEqual(self.status(ran("ATest"))["RULE-002"], "tested")
 
     def test_only_exact_ids_count_and_neighbours_do_not(self):
-        put(self.root, "modernized/s/mod/src/test/T.java", "RULE-0010 RULE-1001 XRULE-001 rulebook-2 the rule of thumb, schedule_2, ruler-3\n")
+        put(self.root, "modernized/s/mod/src/test/T.java", "RULE-0010 RULE-1001 XRULE-001 handbook-2 the rule of thumb, schedule_2, ruler-3\n")
         self.assertEqual(set(self.status().values()), {"none"})
         put(self.root, "modernized/s/mod/src/test/U.java", "// RULE_002 and testRule001 and rule-003\n")
         self.assertEqual({k: v for k, v in self.status(ran("T", "U")).items() if v == "tested"}, {"RULE-001": "tested", "RULE-002": "tested", "RULE-003": "tested"})

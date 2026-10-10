@@ -18,14 +18,14 @@ specification) for `$app`, which asks what the person wants and starts preflight
 
 ## 1 — Inventory
 
-Check `assessment/$app/` in the workspace repository and the target repository of `$app` (its default branch and open
+Check `assessment/$app/` in the document repository and the target repository of `$app` (its default branch and open
 member branches) and build a table, one row per stage, with each artifact's presence and last commit time (Git
 history is the modification time):
 
 | Stage | Artifacts |
 |---|---|
 | intent | `INTENT.md` (what the person wants; written by the "start a modernization" wizard) |
-| preflight | `PREFLIGHT.md` (are the Check 0 human answers and the Check 6 scope-boundary finding there?), the registered source repository and the commit preflight read (is it still registered and reachable?) |
+| preflight | `PREFLIGHT.md` (are the Check 0 human answers and the Check 6 scope-boundary finding there?), the registered legacy repository and the commit preflight read (is it still registered and reachable?) |
 | assess | `ASSESSMENT.md`, `ARCHITECTURE.mmd` |
 | map | `topology.json`, `*.mmd`, `extract_topology.*` |
 | extract-rules | `BUSINESS_RULES.md`, `DATA_OBJECTS.md` |
@@ -44,7 +44,7 @@ Flag any artifact older than one it derives from: the brief older than `ASSESSME
 `BUSINESS_RULES.md` (no longer reflects discovery: rerun `brief`); an uplift's brief older than
 `DELTA_CATALOG.md`, or with no catalog (phase order was decided without the version deltas: rerun `brief`);
 discovery artifacts (`ASSESSMENT.md`, `topology.json`, `BUSINESS_RULES.md`) that read an older source commit than
-the one now on the source repository's default branch (the legacy code moved on: say how many commits behind, and
+the one now on the legacy repository's default branch (the legacy code moved on: say how many commits behind, and
 rerun the stage if the change touches its scope); a `TRANSFORMATION_NOTES.md` older
 than `BUSINESS_RULES.md` (the module may not implement the latest rules: list which).
 
@@ -52,8 +52,8 @@ than `BUSINESS_RULES.md` (the module may not implement the latest rules: list wh
 
 Kintsugi never commits raw credentials: the credential inventory is a restricted portal record, and
 `SECURITY_FINDINGS.md` keeps masked previews and points to it. Check that this held: no `SECRETS.local.md` and no
-`*.local.patch` file is tracked anywhere in the workspace repository, and none was ever committed (search the
-workspace repository's full history for those paths: it should be empty). Check that `SECURITY_FINDINGS.md` shows
+`*.local.patch` file is tracked anywhere in the document repository, and none was ever committed (search the
+document repository's full history for those paths: it should be empty). Check that `SECURITY_FINDINGS.md` shows
 only masked previews. If any check fails, say so prominently and recommend rotation of the exposed credentials and
 history scrubbing.
 
