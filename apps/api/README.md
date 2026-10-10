@@ -23,7 +23,7 @@ src/
     domain/repository.ts   generic repository port (DDD)
     application/           generic CRUD use cases over the port
     infrastructure/        in-memory repository adapter (dev skeletons)
-    security/password.ts   scrypt password hashing (ADR-0008)
+    security/password.ts   argon2id password hashing (ADR-0008)
     auth/decorators.ts     @Public() / @RequirePermission("code")
     interface/             response envelope + zod helpers (idSchema, stringField)
     filters/               uniform error envelope (HttpExceptionFilter)
@@ -163,7 +163,9 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
     `members.manage` and `roles.manage`, and nobody removes or disables themselves;
   - a member holds exactly one primary role;
   - resetting a password or disabling a member ends their sessions.
-- **Known behaviors**: passwords use scrypt (async), where ADR-0008 says argon2id.
+- **Password hashing**: argon2id (`@node-rs/argon2`, 19 MiB / 2 passes / 1 lane) stored as a
+  PHC string. Older scrypt hashes, or argon2id hashes with other parameters, are re-hashed
+  at the next successful sign-in.
 
 ## Adding a feature module
 
