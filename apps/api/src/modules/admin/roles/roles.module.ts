@@ -1,4 +1,4 @@
-// Wiring of the roles & permissions module (Roles & Permissions UI).
+// Wiring of the installation access roles & permissions module (Members & Permissions UI).
 
 import { Module } from "@nestjs/common";
 import { RolesService } from "./application/roles.service.js";

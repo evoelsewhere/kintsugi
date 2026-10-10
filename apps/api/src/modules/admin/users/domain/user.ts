@@ -1,4 +1,4 @@
-// Domain of members (Admin · Identity & Access, A2): users and their role assignments.
+// Domain of members (Admin · Identity & Access, A2): users and their access-role assignments.
 // Pure types — no framework, no I/O.
 
 export interface UserRecord {
@@ -7,7 +7,7 @@ export interface UserRecord {
   email: string;
   displayName: string;
   enabled: boolean;
-  /** Role ids: one primary role plus optional sub-roles. */
+  /** Access-role ids: one primary access role plus optional access sub-roles. */
   roleIds: string[];
   createdAt: string;
 }

@@ -1,4 +1,4 @@
-// Application layer: use cases for roles & permissions (Roles & Permissions UI).
+// Application layer: use cases for installation access roles and permissions.
 
 import { type Page, type PageQuery, toPage } from "../../../../common/application/pagination.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
@@ -16,7 +16,7 @@ export class RolesService {
     return this.roles.list();
   }
 
-  /** Roles are few (primary roles plus admin-defined sub-roles): paginated in memory. */
+  /** Access roles are few (primary access roles plus admin-defined access sub-roles): paginated in memory. */
   async listPage(query: PageQuery): Promise<Page<RoleRecord>> {
     const roles = await this.roles.list();
     return toPage(roles.slice(query.offset, query.offset + query.limit), roles.length, query);
