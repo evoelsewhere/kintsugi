@@ -14,4 +14,6 @@ export abstract class LlmProviderRepository {
   abstract replaceBindings(bindings: AgentModelBinding[]): Promise<void>;
   /** Resolves the stored API key — connectivity checks and the runtime launcher only. */
   abstract resolveApiKey(providerId: string): Promise<string | undefined>;
+  /** Resolves a stored { secretId } (e.g. a custom header value) — same callers only. */
+  abstract resolveSecret(secretId: string): Promise<string | undefined>;
 }

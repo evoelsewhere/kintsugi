@@ -9,12 +9,16 @@ export interface ConnectionProbe {
 
 const trimSlash = (url: string): string => url.replace(/\/+$/, "");
 
-/** The probe request for `api`, or undefined when Kintsugi has no probe for that protocol. */
-export function connectionProbe(api: string, baseUrl: string, apiKey: string): ConnectionProbe | undefined {
+/**
+ * The probe request for `api`, or undefined when Kintsugi has no probe for that protocol.
+ * `extraHeaders` are a custom provider's own headers (gateways often require them); the
+ * protocol's auth header still wins on a name clash.
+ */
+export function connectionProbe(api: string, baseUrl: string, apiKey: string, extraHeaders: Record<string, string> = {}): ConnectionProbe | undefined {
   // Templated catalog URLs ({account_id}, {location}…) need values only the runtime has.
   if (baseUrl === "" || /[{}]/.test(baseUrl)) return undefined;
   const base = trimSlash(baseUrl);
-  const accept = { accept: "application/json" };
+  const accept = { accept: "application/json", ...extraHeaders };
   switch (api) {
     case "openai-completions":
     case "openai-responses":
