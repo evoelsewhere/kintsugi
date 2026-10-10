@@ -97,6 +97,18 @@
   --ds-motion-popover-duration: 0.2s;
 }
 
+/* Overlay entrance — Modal scales in. */
+@keyframes ds-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @theme inline {
   --color-background: var(--ds-background-100);
   --color-recessed: var(--ds-background-200);

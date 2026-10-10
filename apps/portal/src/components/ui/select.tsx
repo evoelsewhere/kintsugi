@@ -1,9 +1,11 @@
 // Select — styled dropdown (no native <select>). DESIGN.md §4: input-like trigger
 // (40px, radius 6px, shadow-as-border), menu with --ds-shadow-menu, radius 12px,
-// 14px items with gray hover fill.
+// 14px items with gray hover fill. The menu portals to the document body so it
+// never clips inside a scrolling Modal body.
 
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 
 export interface SelectOption {
@@ -23,27 +25,65 @@ export interface SelectProps {
   id?: string;
 }
 
+/** Viewport-anchored placement for the portaled menu. */
+interface MenuPlacement {
+  left: number;
+  width: number;
+  maxHeight: number;
+  top?: number;
+  bottom?: number;
+}
+
+const MENU_MARGIN = 6;
+const MENU_FALLBACK_HEIGHT = 260;
+
+function placeMenu(trigger: HTMLElement): MenuPlacement {
+  const rect = trigger.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom - MENU_MARGIN * 2;
+  const spaceAbove = rect.top - MENU_MARGIN * 2;
+  const flip = spaceBelow < MENU_FALLBACK_HEIGHT && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(96, Math.min(256, flip ? spaceAbove : spaceBelow));
+  return flip
+    ? { bottom: window.innerHeight - rect.top + MENU_MARGIN, left: rect.left, width: rect.width, maxHeight }
+    : { top: rect.bottom + MENU_MARGIN, left: rect.left, width: rect.width, maxHeight };
+}
+
 export function Select({ value, options, onChange, placeholder = "Select…", disabled, className, id }: SelectProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<MenuPlacement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
   const selected = options.find((option) => option.value === value);
 
-  useEffect(() => {
+  // Layout effect: the menu is placed before paint, so it never flashes at a stale position.
+  useLayoutEffect(() => {
     if (!open) return;
+    const root = rootRef.current;
+    if (root === null) return;
+    const reposition = (): void => setPlacement(placeMenu(root));
+    reposition();
     const onPointerDown = (event: MouseEvent): void => {
-      if (rootRef.current !== null && !rootRef.current.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) === true) return;
+      if (menuRef.current?.contains(target) === true) return;
+      setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== "Escape") return;
-      // Consumed: the surrounding modal must stay open (see Modal).
+      // Consumed: the surrounding overlay must stay open (see useOverlayStack).
       event.preventDefault();
       setOpen(false);
     };
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
+    // Capture phase: also follows scrolling inside Modal bodies.
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
     };
   }, [open]);
 
@@ -61,46 +101,50 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
           "hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] disabled:pointer-events-none disabled:text-text-muted",
         )}
       >
-        <span className={cn("min-w-0 flex-1 truncate", selected === undefined && "text-text-muted")}>
+        <span className={cn("flex min-w-0 flex-1 items-center gap-2", selected === undefined && "text-text-muted")}>
           {selected?.icon}
-          {selected?.label ?? placeholder}
+          <span className="min-w-0 truncate">{selected?.label ?? placeholder}</span>
         </span>
         <ChevronDown className={cn("size-4 shrink-0 text-text-muted transition-transform duration-150", open && "rotate-180")} strokeWidth={1.75} />
       </button>
 
-      {open ? (
-        <ul
-          role="listbox"
-          className="absolute z-30 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl bg-surface p-1"
-          style={{ boxShadow: "var(--ds-shadow-menu)" }}
-        >
-          {options.map((option) => {
-            const active = option.value === value;
-            return (
-              <li key={option.value}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-[var(--geist-radius)] px-2.5 py-2 text-left text-[14px] text-text-secondary hover:bg-hover hover:text-text",
-                    active && "text-text",
-                  )}
-                >
-                  <Check className={cn("size-3.5 shrink-0", active ? "opacity-100" : "opacity-0")} strokeWidth={2} />
-                  {option.icon}
-                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                  {option.hint === undefined ? null : <span className="shrink-0 text-[11px] text-text-muted">{option.hint}</span>}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+      {open && placement !== null
+        ? createPortal(
+            <ul
+              ref={menuRef}
+              role="listbox"
+              className="fixed z-[60] overflow-y-auto rounded-xl bg-surface p-1"
+              style={{ boxShadow: "var(--ds-shadow-menu)", ...placement }}
+            >
+              {options.map((option) => {
+                const active = option.value === value;
+                return (
+                  <li key={option.value}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => {
+                        onChange(option.value);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-[var(--geist-radius)] px-2.5 py-2 text-left text-[14px] text-text-secondary hover:bg-hover hover:text-text",
+                        active && "text-text",
+                      )}
+                    >
+                      <Check className={cn("size-3.5 shrink-0", active ? "opacity-100" : "opacity-0")} strokeWidth={2} />
+                      {option.icon}
+                      <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                      {option.hint === undefined ? null : <span title={option.hint} className="max-w-[40%] min-w-0 shrink truncate text-right text-[11px] text-text-muted">{option.hint}</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
