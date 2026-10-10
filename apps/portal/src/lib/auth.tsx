@@ -23,6 +23,8 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+// The provider and its hook belong together; fast refresh reloads this module fully.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthState {
   const state = useContext(AuthContext);
   if (state === null) throw new Error("useAuth must be used inside AuthProvider");

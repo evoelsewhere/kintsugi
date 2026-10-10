@@ -24,8 +24,8 @@ export interface ModalProps {
 const openModals: symbol[] = [];
 
 export function Modal({ open, title, description, onClose, children, footer, wide, size = "default" }: ModalProps): React.JSX.Element | null {
-  const onCloseRef = React.useRef(onClose);
-  onCloseRef.current = onClose;
+  // Always calls the latest onClose without re-registering the key listener.
+  const close = React.useEffectEvent(onClose);
 
   React.useEffect(() => {
     if (!open) return;
@@ -35,7 +35,7 @@ export function Modal({ open, title, description, onClose, children, footer, wid
       // A nested control (e.g. an open Select) that handled Escape marks it as consumed.
       if (event.key !== "Escape" || event.defaultPrevented || openModals.at(-1) !== self) return;
       event.preventDefault();
-      onCloseRef.current();
+      close();
     };
     window.addEventListener("keydown", onKey);
     return () => {

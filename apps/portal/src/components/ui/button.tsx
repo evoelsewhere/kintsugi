@@ -40,4 +40,6 @@ export function Button({ className, variant, size, type = "button", ...props }: 
   return <button type={type} className={cn(buttonVariants({ variant, size }), className)} {...props} />;
 }
 
+// Shared with components that style links as buttons (shadcn pattern).
+// eslint-disable-next-line react-refresh/only-export-components
 export { buttonVariants };

@@ -3,7 +3,7 @@
 // generated; models are picked from a searchable list. Credentials are write-only.
 // All controls are custom components (no native form widgets).
 
-import { Check, Plus, Search, Trash2 } from "lucide-react";
+import { Check, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -50,6 +50,8 @@ export function ProviderFormDialog({ open, provider, existingIds, onClose, onSub
 
   useEffect(() => {
     if (!open) return;
+    // Reset the form each time the dialog opens (the dialog stays mounted while closed).
+    /* eslint-disable react-hooks/set-state-in-effect */
     setPiProvider(provider?.piProvider ?? "");
     setEnabledModels(provider?.enabledModels ?? []);
     setApiKey("");
@@ -57,6 +59,7 @@ export function ProviderFormDialog({ open, provider, existingIds, onClose, onSub
     setProviderQuery("");
     setModelQuery("");
     setError(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
     void providersApi.supported().then(setSupported).catch(() => setSupported({ builtin: [], customApis: [] }));
   }, [open, provider]);
 
