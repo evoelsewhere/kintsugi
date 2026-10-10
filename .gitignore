@@ -10,3 +10,5 @@ coverage/
 # local agent workspaces / sessions
 .kintsugi/
 .pi/sessions/
+# local Claude Code preview config
+.claude/launch.json
