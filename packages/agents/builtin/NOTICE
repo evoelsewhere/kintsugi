@@ -2,12 +2,13 @@ Kintsugi built-in modernization content
 
 This directory is derived from the "code-modernization" plugin in
 https://github.com/anthropics/claude-plugins-official (plugins/code-modernization),
-at commit c8874f5ad883e26428f483ffa4d537cc81489e64,
-Copyright Anthropic, licensed under the Apache License, Version 2.0 (see LICENSE).
+at commit c8874f5ad883e26428f483ffa4d537cc81489e64.
+Copyright Anthropic. Licensed under the Apache License, Version 2.0; see LICENSE.
 
 Changes from the upstream content:
-- assets/ (report and viewer templates, screenshots, vendored Mermaid) removed;
-  presentation is provided by the Kintsugi portal.
-- Agents, commands, workflows, scripts, hooks and tests are being adapted to Kintsugi
-  (runtime jobs, workspace-repo artifacts, pipeline stages, portal); the Git history
-  of this directory records each modification.
+
+- Deleted: upstream assets and presentation templates; Claude Code plugin metadata; host hook registration and APIs; terminal pane, review deck, X-ray and other host UI; telemetry; and tests/fixtures used only by the plugin host or pane.
+- Added: the server-side JobOutput Python hook and specification, including credential scanning, artifact-shape validation, redacted JSON findings, bounded/fail-closed input handling, and Python tests; Kintsugi reader-layout helpers and Vitest coverage.
+- Adapted: agent, command, workflow, script, hook-reader, and documentation content to Kintsugi's split between runtime jobs, member harnesses, and the portal; workspace artifact paths and commit boundaries; and the package's test/lint/typecheck setup. The reader functions remain pure and are intended for future portal progress presentation.
+
+The complete Kintsugi adaptation history is recorded in the repository. No Claude Code plugin or plugin marketplace is shipped.
