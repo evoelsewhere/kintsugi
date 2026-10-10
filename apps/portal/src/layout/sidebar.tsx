@@ -2,9 +2,9 @@
 // with icons and badges, user card at the bottom. Collapsible (icon rail).
 // Items come from nav-config.tsx; the user card and the Settings entry open the
 // settings modal. Styled per DESIGN.md (14px/400 items, gray hover fill).
-import { LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Settings } from "lucide-react";
+import { ChevronDown, LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { BrandMark } from "../components/brand-mark";
 import { StatusDot } from "../components/ui/status-dot";
 import { APP_VERSION } from "../lib/app-info";
@@ -21,16 +21,21 @@ function SidebarLink({
   item,
   collapsed,
   onAction,
+  onClick,
+  grouped = false,
 }: {
   item: NavItem;
   collapsed: boolean;
   onAction?: () => void;
+  onClick?: () => void;
+  grouped?: boolean;
 }): React.JSX.Element {
   const Icon = item.icon;
   const className = ({ isActive }: { isActive: boolean }): string =>
     cn(
-      "flex h-9 items-center gap-2.5 rounded-[10px] px-3 text-[14px] text-text-secondary hover:bg-hover hover:text-text",
-      isActive && "bg-hover font-medium text-text",
+      "flex h-9 min-w-0 w-full items-center gap-2.5 rounded-[10px] px-3 text-[14px] text-text-secondary hover:bg-hover hover:text-text",
+      grouped && "hover:bg-transparent",
+      isActive && cn(!grouped && "bg-hover", "font-medium text-text"),
       collapsed && "justify-center px-0",
     );
 
@@ -43,7 +48,7 @@ function SidebarLink({
     );
   }
   return (
-    <NavLink to={item.to} end={item.end} title={collapsed ? item.label : undefined} className={className}>
+    <NavLink to={item.to} end={item.end} title={collapsed ? item.label : undefined} onClick={onClick} className={className}>
       <Icon className="size-4 shrink-0" strokeWidth={1.75} />
       {collapsed ? null : <span className="truncate">{item.label}</span>}
       {collapsed || item.badge === undefined ? null : (
@@ -56,7 +61,9 @@ function SidebarLink({
 export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
+  const { pathname } = useLocation();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const health = useHealth();
   const { user, logout } = useAuth();
@@ -75,7 +82,12 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
     const needle = query.trim().toLowerCase();
     return NAV_SECTIONS.map((section) => ({
       ...section,
-      items: section.items.filter((item) => item.label.toLowerCase().includes(needle)),
+      items: section.items.flatMap((item) => {
+        const matchesParent = item.label.toLowerCase().includes(needle);
+        const matchingChildren = item.children?.filter((child) => child.label.toLowerCase().includes(needle));
+        if (needle.length > 0 && !matchesParent && (matchingChildren?.length ?? 0) === 0) return [];
+        return [{ ...item, children: needle.length > 0 && !matchesParent ? matchingChildren : item.children }];
+      }),
     })).filter((section) => section.items.length > 0);
   }, [query]);
 
@@ -151,14 +163,65 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
         {filtered.map((section) => (
           <div key={section.id} className="flex flex-col gap-1">
             {rail ? null : <p className="px-3 pb-1 text-[11px] font-medium tracking-wider text-text-muted uppercase">{section.label}</p>}
-            {section.items.map((item) => (
-              <SidebarLink
-                key={`${section.id}-${item.id}`}
-                item={item}
-                collapsed={rail}
-                onAction={item.action === "open-settings" ? onOpenSettings : undefined}
-              />
-            ))}
+            {section.items.map((item) => {
+              const activeParent = pathname === item.to || pathname.startsWith(`${item.to}/`);
+              const hasChildren = item.children !== undefined && item.children.length > 0;
+              const searchOpen = query.trim().length > 0;
+              const groupExpanded = searchOpen || (groupOverrides[item.id] ?? activeParent);
+              const toggleGroup = () => setGroupOverrides((previous) => ({ ...previous, [item.id]: !groupExpanded }));
+              const showChildren = !rail && hasChildren && groupExpanded;
+              return (
+                <div key={`${section.id}-${item.id}`}>
+                  <div className={cn("flex items-center gap-1 rounded-[10px] transition-colors hover:bg-hover", activeParent && "bg-hover")}>
+                    <div className="min-w-0 flex-1">
+                      <SidebarLink
+                        item={item}
+                        collapsed={rail}
+                        grouped={!rail && hasChildren}
+                        onClick={!rail && hasChildren ? toggleGroup : undefined}
+                        onAction={item.action === "open-settings" ? onOpenSettings : undefined}
+                      />
+                    </div>
+                    {!rail && hasChildren ? (
+                      <button
+                        type="button"
+                        onClick={toggleGroup}
+                        aria-label={`${groupExpanded ? "Collapse" : "Expand"} ${item.label} submenu`}
+                        aria-expanded={groupExpanded}
+                        aria-controls={`${item.id}-submenu`}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+                      >
+                        <ChevronDown className={cn("size-4 transition-transform duration-150", groupExpanded && "rotate-180")} strokeWidth={1.75} />
+                      </button>
+                    ) : null}
+                  </div>
+                  {!rail && hasChildren ? (
+                    <div
+                      id={`${item.id}-submenu`}
+                      hidden={!showChildren}
+                      className="ml-[17px] mt-1 flex flex-col gap-0.5 border-l border-black/10 py-1 pl-2 dark:border-white/10"
+                      aria-label={`${item.label} subnavigation`}
+                    >
+                      {item.children?.map((child) => (
+                        <NavLink
+                          key={child.id}
+                          to={child.to}
+                          end
+                          className={({ isActive }) =>
+                            cn(
+                              "flex min-h-8 items-center rounded-[8px] px-3 text-[13px] text-text-secondary transition-colors hover:bg-hover hover:text-text",
+                              isActive && "bg-hover font-medium text-text",
+                            )
+                          }
+                        >
+                          <span className="truncate">{child.label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ))}
       </nav>

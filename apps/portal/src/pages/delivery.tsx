@@ -1,60 +1,41 @@
+import { Navigate, NavLink, useParams } from "react-router-dom";
 import { Breadcrumbs } from "../components/breadcrumbs";
 import { AreaCard, type AreaCardProps } from "../components/area-card";
-
-/** Functional areas B1–B7 (docs/architecture/05-building-block-view.md). */
-const AREAS = [
-  {
-    title: "B1 · Portfolio & Assessment",
-    description: "Inventory and unit files, dependencies, weighted scorecard, 7R recommendation, wave planning.",
-    status: "not implemented yet",
-    tone: "muted",
-  },
-  {
-    title: "B2 · Architecture Studio",
-    description: "AS-IS vs TO-BE architecture, ADRs, gap list, co-existence strategy, POC plan, ARB review.",
-    status: "not implemented yet",
-    tone: "muted",
-  },
-  {
-    title: "B3 · Factory Setup",
-    description: "Base source, IaC, CI/CD; agent plugins and task-pack templates; gate-reviewer rules; pilot runs.",
-    status: "not implemented yet",
-    tone: "muted",
-  },
-  {
-    title: "B4 · Migration Workbench",
-    description: "Board of work items × stages, task packs, assignment, PR tracking, design ↔ code sync.",
-    status: "not implemented yet",
-    tone: "muted",
-  },
-  {
-    title: "B5 · Verification",
-    description: "Test generation, compare tests, coverage, non-functional tests, rehearsal, UAT tracking.",
-    status: "not implemented yet",
-    tone: "muted",
-  },
-  {
-    title: "B6 · Cutover",
-    description: "Readiness checklist, runbook, go / no-go, decommissioning.",
-    status: "not implemented yet",
-    tone: "muted",
-  },
-  {
-    title: "B7 · Hypercare & Operate",
-    description: "Incidents, user manual / training generation, end-user chatbot, KB handover.",
-    status: "not implemented yet",
-    tone: "muted",
-  },
-] as const satisfies ReadonlyArray<AreaCardProps>;
+import { DELIVERY_AREAS } from "../lib/delivery-areas";
 
 export function DeliveryPage(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-5">
       <Breadcrumbs items={["Delivery"]} />
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {AREAS.map((area) => (
-          <AreaCard key={area.title} {...area} />
-        ))}
+      <section className="flex flex-col gap-2">
+        <h1 className="text-[20px] font-semibold tracking-tight text-text">Delivery workstreams</h1>
+        <p className="text-[14px] text-text-secondary">Choose a workstream from the navigation to view its scope and status.</p>
+        <nav aria-label="Delivery workstreams" className="mt-3 grid grid-cols-1 gap-2 md:hidden">
+          {DELIVERY_AREAS.map((area) => (
+            <NavLink
+              key={area.id}
+              to={`/delivery/${area.id}`}
+              className="flex min-h-11 items-center rounded-[10px] px-3 text-[14px] text-text-secondary shadow-border hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+            >
+              {area.title}
+            </NavLink>
+          ))}
+        </nav>
+      </section>
+    </div>
+  );
+}
+
+export function DeliveryAreaPage(): React.JSX.Element {
+  const { areaId } = useParams();
+  const area = DELIVERY_AREAS.find((candidate) => candidate.id === areaId);
+  if (area === undefined) return <Navigate to="/delivery" replace />;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Breadcrumbs items={["Delivery", area.title]} />
+      <section className="max-w-3xl">
+        <AreaCard {...(area satisfies AreaCardProps)} />
       </section>
     </div>
   );

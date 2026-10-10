@@ -4,7 +4,7 @@ import { subscribeToSystemAppearance } from "./lib/appearance";
 import { PanelShell } from "./layout/panel-shell";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { AdminPage } from "./pages/admin";
-import { DeliveryPage } from "./pages/delivery";
+import { DeliveryAreaPage, DeliveryPage } from "./pages/delivery";
 import { GovernancePage } from "./pages/governance";
 import { LoginPage } from "./pages/login";
 import { MonitoringPage } from "./pages/monitoring";
@@ -39,6 +39,7 @@ export function App(): React.JSX.Element {
             <Route index element={<OverviewPage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="delivery" element={<DeliveryPage />} />
+            <Route path="delivery/:areaId" element={<DeliveryAreaPage />} />
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="governance" element={<GovernancePage />} />
             <Route path="members" element={<MembersPermissionsPage />} />
