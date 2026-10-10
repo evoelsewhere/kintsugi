@@ -2,7 +2,7 @@
 // Full CRUD against /api/admin/llm-providers (ADR-0009): providers as list rows,
 // agent → model bindings as a compact editor. Credentials are write-only.
 
-import { RUNTIME_AGENTS, type ThinkingLevel } from "@kintsugi/domain";
+import type { ThinkingLevel } from "@kintsugi/domain";
 import { PlugZap, Plus, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
@@ -24,7 +24,6 @@ import { ProviderFormDialog } from "./provider-form-dialog";
 
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
-const AGENT_OPTIONS: SelectOption[] = RUNTIME_AGENTS.map((agent) => ({ value: agent, label: agent }));
 const THINKING_OPTIONS: SelectOption[] = [{ value: "", label: "Default" }, ...THINKING_LEVELS.map((level) => ({ value: level, label: level }))];
 
 export function ProvidersSection(): React.JSX.Element {
@@ -156,7 +155,7 @@ export function ProvidersSection(): React.JSX.Element {
             <CardDescription>Provider and model per runtime agent — blank = installation default.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="small" variant="ghost" onClick={() => setBindings((prev) => [...prev, { agent: "assessment", provider: providers[0]?.id ?? "", model: "" }])}>
+            <Button size="small" variant="ghost" onClick={() => setBindings((prev) => [...prev, { agent: "", provider: providers[0]?.id ?? "", model: "" }])}>
               <Plus className="size-4" />
               Add binding
             </Button>
@@ -172,12 +171,12 @@ export function ProvidersSection(): React.JSX.Element {
             <div className="flex flex-col gap-1.5">
               {bindings.map((binding, index) => (
                 <div key={index} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1.1fr_1fr_1fr_0.8fr_auto]">
-                  <Select
+                  <Input
                     value={binding.agent}
-                    options={AGENT_OPTIONS}
-                    onChange={(value) =>
-                      setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, agent: value as AgentModelBindingInput["agent"] } : row)))
-                    }
+                    placeholder="agent id"
+                    aria-label="Agent id"
+                    className="h-[var(--geist-form-height)] text-[14px]"
+                    onChange={(event) => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, agent: event.target.value } : row)))}
                   />
                   <Select
                     value={binding.provider}

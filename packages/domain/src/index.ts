@@ -62,20 +62,10 @@ export type Performer =
 export const MEMBER_HARNESSES = ["claude-code", "copilot", "codex", "chatgpt"] as const;
 export type MemberHarnessId = (typeof MEMBER_HARNESSES)[number] | (string & {});
 
-/** Kintsugi's own agents, executed on the pi runtime. */
-export const RUNTIME_AGENTS = [
-  "knowledge-ingest",
-  "kb-assistant",
-  "assessment",
-  "wave-planner",
-  "to-be-analyst",
-  "task-planner",
-  "gate-reviewer",
-  "insight",
-] as const;
-export type RuntimeAgentId = (typeof RUNTIME_AGENTS)[number];
+/** Id of a runtime agent. Open: agents are data supplied with each job, none ships with Kintsugi (ADR-0023). */
+export type RuntimeAgentId = string;
 
-/** Reasoning effort for a runtime agent's model binding (mirrors pi's thinking levels). */
+/** Reasoning effort for a runtime agent's model (mirrors pi's thinking levels). */
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 /** Work item status as stored in the unit file frontmatter. */
@@ -299,6 +289,25 @@ export interface RunnerSpec {
   network?: "none" | "allowlist";
 }
 
+/** A rulebook runner job: runs in its own isolated container, with no LLM credentials (ADR-0004). */
+export interface RunnerJobSpec {
+  runner: { id: string; pack: string; spec: RunnerSpec };
+  context: { projectId: string; applicationId?: string; workItemId?: string; phase?: Phase; trigger: string };
+  rulebook: RulebookRef;
+  /** Read-only repositories mounted into the runner, pinned to a commit. */
+  inputs: { url: string; commit: string; paths?: string[] }[];
+  /** Optional comparator run after the runner, producing the standard compare report. */
+  thenCompare?: { profile?: string; comparator?: string };
+}
+
+/** Standard compare report contract, produced by the built-in compare engine or a custom comparator. */
+export interface CompareReport {
+  verdict: "pass" | "fail";
+  diffCount: number;
+  clusters: { id: string; files: string[]; summary: string }[];
+  reportPath: string;
+}
+
 export interface PackManifest {
   id: string;
   version?: string; // present on vendored packs
@@ -342,7 +351,7 @@ export interface Waiver {
 }
 
 export type StagePerformer =
-  | { agent: RuntimeAgentId } // built-in agents only; fixed in code (ADR-0014)
+  | { agent: RuntimeAgentId } // a runtime agent by id (ADR-0023)
   | { member: Role[] }
   | { runner: string; then?: "compare" };
 

@@ -1,33 +1,29 @@
 // Kintsugi Runtime entry point: the `AgentRuntime` contract from packages/runtime-sdk.
-// Two backends share one job loop shape (JobSpec → JobHandle → JobEvent):
-//   - "pi"   — the real engine (ADR-0001), one container per job (ADR-0004);
+// The runtime is a generic agent kernel (ADR-0023): every job carries its whole agent
+// definition, and no agent is defined here. Two backends share one job loop shape
+// (JobSpec → JobHandle → JobEvent):
+//   - "pi"   — the real engine (ADR-0001), run inside the job sandbox (ADR-0004);
 //   - "mock" — a deterministic simulation so the orchestrator and telemetry can be
-//              built against the contract before real pi jobs run.
-// Built-in agent definitions are fixed in code (ADR-0014); nothing here reads agent
-// configuration from a repository.
+//              built against the contract without LLM calls.
 
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { AgentRuntime, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
 import { startMockJob } from "./mock-agent.js";
 import { PI_ENGINE_ID, RUNTIME_VERSION } from "./version.js";
 
-export type RuntimeMode = "mock" | "pi";
+export type CreateAgentRuntimeOptions =
+  | { mode?: "mock" }
+  | {
+      mode: "pi";
+      /** Provides the job's models and credentials (launcher/model-runtime.ts). */
+      resolveModelRuntime(spec: JobSpec): Promise<ModelRuntime>;
+    };
 
-export interface CreateAgentRuntimeOptions {
-  /** Defaults to "mock" until the runner image and launcher wiring land. */
-  mode?: RuntimeMode;
-}
+export type RuntimeMode = NonNullable<CreateAgentRuntimeOptions["mode"]>;
 
 /** The pi job backend (services/runtime/src/pi-runtime.ts), loaded lazily. */
 export interface PiJobBackend {
   startJob(spec: JobSpec): Promise<JobHandle>;
-}
-
-let piBackend: Promise<PiJobBackend> | undefined;
-
-/** Mock-only consumers never load the pi SDK. */
-function loadPiBackend(): Promise<PiJobBackend> {
-  piBackend ??= import("./pi-runtime.js").then((m) => m.createPiJobBackend());
-  return piBackend;
 }
 
 class MockAgentRuntime implements AgentRuntime {
@@ -40,16 +36,20 @@ class MockAgentRuntime implements AgentRuntime {
 
 class PiAgentRuntime implements AgentRuntime {
   readonly engine = PI_ENGINE_ID;
+  readonly #backend: Promise<PiJobBackend>;
+
+  constructor(resolveModelRuntime: (spec: JobSpec) => Promise<ModelRuntime>) {
+    // Mock-only consumers never load the pi SDK.
+    this.#backend = import("./pi-runtime.js").then((m) => m.createPiJobBackend({ resolveModelRuntime }));
+  }
 
   async startJob(spec: JobSpec): Promise<JobHandle> {
-    const backend = await loadPiBackend();
-    return backend.startJob(spec);
+    return (await this.#backend).startJob(spec);
   }
 }
 
 export function createAgentRuntime(options: CreateAgentRuntimeOptions = {}): AgentRuntime {
-  const mode = options.mode ?? "mock";
-  return mode === "pi" ? new PiAgentRuntime() : new MockAgentRuntime();
+  return options.mode === "pi" ? new PiAgentRuntime(options.resolveModelRuntime) : new MockAgentRuntime();
 }
 
 export { EventStream } from "./event-stream.js";

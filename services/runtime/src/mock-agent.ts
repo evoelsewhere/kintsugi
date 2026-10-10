@@ -1,17 +1,14 @@
 // Deterministic stand-in for the pi backend: runs the shared job loop
-// (JobSpec → JobHandle → JobEvent) with simulated agent steps and no LLM calls.
-// It exists so the orchestrator, job gateway and telemetry pipeline can be built
-// and tested against the contract before real pi jobs run (ADR-0001, ADR-0004).
+// (JobSpec → JobHandle → JobEvent) with simulated turns and no LLM calls, so the
+// orchestrator, job gateway and telemetry can be built and tested against the contract.
+// Each simulated turn calls one tool, cycling through "read" and the agent's own tools;
+// tools outside the allowlist show up as blocked calls.
 
 import { randomUUID } from "node:crypto";
-import type { JobEvent, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
+import type { JobEvent, JobFailureReason, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
 import { EventStream } from "./event-stream.js";
-import { describeInputs } from "./job-inputs.js";
 
-type JobCompleted = Extract<JobEvent, { type: "job.completed" }>;
-
-/** Tools the mock cycles through; the first two exercise the ToolPolicy path. */
-const SIMULATED_TOOLS = ["read", "bash", "write"] as const;
+type JobEnd = Extract<JobEvent, { type: "job.completed" | "job.failed" }>;
 
 const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -20,91 +17,65 @@ const now = (): string => new Date().toISOString();
 class MockJob implements JobHandle {
   readonly jobId = randomUUID();
   readonly events = new EventStream<JobEvent>();
-  readonly done: Promise<JobCompleted>;
+  readonly done: Promise<JobEnd>;
 
-  #settled = false;
-  #resolveDone!: (event: JobCompleted) => void;
-  #rejectDone!: (error: unknown) => void;
+  #ended = false;
+  #resolveDone!: (event: JobEnd) => void;
 
   constructor(
     private readonly spec: JobSpec,
     private readonly runtimeVersion: string,
   ) {
-    this.done = new Promise<JobCompleted>((resolve, reject) => {
+    this.done = new Promise<JobEnd>((resolve) => {
       this.#resolveDone = resolve;
-      this.#rejectDone = reject;
     });
-    // Callers may rely on `events` alone; keep an unawaited rejection from surfacing.
-    this.done.catch(() => undefined);
     void this.#run();
   }
 
-  async followUp(message: string): Promise<void> {
-    if (this.#settled) {
-      throw new Error("mock job already finished; interactive follow-ups need the pi backend");
-    }
-    this.events.push({ type: "message.delta", jobId: this.jobId, text: `> ${message}\n` });
-  }
-
   async abort(reason: string): Promise<void> {
-    if (this.#settled) return;
-    this.#settled = true;
-    this.#rejectDone(new Error(reason));
-    this.events.push({ type: "job.failed", jobId: this.jobId, at: now(), error: reason });
-    this.events.close();
+    this.#end({ type: "job.failed", jobId: this.jobId, at: now(), reason: "aborted", error: reason });
   }
 
   #emit(event: JobEvent): void {
-    this.events.push(event);
+    if (!this.#ended) this.events.push(event);
   }
 
-  #complete(summary: string): void {
-    if (this.#settled) return;
-    this.#settled = true;
-    const event: JobCompleted = { type: "job.completed", jobId: this.jobId, at: now(), summary };
+  #end(event: JobEnd): void {
+    if (this.#ended) return;
+    this.events.push(event);
+    this.#ended = true;
+    this.events.close();
     this.#resolveDone(event);
-    this.events.push(event);
-    this.events.close();
   }
 
-  #fail(error: string): void {
-    if (this.#settled) return;
-    this.#settled = true;
-    this.#rejectDone(new Error(error));
-    this.events.push({ type: "job.failed", jobId: this.jobId, at: now(), error });
-    this.events.close();
+  #fail(reason: JobFailureReason, error: string): void {
+    this.#end({ type: "job.failed", jobId: this.jobId, at: now(), reason, error });
   }
 
   async #run(): Promise<void> {
-    const spec = this.spec;
-    this.#emit({ type: "job.started", jobId: this.jobId, at: now(), runtimeVersion: this.runtimeVersion });
-    await tick();
-
+    const { spec } = this;
     this.#emit({
-      type: "message.delta",
+      type: "job.started",
       jobId: this.jobId,
-      text: `[mock ${spec.agent.id}] rulebook ${spec.rulebook.version}${spec.rulebook.commit ? `@${spec.rulebook.commit}` : ""}, packs: ${spec.packs.join(", ") || "(none)"}\n`,
+      at: now(),
+      runtimeVersion: this.runtimeVersion,
+      agent: `${spec.agent.id}@${spec.agent.version}`,
+      ...(spec.metadata === undefined ? {} : { metadata: spec.metadata }),
     });
     await tick();
 
-    this.#emit({
-      type: "message.delta",
-      jobId: this.jobId,
-      text: `Inputs: ${describeInputs(spec.inputs) || "(none)"}\n`,
-    });
+    this.#emit({ type: "message.delta", jobId: this.jobId, text: `[mock ${spec.agent.id}] ${spec.task}\n` });
     await tick();
 
-    const maxTurns = Math.min(Math.max(spec.budget.maxTurns ?? 3, 1), 8);
-    let toolCalls = 0;
-    let blockedCalls = 0;
+    const turns = Math.min(spec.limits.maxTurns ?? 3, 8);
+    const candidates = ["read", ...spec.agent.tools.filter((tool) => tool !== "read")];
+    let blocked = 0;
 
-    for (let turn = 0; turn < maxTurns; turn++) {
-      if (this.#settled) return;
-      const tool = SIMULATED_TOOLS[turn % SIMULATED_TOOLS.length] ?? "read";
-      const allowed = spec.policy.allowTools.includes(tool);
+    for (let turn = 0; turn < turns; turn++) {
+      if (this.#ended) return;
+      const tool = candidates[turn % candidates.length] ?? "read";
+      const allowed = spec.agent.tools.includes(tool);
       const callId = `${this.jobId}-${turn}`;
-      toolCalls++;
-
       this.#emit({
         type: "tool.call",
         jobId: this.jobId,
@@ -112,45 +83,33 @@ class MockJob implements JobHandle {
         tool,
         input: { turn, purpose: "simulated" },
         decision: allowed ? "allowed" : "blocked",
-        ...(allowed ? {} : { reason: `"${tool}" is not in the agent's allowTools policy` }),
+        ...(allowed ? {} : { reason: `"${tool}" is not in the agent's tool allowlist` }),
       });
       await tick();
-
       if (allowed) {
         this.#emit({ type: "tool.result", jobId: this.jobId, callId, ok: true, summary: `${tool} completed (simulated)` });
+        if (tool === "outputs_write") this.#emit({ type: "output", jobId: this.jobId, path: `mock/turn-${turn}.md` });
       } else {
-        blockedCalls++;
-        this.#emit({ type: "tool.result", jobId: this.jobId, callId, ok: false, summary: `${tool} blocked by policy` });
+        blocked++;
       }
       await tick();
     }
 
-    for (const rule of spec.outputs) {
-      if (this.#settled) return;
-      this.#emit({ type: "output", jobId: this.jobId, target: "file", ref: rule.path });
-      await tick();
-    }
+    const inputTokens = 128 * turns;
+    const outputTokens = 64 * turns;
+    const costUsd = Number((inputTokens * 0.000001 + outputTokens * 0.000005).toFixed(6));
+    this.#emit({ type: "usage", jobId: this.jobId, model: `${spec.model.provider}/${spec.model.id}`, inputTokens, outputTokens, costUsd });
 
-    const inputTokens = 128 * maxTurns;
-    const outputTokens = 64 * maxTurns;
-    const costUsd = Number(((inputTokens * 0.000001 + outputTokens * 0.000005)).toFixed(6));
-    this.#emit({
-      type: "usage",
-      jobId: this.jobId,
-      model: `${spec.model.provider}/${spec.model.id}`,
-      inputTokens,
-      outputTokens,
-      costUsd,
-    });
-
-    if (spec.budget.maxCostUsd !== undefined && costUsd > spec.budget.maxCostUsd) {
-      this.#fail(`budget exceeded: ${costUsd} USD > ${spec.budget.maxCostUsd} USD`);
+    if (spec.limits.maxCostUsd !== undefined && costUsd > spec.limits.maxCostUsd) {
+      this.#fail("budget", `cost ${costUsd} USD exceeded ${spec.limits.maxCostUsd} USD`);
       return;
     }
-
-    this.#complete(
-      `${spec.agent.id} simulated run: ${maxTurns} turn(s), ${toolCalls} tool call(s) (${blockedCalls} blocked), ${spec.outputs.length} output(s)`,
-    );
+    this.#end({
+      type: "job.completed",
+      jobId: this.jobId,
+      at: now(),
+      summary: `simulated run: ${turns} turn(s), ${blocked} blocked call(s)`,
+    });
   }
 }
 
