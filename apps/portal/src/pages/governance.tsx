@@ -33,12 +33,6 @@ const AREAS = [
     status: "not implemented yet",
     tone: "muted",
   },
-  {
-    title: "D6 · Rulebook & Asset Governance",
-    description: "Scoped capability maturity, readiness checks, waivers with expiry, evidence-backed promotions, stale-unit detection.",
-    status: "not implemented yet",
-    tone: "muted",
-  },
 ] as const satisfies ReadonlyArray<AreaCardProps>;
 
 export function GovernancePage(): React.JSX.Element {

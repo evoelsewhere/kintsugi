@@ -140,7 +140,7 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
             <Field label="Username" hint="Optional; most servers ignore it.">
               <Input value={username} placeholder="kintsugi" autoComplete="off" onChange={(event) => setUsername(event.target.value)} />
             </Field>
-            <Field label="Access token" hint="Read access to the repositories; write access for the workspace repo.">
+            <Field label="Access token" hint="Read access to the repositories; write access for the document repo.">
               <Input
                 type="password"
                 autoComplete="new-password"

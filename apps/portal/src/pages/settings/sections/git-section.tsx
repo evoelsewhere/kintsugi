@@ -118,7 +118,7 @@ export function GitSection(): React.JSX.Element {
         <CardHeader className="px-4 pt-3">
           <div>
             <CardTitle>Repositories</CardTitle>
-            <CardDescription>Source, target and workspace repositories. Each must be reachable with its server's credential.</CardDescription>
+            <CardDescription>Legacy, legacy-data, target and document repositories. Each must be reachable with its server's credential.</CardDescription>
           </div>
           <Button size="small" variant="solid" disabled={servers.length === 0} onClick={() => setRepositoryDialog(true)}>
             <Plus className="size-4" />
