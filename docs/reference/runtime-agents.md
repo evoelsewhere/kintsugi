@@ -21,7 +21,7 @@ Contract types: `JobSpec`, `AgentDefinition`, `JobEvent`, `JobHandle`, `AgentRun
 | `limits` | `timeoutSec` (required), `maxTurns`, `maxCostUsd` |
 | `metadata` | Opaque correlation data (e.g. project id, trigger), echoed on `job.started`; never shown to the agent |
 
-Higher layers (orchestrator) translate their concepts (projects, units, rulebook content) into these fields. The kernel refuses a job before it starts if the agent id, instructions or task is empty, a tool is unknown, a skill name is invalid or duplicated, a deny pattern is not a valid regular expression, a workspace directory is missing, or a limit is invalid.
+Higher layers (orchestrator) translate their concepts (projects, units, standards) into these fields. The kernel refuses a job before it starts if the agent id, instructions or task is empty, a tool is unknown, a skill name is invalid or duplicated, a deny pattern is not a valid regular expression, a workspace directory is missing, or a limit is invalid.
 
 ## Agent definition
 

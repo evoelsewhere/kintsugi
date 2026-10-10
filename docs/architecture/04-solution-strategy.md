@@ -6,13 +6,13 @@
 |---|---|---|---|
 | 1 | **Separate the brain from the hands** | The Kintsugi Runtime (pi) does knowledge, assessment, planning and review. Members implement in their own harnesses | [0001](../decisions/0001-pi-as-kintsugi-runtime.md) |
 | 2 | **Self-hosted, single-host package** | Docker Compose, one installation per organization, no Kubernetes, no multi-tenancy | [0006](../decisions/0006-self-hosted-package.md) |
-| 3 | **Git is the source of truth** | Documents, deliverables, the rulebook and work item state are files in Git; Postgres holds operational data + rebuildable indexes; many Git servers and repos | [0007](../decisions/0007-git-as-source-of-truth.md), [0012](../decisions/0012-work-items-as-files-in-git.md) |
+| 3 | **Git is the source of truth** | Documents, deliverables, standards and work item state are files in Git; Postgres holds operational data + rebuildable indexes; many Git servers and repos | [0007](../decisions/0007-git-as-source-of-truth.md), [0012](../decisions/0012-work-items-as-files-in-git.md) |
 | 4 | **One datastore** | Postgres + pgvector for state, KB index, queue, events, audit | [0010](../decisions/0010-postgres-only.md) |
 | 5 | **Isolate every runtime job** | One container per job, read-only sources, `/out` only, egress proxy | [0004](../decisions/0004-runner-container-per-job.md) |
 | 6 | **Package assets once as agent plugins** | Claude Code plugin format (skills, agents, commands, hooks, MCP); generated marketplaces for Claude Code, Copilot CLI and Codex; fallback rendering elsewhere | [0005](../decisions/0005-canonical-asset-format.md), [0015](../decisions/0015-member-assets-as-agent-plugins.md) |
 | 7 | **Provider-agnostic runtime** | Every LLM provider pi supports, plus custom endpoints, configured in the portal | [0009](../decisions/0009-llm-provider-config.md) |
-| 8 | **Common engine, project-built rules** | Kintsugi is stack-agnostic; each project builds a rulebook in its workspace repo and verifies it (`template` → `draft` → `ready`) before dependent stages run | [0011](../decisions/0011-project-rulebook.md) |
-| 9 | **Open and composable, never locked** | Packs per stack pair, layered overrides, open capabilities, declarative pipelines, runner images, declarative harness renderers, `x-*` extensions; reuse via vendored, pinned snapshots | [0013](../decisions/0013-composable-open-rulebook.md) |
+| 8 | **Common engine, project-written standards** | Kintsugi is stack-agnostic; each project keeps its standards (conventions, mappings, review rules) and member plugins as plain documents in its single document repo | [0028](../decisions/0028-remove-rulebook-single-document-repo.md) |
+| 9 | **Open, never locked** | Declarative pipelines in `kintsugi.yaml`, open harness ids, declarative harness renderers, member plugins in the Claude Code plugin format | [0015](../decisions/0015-member-assets-as-agent-plugins.md), [0028](../decisions/0028-remove-rulebook-single-document-repo.md) |
 | 10 | **Keep the engine small** | No code graph or parsers, no unit-discovery or agent configuration; agents read code directly; the runtime is a generic agent kernel with agents supplied per job | [0014](../decisions/0014-no-code-graph-no-agent-config.md), [0023](../decisions/0023-runtime-as-generic-agent-kernel.md) |
 
 ## 4.2 Technology choices

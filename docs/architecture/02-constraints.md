@@ -12,11 +12,11 @@
 | TypeScript on Node ≥ 22; the runner follows pi's requirement (Node ≥ 22.19) | [ADR-0002](../decisions/0002-typescript-monorepo.md) |
 | pi is pinned to an exact version; only its MIT core packages are used | [ADR-0001](../decisions/0001-pi-as-kintsugi-runtime.md) |
 | The runtime never writes to repositories; runner containers are read-only except `/out` | [ADR-0004](../decisions/0004-runner-container-per-job.md) |
-| Kintsugi ships no stack-specific content; projects build their rulebook, and dependent stages are blocked until capabilities are `ready` (or waived) | [ADR-0011](../decisions/0011-project-rulebook.md), [ADR-0013](../decisions/0013-composable-open-rulebook.md) |
-| Extensions that run project code (runner images, harness transformer plugins) require installation-level allowlists | [ADR-0013](../decisions/0013-composable-open-rulebook.md) |
+| Kintsugi ships no stack-specific content; projects write their standards in their document repo | [ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md) |
+| Extensions (harness transformer plugins) require installation-level allowlists | [ADR-0015](../decisions/0015-member-assets-as-agent-plugins.md) |
 | No code graph or language parsing; no unit-discovery configuration; no runtime-agent configuration in any project repo | [ADR-0014](../decisions/0014-no-code-graph-no-agent-config.md) |
 | The runtime is a generic agent kernel; agents are installation data (built-in and custom), resolved by the launcher and supplied whole per job | [ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md), [ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md) |
-| Source repos are always read-only; the target base is scaffolded by the project before convert | [ADR-0011](../decisions/0011-project-rulebook.md) |
+| Legacy repos are always read-only; target repos are scaffolded by the project before convert, and only members write to them | [ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md) |
 
 ## 2.2 Organizational constraints
 

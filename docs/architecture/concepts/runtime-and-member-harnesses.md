@@ -7,7 +7,7 @@ Kintsugi has two kinds of agents with separate execution models ([ADR-0001](../.
 | Where it runs | The project's Kintsugi installation, one Docker container per job | Members' machines (IDE, CLI, desktop/web app) |
 | Who drives it | Kintsugi (orchestrator), automatically or on request from the portal | The member, interactively |
 | What it does | A **generic agent kernel** ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)) for **platform intelligence**; the agents (knowledge, assessment, to-be analysis, planning, review / gates, reporting) are planned and supplied per job as data | **The actual work**: write / migrate code, tests, designs, deliverable documents |
-| Writes to project repos | **Not directly.** The runner writes only to its output directory; the worker commits or opens a PR in the workspace repo | **Yes**, through the member's branches and PRs |
+| Writes to project repos | **Not directly.** The runner writes only to its output directory; the worker commits or opens a PR in the document repo | **Yes**, through the member's branches and PRs |
 | LLM license / cost | Providers configured in Kintsugi ([LLM configuration](llm-configuration.md)) | The member's or customer's existing licenses |
 
 ```
@@ -24,7 +24,7 @@ Kintsugi has two kinds of agents with separate execution models ([ADR-0001](../.
    skills, KB ▼                              │                    ▼
       ┌──────────────── Member machines ─────┴───┐   push/PR   ┌─────────────────────────────┐
       │  Claude Code · GitHub Copilot · ChatGPT/Codex │──────────►│ Git servers: code repos +   │
-      └──────────────────────────────────────────┘             │ workspace repo (documents)  │
+      └──────────────────────────────────────────┘             │ document repo (documents)  │
                                                                └─────────────────────────────┘
 ```
 
@@ -32,9 +32,9 @@ Kintsugi has two kinds of agents with separate execution models ([ADR-0001](../.
 
 The intended loop; the runtime steps need agents that are not introduced yet ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)).
 
-1. **Runtime prepares.** It pulls AS-IS context from the KB and produces a task pack. The worker commits the task pack to the workspace repo.
+1. **Runtime prepares.** It pulls AS-IS context from the KB and produces a task pack. The worker commits the task pack to the document repo.
 2. **The member implements** in their own harness. The harness uses the KB through the Kintsugi MCP server or CLI.
-3. **The member delivers.** Code goes to target repos and deliverables go to the workspace repo, both through PRs. The artifacts are then registered.
+3. **The member delivers.** Code goes to target repos and deliverables go to the document repo, both through PRs. The artifacts are then registered.
 4. **Runtime reviews** the PR against the gate. A human approves.
 5. **After merge**, the runtime enriches the TO-BE KB and the metrics are updated.
 
