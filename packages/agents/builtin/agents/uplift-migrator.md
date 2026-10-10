@@ -27,7 +27,7 @@ proven recipe to your unit — not to invent an approach.
 
    **If `PLAYBOOK.md` does not exist, STOP and migrate nothing.** You only
    run *after* a pilot unit has been migrated and its lessons written
-   down in the workspace repository; a missing playbook means that has not happened, and your
+   down in the document repository; a missing playbook means that has not happened, and your
    general knowledge of the stack is exactly what the pilot exists to
    correct. Report that the pilot has not been done and do not edit a file.
    This rule holds no matter how you were invoked — from a task pack, by a
@@ -67,7 +67,7 @@ manifest, shared build configuration at or above the working-copy root, lock
 files, dependency manifests outside your unit — are owned by the member
 running the uplift, not by you. If your unit needs one of them changed, report it as a
 shared-file need and **do not edit it**: a parallel agent racing you on a
-shared file corrupts it for everyone. Never touch the source repository (read-only: Kintsugi's member hooks refuse writes to it): it is the untouched baseline.
+shared file corrupts it for everyone. Never touch the legacy repository (read-only: Kintsugi's member hooks refuse writes to it): it is the untouched baseline.
 
 Use the **Write/Edit tools** for every file change — they are what the
 harness permission rules and Kintsugi's hooks can see and scope. Use **Bash only** to run this

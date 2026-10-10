@@ -6,14 +6,14 @@ metadata:
   audience: member
   upstream: commands/modernize-brief.md
   agents: []
-  reads: [assessment/<app>/ASSESSMENT.md, assessment/<app>/topology.json, assessment/<app>/*.mmd, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/RULE_REVIEWS.md, assessment/<app>/INTENT.md, assessment/<app>/PREFLIGHT.md, assessment/<app>/DELTA_CATALOG.md, assessment/<app>/BASELINE.md]
+  reads: [standards/, assessment/<app>/ASSESSMENT.md, assessment/<app>/topology.json, assessment/<app>/*.mmd, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/RULE_REVIEWS.md, assessment/<app>/INTENT.md, assessment/<app>/PREFLIGHT.md, assessment/<app>/DELTA_CATALOG.md, assessment/<app>/BASELINE.md]
   writes: [assessment/<app>/MODERNIZATION_BRIEF.md]
   gates: [the brief is approved in the portal (Phase 1 only or full plan) before any build stage starts]
 ---
 
 This command runs in the architect's harness through Kintsugi's member plugin: the architect writes the brief with
-their harness, from the workspace repository checked out next to the target repository, and proposes it as a pull
-request to the workspace repository. Approval does not happen here: it is a gate in the portal, and no build stage
+their harness, from the document repository checked out next to the target repository, and proposes it as a pull
+request to the document repository. Approval does not happen here: it is a gate in the portal, and no build stage
 starts until a person decides it.
 
 Synthesize everything in `assessment/$app/` into a **Modernization Brief**: the single
@@ -46,17 +46,17 @@ can wait. If a required file is missing, say so and stop: they come from the `as
   tests can even run on the target runtime; phasing without the catalog is planning blind. If it
   is missing, it is produced first by a **version-delta-analyst** runtime job (the `uplift` stage's
   delta-catalog step, started from the portal) and lands as `assessment/$app/DELTA_CATALOG.md` through the
-  workspace repository. Say so, ask for that job in the portal, and **stop until the catalog is merged**:
+  document repository. Say so, ask for that job in the portal, and **stop until the catalog is merged**:
   never write the brief before the catalog exists. Do not guess at deltas.
 
 **Staleness.** If an input is newer than an existing `MODERNIZATION_BRIEF.md`, regenerating is
 justified. If the brief is newer than every input and the user re-ran this anyway, ask what
-changed. Note the input timestamps in the brief's header (each input's last commit in the workspace repository),
-and the source repository commit the discovery artifacts read.
+changed. Note the input timestamps in the brief's header (each input's last commit in the document repository),
+and the legacy repository commit the discovery artifacts read.
 
 ## The Brief
 
-Write `assessment/$app/MODERNIZATION_BRIEF.md` in your checkout of the workspace repository, on your own branch,
+Write `assessment/$app/MODERNIZATION_BRIEF.md` in your checkout of the document repository, on your own branch,
 with these sections.
 
 **1. Objective.** One paragraph: from what, to what, why now.
@@ -104,7 +104,7 @@ Exit criteria:
   recorded in `assessment/$app/BASELINE.md`", "pilot playbook approved"). The build commands read the
   brief and treat them as binding, and they may tick a box or add a note but never reword a criterion:
   a proposed change goes on a `Proposed revision:` line for the approver. Tell the approver they steer
-  execution by editing this file (through a pull request to the workspace repository): an edited criterion is
+  execution by editing this file (through a pull request to the document repository): an edited criterion is
   honored, a chat message or a portal comment is not.
 - Draw the phases as a Mermaid `flowchart LR` of **sequence and dependencies**, never a `gantt`
   (that encodes durations this plan deliberately does not claim).
@@ -144,7 +144,7 @@ approval covers, and commits as `kintsugi-bot` with a `Kintsugi-Actor: <approver
 
 ## Finish
 
-Commit with an `Assisted-by: <harness>` trailer and open a pull request to the workspace repository; never push to
+Commit with an `Assisted-by: <harness>` trailer and open a pull request to the document repository; never push to
 its default branch. The portal shows the brief from there; there is no report to refresh. Present a summary of the
 brief with the link to the pull request and **stop: write nothing further until the brief is
 explicitly approved at the portal's approval gate** (use plan mode if the session supports it). This is the human

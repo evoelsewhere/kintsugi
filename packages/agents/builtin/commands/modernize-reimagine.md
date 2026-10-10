@@ -14,14 +14,14 @@ metadata:
 The first token of `$ARGUMENTS` is the application id (`$app`, from `kintsugi.yaml`); **everything after it is the target
 vision**, usually several words, so do not truncate it (with none, use the one in `assessment/$app/INTENT.md`). Below, `<vision>` means that whole remainder.
 
-This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **workspace repository**
-(`assessment/$app/...`); the **source repository** of `$app` is your local clone, **read-only** (Kintsugi's member hooks
+This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **document repository**
+(`assessment/$app/...`); the **legacy repository** of `$app` is your local clone, **read-only** (Kintsugi's member hooks
 refuse writes to it); the new services go to the **target repository** of `$app`, on your own branch, committed with an
 `Assisted-by: <harness>` trailer. Before you start, say in one line which source commit you read: the one the assessment
 recorded for `$app` (named in `assessment/$app/PREFLIGHT.md` and in the portal); check out exactly that commit. If you have no
-clone of the source repository, stop and say so: nothing can run without the code, and the fix is to clone the repositories
+clone of the legacy repository, stop and say so: nothing can run without the code, and the fix is to clone the repositories
 the portal lists for `$app`. The spec and the architecture (`AI_NATIVE_SPEC.md`, `REIMAGINED_ARCHITECTURE.md`) go to
-`assessment/$app/` on your own branch of the workspace repository and reach the project through a pull request. Run every
+`assessment/$app/` on your own branch of the document repository and reach the project through a pull request. Run every
 subagent in the foreground and wait for its result: never end your turn while one is still running. Stop any server or other
 process you started (a legacy app on a local port, a watcher) before you finish, and say you did.
 
@@ -29,7 +29,7 @@ process you started (a legacy app on a local port, a watcher) before you finish,
 system is the *specification source*, not the structural template. The command orchestrates a team of
 agents with two explicit human checkpoints, both **portal gates**: at each, this command stops and tells the user which gate
 to request; re-running `/kintsugi:modernize-reimagine $app <vision>` continues from the next phase once the portal shows the
-gate approved (the result is recorded under `gates` in the unit files in `units/$app/` of the workspace repository: pull it).
+gate approved (the result is recorded under `gates` in the unit files in `units/$app/` of the document repository: pull it).
 On a re-run, reuse the spec and architecture already written and do not repeat a phase whose gate is approved.
 
 **The brief is binding.** If `assessment/$app/MODERNIZATION_BRIEF.md` exists, find the phase whose
@@ -46,13 +46,13 @@ stage wrote there. Spawn concurrently (and tell the user all are running) only t
 agents whose input is missing:
 
 1. **business-rules-extractor**, only if `BUSINESS_RULES.md` is missing (better: run the `extract-rules` stage in the
-   portal) — "Extract every business rule from the source repository of $app (read-only, at the recorded commit) into
+   portal) — "Extract every business rule from the legacy repository of $app (read-only, at the recorded commit) into
    Given/When/Then form, as a structured list."
-2. **legacy-analyst**, only if no interface catalog exists yet — "Catalog every external interface of the source repository
+2. **legacy-analyst**, only if no interface catalog exists yet — "Catalog every external interface of the legacy repository
    of $app: inbound (screens, APIs, batch triggers, queues) and outbound (reports, files, downstream calls, DB writes), each
    with name, direction, payload shape, and frequency or SLA if discernible. Mask credentials in endpoints and payload examples."
 3. **legacy-analyst**, only if there is no `topology.json` or `DATA_OBJECTS.md` — "Identify the core domain
-   entities of the source repository of $app and their relationships: an entity list and a Mermaid erDiagram."
+   entities of the legacy repository of $app and their relationships: an entity list and a Mermaid erDiagram."
 
 Write `assessment/$app/AI_NATIVE_SPEC.md`: **Capabilities** (what the system must do, from rules and
 interfaces), **Domain Model** (entities and erDiagram), **Interface Contracts** (each external interface as
@@ -64,7 +64,7 @@ never literals.
 
 ## Phase B — Checkpoint 1
 
-Push the spec to the workspace pull request, summarize it, and **stop**: tell the user to request the **P0 capabilities**
+Push the spec to the document repo pull request, summarize it, and **stop**: tell the user to request the **P0 capabilities**
 gate in the portal with **one focused question**: "Which of these capabilities are P0 for the
 reimagined system, and should any be deliberately dropped?" On the re-run after the gate, record the answer
 from the gate in the spec.
@@ -74,14 +74,14 @@ from the gate in the spec.
 Design the target architecture for <vision>: a Mermaid C4 Container diagram, service boundaries with
 rationale (which rules and entities live where), technology choices with a one-line justification each, and
 the data migration approach from the legacy stores. Then get the critique: if an architecture-critic review of this design
-from Kintsugi's review stage is already in `reviews/` of the workspace repository, reuse it; otherwise spawn
+from Kintsugi's review stage is already in `reviews/` of the document repository, reuse it; otherwise spawn
 **architecture-critic**: "Review this architecture for <vision> against `assessment/$app/AI_NATIVE_SPEC.md`:
 over-engineering, missed requirements, scaling risks, simpler alternatives." Incorporate the critique and write
 `assessment/$app/REIMAGINED_ARCHITECTURE.md`.
 
 ## Phase D — Checkpoint 2
 
-Push the architecture to the workspace pull request and **stop: scaffold nothing until the architecture is approved** (plan
+Push the architecture to the document repo pull request and **stop: scaffold nothing until the architecture is approved** (plan
 mode if available). Tell the user to request the **architecture approval** gate in the portal. The approval authorizes the
 build-out, and edits a reviewer makes at the gate are binding.
 
@@ -98,7 +98,7 @@ Workflow({
   args: { app: "$app",
           sourceDir: "<path of the pinned source checkout, read-only>",
           targetDir: "<path of the working copy in the target repository>",
-          workspaceDir: "<workspace repository root that holds assessment/$app/>",
+          workspaceDir: "<document repository root that holds assessment/$app/>",
           services: [
     { name: "<service-name>", responsibilities: "<one line from the architecture>" }, ...
   ] }
@@ -123,12 +123,12 @@ When all finish, run the acceptance suites and report: total tests, passing (sca
 ## Phase F — Knowledge handoff
 
 Write `CLAUDE.md` at the root of the target repository, the persistent context for the new system: architecture
-summary, service responsibilities, where the spec lives (`assessment/$app/` in the workspace repository), how to run the
+summary, service responsibilities, where the spec lives (`assessment/$app/` in the document repository), how to run the
 tests, and the legacy-to-modern traceability map. It gets committed, so connection details and credentials appear only as
 env-var names with a pointer to where they are provisioned, never values. The stage's progress is tracked in the portal, not
 by this file.
 
-Push the target branch and open the target pull request; open (or update) the workspace pull request with everything under
+Push the target branch and open the target pull request; open (or update) the document repo pull request with everything under
 `assessment/$app/` this command wrote. Report: services scaffolded, acceptance tests defined, the share of behaviors with a
-home, and where the artifacts are (the portal shows them once the workspace pull request is merged). The next step is
+home, and where the artifacts are (the portal shows them once the document repo pull request is merged). The next step is
 implementing the pending rules service by service, then the `harden` stage.

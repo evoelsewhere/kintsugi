@@ -27,19 +27,19 @@ readiness report, not the first error.
 
 ## Where the code lives
 
-Kintsugi already knows the code: the application's source repositories are registered in `kintsugi.yaml`
-(`role: source`), and the task pack names the repository and the commit to check. The member works on a local
-clone of each source repository, read-only, with the workspace repository checked out next to the target
+Kintsugi already knows the code: the application's legacy repositories are registered in `kintsugi.yaml`
+(`role: legacy`), and the task pack names the repository and the commit to check. The member works on a local
+clone of each legacy repository, read-only, with the document repository checked out next to the target
 repository. Nothing is ever copied, linked or cloned by this command.
 
-- Locate the local clone of the source repository (from the task pack, or ask the member where it is). If it is
+- Locate the local clone of the legacy repository (from the task pack, or ask the member where it is). If it is
   missing, say how to clone it and stop the checks that need it, but still run the rest.
 - Say in one line which repository and which commit you checked (`git -C <clone> rev-parse HEAD`), and whether it
   matches the commit recorded in `assessment/$app/INTENT.md`. A mismatch is a finding, not a reason to check out
   another commit yourself.
 - If `$target_stack` starts with `--`, it is a flag, not a stack.
 
-Never modify anything in the source repository. Kintsugi's member hooks refuse writes to it; do not work around them.
+Never modify anything in the legacy repository. Kintsugi's member hooks refuse writes to it; do not work around them.
 
 ## Check 0 — The human answers (asked in the portal; these answers are not in the source)
 
@@ -74,7 +74,7 @@ below, keep the Answers section exactly as recorded.
 
 ## Check 1 — Detect the stack
 
-Fingerprint the source repository from file extensions and manifests: languages, build
+Fingerprint the legacy repository from file extensions and manifests: languages, build
 system, deployment and config descriptors. Report what you found and the rough
 file split.
 
@@ -150,23 +150,23 @@ The map is only as good as what is in the tree. Look for the stack's equivalents
 
 - **Production telemetry** — is an APM MCP server connected, or are batch logs
   and runtime exports available? (Enables the runtime overlay in assess.)
-- **Version control** — does the source repository have real history, or one squashed import commit? (Change
+- **Version control** — does the legacy repository have real history, or one squashed import commit? (Change
   frequency sharpens risk ranking.)
 
 ## Check 6 — Scope boundary (is `$app` the whole world, or a slice?)
 
-Every downstream stage assumes the registered source repositories of `$app` *are* the system. When the code is one
+Every downstream stage assumes the registered legacy repositories of `$app` *are* the system. When the code is one
 part of a larger codebase — a module of a monorepo that was split out, one solution among several repositories, a
 subsystem sharing includes with sibling repositories — that assumption is the most dangerous
-in the run, and nothing else checks it. Look for references that reach outside the source repository (relative
+in the run, and nothing else checks it. Look for references that reach outside the legacy repository (relative
 paths above its root, a parent build file or solution that is not in it, project or module references to sibling
 repositories, packages built from other repositories and pulled from an internal feed), and for other source
 repositories registered for this application or project that share code with it. If either is true, report both directions:
 
 - **Outbound** — things inside that depend on source outside (project or module
   references, shared includes, a parent build file). The map and the delta
-  catalog only see what is in the registered source repositories, so each one is a dependency they will
-  silently miss. List them, and say whether registering another source repository would close the gap.
+  catalog only see what is in the registered legacy repositories, so each one is a dependency they will
+  silently miss. List them, and say whether registering another legacy repository would close the gap.
 - **Inbound** — things outside that depend on things inside: the **blast
   radius**. An in-place migration of a node with outside consumers breaks each of
   them. Grep the manifests of the sibling repositories you have locally for references into this code, list the nodes
@@ -174,11 +174,11 @@ repositories registered for this application or project that share code with it.
   in-place change: keep it buildable for old and new consumers during the
   transition, widen the scope to include the consumers, or schedule the break.
 
-If the source repository is standalone, one line saying so is the whole check.
+If the legacy repository is standalone, one line saying so is the whole check.
 
 ## Check 7 — Is the source protected from edits?
 
-Every command is written never to edit the source repository, and Kintsugi's member hooks refuse writes to it, but a
+Every command is written never to edit the legacy repository, and Kintsugi's member hooks refuse writes to it, but a
 hook only covers the tools it sees. This check is **read-only**: never edit a settings file and never suggest
 loosening a permission.
 
@@ -197,7 +197,7 @@ loosening a permission.
 The status is ✅ or ⚠️, never ❌, and changes no command's verdict:
 
 - **✅** — the member hook is active, or matching deny rules exist (best: both). Name the plugin version, the file
-  and the rules. If one is a bare `Edit`, say it also blocks the workspace and target repositories, where commands write.
+  and the rules. If one is a bare `Edit`, say it also blocks the document and target repositories, where commands write.
 - **⚠️** — neither found. Say how to install or enable Kintsugi's member plugin, and print this snippet for the
   project's `.claude/settings.json` (merged into `permissions.deny` if that list exists):
 
@@ -214,11 +214,11 @@ or a sandbox that blocks shell writes.
 
 ## Report
 
-Write `assessment/$app/PREFLIGHT.md` in your checkout of the workspace repository, on your own branch, and open a
-pull request to the workspace repository (commit with an `Assisted-by: <harness>` trailer). Never push to its
+Write `assessment/$app/PREFLIGHT.md` in your checkout of the document repository, on your own branch, and open a
+pull request to the document repository (commit with an `Assisted-by: <harness>` trailer). Never push to its
 default branch: Kintsugi indexes the file when the pull request merges. **Lead with the Answers section, exactly as
 the portal recorded it, and the Check 6 finding** — downstream stages (`brief` above all) read those two. Record
-which source repository and commit you checked, and on which machine (platform, not hostname).
+which legacy repository and commit you checked, and on which machine (platform, not hostname).
 Then a table, one row per check, status ✅ / ⚠️ / ❌, what was found and the fix
 for anything not green, then a **Ready / Ready-with-gaps / Not ready** verdict per
 stage:

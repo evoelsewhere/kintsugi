@@ -18,7 +18,7 @@ pg-boss keeps its tables in its own `pgboss` schema: an infrastructure library, 
 ## Planned
 
 - **Job worktrees**: a per-job worktree at the job's commit, mounted read-only as `/src`.
-- **Git writer**: validates a runtime job's `/out`, then commits to the workspace repo on `kintsugi/<agent>/<job-id>` and opens a PR (or auto-commits allowed paths) — ADR-0019.
+- **Git writer**: validates a runtime job's `/out`, then commits to the document repo on `kintsugi/<agent>/<job-id>` and opens a PR (or auto-commits allowed paths) — ADR-0019.
 - Runtime jobs (via the launcher in `services/runtime`), ingestion, webhooks (D30).
 
 ## Run

@@ -27,9 +27,9 @@ The 13 files under `commands/` describe individual tasks, their audience (`runti
 
 | Location | Repository/owner | Contents and write boundary |
 | --- | --- | --- |
-| Source repository at the recorded job commit | Project source repository | Runtime jobs and readers may read it only. It is mounted read-only; no job, script, or member workflow writes or commits source changes. |
-| `assessment/<app>/` | Project workspace repository | Durable understanding evidence such as assessment, topology, business rules, brief, data objects, security findings, verification, and review records. Runtime output is collected here only after lifecycle checks and the applicable gate. |
-| `golden/<unit>/cases/` and `golden/<unit>/fresh/` | Project workspace repository | Human-reviewed baseline inputs and captured legacy outputs for equivalence. |
+| Legacy repository at the recorded job commit | Project legacy repository | Runtime jobs and readers may read it only. It is mounted read-only; no job, script, or member workflow writes or commits source changes. |
+| `assessment/<app>/` | Project document repository | Durable understanding evidence such as assessment, topology, business rules, brief, data objects, security findings, verification, and review records. Runtime output is collected here only after lifecycle checks and the applicable gate. |
+| `golden/<unit>/cases/` and `golden/<unit>/fresh/` | Project document repository | Human-reviewed baseline inputs and captured legacy outputs for equivalence. |
 | `runs/<unit>/<run-id>/` | Job scratch/output namespace | Ephemeral output from a new implementation run. It is not committed as golden data and is not a place to store credentials. |
 | Target repository | Separate project target repository | Member harnesses make target changes here. Kintsugi supplies context and ingests results; it does not edit or commit the target repository. |
 

@@ -6,7 +6,7 @@ metadata:
   audience: runtime
   upstream: commands/modernize-harden.md
   agents: [security-auditor]
-  reads: [assessment/<app>/ASSESSMENT.md, assessment/<app>/SECURITY_FINDINGS.md]
+  reads: [standards/, assessment/<app>/ASSESSMENT.md, assessment/<app>/SECURITY_FINDINGS.md]
   writes: [assessment/<app>/SECURITY_FINDINGS.md, assessment/<app>/security_remediation.patch]
   gates: [a member decides whether to apply the remediation patch, re-run the coverage gaps]
 ---
@@ -17,19 +17,19 @@ distinct finding, one **security-auditor** second-judge job per finding still Cr
 **security-auditor** triage-and-remediation job writes `assessment/$app/SECURITY_FINDINGS.md`, the shareable
 `assessment/$app/security_remediation.patch` and, under `restricted/`, the masked credential inventory;
 then up to three rounds of **security-auditor** patch-review jobs, each followed by a
-**security-auditor** revision job while any hunk is not clean. Every job reads the source repository of `$app`
+**security-auditor** revision job while any hunk is not clean. Every job reads the legacy repository of `$app`
 read-only at the commit the orchestrator pinned and writes only through `outputs_write`; the worker commits the
-shareable outputs to the workspace repository as `kintsugi-bot` and stores everything under `restricted/` as a
+shareable outputs to the document repository as `kintsugi-bot` and stores everything under `restricted/` as a
 restricted portal record, never committed. Applying a patch is a member's decision, taken at a portal gate.
 
 Run a **security hardening pass** on the legacy application: find vulnerabilities, rank them, and produce a
 reviewable patch for the critical ones. `$app` is the application id from `kintsugi.yaml`.
-The code is the **source repository** of `$app`, registered on the application in `kintsugi.yaml`
-(`role: source`); every job reads it at the same pinned commit, and `SECURITY_FINDINGS.md` says which repository
-and commit were read. If the application has no source repository, the stage cannot start: the orchestrator
+The code is the **legacy repository** of `$app`, registered on the application in `kintsugi.yaml`
+(`role: legacy`); every job reads it at the same pinned commit, and `SECURITY_FINDINGS.md` says which repository
+and commit were read. If the application has no legacy repository, the stage cannot start: the orchestrator
 says so, and the fix is registering one on the application in the portal.
 
-This stage never edits the source repository: it writes findings and a proposed patch to `assessment/$app/`
+This stage never edits the legacy repository: it writes findings and a proposed patch to `assessment/$app/`
 (and the masked credential inventory to the restricted record), and a member reviews and decides whether it is
 applied.
 
@@ -40,7 +40,7 @@ Kintsugi never commits raw credentials:
 
 1. The credential inventory goes only to the **restricted portal record**: a job writes it under `restricted/`
    in its output directory (`restricted/SECRETS.local.md`), and the worker stores it as the restricted record
-   (visible only to people with the permission for it) and never commits it to the workspace repository.
+   (visible only to people with the permission for it) and never commits it to the document repository.
 2. Nothing under `restricted/` is copied into a committed file, a portal summary or a job log.
 
 **No job ever writes a raw credential value, anywhere**, not even to the restricted record: every artifact masks
@@ -88,8 +88,8 @@ found — inventory in the restricted portal record (not committed; not for shar
 ## Remediate
 
 For each **Critical** and **High** finding, the same job drafts a minimal, targeted fix. It does **not** edit the
-source repository (it cannot: the job's working directory is read-only): it writes unified diffs with `a/` and
-`b/` paths **relative to the source repository root**, a comment line above each
+legacy repository (it cannot: the job's working directory is read-only): it writes unified diffs with `a/` and
+`b/` paths **relative to the legacy repository root**, a comment line above each
 hunk citing its finding (`# SEC-001: parameterize the query`). **Credential findings get no applicable hunk**,
 because a diff that removes a secret contains the raw value on its `-` and context lines:
 
@@ -104,8 +104,8 @@ the patch carries a hunk or the finding needs a manual credential change.
 
 ## Verify
 
-The orchestrator starts a **security-auditor** patch-review job, given both patches and the source repository:
-"Review `assessment/$app/security_remediation.patch` against the source repository of $app. For each hunk: does it fully remediate the cited finding? Does it introduce a vulnerability
+The orchestrator starts a **security-auditor** patch-review job, given both patches and the legacy repository:
+"Review `assessment/$app/security_remediation.patch` against the legacy repository of $app. For each hunk: does it fully remediate the cited finding? Does it introduce a vulnerability
 or change behavior beyond the fix? Confirm no raw credential appears anywhere in the shareable patch. One verdict
 per hunk: RESOLVES, PARTIAL or INTRODUCES-RISK, with a one-line reason. Never quote a credential value in your
 verdicts." **Loop deterministically:** while any hunk is PARTIAL or INTRODUCES-RISK, the orchestrator starts a
@@ -121,13 +121,13 @@ The worker commits the shareable outputs and stores the restricted record. The p
 
 - `assessment/$app/SECURITY_FINDINGS.md`: findings, remediation log, patch review. If Coverage gaps lists any,
   the portal says so plainly and offers to re-run just those.
-- `assessment/$app/security_remediation.patch`, behind a **gate: a member decides whether it is applied**. Kintsugi never applies them: the source repository is read-only for
+- `assessment/$app/security_remediation.patch`, behind a **gate: a member decides whether it is applied**. Kintsugi never applies them: the legacy repository is read-only for
   the runtime and for Kintsugi's member plugin. A member who accepts applies it outside Kintsugi's write path,
-  through the legacy code's own change process, from a clone of the source repository:
+  through the legacy code's own change process, from a clone of the legacy repository:
   `patch -p1 < security_remediation.patch`; credential findings are fixed by hand from the masked inventory,
   and the affected credentials are rotated regardless. The decision (applied, rejected, deferred, by whom)
   is recorded in the portal.
-- After a patch is applied and the source repository has a new commit, rerun the `harden` stage on that commit to
+- After a patch is applied and the legacy repository has a new commit, rerun the `harden` stage on that commit to
   confirm resolution.
 
 ### Re-running coverage gaps

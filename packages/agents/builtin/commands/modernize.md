@@ -13,7 +13,7 @@ metadata:
 
 **The portal implements this command** as its "start a modernization" wizard. The content below is the
 specification of what the wizard asks, what it shows and what the worker writes; nothing here runs as a runtime
-job or in a member's harness. Every file the wizard records is committed to the workspace repository by the
+job or in a member's harness. Every file the wizard records is committed to the document repository by the
 worker as `kintsugi-bot`, with a `Kintsugi-Actor: <user>` trailer naming the person who answered.
 
 You are the front door of a guided modernization. The person may know nothing about modernization: ask
@@ -27,16 +27,16 @@ little, explain in plain words, and always end on one exact next step to start.
 - If `assessment/$app/` already has files, this is a return visit: show what the progress view (the `status`
   specification) shows (where they are, what is stale) in five lines, and end on the exact next step. Stop there.
 
-## 2 — Pick the application and its source repository
+## 2 — Pick the application and its legacy repository
 
 Kintsugi already knows where the code is: each application in `kintsugi.yaml` lists its registered repositories,
-and the ones with `role: source` hold the legacy code (read-only for the runtime and for members). Nothing is ever
+and the ones with `role: legacy` hold the legacy code (read-only for the runtime and for members). Nothing is ever
 copied, linked or cloned by this wizard.
 
-- Show the application's source repositories (Git server and path). One means use it; several means ask which one
+- Show the application's legacy repositories (Git server and path). One means use it; several means ask which one
   this modernization covers (or all of them). None means the application cannot start yet: say so and point to
-  registering a source repository on the application.
-- Read the source repository at its current default-branch commit and record that commit: every later stage says
+  registering a legacy repository on the application.
+- Read the legacy repository at its current default-branch commit and record that commit: every later stage says
   which commit it read.
 - Say in one line what you found there (languages and rough size: a file count by extension is enough; the portal
   can take it from the repository index or from a script step).
@@ -66,7 +66,7 @@ can type any other target.
 ## 4 — Write it down once
 
 The worker writes `assessment/$app/INTENT.md`: the goal (uplift, transform, reimagine or understand), from and to (or the target
-and vision), what must stay true, the source repository and commit read in step 2, who answered, and today's date, with their answers word for word. Later stages read it so nobody
+and vision), what must stay true, the legacy repository and commit read in step 2, who answered, and today's date, with their answers word for word. Later stages read it so nobody
 is asked twice: `brief` takes its target stack from it and never overrides it with a guess.
 
 ## 5 — Show the road

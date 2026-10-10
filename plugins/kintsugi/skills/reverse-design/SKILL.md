@@ -6,7 +6,7 @@ description: Generate an AS-IS detail design document (markdown) for one feature
 # Reverse design
 
 ## Inputs
-- Task pack (`tasks/<id>.md` in the workspace repo, via `kintsugi task start` or MCP `task.get`): feature scope and entry points (controllers, pages, jobs).
+- Task pack (`tasks/<id>.md` in the document repo, via `kintsugi task start` or MCP `task.get`): feature scope and entry points (controllers, pages, jobs).
 - DD template: `references/dd-template.md` from the project's TO-BE KB (fetch with MCP `kb.search` if not provided).
 
 ## Steps
@@ -14,7 +14,7 @@ description: Generate an AS-IS detail design document (markdown) for one feature
 2. Extract: screen/API spec, business rules, validation, data entities and queries, external interfaces, error handling.
 3. Fill the DD template. Mark anything inferred rather than read from code as `[INFERRED]`.
 4. Record gaps between code and existing documents as a GAP list section.
-5. Save the document at the path given in the task pack (workspace repo), commit it on your branch, open a PR, and register it with `kintsugi artifact register` or MCP `artifact.register` (type `detail-design`). Do not modify source code in this stage.
+5. Save the document at the path given in the task pack (document repo), commit it on your branch, open a PR, and register it with `kintsugi artifact register` or MCP `artifact.register` (type `detail-design`). Do not modify source code in this stage.
 
 ## Output quality bar
 - Every business rule cites `path:line`.

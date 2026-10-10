@@ -6,7 +6,7 @@ metadata:
   audience: member
   upstream: commands/modernize-transform.md
   agents: [test-engineer, architecture-critic]
-  reads: [assessment/<app>/MODERNIZATION_BRIEF.md, assessment/<app>/INTENT.md, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/PREFLIGHT.md]
+  reads: [standards/, assessment/<app>/MODERNIZATION_BRIEF.md, assessment/<app>/INTENT.md, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/PREFLIGHT.md]
   writes: [assessment/<app>/modules/<module>/TRANSFORMATION_NOTES.md, golden/<module>/cases/, golden/<module>/cases.json, runs/<module>/<run-id>/EQUIVALENCE.json]
   gates: [transform plan approval, approval of each accepted equivalence difference]
 ---
@@ -16,14 +16,14 @@ equivalence. This is one vertical slice of the strangler fig; the code goes to t
 under the module's folder (`<module>/`, or the target path the brief or the unit file in `units/$app/` names), on your
 own branch, committed with an `Assisted-by: <harness>` trailer.
 
-This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **workspace repository**
-(`assessment/$app/...`), checked out next to the target repository; the **source repository** of `$app` is your local
+This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **document repository**
+(`assessment/$app/...`), checked out next to the target repository; the **legacy repository** of `$app` is your local
 clone, **read-only** (Kintsugi's member hooks refuse writes to it). Before you start, say in one line which source commit
 you read: the one the assessment recorded for `$app` (named in `assessment/$app/PREFLIGHT.md` and in the portal); check out
-exactly that commit. If you have no clone of the source repository, stop and say so: nothing can run without the code, and
+exactly that commit. If you have no clone of the legacy repository, stop and say so: nothing can run without the code, and
 the fix is to clone the repositories the portal lists for `$app`. Analysis outputs (`TRANSFORMATION_NOTES.md` under
 `assessment/$app/`, the golden cases under `golden/<module>/` and the comparison report under `runs/<module>/<run-id>/`) go
-on your own branch of the workspace repository and reach the project through a pull request. Equivalence data follows the workspace repository's layout: development cases (inputs and the legacy outputs)
+on your own branch of the document repository and reach the project through a pull request. Equivalence data follows the document repository's layout: development cases (inputs and the legacy outputs)
 live in `golden/<module>/cases/<id>/`, listed in `golden/<module>/cases.json`; each comparison run writes its small
 reports to `runs/<module>/<run-id>/` (`<run-id>` is `<YYYYMMDD-HHMM>-<short target commit>`). The new side's raw
 outputs are never committed: keep them in a scratch folder outside the three checkouts. Run every subagent in the foreground and wait for its result: never end your turn while
@@ -70,7 +70,7 @@ repository: pull it). Edits a reviewer makes to the plan at the gate are binding
 
 ## Step 1 — Characterization tests first
 
-Spawn the **test-engineer** subagent: "Write characterization tests for module $module of the source repository of $app
+Spawn the **test-engineer** subagent: "Write characterization tests for module $module of the legacy repository of $app
 (read-only, at the recorded commit).
 Read the source, identify every observable behavior and encode each as a test with concrete input and
 expected output derived from the legacy logic. Target framework: <right for $target_stack>. Write to
@@ -105,7 +105,7 @@ While iterating, run only this module's tests; run the whole suite once before S
    run both systems on the same inputs: save each input and its legacy output under `golden/$module/cases/<id>/`
    and each new output in your scratch folder, list the pairs in `golden/$module/cases.json` (legacy paths relative
    to `golden/$module/`, new paths relative to the scratch folder; the schema is at the top of `scripts/compare.py`),
-   and run, from the root of the workspace checkout,
+   and run, from the root of the document repo checkout,
    `python3 scripts/compare.py $app --source <source clone> --assessment assessment/$app --target <target checkout> --cases golden/$module/cases.json --runs <scratch folder> --out runs/$module/<run-id>`,
    which writes `runs/$module/<run-id>/EQUIVALENCE.json`.
    That script, not your judgment, decides same or different. Mask only fields that legitimately vary
@@ -123,18 +123,18 @@ mapping table (legacy file:lines at the recorded source commit to target file:li
 with rationale; what was NOT migrated (dead code, unreachable branches) and why; the canary result and the executed-case
 count; follow-ups for the next dependent module. Show one representative behavior side by side
 (`diff -y --width=160 <(sed -n '<lines>p' <legacy file>) <target file>`). Never pick a credential-bearing
-range, and mask any credential-like literal in the notes: they are committed to the workspace repository.
+range, and mask any credential-like literal in the notes: they are committed to the document repository.
 This is your own evidence: `/kintsugi:modernize-verify $app $module` is the independent re-check
 (it re-runs the tests and the comparison, tries new inputs, and gives one verdict).
 
 ## Step 5 — Architecture review
 
 Kintsugi's review stage runs the **architecture-critic** server-side on your pushed branch: if its record for this commit is
-in `reviews/` of the workspace repository, reuse it; otherwise spawn the **architecture-critic** subagent here to review
+in `reviews/` of the document repository, reuse it; otherwise spawn the **architecture-critic** subagent here to review
 the code against $target_stack best practice.
 Apply HIGH-severity feedback and list the rest in the notes.
 
-Push the target branch and open the target pull request; open (or update) the workspace pull request with everything under
+Push the target branch and open the target pull request; open (or update) the document repo pull request with everything under
 `assessment/$app/` this command wrote. Report: tests passing, cases executed, lines of legacy retired, where the artifacts
-are (the portal shows them once the workspace pull request is merged). The next step is the brief's next module, or the
+are (the portal shows them once the document repo pull request is merged). The next step is the brief's next module, or the
 `harden` stage when the phase is done.

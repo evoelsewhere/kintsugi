@@ -4,10 +4,10 @@ Built-in agent plugins for members' harnesses, in the **Claude Code plugin forma
 
 - `kintsugi/`: the built-in, stack-agnostic plugin (task workflow, reverse design, Kintsugi MCP server, hooks).
 
-Stack-specific plugins do not belong here. They live in each project's rulebook (`rulebook/packs/<pack>/plugins/<plugin>/`).
+Stack-specific plugins do not belong here. They live in each project's document repo (`plugins/<plugin>/`).
 
 How plugins reach members:
-1. For each project, Kintsugi vendors the built-in plugin into the workspace repo.
+1. For each project, Kintsugi vendors the built-in plugin into the document repo.
 2. It generates marketplace files there (`.claude-plugin/marketplace.json`, `.github/plugin/marketplace.json`, `.agents/plugins/marketplace.json`).
 3. Members install from that marketplace with their harness's plugin commands.
 

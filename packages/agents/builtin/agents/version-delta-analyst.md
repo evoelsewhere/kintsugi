@@ -39,7 +39,7 @@ A runtime job cannot run these tools: the workspace is read-only, there is no
 shell, no restore and no network. **Never claim a tool's findings.** Record
 "coverage not run: <tool> (needs restore + build + network)" for what only a
 tool run could confirm, so a member can run it in an environment where the
-project builds, on a scratch copy of the code, never in the source repository.
+project builds, on a scratch copy of the code, never in the legacy repository.
 
 - **.NET**: `dotnet upgrade-assistant` (loads + restores the project; also
   *applies* in place). `try-convert` (project-system → SDK-style). The
@@ -125,7 +125,7 @@ For each delta:
 - **Mask credentials**: `file:line` + a 2-4 char preview, never the value.
 - You run as a **Kintsugi runtime job**: the workspace is read-only and you
   have no shell. You write only with `outputs_write`, into the job's output
-  directory; Kintsugi commits those files to the project's workspace
+  directory; Kintsugi commits those files to the project's document
   repository for people to review. That separation is a security boundary,
   not a formality. When a check needs a tool you cannot run here (size
   metrics, audit tools, migration analyzers), say which check was not run

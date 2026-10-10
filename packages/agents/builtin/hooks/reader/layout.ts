@@ -1,6 +1,6 @@
 import { isAppName } from './text'
 
-/** Workspace-repository artifact locations understood by the portal reader. */
+/** Document-repository artifact locations understood by the portal reader. */
 export type WorkspaceLayout = {
   assessmentDir: string
   sourceDir: string
@@ -33,7 +33,7 @@ const prefix = (value: string, label: string): string => {
   return value
 }
 
-/** Assessment artifacts are committed in the workspace repository. */
+/** Assessment artifacts are committed in the document repository. */
 export const assessmentPath = (app: string, layout = DEFAULT_WORKSPACE_LAYOUT): string =>
   `${prefix(layout.assessmentDir, 'assessment directory')}/${segment(app, 'app')}`
 
@@ -47,7 +47,7 @@ export const targetPath = (app: string, track: 'transform' | 'uplift' | 'reimagi
   return `${prefix(layout.targetDir, 'target directory')}/${segment(app, 'app')}${suffix}`
 }
 
-/** Golden fixtures are versioned per unit in the workspace repository. */
+/** Golden fixtures are versioned per unit in the document repository. */
 export const goldenPath = (unit: string, layout = DEFAULT_WORKSPACE_LAYOUT): string => {
   return `${prefix(layout.goldenDir, 'golden directory')}/${segment(unit, 'unit')}`
 }

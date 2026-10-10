@@ -4,7 +4,7 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
-- Adapt the upstream modernization method to Kintsugi runtime jobs, member harnesses, workspace-repository artifacts, and portal-owned progress presentation.
+- Adapt the upstream modernization method to Kintsugi runtime jobs, member harnesses, document-repository artifacts, and portal-owned progress presentation.
 - Retain pure progress readers under `hooks/reader/`, mapping assessment, source, target, golden, and run data to Kintsugi repository namespaces for future portal use.
 - Add the server-side JobOutput hook and its fail-closed credential scan, artifact-shape checks, redacted JSON report, bounds, and tests.
 - Remove the Claude Code plugin manifest and pane/plugin-host code, including hook registration, terminal views, telemetry, and host-specific tests.

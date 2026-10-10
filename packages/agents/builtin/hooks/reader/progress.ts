@@ -194,7 +194,7 @@ async function cached<T>(
   return { value, mtimeMs }
 }
 
-/** The apps with committed assessment artifacts in the workspace repository. */
+/** The apps with committed assessment artifacts in the document repository. */
 export async function appsOf(fs: ReaderFs, assessmentDir = 'assessment'): Promise<string[]> {
   return (await dirNamesOf(fs, assessmentDir)).filter(isAppName).sort()
 }
