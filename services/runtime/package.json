@@ -26,5 +26,15 @@
   "devDependencies": {
     "@types/pg": "^8.23.1",
     "vitest": "^5.0.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./provider-catalog": {
+      "types": "./dist/catalog/provider-catalog.d.ts",
+      "import": "./dist/catalog/provider-catalog.js"
+    }
   }
 }
