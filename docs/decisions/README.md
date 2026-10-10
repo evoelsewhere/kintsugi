@@ -32,7 +32,7 @@ This page has two parts:
 | [0011](0011-project-rulebook.md) | Every project builds its own rulebook before running the pipeline | Accepted |
 | [0012](0012-work-items-as-files-in-git.md) | Work items are files in the workspace repo; Postgres indexes them | Accepted |
 | [0013](0013-composable-open-rulebook.md) | Composable, open rulebook | Accepted (decisions 7–8 superseded by 0014) |
-| [0014](0014-no-code-graph-no-agent-config.md) | No code graph or parsing, no unit-discovery config, built-in runtime agents fixed in code | Accepted |
+| [0014](0014-no-code-graph-no-agent-config.md) | No code graph or parsing, no unit-discovery config, built-in runtime agents fixed in code | Accepted (decision 3 superseded by 0023) |
 | [0015](0015-member-assets-as-agent-plugins.md) | Member-harness assets are agent plugins (Claude Code plugin format) | Accepted |
 | [0016](0016-nestjs-api-framework.md) | NestJS is the API framework for `apps/api` | Accepted |
 | [0017](0017-portal-vite-react-shadcn.md) | Portal is a Vite + React SPA with shadcn/ui | Accepted |
@@ -40,7 +40,8 @@ This page has two parts:
 | [0019](0019-workspace-repo-write-path.md) | One workspace repo per project; the worker writes as `kintsugi-bot` | Accepted |
 | [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Accepted (0021 proposes to supersede it) |
 | [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Proposed |
-| [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Accepted |
+| [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Superseded by 0023 |
+| [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted |
 
 ## Decision register
 
@@ -73,7 +74,7 @@ This page has two parts:
 | D25 | Policy engine | 🟢 | TypeScript rules + policy in `kintsugi.yaml`; consider OPA/Cedar in M4 | M4 | 🟡 |
 | D26 | Audit log | 🟢 | Append-only, hash-chained table in Postgres | M4 | 🟡 |
 | D27 | pi versioning | 🟢 | Track latest pi, pin exact versions of `@earendil-works/*` in the runner image; deliberate upgrades | M0 | ✅ [0018](0018-pin-pi-exact-version.md) |
-| D28 | Runtime agent definitions | 🟢 | Built-in, stack-agnostic, fixed in code (prompt, skills, tools, policy); no agent configuration in any repo | M1 | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
+| D28 | Runtime agent definitions | 🟢 | The runtime is a generic kernel; an agent definition (instructions, skills, tools, policy) is data supplied with each job; no agent ships with Kintsugi and none is configured in any repo | M1 | ✅ [0023](0023-runtime-as-generic-agent-kernel.md) |
 | D29 | Workspace repo layout + how the runtime writes to Git | 🔴 | One workspace repo per project; worker commits on `kintsugi/*` branches + PR as `kintsugi-bot`; `autoCommitPaths` (`units/**`, `tasks/**`, `knowledge/**/generated/**`) commit directly to the default branch ([reference](../reference/workspace-repo.md)) | M0 | ✅ [0019](0019-workspace-repo-write-path.md) |
 | D30 | Webhooks vs. polling | 🟠 | Polling by default (1–5 min); webhooks when reachable | M2 | 🟡 |
 | D31 | Large binaries (recordings, video, scanned PDFs) | 🟠 | Git LFS where supported; otherwise the `kintsugi-data` volume + a link file in Git | M1 | ⬜ |
