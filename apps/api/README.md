@@ -184,4 +184,14 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
 pnpm --filter @kintsugi/api dev      # tsc --watch
 pnpm --filter @kintsugi/api build
 pnpm --filter @kintsugi/api start    # node dist/main.js
+pnpm --filter @kintsugi/api test     # vitest
 ```
+
+## Tests
+
+- `test/unit/`: pure units (password hashing, sign-in throttle, error filter, environment).
+- `test/integration/`: the real `AppModule`, booted like `src/main.ts` on an ephemeral port and driven over HTTP: session cookie and CSRF, guard order, lockout, member and role guard rails, session revocation, hash upgrades, LLM provider permissions and credential confidentiality.
+- Integration tests need Postgres: the server comes from `DATABASE_URL` (environment, else the repo-root `.env`). Each test file creates its own `kintsugi_api_test_*` database and drops it afterwards; the database named in `DATABASE_URL` is never touched. Without `DATABASE_URL` the integration suites are skipped.
+- NestJS injection needs decorator metadata: `vitest.config.ts` enables it in Vite's oxc transform.
+- Known gaps are pinned with `it.fails` (the test passes while the gap exists); turn them into plain `it` when fixing the gap.
+

@@ -1,0 +1,5 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true, "rootDir": "..", "experimentalDecorators": true, "emitDecoratorMetadata": true, "types": ["node"] },
+  "include": [".", "../src", "../vitest.config.ts"]
+}
