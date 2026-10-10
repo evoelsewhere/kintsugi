@@ -11,6 +11,9 @@ kintsugi.yaml                 # project manifest; pins the rulebook
 rulebook/                     # the project's rules, see reference/rulebook.md
 inventory/<app>.yaml
 assessment/<app>/scorecard.md
+assessment/<app>/...           # understanding-phase artifacts (ADR-0027): INTENT.md, PREFLIGHT.md, ASSESSMENT.md,
+                              #   topology.json, BUSINESS_RULES.md, DATA_OBJECTS.md, RULE_REVIEWS.json, DELTA_CATALOG.md,
+                              #   SECURITY_FINDINGS.md, MODERNIZATION_BRIEF.md, VERIFICATION.md
 architecture/adr/NNNN-*.md
 knowledge/as-is/<app>/...     # AS-IS documents (generated + human-written)
 knowledge/to-be/...
@@ -18,8 +21,9 @@ units/<app>/<module>/<unit>.md  # one file per work item; frontmatter = state (A
 tasks/<work-item-id>.md       # task packs
 reviews/<work-item-id>/...    # gate-reviewer records
 deliverables/<phase>/...      # detail designs, test reports, ... (large binaries: D31)
-golden/<unit>/cases/<id>/     # golden-master cases for compare (when equivalence testing is in scope)
-runs/<unit>/<run-id>/         # small compare reports (raw actuals are not committed)
+golden/<unit>/cases/<id>/     # golden-master cases for compare: inputs + legacy outputs, listed in golden/<unit>/cases.json
+golden/<unit>/fresh/<id>/     # fresh inputs invented by verify, listed in golden/<unit>/fresh-cases.json
+runs/<unit>/<run-id>/         # small reports per run (EQUIVALENCE.json, test-runs.json, test and canary logs); raw actuals are not committed
 .kintsugi/plugins/kintsugi@<version>/   # vendored built-in plugin (generated)
 .claude-plugin/marketplace.json         # generated marketplace (Claude Code, Copilot CLI)
 .github/plugin/marketplace.json         # generated marketplace (Copilot CLI)

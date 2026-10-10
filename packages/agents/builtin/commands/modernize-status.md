@@ -35,7 +35,7 @@ history is the modification time):
 | uplift | `DELTA_CATALOG.md`, `BASELINE.md`, `PLAYBOOK.md` (no playbook means the pilot has not happened, so the fan-out must not), `UPLIFT_NOTES.md` in the target repository (per unit: builds on target? baseline reproduced?) |
 | transform | each module in the target repository: tests present? `TRANSFORMATION_NOTES.md` present (its completion marker)? |
 | reimagine | the reimagined target repository: per-service acceptance tests, and the `CLAUDE.md` handoff (its completion marker; it does not write `TRANSFORMATION_NOTES.md`) |
-| equivalence | `EQUIVALENCE.json`: cases executed, same, differs (any differing or missing case, or zero executed, is a failure) |
+| equivalence | the latest `runs/<module>/<run-id>/EQUIVALENCE.json` per module: cases executed, same, differs (any differing or missing case, or zero executed, is a failure) |
 | verify | `VERIFICATION.md` (written by the `verify` stage): the verdict per built module (PROVEN, PARTLY PROVEN or NOT PROVEN) and whether a person has signed it. A built module with no `VERIFICATION.md`, or one older than the module's code or tests, is **not proven yet** |
 
 ## 2 — Stale
