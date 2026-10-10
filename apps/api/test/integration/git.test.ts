@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { type Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
-import { type GitHttpServer, startGitHttpServer } from "../support/git-http.js";
+import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 
 const TOKEN = "glpat-TEST-secret-token-0123456789";
 const SSH_KEY = "-----BEGIN OPENSSH PRIVATE KEY-----\nTEST-secret-key-material\n-----END OPENSSH PRIVATE KEY-----";
