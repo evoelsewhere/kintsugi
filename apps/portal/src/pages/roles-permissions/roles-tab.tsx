@@ -37,8 +37,9 @@ export function RolesTab(): React.JSX.Element {
   };
 
   useEffect(() => {
+    // load() sets state only after awaiting the API, never synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const grouped = useMemo(() => {
