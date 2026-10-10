@@ -31,7 +31,7 @@ Rebuilding that method by hand would lose most of its value.
    | `agents/<name>.md` | Agent files in the Claude Code format. `metadata.audience` decides who runs the agent. `runtime` agents (`legacy-analyst`, `business-rules-extractor`, `version-delta-analyst`, `architecture-critic`, `security-auditor`) run in the kernel with kernel tools. `member` agents (`test-engineer`, `uplift-migrator`, `scaffolder`) run in members' harnesses with harness tools. |
    | `commands/<name>.md` | Stage commands. Understanding commands run as runtime jobs; build and verify commands are member work. |
    | `workflows/` | Multi-job flows. The orchestrator executes them; until a workflow is re-expressed in a form the orchestrator interprets, the upstream script is the specification. Plugin code never runs inside the worker. |
-   | `scripts/` | Deterministic steps, run as sandboxed jobs without an LLM (ADR-0021). The worker image ships Python 3 for them. |
+   | `scripts/` | Deterministic steps, run as script jobs without an LLM in the standard script environment (decision 5). |
    | `hooks/` | Server-side lifecycle hooks around jobs (for example, scanning output for credentials before it is committed). The upstream session hooks (telemetry, live pane) are replaced by the portal and job events. |
    | `tests/` | Fixtures and checks for the content above. |
 
@@ -47,10 +47,27 @@ Rebuilding that method by hand would lose most of its value.
    - Runtime agents name kernel tools only and may not set `model`, `hooks`, `mcpServers`, `permissionMode`, `disallowedTools` or `maxTurns`.
    - `@kintsugi/agents` parses, validates, exports and converts them; member agents are never converted into kernel jobs.
 
+5. **The standard script environment.** Every script step runs in one prepared environment, whether the script ships
+   in `builtin/scripts/` or an agent wrote it during a stage (for example the `map` stage's
+   `extract_topology.py`). Scripts run without a review gate; the environment is the safety boundary:
+   - **Interpreters:** Python 3.12 and Node 22, with their standard libraries only. Nothing is installed at run
+     time, and there is no package index or registry access. Extra libraries can be added to the environment by
+     an image change, with a security review.
+   - **Filesystem:** the source repository at the job's commit, mounted read-only; the inputs the step declares
+     (workspace artifacts), read-only; the job's output directory and a private scratch directory, writable and
+     deleted after the job (the output is collected first). Nothing else is visible.
+   - **Isolation:** the same sandbox as runtime agent jobs (ADR-0021: pi-sandbox child process with bubblewrap on
+     Linux), a non-root user, no network, no credentials or Kintsugi tokens in the environment.
+   - **Limits:** wall-clock timeout, CPU, memory, process count and output size, set per step with installation
+     defaults; exceeding one fails the step with a clear reason.
+   - **Provenance:** a model-written script is committed with the artifacts it produced, and the job records the
+     script's hash, so the result can be reproduced and audited.
+
 ## Consequences
 
 - The workspace repository layout gains the `assessment/<app>/` artifacts of the understanding phases: assessment, topology, business rules, data objects, delta catalog, security findings, brief and rule reviews.
 - The orchestrator needs a workflow executor, a script runner and hook dispatch inside the job sandbox launcher (ADR-0021).
+- The worker image provides the standard script environment (Python 3.12, Node 22, standard libraries only).
 - The member plugin (ADR-0015) will carry the member agents and build commands to members' harnesses.
 - Until each part is adapted, the content under `builtin/` is excluded from the repository lint.
 
