@@ -5,9 +5,10 @@
 //   <data>/git/workspaces/<project-id>/            the worker's clone of the workspace repo
 //   <data>/jobs/<job-id>/src                       per-job worktree at a fixed commit (mounted read-only)
 //   <data>/jobs/<job-id>/out                       per-job output
-//   <data>/ssh/known_hosts                         pinned SSH host keys
+//
+// SSH host keys are not stored here: they live with each Git server and are passed per call.
 
-import { mkdir, open } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
 /** Ids become path segments: letters, digits, `.`, `_`, `-`; no separators, no `..`. */
@@ -45,16 +46,11 @@ export class CheckoutStorage {
     return { root, src: join(root, "src"), out: join(root, "out") };
   }
 
-  get knownHosts(): string {
-    return join(this.root, "ssh", "known_hosts");
-  }
-
   /** Creates the top-level layout; safe to call on every start. */
   async prepare(): Promise<void> {
-    for (const dir of [join(this.root, "git", "mirrors"), join(this.root, "git", "workspaces"), join(this.root, "jobs"), join(this.root, "ssh")]) {
+    for (const dir of [join(this.root, "git", "mirrors"), join(this.root, "git", "workspaces"), join(this.root, "jobs")]) {
       await mkdir(dir, { recursive: true });
     }
-    await (await open(this.knownHosts, "a", 0o600)).close();
   }
 }
 
