@@ -2,7 +2,7 @@
 // Mirrors apps/api → modules/admin/llm-providers (ADR-0009).
 
 import type { ThinkingLevel } from "@kintsugi/domain";
-import { apiGet, apiSend, type Page } from "../api";
+import { apiGet, apiGetAll, apiSend } from "../api";
 
 export interface CustomModelConfig {
   id: string;
@@ -83,7 +83,7 @@ export interface SupportedProviders {
 const BASE = "/api/admin/llm-providers";
 
 export const providersApi = {
-  list: () => apiGet<Page<ProviderView>>(`${BASE}?limit=200`),
+  list: () => apiGetAll<ProviderView>(BASE),
   supported: () => apiGet<SupportedProviders>(`${BASE}/supported`),
   create: (input: CreateProviderInput) => apiSend<ProviderView>(BASE, "POST", input),
   replace: (id: string, input: ReplaceProviderInput) => apiSend<ProviderView>(`${BASE}/${id}`, "PATCH", input),

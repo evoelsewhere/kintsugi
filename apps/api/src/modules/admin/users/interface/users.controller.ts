@@ -1,7 +1,9 @@
 // Interface layer: members management (Admin · Identity & Access, A2).
 
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { Page, PageQuery } from "../../../../common/application/pagination.js";
+import { pageQuerySchema } from "../../../../common/interface/pagination.js";
 import { type Actor, CurrentActor, RequirePermission } from "../../../../common/auth/decorators.js";
 import type { UserRecord } from "../domain/user.js";
 import { UsersService } from "../application/users.service.js";
@@ -25,8 +27,8 @@ export class UsersController {
   @Get()
   @ApiOperation({ summary: "List members with their roles" })
   @ApiOkResponse({ description: "The members." })
-  list(): Promise<UserRecord[]> {
-    return this.users.list();
+  list(@Query({ schema: pageQuerySchema }) query: PageQuery): Promise<Page<UserRecord>> {
+    return this.users.listPage(query);
   }
 
   @Get(":id")

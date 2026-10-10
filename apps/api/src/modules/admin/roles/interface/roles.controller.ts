@@ -1,7 +1,9 @@
 // Interface layer: roles & permissions management (dynamic permission grants per role).
 
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { Page, PageQuery } from "../../../../common/application/pagination.js";
+import { pageQuerySchema } from "../../../../common/interface/pagination.js";
 import { type Actor, CurrentActor, RequirePermission } from "../../../../common/auth/decorators.js";
 import type { PermissionRecord, RoleRecord } from "../domain/role.js";
 import { RolesService } from "../application/roles.service.js";
@@ -23,8 +25,8 @@ export class RolesController {
   @RequirePermission("roles.manage", "members.manage") // members managers pick roles to assign
   @ApiOperation({ summary: "List roles with their granted permissions" })
   @ApiOkResponse({ description: "Primary roles and admin-defined sub-roles." })
-  list(): Promise<RoleRecord[]> {
-    return this.roles.list();
+  list(@Query({ schema: pageQuerySchema }) query: PageQuery): Promise<Page<RoleRecord>> {
+    return this.roles.listPage(query);
   }
 
   @Get("permissions")

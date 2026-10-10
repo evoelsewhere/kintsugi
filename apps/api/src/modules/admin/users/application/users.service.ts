@@ -9,6 +9,7 @@
 //   - password resets and disabling end the member's sessions.
 
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import type { Page, PageQuery } from "../../../../common/application/pagination.js";
 import type { Actor } from "../../../../common/auth/decorators.js";
 import { ADMIN_ROLE_ID, RolesService } from "../../roles/application/roles.service.js";
 import { newId } from "../../../../common/domain/ids.js";
@@ -27,6 +28,10 @@ export class UsersService {
 
   list(): Promise<UserRecord[]> {
     return this.users.list();
+  }
+
+  listPage(query: PageQuery): Promise<Page<UserRecord>> {
+    return this.users.listPage(query);
   }
 
   async get(id: string): Promise<UserRecord> {
