@@ -1,6 +1,6 @@
 # ADR-0014: No code graph or parsing, no unit-discovery config, built-in runtime agents fixed in code
 
-- Status: Accepted
+- Status: Accepted (decision 3 superseded by ADR-0023)
 - Date: 2026-10-09
 - Decision register: D13, D14, D28, D39, D42
 - Supersedes: parts of ADR-0013 (decision 7 "per-language parsing and multi-source discovery", decision 8 "project runtime agents and runtime MCP"); ADR-0010 (KB graph tables)

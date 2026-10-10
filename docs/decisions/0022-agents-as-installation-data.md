@@ -1,6 +1,6 @@
 # ADR-0022: Agents are installation data — built-in and custom, managed in the portal
 
-- Status: Accepted
+- Status: Superseded by ADR-0023
 - Date: 2026-10-10
 - Decision register: amends ADR-0014 (D28)
 
