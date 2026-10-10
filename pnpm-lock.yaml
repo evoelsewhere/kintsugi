@@ -38,6 +38,9 @@ importers:
       '@kintsugi/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@kintsugi/git':
+        specifier: workspace:*
+        version: link:../../packages/git
       '@kintsugi/runtime':
         specifier: workspace:*
         version: link:../../services/runtime
