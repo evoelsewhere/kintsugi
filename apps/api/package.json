@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
     "start": "node dist/main.js",
-    "dev": "node scripts/dev.mjs",
+    "dev": "node ../../scripts/dev-service.mjs",
     "test": "vitest run",
     "lint": "eslint ."
   },
