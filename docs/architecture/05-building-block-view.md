@@ -104,6 +104,7 @@ Shared libraries and assets:
 | Path | Content |
 |---|---|
 | `packages/domain` | Shared vocabulary: phases, 7R, project roles, work items, provenance, Git servers / repositories, scorecard |
+| `packages/agents` | Agent packages (Claude Code agent files + Agent Skills): parsing, validation, conversion of runtime agents to `AgentDefinition`; `builtin/` holds the modernization content (agents, commands, workflows, scripts, hooks, tests) adapted from upstream ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md), [ADR-0027](../decisions/0027-builtin-modernization-content.md)) |
 | `packages/git` | Git core: system `git` CLI wrapper with per-call credentials, checkout storage layout, provider REST adapters ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
 | `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `AgentDefinition`, `JobEvent`, LLM provider configuration types |
 | `packages/harness-sdk` | `TaskPack`, `AssetRenderer`, `HarnessActivity`, `HarnessPolicy` |
