@@ -7,7 +7,7 @@ metadata:
   upstream: commands/modernize-transform.md
   agents: [test-engineer, architecture-critic]
   reads: [assessment/<app>/MODERNIZATION_BRIEF.md, assessment/<app>/INTENT.md, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/PREFLIGHT.md]
-  writes: [assessment/<app>/modules/<module>/TRANSFORMATION_NOTES.md, assessment/<app>/equivalence/, assessment/<app>/EQUIVALENCE.json]
+  writes: [assessment/<app>/modules/<module>/TRANSFORMATION_NOTES.md, golden/<module>/cases/, golden/<module>/cases.json, runs/<module>/<run-id>/EQUIVALENCE.json]
   gates: [transform plan approval, approval of each accepted equivalence difference]
 ---
 
@@ -21,9 +21,12 @@ This command runs in your own harness through Kintsugi's member plugin. Inputs c
 clone, **read-only** (Kintsugi's member hooks refuse writes to it). Before you start, say in one line which source commit
 you read: the one the assessment recorded for `$app` (named in `assessment/$app/PREFLIGHT.md` and in the portal); check out
 exactly that commit. If you have no clone of the source repository, stop and say so: nothing can run without the code, and
-the fix is to clone the repositories the portal lists for `$app`. Analysis outputs (`TRANSFORMATION_NOTES.md`, the
-equivalence cases and `EQUIVALENCE.json`) go to `assessment/$app/` on your own branch of the workspace repository and reach
-the project through a pull request. Run every subagent in the foreground and wait for its result: never end your turn while
+the fix is to clone the repositories the portal lists for `$app`. Analysis outputs (`TRANSFORMATION_NOTES.md` under
+`assessment/$app/`, the golden cases under `golden/<module>/` and the comparison report under `runs/<module>/<run-id>/`) go
+on your own branch of the workspace repository and reach the project through a pull request. Equivalence data follows the workspace repository's layout: development cases (inputs and the legacy outputs)
+live in `golden/<module>/cases/<id>/`, listed in `golden/<module>/cases.json`; each comparison run writes its small
+reports to `runs/<module>/<run-id>/` (`<run-id>` is `<YYYYMMDD-HHMM>-<short target commit>`). The new side's raw
+outputs are never committed: keep them in a scratch folder outside the three checkouts. Run every subagent in the foreground and wait for its result: never end your turn while
 one is still running. Stop any server or other process you started (a legacy app on a local port, a watcher) before you
 finish, and say you did. **If `$module` or `$target_stack` is empty**, read
 `assessment/$app/MODERNIZATION_BRIEF.md`: take the target stack it names, and the first module of
@@ -99,12 +102,12 @@ While iterating, run only this module's tests; run the whole suite once before S
    restore it, and record `Canary: <the change> → <N> tests failed` in the notes. If nothing failed,
    the tests do not pin the behavior: strengthen them before going on.
 4. **When the legacy code can run here** (built and run from a scratch copy of the source clone, never inside it), also
-   run both systems on the same inputs, save each output
-   under `assessment/$app/equivalence/legacy/` and `.../new/`, list the pairs in
-   `assessment/$app/equivalence/cases.json` (paths relative to that folder; the schema is at the top of
-   `scripts/compare.py`), and run
-   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compare.py" assessment/$app/equivalence/cases.json --out assessment/$app/EQUIVALENCE.json`
-   from the root of the workspace checkout.
+   run both systems on the same inputs: save each input and its legacy output under `golden/$module/cases/<id>/`
+   and each new output in your scratch folder, list the pairs in `golden/$module/cases.json` (legacy paths relative
+   to `golden/$module/`, new paths relative to the scratch folder; the schema is at the top of `scripts/compare.py`),
+   and run `scripts/compare.py` on `golden/$module/cases.json` with the scratch folder as the new side
+   (`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compare.py" --help` gives the exact arguments), writing
+   `runs/$module/<run-id>/EQUIVALENCE.json`, from the root of the workspace checkout.
    That script, not your judgment, decides same or different. Mask only fields that legitimately vary
    (timestamps, generated ids) and say what each mask hides. A difference you accept is recorded with a
    reason in the case's `approvedDifference`, and only a person accepts it, at a gate in the portal: list the
