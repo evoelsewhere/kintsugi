@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
-import { Modal } from "../../../components/ui/modal";
+import { ConfirmDialog } from "../../../components/ui/confirm-dialog";
 import { ProviderIcon } from "../../../components/ui/provider-icon";
 import { Select, type SelectOption } from "../../../components/ui/select";
 import { StatusDot } from "../../../components/ui/status-dot";
@@ -33,8 +33,6 @@ export function ProvidersSection(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ open: boolean; provider: ProviderView | null }>({ open: false, provider: null });
   const [removeTarget, setRemoveTarget] = useState<ProviderView | null>(null);
-  const [isRemoving, setIsRemoving] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
   const [tests, setTests] = useState<Record<string, TestConnectionResult>>({});
 
   const load = useCallback(async (): Promise<void> => {
@@ -58,19 +56,9 @@ export function ProvidersSection(): React.JSX.Element {
     await load();
   }
 
-  async function confirmRemove(): Promise<void> {
-    if (removeTarget === null || isRemoving) return;
-    setIsRemoving(true);
-    setRemoveError(null);
-    try {
-      await providersApi.remove(removeTarget.id);
-      setRemoveTarget(null);
-      await load();
-    } catch (removeError) {
-      setRemoveError(removeError instanceof Error ? removeError.message : String(removeError));
-    } finally {
-      setIsRemoving(false);
-    }
+  async function remove(provider: ProviderView): Promise<void> {
+    await providersApi.remove(provider.id);
+    await load();
   }
 
   async function test(provider: ProviderView): Promise<void> {
@@ -147,10 +135,7 @@ export function ProvidersSection(): React.JSX.Element {
                       size="icon"
                       variant="danger"
                       aria-label={`Remove ${provider.id}`}
-                      onClick={() => {
-                        setRemoveError(null);
-                        setRemoveTarget(provider);
-                      }}
+                      onClick={() => setRemoveTarget(provider)}
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -238,27 +223,17 @@ export function ProvidersSection(): React.JSX.Element {
         onSubmit={save}
       />
 
-      <Modal
+      <ConfirmDialog
         open={removeTarget !== null}
         title="Remove provider?"
         description={removeTarget === null ? undefined : `Remove "${removeTarget.id}" and its model bindings?`}
-        onClose={() => {
-          if (!isRemoving) setRemoveTarget(null);
-        }}
-        footer={
-          <>
-            <Button variant="ghost" disabled={isRemoving} onClick={() => setRemoveTarget(null)}>
-              Cancel
-            </Button>
-            <Button variant="danger" disabled={isRemoving} onClick={() => void confirmRemove()}>
-              {isRemoving ? "Removing…" : "Remove provider"}
-            </Button>
-          </>
-        }
+        confirmLabel="Remove provider"
+        busyLabel="Removing…"
+        onConfirm={() => (removeTarget === null ? Promise.resolve() : remove(removeTarget))}
+        onClose={() => setRemoveTarget(null)}
       >
-        <p className="text-[13px] leading-5 text-text-muted">This action cannot be undone. Agent model bindings that use this provider will also be removed.</p>
-        {removeError === null ? null : <p role="alert" className="mt-3 text-[13px] text-[var(--ds-status-red)]">{removeError}</p>}
-      </Modal>
+        This action cannot be undone. Agent model bindings that use this provider will also be removed.
+      </ConfirmDialog>
     </div>
   );
 }
