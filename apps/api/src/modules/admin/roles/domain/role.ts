@@ -1,5 +1,5 @@
-// Domain of roles & permissions (Roles & Permissions UI): primary roles and admin-defined
-// sub-roles, plus the dynamic permission catalog (rows in core.permission, added by
+// Domain of installation access roles and permissions (Members & Permissions UI): primary access roles and admin-defined
+// access sub-roles, plus the dynamic permission catalog (rows in core.permission, added by
 // migrations so they appear automatically in the UI). Pure types — no framework, no I/O.
 
 export type RoleKind = "primary" | "sub";
@@ -25,8 +25,8 @@ export interface CreateSubRole {
   description?: string;
 }
 
-/** The seeded primary role that administers the installation. */
+/** The seeded primary access role that administers the installation. */
 export const ADMIN_ROLE_ID = "admin";
 
-/** Grants the admin role can never lose — without them nobody could repair members or roles. */
+/** Grants the admin access role can never lose — without them nobody could repair members or access roles. */
 export const ADMIN_LOCKED_PERMISSIONS: readonly string[] = ["members.manage", "roles.manage"];

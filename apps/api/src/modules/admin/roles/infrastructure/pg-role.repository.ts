@@ -1,4 +1,4 @@
-// Postgres adapter for roles & permissions (schema: core).
+// Postgres adapter for installation access roles & permissions (schema: core).
 
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";

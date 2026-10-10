@@ -29,7 +29,7 @@ export const DISPOSITIONS = [
 export type Disposition = (typeof DISPOSITIONS)[number];
 
 /** Project roles, aligned with the reference RACI. */
-export const ROLES = [
+export const PROJECT_ROLES = [
   "admin",
   "pm",
   "core-team",
@@ -44,14 +44,14 @@ export const ROLES = [
   "km-lead",
   "km-engineer",
 ] as const;
-export type Role = (typeof ROLES)[number];
+export type ProjectRole = (typeof PROJECT_ROLES)[number];
 
 export type Raci = "R" | "A" | "C" | "I";
 
 /** Who performs a stage of a work item. */
 export type Performer =
   // A project member, typically working through their own AI harness.
-  | { kind: "member"; role: Role; harness?: MemberHarnessId }
+  | { kind: "member"; role: ProjectRole; harness?: MemberHarnessId }
   // A Kintsugi runtime agent (pi-based, server-side, never writes to project repos).
   | { kind: "runtime-agent"; agentId: RuntimeAgentId }
   | { kind: "runner"; runnerId: string; pack: string }
@@ -324,7 +324,7 @@ export interface RulebookManifest {
   schemaVersion: 1;
   id: string;
   version: string;
-  owners: Role[];
+  owners: ProjectRole[];
   extends?: {
     id: string;
     version: string;
@@ -346,13 +346,13 @@ export interface Waiver {
   packs?: string[];
   scope: { kinds?: string[]; units?: string[]; applications?: string[] };
   reason: string;
-  approvedBy: Role[];
+  approvedBy: ProjectRole[];
   expires: string; // ISO date, inclusive
 }
 
 export type StagePerformer =
   | { agent: RuntimeAgentId } // a runtime agent by id (ADR-0023)
-  | { member: Role[] }
+  | { member: ProjectRole[] }
   | { runner: string; then?: "compare" };
 
 export interface PipelineDefinition {
