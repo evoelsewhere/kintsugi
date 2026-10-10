@@ -1,5 +1,5 @@
 /**
- * Text that came from the legacy tree, or from an analysis of it, and is about to go in front of the model or into
+ * Text that came from source code, or from an assessment of it, and is about to go in front of the model or into
  * the prompt box: a node name, a rule title, a module id, a delta id. Such text can hold words written for a model,
  * so it is not passed on as it is. Control, format (zero-width, bidirectional and tag) and line-separator characters are
  * replaced too, so nothing in the value is invisible to a person reading the same line.
@@ -29,12 +29,12 @@ export function plain(value: unknown, max = 80): string {
 
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/#@+-]{0,79}$/
 
-/** The names the plugin's own workflows accept for a system: letters, digits, hyphen and underscore. */
-const SYSTEM_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+/** App identifiers used as a single workspace path segment. */
+const APP_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
 export const isToken = (value: string): boolean => TOKEN.test(value)
 
-export const isSystemName = (value: string): boolean => SYSTEM_NAME.test(value)
+export const isAppName = (value: string): boolean => APP_NAME.test(value)
 
 /** The longest line a reader looks at. A line of a table or a heading is a few hundred characters; a longer one is not a card, and a pattern run over a million characters of it is what a hostile file is for. */
 export const MAX_LINE = 4_000

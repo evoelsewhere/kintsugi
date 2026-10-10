@@ -1,7 +1,7 @@
-import { baseName, norm } from '../paths'
+import { baseName, norm } from './paths'
 
 /**
- * `analysis/<system>/topology.json`, read into the few shapes the live pane uses.
+ * `assessment/<app>/topology.json`, read into the few shapes the portal progress panel uses.
  *
  * The file is written by an agent, so every field is treated as optional and
  * of unknown shape: anything that does not fit is dropped, never thrown on.
@@ -14,7 +14,7 @@ export type TopoNode = {
   kind: string
   /** Lines of code; 0 when the map gave none. */
   loc: number
-  /** Source file relative to `legacy/<system>/`, when the node is one file. */
+  /** Source file relative to `source/<app>/`, when the node is one file. */
   file?: string
   /** The name of the domain (first ancestor of kind `domain`) it sits under. */
   domain?: string
@@ -228,7 +228,7 @@ export function parseTopology(text: string): Topology | null {
 
 /**
  * The topology node a legacy file belongs to: by its path relative to
- * `legacy/<system>/` when the map recorded one, else by base name alone.
+ * `source/<app>/` when the map recorded one, else by base name alone.
  */
 export function nodeOfFile(topo: Topology, fileRel: string): TopoNode | null {
   const wanted = norm(fileRel)

@@ -1,7 +1,7 @@
 /**
- * The three ways the plugin's commands work on a system, and what each leaves behind. The pane follows
- * whichever one the artifacts on disk say is under way, so a same-stack version uplift or a greenfield
- * rebuild is followed as closely as a rewrite is.
+ * The three modernization tracks and the artifacts each leaves behind. The portal reader follows
+ * whichever track the repository evidence says is under way, so an in-place version uplift or a greenfield
+ * rebuild is represented alongside a rewrite.
  */
 
 export type TrackKey = 'transform' | 'uplift' | 'reimagine'
@@ -12,7 +12,7 @@ export const TRACK_LABELS: Record<TrackKey, string> = {
   reimagine: 'reimagine',
 }
 
-/** The unit of work in each track, as the pane names a list of them. */
+/** The unit of work in each track, as the portal reader names a list of them. */
 export const TRACK_UNITS: Record<TrackKey, { one: string; many: string }> = {
   transform: { one: 'module', many: 'Modules' },
   uplift: { one: 'module', many: 'Modules' },
@@ -66,7 +66,7 @@ export type TrackFacts = {
 /**
  * The track under way: the one whose own artifacts were written last. The discovery artifacts (preflight,
  * assess, map, rules, brief) feed all three and decide nothing. With no track's own artifacts a system
- * is at the start of the rewrite path, which is where the plugin's commands begin.
+ * is at the start of the rewrite path, which is where the runtime jobs and member workflows begin.
  */
 export function pickTrack(option: TrackKey | 'auto', facts: TrackFacts): TrackKey {
   if (option !== 'auto') {

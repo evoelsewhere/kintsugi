@@ -1,5 +1,5 @@
-import { join } from '../paths'
-import { linesOf } from '../text'
+import { join } from './paths'
+import { linesOf } from './text'
 import { unitOfPath, type EstateModel, type EstateUnit } from './estate-model'
 import type { ReaderFs } from './fs'
 import { readTests, stateOfUplift, type ModernizedModule, type ModuleState, type TestTotals } from './modernized'
@@ -233,7 +233,7 @@ export function changedUnitsOf(estate: EstateModel, changed: readonly string[]):
 /**
  * Each unit of the working copy that the uplift has touched or tested, with its state:
  * changed, tested, matching the baseline, or worse than it. `observed` holds the totals of test
- * runs seen this session, used where no report file was left.
+ * runs seen the current job or reader snapshot, used where no report file was left.
  */
 export async function readUpliftUnits(
   fs: ReaderFs,

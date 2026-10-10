@@ -1,10 +1,11 @@
 {
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "es2023", "lib": ["es2023"], "types": [],
-    "module": "esnext", "moduleResolution": "bundler",
-    "strict": true, "noUncheckedIndexedAccess": true,
-    "noEmit": true, "skipLibCheck": true,
-    "jsx": "react", "jsxFactory": "h", "jsxFragmentFactory": "Fragment"
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
   },
-  "include": [".claude/types", "hooks", "tests"]
+  "include": ["hooks/reader/**/*.ts", "tests/**/*.test.ts"]
 }

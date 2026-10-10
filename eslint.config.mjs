@@ -15,8 +15,8 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/coverage/**",
       "**/.turbo/**",
-      // Built-in modernization content derived from upstream; linted once adapted (packages/agents/builtin/NOTICE).
-      "packages/agents/builtin/**",
+      // Workflow modules use orchestrator-injected globals (for example, args and log), not a standalone Node execution context.
+      "packages/agents/builtin/workflows/**",
     ],
   },
   js.configs.recommended,

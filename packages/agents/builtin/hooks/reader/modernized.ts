@@ -1,9 +1,9 @@
-import { join } from '../paths'
-import { linesOf } from '../text'
+import { join } from './paths'
+import { linesOf } from './text'
 import { listOrEmpty, readOrNull, type ReaderFs } from './fs'
 
 /**
- * The state of each transformed module, read from `modernized/<system>/`:
+ * The state of each transformed module, read from `target/<app>/`:
  * what exists on disk, what the test reports say, what the notes record.
  * No inference: a fact that is not on disk is absent.
  */
@@ -29,7 +29,7 @@ export type ModuleState =
   | 'switched'
 
 export type ModernizedModule = {
-  /** The directory's name under `modernized/<system>/`. */
+  /** The directory's name under `target/<app>/`. */
   dir: string
   /** Path relative to the working directory. */
   path: string
@@ -55,8 +55,8 @@ export type ModernizedModule = {
 const DONE_STATES: ReadonlySet<ModuleState> = new Set(['reviewed', 'ported', 'switched'])
 
 /**
- * Whether a module's work is finished. Green tests with notes written count: the notes are where the plugin's
- * review step lists what the critic found, and how they headline it varies, so a missing headline is not unfinished work.
+ * Whether a module's work is finished. Green tests with notes written count: the notes are where the review
+ * stage records what the critic found, and how they headline it varies, so a missing headline is not unfinished work.
  */
 export const isDone = (module: Pick<ModernizedModule, 'state' | 'hasNotes'>): boolean =>
   DONE_STATES.has(module.state) || (module.state === 'tests-green' && module.hasNotes)
@@ -245,7 +245,7 @@ export function readNotes(notes: string): {
   followUps: number
 } {
   const lines = linesOf(notes)
-  // The plugin's review step spawns the architecture critic and lists what it found in the notes; how the notes
+  // The Kintsugi review stage step spawns the architecture critic and lists what it found in the notes; how the notes
   // headline that varies, so any heading that says review or critic counts, and so does naming the critic.
   const named = lines.findIndex(line => /^#{1,4}\s+.*\b(?:review|critic)/i.test(line))
   const start = named >= 0 ? named : -1
@@ -357,7 +357,7 @@ export function stateOfUplift(
   return isChanged ? 'scaffolded' : 'untouched'
 }
 
-/** Reads every code directory under `modernized/<system>/`. */
+/** Reads every code directory under `target/<app>/`. */
 export async function readModernized(
   fs: ReaderFs,
   system: string,

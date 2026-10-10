@@ -1,7 +1,7 @@
-import { linesOf } from '../text'
+import { linesOf } from './text'
 
 /**
- * `analysis/<system>/MODERNIZATION_BRIEF.md`, read without a model: the
+ * `assessment/<app>/MODERNIZATION_BRIEF.md`, read without a model: the
  * target stack, the phases, which modules each phase names, the exit
  * criteria boxes, and the approval block.
  *
@@ -44,7 +44,7 @@ export type Brief = {
   openQuestions: number
 }
 
-const PHASE_HEADING = /^#{2,4}\s+Phase\s+(\d+)\s*[—–:.\-]\s*(.+?)\s*$/i
+const PHASE_HEADING = /^#{2,4}\s+Phase\s+(\d+)\s*[—–:.-]\s*(.+?)\s*$/i
 const CHECKBOX = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/
 const TICK_NOTE = /\s*\((?:[^()]*\d{4}-\d{2}-\d{2}[^()]*)\)\s*$/
 

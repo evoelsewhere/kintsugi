@@ -1,5 +1,6 @@
-import { join } from '../paths'
-import { isSystemName, isToken, plain } from '../text'
+import { join } from './paths'
+import { assessmentPath, DEFAULT_WORKSPACE_LAYOUT, sourcePath, targetPath } from './layout'
+import { isAppName, isToken, plain } from './text'
 import { parseBrief, type Brief, type Phase } from './brief'
 import { discoverEstate, sourceSizes } from './discover'
 import { estateOfTopology, keysOfUnit, type EstateModel, type EstateUnit } from './estate-model'
@@ -9,7 +10,7 @@ import { needsReview, parseRules, type RuleSet } from './rules'
 import { pickTrack, TRACK_LABELS, type TrackKey } from './tracks'
 import { parseTopology, type Topology } from './topology'
 import { parseVerification, proofOfModule, type ProofState, type Verification } from './verification'
-import { parseLedger } from '../review/ledger'
+import { parseLedger } from './ledger'
 import {
   baselineRowOf,
   changedUnitsOf,
@@ -22,7 +23,7 @@ import {
 } from './uplift'
 
 /**
- * One reading of a system's modernization state, from the artifacts on disk
+ * One reading of an app's modernization state, from repository artifacts
  * alone. Everything here is a fact of a file that exists; nothing is inferred
  * by a model, and what cannot be read is absent.
  */
@@ -63,11 +64,11 @@ export type ReviewLedger = Record<
 >
 
 export type NextStep = {
-  /** The slash command to run, or what to do by hand. */
+  /** Suggested portal action or member/human handoff; this reader does not execute it. */
   text: string
   isByHand: boolean
   reason: string
-  /** A step the pane can do itself: `sign` opens the sign-off dialog. */
+  /** Portal action hint; this module exposes no write or sign-off operation. */
   action?: 'sign'
 }
 
@@ -83,12 +84,12 @@ export type UpliftFacts = {
 }
 
 export type Snapshot = {
-  system: string
-  systems: string[]
-  /** Which way the plugin's commands are working on the system. */
+  app: string
+  apps: string[]
+  /** Which way the runtime jobs and member workflows are working on the app. */
   track: TrackKey
-  /** True once the system has any artifact under `analysis/`: modernization is under way, not only possible. */
-  hasAnalysis: boolean
+  /** True once the app has an artifact under `assessment/<app>/`. */
+  hasAssessment: boolean
   stages: Stage[]
   /** The units the estate map draws: the map's modules, or what the legacy tree holds. */
   estate: EstateModel | null
@@ -107,7 +108,7 @@ export type Snapshot = {
   verification: Verification | null
   /**
    * Where each built module stands with the proof, by its folder name lower-cased. An uplift is one piece, so it has one
-   * entry, under the name of its working copy (`<system>-uplifted`).
+   * entry, under the name of its working copy (`<app>-uplifted`).
    */
   proofs: Map<string, ProofState>
   reviews: ReviewLedger
@@ -193,20 +194,9 @@ async function cached<T>(
   return { value, mtimeMs }
 }
 
-/** The systems the workspace holds: each directory under `analysis/` and under the legacy tree. */
-export async function systemsOf(fs: ReaderFs, legacyDir = 'legacy'): Promise<string[]> {
-  const names = new Set<string>()
-
-  for (const root of ['analysis', legacyDir]) {
-    for (const name of await dirNamesOf(fs, root)) {
-      // The names the plugin's workflows accept: anything else could not be run on, and is not put in a command or a note.
-      if (isSystemName(name)) {
-        names.add(name)
-      }
-    }
-  }
-
-  return [...names].sort()
+/** The apps with committed assessment artifacts in the workspace repository. */
+export async function appsOf(fs: ReaderFs, assessmentDir = 'assessment'): Promise<string[]> {
+  return (await dirNamesOf(fs, assessmentDir)).filter(isAppName).sort()
 }
 
 const slugOf = (target: string) =>
@@ -244,20 +234,20 @@ export function isUnitDone(
   return module.state === 'reviewed' || (module.state === 'tests-green' && !hasRows)
 }
 
-/** The command that opens the whole process: the prefix without its verb dash (`/code-modernization:modernize`). */
+/** The command that opens the whole process: the prefix without its verb dash (`/kintsugi:modernize`). */
 export const frontDoorOf = (prefix: string): string => prefix.replace(/-$/, '')
 
 /**
  * The verify step a built module calls for: none yet, changed since it was verified, or failed. A module that is
  * proven, or partly proven (which a person decides on), calls for nothing; nor does one with no notes and no verdict.
  */
-function verifyStepOf(prefix: string, system: string, module: Pick<ModernizedModule, 'dir'>, proof: ProofState | undefined): NextStep | null {
+function verifyStepOf(prefix: string, app: string, module: Pick<ModernizedModule, 'dir'>, proof: ProofState | undefined): NextStep | null {
   if (proof === undefined || proof.state === 'proven' || proof.state === 'partly') {
     return null
   }
 
   const name = plain(module.dir, 60)
-  const text = `${prefix}verify ${system}${isToken(module.dir) ? ` ${module.dir}` : ''}`
+  const text = `${prefix}verify ${app}${isToken(module.dir) ? ` ${module.dir}` : ''}`
 
   if (proof.state === 'none') {
     return { text, isByHand: false, reason: `${name} is built but not yet checked against the old code` }
@@ -272,19 +262,19 @@ function verifyStepOf(prefix: string, system: string, module: Pick<ModernizedMod
 
 function nextOfTransform(
   prefix: string,
-  system: string,
+  app: string,
   stages: Stage[],
   brief: Brief | null,
   byNode: Map<string, ModernizedModule>,
-  hasAnalysis: boolean,
+  hasAssessment: boolean,
   proofs: ReadonlyMap<string, ProofState>,
 ): NextStep | null {
   const done = (key: StageKey) => stages.find(stage => stage.key === key)?.isDone === true
-  const cmd = (name: string, rest = '') => `${prefix}${name} ${system}${rest === '' ? '' : ` ${rest}`}`
+  const cmd = (name: string, rest = '') => `${prefix}${name} ${app}${rest === '' ? '' : ` ${rest}`}`
 
-  // Nothing has been written for this system yet: the front door asks what the person wants, once, and gives the first step.
-  if (!hasAnalysis) {
-    return { text: `${frontDoorOf(prefix)} ${system}`, isByHand: false, reason: 'start here: it asks what you want done, then gives you the first step' }
+  // Nothing has been written for this app yet: the front door asks what the person wants, once, and gives the first step.
+  if (!hasAssessment) {
+    return { text: `${frontDoorOf(prefix)} ${app}`, isByHand: false, reason: 'start here: it asks what you want done, then gives you the first step' }
   }
 
   if (!done('preflight') && !done('assess')) {
@@ -334,7 +324,7 @@ function nextOfTransform(
         }
       }
 
-      const step = verifyStepOf(prefix, system, module, proofs.get(module.dir.toLowerCase()))
+      const step = verifyStepOf(prefix, app, module, proofs.get(module.dir.toLowerCase()))
 
       if (step !== null) {
         return step
@@ -343,7 +333,7 @@ function nextOfTransform(
 
     if (phase.modules.length === 0) {
       return {
-        text: `pick Phase ${phase.number}'s first module and run ${prefix}transform ${system} <module>${target === '' ? '' : ` ${target}`}`,
+        text: `pick Phase ${phase.number}'s first module and run ${prefix}transform ${app} <module>${target === '' ? '' : ` ${target}`}`,
         isByHand: true,
         reason: `Phase ${phase.number} names no module the map knows`,
       }
@@ -361,9 +351,9 @@ function nextOfTransform(
 }
 
 /** The uplift command takes its two versions from what the person said at the start (`INTENT.md`, the brief), and asks when neither has them. */
-function nextOfUplift(prefix: string, system: string, stages: Stage[], proofs: ReadonlyMap<string, ProofState>): NextStep {
+function nextOfUplift(prefix: string, app: string, stages: Stage[], proofs: ReadonlyMap<string, ProofState>): NextStep {
   const done = (key: StageKey) => stages.find(stage => stage.key === key)?.isDone === true
-  const command = `${prefix}uplift ${system}`
+  const command = `${prefix}uplift ${app}`
 
   if (!done('deltas')) {
     return { text: command, isByHand: false, reason: 'first it lists what the newer version breaks in this code' }
@@ -382,21 +372,21 @@ function nextOfUplift(prefix: string, system: string, stages: Stage[], proofs: R
   }
 
   // The whole upgraded copy is one thing to prove, under the name of its working copy.
-  const step = verifyStepOf(prefix, system, { dir: `${system}-uplifted` }, proofs.get(`${system}-uplifted`))
+  const step = verifyStepOf(prefix, app, { dir: `${app}-uplifted` }, proofs.get(`${app}-uplifted`))
 
   if (step !== null) {
-    return { ...step, text: `${prefix}verify ${system}` }
+    return { ...step, text: `${prefix}verify ${app}` }
   }
 
-  return { text: `${prefix}status ${system}`, isByHand: false, reason: 'the upgrade is built and checked; status says what is stale' }
+  return { text: `${prefix}status ${app}`, isByHand: false, reason: 'the upgrade is built and checked; status says what is stale' }
 }
 
-function nextOfReimagine(prefix: string, system: string, stages: Stage[], modules: readonly ModernizedModule[], proofs: ReadonlyMap<string, ProofState>): NextStep {
+function nextOfReimagine(prefix: string, app: string, stages: Stage[], modules: readonly ModernizedModule[], proofs: ReadonlyMap<string, ProofState>): NextStep {
   const done = (key: StageKey) => stages.find(stage => stage.key === key)?.isDone === true
-  const command = `${prefix}reimagine ${system}`
+  const command = `${prefix}reimagine ${app}`
 
   if (!done('spec')) {
-    return { text: command, isByHand: false, reason: 'first it writes down what the old system does, from its code' }
+    return { text: command, isByHand: false, reason: 'first it writes down what the old app does, from its code' }
   }
 
   if (!done('design')) {
@@ -408,31 +398,33 @@ function nextOfReimagine(prefix: string, system: string, stages: Stage[], module
   }
 
   for (const module of modules) {
-    const step = verifyStepOf(prefix, system, module, proofs.get(module.dir.toLowerCase()))
+    const step = verifyStepOf(prefix, app, module, proofs.get(module.dir.toLowerCase()))
 
     if (step !== null) {
       return step
     }
   }
 
-  return { text: `${prefix}status ${system}`, isByHand: false, reason: 'the services are built and checked; status says what is stale' }
+  return { text: `${prefix}status ${app}`, isByHand: false, reason: 'the services are built and checked; status says what is stale' }
 }
 
 export type ReadOptions = {
-  /** The system to read; the first one found when absent or unknown. */
-  system?: string
-  /** What a command is written with, up to its verb (`/code-modernization:modernize-`). */
-  commandPrefix: string
+  /** The app to read; the first assessed app is selected when absent or unknown. */
+  app?: string
+  /** Portal-owned action identifier prefix used to form suggested next steps. */
+  actionPrefix: string
   nowMs: number
-  /** The read-only tree holding the systems, relative to the workspace; `legacy` when absent. */
-  legacyDir?: string
-  /** Which way to follow the system; `auto` when absent: whichever one's artifacts are newest. */
+  /** Repository namespaces routed by the caller; source is always read-only. */
+  assessmentDir?: string
+  sourceDir?: string
+  targetDir?: string
+  /** Which track to follow; `auto` when absent: whichever track's artifacts are newest. */
   track?: TrackKey | 'auto'
-  /** Units of an uplift's working copy that were written during this session: they count as changed even when the file kept its size. */
+  /** Units of an uplift's working copy that were written during the current job or reader snapshot: they count as changed even when the file kept its size. */
   writtenUnits?: ReadonlySet<string>
   /** How long a listing of the working copy is reused, in milliseconds; 15 seconds when absent. */
   changedTtlMs?: number
-  /** Test totals read off commands this session, by module path, for modules that left no report file. */
+  /** Test totals read off commands the current job or reader snapshot, by module path, for modules that left no report file. */
   observed?: ReadonlyMap<string, TestTotals>
 }
 
@@ -442,7 +434,7 @@ const newest = (...times: (number | null)[]): number | null => {
   return known.length === 0 ? null : Math.max(...known)
 }
 
-/** The files of an uplift's working copy and their sizes, reused for a short while so an idle pane does not walk the tree again and again. */
+/** The files of an uplift's working copy and their sizes, reused for a short while so an idle portal reader does not walk the tree repeatedly. */
 async function workingSizesOf(
   fs: ReaderFs,
   cache: ReaderCache,
@@ -464,57 +456,60 @@ async function workingSizesOf(
   return value
 }
 
-/** The estate to draw: the map's modules, or what the legacy tree holds. Read once per system, then kept. */
+/** The estate to draw: the map's modules, or what the legacy tree holds. Read once per app, then kept. */
 async function estateOf(
   fs: ReaderFs,
   cache: ReaderCache,
   track: TrackKey,
   topology: Topology | null,
-  legacyRoot: string,
-  system: string,
+  sourceRoot: string,
+  app: string,
 ): Promise<EstateModel | null> {
   if (topology !== null && track !== 'uplift') {
     return estateOfTopology(topology, 0)
   }
 
-  const key = `estate:${legacyRoot}`
-  const at = (await mtimeOrNull(fs, legacyRoot)) ?? 0
+  const key = `estate:${sourceRoot}`
+  const at = (await mtimeOrNull(fs, sourceRoot)) ?? 0
   const hit = cache.get(key)
 
   if (hit !== undefined && hit.mtimeMs === at) {
     return hit.value as EstateModel | null
   }
 
-  const found = await discoverEstate(fs, legacyRoot, system)
+  const found = await discoverEstate(fs, sourceRoot, app)
 
   cache.set(key, { mtimeMs: at, value: found })
 
   return found ?? (topology !== null ? estateOfTopology(topology, 0) : null)
 }
 
-/** Reads one system's state. Null when the workspace holds no system. */
+/** Reads one app's state. Null when the workspace holds no app. */
 export async function readSnapshot(
   fs: ReaderFs,
   cache: ReaderCache,
   options: ReadOptions,
 ): Promise<Snapshot | null> {
-  const legacyDir = options.legacyDir ?? 'legacy'
-  const systems = await systemsOf(fs, legacyDir)
+  const assessmentDir = options.assessmentDir ?? 'assessment'
+  const apps = await appsOf(fs, assessmentDir)
 
-  const system =
-    options.system !== undefined && systems.includes(options.system)
-      ? options.system
-      : systems[0]
+  const app = options.app !== undefined && apps.includes(options.app) ? options.app : apps[0]
 
-  if (system === undefined) {
+  if (app === undefined) {
     return null
   }
 
-  const dir = join('analysis', system)
-  const legacyRoot = join(legacyDir, system)
-  const transformRoot = join('modernized', system)
-  const upliftRoot = join('modernized', `${system}-uplifted`)
-  const reimagineRoot = join('modernized', `${system}-reimagined`)
+  const layout = {
+    ...DEFAULT_WORKSPACE_LAYOUT,
+    assessmentDir,
+    sourceDir: options.sourceDir ?? DEFAULT_WORKSPACE_LAYOUT.sourceDir,
+    targetDir: options.targetDir ?? DEFAULT_WORKSPACE_LAYOUT.targetDir,
+  }
+  const dir = assessmentPath(app, layout)
+  const sourceRoot = sourcePath(app, layout)
+  const transformRoot = targetPath(app, 'transform', layout)
+  const upliftRoot = targetPath(app, 'uplift', layout)
+  const reimagineRoot = targetPath(app, 'reimagine', layout)
   const observed = options.observed ?? new Map<string, TestTotals>()
 
   const [topo, rules, catalog, baseline, verificationRead, reviewsRaw, findingsHead, marks] = await Promise.all([
@@ -541,7 +536,7 @@ export async function readSnapshot(
     ),
   ])
 
-  const [analysisAt, preflightAt, assessAt, playbookAt, upliftNotesAt, upliftCopyAt, specAt, designAt, reimagineDirAt, transformDirAt] = marks
+  const [assessmentAt, preflightAt, assessAt, playbookAt, upliftNotesAt, upliftCopyAt, specAt, designAt, reimagineDirAt, transformDirAt] = marks
 
   const topology = topo.value
   const moduleIds = topology?.modules.map(node => node.id) ?? []
@@ -578,18 +573,18 @@ export async function readSnapshot(
     reimagineAt: newest(specAt, designAt, reimagineDirAt),
   })
 
-  const estate = await estateOf(fs, cache, track, topology, legacyRoot, system)
+  const estate = await estateOf(fs, cache, track, topology, sourceRoot, app)
 
-  let modules: ModernizedModule[] = []
+  let modules: ModernizedModule[]
   const byNode = new Map<string, ModernizedModule>()
   const extras: ModernizedModule[] = []
   let uplift: UpliftFacts | null = null
 
   if (track === 'uplift') {
     const hasCopy = upliftCopyAt !== null
-    const legacySizes = estate?.isPartial === false ? estate.fileSizes : undefined
-    const workingSizes = hasCopy && legacySizes !== undefined ? await workingSizesOf(fs, cache, upliftRoot, options.nowMs, options.changedTtlMs ?? 15_000) : null
-    const changedPaths = legacySizes !== undefined && workingSizes !== null ? changedPathsOf(legacySizes, workingSizes) : null
+    const sourceSizesByPath = estate?.isPartial === false ? estate.fileSizes : undefined
+    const workingSizes = hasCopy && sourceSizesByPath !== undefined ? await workingSizesOf(fs, cache, upliftRoot, options.nowMs, options.changedTtlMs ?? 15_000) : null
+    const changedPaths = sourceSizesByPath !== undefined && workingSizes !== null ? changedPathsOf(sourceSizesByPath, workingSizes) : null
     const changed = estate !== null && changedPaths !== null ? changedUnitsOf(estate, changedPaths) : new Set<string>()
 
     for (const id of options.writtenUnits ?? []) {
@@ -649,7 +644,7 @@ export async function readSnapshot(
   const proofs = new Map<string, ProofState>()
 
   if (track === 'uplift') {
-    const name = `${system}-uplifted`
+    const name = `${app}-uplifted`
     const proof = proofOfModule(verification, 'uplift', name, upliftNotesAt ?? 0, upliftNotesAt !== null)
 
     if (proof !== null) {
@@ -738,7 +733,7 @@ export async function readSnapshot(
             }),
           },
           {
-            // Transform writes under modernized/, not analysis/: this stage is done once a module's tests are green.
+            // Transform writes under target repository paths; this stage is done once a module's tests are green.
             key: 'transform' as const,
             label: STAGE_LABELS.transform,
             isDone: green.length > 0,
@@ -912,16 +907,16 @@ export async function readSnapshot(
 
   const next: NextStep | null =
     track === 'uplift'
-      ? nextOfUplift(options.commandPrefix, system, stages, proofs)
+      ? nextOfUplift(options.actionPrefix, app, stages, proofs)
       : track === 'reimagine'
-        ? nextOfReimagine(options.commandPrefix, system, stages, modules, proofs)
-        : nextOfTransform(options.commandPrefix, system, stages, brief.value, byNode, analysisAt !== null, proofs)
+        ? nextOfReimagine(options.actionPrefix, app, stages, modules, proofs)
+        : nextOfTransform(options.actionPrefix, app, stages, brief.value, byNode, assessmentAt !== null, proofs)
 
   return {
-    system,
-    systems,
+    app,
+    apps,
     track,
-    hasAnalysis: analysisAt !== null,
+    hasAssessment: assessmentAt !== null,
     stages,
     estate,
     topology,
@@ -956,8 +951,8 @@ export function oneLineOf(snapshot: Snapshot): string {
 
   const parts =
     snapshot.track === 'transform'
-      ? [`${snapshot.system}: analysis ${done}/5`]
-      : [`${snapshot.system}: ${TRACK_LABELS[snapshot.track]} ${done}/${countable.length}`]
+      ? [`${snapshot.app}: assessment ${done}/5`]
+      : [`${snapshot.app}: ${TRACK_LABELS[snapshot.track]} ${done}/${countable.length}`]
 
   if (snapshot.brief !== null) {
     parts.push(snapshot.brief.approval.isSigned ? 'brief approved' : 'brief waiting for approval')
