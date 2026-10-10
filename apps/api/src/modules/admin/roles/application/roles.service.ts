@@ -1,5 +1,6 @@
 // Application layer: use cases for roles & permissions (Roles & Permissions UI).
 
+import { type Page, type PageQuery, toPage } from "../../../../common/application/pagination.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Actor } from "../../../../common/auth/decorators.js";
 import { ADMIN_LOCKED_PERMISSIONS, ADMIN_ROLE_ID, type CreateSubRole, type PermissionRecord, type RoleRecord } from "../domain/role.js";
@@ -13,6 +14,12 @@ export class RolesService {
 
   list(): Promise<RoleRecord[]> {
     return this.roles.list();
+  }
+
+  /** Roles are few (primary roles plus admin-defined sub-roles): paginated in memory. */
+  async listPage(query: PageQuery): Promise<Page<RoleRecord>> {
+    const roles = await this.roles.list();
+    return toPage(roles.slice(query.offset, query.offset + query.limit), roles.length, query);
   }
 
   async get(id: string): Promise<RoleRecord> {

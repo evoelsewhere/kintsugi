@@ -95,3 +95,13 @@ export interface HealthResponse {
 export function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return apiGet<HealthResponse>("/api/health", signal);
 }
+
+/** Reads every page of a paginated list (for screens without a pager); `path` must not carry a query. */
+export async function apiGetAll<T>(path: string, pageSize = 200): Promise<T[]> {
+  const items: T[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await apiGet<Page<T>>(`${path}?limit=${pageSize}&offset=${offset}`);
+    items.push(...page.items);
+    if (page.items.length === 0 || items.length >= page.total) return items;
+  }
+}

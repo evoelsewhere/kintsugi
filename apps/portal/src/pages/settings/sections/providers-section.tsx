@@ -35,8 +35,8 @@ export function ProvidersSection(): React.JSX.Element {
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const [page, list] = await Promise.all([providersApi.list(), providersApi.listBindings()]);
-      setProviders(page.items);
+      const [all, list] = await Promise.all([providersApi.list(), providersApi.listBindings()]);
+      setProviders(all);
       setBindings(list);
       setError(null);
     } catch (loadError) {

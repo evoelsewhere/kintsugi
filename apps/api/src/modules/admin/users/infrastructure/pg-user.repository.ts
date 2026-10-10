@@ -1,6 +1,7 @@
 // Postgres adapter for members (ADR-0008; schema: core). Passwords are stored as
 // argon2id PHC strings (legacy scrypt rows are upgraded at sign-in); roles live in core.user_role.
 
+import { type Page, type PageQuery, toPage } from "../../../../common/application/pagination.js";
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
 import type { PasswordHash } from "../../../../common/security/password.js";
@@ -28,6 +29,17 @@ export class PgUserRepository extends UserRepository {
       "select id, username, email, display_name, enabled, created_at from core.app_user order by username",
     );
     return Promise.all(result.rows.map((row) => this.#toRecord(row)));
+  }
+
+  async listPage(query: PageQuery): Promise<Page<UserRecord>> {
+    const result = await this.#pool.query<UserRow & { total: number }>(
+      `select id, username, email, display_name, enabled, created_at, count(*) over ()::int as total
+       from core.app_user order by username limit $1 offset $2`,
+      [query.limit, query.offset],
+    );
+    // An offset past the end returns no rows, hence no window total: count separately.
+    const total = result.rows[0]?.total ?? (await this.count());
+    return toPage(await Promise.all(result.rows.map((row) => this.#toRecord(row))), total, query);
   }
 
   async get(id: string): Promise<UserRecord | undefined> {
