@@ -29,9 +29,9 @@ export const DISPOSITIONS = [
 export type Disposition = (typeof DISPOSITIONS)[number];
 
 /**
- * Project roles: RACI responsibilities named in rulebooks (performers, owners, waiver
- * approvers). Not access roles (ADR-0024). The well-known ones are those the starter
- * rulebook uses; a project may name its own (open set).
+ * Project roles: RACI responsibilities named in pipelines (stage performers, gate owners).
+ * Not access roles (ADR-0024). The well-known ones are those the starter document repo
+ * uses; a project may name its own (open set).
  */
 export const WELL_KNOWN_PROJECT_ROLES = ["pm", "core-team", "architect", "ba", "dev", "qc", "ai-champion"] as const;
 export type ProjectRole = (typeof WELL_KNOWN_PROJECT_ROLES)[number] | (string & {});
@@ -42,7 +42,6 @@ export type Performer =
   | { kind: "member"; role: ProjectRole; harness?: MemberHarnessId }
   // A Kintsugi runtime agent (pi-based, server-side, never writes to project repos).
   | { kind: "runtime-agent"; agentId: RuntimeAgentId }
-  | { kind: "runner"; runnerId: string; pack: string }
   | { kind: "tool"; toolId: string };
 
 /** AI harnesses members use on their own machines to do the actual work. */
@@ -69,14 +68,14 @@ export type WorkItemStatus =
   | "skipped";
 
 /**
- * Frontmatter of `units/<application>/<module>/<unit>.md` in the workspace repo (ADR-0012).
+ * Frontmatter of `units/<application>/<module>/<unit>.md` in the document repo (ADR-0012, ADR-0028).
  * This file is the source of truth; Postgres only indexes it.
  */
 export interface WorkItemFile {
   id: string; // "<application>/<module>/<unit>"
   application: string;
   module: string;
-  kind: string; // one of the rulebook's units.kinds
+  kind: string; // one of the unit kinds declared in kintsugi.yaml
   title: string;
   wave?: number | string;
   pilot?: boolean;
@@ -93,20 +92,10 @@ export interface WorkItemFile {
     taskPack?: string;
     asIs?: string;
     mappings?: string[];
-    uiPatterns?: string[];
     businessRules?: string[];
     pullRequests?: string[];
   };
   gates?: Partial<Record<GateId | string, { status: "pending" | "approved" | "rejected"; by?: string; at?: string; review?: string }>>;
-  /** Packs resolved for this unit (defaults + application packs). */
-  packs?: string[];
-  /** Rule IDs applied when the unit was last planned / reviewed; drives impact analysis. */
-  rulesApplied?: string[];
-  /** Set when a rule in `rulesApplied` changed after the unit was processed. */
-  stale?: { since: string; rules: string[] };
-  /** Waivers relied on by the last run, if any. */
-  waivers?: string[];
-  rulebook?: RulebookRef;
 }
 
 /** Index row derived from a unit file; rebuildable from Git. */
@@ -170,12 +159,22 @@ export interface GitServer {
   credentialRef: string;
 }
 
-/** A project has one workspace repo and any number of source (read-only) and target repos, possibly on different servers. */
+/**
+ * Repository roles (ADR-0028). `document`: the project's single document repo (everything
+ * except code). AS-IS, read-only for Kintsugi: `legacy` (code) and `legacy-data` (data).
+ * TO-BE: `target`, written only by members, one per architecture component.
+ */
+export const REPOSITORY_ROLES = ["legacy", "legacy-data", "document", "target"] as const;
+export type RepositoryRole = (typeof REPOSITORY_ROLES)[number];
+
+/** A project has one document repo and, per application, any number of legacy, legacy-data and target repos, possibly on different servers. */
 export interface Repository {
   id: string;
   serverId: string;
   path: string; // e.g. "org/app-legacy"
-  role: "workspace" | "source" | "target";
+  role: RepositoryRole;
+  /** Architecture component a `target` repo implements. */
+  component?: string;
   defaultBranch: string;
   credentialRef?: string; // overrides the server credential
 }
@@ -191,7 +190,8 @@ export interface Provenance {
   /** Declared or measured share of AI-generated content, 0–1. */
   aiShare?: number;
   assetVersion?: string; // skill / task-pack template version used
-  rulebook?: RulebookRef;
+  /** Document repo commit the artifact was produced against. */
+  documentRepoCommit?: string;
   author?: string;
   reviewedBy?: string;
 }
@@ -225,124 +225,12 @@ export function recommendDispositions(total: number): {
 }
 
 // ---------------------------------------------------------------------------
-// Project rulebook (ADR-0011, ADR-0013). Lives in the workspace repo under rulebook/;
-// these types mirror rulebook.yaml / pack.yaml / pipelines/*.yaml / waivers (schemaVersion 1, draft).
-// JSON Schema for rulebook files is generated from these types. Unknown `x-*` keys are allowed.
-// ---------------------------------------------------------------------------
-
-/** Capabilities Kintsugi knows about; rulebooks may declare custom ones (open set). */
-export const WELL_KNOWN_CAPABILITIES = [
-  "understand",
-  "conventions",
-  "mapping",
-  "convert",
-  "review",
-  "compare",
-  "cutover",
-] as const;
-export type CapabilityName = (typeof WELL_KNOWN_CAPABILITIES)[number] | (string & {});
-
-/** template → draft → ready; `suspended` blocks a capability that was found wrong. */
-export type CapabilityMaturity = "template" | "draft" | "ready" | "suspended";
-
-export interface ScopedMaturity {
-  default: CapabilityMaturity;
-  byKind?: Record<string, CapabilityMaturity>;
-  byApplication?: Record<string, CapabilityMaturity>;
-}
-
-export interface CapabilityDecl {
-  maturity: CapabilityMaturity | ScopedMaturity;
-  uses: string[];
-  /** Units, reviews or eval results supporting the current maturity. */
-  evidence?: string[];
-}
-
-export interface RulebookRef {
-  version: string;
-  /** Workspace-repo commit the rulebook was read from. */
-  commit?: string;
-}
-
-export interface StackSpec {
-  name: string;
-  version?: string;
-  frameworks?: string[];
-}
-
-export interface RunnerSpec {
-  /** Container image; must match the installation image allowlist. */
-  image: string;
-  command: string[];
-  resources?: { cpus?: number; memory?: string; timeoutSec?: number };
-  network?: "none" | "allowlist";
-}
-
-/** A rulebook runner job: runs in its own isolated container, with no LLM credentials (ADR-0004). */
-export interface RunnerJobSpec {
-  runner: { id: string; pack: string; spec: RunnerSpec };
-  context: { projectId: string; applicationId?: string; workItemId?: string; phase?: Phase; trigger: string };
-  rulebook: RulebookRef;
-  /** Read-only repositories mounted into the runner, pinned to a commit. */
-  inputs: { url: string; commit: string; paths?: string[] }[];
-  /** Optional comparator run after the runner, producing the standard compare report. */
-  thenCompare?: { profile?: string; comparator?: string };
-}
-
-/** Standard compare report contract, produced by the built-in compare engine or a custom comparator. */
-export interface CompareReport {
-  verdict: "pass" | "fail";
-  diffCount: number;
-  clusters: { id: string; files: string[]; summary: string }[];
-  reportPath: string;
-}
-
-export interface PackManifest {
-  id: string;
-  version?: string; // present on vendored packs
-  description?: string;
-  stacks: { source: StackSpec[]; target: StackSpec[] };
-  /** Unit kinds only; unit files are declared or agent-proposed in units/** (ADR-0014). */
-  units: { kinds: string[] };
-  capabilities: Record<CapabilityName, CapabilityDecl>;
-  runners?: Record<string, RunnerSpec>;
-  compare?: { defaultProfile?: string; comparators?: Record<string, string> };
-}
-
-export interface RulebookManifest {
-  schemaVersion: 1;
-  id: string;
-  version: string;
-  owners: ProjectRole[];
-  extends?: {
-    id: string;
-    version: string;
-    source: string;
-    path: string; // vendor/<id>@<version>
-    /** The project's own maturity for vendored capabilities (default draft). */
-    capabilities?: Record<CapabilityName, Omit<CapabilityDecl, "uses"> & { uses?: string[] }>;
-  }[];
-  packs: string[];
-  /** Registry of custom capabilities (well-known ones need no entry). */
-  capabilities?: Record<string, { description: string }>;
-  pipelines: string[];
-  harnesses?: string[];
-}
-
-export interface Waiver {
-  id: string; // W-###
-  capability: CapabilityName;
-  packs?: string[];
-  scope: { kinds?: string[]; units?: string[]; applications?: string[] };
-  reason: string;
-  approvedBy: ProjectRole[];
-  expires: string; // ISO date, inclusive
-}
+// Application pipelines (ADR-0028). Declared directly in the document repo's kintsugi.yaml,
+// or chosen from the built-in pipelines.
 
 export type StagePerformer =
   | { agent: RuntimeAgentId } // a runtime agent by id (ADR-0023)
-  | { member: ProjectRole[] }
-  | { runner: string; then?: "compare" };
+  | { member: ProjectRole[] };
 
 export interface PipelineDefinition {
   id: string;
@@ -352,85 +240,15 @@ export interface PipelineDefinition {
     /** Required for custom phases: built-in phase used for reporting. */
     category?: Phase;
     perUnit?: boolean;
-    stages: { id: string; performer: StagePerformer; requires?: CapabilityName[]; gate?: GateId | (string & {}) }[];
+    stages: { id: string; performer: StagePerformer; gate?: GateId | (string & {}) }[];
   }[];
   gates?: Record<string, { require: string[] }>;
 }
 
-/** Frontmatter of mappings, UI patterns and review rules (one rule per file). */
-export interface RuleFrontmatter {
-  id: string;
-  title: string;
-  appliesTo?: { kinds?: string[]; packs?: string[]; applications?: string[]; globs?: string[] };
-  severity?: "block" | "warn";
-  check?: string[];
-  relatesTo?: string[];
-}
-
-/** One layer providing a capability for a unit, after composition (vendor → packs → overrides). */
-export interface CapabilityProvider {
-  layer: string; // e.g. "vendor/org-baseline@2.1.0", "packs/webforms-to-aspnetcore"
-  decl: CapabilityDecl;
-}
-
-export interface UnitScope {
-  id: string;
-  kind: string;
-  application: string;
-  pilot?: boolean;
-}
-
-export function resolveMaturity(
-  maturity: CapabilityMaturity | ScopedMaturity,
-  unit: Pick<UnitScope, "kind" | "application">,
-): CapabilityMaturity {
-  if (typeof maturity === "string") return maturity;
-  return maturity.byApplication?.[unit.application] ?? maturity.byKind?.[unit.kind] ?? maturity.default;
-}
-
-function waiverCovers(w: Waiver, capability: CapabilityName, layer: string, unit: UnitScope, today: string): boolean {
-  if (w.capability !== capability || w.expires < today) return false;
-  if (w.packs?.length && !w.packs.some((p) => layer === p || layer.endsWith("/" + p))) return false;
-  const { kinds, units, applications } = w.scope;
-  if (units?.length) return units.includes(unit.id);
-  if (applications?.length && !applications.includes(unit.application)) return false;
-  return !kinds?.length || kinds.includes(unit.kind);
-}
-
-export interface ReadinessResult {
-  ok: boolean;
-  missing: { capability: CapabilityName; layer?: string; maturity?: CapabilityMaturity }[];
-  waived: { capability: CapabilityName; layer: string; waiver: string }[];
-}
-
-/**
- * Can a stage requiring `required` run for `unit`? Every provider of every required capability
- * must allow it: `ready`, or `draft` for pilot units; otherwise a valid (non-expired) waiver must
- * cover it. `suspended` can never be waived. Capabilities with no provider are reported as missing.
- */
-export function checkReadiness(
-  providers: Record<CapabilityName, CapabilityProvider[]>,
-  required: CapabilityName[],
-  unit: UnitScope,
-  waivers: Waiver[] = [],
-  today: string = new Date().toISOString().slice(0, 10),
-): ReadinessResult {
-  const result: ReadinessResult = { ok: true, missing: [], waived: [] };
-  for (const capability of required) {
-    const list = providers[capability] ?? [];
-    if (list.length === 0) {
-      result.missing.push({ capability });
-      continue;
-    }
-    for (const { layer, decl } of list) {
-      const maturity = resolveMaturity(decl.maturity, unit);
-      if (maturity === "ready" || (maturity === "draft" && unit.pilot)) continue;
-      const waiver =
-        maturity === "suspended" ? undefined : waivers.find((w) => waiverCovers(w, capability, layer, unit, today));
-      if (waiver) result.waived.push({ capability, layer, waiver: waiver.id });
-      else result.missing.push({ capability, layer, maturity });
-    }
-  }
-  result.ok = result.missing.length === 0;
-  return result;
+/** Standard compare report contract, produced by the built-in compare engine. */
+export interface CompareReport {
+  verdict: "pass" | "fail";
+  diffCount: number;
+  clusters: { id: string; files: string[]; summary: string }[];
+  reportPath: string;
 }
