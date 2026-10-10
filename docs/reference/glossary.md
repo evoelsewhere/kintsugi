@@ -2,9 +2,8 @@
 
 | Term | Meaning |
 |---|---|
-| **Access role** | Installation-wide permission bundle, such as `admin`, `contribute`, `user`, or an admin-defined access sub-role; managed in Admin → Members & Permissions |
-| **Project role** | RACI responsibility from `@kintsugi/domain`, such as `pm`, `architect`, `ba`, `dev`, `qc`, or an `ai-*` role; assignment per project membership is planned with M0 project persistence |
 | **7R** | Retire, Retain, Rehost, Replatform, Refactor, Re-architect, Rebuild, Repurchase: the transformation strategies for an application |
+| **Access role** | Installation-wide permission bundle, such as `admin`, `contribute`, `user`, or an admin-defined access sub-role; managed in Admin → Members & Permissions |
 | **Capability** | A group of rulebook content a pipeline stage depends on. Seven are well-known; projects can add custom ones |
 | **Capability maturity** | `template` → `draft` → `ready` (or `suspended`): how far a capability has been adapted and verified, optionally scoped per unit kind / application |
 | **AS-IS / TO-BE KB** | Knowledge base of the current / target system. Sources are in Git; the index (vector + graph) is in Postgres |
@@ -19,6 +18,7 @@
 | **Pipeline definition** | `rulebook/pipelines/<id>.yaml`: the phases, stages, performers, required capabilities and gates an application follows |
 | **Pilot unit** | A unit flagged `pilot: true`, used to verify `draft` rulebook capabilities before promoting them |
 | **Project build** | Shaping a project before running the pipeline: bootstrap the workspace repo, then shape and verify the rulebook |
+| **Project role** | RACI responsibility from `@kintsugi/domain`, such as `pm`, `architect`, `ba`, `dev`, `qc`, or an `ai-*` role; assignment per project membership is planned with M0 project persistence |
 | **PAT** | Personal Access Token, used by the CLI and MCP clients |
 | **Resolved view** | The rules that apply to one unit after composing vendored content, packs and overrides, each with the layer it came from |
 | **Rulebook** | The project's rules in `rulebook/` of the workspace repo: packs (stack pairs, unit kinds, conventions, mappings, review rules, runners), pipelines, harness renderers, waivers |
