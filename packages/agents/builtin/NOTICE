@@ -1,0 +1,13 @@
+Kintsugi built-in modernization content
+
+This directory is derived from the "code-modernization" plugin in
+https://github.com/anthropics/claude-plugins-official (plugins/code-modernization),
+at commit c8874f5ad883e26428f483ffa4d537cc81489e64,
+Copyright Anthropic, licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Changes from the upstream content:
+- assets/ (report and viewer templates, screenshots, vendored Mermaid) removed;
+  presentation is provided by the Kintsugi portal.
+- Agents, commands, workflows, scripts, hooks and tests are being adapted to Kintsugi
+  (runtime jobs, workspace-repo artifacts, pipeline stages, portal); the Git history
+  of this directory records each modification.

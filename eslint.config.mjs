@@ -9,7 +9,16 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/node_modules/**", "**/coverage/**", "**/.turbo/**"] },
+  {
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/coverage/**",
+      "**/.turbo/**",
+      // Built-in modernization content derived from upstream; linted once adapted (packages/agents/builtin/NOTICE).
+      "packages/agents/builtin/**",
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
