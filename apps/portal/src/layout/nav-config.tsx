@@ -5,8 +5,6 @@ import {
   Gauge,
   type LucideIcon,
   Package,
-  Puzzle,
-  Settings,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -45,8 +43,6 @@ export const NAV_SECTIONS: NavSection[] = [
     id: "administration",
     label: "Administration",
     items: [
-      { id: "admin", label: "Admin", icon: Settings, to: "/admin" },
-      { id: "harnesses", label: "Harnesses", icon: Puzzle, to: "/admin" , badge: "soon" },
       { id: "members", label: "Members & Permissions", icon: Users, to: "/members" },
     ],
   },
