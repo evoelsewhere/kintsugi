@@ -15,6 +15,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { PathGuard } from "./paths.js";
+import type { KernelToolName } from "./tool-names.js";
 
 export interface ToolContext {
   /** Working directory: the first read-only root. */
@@ -137,7 +138,7 @@ const outputsWriteTool: ToolFactory = (context) => {
   );
 };
 
-const KERNEL_TOOLS: Record<string, ToolFactory> = {
+const KERNEL_TOOLS: Record<KernelToolName, ToolFactory> = {
   read: readTool,
   ls: lsTool,
   grep: grepTool,
@@ -145,12 +146,12 @@ const KERNEL_TOOLS: Record<string, ToolFactory> = {
   outputs_write: outputsWriteTool,
 };
 
-export const KERNEL_TOOL_NAMES: readonly string[] = Object.keys(KERNEL_TOOLS);
+export { KERNEL_TOOL_NAMES } from "./tool-names.js";
 
 /** Creates the allowlisted tools; unknown names are rejected by job validation first. */
 export function createTools(names: readonly string[], context: ToolContext): ToolDefinition[] {
   return names.map((name) => {
-    const factory = KERNEL_TOOLS[name];
+    const factory = (KERNEL_TOOLS as Record<string, ToolFactory | undefined>)[name];
     if (factory === undefined) throw new Error(`unknown tool "${name}"`);
     return factory(context);
   });

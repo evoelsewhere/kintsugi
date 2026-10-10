@@ -35,6 +35,10 @@
     "./provider-catalog": {
       "types": "./dist/catalog/provider-catalog.d.ts",
       "import": "./dist/catalog/provider-catalog.js"
+    },
+    "./tool-names": {
+      "types": "./dist/kernel/tool-names.d.ts",
+      "import": "./dist/kernel/tool-names.js"
     }
   }
 }
