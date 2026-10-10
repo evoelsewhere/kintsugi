@@ -1,6 +1,5 @@
 // BrandMark — the Kintsugi mark from assets/brand, inlined as a component.
-// Uses the light-background variant (dark plate #1E2A44) because the UI is
-// light-only for now; switch to the dark mark when dark tokens land (index.css).
+// The plate follows the active theme so the gold mark stays legible in both modes.
 import { useId } from "react";
 import { cn } from "../lib/utils";
 
@@ -8,7 +7,7 @@ export function BrandMark({ className }: { className?: string }): React.JSX.Elem
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const gold = `kintsugi-gold-${uid}`;
   const cut = `kintsugi-cut-${uid}`;
-  const plate = "#1E2A44";
+  const plate = "var(--ds-brand-mark-plate)";
 
   return (
     <svg viewBox="-6 -6 148 148" role="img" aria-label="Kintsugi" className={cn("size-8 shrink-0", className)}>
