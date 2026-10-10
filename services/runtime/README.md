@@ -14,6 +14,7 @@
   - `job.ts` — maps pi events onto `JobEvent`s, enforces `timeoutSec` / `maxTurns` / `maxCostUsd`, and reads the outcome from the last assistant message (LLM errors and aborts end as `job.failed`).
   - `validate.ts` — rejects jobs with unknown tools, missing directories or invalid limits before anything starts.
 - `src/launcher/` — runs on the worker side: `provider-registry.ts` reads `admin.llm_provider` and decrypts secrets; `model-runtime.ts` builds the job's pi `ModelRuntime` in memory (no `models.json`, no `auth.json`, nothing from the host's `~/.pi`).
+- `src/catalog/provider-catalog.ts` — the builtin providers and models of the pinned pi release plus the supported custom wire protocols, in a pi-agnostic shape. Exported as `@kintsugi/runtime/provider-catalog`; `apps/api` serves it to the portal (`GET /api/admin/llm-providers/supported`), so pi-specific code stays in this service.
 - `src/bin/run-job.ts` — dev CLI, see below.
 - `src/mock-agent.ts`, `src/event-stream.ts`, `src/version.ts`.
 

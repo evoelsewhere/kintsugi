@@ -13,8 +13,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "1.1.0",
     "@kintsugi/domain": "workspace:*",
+    "@kintsugi/runtime": "workspace:*",
     "@kintsugi/runtime-sdk": "workspace:*",
     "@kintsugi/secrets": "workspace:*",
     "@nestjs/common": "^12.1.2",

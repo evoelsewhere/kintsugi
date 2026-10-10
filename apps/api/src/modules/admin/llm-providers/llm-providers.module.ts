@@ -6,7 +6,7 @@ import { LlmProvidersService } from "./application/llm-providers.service.js";
 import { LlmProviderRepository } from "./domain/llm-provider.repository.js";
 import { ProviderCatalog } from "./domain/provider-catalog.js";
 import { PgLlmProviderRepository } from "./infrastructure/pg-llm-provider.repository.js";
-import { PiProviderCatalog } from "./infrastructure/pi-provider-catalog.js";
+import { RuntimeProviderCatalog } from "./infrastructure/runtime-provider-catalog.js";
 import { LlmProvidersController } from "./interface/llm-providers.controller.js";
 
 /** admin · LLM providers — docs/architecture/05-building-block-view.md (A4). */
@@ -15,7 +15,7 @@ import { LlmProvidersController } from "./interface/llm-providers.controller.js"
   providers: [
     LlmProvidersService,
     { provide: LlmProviderRepository, useClass: PgLlmProviderRepository },
-    { provide: ProviderCatalog, useClass: PiProviderCatalog },
+    { provide: ProviderCatalog, useClass: RuntimeProviderCatalog },
   ],
   exports: [LlmProvidersService, LlmProviderRepository],
 })

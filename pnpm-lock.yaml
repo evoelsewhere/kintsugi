@@ -35,12 +35,12 @@ importers:
 
   apps/api:
     dependencies:
-      '@earendil-works/pi-ai':
-        specifier: 1.1.0
-        version: 1.1.0(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(undici@8.10.2)(ws@8.22.0)(zod@4.6.5)
       '@kintsugi/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@kintsugi/runtime':
+        specifier: workspace:*
+        version: link:../../services/runtime
       '@kintsugi/runtime-sdk':
         specifier: workspace:*
         version: link:../../packages/runtime-sdk
