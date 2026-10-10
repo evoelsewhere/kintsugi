@@ -8,16 +8,18 @@
 //   - a member holds exactly one primary role plus optional sub-roles;
 //   - password resets and disabling end the member's sessions.
 
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Actor } from "../../../../common/auth/decorators.js";
 import { ADMIN_ROLE_ID, RolesService } from "../../roles/application/roles.service.js";
 import { newId } from "../../../../common/domain/ids.js";
-import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from "../../../../common/security/password.js";
+import { DUMMY_PASSWORD_HASH, hashPassword, needsRehash, verifyPassword } from "../../../../common/security/password.js";
 import type { CreateUser, UpdateUser, UserRecord } from "../domain/user.js";
 import { UserRepository } from "../domain/user.repository.js";
 
 @Injectable()
 export class UsersService {
+  readonly #logger = new Logger(UsersService.name);
+
   constructor(
     private readonly users: UserRepository,
     private readonly roles: RolesService,
@@ -78,13 +80,25 @@ export class UsersService {
   /**
    * Credential check for sign-in (ADR-0008). Returns undefined on any failure, and
    * always runs one hash comparison so unknown usernames answer in the same time.
+   * A correct password stored with an outdated scheme (scrypt, older argon2id
+   * parameters) is re-hashed on the spot — the only moment the plaintext is known.
    */
   async validateCredentials(username: string, password: string): Promise<UserRecord | undefined> {
     const user = await this.users.findByUsername(username);
     const stored = user === undefined ? undefined : await this.users.passwordOf(user.id);
     const matches = await verifyPassword(password, stored ?? (await DUMMY_PASSWORD_HASH));
     if (user === undefined || stored === undefined || !matches || !user.enabled) return undefined;
+    if (needsRehash(stored)) await this.#upgradeHash(user, password);
     return user;
+  }
+
+  /** Best effort: a failed upgrade must not block sign-in; the next sign-in retries. */
+  async #upgradeHash(user: UserRecord, password: string): Promise<void> {
+    try {
+      await this.users.setPassword(user.id, await hashPassword(password));
+    } catch (error) {
+      this.#logger.warn(`password hash upgrade failed for ${user.username}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   count(): Promise<number> {

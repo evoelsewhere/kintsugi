@@ -1,5 +1,5 @@
 // Postgres adapter for members (ADR-0008; schema: core). Passwords are stored as
-// scrypt hashes; roles live in core.user_role.
+// argon2id PHC strings (legacy scrypt rows are upgraded at sign-in); roles live in core.user_role.
 
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
