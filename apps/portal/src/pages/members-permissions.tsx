@@ -1,4 +1,4 @@
-﻿// Members & Permissions â€” members table with always-visible filters; the roles &
+// Members & Permissions — members table with always-visible filters; the roles &
 // permission matrix opens in a modal from the toolbar action.
 
 import { Breadcrumbs } from "../components/breadcrumbs";

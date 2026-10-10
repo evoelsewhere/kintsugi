@@ -3,7 +3,7 @@
 //   success → { success: true, data }
 //   error   → { success: false, statusCode, error, message, timestamp, path }
 
-import { getToken } from "./auth";
+import { expireSession, getToken } from "./session";
 
 export interface ApiSuccess<T> {
   success: true;
@@ -47,6 +47,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   const body = (await response.json().catch(() => null)) as ApiSuccess<T> | ApiErrorBody | null;
+
+  // A rejected token ends the session everywhere (sign-in failures are not session loss).
+  if (response.status === 401 && token !== null) expireSession();
 
   // No content (e.g. 204 on delete) — nothing to unwrap.
   if (body === null) {

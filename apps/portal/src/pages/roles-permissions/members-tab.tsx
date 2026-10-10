@@ -1,4 +1,4 @@
-﻿// Members table — the primary content of Members & Permissions: members with
+// Members table — the primary content of Members & Permissions: members with
 // always-visible filters (search, role, status) and management dialogs.
 
 import { Plus, Search, Settings2, ShieldCheck, Trash2 } from "lucide-react";
@@ -55,6 +55,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
   const [statusFilter, setStatusFilter] = useState("all");
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const primaryRoles: RoleRecord[] = useMemo(() => roles.filter((role) => role.kind === "primary"), [roles]);
@@ -97,6 +98,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
 
   function openCreate(): void {
     setForm({ ...EMPTY_FORM, primaryRole: primaryRoles.at(-1)?.id ?? "user" });
+    setFormError(null);
     setDialogOpen(true);
   }
 
@@ -111,6 +113,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
       subRoles: user.roleIds.filter((id) => subRoles.some((role) => role.id === id)),
       enabled: user.enabled,
     });
+    setFormError(null);
     setDialogOpen(true);
   }
 
@@ -146,7 +149,8 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
       setError(null);
       await load();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : String(saveError));
+      // Shown inside the dialog — the page behind it is covered by the overlay.
+      setFormError(saveError instanceof Error ? saveError.message : String(saveError));
     } finally {
       setSaving(false);
     }
@@ -154,8 +158,12 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
 
   async function remove(user: UserRecord): Promise<void> {
     if (!window.confirm(`Remove member "${user.username}"?`)) return;
-    await identityApi.deleteUser(user.id);
-    await load();
+    try {
+      await identityApi.deleteUser(user.id);
+      await load();
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : String(removeError));
+    }
   }
 
   const roleLabel = (id: string): string => roles.find((role) => role.id === id)?.name ?? id;
@@ -288,6 +296,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
           {form.id === null ? null : (
             <Checkbox checked={form.enabled} onChange={(value) => setForm((prev) => ({ ...prev, enabled: value }))} label="Enabled" />
           )}
+          {formError === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{formError}</p>}
         </div>
       </Modal>
     </div>

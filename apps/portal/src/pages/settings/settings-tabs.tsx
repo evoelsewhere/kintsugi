@@ -3,6 +3,7 @@
 
 import { Activity, Cpu, type LucideIcon, Palette, Puzzle, Settings, Shield } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "../../lib/auth";
 import { cn } from "../../lib/utils";
 import { AppearanceSection } from "./sections/appearance-section";
 import { DiagnosticsSection } from "./sections/diagnostics-section";
@@ -14,20 +15,24 @@ interface SettingsTab {
   label: string;
   icon: LucideIcon;
   component: () => React.JSX.Element;
+  /** Permission code the API requires for this section; hidden without it. */
+  permission?: string;
 }
 
 const TABS: SettingsTab[] = [
   { id: "general", label: "General", icon: Settings, component: () => <PlaceholderSection title="General" description="Installation name, locale, default project settings and startup behavior." /> },
   { id: "appearance", label: "Appearance", icon: Palette, component: () => <AppearanceSection /> },
-  { id: "providers", label: "Providers", icon: Cpu, component: () => <ProvidersSection /> },
+  { id: "providers", label: "Providers", icon: Cpu, component: () => <ProvidersSection />, permission: "providers.manage" },
   { id: "harnesses", label: "Harnesses", icon: Puzzle, component: () => <PlaceholderSection title="Harness registry" description="Member harness plugin support, fallback renderers and transformer plugins (ADR-0013/0015)." /> },
   { id: "security", label: "Security", icon: Shield, component: () => <PlaceholderSection title="Security" description="Sessions, PAT lifetime, secret rotation and data-residency policy." /> },
   { id: "diagnostics", label: "Diagnostics", icon: Activity, component: () => <DiagnosticsSection /> },
 ];
 
 export function SettingsTabs({ initial = "general" }: { initial?: string }): React.JSX.Element {
+  const { can } = useAuth();
+  const tabs = TABS.filter((tab) => tab.permission === undefined || can(tab.permission));
   const [active, setActive] = useState(initial);
-  const current = TABS.find((tab) => tab.id === active) ?? TABS[0]!;
+  const current = tabs.find((tab) => tab.id === active) ?? tabs[0]!;
   const Section = current.component;
 
   return (
@@ -37,7 +42,7 @@ export function SettingsTabs({ initial = "general" }: { initial?: string }): Rea
         aria-label="Settings sections"
         className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-transparent p-1 [box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]"
       >
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
             <button

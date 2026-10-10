@@ -1,4 +1,4 @@
-﻿// Roles & Permissions — permission matrix: permissions (grouped) as rows, roles as
+// Roles & Permissions — permission matrix: permissions (grouped) as rows, roles as
 // columns. Grants save immediately on toggle. Permission codes are dynamic — new
 // codes added by migration appear here automatically (core.permission).
 // The matrix scrolls both ways: sticky header row and sticky first column.

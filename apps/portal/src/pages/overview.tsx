@@ -1,14 +1,14 @@
-﻿import { Breadcrumbs } from "../components/breadcrumbs";
+import { Breadcrumbs } from "../components/breadcrumbs";
 import { MetricCard } from "../components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { StatusDot, type StatusTone } from "../components/ui/status-dot";
 import { useHealth } from "../lib/use-health";
 
 const METRICS = [
-  { title: "Units in flight", value: "24", subtitle: "12 awaiting review Â· 6 in progress", tone: "green" },
+  { title: "Units in flight", value: "24", subtitle: "12 awaiting review · 6 in progress", tone: "green" },
   { title: "Gate status", value: "G3 pending", subtitle: "Prepare factory readiness", tone: "orange" },
   { title: "AI-generated share", value: "38%", subtitle: "Declared via commit trailers", tone: "blue" },
-  { title: "Runtime cost (MTD)", value: "$412", subtitle: "pi jobs Â· 6 runtime agents", tone: "cyan" },
+  { title: "Runtime cost (MTD)", value: "$412", subtitle: "pi jobs · 6 runtime agents", tone: "cyan" },
 ] as const satisfies ReadonlyArray<{ title: string; value: string; subtitle: string; tone: StatusTone }>;
 
 const PIPELINE = [

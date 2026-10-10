@@ -1,8 +1,9 @@
 // Authentication state for the portal (ADR-0008): session token + current user with
-// roles and effective permissions. Token lives in localStorage and rides every request.
+// roles and effective permissions. Token storage and expiry live in ./session.
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "./api";
+import { getToken, onSessionExpired, setToken } from "./session";
 
 export interface SessionUser {
   id: string;
@@ -10,17 +11,6 @@ export interface SessionUser {
   displayName: string;
   roleIds: string[];
   permissions: string[];
-}
-
-const TOKEN_KEY = "kintsugi-token";
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string | null): void {
-  if (token === null) localStorage.removeItem(TOKEN_KEY);
-  else localStorage.setItem(TOKEN_KEY, token);
 }
 
 interface AuthState {
@@ -42,6 +32,8 @@ export function useAuth(): AuthState {
 export function AuthProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => onSessionExpired(() => setUser(null)), []);
 
   useEffect(() => {
     if (getToken() === null) {

@@ -1,4 +1,4 @@
-﻿// Navigation configuration â€” the single place to add or reorder panel entries.
+// Navigation configuration — the single place to add or reorder panel entries.
 // Adding a page: append an item here and register its route in App.tsx.
 import {
   Activity,
