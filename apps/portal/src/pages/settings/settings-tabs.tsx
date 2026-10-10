@@ -1,12 +1,13 @@
 // Settings sections + navigation — macOS System-Settings style: a sidebar of icon
 // rows on the left, the active section on the right. Adding a section: append to TABS.
 
-import { Activity, Cpu, type LucideIcon, Palette, Puzzle, Settings, Shield } from "lucide-react";
+import { Activity, Cpu, GitBranch, type LucideIcon, Palette, Puzzle, Settings, Shield } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../lib/auth";
 import { cn } from "../../lib/utils";
 import { AppearanceSection } from "./sections/appearance-section";
 import { DiagnosticsSection } from "./sections/diagnostics-section";
+import { GitSection } from "./sections/git-section";
 import { PlaceholderSection } from "./sections/placeholder-section";
 import { ProvidersSection } from "./sections/providers-section";
 
@@ -23,6 +24,7 @@ const TABS: SettingsTab[] = [
   { id: "general", label: "General", icon: Settings, component: () => <PlaceholderSection title="General" description="Installation name, locale, default project settings and startup behavior." /> },
   { id: "appearance", label: "Appearance", icon: Palette, component: () => <AppearanceSection /> },
   { id: "providers", label: "Providers", icon: Cpu, component: () => <ProvidersSection />, permission: "providers.manage" },
+  { id: "git", label: "Git", icon: GitBranch, component: () => <GitSection />, permission: "git.manage" },
   { id: "harnesses", label: "Harnesses", icon: Puzzle, component: () => <PlaceholderSection title="Harness registry" description="Member harness plugin support, fallback renderers and transformer plugins (ADR-0013/0015)." /> },
   { id: "security", label: "Security", icon: Shield, component: () => <PlaceholderSection title="Security" description="Sessions, PAT lifetime, secret rotation and data-residency policy." /> },
   { id: "diagnostics", label: "Diagnostics", icon: Activity, component: () => <DiagnosticsSection /> },
