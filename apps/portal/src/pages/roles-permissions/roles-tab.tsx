@@ -4,7 +4,7 @@
 // The matrix scrolls both ways: sticky header row and sticky first column.
 
 import { Plus, Search, Trash2 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Field } from "../../components/ui/field";
@@ -17,7 +17,11 @@ export function RolesTab(): React.JSX.Element {
   const [permissions, setPermissions] = useState<PermissionRecord[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [savingRole, setSavingRole] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  /** Latest grants wanted per role, not yet confirmed by the API. */
+  const desired = useRef(new Map<string, string[]>());
+  /** Roles with a save in flight — at most one request per role at a time. */
+  const inFlight = useRef(new Set<string>());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newRole, setNewRole] = useState({ id: "", name: "", description: "" });
 
@@ -53,23 +57,52 @@ export function RolesTab(): React.JSX.Element {
     return [...map.entries()];
   }, [permissions, query]);
 
-  /** Optimistic toggle — the grant is saved immediately. */
+  /**
+   * Optimistic toggle — the grant is saved immediately. Rapid toggles on one role are
+   * coalesced: one PUT in flight per role, and the latest wanted grants are sent next,
+   * so responses can never arrive out of order and undo a newer change.
+   */
   function toggle(role: RoleRecord, code: string): void {
-    const granted = role.permissions.includes(code);
-    const next = granted ? role.permissions.filter((entry) => entry !== code) : [...role.permissions, code];
+    const current = desired.current.get(role.id) ?? role.permissions;
+    const next = current.includes(code) ? current.filter((entry) => entry !== code) : [...current, code];
+    desired.current.set(role.id, next);
     setRoles((prev) => prev.map((entry) => (entry.id === role.id ? { ...entry, permissions: next } : entry)));
-    setSavingRole(role.id);
-    identityApi
-      .setPermissions(role.id, next)
-      .then((updated) => {
-        setRoles((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
-        setError(null);
-      })
-      .catch((saveError: unknown) => {
-        setRoles((prev) => prev.map((entry) => (entry.id === role.id ? role : entry)));
-        setError(saveError instanceof Error ? saveError.message : String(saveError));
-      })
-      .finally(() => setSavingRole(null));
+    void flush(role.id);
+  }
+
+  async function flush(roleId: string): Promise<void> {
+    if (inFlight.current.has(roleId)) return;
+    inFlight.current.add(roleId);
+    setSaving(true);
+    try {
+      for (let wanted = desired.current.get(roleId); wanted !== undefined; wanted = desired.current.get(roleId)) {
+        try {
+          const updated = await identityApi.setPermissions(roleId, wanted);
+          if (desired.current.get(roleId) !== wanted) continue; // a newer toggle is queued
+          desired.current.delete(roleId);
+          setRoles((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+          setError(null);
+        } catch (saveError) {
+          // Re-sync with the server rather than restoring a stale snapshot.
+          desired.current.delete(roleId);
+          setError(saveError instanceof Error ? saveError.message : String(saveError));
+          await reloadRoles();
+        }
+      }
+    } finally {
+      inFlight.current.delete(roleId);
+      setSaving(inFlight.current.size > 0);
+    }
+  }
+
+  async function reloadRoles(): Promise<void> {
+    try {
+      const roleList = await identityApi.roles();
+      // Keep optimistic grants of roles that still have a save pending.
+      setRoles(roleList.map((role) => ({ ...role, permissions: desired.current.get(role.id) ?? role.permissions })));
+    } catch {
+      // The save error is already shown; the next load re-syncs.
+    }
   }
 
   async function createSubRole(): Promise<void> {
@@ -107,7 +140,7 @@ export function RolesTab(): React.JSX.Element {
           />
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {savingRole === null ? (
+          {!saving ? (
             <span className="text-[11px] text-text-muted">changes save immediately</span>
           ) : (
             <span className="text-[11px] text-text-muted">saving…</span>
