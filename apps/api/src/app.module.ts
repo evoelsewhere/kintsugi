@@ -26,7 +26,6 @@ import { GatesModule } from "./modules/governance/gates/gates.module.js";
 import { PoliciesModule } from "./modules/governance/policies/policies.module.js";
 import { ReviewsModule } from "./modules/governance/reviews/reviews.module.js";
 import { RisksModule } from "./modules/governance/risks/risks.module.js";
-import { RulebookEntriesModule } from "./modules/governance/rulebook/rulebook-entries.module.js";
 import { HealthModule } from "./modules/system/health/health.module.js";
 
 /**
@@ -70,7 +69,6 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     ReviewsModule,
     AuditEntriesModule,
     RisksModule,
-    RulebookEntriesModule,
   ],
 })
 export class AppModule {}
