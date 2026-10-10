@@ -5,7 +5,7 @@ import { AreaCard, type AreaCardProps } from "../components/area-card";
 const AREAS = [
   {
     title: "A1 · Projects & Applications",
-    description: "Programs, projects, applications, code repos, workspace repo. One installation = one organization.",
+    description: "Programs, projects, applications, code repos, document repo. One installation = one organization.",
     status: "not implemented yet",
     tone: "muted",
   },
@@ -29,13 +29,13 @@ const AREAS = [
   },
   {
     title: "A5 · Templates",
-    description: "SDLC / pipeline templates per 7R, deliverable and RACI templates, the workspace starter template.",
+    description: "SDLC / pipeline templates per 7R, deliverable and RACI templates, the document repo starter template.",
     status: "not implemented yet",
     tone: "muted",
   },
   {
     title: "A6 · Project Build",
-    description: "Rulebook editor, resolved view per unit, readiness board, promote / suspend / waiver PR flows.",
+    description: "Repository setup per application (AS-IS legacy and legacy-data repos, TO-BE target repos per component), standards/ and plugins/ in the document repo.",
     status: "not implemented yet",
     tone: "muted",
   },
