@@ -2,7 +2,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { RequirePermission } from "../../../../common/auth/decorators.js";
+import { type Actor, CurrentActor, RequirePermission } from "../../../../common/auth/decorators.js";
 import type { PermissionRecord, RoleRecord } from "../domain/role.js";
 import { RolesService } from "../application/roles.service.js";
 import {
@@ -20,6 +20,7 @@ export class RolesController {
   constructor(private readonly roles: RolesService) {}
 
   @Get()
+  @RequirePermission("roles.manage", "members.manage") // members managers pick roles to assign
   @ApiOperation({ summary: "List roles with their granted permissions" })
   @ApiOkResponse({ description: "Primary roles and admin-defined sub-roles." })
   list(): Promise<RoleRecord[]> {
@@ -50,8 +51,12 @@ export class RolesController {
   @Put(":id/permissions")
   @ApiOperation({ summary: "Replace a role's permission grants" })
   @ApiOkResponse({ description: "The role with its new grants." })
-  setPermissions(@Param("id") id: string, @Body({ schema: setPermissionsSchema }) input: SetPermissionsInput): Promise<RoleRecord> {
-    return this.roles.setPermissions(id, input.permissions);
+  setPermissions(
+    @Param("id") id: string,
+    @Body({ schema: setPermissionsSchema }) input: SetPermissionsInput,
+    @CurrentActor() actor: Actor,
+  ): Promise<RoleRecord> {
+    return this.roles.setPermissions(id, input.permissions, actor);
   }
 
   @Delete(":id")

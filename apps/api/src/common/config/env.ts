@@ -14,3 +14,26 @@ export function loadEnv(): AppEnv {
     logLevel: (process.env["LOG_LEVEL"] ?? "log") as AppEnv["logLevel"],
   };
 }
+
+export interface BootstrapAdmin {
+  username: string;
+  password: string;
+}
+
+const MIN_BOOTSTRAP_PASSWORD = 8;
+
+/**
+ * Credentials of the first admin, read only when the installation has no users yet.
+ * There is no default password: an unset or short value fails startup instead of
+ * creating a guessable (or empty, hence unusable) admin account.
+ */
+export function loadBootstrapAdmin(): BootstrapAdmin {
+  const username = process.env["KINTSUGI_BOOTSTRAP_ADMIN_USER"] || "admin";
+  const password = process.env["KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD"] ?? "";
+  if (password.length < MIN_BOOTSTRAP_PASSWORD) {
+    throw new Error(
+      `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD must be set (at least ${MIN_BOOTSTRAP_PASSWORD} characters) to create the first admin`,
+    );
+  }
+  return { username, password };
+}
