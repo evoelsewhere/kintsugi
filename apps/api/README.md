@@ -10,6 +10,8 @@ Responsibilities beyond the feature modules below:
 - Auth: local username/password sessions (httpOnly cookie); Personal Access Tokens and an
   `AuthProvider` interface for Entra ID are planned (ADR-0008).
 - Admin → LLM Providers: runtime provider registry (ADR-0009).
+- Admin → Git: Git servers (encrypted credentials, pinned SSH host keys) and repositories;
+  "Test access" runs `git ls-remote` through `packages/git` (ADR-0025).
 
 ## Layout
 

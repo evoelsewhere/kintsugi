@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@kintsugi/domain": "workspace:*",
+    "@kintsugi/git": "workspace:*",
     "@kintsugi/runtime": "workspace:*",
     "@kintsugi/runtime-sdk": "workspace:*",
     "@kintsugi/secrets": "workspace:*",

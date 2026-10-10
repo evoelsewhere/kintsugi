@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConnectorsModule } from "./modules/admin/connectors/connectors.module.js";
+import { GitModule } from "./modules/admin/git/git.module.js";
 import { HarnessesModule } from "./modules/admin/harnesses/harnesses.module.js";
 import { LlmProvidersModule } from "./modules/admin/llm-providers/llm-providers.module.js";
 import { ProjectBuildsModule } from "./modules/admin/project-build/project-builds.module.js";
@@ -44,6 +45,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     UsersModule,
     RolesModule,
     ConnectorsModule,
+    GitModule,
     LlmProvidersModule,
     HarnessesModule,
     TemplatesModule,
