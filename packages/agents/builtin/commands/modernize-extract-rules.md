@@ -42,7 +42,7 @@ rule is confirmed by a two-judge panel before it can anchor the behavior contrac
 
 ### 1. Build the shard list
 
-Script step `scripts/make_shards.py $app "$module_pattern"`, over the source repository.
+Script step `scripts/make_shards.py $app "$module_pattern" --source <source checkout> --assessment assessment/$app --out assessment/$app`, over the source repository.
 
 It reads `assessment/$app/topology.json` when `map` has run (one shard per module, small
 ones merged; the better shards) and otherwise the directory tree, and writes
@@ -74,7 +74,7 @@ The orchestrator runs workflow `workflows/extract-rules.js` with:
 
 ```
 args: {
-  system: "$app",
+  app: "$app",
   modules: <contents of assessment/$app/extract-rules.modules.json>,   // omit in lens mode
   modulePattern: "$module_pattern"                                    // lens mode only
 }
@@ -104,7 +104,7 @@ workflow's per-batch log lines as they arrive.
 The extraction jobs return structured results to the workflow; they write no artifacts. The orchestrator saves
 the workflow's returned object as `assessment/$app/rules_result.json` (for a follow-up run, first merging its
 `confirmedRules`, `dataObjects` and stats into the saved object, de-duplicating by `source` +
-name), then runs script step `scripts/render_rules.py $app`.
+name), then runs script step `scripts/render_rules.py $app --assessment assessment/$app --out assessment/$app`.
 
 It writes `BUSINESS_RULES.md` (summary table, rule cards numbered `RULE-001`… grouped by category, the
 SME-confirmation section, any instruction-shaped-content warnings and the coverage gaps) and

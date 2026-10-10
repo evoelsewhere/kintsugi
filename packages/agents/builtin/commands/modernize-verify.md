@@ -41,7 +41,7 @@ If nothing is built, say so and stop: the next step is the brief's Phase 1 comma
 
 ## 2 — Which rules do the tests name?
 
-Rewrite and reimagine: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/trace_rules.py" $app --target <target checkout> --module <module>` (after step 3 add `--results <the module's result folder>`;
+Rewrite and reimagine: `python3 scripts/trace_rules.py $app --source <source clone> --assessment assessment/$app --target <target checkout> --out runs/<module>/<run-id> --module <module>` (after step 3 add `--runs <the module's result folder>`;
 before it nothing has run, so a named rule reads "named, not run"). A rule counts as tested only when a test that ran and passed backs it: the id
 (`RULE-017`, or `rule017`) is in the name of a passing test or of its class, or a test file names it on a line not marked skipped or pending and
 that file's class passed. A rule only a skipped, pending or failing test names is "named, not run", and one only the notes name is "claimed":
@@ -70,7 +70,7 @@ Break one line that matters (a rounding mode, a threshold by one, a comparison),
 file) and keep that run's XML or raw log in `runs/<module>/<run-id>/canary/`. The pack compares its failures with the
 clean run's. A `Canary:` line in the notes is a claim; the pack does not count it.
 
-**Uplift:** also run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/baseline_diff.py" assessment/$app/BASELINE.md --junit <results folder>`.
+**Uplift:** also run `python3 scripts/baseline_diff.py $app --source <source clone> --assessment assessment/$app --target <target checkout> --out runs/<module>/<run-id> --runs runs/<module>/<run-id>` (it reads `assessment/$app/BASELINE.md`; `--junit` or `--trx` names a single fresh result file instead).
 A test that pins the old version's behavior and fails on the new one is a difference, not a test bug, and tests the pilot added after
 the baseline show as new failures (say so in the suite `note`). A person decides each, at a gate in the portal: fix the code, update the
 test, or approve it in a table headed "Approved differences", `| Test | Reason |`, in `BASELINE.md`. You never edit or approve.
@@ -143,7 +143,7 @@ brief's unticked §7 questions and exit criteria; a person decides those, so nev
 `module` is the module or service folder name in the target repository (an uplift's suites and canaries may name a unit). Give `junit`
 or `log` for every suite and canary: a file the pack cannot parse is no evidence. `legacy.ran` is `false`, with `why`, when the legacy
 cannot run here. `note` is for anything a reader needs, cause first, under 250 characters. Then run
-`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/proof_pack.py" $app $module --source <source clone> --target <target checkout>` (no `$module`
+`python3 scripts/proof_pack.py $app $module --source <source clone> --assessment assessment/$app --target <target checkout> --out assessment/$app --runs runs/<module>/<run-id>` (add `--uplift` for an uplift; no `$module`
 for all). It writes `assessment/$app/VERIFICATION.md` and `VERIFICATION.json`; exit 1 only means "not PROVEN". Show the user the
 verdict per module, the reasons word for word, for a rewrite the P0 rule table, any folder listed as test tooling (not judged),
 **what this does not prove**, and the blank sign-off block. Do not soften a reason or change a verdict; if you think

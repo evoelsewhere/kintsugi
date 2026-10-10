@@ -40,7 +40,7 @@ The orchestrator lists the applications from `kintsugi.yaml` (the workflow has n
 portal shows the count before the stage starts (30 applications means 30 survey jobs). Per application it runs
 the `scripts/inventory.py` script step on that application's source repository, then the orchestrator runs
 workflow `workflows/portfolio-assess.js`, one **legacy-analyst** survey job per application, all independent,
-with `args: { parentDir: "<project id>", systems: ["<app1>", "<app2>", ...] }` and each job reading its own
+with `args: { apps: ["<app1>", "<app2>", ...], inventories: ["<path of each application's inventory.json>", ...] }` and each job reading its own
 application's source repository. Each job is given its application's `inventory.json` and fills in the parts
 that need reading the code (dependency freshness, documentation coverage, risk notes); runtime jobs have no
 shell, so the measured figures (lines, file count, complexity, the tool that produced them) come from the
@@ -78,7 +78,7 @@ budget meeting.
 
 ## Step 1 — Inventory
 
-Script step `scripts/inventory.py` on the source repository writes `assessment/$app/inventory.json`: SLOC and
+Script step `scripts/inventory.py $app --source <source checkout> --source-repo <the application's repository> --source-commit <the commit the job read> --out assessment/$app` writes `assessment/$app/inventory.json`: SLOC and
 file count per language, the per-file complexity (decision keywords counted the same way for every
 application: `IF`/`EVALUATE`/`PERFORM` for COBOL, `if`/`for`/`while`/`case`/`catch` for C-family, and the
 language's equivalents elsewhere), the 25 most complex files, and the index `2.94 × KSLOC^1.10`. Use the index

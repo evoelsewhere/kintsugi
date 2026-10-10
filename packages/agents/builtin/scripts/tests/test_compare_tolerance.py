@@ -1,6 +1,6 @@
-"""Tests for the numeric tolerance in scripts/compare.py.
+"""Tests for the comparison script's tolerance and explicit-root CLI.
 
-Run:  python3 -m unittest discover -s plugins/code-modernization/scripts/tests
+Run:  python -m pytest packages/agents/builtin/scripts/tests/test_compare_tolerance.py
 """
 import json
 import os
@@ -145,6 +145,35 @@ class ToleranceTests(unittest.TestCase):
         big = b"1.0 " * (cmp.MAX_TOLERANT_BYTES // 4 + 10)
         rec = self.run_cases([self.case("a", big, big[:-3] + b"2.0", tolerance=TOL)])["cases"][0]
         self.assertEqual(rec["verdict"], "differs")
+
+
+class ExplicitCliTests(unittest.TestCase):
+    def test_explicit_roots_drive_a_case_and_only_out_receives_the_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            roots = {name: os.path.join(tmp, name) for name in ("source", "assessment", "target", "golden", "runs", "out")}
+            for name in ("source", "assessment", "target", "golden", "runs"):
+                os.makedirs(roots[name])
+            with open(os.path.join(roots["golden"], "legacy.txt"), "wb") as fh:
+                fh.write(b"same\n")
+            with open(os.path.join(roots["runs"], "new.txt"), "wb") as fh:
+                fh.write(b"same\n")
+            cases = os.path.join(roots["golden"], "cases.json")
+            with open(cases, "w", encoding="utf-8") as fh:
+                json.dump({"cases": [{"id": "one", "legacy": "legacy.txt", "new": "new.txt"}]}, fh)
+
+            result = cmp.main([
+                "app", "--source", roots["source"], "--assessment", roots["assessment"],
+                "--target", roots["target"], "--out", roots["out"], "--cases", cases,
+                "--golden", roots["golden"], "--runs", roots["runs"],
+            ])
+
+            self.assertEqual(result, 0)
+            with open(os.path.join(roots["out"], "EQUIVALENCE.json"), encoding="utf-8") as fh:
+                report = json.load(fh)
+            self.assertEqual((report["system"], report["cases"][0]["verdict"]), ("app", "same"))
+            self.assertEqual(os.listdir(roots["source"]), [])
+            self.assertEqual(os.listdir(roots["target"]), [])
+            self.assertEqual(os.listdir(roots["out"]), ["EQUIVALENCE.json"])
 
 
 if __name__ == "__main__":

@@ -1,19 +1,39 @@
 #!/usr/bin/env python3
 """Render the extract-rules workflow's result into BUSINESS_RULES.md and DATA_OBJECTS.md.
 
-    python3 render_rules.py <system> [--workspace DIR] [--result FILE]
+    python3 render_rules.py <app> --out DIR [--assessment DIR] [--result FILE]
 
-Reads analysis/<system>/rules_result.json (the object the workflow returned, saved by the
-command) and writes analysis/<system>/BUSINESS_RULES.md and DATA_OBJECTS.md. Rules are
+Reads rules_result.json (the object the workflow returned, saved by the orchestrator: --result,
+else <assessment>/rules_result.json, where --assessment is the workspace repository's
+assessment/<app>/ folder) and writes BUSINESS_RULES.md and DATA_OBJECTS.md to --out (the step's
+output folder; a member may give the assessment folder itself). Rules are
 numbered RULE-001, RULE-002, ... in the order they appear (by category, then priority) and the heading is always
-`### RULE-NNN: <name>`, the pattern later commands and the pane look for. Every value comes
+`### RULE-NNN: <name>`, the pattern later stages and the portal look for. Every value comes
 from analysis of untrusted code, so it is written as plain text on one line where it is
 a heading or a table cell. Standard library only.
 """
+import argparse
 import json
 import os
 import re
 import sys
+
+MAX_RESULT_BYTES = 5_000_000
+MAX_RECORDS = 10_000
+
+
+class DataError(ValueError):
+    """Invalid or unsafe workflow result."""
+
+
+def within(root, path):
+    root = os.path.realpath(root)
+    real = os.path.realpath(path)
+    try:
+        return os.path.commonpath((root, real)) == root
+    except ValueError:
+        return False
+
 
 CATEGORIES = ['Calculation', 'Validation', 'Lifecycle', 'Policy']
 PRIORITY = {'P0': 0, 'P1': 1, 'P2': 2}
@@ -81,26 +101,96 @@ def render_rule(number, rule):
     return rid, '\n'.join(out)
 
 
+def validate_result(result):
+    if not isinstance(result, dict):
+        raise DataError('rules_result.json must contain a JSON object')
+    list_fields = ('confirmedRules', 'rejectedRules', 'unverifiedRules', 'foldedRules', 'dataObjects', 'injectionFlags', 'rerunModules')
+    for field in list_fields:
+        value = result.get(field, [])
+        if value is not None and not isinstance(value, list):
+            raise DataError(f'rules_result.json field {field} must be an array')
+        if len(value or []) > MAX_RECORDS:
+            raise DataError(f'rules_result.json field {field} exceeds the {MAX_RECORDS}-entry limit')
+    for field in ('confirmedRules', 'rejectedRules', 'unverifiedRules', 'dataObjects'):
+        if any(not isinstance(item, dict) for item in (result.get(field) or [])):
+            raise DataError(f'rules_result.json field {field} must contain objects')
+    for rule in result.get('confirmedRules') or []:
+        for field in ('category', 'priority', 'source'):
+            if rule.get(field) is not None and not isinstance(rule[field], str):
+                raise DataError(f'confirmed rule field {field} must be a string')
+        for field in ('edgeCases', 'alsoCited'):
+            if rule.get(field) is not None and not isinstance(rule[field], list):
+                raise DataError(f'confirmed rule field {field} must be an array')
+        for field in ('edgeCases', 'alsoCited'):
+            if any(not isinstance(item, str) for item in (rule.get(field) or [])):
+                raise DataError(f'confirmed rule field {field} must contain strings')
+    for field in ('injectionFlags', 'rerunModules'):
+        if any(not isinstance(item, str) for item in (result.get(field) or [])):
+            raise DataError(f'rules_result.json field {field} must contain strings')
+    for obj in result.get('dataObjects') or []:
+        if obj.get('fields') is not None and not isinstance(obj['fields'], list):
+            raise DataError('data object fields must be an array')
+        if any(not isinstance(field, dict) for field in (obj.get('fields') or [])):
+            raise DataError('data object fields must contain objects')
+        if obj.get('consumedBy') is not None and not isinstance(obj['consumedBy'], list):
+            raise DataError('data object consumedBy must be an array')
+        if any(not isinstance(item, str) for item in (obj.get('consumedBy') or [])):
+            raise DataError('data object consumedBy must contain strings')
+    stats = result.get('stats', {})
+    if not isinstance(stats, dict):
+        raise DataError('rules_result.json field stats must be an object')
+    for field in ('skippedModules', 'failedModules', 'droppedModules', 'skippedPhases'):
+        if stats.get(field) is not None and not isinstance(stats[field], list):
+            raise DataError(f'stats.{field} must be an array')
+    return result
+
+
+def write_text(root, name, text):
+    if os.path.islink(root):
+        raise DataError(f'refusing to write through a symbolic link: {root}')
+    os.makedirs(root, exist_ok=True)
+    real_root = os.path.realpath(root)
+    path = os.path.join(real_root, name)
+    temporary = path + '.tmp'
+    if not within(real_root, path) or os.path.islink(path) or os.path.islink(temporary):
+        raise DataError(f'refusing to write outside --out or through a symbolic link: {path}')
+    with open(temporary, 'w', encoding='utf-8', newline='\n') as handle:
+        handle.write(text)
+    os.replace(temporary, path)
+
+
 def main(argv):
-    args = [a for a in argv[1:] if not a.startswith('--')]
-    workspace, result_path = '.', None
-    if '--workspace' in argv:
-        workspace = argv[argv.index('--workspace') + 1]
-        args = [a for a in args if a != workspace]
-    if '--result' in argv:
-        result_path = argv[argv.index('--result') + 1]
-        args = [a for a in args if a != result_path]
-    if not args:
-        print('usage: render_rules.py <system> [--workspace DIR] [--result FILE]', file=sys.stderr)
-        return 2
-    system = args[0]
-    base = os.path.join(workspace, 'analysis', system)
-    result_path = result_path or os.path.join(base, 'rules_result.json')
+    ap = argparse.ArgumentParser(description="Render the extract-rules workflow's result into BUSINESS_RULES.md and DATA_OBJECTS.md.")
+    ap.add_argument('app', help='the application id from kintsugi.yaml (used in the headings)')
+    ap.add_argument('--assessment', required=True, help='the assessment/<app>/ folder of the workspace repository (rules_result.json is read from it)')
+    ap.add_argument('--out', required=True, help='the folder BUSINESS_RULES.md and DATA_OBJECTS.md are written to')
+    args = ap.parse_args(argv[1:])
+    if not args.assessment.strip() or not args.out.strip():
+        print('render_rules.py: --assessment and --out must be non-empty explicit paths', file=sys.stderr)
+        return 1
+    system = args.app
+    assessment = os.path.realpath(os.path.expanduser(args.assessment))
+    result_path = os.path.join(assessment, 'rules_result.json')
+    base = os.path.abspath(os.path.expanduser(args.out))
     try:
-        with open(result_path, encoding='utf-8') as handle:
-            result = json.load(handle)
-    except (OSError, ValueError) as error:
-        print(f'Cannot read {result_path}: {error}', file=sys.stderr)
+        if not os.path.isdir(assessment):
+            raise DataError(f'not an assessment directory: {args.assessment}')
+        if not within(assessment, result_path):
+            raise DataError('rules_result.json escapes the assessment directory')
+        if os.path.getsize(result_path) > MAX_RESULT_BYTES:
+            raise DataError(f'rules_result.json exceeds the {MAX_RESULT_BYTES}-byte limit')
+        with open(result_path, 'rb') as handle:
+            raw = handle.read(MAX_RESULT_BYTES + 1)
+        if len(raw) > MAX_RESULT_BYTES:
+            raise DataError(f'rules_result.json exceeds the {MAX_RESULT_BYTES}-byte limit')
+        try:
+            result = validate_result(json.loads(raw.decode('utf-8-sig')))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise DataError(f'rules_result.json is not valid UTF-8 JSON: {error}') from error
+        if os.path.islink(base):
+            raise DataError(f'refusing to write through a symbolic link: {base}')
+    except (DataError, OSError, RecursionError) as error:
+        print(f'render_rules.py: {error}', file=sys.stderr)
         return 1
 
     # Numbered in the order they appear in the document (by category, then priority), so RULE-001.. read in sequence.
@@ -171,8 +261,7 @@ def main(argv):
             doc.append(f"\nA follow-up run for the {len(result['rerunModules'])} affected shard(s) covers them.")
         doc.append('')
 
-    with open(os.path.join(base, 'BUSINESS_RULES.md'), 'w', encoding='utf-8') as handle:
-        handle.write('\n'.join(doc))
+    business_rules = '\n'.join(doc).rstrip() + '\n'
 
     objects = result.get('dataObjects') or []
     dto = [f'# Data Objects — {one_line(system, 80)}', '']
@@ -187,8 +276,12 @@ def main(argv):
         if used:
             dto += ['', 'Used by: ' + ', '.join(one_line(u, 80) for u in used)]
         dto.append('')
-    with open(os.path.join(base, 'DATA_OBJECTS.md'), 'w', encoding='utf-8') as handle:
-        handle.write('\n'.join(dto))
+    try:
+        write_text(base, 'BUSINESS_RULES.md', business_rules)
+        write_text(base, 'DATA_OBJECTS.md', '\n'.join(dto).rstrip() + '\n')
+    except (DataError, OSError) as error:
+        print(f'render_rules.py: {error}', file=sys.stderr)
+        return 1
 
     p0 = sum(1 for r in rules if r.get('priority') == 'P0')
     print(f"BUSINESS_RULES.md: {len(rules)} rules ({p0} P0, {len(sme)} need SME review); DATA_OBJECTS.md: {len(objects)} objects; "
