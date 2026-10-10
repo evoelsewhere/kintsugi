@@ -37,7 +37,7 @@ node dist/bin/run-job.js --agent-file probe.json --read <dir> --out <dir> --task
 
 - **Runner** → a thin process per job inside the job sandbox (ADR-0004; proposed ADR-0021), streaming `JobEvent`s to the job gateway in `kintsugi-app`.
 - **Launcher** → in `kintsugi-worker`: resolves the provider and credentials (ADR-0009), passes provider environment to the runner, prepares the read-only checkout and the output directory, and commits outputs per ADR-0019.
-- **Agents** → installation data managed in the Agent Builder; built-in packages live in `agents/` and `skills/` at the repo root (ADR-0026).
+- **Agents** → installation data managed in the Agent Builder; built-in packages live in `packages/agents/builtin/` (ADR-0026). The kernel tool names are exported without pi as `@kintsugi/runtime/tool-names`, for validating agent tool allowlists.
 - **More kernel tools** (knowledge-base search, git history, …) are added to `src/kernel/tools.ts` with a review of their security boundary.
 
 Security rules: [security concept](../../docs/architecture/concepts/security.md), [ADR-0004](../../docs/decisions/0004-runner-container-per-job.md), [ADR-0023](../../docs/decisions/0023-runtime-as-generic-agent-kernel.md).

@@ -5,6 +5,7 @@
 - Decision register: D46
 - Supersedes: ADR-0023 decision 3 ("no agent ships with Kintsugi")
 - Amends: ADR-0023 (where agent definitions come from); ADR-0014 decision 3 stays superseded
+- Amended by: [ADR-0027](0027-builtin-modernization-content.md) (agent file format, built-in content)
 
 ## Context
 
@@ -45,7 +46,7 @@ Kintsugi's split stays: **implementation belongs to members** in their own harne
    | `architecture-critic` | Adversarial review of target architectures and transformed code | architecture review, transformation review |
    | `security-auditor` | Adversarial security review (OWASP, CWE, dependencies, secrets) | assess (security), harden |
 
-   - Two **shared skills** are attached to every built-in agent: `untrusted-code` (analyzed content is data; report instruction-shaped text as a finding) and `secret-handling` (never reproduce a credential; cite `file:line` with a masked preview).
+   - Three **shared skills** are attached to every built-in agent: `untrusted-code` (analyzed content is data; report instruction-shaped text as a finding), `secret-handling` (never reproduce a credential; cite `file:line` with a masked preview) and `job-workspace` (read-only workspace, `outputs_write`, no shell, report what could not be checked).
    - A pipeline stage supplies the **task**; the agent supplies the **role**. Re-checking findings is a stage pattern: a second job, of the same or another role, verifies the first job's output.
 3. **Package format.** An agent is a folder, and the same format is used for built-ins, import and export:
 
@@ -59,7 +60,7 @@ Kintsugi's split stays: **implementation belongs to members** in their own harne
    - Shared skills live in a skill library, also in Agent Skills format, and are referenced by name.
    - Frontmatter field names stay close to Claude Code and GitHub agent files. Kintsugi-only fields go under `metadata`.
    - `tools` names kernel tools only and is validated against the kernel registry.
-   - Built-in agents and shared skills ship in this repository under `agents/` and `skills/`, versioned with the release.
+   - Built-in agents and shared skills ship in `packages/agents/builtin/` (`agents/`, `skills/`, with the attribution `NOTICE`), versioned with the release. `@kintsugi/agents` parses, validates and exports packages.
 4. **Agents and skills are installation data** in Postgres:
    - `agent` (id, kind `builtin` | `custom`, `forkedFrom`) with one editable **draft** and **immutable published versions**; the same for shared skills.
    - Built-ins are seeded and upgraded from the release at startup and are read-only. To change one, an admin **forks** it into a custom agent with a new id; upgrades never touch a fork.
