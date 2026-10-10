@@ -4,17 +4,16 @@
 // packs, and ingests what they produce (PRs, artifacts, telemetry).
 // See docs/reference/harness-integration.md.
 
-import type { MemberHarnessId, RuleFrontmatter, RulebookRef } from "@kintsugi/domain";
+import type { MemberHarnessId } from "@kintsugi/domain";
 
 /** Context for one work item, prepared by the task-planner runtime agent. */
 export interface TaskPack {
   workItemId: string;
   version: string;
-  /** Rulebook the task pack was generated with; mappings / UI patterns / review rules are cited by ID. */
-  rulebook: RulebookRef;
-  packs: string[];
-  /** Only the rules whose `appliesTo` matches this unit, with the layer each came from. */
-  rulesApplied: (Pick<RuleFrontmatter, "id" | "title" | "severity"> & { layer: string; path: string })[];
+  /** Document repo commit the task pack was generated against. */
+  documentRepoCommit: string;
+  /** Standards that apply to this unit: paths under `standards/` in the document repo. */
+  standards: { path: string; title?: string }[];
   title: string;
   objective: string;
   acceptanceCriteria: string[];
@@ -24,7 +23,7 @@ export interface TaskPack {
   /** Skills (namespaced `<plugin>:<skill>`) from the published plugins that fit this unit. */
   suggestedSkills: string[];
   /** Deliverables are committed to Git by the member, then registered (ADR-0007). */
-  deliverables: { type: string; description: string; repo: "workspace" | "target"; path: string }[];
+  deliverables: { type: string; description: string; repo: "document" | "target"; path: string }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -56,13 +55,9 @@ export interface PluginManifest {
 /** A plugin Kintsugi publishes for a project. */
 export interface PublishedPlugin {
   manifest: PluginManifest;
-  origin: "builtin" | "rulebook";
-  /** Rulebook layer for project plugins, e.g. "packs/webforms-to-aspnetcore". */
-  layer?: string;
-  /** Path inside the workspace repo, relative to its root (vendored built-in or rulebook pack). */
+  origin: "builtin" | "project";
+  /** Path inside the document repo, relative to its root (vendored built-in, or `plugins/<plugin>`). */
   path: string;
-  /** `convert` maturity decides publication: ready → everyone, draft → pilot units only. */
-  audience: "all" | "pilot";
 }
 
 /** Generated marketplace file (`.claude-plugin/marketplace.json` shape). */
@@ -79,7 +74,7 @@ export interface HarnessPluginSupport {
   /** native = reads the Claude Code plugin format; converted = Kintsugi generates the vendor manifest; none = fallback renderer. */
   plugins: "native" | "converted" | "none";
   hooks: "full" | "command-only" | "none";
-  /** Marketplace files Kintsugi generates in the workspace repo for this harness. */
+  /** Marketplace files Kintsugi generates in the document repo for this harness. */
   marketplaceFiles: string[];
 }
 
@@ -93,13 +88,13 @@ export const BUILTIN_HARNESS_SUPPORT: HarnessPluginSupport[] = [
 /** Generates marketplace files (and converted manifests) for the published plugins. */
 export interface MarketplaceGenerator {
   readonly harness: MemberHarnessId;
-  /** Returns workspace-repo-relative path → file content. */
+  /** Returns document-repo-relative path → file content. */
   generate(plugins: PublishedPlugin[], project: { id: string; name: string }): Map<string, string>;
 }
 
 /**
  * Fallback renderer config for harnesses without plugin support (built-in, installation-level,
- * or rulebook `harnesses/*.yaml`). Flattens plugin skills / agents / MCP into native paths;
+ * or declared in the document repo's kintsugi.yaml). Flattens plugin skills / agents / MCP into native paths;
  * hooks cannot be rendered. `format` names a transformer (ADR-0013, ADR-0015).
  */
 export interface HarnessRendererConfig {
