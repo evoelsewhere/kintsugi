@@ -54,7 +54,8 @@ export type MemberHarnessId = (typeof MEMBER_HARNESSES)[number] | (string & {});
 export type RuntimeAgentId = string;
 
 /** Reasoning effort for a runtime agent's model (mirrors pi's thinking levels). */
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 /** Work item status as stored in the unit file frontmatter. */
 export type WorkItemStatus =
