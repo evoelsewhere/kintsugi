@@ -1,30 +1,42 @@
 ---
 description: Write the phased Modernization Brief — the plan a steering committee approves and the build commands execute against
-argument-hint: <system> [target-stack]
-arguments: system target_stack
+argument-hint: <app> [target-stack]
+arguments: app target_stack
+metadata:
+  audience: member
+  upstream: commands/modernize-brief.md
+  agents: []
+  reads: [assessment/<app>/ASSESSMENT.md, assessment/<app>/topology.json, assessment/<app>/*.mmd, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/RULE_REVIEWS.md, assessment/<app>/INTENT.md, assessment/<app>/PREFLIGHT.md, assessment/<app>/DELTA_CATALOG.md, assessment/<app>/BASELINE.md]
+  writes: [assessment/<app>/MODERNIZATION_BRIEF.md]
+  gates: [the brief is approved in the portal (Phase 1 only or full plan) before any build stage starts]
 ---
 
-Synthesize everything in `analysis/$system/` into a **Modernization Brief**: the single
+This command runs in the architect's harness through Kintsugi's member plugin: the architect writes the brief with
+their harness, from the workspace repository checked out next to the target repository, and proposes it as a pull
+request to the workspace repository. Approval does not happen here: it is a gate in the portal, and no build stage
+starts until a person decides it.
+
+Synthesize everything in `assessment/$app/` into a **Modernization Brief**: the single
 document a steering committee approves and engineering executes. Target stack:
-`$target_stack` (if blank, the one in `analysis/$system/INTENT.md`, else recommend one from the assessment).
+`$target_stack` (if blank, the one in `assessment/$app/INTENT.md`, else recommend one from the assessment).
 
 Read `ASSESSMENT.md`, `topology.json` (and the `.mmd` files beside it; never read
-`TOPOLOGY.html`, it is a viewer with the data minified inside) in `analysis/$system/` first,
+any rendered view of it; the portal draws the topology from `topology.json`) in `assessment/$app/` first,
 and `BUSINESS_RULES.md` too unless this is a same-technology **uplift** (the intent or the assessment
 says so): an uplift keeps the code, so its Behavior Contract is the recorded baseline and `extract-rules`
-can wait. If a required file is missing, say so and stop: they come from `assess`, `map` and
-`extract-rules`, which run first. Four more inputs are conditional:
+can wait. If a required file is missing, say so and stop: they come from the `assess`, `map` and
+`extract-rules` stages (runtime jobs started from the portal), which run first. Four more inputs are conditional:
 
-- **`RULE_REVIEWS.json` / `RULE_REVIEWS.md`**, if they exist (written by `/code-modernization:modernize-review`):
+- **`RULE_REVIEWS.json` / `RULE_REVIEWS.md`**, if they exist (written by the portal's rule review screen, the `review` stage):
   a person's verdicts on individual rules. Never put a rule marked `wrong` or `discuss` in the Behavior
   Contract as settled behavior: list each in section 7 as an open question with the reviewer's note, and
   block the phase that covers its module on it. A `confirmed` rule counts as confirmed by a person.
-- **`INTENT.md`**, if it exists (written by `/code-modernization:modernize`): what the person wants (goal, target,
+- **`INTENT.md`**, if it exists (written by the portal's "start a modernization" wizard): what the person wants (goal, target,
   what must stay true). It is the objective of this plan; never override it with a guess. Its goal decides each
   phase's build command: a newer version of the same technology means `uplift`, a rewrite in another technology
   means `transform`, a rebuild on a new architecture means `reimagine`. Without it, the assessment's pattern decides.
 - **`PREFLIGHT.md`**, if it exists. It holds two things nothing else has: the human's answers
-  to preflight Check 0 (scope, local build and test, bespoke build infrastructure, prior
+  to preflight Check 0 (recorded in the portal: scope, local build and test, bespoke build infrastructure, prior
   attempts, what is off limits) and the Check 6 **scope boundary** (whether the source is a
   slice of a larger codebase, and what outside it depends on code inside it). Both constrain
   this plan more than anything derivable from the source. Never override a human's answer with
@@ -32,18 +44,20 @@ can wait. If a required file is missing, say so and stop: they come from `assess
 - **`DELTA_CATALOG.md`**, **required** when the target is a newer version of the *same* stack.
   An uplift's phase order is decided by its version deltas, above all by whether the existing
   tests can even run on the target runtime; phasing without the catalog is planning blind. If it
-  is missing, produce it first (`/code-modernization:modernize-uplift $system <source> $target_stack`
-  through its delta-catalog step, or the **version-delta-analyst** agent) and **wait for its result**:
-  never end your turn while an agent is still running, and never write the brief before the catalog
-  exists. Do not guess at deltas.
+  is missing, it is produced first by a **version-delta-analyst** runtime job (the `uplift` stage's
+  delta-catalog step, started from the portal) and lands as `assessment/$app/DELTA_CATALOG.md` through the
+  workspace repository. Say so, ask for that job in the portal, and **stop until the catalog is merged**:
+  never write the brief before the catalog exists. Do not guess at deltas.
 
 **Staleness.** If an input is newer than an existing `MODERNIZATION_BRIEF.md`, regenerating is
 justified. If the brief is newer than every input and the user re-ran this anyway, ask what
-changed. Note the input timestamps in the brief's header.
+changed. Note the input timestamps in the brief's header (each input's last commit in the workspace repository),
+and the source repository commit the discovery artifacts read.
 
 ## The Brief
 
-Write `analysis/$system/MODERNIZATION_BRIEF.md` with these sections.
+Write `assessment/$app/MODERNIZATION_BRIEF.md` in your checkout of the workspace repository, on your own branch,
+with these sections.
 
 **1. Objective.** One paragraph: from what, to what, why now.
 
@@ -65,11 +79,11 @@ plan works; the uplift command re-applies them at execution, and the two must ne
    (multi-targeting, publishing both), widen the scope to include the consumers, or schedule the
    break. Never silently migrate it in place.
 
-Write every phase in this exact shape, because the build commands and the progress pane read it:
+Write every phase in this exact shape, because the build stages and the portal's progress view read it:
 
 ```
 #### Phase N — <name>
-Command: /code-modernization:modernize-transform | -uplift | -reimagine      (exactly one)
+Command: /kintsugi:modernize-transform | -uplift | -reimagine      (exactly one)
 Modules: <module ids exactly as in topology.json, comma separated>
 Scale: S | M | L | XL
 Risk: <level>; <top 2 risks and mitigations>
@@ -87,10 +101,11 @@ Exit criteria:
   delivery estimate (agentic work does not follow human-team productivity).
 - **Criteria are conditions, never states.** "All P0 rules in Phase 1 proven equivalent" is a
   criterion; "P0 rules proven" is a claim. Make entry criteria *checkable preconditions* ("baseline
-  recorded in `analysis/$system/BASELINE.md`", "pilot playbook approved"). The build commands read the
+  recorded in `assessment/$app/BASELINE.md`", "pilot playbook approved"). The build commands read the
   brief and treat them as binding, and they may tick a box or add a note but never reword a criterion:
   a proposed change goes on a `Proposed revision:` line for the approver. Tell the approver they steer
-  execution by editing this file: an edited criterion is honored, a chat message is not.
+  execution by editing this file (through a pull request to the workspace repository): an edited criterion is
+  honored, a chat message or a portal comment is not.
 - Draw the phases as a Mermaid `flowchart LR` of **sequence and dependencies**, never a `gantt`
   (that encodes durations this plan deliberately does not claim).
 - **Phase 1 is a pilot, and this brief is a hypothesis.** When a phase's units share one recipe (an
@@ -108,7 +123,7 @@ entry points and mark them as needing SME confirmation.
 **5. Behavior Contract.** The **P0 rules** from `BUSINESS_RULES.md` (the ones the system's core purpose
 depends on, or that are costly if wrong) that MUST be proven equivalent before any phase ships: they become the regression suite.
 Flag any P0 rule below High confidence as a blocker needing SME confirmation before its phase starts. For an uplift
-with no rules file, the contract is the baseline: `analysis/$system/BASELINE.md` and the result files it points to,
+with no rules file, the contract is the baseline: `assessment/$app/BASELINE.md` and the result files it points to,
 which the new version must reproduce.
 
 **6. Validation Strategy.** Which combination applies, per phase: characterization tests, contract
@@ -124,8 +139,14 @@ Approved by: ________________  Date: __________
 Approval covers: Phase 1 only | Full plan
 ```
 
+Leave the block blank. The portal's approval gate fills it: the worker writes the approver, the date and what the
+approval covers, and commits as `kintsugi-bot` with a `Kintsugi-Actor: <approver>` trailer.
+
 ## Finish
 
-Refresh the report: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_report.py" $system` (a convenience: if it fails or `python3` is missing, say so in one line and carry on). Present a summary of the brief and **stop: write nothing further until the user
-explicitly approves** (use plan mode if the session supports it). This is the human control point, and
-"no objection" is not approval. After approval, the next step is Phase 1's command.
+Commit with an `Assisted-by: <harness>` trailer and open a pull request to the workspace repository; never push to
+its default branch. The portal shows the brief from there; there is no report to refresh. Present a summary of the
+brief with the link to the pull request and **stop: write nothing further until the brief is
+explicitly approved at the portal's approval gate** (use plan mode if the session supports it). This is the human
+control point, and "no objection" (or a merged pull request alone) is not approval. After approval, the next step is
+Phase 1's command.
