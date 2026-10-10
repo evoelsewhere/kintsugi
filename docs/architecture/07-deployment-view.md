@@ -47,8 +47,7 @@ Kintsugi ships as a self-hosted Docker Compose package ([ADR-0006](../decisions/
 | `jobs` network (`internal: true`) | runner containers, app (job gateway), egress-proxy |
 | `egress` network | egress-proxy → internet |
 | `pg-data` volume | Postgres data (back this up) |
-| `git-cache` volume | Clones of code and workspace repos |
-| `jobs-data` volume | Per-job `/src` (read-only) and `/out`, mounted via volume subpaths |
+| `kintsugi-data` volume | Backed by the host directory `KINTSUGI_DATA_DIR`: Git mirrors, the workspace clones, per-job `/src` (read-only worktree) and `/out` mounted via volume subpaths ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
 
 ## 7.3 Runner container hardening
 
@@ -73,6 +72,6 @@ Details: [security](concepts/security.md).
 |---|---|
 | Install | [Installation guide](../guides/installation.md) |
 | Upgrade | Pull new images; database migrations run on app start |
-| Backup | Postgres (`pg-data`). Code and documents are in Git; the KB can be rebuilt from Git |
+| Backup | Postgres (`pg-data`). Code and documents are in Git; `KINTSUGI_DATA_DIR` and the KB can be rebuilt from Git (except imported repositories) |
 | Offline / air-gapped | Image tarballs + local registry (`KINTSUGI_REGISTRY`) |
 | Configuration | [Configuration reference](../reference/configuration.md) |

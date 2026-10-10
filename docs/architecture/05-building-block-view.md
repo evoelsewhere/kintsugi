@@ -104,6 +104,7 @@ Shared libraries and assets:
 | Path | Content |
 |---|---|
 | `packages/domain` | Shared vocabulary: phases, 7R, project roles, work items, provenance, Git servers / repositories, scorecard |
+| `packages/git` | Git core: system `git` CLI wrapper with per-call credentials, checkout storage layout, provider REST adapters ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
 | `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `AgentDefinition`, `JobEvent`, LLM provider configuration types |
 | `packages/harness-sdk` | `TaskPack`, `AssetRenderer`, `HarnessActivity`, `HarnessPolicy` |
 | `plugins/` | Built-in agent plugin `kintsugi` for member harnesses (skills, hooks, Kintsugi MCP server) |

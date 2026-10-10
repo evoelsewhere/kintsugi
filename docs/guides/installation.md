@@ -57,4 +57,4 @@ Do these in order:
 ## Upgrade and backup
 
 - **Upgrade**: run `docker compose pull && docker compose up -d`. Migrations run on start.
-- **Backup**: back up the `pg-data` volume. Code and documents are already in Git.
+- **Backup**: back up the `pg-data` volume. Code and documents are already in Git, and `KINTSUGI_DATA_DIR` is rebuilt from Git; back it up only if you imported repositories that exist nowhere else.

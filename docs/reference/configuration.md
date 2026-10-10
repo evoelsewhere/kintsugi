@@ -16,6 +16,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_BOOTSTRAP_ADMIN_USER` | yes (first start) | `admin` | First admin account |
 | `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` | yes (first start) | — | First admin password, at least 8 characters; startup fails without it while the installation has no users. Change it after first sign-in |
 | `POSTGRES_PASSWORD` | yes | — | Password of the `kintsugi` database user |
+| `KINTSUGI_DATA_DIR` | yes | — | Host directory for Git mirrors, workspace clones and per-job checkouts ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)); size it for every registered repository plus running jobs. Without Docker (development) it defaults to `./.kintsugi/data` |
 | `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between Git polls (when webhooks are not used) |
 | `KINTSUGI_JOB_MAX_CONCURRENCY` | no | `2` | Parallel runtime jobs |
 | `KINTSUGI_JOB_DEFAULT_TIMEOUT` | no | `1800` | Default job timeout (seconds) |
@@ -34,4 +35,4 @@ Harness renderers and transformer plugins are configured in the portal (Admin �
 | `DOCKER_HOST` | worker | Restricted Docker API (`docker-proxy`) |
 | `KINTSUGI_RUNNER_IMAGE` | worker | Runner image to start per job |
 | `KINTSUGI_JOBS_NETWORK` | worker | Network runner containers join |
-| `KINTSUGI_JOBS_VOLUME` | worker | Volume holding per-job `/src` and `/out` |
+| `KINTSUGI_DATA_VOLUME` | worker | The `kintsugi-data` volume; runner containers get its `jobs/<job-id>/src` (read-only) and `jobs/<job-id>/out` subpaths |
