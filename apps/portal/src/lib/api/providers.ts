@@ -1,7 +1,7 @@
 // Typed access to the LLM provider registry (Settings → Providers).
 // Mirrors apps/api → modules/admin/llm-providers (ADR-0009).
 
-import type { RuntimeAgentId, ThinkingLevel } from "@kintsugi/domain";
+import type { ThinkingLevel } from "@kintsugi/domain";
 import { apiGet, apiSend, type Page } from "../api";
 
 export interface CustomModelConfig {
@@ -45,7 +45,7 @@ export interface CreateProviderInput {
 export type ReplaceProviderInput = Omit<CreateProviderInput, "id">;
 
 export interface AgentModelBindingInput {
-  agent: RuntimeAgentId;
+  agent: string;
   projectId?: string;
   provider: string;
   model: string;

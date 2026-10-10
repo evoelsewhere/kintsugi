@@ -3,7 +3,6 @@
 // OpenAPI generation. Domain commands are built here — the application layer never
 // sees transport shapes.
 
-import { RUNTIME_AGENTS } from "@kintsugi/domain";
 import type { ThinkingLevel } from "@kintsugi/domain";
 import type { AgentModelBinding } from "@kintsugi/runtime-sdk";
 import { z } from "zod";
@@ -70,7 +69,8 @@ export const replaceProviderSchema = z.discriminatedUnion("kind", [
 export type ReplaceProviderInput = z.infer<typeof replaceProviderSchema>;
 
 export const agentModelBindingSchema = z.object({
-  agent: z.enum(RUNTIME_AGENTS),
+  /** Runtime agent id (ADR-0023: agents are data, so any well-formed id). */
+  agent: idSchema,
   /** Undefined = installation default. */
   projectId: z.string().min(1).max(200).optional(),
   provider: providerIdSchema,

@@ -1,112 +1,76 @@
-// Contract for the Kintsugi Runtime: Kintsugi's own agents (knowledge, assessment,
-// planning, gate review, …) executed on pi, one Docker container per job (ADR-0004).
-// The runner reads a read-only git checkout and writes only to /out; the worker
-// commits /out to the workspace repo (ADR-0007). See docs/reference/runtime-agents.md.
+// Contract for the Kintsugi Runtime: a generic agent kernel on pi (ADR-0023). It runs
+// one agent job at a time and knows no agent or use case: the job carries the whole
+// agent definition, the task, the model and the limits. Sources are read-only; the job
+// writes only to its output directory, and the caller decides what happens to the files
+// (ADR-0004, ADR-0007).
 
-import type { CapabilityName, Phase, RulebookRef, RunnerSpec, RuntimeAgentId, ThinkingLevel } from "@kintsugi/domain";
+import type { ThinkingLevel } from "@kintsugi/domain";
 
-export interface JobContext {
-  projectId: string;
-  applicationId?: string;
-  workItemId?: string;
-  phase?: Phase;
-  /** User or event that triggered the job (e.g. "user:alice", "event:pr.opened"). */
-  trigger: string;
+/** A skill: extra instructions loaded into the agent's system prompt. */
+export interface AgentSkill {
+  /** Lowercase identifier, e.g. "review-checklist" ([a-z][a-z0-9-]*). */
+  name: string;
+  content: string;
 }
 
-/** Read-only inputs mounted into the job container. Repos are pinned to a commit. */
-export type JobInput =
-  | { kind: "repo"; url: string; commit: string; paths?: string[] }
-  | { kind: "pull-request"; url: string }
-  | { kind: "document"; repoUrl: string; commit: string; path: string }
-  | { kind: "kb-query"; kb: "as-is" | "to-be"; query: string };
-
-export interface ToolPolicy {
-  /** Derived from the built-in agent definition in code; not configurable per project. */
-  allowTools: string[];
-  denyBashPatterns?: string[];
+/** A complete agent, supplied with every job. Nothing about agents is stored in the runtime. */
+export interface AgentDefinition {
+  id: string;
+  version: string;
+  /** System prompt, used verbatim. */
+  instructions: string;
+  skills?: AgentSkill[];
+  /** Tool allowlist by name (see the kernel tool registry); [] = no tools. */
+  tools: string[];
+  /** Regular expressions; matching shell commands are blocked before they run. */
+  denyCommandPatterns?: string[];
+  thinking?: ThinkingLevel;
 }
 
-/** A file the job wants persisted; the worker validates it and commits it to the workspace repo. */
-export interface JobOutputRule {
-  /** Path pattern in the workspace repo, e.g. "assessment/{app}/scorecard.md". */
-  path: string;
-  commit: "pull-request" | "auto";
+export interface JobLimits {
+  timeoutSec: number;
+  /** Maximum assistant turns (one LLM response plus its tool calls). */
+  maxTurns?: number;
+  maxCostUsd?: number;
 }
 
 export interface JobSpec {
-  /** Agent id: a builtin RuntimeAgentId or an installation-defined custom id (ADR-0022). */
-  agent: { id: string; version: string };
-  /** Resolved agent definition from the installation DB (ADR-0022); the runner falls back to the code catalog for builtins. */
-  definition?: ResolvedAgent;
-  context: JobContext;
-  /** Project rulebook the job runs against (ADR-0011); readiness of `requires` is checked before launch. */
-  rulebook: RulebookRef;
-  /** Packs resolved for the job's units; rules and skills come from these layers. */
-  packs: string[];
-  /** From the pipeline stage definition (rulebook pipelines/*.yaml), not hard-coded per agent. */
-  requires: CapabilityName[];
-  /** Waivers the readiness check relied on, recorded for audit. */
-  waivers?: string[];
-  /** True when every unit in the job is a pilot unit (allows `draft` capabilities). */
-  pilot?: boolean;
-  inputs: JobInput[];
-  /** Task-specific instruction appended to the agent's own prompt and skills. */
-  instruction?: string;
-  /** Resolved from AgentModelBinding; provider refers to an LlmProviderConfig id. */
+  agent: AgentDefinition;
+  /** The user prompt for this job. */
+  task: string;
+  /** provider refers to an LlmProviderConfig id; thinking overrides the agent's default. */
   model: { provider: string; id: string; thinking?: ThinkingLevel };
-  policy: ToolPolicy;
-  outputs: JobOutputRule[];
-  budget: { maxCostUsd?: number; maxTurns?: number; timeoutSec: number };
+  workspace: {
+    /** Directories the agent may read; the first one is its working directory. */
+    readOnly: string[];
+    /** The only directory the agent may write to. */
+    outDir: string;
+  };
+  limits: JobLimits;
+  /** Opaque correlation data (e.g. projectId, trigger), echoed on job.started; never shown to the agent. */
+  metadata?: Record<string, string>;
 }
 
-/** Resolved agent definition (ADR-0022): travels with the job so the runner stays stateless. */
-export interface ResolvedAgent {
-  id: string;
-  version: string;
-  systemPrompt: string;
-  skills: Array<{ path?: string; content?: string }>;
-  allowTools: string[];
-  denyBashPatterns?: string[];
-  thinking?: ThinkingLevel;
-  budget?: { maxTurns?: number; maxCostUsd?: number; timeoutSec?: number };
-}
+export type JobFailureReason = "error" | "timeout" | "max-turns" | "budget" | "aborted";
 
 export type JobEvent =
-  | { type: "job.started"; jobId: string; at: string; runtimeVersion: string }
+  | { type: "job.started"; jobId: string; at: string; runtimeVersion: string; agent: string; metadata?: Record<string, string> }
   | { type: "message.delta"; jobId: string; text: string }
   | { type: "tool.call"; jobId: string; callId: string; tool: string; input: unknown; decision: "allowed" | "blocked"; reason?: string }
   | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string }
-  | { type: "output"; jobId: string; target: "file" | "pr-comment"; ref: string }
+  | { type: "output"; jobId: string; path: string }
   | { type: "usage"; jobId: string; model: string; inputTokens: number; outputTokens: number; costUsd?: number }
   | { type: "job.completed"; jobId: string; at: string; summary: string }
-  | { type: "job.failed"; jobId: string; at: string; error: string };
+  | { type: "job.failed"; jobId: string; at: string; reason: JobFailureReason; error: string };
 
 export interface JobHandle {
   jobId: string;
   events: AsyncIterable<JobEvent>;
-  /** Interactive agents (e.g. kb-assistant) accept follow-up messages. */
+  /** Sends another user message to a job that is still running (interactive agents). */
   followUp?(message: string): Promise<void>;
   abort(reason: string): Promise<void>;
-  done: Promise<Extract<JobEvent, { type: "job.completed" }>>;
-}
-
-/** A rulebook runner executed in its own isolated container (no LLM credentials). */
-export interface RunnerJobSpec {
-  runner: { id: string; pack: string; spec: RunnerSpec };
-  context: JobContext;
-  rulebook: RulebookRef;
-  inputs: JobInput[];
-  /** Optional comparator run after the runner, producing the standard compare report. */
-  thenCompare?: { profile?: string; comparator?: string };
-}
-
-/** Standard compare report contract, produced by the built-in compare engine or a custom comparator. */
-export interface CompareReport {
-  verdict: "pass" | "fail";
-  diffCount: number;
-  clusters: { id: string; files: string[]; summary: string }[];
-  reportPath: string;
+  /** Resolves with the final event; never rejects. */
+  done: Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>>;
 }
 
 export interface AgentRuntime {
@@ -117,7 +81,7 @@ export interface AgentRuntime {
 
 // ---------------------------------------------------------------------------
 // LLM provider registry for the runtime (ADR-0009). Mirrors what pi supports;
-// the worker translates it into a job-scoped pi models.json + environment.
+// the launcher registers it with pi in memory and passes credentials at runtime.
 // ---------------------------------------------------------------------------
 
 /** Credentials are stored encrypted in Postgres; only references travel in configs. */
@@ -170,9 +134,9 @@ export interface CustomModelConfig {
 
 export type LlmProviderConfig = BuiltinProviderConfig | CustomProviderConfig;
 
-/** Which provider/model a runtime agent uses, optionally per project. */
+/** Which provider/model a runtime agent (by id) uses, optionally per project. */
 export interface AgentModelBinding {
-  agent: RuntimeAgentId;
+  agent: string;
   projectId?: string; // undefined = installation default
   provider: string; // LlmProviderConfig.id
   model: string;

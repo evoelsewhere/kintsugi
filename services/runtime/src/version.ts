@@ -1,7 +1,7 @@
 // Version pins for the Kintsugi Runtime (ADR-0018). `PI_VERSION` must always match
 // the exact `@earendil-works/*` pins in package.json; `engine` reports it on every job.
 
-/** Pinned pi release. Bump deliberately: exact pin + smoke run of one job per built-in agent. */
+/** Pinned pi release. Bump deliberately: exact pin + the kernel smoke suite (ADR-0023). */
 export const PI_VERSION = "1.1.0";
 
 /** Kintsugi Runtime release; travels in job provenance and telemetry. */
