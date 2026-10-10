@@ -36,7 +36,7 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 - Do not add AI co-author or attribution trailers.
 
 ## Commands
-- `pnpm install` · `pnpm lint` · `pnpm typecheck` · `pnpm build` · `pnpm test`
+- `pnpm install` · `pnpm lint` · `pnpm typecheck` · `pnpm build` · `pnpm test` · `make dev` (API on :3000 with rebuild + restart, portal on :5173)
 
 ## Security
 - Never run the pi runtime against customer code outside a sandbox, and always mount the code read-only (ADR-0004).
