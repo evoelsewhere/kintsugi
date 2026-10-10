@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
 import type { CreateTemplate, Template } from "../domain/template.js";
-import { TemplateRepository } from "../domain/template.repository.js";
 
 @Injectable()
 export class InMemoryTemplateRepository extends InMemoryRepository<Template, CreateTemplate> {

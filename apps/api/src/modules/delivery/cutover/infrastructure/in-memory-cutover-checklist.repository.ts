@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
 import type { CreateCutoverChecklist, CutoverChecklist } from "../domain/cutover-checklist.js";
-import { CutoverChecklistRepository } from "../domain/cutover-checklist.repository.js";
 
 @Injectable()
 export class InMemoryCutoverChecklistRepository extends InMemoryRepository<CutoverChecklist, CreateCutoverChecklist> {

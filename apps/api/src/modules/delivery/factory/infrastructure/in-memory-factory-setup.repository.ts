@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
 import type { CreateFactorySetup, FactorySetup } from "../domain/factory-setup.js";
-import { FactorySetupRepository } from "../domain/factory-setup.repository.js";
 
 @Injectable()
 export class InMemoryFactorySetupRepository extends InMemoryRepository<FactorySetup, CreateFactorySetup> {

@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
 import type { CreateJobRun, JobRun } from "../domain/job-run.js";
-import { JobRunRepository } from "../domain/job-run.repository.js";
 
 @Injectable()
 export class InMemoryJobRunRepository extends InMemoryRepository<JobRun, CreateJobRun> {

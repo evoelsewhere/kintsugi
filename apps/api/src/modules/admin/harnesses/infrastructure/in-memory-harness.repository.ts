@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
 import type { CreateHarness, Harness } from "../domain/harness.js";
-import { HarnessRepository } from "../domain/harness.repository.js";
 
 @Injectable()
 export class InMemoryHarnessRepository extends InMemoryRepository<Harness, CreateHarness> {
