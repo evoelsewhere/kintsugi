@@ -6,7 +6,7 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 - TypeScript, ESM, Node ≥ 22, `strict` + `noUncheckedIndexedAccess`.
 - Shared vocabulary lives in `packages/domain`; never redefine Phase, Disposition, ProjectRole or HarnessId elsewhere.
 - Two agent worlds, kept separate:
-  - **Kintsugi Runtime** (`services/runtime`): a generic agent kernel on pi, behind `packages/runtime-sdk` (ADR-0023). Agents are data supplied whole with each job; none ships with Kintsugi, and there is no agent configuration in project repos. Runtime jobs never write to project repos.
+  - **Kintsugi Runtime** (`services/runtime`): a generic agent kernel on pi, behind `packages/runtime-sdk` (ADR-0023). Agents are data supplied whole with each job: five built-in read-only agents for the understanding phases plus admin-created ones, packaged as `AGENT.md` + Agent Skills (`agents/`, `skills/`) and managed in the Agent Builder (ADR-0026). There is no agent configuration in project repos. Runtime jobs never write to project repos; implementation belongs to members.
   - **Member harnesses** (Claude Code, Copilot, ChatGPT/Codex), served by `services/harness-hub` through `packages/harness-sdk`. Kintsugi supplies context and ingests results; it does not drive them.
 - pi-specific code lives only in `services/runtime`. Harness-specific rendering and telemetry code lives only in `services/harness-hub`.
 - Kintsugi ships no stack-specific content. Stack/project specifics belong in a project's rulebook (`rulebook/` in its workspace repo, ADR-0011); the neutral starter lives in `templates/workspace/`.

@@ -44,7 +44,7 @@ This page has two parts:
 | [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted |
 | [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
 | [0025](0025-git-core-and-checkout-storage.md) | Git core package and Kintsugi-managed checkout storage | Accepted |
-| [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Proposed |
+| [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Accepted |
 
 ## Decision register
 
@@ -77,7 +77,7 @@ This page has two parts:
 | D25 | Policy engine | 🟢 | TypeScript rules + policy in `kintsugi.yaml`; consider OPA/Cedar in M4 | M4 | 🟡 |
 | D26 | Audit log | 🟢 | Append-only, hash-chained table in Postgres | M4 | 🟡 |
 | D27 | pi versioning | 🟢 | Track latest pi, pin exact versions of `@earendil-works/*` in the runner image; deliberate upgrades | M0 | ✅ [0018](0018-pin-pi-exact-version.md) |
-| D28 | Runtime agent definitions | 🟢 | The runtime is a generic kernel; an agent definition (instructions, skills, tools, policy) is data supplied with each job; no agent ships with Kintsugi and none is configured in any repo | M1 | ✅ [0023](0023-runtime-as-generic-agent-kernel.md) |
+| D28 | Runtime agent definitions | 🟢 | The runtime is a generic kernel; an agent definition (instructions, skills, tools, policy) is data supplied with each job; none is configured in any repo; built-in and custom agents are installation data (D46) | M1 | ✅ [0023](0023-runtime-as-generic-agent-kernel.md), [0026](0026-runtime-agents-and-agent-builder.md) |
 | D29 | Workspace repo layout + how the runtime writes to Git | 🔴 | One workspace repo per project; worker commits on `kintsugi/*` branches + PR as `kintsugi-bot`; `autoCommitPaths` (`units/**`, `tasks/**`, `knowledge/**/generated/**`) commit directly to the default branch ([reference](../reference/workspace-repo.md)) | M0 | ✅ [0019](0019-workspace-repo-write-path.md) |
 | D30 | Webhooks vs. polling | 🟠 | Polling by default (1–5 min); webhooks when reachable | M2 | 🟡 |
 | D31 | Large binaries (recordings, video, scanned PDFs) | 🟠 | Git LFS where supported; otherwise the `kintsugi-data` volume + a link file in Git | M1 | ⬜ |
@@ -94,7 +94,7 @@ This page has two parts:
 | D41 | Stale units on rule change | 🟠 | Units record `rulesApplied`; changed rules mark units `stale` → re-review queue | M3 | ✅ [0013](0013-composable-open-rulebook.md) |
 | D44 | Access roles vs. project roles | 🔴 | Keep installation-wide permission-bundle access roles separate from project RACI roles; assign project roles per membership after M0 project persistence | M0 | ✅ [0024](0024-access-roles-vs-project-roles.md) |
 | D45 | Git access and checkout storage | 🔴 | Kintsugi clones from registered URLs into one admin-chosen data directory (`KINTSUGI_DATA_DIR`): bare mirror per repository, per-job worktree at a fixed commit; `packages/git` over the system `git` CLI with per-call credentials; provider REST adapters, no provider CLIs | M0 | ✅ [0025](0025-git-core-and-checkout-storage.md) |
-| D46 | Runtime agents and the Agent Builder | 🔴 | Five built-in read-only agents for understanding (legacy-analyst, business-rules-extractor, version-delta-analyst, architecture-critic, security-auditor) plus admin-created agents; AGENT.md + Agent Skills packages; draft and immutable published versions; implementation stays with members | M0 | 🟡 [0026](0026-runtime-agents-and-agent-builder.md) |
+| D46 | Runtime agents and the Agent Builder | 🔴 | Five built-in read-only agents for understanding (legacy-analyst, business-rules-extractor, version-delta-analyst, architecture-critic, security-auditor) plus admin-created agents; AGENT.md + Agent Skills packages; draft and immutable published versions; implementation stays with members | M0 | ✅ [0026](0026-runtime-agents-and-agent-builder.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
 ## Notes on open points

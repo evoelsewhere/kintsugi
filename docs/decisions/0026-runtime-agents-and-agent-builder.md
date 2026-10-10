@@ -1,9 +1,9 @@
 # ADR-0026: Built-in and custom runtime agents, packaged and managed in an Agent Builder
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-10
 - Decision register: D46
-- Supersedes (on acceptance): ADR-0023 decision 3 ("no agent ships with Kintsugi")
+- Supersedes: ADR-0023 decision 3 ("no agent ships with Kintsugi")
 - Amends: ADR-0023 (where agent definitions come from); ADR-0014 decision 3 stays superseded
 
 ## Context

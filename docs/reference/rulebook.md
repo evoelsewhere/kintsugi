@@ -154,7 +154,7 @@ gates:
 
 | Field | Meaning |
 |---|---|
-| `performer.agent` | A runtime agent id ([runtime agents](runtime-agents.md)); the agent definition is supplied with each job, and none ships with Kintsugi yet (ADR-0023) |
+| `performer.agent` | A runtime agent id ([runtime agents](runtime-agents.md)); built-in or created in the Agent Builder; `<id>@<version>` pins a published version (ADR-0026) |
 | `phases[].id` | A built-in phase id (`mobilize` … `hypercare-operate`), or a custom id with `category` |
 | `perUnit` | Stages run per work item; otherwise once per application / project |
 | `performer` | `{agent}` (runtime agent id), `{member: [project roles]}` (well-known or custom), or `{runner}` (optionally `then: compare`) |

@@ -3,7 +3,7 @@
 The Kintsugi Runtime is a **generic agent kernel** on pi ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)). It runs one agent job at a time, one sandbox per job ([ADR-0004](../decisions/0004-runner-container-per-job.md)), and knows no agent or use case.
 
 - **An agent is data, supplied whole with each job.** The runner is stateless and never looks an agent up.
-- **No agent ships with Kintsugi**, in code or in seed data. Where agent definitions are stored and edited is decided when the first agent is introduced.
+- **Agents are installation data** ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)): five built-in read-only agents for the understanding phases ship as packages (`agents/`, `skills/`) and are seeded at startup; admins fork them or create their own in the Agent Builder. The launcher resolves `id` or `id@version` to a published version at job start and embeds it in the job.
 - **No agent configuration in project repos.** Projects control the model each agent id uses (Admin → LLM Providers → agent bindings, [LLM configuration](../architecture/concepts/llm-configuration.md)).
 - **How agents read code**: directly, with the kernel's file tools on the read-only workspace. There is no code graph or parser.
 

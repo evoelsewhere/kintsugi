@@ -41,7 +41,7 @@
   | Runner images | Image allowlist |
   | Harness transformer plugins | Installed by admins only |
 
-  No agent ships with Kintsugi; agents are supplied per job by Kintsugi, and projects cannot add agents, tools or MCP servers to the runtime. Kernel path confinement and tool allowlists are defence in depth; the job sandbox is the isolation boundary (ADR-0023).
+  Agents are installation data (built-in or created by admins, ADR-0026) supplied per job by Kintsugi; projects cannot add agents, tools or MCP servers to the runtime. Kernel path confinement and tool allowlists are defence in depth; the job sandbox is the isolation boundary (ADR-0023).
 - **Worker commits**: authored by a bot account and carrying job/agent trailers ([workspace repo](../../reference/workspace-repo.md#commit-conventions)).
 
 ## Member harnesses

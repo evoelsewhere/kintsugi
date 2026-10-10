@@ -1,6 +1,6 @@
 # ADR-0023: The runtime is a generic agent kernel; agents are data supplied per job
 
-- Status: Accepted
+- Status: Accepted. Decision 3 superseded by [ADR-0026](0026-runtime-agents-and-agent-builder.md)
 - Date: 2026-10-10
 - Decision register: D28
 - Supersedes: ADR-0014 decision 3 ("built-in runtime agents are fixed in code"); ADR-0022
