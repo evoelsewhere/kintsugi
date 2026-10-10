@@ -55,7 +55,7 @@ Constraints:
   - It runs the system `git` through `execFile`: no shell, argument arrays, a timeout on every call.
   - It does not use libgit2 or isomorphic-git, because they lack full support for partial clone, LFS, worktrees and SSH, and members' tools use real Git anyway.
 - **Credentials never touch the repository or the disk in plaintext:**
-  - HTTPS tokens are passed for one invocation through `GIT_ASKPASS` and an environment variable. They are never put in URLs, remote config, the process arguments or a credential store.
+  - HTTPS tokens are passed for one invocation through an inline credential helper that reads an environment variable of that call; the helper only answers `get`. Tokens are never put in URLs, remote config, the process arguments or a credential store, and they are redacted from error messages.
   - SSH keys are written to a mode-0600 temporary file that lives only for the invocation. `GIT_SSH_COMMAND` sets `IdentitiesOnly=yes` and `StrictHostKeyChecking=yes`, and uses `<data>/ssh/known_hosts`.
   - The host key is shown to the admin and pinned when the server is registered.
 - **Hardened environment on every call:**
