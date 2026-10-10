@@ -45,6 +45,7 @@ This page has two parts:
 | [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
 | [0025](0025-git-core-and-checkout-storage.md) | Git core package and Kintsugi-managed checkout storage | Accepted |
 | [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Accepted |
+| [0027](0027-runtime-plugins.md) | Runtime plugins: agents, skills, commands, workflows, scripts, hooks, assets and tests in one package | Proposed |
 
 ## Decision register
 
@@ -95,6 +96,7 @@ This page has two parts:
 | D44 | Access roles vs. project roles | 🔴 | Keep installation-wide permission-bundle access roles separate from project RACI roles; assign project roles per membership after M0 project persistence | M0 | ✅ [0024](0024-access-roles-vs-project-roles.md) |
 | D45 | Git access and checkout storage | 🔴 | Kintsugi clones from registered URLs into one admin-chosen data directory (`KINTSUGI_DATA_DIR`): bare mirror per repository, per-job worktree at a fixed commit; `packages/git` over the system `git` CLI with per-call credentials; provider REST adapters, no provider CLIs | M0 | ✅ [0025](0025-git-core-and-checkout-storage.md) |
 | D46 | Runtime agents and the Agent Builder | 🔴 | Five built-in read-only agents for understanding (legacy-analyst, business-rules-extractor, version-delta-analyst, architecture-critic, security-auditor) plus admin-created agents; AGENT.md + Agent Skills packages; draft and immutable published versions; implementation stays with members | M0 | ✅ [0026](0026-runtime-agents-and-agent-builder.md) |
+| D47 | Runtime plugin format | 🔴 | Claude Code plugin layout with `.kintsugi-plugin/plugin.json`: agents, skills, commands (stage tasks), declarative YAML workflows, sandboxed scripts (Node, Python), server-side hooks, assets, tests; built-in `modernization` plugin | M0 | 🟡 [0027](0027-runtime-plugins.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
 ## Notes on open points
