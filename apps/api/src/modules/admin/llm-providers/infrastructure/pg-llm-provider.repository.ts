@@ -3,11 +3,11 @@
 // the stored config as { secretId } — plaintext never leaves this adapter.
 
 import { Injectable, type OnApplicationBootstrap } from "@nestjs/common";
-import { decryptSecret, encryptSecret } from "@kintsugi/secrets";
 import type { AgentModelBinding, CustomModelConfig, LlmProviderConfig, SecretRef } from "@kintsugi/runtime-sdk";
 import type { ThinkingLevel } from "@kintsugi/domain";
 import type { Pool } from "pg";
 import { getPool, type Queryable, withTransaction } from "../../../../common/db/pool.js";
+import { readSecret, type SecretTable, secretExists, storeSecret } from "../../../../common/db/secret-store.js";
 import type { LlmProviderRecord, ProviderConfigInput, ProviderCredentials, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 
@@ -38,6 +38,8 @@ interface ProviderRow {
   enabled: boolean;
   updated_at: Date;
 }
+
+const SECRETS: SecretTable = { table: "admin.llm_secret", ownerColumn: "provider_id" };
 
 const apiKeySecretId = (providerId: string): string => `provider:${providerId}:api-key`;
 const headerSecretId = (providerId: string, name: string): string => `provider:${providerId}:header:${encodeURIComponent(name)}`;
@@ -178,12 +180,7 @@ export class PgLlmProviderRepository extends LlmProviderRepository implements On
 
   /** Resolves a stored { secretId } to its plaintext — connectivity checks and the runtime launcher only. */
   async resolveSecret(secretId: string): Promise<string | undefined> {
-    const result = await this.#pool.query<{ ciphertext: string; iv: string; auth_tag: string }>(
-      "select ciphertext, iv, auth_tag from admin.llm_secret where secret_id = $1",
-      [secretId],
-    );
-    const row = result.rows[0];
-    return row === undefined ? undefined : decryptSecret({ ciphertext: row.ciphertext, iv: row.iv, authTag: row.auth_tag });
+    return readSecret(this.#pool, SECRETS, secretId);
   }
 
   #buildStoredConfig(input: RegisterLlmProvider, keepAuth?: StoredAuth, existing?: StoredConfig): PreparedConfig {
@@ -256,19 +253,8 @@ export class PgLlmProviderRepository extends LlmProviderRepository implements On
     }
     entries.push(...headerSecrets);
     for (const [secretId, plaintext] of entries) {
-      const encrypted = encryptSecret(plaintext);
-      await db.query(
-        `insert into admin.llm_secret (secret_id, provider_id, ciphertext, iv, auth_tag)
-         values ($1, $2, $3, $4, $5)
-         on conflict (secret_id) do update set ciphertext = $3, iv = $4, auth_tag = $5`,
-        [secretId, providerId, encrypted.ciphertext, encrypted.iv, encrypted.authTag],
-      );
+      await storeSecret(db, SECRETS, providerId, secretId, plaintext);
     }
-  }
-
-  async #secretExists(secretId: string): Promise<boolean> {
-    const result = await this.#pool.query("select 1 from admin.llm_secret where secret_id = $1", [secretId]);
-    return (result.rowCount ?? 0) > 0;
   }
 
   async #toRecord(row: ProviderRow): Promise<LlmProviderRecord> {
@@ -276,7 +262,7 @@ export class PgLlmProviderRepository extends LlmProviderRepository implements On
     const auth = config.auth;
     const envKeys = auth.type === "env" && auth.vars !== undefined ? Object.keys(auth.vars) : [];
     // Presence only: listing never decrypts, so a rotated or missing key cannot break reads.
-    const hasApiKey = auth.type === "api-key" && auth.key !== undefined ? await this.#secretExists(auth.key.secretId) : false;
+    const hasApiKey = auth.type === "api-key" && auth.key !== undefined ? await secretExists(this.#pool, SECRETS, auth.key.secretId) : false;
     return {
       id: row.id,
       kind: row.kind,
