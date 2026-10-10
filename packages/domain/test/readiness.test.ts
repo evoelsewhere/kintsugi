@@ -1,11 +1,15 @@
 // Capability maturity and readiness (docs/reference/rulebook.md §6, ADR-0013).
 
 import { describe, expect, it } from "vitest";
-import { checkReadiness, resolveMaturity, type CapabilityDecl, type CapabilityProvider, type UnitScope, type Waiver } from "../src/index.js";
+import { checkReadiness, resolveMaturity, type CapabilityDecl, type CapabilityName, type CapabilityProvider, type UnitScope, type Waiver } from "../src/index.js";
 
 const TODAY = "2026-10-10";
 const unit: UnitScope = { id: "U-001", kind: "screen", application: "billing" };
 const pilot: UnitScope = { ...unit, id: "U-002", pilot: true };
+
+// checkReadiness types `providers` as a full Record over CapabilityName although it reads
+// it as partial (`?? []`); real callers only know the capabilities a rulebook provides.
+const providers = (map: Record<string, CapabilityProvider[]>) => map as Record<CapabilityName, CapabilityProvider[]>;
 
 const provider = (layer: string, maturity: CapabilityDecl["maturity"]): CapabilityProvider => ({ layer, decl: { maturity, uses: [] } });
 const waiver = (overrides: Partial<Waiver> = {}): Waiver => ({
@@ -32,16 +36,16 @@ describe("resolveMaturity", () => {
 });
 
 describe("checkReadiness", () => {
-  const check = (providers: CapabilityProvider[], target: UnitScope = unit, waivers: Waiver[] = []) =>
-    checkReadiness({ compare: providers }, ["compare"], target, waivers, TODAY);
+  const check = (list: CapabilityProvider[], target: UnitScope = unit, waivers: Waiver[] = []) =>
+    checkReadiness(providers({ compare: list }), ["compare"], target, waivers, TODAY);
 
   it("reports a capability without provider as missing", () => {
-    const result = checkReadiness({}, ["compare"], unit, [], TODAY);
+    const result = checkReadiness(providers({}), ["compare"], unit, [], TODAY);
     expect(result).toEqual({ ok: false, missing: [{ capability: "compare" }], waived: [] });
   });
 
   it("passes with nothing required", () => {
-    expect(checkReadiness({}, [], unit, [], TODAY).ok).toBe(true);
+    expect(checkReadiness(providers({}), [], unit, [], TODAY).ok).toBe(true);
   });
 
   it("allows ready for every unit", () => {
@@ -71,7 +75,7 @@ describe("checkReadiness", () => {
   });
 
   it("checks every required capability", () => {
-    const result = checkReadiness({ compare: [provider("packs/p", "ready")], deploy: [provider("packs/q", "template")] }, ["compare", "deploy"], unit, [], TODAY);
+    const result = checkReadiness(providers({ compare: [provider("packs/p", "ready")], deploy: [provider("packs/q", "template")] }), ["compare", "deploy"], unit, [], TODAY);
     expect(result.ok).toBe(false);
     expect(result.missing.map((entry) => entry.capability)).toEqual(["deploy"]);
   });
@@ -141,6 +145,6 @@ describe("checkReadiness", () => {
 
   it("defaults today to the current date", () => {
     const expired = waiver({ expires: "2000-01-01" });
-    expect(checkReadiness({ compare: [provider("packs/p", "draft")] }, ["compare"], unit, [expired]).ok).toBe(false);
+    expect(checkReadiness(providers({ compare: [provider("packs/p", "draft")] }), ["compare"], unit, [expired]).ok).toBe(false);
   });
 });
