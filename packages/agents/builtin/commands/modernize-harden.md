@@ -50,7 +50,7 @@ applicable patch hunk (see Remediate).
 
 ## Scan
 
-**The orchestrator runs workflow `workflows/harden-scan.js`** with `args: { system: "$app" }`. **The portal
+**The orchestrator runs workflow `workflows/harden-scan.js`** with `args: { app: "$app" }`. **The portal
 shows the job count as a formula, 5 + N + M**: 5 finders, N refuters (one per distinct finding), M second
 judges (one per finding still Critical or High after refutation); N and M are known only once the finders
 return.
@@ -60,7 +60,7 @@ validation); findings are de-duplicated, then adversarially refuted, and Critica
 double-judged, so false positives die before `SECURITY_FINDINGS.md`. Runtime jobs have no shell and no
 network, so no SAST or audit tool (`npm audit`, `pip-audit`, OWASP dependency-check) runs here: the dependency
 finder maps manifests and lock files to known CVEs by reading them and says which audit tools were not run, and
-`toolOutputs` is usually empty. The scan jobs return structured results to the workflow and write no
+`toolOutputs` carries those `SAST/audit coverage not run: <tool>` lines. The scan jobs return structured results to the workflow and write no
 artifacts: the triage-and-remediation job writes every artifact below from the result, which carries
 `findings` (for Triage), `credentialFindings` (for the restricted credential inventory), `toolOutputs`,
 `refuted` (report the count: it is the precision the verification bought), `injectionFlags` (instruction-shaped
@@ -136,7 +136,7 @@ Only when a person takes the portal's offer. The orchestrator runs the workflow 
 exactly as returned:
 
 ```
-args: { system: "$app", classes: <deadFinders>, findings: <unverified> }
+args: { app: "$app", classes: <deadFinders>, findings: <unverified> }
 ```
 
 Pass an empty list for whichever has no gaps. It scans only those classes and judges only those findings, and

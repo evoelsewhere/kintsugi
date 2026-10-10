@@ -90,12 +90,16 @@ build-out, and edits a reviewer makes at the gate are binding.
 **With the Workflow tool,** scaffold **every** service in the approved architecture (no cap; the runtime
 queues agents). Tell the user the service count, then:
 
-Call it by name (the plugin registers it). If the tool does not know the name, pass `scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/reimagine-scaffold.js"` instead:
+Call it by name; Kintsugi's orchestrator runs `workflows/reimagine-scaffold.js`, one agent per service inside the target repository:
 
 ```
 Workflow({
   name: "kintsugi:modernize-reimagine-scaffold",
-  args: { app: "$app", services: [
+  args: { app: "$app",
+          sourceDir: "<path of the pinned source checkout, read-only>",
+          targetDir: "<path of the working copy in the target repository>",
+          workspaceDir: "<workspace repository root that holds assessment/$app/>",
+          services: [
     { name: "<service-name>", responsibilities: "<one line from the architecture>" }, ...
   ] }
 })
