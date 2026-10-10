@@ -24,3 +24,9 @@ export interface CreateSubRole {
   name: string;
   description?: string;
 }
+
+/** The seeded primary role that administers the installation. */
+export const ADMIN_ROLE_ID = "admin";
+
+/** Grants the admin role can never lose — without them nobody could repair members or roles. */
+export const ADMIN_LOCKED_PERMISSIONS: readonly string[] = ["members.manage", "roles.manage"];

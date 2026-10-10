@@ -1,8 +1,11 @@
 // Application layer: use cases for roles & permissions (Roles & Permissions UI).
 
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreateSubRole, PermissionRecord, RoleRecord } from "../domain/role.js";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Actor } from "../../../../common/auth/decorators.js";
+import { ADMIN_LOCKED_PERMISSIONS, ADMIN_ROLE_ID, type CreateSubRole, type PermissionRecord, type RoleRecord } from "../domain/role.js";
 import { RoleRepository } from "../domain/role.repository.js";
+
+export { ADMIN_ROLE_ID } from "../domain/role.js";
 
 @Injectable()
 export class RolesService {
@@ -30,11 +33,17 @@ export class RolesService {
     await this.roles.removeSubRole(id);
   }
 
-  async setPermissions(roleId: string, codes: string[]): Promise<RoleRecord> {
+  async setPermissions(roleId: string, codes: string[], actor: Actor): Promise<RoleRecord> {
     const role = await this.get(roleId);
     const catalog = new Set((await this.roles.listPermissions()).map((permission) => permission.code));
     const unknown = codes.filter((code) => !catalog.has(code));
     if (unknown.length > 0) throw new BadRequestException(`Unknown permission codes: ${unknown.join(", ")}`);
+    const notHeld = codes.filter((code) => !role.permissions.includes(code) && !actor.permissions.includes(code));
+    if (notHeld.length > 0) throw new ForbiddenException(`Cannot grant permissions you do not hold: ${notHeld.join(", ")}`);
+    if (role.id === ADMIN_ROLE_ID) {
+      const removed = ADMIN_LOCKED_PERMISSIONS.filter((code) => !codes.includes(code));
+      if (removed.length > 0) throw new ConflictException(`The admin role must keep: ${removed.join(", ")}`);
+    }
     const updated = await this.roles.setPermissions(role.id, codes);
     if (updated === undefined) throw new NotFoundException(`Role ${roleId} not found`);
     return updated;

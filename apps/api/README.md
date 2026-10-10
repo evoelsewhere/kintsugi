@@ -91,6 +91,7 @@ Rules (enforced by review — see AGENTS.md):
 | `sleep()`, `retry()`, `chunk()` | `common/util/async.js` | async utilities |
 | `nowIso()` | `common/util/time.js` | one clock format (ISO-8601 UTC) |
 | `getPool`, `ensureSchema` | `common/db/pool.js` | Postgres access + migrations |
+| `@Public()`, `@RequirePermission()`, `@CurrentActor()`, `Actor` | `common/auth/decorators.js` | route access + the caller passed to use cases |
 | `encryptSecret`, `decryptSecret` | `@kintsugi/secrets` | AES-256-GCM with `KINTSUGI_SECRET_KEY` (shared with services/runtime) |
 | `HttpExceptionFilter` | `common/filters/…` | uniform error envelope |
 
@@ -131,17 +132,28 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
   returns the user with roles and effective permissions.
 - **Route protection** is global (`AuthGuard` + `PermissionsGuard` in `modules/core/auth`):
   every route needs a bearer token unless marked `@Public()` (login, health); routes can
-  require one permission code with `@RequirePermission("code")`.
+  require permission codes with `@RequirePermission("code", …)` (any one of them; a
+  method-level decorator overrides the class-level one). Every write route is gated;
+  reads of shared catalogs only need a session. Use cases that depend on who calls
+  receive the caller via `@CurrentActor()`.
 - **Roles**: primary roles (`admin`, `contribute`, `user`) and admin-defined sub-roles
   (`dev`, `ba`, `tester`, …). A member holds one primary role plus optional sub-roles.
 - **Permissions are dynamic**: codes live in `core.permission` and are added by
   **migration** — the portal's matrix reads the table, so new codes appear automatically
   and are granted per role there. Grants are stored in `core.role_permission`.
-- **Bootstrap admin**: created on startup when no users exist —
-  `admin / admin@1234` in dev; override with `KINTSUGI_BOOTSTRAP_ADMIN_USER` /
-  `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` and change it after first sign-in.
-- **Known behaviors**: `members.manage` implies the power to assign any role (treat it as
-  privileged); passwords use scrypt; no login rate limiting yet (M0 hardening).
+- **Bootstrap admin**: created on startup when no users exist, from
+  `KINTSUGI_BOOTSTRAP_ADMIN_USER` (default `admin`) and `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD`
+  (required, at least 8 characters — there is no default; startup fails without it).
+  Change the password after first sign-in.
+- **Guard rails** (members & roles use cases):
+  - you can only assign roles, grant permissions, and manage members whose permissions
+    you hold yourself — `members.manage` / `roles.manage` do not allow self-escalation or
+    taking over a stronger account;
+  - the installation keeps at least one enabled `admin`, the `admin` role keeps
+    `members.manage` and `roles.manage`, and nobody removes or disables themselves;
+  - a member holds exactly one primary role;
+  - resetting a password or disabling a member ends their sessions.
+- **Known behaviors**: passwords use scrypt; no login rate limiting yet (M0 hardening).
 
 ## Adding a feature module
 

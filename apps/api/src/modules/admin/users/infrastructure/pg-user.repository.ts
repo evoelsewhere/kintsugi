@@ -103,6 +103,20 @@ export class PgUserRepository extends UserRepository {
     return row === undefined ? undefined : { hash: row.password_hash, salt: row.password_salt };
   }
 
+  async countEnabledWithRole(roleId: string): Promise<number> {
+    const result = await this.#pool.query<{ count: number }>(
+      `select count(*)::int as count
+       from core.app_user u join core.user_role ur on ur.user_id = u.id
+       where u.enabled and ur.role_id = $1`,
+      [roleId],
+    );
+    return result.rows[0]?.count ?? 0;
+  }
+
+  async revokeSessions(id: string): Promise<void> {
+    await this.#pool.query("delete from core.session where user_id = $1", [id]);
+  }
+
   async #replaceRoles(userId: string, roleIds: string[]): Promise<void> {
     await this.#pool.query("delete from core.user_role where user_id = $1", [userId]);
     for (const roleId of roleIds) {

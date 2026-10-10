@@ -1,7 +1,8 @@
 // Application layer: sign-in, sessions and the bootstrap admin (ADR-0008).
-// Dev default credentials: admin / admin@1234 (override with KINTSUGI_BOOTSTRAP_ADMIN_*).
+// The first admin comes from KINTSUGI_BOOTSTRAP_ADMIN_* — there is no default password.
 
 import { Injectable, OnApplicationBootstrap, UnauthorizedException } from "@nestjs/common";
+import { loadBootstrapAdmin } from "../../../../common/config/env.js";
 import type { UserRecord } from "../../../admin/users/domain/user.js";
 import { UsersService } from "../../../admin/users/application/users.service.js";
 import { RolesService } from "../../../admin/roles/application/roles.service.js";
@@ -26,9 +27,8 @@ export class AuthService implements OnApplicationBootstrap {
   /** Creates the first admin when the installation has no users yet. */
   async onApplicationBootstrap(): Promise<void> {
     if ((await this.users.count()) > 0) return;
-    const username = process.env["KINTSUGI_BOOTSTRAP_ADMIN_USER"] ?? "admin";
-    const password = process.env["KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD"] ?? "admin@1234";
-    await this.users.create({ username, password, displayName: "Admin", roleIds: ["admin"] });
+    const { username, password } = loadBootstrapAdmin();
+    await this.users.createFirstAdmin(username, password);
   }
 
   async login(username: string, password: string): Promise<{ token: string; user: SessionUser }> {

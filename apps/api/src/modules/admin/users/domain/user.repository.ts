@@ -14,4 +14,8 @@ export abstract class UserRepository {
   abstract setPassword(id: string, password: PasswordHash): Promise<void>;
   abstract remove(id: string): Promise<boolean>;
   abstract passwordOf(id: string): Promise<PasswordHash | undefined>;
+  /** Enabled members holding the role — guards against removing the last admin. */
+  abstract countEnabledWithRole(roleId: string): Promise<number>;
+  /** Ends every session of the member (password reset, disable). */
+  abstract revokeSessions(id: string): Promise<void>;
 }
