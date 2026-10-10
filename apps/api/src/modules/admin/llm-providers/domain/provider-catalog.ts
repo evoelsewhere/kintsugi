@@ -25,6 +25,14 @@ export interface SupportedProviders {
   customApis: SupportedCustomApi[];
 }
 
+/** Where a builtin provider is reached: its wire protocol and base URL. */
+export interface ProviderEndpoint {
+  api: string;
+  baseUrl: string;
+}
+
 export abstract class ProviderCatalog {
   abstract list(): SupportedProviders;
+  /** The builtin provider's endpoint, or undefined when it has several or none. */
+  abstract endpointOf(piProvider: string): ProviderEndpoint | undefined;
 }

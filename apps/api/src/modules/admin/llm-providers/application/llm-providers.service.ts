@@ -9,6 +9,7 @@ import type { LlmProviderRecord, ProviderConfigInput, ProviderKind, RegisterLlmP
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";
 import { ProviderCatalog } from "../domain/provider-catalog.js";
+import { connectionProbe } from "./connection-probe.js";
 
 /** Presentation view: configuration with every credential redacted. */
 export interface LlmProviderView {
@@ -122,35 +123,43 @@ export class LlmProvidersService {
     return this.providers.listBindings();
   }
 
-  /** Best-effort connectivity check from the API host (the definitive check runs with the job). */
+  /**
+   * Best-effort connectivity check from the API host (the definitive check runs with the
+   * job): an authenticated model listing against the provider's own endpoint — the stored
+   * base URL for custom providers, pi's catalog endpoint for builtin ones.
+   */
   async testConnection(id: string): Promise<TestConnectionResult> {
     const view = toView(await this.#mustGet(id));
 
     if (!view.hasApiKey && view.envKeys.length === 0) {
       return { ok: false, message: "No credential stored for this provider." };
     }
-    if (view.kind !== "custom") {
-      return {
-        ok: true,
-        message: `Credential stored for the "${view.piProvider ?? "builtin"}" catalog; live model access is checked when a runtime job runs (ADR-0009).`,
-      };
+    const endpoint =
+      view.kind === "custom"
+        ? { api: view.api ?? "", baseUrl: view.baseUrl ?? "" }
+        : this.catalog.endpointOf(view.piProvider ?? "");
+    if (endpoint === undefined) {
+      return { ok: false, message: `Connection test not supported for "${view.piProvider ?? id}": it has no single fixed endpoint; it is checked when a runtime job runs.` };
+    }
+    if (!view.hasApiKey) {
+      return { ok: false, message: `Connection test not supported for environment-based credentials (${endpoint.api}); they are checked when a runtime job runs.` };
     }
 
     const secret = await this.providers.resolveApiKey(id);
     if (secret === undefined) return { ok: false, message: "Stored credential could not be resolved." };
 
-    const url = `${view.baseUrl?.replace(/\/$/, "") ?? ""}/models`;
+    const probe = connectionProbe(endpoint.api, endpoint.baseUrl, secret);
+    if (probe === undefined) {
+      return { ok: false, message: `Connection test not supported for the "${endpoint.api}" protocol; it is checked when a runtime job runs.` };
+    }
     try {
-      const response = await fetch(url, {
-        headers: { authorization: `Bearer ${secret}`, accept: "application/json" },
-        signal: AbortSignal.timeout(5000),
-      });
+      const response = await fetch(probe.url, { headers: probe.headers, signal: AbortSignal.timeout(5000) });
       return {
         ok: response.ok,
-        message: response.ok ? `Reachable: GET ${url} → ${response.status}` : `GET ${url} → ${response.status} ${response.statusText}`,
+        message: response.ok ? `Reachable: GET ${probe.url} → ${response.status}` : `GET ${probe.url} → ${response.status} ${response.statusText}`,
       };
     } catch (error) {
-      return { ok: false, message: `GET ${url} failed: ${error instanceof Error ? error.message : String(error)}` };
+      return { ok: false, message: `GET ${probe.url} failed: ${error instanceof Error ? error.message : String(error)}` };
     }
   }
 
