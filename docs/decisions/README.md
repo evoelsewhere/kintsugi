@@ -38,7 +38,9 @@ This page has two parts:
 | [0017](0017-portal-vite-react-shadcn.md) | Portal is a Vite + React SPA with shadcn/ui | Accepted |
 | [0018](0018-pin-pi-exact-version.md) | Pin pi to an exact version; track the latest release | Accepted |
 | [0019](0019-workspace-repo-write-path.md) | One workspace repo per project; the worker writes as `kintsugi-bot` | Accepted |
-| [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Accepted |
+| [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Accepted (0021 proposes to supersede it) |
+| [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Proposed |
+| [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Accepted |
 
 ## Decision register
 
@@ -75,7 +77,7 @@ This page has two parts:
 | D29 | Workspace repo layout + how the runtime writes to Git | 🔴 | One workspace repo per project; worker commits on `kintsugi/*` branches + PR as `kintsugi-bot`; `autoCommitPaths` (`units/**`, `tasks/**`, `knowledge/**/generated/**`) commit directly to the default branch ([reference](../reference/workspace-repo.md)) | M0 | ✅ [0019](0019-workspace-repo-write-path.md) |
 | D30 | Webhooks vs. polling | 🟠 | Polling by default (1–5 min); webhooks when reachable | M2 | 🟡 |
 | D31 | Large binaries (recordings, video, scanned PDFs) | 🟠 | Git LFS where supported; otherwise the `kintsugi-data` volume + a link file in Git | M1 | ⬜ |
-| D32 | Worker's Docker API access | 🔴 | docker-socket-proxy limited to container lifecycle; worker accepts only `kintsugi-runner` (runtime jobs) and images on `KINTSUGI_JOB_IMAGE_ALLOWLIST` (runners), mounts only inside the job directory | M0 | ✅ [0020](0020-docker-api-via-socket-proxy.md) |
+| D32 | Worker's Docker API access | 🔴 | Decided: docker-socket-proxy limited to container lifecycle, image allowlist ([0020](0020-docker-api-via-socket-proxy.md)). Proposed replacement: runtime jobs as sandboxed child processes (pi-sandbox), no Docker socket ([0021](0021-sandboxed-child-processes.md)) | M0 | 🟡 [0021](0021-sandboxed-child-processes.md) |
 | D34 | Project-specific knowledge | 🔴 | Each project builds a rulebook in its workspace repo; Kintsugi ships only a neutral starter template; reuse = deliberate copy/adapt (`derivedFrom`) | M0 | ✅ [0011](0011-project-rulebook.md) |
 | D35 | Capability maturity & readiness gating | 🔴 | `template` → `draft` → `ready` / `suspended`, scoped per kind / application; all providing layers must allow; waivers with scope + expiry; G3 requires pipeline capabilities `ready`; promotion by PR with evidence | M0 | ✅ [0011](0011-project-rulebook.md), [0013](0013-composable-open-rulebook.md) |
 | D36 | Rulebook structure | 🔴 | Packs + layered overrides; open capabilities; declarative pipelines; scoped maturity + `suspended` + waivers; one rule per file with `appliesTo`; single version; `x-*` extensions; JSON Schema from domain types; `rulebook migrate` | M0 | ✅ [0013](0013-composable-open-rulebook.md) |
