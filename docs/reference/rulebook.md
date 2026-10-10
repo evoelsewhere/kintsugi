@@ -157,7 +157,7 @@ gates:
 | `performer.agent` | A runtime agent id ([runtime agents](runtime-agents.md)); the agent definition is supplied with each job, and none ships with Kintsugi yet (ADR-0023) |
 | `phases[].id` | A built-in phase id (`mobilize` … `hypercare-operate`), or a custom id with `category` |
 | `perUnit` | Stages run per work item; otherwise once per application / project |
-| `performer` | `{agent}` (runtime agent id), `{member: [project roles]}`, or `{runner}` (optionally `then: compare`) |
+| `performer` | `{agent}` (runtime agent id), `{member: [project roles]}` (well-known or custom), or `{runner}` (optionally `then: compare`) |
 | `requires` | Capability names (well-known or custom) checked before the stage runs |
 | `gate` | Gate this stage closes |
 
