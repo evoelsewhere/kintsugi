@@ -39,6 +39,7 @@ export interface CreateProviderInput {
   // custom
   api?: string;
   baseUrl?: string;
+  headers?: Record<string, string>;
   models?: CustomModelConfig[];
 }
 

@@ -26,15 +26,23 @@ export function Checkbox({ checked, onChange, label, disabled, id }: CheckboxPro
         label === undefined && "rounded-[4px]",
       )}
     >
-      <span
-        className={cn(
-          "flex size-4 shrink-0 items-center justify-center rounded-[4px] transition-colors duration-150",
-          checked ? "bg-text text-background" : "shadow-border bg-transparent text-transparent hover:bg-hover",
-        )}
-      >
-        <Check className="size-3" strokeWidth={3} />
-      </span>
+      <CheckMark checked={checked} />
       {label === undefined ? null : <span>{label}</span>}
     </button>
+  );
+}
+
+/** The visual box alone, for rows that own the checkbox role and the toggle themselves. */
+export function CheckMark({ checked }: { checked: boolean }): React.JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-4 shrink-0 items-center justify-center rounded-[4px] transition-colors duration-150",
+        checked ? "bg-text text-background" : "shadow-border bg-transparent text-transparent hover:bg-hover",
+      )}
+    >
+      <Check className="size-3" strokeWidth={3} />
+    </span>
   );
 }
