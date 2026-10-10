@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { Risk } from "../domain/risk.js";
 import { RisksService } from "../application/risks.service.js";
 import {
@@ -33,6 +34,7 @@ export class RisksController {
     return this.risks.get(id);
   }
 
+  @RequirePermission("governance.manage")
   @Post()
   @ApiOperation({ summary: "Create a risk" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class RisksController {
     return this.risks.create(toCreateCommand(input));
   }
 
+  @RequirePermission("governance.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a risk" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class RisksController {
     return this.risks.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("governance.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a risk" })

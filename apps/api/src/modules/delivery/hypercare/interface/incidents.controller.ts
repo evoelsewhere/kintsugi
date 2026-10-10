@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { Incident } from "../domain/incident.js";
 import { IncidentsService } from "../application/incidents.service.js";
 import {
@@ -33,6 +34,7 @@ export class IncidentsController {
     return this.incidents.get(id);
   }
 
+  @RequirePermission("workitems.manage")
   @Post()
   @ApiOperation({ summary: "Create a incident" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class IncidentsController {
     return this.incidents.create(toCreateCommand(input));
   }
 
+  @RequirePermission("workitems.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a incident" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class IncidentsController {
     return this.incidents.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("workitems.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a incident" })

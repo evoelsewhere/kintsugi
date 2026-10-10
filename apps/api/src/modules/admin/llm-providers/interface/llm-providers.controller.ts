@@ -4,6 +4,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { AgentModelBinding } from "@kintsugi/runtime-sdk";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { Page, PageQuery } from "../../../../common/application/pagination.js";
 import { pageQuerySchema } from "../../../../common/interface/pagination.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";
@@ -22,6 +23,7 @@ import {
 /** Settings → Providers in the portal: the LLM provider registry (ADR-0009). */
 @ApiTags("admin · LLM providers")
 @Controller("admin/llm-providers")
+@RequirePermission("providers.manage")
 export class LlmProvidersController {
   constructor(private readonly providers: LlmProvidersService) {}
 

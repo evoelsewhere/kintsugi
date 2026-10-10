@@ -1,15 +1,32 @@
 // Cross-cutting auth decorators. Route access:
 //   - default: authentication required (AuthGuard, registered globally)
 //   - @Public(): no authentication (login, health)
-//   - @RequirePermission("code"): additionally requires the permission (PermissionsGuard)
+//   - @RequirePermission("code", …): additionally requires one of the permissions (PermissionsGuard)
+//   - @CurrentActor(): injects the signed-in caller into a handler parameter
 
-import { SetMetadata } from "@nestjs/common";
+import { createParamDecorator, type ExecutionContext, SetMetadata, UnauthorizedException } from "@nestjs/common";
 
 export const IS_PUBLIC_KEY = "kintsugi:is-public";
 export const PERMISSION_KEY = "kintsugi:required-permission";
 
+/** The signed-in caller as seen by use cases: identity plus effective permissions. */
+export interface Actor {
+  id: string;
+  permissions: string[];
+}
+
 /** Marks a route as reachable without a session. */
 export const Public = (): MethodDecorator & ClassDecorator => SetMetadata(IS_PUBLIC_KEY, true);
 
-/** Requires one permission code from the caller's effective roles. */
-export const RequirePermission = (code: string): MethodDecorator & ClassDecorator => SetMetadata(PERMISSION_KEY, code);
+/**
+ * Requires at least one of the permission codes from the caller's effective roles.
+ * A method-level decorator overrides the class-level one.
+ */
+export const RequirePermission = (...codes: [string, ...string[]]): MethodDecorator & ClassDecorator => SetMetadata(PERMISSION_KEY, codes);
+
+/** The caller set by AuthGuard; only valid on authenticated (non-@Public) routes. */
+export const CurrentActor = createParamDecorator((_data: unknown, context: ExecutionContext): Actor => {
+  const actor = context.switchToHttp().getRequest<{ sessionUser?: Actor }>().sessionUser;
+  if (actor === undefined) throw new UnauthorizedException("Missing session");
+  return actor;
+});

@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { Review } from "../domain/review.js";
 import { ReviewsService } from "../application/reviews.service.js";
 import {
@@ -33,6 +34,7 @@ export class ReviewsController {
     return this.reviews.get(id);
   }
 
+  @RequirePermission("governance.manage")
   @Post()
   @ApiOperation({ summary: "Create a review" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class ReviewsController {
     return this.reviews.create(toCreateCommand(input));
   }
 
+  @RequirePermission("governance.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a review" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class ReviewsController {
     return this.reviews.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("governance.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a review" })

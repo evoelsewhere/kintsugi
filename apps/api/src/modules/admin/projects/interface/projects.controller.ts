@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { Project } from "../domain/project.js";
 import { ProjectsService } from "../application/projects.service.js";
 import {
@@ -33,6 +34,7 @@ export class ProjectsController {
     return this.projects.get(id);
   }
 
+  @RequirePermission("projects.manage")
   @Post()
   @ApiOperation({ summary: "Create a project" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class ProjectsController {
     return this.projects.create(toCreateCommand(input));
   }
 
+  @RequirePermission("projects.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a project" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class ProjectsController {
     return this.projects.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("projects.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a project" })

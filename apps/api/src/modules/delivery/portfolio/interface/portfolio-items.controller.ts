@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { PortfolioItem } from "../domain/portfolio-item.js";
 import { PortfolioItemsService } from "../application/portfolio-items.service.js";
 import {
@@ -33,6 +34,7 @@ export class PortfolioItemsController {
     return this.portfolioItems.get(id);
   }
 
+  @RequirePermission("workitems.manage")
   @Post()
   @ApiOperation({ summary: "Create a portfolio item" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class PortfolioItemsController {
     return this.portfolioItems.create(toCreateCommand(input));
   }
 
+  @RequirePermission("workitems.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a portfolio item" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class PortfolioItemsController {
     return this.portfolioItems.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("workitems.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a portfolio item" })

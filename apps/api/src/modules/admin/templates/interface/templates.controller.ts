@@ -3,6 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { RequirePermission } from "../../../../common/auth/decorators.js";
 import type { Template } from "../domain/template.js";
 import { TemplatesService } from "../application/templates.service.js";
 import {
@@ -33,6 +34,7 @@ export class TemplatesController {
     return this.templates.get(id);
   }
 
+  @RequirePermission("projects.manage")
   @Post()
   @ApiOperation({ summary: "Create a template" })
   @ApiCreatedResponse({ description: "The created record." })
@@ -40,6 +42,7 @@ export class TemplatesController {
     return this.templates.create(toCreateCommand(input));
   }
 
+  @RequirePermission("projects.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a template" })
   @ApiOkResponse({ description: "The updated record." })
@@ -47,6 +50,7 @@ export class TemplatesController {
     return this.templates.update(id, toUpdateCommand(input));
   }
 
+  @RequirePermission("projects.manage")
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a template" })

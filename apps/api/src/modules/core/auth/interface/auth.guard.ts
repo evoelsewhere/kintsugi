@@ -5,7 +5,6 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Unauthor
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { IS_PUBLIC_KEY, PERMISSION_KEY } from "../../../../common/auth/decorators.js";
-import { RolesService } from "../../../admin/roles/application/roles.service.js";
 import { AuthService, type SessionUser } from "../application/auth.service.js";
 
 /** Request carrying the authenticated session user (set by AuthGuard). */
@@ -41,22 +40,18 @@ export class AuthGuard implements CanActivate {
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(
-    private readonly reflector: Reflector,
-    private readonly roles: RolesService,
-  ) {}
+  constructor(private readonly reflector: Reflector) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<string | undefined>(PERMISSION_KEY, [context.getHandler(), context.getClass()]);
+  canActivate(context: ExecutionContext): boolean {
+    const required = this.reflector.getAllAndOverride<string[] | undefined>(PERMISSION_KEY, [context.getHandler(), context.getClass()]);
     if (required === undefined) return true;
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.sessionUser;
     if (user === undefined) throw new UnauthorizedException("Missing session");
 
-    const permissions = user.permissions.length > 0 ? user.permissions : await this.roles.permissionsOfUser(user.id);
-    if (!permissions.includes(required)) {
-      throw new ForbiddenException(`Missing permission: ${required}`);
+    if (!required.some((code) => user.permissions.includes(code))) {
+      throw new ForbiddenException(`Missing permission: ${required.join(" or ")}`);
     }
     return true;
   }
