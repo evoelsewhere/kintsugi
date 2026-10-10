@@ -1,0 +1,58 @@
+# Project manifest — see docs/reference/document-repo.md
+# This file lives at the root of the project's document repo: the one repo that holds
+# everything except code (ADR-0028).
+schemaVersion: 1
+
+project:
+  id: my-project            # TODO: stable id (kebab-case)
+  name: My project          # TODO
+
+# The document repo itself, declared once for the project.
+document:
+  server: my-git-server     # GitServer id registered in the installation
+  path: org/my-project-docs
+
+unitKinds: [module]         # TODO e.g. [screen, api, batch-job, db-object]
+
+applications:
+  - id: my-app              # TODO: one entry per application in scope
+    disposition: refactor   # 7R: retire | retain | rehost | replatform | refactor | rearchitect | rebuild | repurchase
+    pipeline: refactor      # a built-in pipeline id, or the id of a pipeline declared under `pipelines:` below
+    repos:
+      # AS-IS: read-only for Kintsugi.
+      - server: my-git-server
+        path: org/my-app-legacy
+        role: legacy                  # legacy code (many allowed)
+      - server: my-git-server
+        path: org/my-app-db
+        role: legacy-data             # legacy data: schemas, dumps, reference data (many allowed)
+      # TO-BE: only members write; the runtime never writes.
+      - server: my-git-server
+        path: org/my-app-web
+        role: target
+        component: web                # component name from the TO-BE architecture
+      - server: my-git-server
+        path: org/my-app-api
+        role: target
+        component: api
+
+# Optional: project pipelines, declared here instead of choosing a built-in one.
+pipelines: []
+#  - id: refactor-custom
+#    appliesTo: {dispositions: [refactor]}
+#    phases:
+#      - id: migrate
+#        perUnit: true
+#        stages:
+#          - {id: implement, performer: {member: [dev]}}
+#          - {id: review, performer: {agent: gate-reviewer}}
+#          - {id: approve, performer: {member: [core-team]}, gate: G4}
+
+autoCommitPaths:
+  - units/**                # work item state, committed by kintsugi-bot (ADR-0012)
+  - tasks/**
+  - knowledge/**/generated/**
+
+policy:
+  harnesses: [copilot, claude-code, codex, chatgpt]   # any registered harness id
+  requireCommitTrailer: true

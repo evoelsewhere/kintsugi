@@ -1,7 +1,0 @@
-id: W-001
-capability: compare
-packs: [main]
-scope: {kinds: [screen], units: [], applications: []}   # empty lists = no restriction on that axis
-reason: Golden cases not yet captured; UAT covers equivalence for wave 1
-approvedBy: [architect]
-expires: 2026-12-31
