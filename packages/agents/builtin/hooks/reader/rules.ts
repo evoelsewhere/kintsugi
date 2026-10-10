@@ -1,8 +1,8 @@
-import { baseName } from '../paths'
-import { linesOf } from '../text'
+import { baseName } from './paths'
+import { linesOf } from './text'
 
 /**
- * `analysis/<system>/BUSINESS_RULES.md`, read into rule cards.
+ * `assessment/<app>/BUSINESS_RULES.md`, read into rule cards.
  *
  * The file is written by an agent, and the agent's layout varies between models and
  * runs. Three shapes are read: a card per rule under a `### <ID> · <title>` heading with
@@ -13,7 +13,7 @@ import { linesOf } from '../text'
  */
 
 export type Citation = {
-  /** The path as written (`legacy/x/app/cbl/A.cbl`, `A.cbl`, `app/cpy/B.cpy`). */
+  /** The path as written (`source/x/app/cbl/A.cbl`, `A.cbl`, `app/cpy/B.cpy`). */
   path: string
   /** Lower-cased base name, the key the x-ray matches a read file by. */
   base: string

@@ -1,9 +1,9 @@
-import { plain } from '../text'
+import { plain } from './text'
 import type { TrackKey } from './tracks'
 
 /**
- * `analysis/<system>/VERIFICATION.json`, written by the proof pack (`scripts/proof_pack.py`, run by the verify
- * command): one verdict per built module, computed by a script from the evidence files. The pane shows the verdicts
+ * `assessment/<app>/VERIFICATION.json`, written by the proof pack (`scripts/proof_pack.py`, run by the verify
+ * command): one verdict per built module, computed by a script from the evidence files. The portal reader exposes the verdicts
  * as they are and never computes one.
  *
  * The file is text from a run on an untrusted tree, and its shape may move between releases, so it is read
@@ -17,7 +17,7 @@ const VERDICTS: readonly string[] = ['PROVEN', 'PARTLY PROVEN', 'NOT PROVEN']
 
 /** What one module's verdict is, as the file says it. */
 export type ProofEntry = {
-  /** The module: a folder under `modernized/<system>/`, or the uplift's whole working copy. */
+  /** The module: a folder under `target/<app>/`, or the uplift's whole working copy. */
   name: string
   track: TrackKey
   verdict: Verdict
@@ -30,11 +30,11 @@ export type ProofEntry = {
 export type Verification = {
   overall: Verdict | null
   entries: ProofEntry[]
-  /** Built folders that hold only test code and the files that build it: the pack lists them and judges none, so the pane says nothing of them. */
+  /** Built folders that hold only test code and the files that build it: the pack lists them and judges none, so the portal reader says nothing of them. */
   tooling: { track: TrackKey; name: string }[]
 }
 
-/** How the module is standing with the proof, for a chip and for the next step. */
+/** How the module is standing with the proof, for progress data and the next action. */
 export type ProofState = {
   /** `none`: built, and nothing checked it yet. `changed`: checked, and its code or tests are newer than that check. */
   state: 'proven' | 'partly' | 'not' | 'changed' | 'none'
@@ -136,8 +136,8 @@ const SLACK_MS = 90_000
  * module still being built, and null for a folder the pack lists as test tooling (only test code and build files: nothing to prove).
  *
  * @param verification the file, or null when there is none
- * @param track the track the pane follows
- * @param name the module's folder under `modernized/`
+ * @param track the modernization track
+ * @param name the module's folder under the selected target repository root
  * @param changedAtMs when the module's notes or test reports last changed (0 when unknown)
  * @param hasNotes whether the module has notes: the sign a module was finished being built
  */

@@ -1,7 +1,7 @@
 /**
- * The file access the reader needs, narrow enough that `$.fs` and a test's
- * in-memory tree both satisfy it. Paths are relative to the session's
- * working directory or absolute, as `$.fs` takes them.
+ * The read-only filesystem contract for the portal adapter and tests. Paths are
+ * logical namespaces routed to the workspace, source, and target repositories by
+ * the adapter; the source-repository mapping must remain read-only.
  */
 export type ReaderFs = {
   read: (path: string) => Promise<string>
@@ -11,7 +11,7 @@ export type ReaderFs = {
   stat: (path: string) => Promise<{ kind: 'file' | 'dir' | 'other'; size: number; mtimeMs: number }>
 }
 
-/** `read`, or null when the file is missing, unreadable or over the size cap. */
+/** `read`, or null when the file is missing or unreadable. */
 export async function readOrNull(fs: ReaderFs, path: string): Promise<string | null> {
   try {
     // `exists` never rejects; asking first keeps a missing optional file out of the error log.

@@ -1,4 +1,4 @@
-import { baseName, join, stemOf } from '../paths'
+import { baseName, join, stemOf } from './paths'
 import {
   groupOfDir,
   languageOf,
@@ -173,8 +173,6 @@ function totalBytes(dirs: Map<string, DirInfo>, rel: string): number {
     info.bytes,
   )
 }
-
-const under = (path: string, dir: string): boolean => dir === '' || path === dir || path.startsWith(`${dir}/`)
 
 /** Units where each directory with a build file is one, sized by the bytes not inside a unit beneath it. */
 function buildModules(dirs: Map<string, DirInfo>, rootLabel: string): EstateUnit[] {

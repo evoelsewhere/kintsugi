@@ -1,11 +1,11 @@
-import { baseName, dirName, norm, stemOf } from '../paths'
+import { baseName, dirName, norm, stemOf } from './paths'
 import { nodeOfFile, type Topology } from './topology'
 
 /**
- * The estate: the units a system's code is divided into, whatever its language.
+ * The estate: the units an app's code is divided into, whatever its language.
  * They come from the map's `topology.json` when there is one and from the legacy
- * tree itself when there is not, so the pane has a map from the first minute of
- * a session in any workspace.
+ * tree itself when there is not, so the portal reader can describe an assessed app
+ * before a topology artifact has been published.
  */
 
 export type EstateUnit = {
@@ -15,9 +15,9 @@ export type EstateUnit = {
   group: string
   /** Lines when the map gave them, bytes of source when the unit was read off the tree. */
   size: number
-  /** The unit as a directory, relative to `legacy/<system>/` (`''` is the system root). */
+  /** The unit as a directory, relative to `source/<app>/` (`''` is the system root). */
   dir?: string
-  /** The unit as one file, relative to `legacy/<system>/`. */
+  /** The unit as one file, relative to `source/<app>/`. */
   file?: string
 }
 
@@ -28,7 +28,7 @@ export type EstateModel = {
   source: 'map' | 'tree'
   /** What `size` counts. */
   measure: 'lines' | 'bytes'
-  /** What a unit is, for the pane's words. */
+  /** What a unit is, for the portal reader's words. */
   granularity: Granularity
   units: EstateUnit[]
   /** Source files seen under the system root. */
@@ -155,7 +155,7 @@ export function estateOfTopology(topology: Topology, files: number): EstateModel
 }
 
 /**
- * The unit a path under `legacy/<system>/` belongs to: by the map's own file
+ * The unit a path under `source/<app>/` belongs to: by the map's own file
  * where there is a map, else by the file itself or the nearest directory that is a unit.
  */
 export function unitOfPath(
