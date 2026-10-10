@@ -5,12 +5,15 @@
 ## Current code (scaffold)
 
 - `src/agent-runtime.ts` — `createAgentRuntime({ mode })`, the `AgentRuntime` contract with two backends.
-- `src/pi-runtime.ts` — pi backend: one `AgentSession` per job (`createAgentSession`, `@earendil-works/pi-coding-agent` pinned exact, ADR-0018), pi events mapped onto `JobEvent`s.
-- `src/mock-agent.ts` — deterministic simulated backend (no LLM) so orchestrator and telemetry can build against the contract.
-- `src/event-stream.ts`, `src/job-inputs.ts` — event queue and input descriptions.
-- `src/version.ts` — the pi pin and `engine` string (`pi@<version>`).
+- `src/pi-runtime.ts` — pi backend: one `AgentSession` per job (`createAgentSession`, `@earendil-works/pi-coding-agent` pinned exact, ADR-0018) with the full agent wiring: agent catalog prompt + skills, Kintsugi extensions (system prompt, policy), pi built-in extensions (codemode, tool_search, MCP) and the custom Kintsugi tools; pi events mapped onto `JobEvent`s.
+- `src/agents/catalog.ts` — the built-in agents, fixed in code (ADR-0014): role prompt, skills, default tools/thinking/budget. `src/agents/system-prompt.ts` builds the session system prompt.
+- `src/extensions/kintsugi.ts` — system-prompt extension and policy extension (`denyBashPatterns` enforced at tool-call time; blocked calls surface as `tool.call` decision `"blocked"`).
+- `src/tools/kintsugi-tools.ts` — `kb_search` (gateway wiring pending) and `outputs_write` (writes into /out, path-guarded).
+- `src/launcher/` — `model-runtime.ts` builds the job's pi `ModelRuntime` from the provider registry; `provider-registry.ts` reads `admin.llm_provider` + decrypts secrets.
+- `src/bin/run-job.ts` — dev CLI: run one real job (`node dist/bin/run-job.js --provider <id> --model <id> [--instruction …] [--deny-bash <pattern>] [--out <dir>]`).
+- `src/mock-agent.ts`, `src/event-stream.ts`, `src/job-inputs.ts`, `src/version.ts`.
 
-The runner/launcher split below is the target shape; the wiring lands with the Docker image work.
+The runner/launcher split below is the target shape; the container image lands with the Docker work.
 
 ## Planned layout
 
