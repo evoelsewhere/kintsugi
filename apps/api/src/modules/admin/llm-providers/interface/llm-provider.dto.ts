@@ -14,7 +14,7 @@ const providerIdSchema = idSchema;
 export const customModelSchema = z.object({
   id: z.string().min(1).max(200),
   name: z.string().min(1).max(200).optional(),
-  input: z.array(z.enum(["text", "image"])).optional(),
+  input: z.array(z.enum(["text", "image"])).min(1).optional(),
   reasoning: z.boolean().optional(),
   contextWindow: z.number().int().positive().optional(),
   maxTokens: z.number().int().positive().optional(),
@@ -53,13 +53,27 @@ const customProviderSchema = z.object({
   /** pi wire protocol, e.g. "openai-completions", "anthropic-messages", "bedrock-converse-stream". */
   api: z.string().min(1).max(100),
   baseUrl: z.string().min(1).max(2000),
-  headers: z.record(z.string(), z.string()).optional(),
+  /** Write-only, stored encrypted; names are case-insensitive. On replace, `null` keeps the stored value. */
+  headers: z
+    .record(z.string().min(1).max(200), z.string().nullable())
+    .refine((headers) => new Set(Object.keys(headers).map((name) => name.toLowerCase())).size === Object.keys(headers).length, {
+      message: "Header names must be unique (case-insensitive).",
+    })
+    .optional(),
   models: z.array(customModelSchema).min(1),
   enabled: z.boolean().optional(),
   ...authFields,
 });
 
-export const createProviderSchema = z.discriminatedUnion("kind", [builtinProviderSchema, customProviderSchema]);
+export const createProviderSchema = z.discriminatedUnion("kind", [builtinProviderSchema, customProviderSchema]).superRefine((input, context) => {
+  if (input.kind === "custom" && Object.values(input.headers ?? {}).some((value) => value === null)) {
+    context.addIssue({
+      code: "custom",
+      path: ["headers"],
+      message: "Header values can only be null when preserving existing headers during replacement.",
+    });
+  }
+});
 export type CreateProviderInput = z.infer<typeof createProviderSchema>;
 
 export const replaceProviderSchema = z.discriminatedUnion("kind", [

@@ -2,9 +2,9 @@
 // Secrets live in admin.llm_secret as AES-256-GCM ciphertext and are referenced from
 // the stored config as { secretId } — plaintext never leaves this adapter.
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, type OnApplicationBootstrap } from "@nestjs/common";
 import { decryptSecret, encryptSecret } from "@kintsugi/secrets";
-import type { AgentModelBinding, CustomModelConfig, LlmProviderConfig } from "@kintsugi/runtime-sdk";
+import type { AgentModelBinding, CustomModelConfig, LlmProviderConfig, SecretRef } from "@kintsugi/runtime-sdk";
 import type { ThinkingLevel } from "@kintsugi/domain";
 import type { Pool } from "pg";
 import { getPool, type Queryable, withTransaction } from "../../../../common/db/pool.js";
@@ -27,7 +27,7 @@ interface StoredConfig {
   modelOverrides?: Record<string, unknown>;
   api?: string;
   baseUrl?: string;
-  headers?: Record<string, string>;
+  headers?: Record<string, string | SecretRef>;
   models?: CustomModelConfig[];
 }
 
@@ -40,11 +40,54 @@ interface ProviderRow {
 }
 
 const apiKeySecretId = (providerId: string): string => `provider:${providerId}:api-key`;
+const headerSecretId = (providerId: string, name: string): string => `provider:${providerId}:header:${encodeURIComponent(name)}`;
+
+interface PreparedConfig {
+  config: StoredConfig;
+  headerSecrets: Array<[string, string]>;
+  staleHeaderSecretIds: string[];
+}
 
 @Injectable()
-export class PgLlmProviderRepository extends LlmProviderRepository {
+export class PgLlmProviderRepository extends LlmProviderRepository implements OnApplicationBootstrap {
   get #pool(): Pool {
     return getPool();
+  }
+
+  /** Runs after ensureSchema() (main.ts), before the API serves requests. */
+  async onApplicationBootstrap(): Promise<void> {
+    await this.encryptLegacyHeaders();
+  }
+
+  /**
+   * Older installations stored custom header values as plaintext in the provider JSON.
+   * Moves them into admin.llm_secret once at startup, so reads never write.
+   */
+  async encryptLegacyHeaders(): Promise<void> {
+    const result = await this.#pool.query<{ id: string }>(
+      `select id from admin.llm_provider
+        where kind = 'custom'
+          and exists (select 1 from jsonb_each(coalesce(config->'headers', '{}'::jsonb)) as header where jsonb_typeof(header.value) = 'string')`,
+    );
+    for (const { id } of result.rows) {
+      await withTransaction(async (client) => {
+        const locked = await client.query<ProviderRow>("select id, kind, config, enabled, updated_at from admin.llm_provider where id = $1 for update", [id]);
+        const current = locked.rows[0];
+        if (current === undefined) return;
+        // Every header kept as-is (null = keep the stored value): plaintext ones are encrypted on the way.
+        const configInput = {
+          ...current.config,
+          headers: Object.fromEntries(Object.keys(current.config.headers ?? {}).map((name) => [name, null])),
+        } as unknown as ProviderConfigInput;
+        const prepared = this.#buildStoredConfig(
+          { id: current.id, enabled: current.enabled, config: configInput, credentials: {} },
+          current.config.auth,
+          current.config,
+        );
+        await client.query("update admin.llm_provider set config = $2, updated_at = now() where id = $1", [current.id, JSON.stringify(prepared.config)]);
+        await this.#storeSecrets(client, current.id, {}, prepared.headerSecrets);
+      });
+    }
   }
 
   async list(): Promise<LlmProviderRecord[]> {
@@ -59,10 +102,11 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
   }
 
   async create(input: RegisterLlmProvider): Promise<LlmProviderRecord> {
-    const config = this.#buildStoredConfig(input);
+    const prepared = this.#buildStoredConfig(input);
+    const config = prepared.config;
     await withTransaction(async (client) => {
       await client.query("insert into admin.llm_provider (id, kind, config) values ($1, $2, $3)", [input.id, config.kind, JSON.stringify(config)]);
-      await this.#storeSecrets(client, input.id, input.credentials);
+      await this.#storeSecrets(client, input.id, input.credentials, prepared.headerSecrets);
     });
     return (await this.get(input.id))!;
   }
@@ -72,7 +116,12 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
     if (existing === undefined) return undefined;
 
     const hasNewCredentials = input.credentials.apiKey !== undefined || input.credentials.env !== undefined;
-    const config = this.#buildStoredConfig(input, hasNewCredentials ? undefined : (existing.config.auth as StoredAuth));
+    const prepared = this.#buildStoredConfig(
+      input,
+      hasNewCredentials ? undefined : (existing.config.auth as StoredAuth),
+      existing.config as StoredConfig,
+    );
+    const config = prepared.config;
     await withTransaction(async (client) => {
       await client.query("update admin.llm_provider set config = $2, enabled = $3, updated_at = now() where id = $1", [
         id,
@@ -80,9 +129,14 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
         config.enabled,
       ]);
       if (hasNewCredentials) {
-        // New credentials replace the old set entirely, so no orphaned secrets survive.
-        await client.query("delete from admin.llm_secret where provider_id = $1", [id]);
-        await this.#storeSecrets(client, id, input.credentials);
+        // Replace API/env credentials but retain encrypted header values still referenced by this config.
+        const headerSecretIds = Object.values(config.headers ?? {}).flatMap((value) => (typeof value === "string" ? [] : [value.secretId]));
+        await client.query("delete from admin.llm_secret where provider_id = $1 and not (secret_id = any($2::text[]))", [id, headerSecretIds]);
+      } else if (prepared.staleHeaderSecretIds.length > 0) {
+        await client.query("delete from admin.llm_secret where provider_id = $1 and secret_id = any($2::text[])", [id, prepared.staleHeaderSecretIds]);
+      }
+      if (hasNewCredentials || prepared.headerSecrets.length > 0) {
+        await this.#storeSecrets(client, id, hasNewCredentials ? input.credentials : {}, prepared.headerSecrets);
       }
     });
     return (await this.get(id))!;
@@ -132,16 +186,52 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
     return row === undefined ? undefined : decryptSecret({ ciphertext: row.ciphertext, iv: row.iv, authTag: row.auth_tag });
   }
 
-  #buildStoredConfig(input: RegisterLlmProvider, keepAuth?: StoredAuth): StoredConfig {
-    const { kind, ...rest } = input.config as ProviderConfigInput & { kind: "builtin" | "custom" };
-    void rest;
+  #buildStoredConfig(input: RegisterLlmProvider, keepAuth?: StoredAuth, existing?: StoredConfig): PreparedConfig {
+    const { kind, headers: incomingHeaders, ...configFields } = input.config as ProviderConfigInput & {
+      kind: "builtin" | "custom";
+      headers?: Record<string, string | null>;
+    };
+    const oldHeaders = existing?.kind === "custom" ? existing.headers : undefined;
+    // HTTP header names are case-insensitive: stored lower-case, matched lower-case.
+    const previousByName = new Map(Object.entries(oldHeaders ?? {}).map(([name, value]) => [name.toLowerCase(), value]));
+    const headers: Record<string, SecretRef> = {};
+    const headerSecrets: Array<[string, string]> = [];
+
+    for (const [rawName, value] of Object.entries(incomingHeaders ?? {})) {
+      const name = rawName.toLowerCase();
+      if (value === null) {
+        const previous = previousByName.get(name);
+        if (previous === undefined) continue;
+        if (typeof previous === "string") {
+          const secretId = headerSecretId(input.id, name);
+          headers[name] = { secretId };
+          headerSecrets.push([secretId, previous]);
+        } else {
+          headers[name] = previous;
+        }
+      } else {
+        const secretId = headerSecretId(input.id, name);
+        headers[name] = { secretId };
+        headerSecrets.push([secretId, value]);
+      }
+    }
+
+    const retainedHeaderSecretIds = new Set(Object.values(headers).map((value) => value.secretId));
+    const staleHeaderSecretIds = Object.entries(oldHeaders ?? {})
+      .map(([name, value]) => (typeof value === "string" ? headerSecretId(input.id, name.toLowerCase()) : value.secretId))
+      .filter((secretId) => !retainedHeaderSecretIds.has(secretId));
     const auth = keepAuth ?? this.#authFor(input.id, input.credentials);
     return {
-      ...(input.config as Omit<StoredConfig, "kind" | "id" | "enabled" | "auth">),
-      kind,
-      id: input.id,
-      enabled: input.enabled,
-      auth,
+      config: {
+        ...(configFields as Omit<StoredConfig, "kind" | "id" | "enabled" | "auth" | "headers">),
+        ...(kind === "custom" && Object.keys(headers).length > 0 ? { headers } : {}),
+        kind,
+        id: input.id,
+        enabled: input.enabled,
+        auth,
+      },
+      headerSecrets,
+      staleHeaderSecretIds,
     };
   }
 
@@ -153,12 +243,18 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
     return { type: "none" };
   }
 
-  async #storeSecrets(db: Queryable, providerId: string, credentials: ProviderCredentials): Promise<void> {
+  async #storeSecrets(
+    db: Queryable,
+    providerId: string,
+    credentials: ProviderCredentials,
+    headerSecrets: Array<[string, string]> = [],
+  ): Promise<void> {
     const entries: Array<[string, string]> = [];
     if (credentials.apiKey !== undefined) entries.push([apiKeySecretId(providerId), credentials.apiKey]);
     for (const [name, value] of Object.entries(credentials.env ?? {})) {
       entries.push([`${apiKeySecretId(providerId)}:env:${name}`, value]);
     }
+    entries.push(...headerSecrets);
     for (const [secretId, plaintext] of entries) {
       const encrypted = encryptSecret(plaintext);
       await db.query(
@@ -176,7 +272,8 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
   }
 
   async #toRecord(row: ProviderRow): Promise<LlmProviderRecord> {
-    const auth = row.config.auth;
+    const config = row.config;
+    const auth = config.auth;
     const envKeys = auth.type === "env" && auth.vars !== undefined ? Object.keys(auth.vars) : [];
     // Presence only: listing never decrypts, so a rotated or missing key cannot break reads.
     const hasApiKey = auth.type === "api-key" && auth.key !== undefined ? await this.#secretExists(auth.key.secretId) : false;
@@ -184,7 +281,7 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
       id: row.id,
       kind: row.kind,
       enabled: row.enabled,
-      config: row.config as unknown as LlmProviderConfig,
+      config: config as unknown as LlmProviderConfig,
       hasApiKey,
       envKeys,
       updatedAt: row.updated_at.toISOString(),

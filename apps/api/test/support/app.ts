@@ -13,6 +13,8 @@ const CSRF = { "x-kintsugi-csrf": "1" };
 export interface TestApp {
   baseUrl: string;
   db: TestDatabase;
+  /** The booted Nest application, for tests that call a provider directly. */
+  nest: INestApplication;
   close(): Promise<void>;
 }
 
@@ -52,6 +54,7 @@ export async function startTestApp(): Promise<TestApp> {
   return {
     baseUrl: `http://127.0.0.1:${address.port}/api`,
     db,
+    nest: started,
     close: async () => {
       await started.close();
       const { getPool } = await import("../../src/common/db/pool.js");

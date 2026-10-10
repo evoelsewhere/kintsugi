@@ -21,7 +21,9 @@ export interface ProviderCredentials {
 }
 
 /** Provider configuration without `auth`; the repository attaches the stored { secretId } auth. */
-export type ProviderConfigInput = Omit<BuiltinProviderConfig, "auth"> | Omit<CustomProviderConfig, "auth">;
+export type ProviderConfigInput =
+  | Omit<BuiltinProviderConfig, "auth">
+  | (Omit<CustomProviderConfig, "auth" | "headers"> & { headers?: Record<string, string | null> });
 
 /** Application command: register or replace a provider. */
 export interface RegisterLlmProvider {

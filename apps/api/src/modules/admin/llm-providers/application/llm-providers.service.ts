@@ -48,16 +48,19 @@ function toView(record: LlmProviderRecord): LlmProviderView {
           api: config.api,
           baseUrl: config.baseUrl,
           // SecretRef values are masked — the API never returns credentials.
-          headers: config.headers === undefined
-            ? undefined
-            : Object.fromEntries(Object.entries(config.headers).map(([name, value]) => [name, typeof value === "string" ? value : "[secret]"])),
+          headers: config.headers === undefined ? undefined : Object.fromEntries(Object.keys(config.headers).map((name) => [name, "[secret]"])),
           models: config.models,
         }),
   };
 }
 
+/** True when the replacement keeps a stored header value (`null` = keep). */
+function keepsStoredHeaders(config: ProviderConfigInput): boolean {
+  return config.kind === "custom" && Object.values(config.headers ?? {}).some((value) => value === null);
+}
+
 /** Where a provider's credential is sent: the pi catalog entry, or the custom wire protocol + base URL. */
-function endpointOf(config: ProviderConfigInput): string {
+function endpointOf(config: ProviderConfigInput | LlmProviderRecord["config"]): string {
   return config.kind === "builtin" ? `builtin:${config.piProvider}` : `custom:${config.api}:${config.baseUrl.replace(/\/$/, "")}`;
 }
 
@@ -99,8 +102,13 @@ export class LlmProvidersService {
     const hasNewCredentials = input.credentials.apiKey !== undefined || input.credentials.env !== undefined;
     // A stored credential stays bound to the endpoint it was entered for; otherwise
     // repointing the provider would send the kept key to an arbitrary host.
-    if (!hasNewCredentials && endpointOf(existing.config) !== endpointOf(input.config)) {
+    const endpointChanged = endpointOf(existing.config) !== endpointOf(input.config);
+    if (endpointChanged && !hasNewCredentials) {
       throw new BadRequestException("Changing the provider endpoint requires re-entering its credential");
+    }
+    // Stored header values are bound to the endpoint the same way (gateways put keys in headers).
+    if (endpointChanged && keepsStoredHeaders(input.config)) {
+      throw new BadRequestException("Changing the provider endpoint requires re-entering its header values");
     }
     const updated = await this.providers.replace(id, input);
     if (updated === undefined) throw new NotFoundException(`LLM provider ${id} not found`);
@@ -129,7 +137,8 @@ export class LlmProvidersService {
    * base URL for custom providers, pi's catalog endpoint for builtin ones.
    */
   async testConnection(id: string): Promise<TestConnectionResult> {
-    const view = toView(await this.#mustGet(id));
+    const record = await this.#mustGet(id);
+    const view = toView(record);
 
     if (!view.hasApiKey && view.envKeys.length === 0) {
       return { ok: false, message: "No credential stored for this provider." };
@@ -148,7 +157,9 @@ export class LlmProvidersService {
     const secret = await this.providers.resolveApiKey(id);
     if (secret === undefined) return { ok: false, message: "Stored credential could not be resolved." };
 
-    const probe = connectionProbe(endpoint.api, endpoint.baseUrl, secret);
+    const extraHeaders = await this.#resolveHeaders(record);
+    if (extraHeaders === undefined) return { ok: false, message: "A stored header value could not be resolved." };
+    const probe = connectionProbe(endpoint.api, endpoint.baseUrl, secret, extraHeaders);
     if (probe === undefined) {
       return { ok: false, message: `Connection test not supported for the "${endpoint.api}" protocol; it is checked when a runtime job runs.` };
     }
@@ -161,6 +172,18 @@ export class LlmProvidersService {
     } catch (error) {
       return { ok: false, message: `GET ${probe.url} failed: ${error instanceof Error ? error.message : String(error)}` };
     }
+  }
+
+  /** A custom provider's header values in plaintext, or undefined when one is missing. */
+  async #resolveHeaders(record: LlmProviderRecord): Promise<Record<string, string> | undefined> {
+    if (record.config.kind !== "custom") return {};
+    const resolved: Record<string, string> = {};
+    for (const [name, value] of Object.entries(record.config.headers ?? {})) {
+      const plaintext = typeof value === "string" ? value : await this.providers.resolveSecret(value.secretId);
+      if (plaintext === undefined) return undefined;
+      resolved[name] = plaintext;
+    }
+    return resolved;
   }
 
   async #mustGet(id: string): Promise<LlmProviderRecord> {
