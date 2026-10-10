@@ -3,21 +3,36 @@
 // packages/runtime-sdk. The runner mounts the job's read-only checkout at /src and writes
 // only to /out; the worker commits /out to the workspace repo (ADR-0007).
 //
-// ToolPolicy is enforced at session construction: pi's tool allowlist is exactly the
-// agent's `allowTools` (built-in agents are fixed in code, ADR-0014). `denyBashPatterns`
-// is enforced by the `policy` pi extension at tool-call time (services/runtime README).
+// Full agent features are wired here: agent catalog prompts + skills (ADR-0014), the
+// Kintsugi extensions (system prompt, policy) and pi's built-in extensions (codemode,
+// tool_search, MCP), plus the custom Kintsugi tools (kb_search, outputs_write).
+// ToolPolicy: the allowlist is enforced at session construction; denyBashPatterns is
+// enforced by the policy extension at tool-call time (blocked calls are surfaced as
+// JobEvent tool.call with decision "blocked").
 
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   createAgentSession,
+  createCodemodeExtension,
+  createMcpExtension,
+  createToolSearchExtension,
+  DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
   type AgentSession,
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { JobEvent, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
+import { agentDefinition } from "./agents/catalog.js";
+import { buildJobSystemPrompt, buildSystemPrompt, resolveSkillTexts } from "./agents/system-prompt.js";
 import type { PiJobBackend } from "./agent-runtime.js";
 import { EventStream } from "./event-stream.js";
+import { createPolicyExtension, createSystemPromptExtension, type PolicySink } from "./extensions/kintsugi.js";
 import { describeInputs } from "./job-inputs.js";
+import { createGitReadTool, kbAskTool, webFetchTool } from "./tools/harness-tools.js";
+import { createOutputsWriteTool, kbSearchTool } from "./tools/kintsugi-tools.js";
 import { RUNTIME_VERSION } from "./version.js";
 
 type CreateSessionOptions = NonNullable<Parameters<typeof createAgentSession>[0]>;
@@ -28,6 +43,8 @@ const now = (): string => new Date().toISOString();
 export interface PiBackendOptions {
   /** Job checkout. The runner image mounts it read-only at /src. */
   cwd?: string;
+  /** Writable output directory. The runner image mounts it at /out. */
+  outDir?: string;
   /** Built by the launcher from the LLM provider registry (ADR-0009). Defaults to models.json + auth.json. */
   modelRuntime?: ModelRuntime;
 }
@@ -48,22 +65,6 @@ function readUsage(message: unknown): UsageLike | undefined {
   return (message as MessageLike | undefined)?.usage;
 }
 
-/** Prompt composed here until the per-agent prompts land in services/runtime/agents/ (ADR-0014). */
-function composePrompt(spec: JobSpec): string {
-  const lines = [
-    `You are the Kintsugi runtime agent "${spec.agent.id}" (version ${spec.agent.version}).`,
-    `Project: ${spec.context.projectId}${spec.context.applicationId ? ` / application ${spec.context.applicationId}` : ""}.`,
-    `Rulebook: ${spec.rulebook.version}${spec.rulebook.commit ? ` @ ${spec.rulebook.commit}` : ""}; packs: ${spec.packs.join(", ") || "(none)"}.`,
-    `Required capabilities: ${spec.requires.join(", ") || "(none)"}.`,
-    `Inputs (read-only): ${describeInputs(spec.inputs) || "(none)"}.`,
-    "Work only on platform tasks and write only to /out.",
-  ];
-  if (spec.instruction) {
-    lines.push("", "## Instruction", spec.instruction);
-  }
-  return lines.join("\n");
-}
-
 class PiJob implements JobHandle {
   readonly events = new EventStream<JobEvent>();
   readonly done: Promise<Extract<JobEvent, { type: "job.completed" }>>;
@@ -74,6 +75,7 @@ class PiJob implements JobHandle {
   #inputTokens = 0;
   #outputTokens = 0;
   #costUsd = 0;
+  #blockedCalls = 0;
   #unsubscribe: (() => void) | undefined;
 
   constructor(
@@ -91,6 +93,21 @@ class PiJob implements JobHandle {
   /** Wired by the backend right after `session.subscribe()` returns its unsubscriber. */
   attach(unsubscribe: () => void): void {
     this.#unsubscribe = unsubscribe;
+  }
+
+  /** Called by the policy extension when a tool call is blocked before execution. */
+  pushBlocked(tool: string, reason: string, input: unknown): void {
+    if (this.#settled) return;
+    this.#blockedCalls += 1;
+    this.events.push({
+      type: "tool.call",
+      jobId: this.jobId,
+      callId: `${this.jobId}-blocked-${this.#blockedCalls}`,
+      tool,
+      input,
+      decision: "blocked",
+      reason,
+    });
   }
 
   async followUp(message: string): Promise<void> {
@@ -114,7 +131,7 @@ class PiJob implements JobHandle {
     }
 
     if (event.type === "tool_execution_start") {
-      // Only allowlisted tools reach the session; blocked tools never execute.
+      // Only allowlisted tools reach execution; blocked calls come from pushBlocked().
       this.events.push({
         type: "tool.call",
         jobId: this.jobId,
@@ -169,7 +186,9 @@ class PiJob implements JobHandle {
       type: "job.completed",
       jobId: this.jobId,
       at: now(),
-      summary: `${this.spec.agent.id} run complete: ${this.#inputTokens} input / ${this.#outputTokens} output tokens`,
+      summary: `${this.spec.agent.id} run complete: ${this.#inputTokens} input / ${this.#outputTokens} output tokens${
+        this.#blockedCalls === 0 ? "" : `, ${this.#blockedCalls} blocked call(s)`
+      }`,
     };
     this.#teardown();
     this.events.push(event);
@@ -199,6 +218,7 @@ class PiJob implements JobHandle {
 
 export function createPiJobBackend(options: PiBackendOptions = {}): PiJobBackend {
   const cwd = options.cwd ?? process.env["KINTSUGI_JOB_SRC"] ?? "/src";
+  const outDir = options.outDir ?? process.env["KINTSUGI_JOB_OUT"] ?? resolve(cwd, "..", "out");
   const modelRuntimePromise: Promise<ModelRuntime> =
     options.modelRuntime === undefined ? ModelRuntime.create() : Promise.resolve(options.modelRuntime);
 
@@ -211,34 +231,71 @@ export function createPiJobBackend(options: PiBackendOptions = {}): PiJobBackend
         throw new Error(`model ${spec.model.provider}/${spec.model.id} is not in the provider registry (ADR-0009)`);
       }
 
+      // Agent resolution (ADR-0022): JobSpec.definition (from the installation DB) wins;
+      // the code catalog is the fallback for builtins (dev without DB, seeds, validation).
+      const resolved = spec.definition;
+      const fallback = agentDefinition(spec.agent.id);
+      if (resolved === undefined && fallback === undefined) {
+        throw new Error(`unknown agent "${spec.agent.id}" and no definition in the JobSpec (ADR-0022)`);
+      }
+      const rolePrompt = resolved?.systemPrompt ?? fallback!.systemPrompt;
+      const skillTexts = resolved !== undefined ? resolveSkillTexts(resolved.skills) : (fallback!.skills ?? []).map((path) => resolveSkillTexts([{ path }])[0] ?? "");
+      const systemPrompt = buildJobSystemPrompt(spec, rolePrompt, skillTexts.filter((text) => text !== ""));
+      const allowTools = spec.policy.allowTools.length > 0 ? spec.policy.allowTools : (resolved?.allowTools ?? fallback!.allowTools);
+      const denyBashPatterns = spec.policy.denyBashPatterns ?? resolved?.denyBashPatterns;
+      const thinkingLevel = spec.model.thinking ?? resolved?.thinking ?? fallback!.thinking;
+
+      let job: PiJob | undefined;
+      const sink: PolicySink = {
+        blocked: (tool, reason, input) => job?.pushBlocked(tool, reason, input),
+      };
+
+      const agentDir = mkdtempSync(join(tmpdir(), `kintsugi-agent-${jobId.slice(0, 8)}-`));
+      const resourceLoader = new DefaultResourceLoader({
+        cwd,
+        agentDir,
+        extensionFactories: [
+          createSystemPromptExtension(systemPrompt),
+          createPolicyExtension({ allowTools, denyBashPatterns }, sink),
+          createCodemodeExtension(),
+          createToolSearchExtension(),
+          createMcpExtension(),
+        ],
+      });
+      await resourceLoader.reload();
+
       const { session } = await createAgentSession({
         cwd,
+        agentDir,
         modelRuntime,
         model,
-        thinkingLevel: spec.model.thinking as ThinkingLevelOption,
-        tools: spec.policy.allowTools,
+        thinkingLevel: thinkingLevel as ThinkingLevelOption,
+        tools: allowTools,
+        customTools: [kbSearchTool, kbAskTool, createGitReadTool(cwd), webFetchTool, createOutputsWriteTool(outDir)],
         sessionManager: SessionManager.inMemory(),
+        resourceLoader,
       });
 
-      const job = new PiJob(jobId, spec, session);
-      job.attach(session.subscribe((event) => job.onSessionEvent(event)));
+      job = new PiJob(jobId, spec, session);
+      job.attach(session.subscribe((event) => job!.onSessionEvent(event)));
 
       job.events.push({ type: "job.started", jobId, at: now(), runtimeVersion: RUNTIME_VERSION });
 
       const timeoutMs = spec.budget.timeoutSec * 1000;
       const timer = setTimeout(() => {
-        void job.abort(`timeout after ${spec.budget.timeoutSec}s`);
+        void job!.abort(`timeout after ${spec.budget.timeoutSec}s`);
       }, timeoutMs);
 
+      const promptText = spec.instruction ?? "Perform the task described in your system prompt for this job.";
       void session
-        .prompt(composePrompt(spec))
+        .prompt(promptText)
         .then(() => {
           clearTimeout(timer);
-          job.onComplete();
+          job!.onComplete();
         })
         .catch((error: unknown) => {
           clearTimeout(timer);
-          job.failBeforeStart(error instanceof Error ? error.message : String(error));
+          job!.failBeforeStart(error instanceof Error ? error.message : String(error));
         });
 
       return job;

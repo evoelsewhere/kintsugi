@@ -6,7 +6,10 @@
 //   node dist/bin/run-job.js --provider <id> --model <id> [--instruction "..."]
 
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
+import { loadAgent } from "../launcher/agent-registry.js";
 import { buildModelRuntime, piProviderId } from "../launcher/model-runtime.js";
 import { loadProvider } from "../launcher/provider-registry.js";
 import { createPiJobBackend } from "../pi-runtime.js";
@@ -26,24 +29,30 @@ if (providerArg === undefined || modelArg === undefined) {
 }
 
 const instruction = arg("instruction") ?? "Reply with one short sentence confirming you are running.";
+const denyPattern = arg("deny-bash");
+const outDir = arg("out") ?? process.env["KINTSUGI_JOB_OUT"] ?? join(tmpdir(), "kintsugi-out");
+const agentId = arg("agent") ?? "assessment";
+const definition = await loadAgent(agentId);
 const { config, credentials } = await loadProvider(providerArg);
 const modelRuntime = await buildModelRuntime(config, credentials);
 
 const spec: JobSpec = {
-  agent: { id: "assessment", version: "0.0.0" },
+  agent: { id: agentId, version: definition?.version ?? "0.0.0" },
+  ...(definition === undefined ? {} : { definition }),
   context: { projectId: "smoke", trigger: "user:dev" },
   rulebook: { version: "smoke" },
   packs: [],
   requires: [],
   inputs: [],
   instruction,
-  model: { provider: piProviderId(config), id: modelArg, thinking: "low" },
-  policy: { allowTools: [] },
+  // Empty allowlist / no thinking = use the agent catalog defaults (ADR-0014).
+  model: { provider: piProviderId(config), id: modelArg },
+  policy: { allowTools: [], ...(denyPattern === undefined ? {} : { denyBashPatterns: [denyPattern] }) },
   outputs: [],
   budget: { maxTurns: 2, timeoutSec: 180 },
 };
 
-const backend = await createPiJobBackend({ modelRuntime, cwd: process.cwd() });
+const backend = await createPiJobBackend({ modelRuntime, cwd: process.cwd(), outDir });
 const job = await backend.startJob(spec);
 for await (const event of job.events) {
   console.log(JSON.stringify(event));

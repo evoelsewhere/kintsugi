@@ -35,8 +35,10 @@ export interface JobOutputRule {
 }
 
 export interface JobSpec {
-  /** Built-in agent; its prompt, skills, tools and policy are fixed in code (ADR-0014). */
-  agent: { id: RuntimeAgentId; version: string };
+  /** Agent id: a builtin RuntimeAgentId or an installation-defined custom id (ADR-0022). */
+  agent: { id: string; version: string };
+  /** Resolved agent definition from the installation DB (ADR-0022); the runner falls back to the code catalog for builtins. */
+  definition?: ResolvedAgent;
   context: JobContext;
   /** Project rulebook the job runs against (ADR-0011); readiness of `requires` is checked before launch. */
   rulebook: RulebookRef;
@@ -56,6 +58,18 @@ export interface JobSpec {
   policy: ToolPolicy;
   outputs: JobOutputRule[];
   budget: { maxCostUsd?: number; maxTurns?: number; timeoutSec: number };
+}
+
+/** Resolved agent definition (ADR-0022): travels with the job so the runner stays stateless. */
+export interface ResolvedAgent {
+  id: string;
+  version: string;
+  systemPrompt: string;
+  skills: Array<{ path?: string; content?: string }>;
+  allowTools: string[];
+  denyBashPatterns?: string[];
+  thinking?: ThinkingLevel;
+  budget?: { maxTurns?: number; maxCostUsd?: number; timeoutSec?: number };
 }
 
 export type JobEvent =

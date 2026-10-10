@@ -17,7 +17,8 @@
     "@kintsugi/domain": "workspace:*",
     "@kintsugi/runtime-sdk": "workspace:*",
     "@kintsugi/secrets": "workspace:*",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "typebox": "1.3.27"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"
