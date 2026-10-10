@@ -7,7 +7,7 @@ import { decryptSecret, encryptSecret } from "@kintsugi/secrets";
 import type { AgentModelBinding, CustomModelConfig, LlmProviderConfig } from "@kintsugi/runtime-sdk";
 import type { ThinkingLevel } from "@kintsugi/domain";
 import type { Pool } from "pg";
-import { getPool } from "../../../../common/db/pool.js";
+import { getPool, type Queryable, withTransaction } from "../../../../common/db/pool.js";
 import type { LlmProviderRecord, ProviderConfigInput, ProviderCredentials, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 
@@ -60,8 +60,10 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
 
   async create(input: RegisterLlmProvider): Promise<LlmProviderRecord> {
     const config = this.#buildStoredConfig(input);
-    await this.#pool.query("insert into admin.llm_provider (id, kind, config) values ($1, $2, $3)", [input.id, config.kind, JSON.stringify(config)]);
-    await this.#storeSecrets(input.id, input.credentials);
+    await withTransaction(async (client) => {
+      await client.query("insert into admin.llm_provider (id, kind, config) values ($1, $2, $3)", [input.id, config.kind, JSON.stringify(config)]);
+      await this.#storeSecrets(client, input.id, input.credentials);
+    });
     return (await this.get(input.id))!;
   }
 
@@ -71,12 +73,18 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
 
     const hasNewCredentials = input.credentials.apiKey !== undefined || input.credentials.env !== undefined;
     const config = this.#buildStoredConfig(input, hasNewCredentials ? undefined : (existing.config.auth as StoredAuth));
-    await this.#pool.query("update admin.llm_provider set config = $2, enabled = $3, updated_at = now() where id = $1", [
-      id,
-      JSON.stringify(config),
-      config.enabled,
-    ]);
-    if (hasNewCredentials) await this.#storeSecrets(id, input.credentials);
+    await withTransaction(async (client) => {
+      await client.query("update admin.llm_provider set config = $2, enabled = $3, updated_at = now() where id = $1", [
+        id,
+        JSON.stringify(config),
+        config.enabled,
+      ]);
+      if (hasNewCredentials) {
+        // New credentials replace the old set entirely, so no orphaned secrets survive.
+        await client.query("delete from admin.llm_secret where provider_id = $1", [id]);
+        await this.#storeSecrets(client, id, input.credentials);
+      }
+    });
     return (await this.get(id))!;
   }
 
@@ -99,9 +107,7 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
   }
 
   async replaceBindings(bindings: AgentModelBinding[]): Promise<void> {
-    const client = await this.#pool.connect();
-    try {
-      await client.query("begin");
+    await withTransaction(async (client) => {
       await client.query("delete from admin.agent_model_binding");
       for (const binding of bindings) {
         await client.query(
@@ -109,13 +115,7 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
           [binding.agent, binding.projectId ?? "*", binding.provider, binding.model, binding.thinking ?? null],
         );
       }
-      await client.query("commit");
-    } catch (error) {
-      await client.query("rollback");
-      throw error;
-    } finally {
-      client.release();
-    }
+    });
   }
 
   async resolveApiKey(providerId: string): Promise<string | undefined> {
@@ -153,7 +153,7 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
     return { type: "none" };
   }
 
-  async #storeSecrets(providerId: string, credentials: ProviderCredentials): Promise<void> {
+  async #storeSecrets(db: Queryable, providerId: string, credentials: ProviderCredentials): Promise<void> {
     const entries: Array<[string, string]> = [];
     if (credentials.apiKey !== undefined) entries.push([apiKeySecretId(providerId), credentials.apiKey]);
     for (const [name, value] of Object.entries(credentials.env ?? {})) {
@@ -161,7 +161,7 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
     }
     for (const [secretId, plaintext] of entries) {
       const encrypted = encryptSecret(plaintext);
-      await this.#pool.query(
+      await db.query(
         `insert into admin.llm_secret (secret_id, provider_id, ciphertext, iv, auth_tag)
          values ($1, $2, $3, $4, $5)
          on conflict (secret_id) do update set ciphertext = $3, iv = $4, auth_tag = $5`,
@@ -170,11 +170,16 @@ export class PgLlmProviderRepository extends LlmProviderRepository {
     }
   }
 
+  async #secretExists(secretId: string): Promise<boolean> {
+    const result = await this.#pool.query("select 1 from admin.llm_secret where secret_id = $1", [secretId]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async #toRecord(row: ProviderRow): Promise<LlmProviderRecord> {
     const auth = row.config.auth;
     const envKeys = auth.type === "env" && auth.vars !== undefined ? Object.keys(auth.vars) : [];
-    const hasApiKey =
-      auth.type === "api-key" && auth.key !== undefined ? (await this.resolveSecret(auth.key.secretId)) !== undefined : false;
+    // Presence only: listing never decrypts, so a rotated or missing key cannot break reads.
+    const hasApiKey = auth.type === "api-key" && auth.key !== undefined ? await this.#secretExists(auth.key.secretId) : false;
     return {
       id: row.id,
       kind: row.kind,

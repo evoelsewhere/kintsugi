@@ -4,7 +4,7 @@
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
 import type { PasswordHash } from "../../../../common/security/password.js";
-import { getPool } from "../../../../common/db/pool.js";
+import { getPool, type Queryable, withTransaction } from "../../../../common/db/pool.js";
 import type { CreateUser, UpdateUser, UserRecord } from "../domain/user.js";
 import { UserRepository } from "../domain/user.repository.js";
 
@@ -54,12 +54,14 @@ export class PgUserRepository extends UserRepository {
   }
 
   async create(id: string, user: CreateUser, password: PasswordHash): Promise<UserRecord> {
-    await this.#pool.query(
-      `insert into core.app_user (id, username, email, display_name, password_hash, password_salt)
-       values ($1, $2, $3, $4, $5, $6)`,
-      [id, user.username, user.email ?? "", user.displayName ?? user.username, password.hash, password.salt],
-    );
-    await this.#replaceRoles(id, user.roleIds ?? []);
+    await withTransaction(async (client) => {
+      await client.query(
+        `insert into core.app_user (id, username, email, display_name, password_hash, password_salt)
+         values ($1, $2, $3, $4, $5, $6)`,
+        [id, user.username, user.email ?? "", user.displayName ?? user.username, password.hash, password.salt],
+      );
+      await this.#replaceRoles(client, id, user.roleIds ?? []);
+    });
     return (await this.get(id))!;
   }
 
@@ -73,11 +75,13 @@ export class PgUserRepository extends UserRepository {
     if (input.email !== undefined) push("email", input.email);
     if (input.displayName !== undefined) push("display_name", input.displayName);
     if (input.enabled !== undefined) push("enabled", input.enabled);
-    if (fields.length > 0) {
-      values.push(id);
-      await this.#pool.query(`update core.app_user set ${fields.join(", ")}, updated_at = now() where id = $${values.length}`, values);
-    }
-    if (input.roleIds !== undefined) await this.#replaceRoles(id, input.roleIds);
+    await withTransaction(async (client) => {
+      if (fields.length > 0) {
+        values.push(id);
+        await client.query(`update core.app_user set ${fields.join(", ")}, updated_at = now() where id = $${values.length}`, values);
+      }
+      if (input.roleIds !== undefined) await this.#replaceRoles(client, id, input.roleIds);
+    });
     return this.get(id);
   }
 
@@ -117,10 +121,10 @@ export class PgUserRepository extends UserRepository {
     await this.#pool.query("delete from core.session where user_id = $1", [id]);
   }
 
-  async #replaceRoles(userId: string, roleIds: string[]): Promise<void> {
-    await this.#pool.query("delete from core.user_role where user_id = $1", [userId]);
+  async #replaceRoles(db: Queryable, userId: string, roleIds: string[]): Promise<void> {
+    await db.query("delete from core.user_role where user_id = $1", [userId]);
     for (const roleId of roleIds) {
-      await this.#pool.query("insert into core.user_role (user_id, role_id) values ($1, $2) on conflict do nothing", [userId, roleId]);
+      await db.query("insert into core.user_role (user_id, role_id) values ($1, $2) on conflict do nothing", [userId, roleId]);
     }
   }
 
