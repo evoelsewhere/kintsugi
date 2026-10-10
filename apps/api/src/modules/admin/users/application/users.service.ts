@@ -12,7 +12,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type { Actor } from "../../../../common/auth/decorators.js";
 import { ADMIN_ROLE_ID, RolesService } from "../../roles/application/roles.service.js";
 import { newId } from "../../../../common/domain/ids.js";
-import { hashPassword, verifyPassword } from "../../../../common/security/password.js";
+import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from "../../../../common/security/password.js";
 import type { CreateUser, UpdateUser, UserRecord } from "../domain/user.js";
 import { UserRepository } from "../domain/user.repository.js";
 
@@ -36,13 +36,13 @@ export class UsersService {
   async create(input: CreateUser, actor: Actor): Promise<UserRecord> {
     await this.#assertUsernameFree(input.username);
     await this.#assertAssignable(input.roleIds ?? [], [], actor);
-    return this.users.create(newId(), input, hashPassword(input.password));
+    return this.users.create(newId(), input, await hashPassword(input.password));
   }
 
   /** Bootstrap only: the first admin of an empty installation (ADR-0008). */
   async createFirstAdmin(username: string, password: string): Promise<UserRecord> {
     if ((await this.users.count()) > 0) throw new ConflictException("The installation already has members");
-    return this.users.create(newId(), { username, password, displayName: "Admin", roleIds: [ADMIN_ROLE_ID] }, hashPassword(password));
+    return this.users.create(newId(), { username, password, displayName: "Admin", roleIds: [ADMIN_ROLE_ID] }, await hashPassword(password));
   }
 
   async update(id: string, input: UpdateUser, actor: Actor): Promise<UserRecord> {
@@ -63,7 +63,7 @@ export class UsersService {
 
   async setPassword(id: string, password: string, actor: Actor): Promise<void> {
     await this.#assertCanManage(await this.get(id), actor);
-    await this.users.setPassword(id, hashPassword(password));
+    await this.users.setPassword(id, await hashPassword(password));
     await this.users.revokeSessions(id);
   }
 
@@ -75,12 +75,15 @@ export class UsersService {
     if (!(await this.users.remove(id))) throw new NotFoundException(`User ${id} not found`);
   }
 
-  /** Credential check for sign-in (ADR-0008). Returns undefined on any failure. */
+  /**
+   * Credential check for sign-in (ADR-0008). Returns undefined on any failure, and
+   * always runs one hash comparison so unknown usernames answer in the same time.
+   */
   async validateCredentials(username: string, password: string): Promise<UserRecord | undefined> {
     const user = await this.users.findByUsername(username);
-    if (user === undefined || !user.enabled) return undefined;
-    const stored = await this.users.passwordOf(user.id);
-    if (stored === undefined || !verifyPassword(password, stored)) return undefined;
+    const stored = user === undefined ? undefined : await this.users.passwordOf(user.id);
+    const matches = await verifyPassword(password, stored ?? (await DUMMY_PASSWORD_HASH));
+    if (user === undefined || stored === undefined || !matches || !user.enabled) return undefined;
     return user;
   }
 

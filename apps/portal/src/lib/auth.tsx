@@ -1,9 +1,9 @@
-// Authentication state for the portal (ADR-0008): session token + current user with
-// roles and effective permissions. Token storage and expiry live in ./session.
+// Authentication state for the portal (ADR-0008): the current user with roles and
+// effective permissions. The session is an httpOnly cookie; expiry lives in ./session.
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "./api";
-import { getToken, onSessionExpired, setToken } from "./session";
+import { onSessionExpired } from "./session";
 
 export interface SessionUser {
   id: string;
@@ -36,16 +36,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   useEffect(() => onSessionExpired(() => setUser(null)), []);
 
   useEffect(() => {
-    if (getToken() === null) {
-      setLoading(false);
-      return;
-    }
+    // The session cookie is invisible to scripts: ask the API who is signed in.
     apiGet<SessionUser>("/api/auth/me")
       .then(setUser)
-      .catch(() => {
-        setToken(null);
-        setUser(null);
-      })
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -54,8 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       user,
       loading,
       login: async (username, password) => {
-        const result = await apiSend<{ token: string; user: SessionUser }>("/api/auth/login", "POST", { username, password });
-        setToken(result.token);
+        const result = await apiSend<{ user: SessionUser }>("/api/auth/login", "POST", { username, password });
         setUser(result.user);
       },
       logout: async () => {
@@ -64,7 +57,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         } catch {
           // Session may already be gone — clearing local state is enough.
         }
-        setToken(null);
         setUser(null);
       },
       can: (permission) => user?.permissions.includes(permission) ?? false,

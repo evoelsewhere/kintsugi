@@ -4,39 +4,34 @@ import { createHash, randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
 import { getPool } from "../../../../common/db/pool.js";
-
-const SESSION_DAYS = 7;
+import { SESSION_TTL_SECONDS, SessionRepository } from "../domain/session.repository.js";
 
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
 @Injectable()
-export class PgSessionRepository {
+export class PgSessionRepository extends SessionRepository {
   get #pool(): Pool {
     return getPool();
   }
 
-  /** Returns the raw token — it is shown to the caller once and never stored. */
   async create(userId: string): Promise<string> {
     const token = randomBytes(32).toString("base64url");
     await this.#pool.query(
       `insert into core.session (token_hash, user_id, expires_at)
-       values ($1, $2, now() + interval '${SESSION_DAYS} days')`,
-      [hashToken(token), userId],
+       values ($1, $2, now() + make_interval(secs => $3))`,
+      [hashToken(token), userId, SESSION_TTL_SECONDS],
     );
     return token;
   }
 
   async validate(token: string): Promise<string | undefined> {
     const result = await this.#pool.query<{ user_id: string }>(
-      "select user_id from core.session where token_hash = $1 and expires_at > now()",
+      "update core.session set last_seen_at = now() where token_hash = $1 and expires_at > now() returning user_id",
       [hashToken(token)],
     );
-    const row = result.rows[0];
-    if (row === undefined) return undefined;
-    await this.#pool.query("update core.session set last_seen_at = now() where token_hash = $1", [hashToken(token)]);
-    return row.user_id;
+    return result.rows[0]?.user_id;
   }
 
   async revoke(token: string): Promise<void> {
