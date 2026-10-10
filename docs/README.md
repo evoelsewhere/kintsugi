@@ -47,7 +47,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 **Reference**
 - [Glossary](reference/glossary.md)
 - [Rulebook](reference/rulebook.md): layout, `rulebook.yaml`, capabilities and maturity
-- [Runtime agents](reference/runtime-agents.md)
+- [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
 - [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
 - [Data model](reference/data-model.md)
 - [Workspace repository](reference/workspace-repo.md): layout, `kintsugi.yaml`, commit conventions

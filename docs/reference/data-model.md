@@ -15,7 +15,7 @@ Project 1─* Application 1─* WorkItem (index of units/**) 1─* StageRun ─0
    ├─ Rulebook(id, version, commit) (index of rulebook/; primary copy in the workspace repo)
    │     ├─ Layer(vendor | pack | override) 1─* CapabilityDecl(name, maturity scoped, uses[], evidence[])
    │     ├─ Rule(id, appliesTo, severity, layer) · PipelineDefinition · Waiver(scope, expires)
-   │     └─ ProjectAgent · RunnerSpec(image) · HarnessRendererConfig
+   │     └─ RunnerSpec(image) · HarnessRendererConfig
    ├─ PipelineTemplate (phase/stage/gate) ─ GateDecision (index of unit frontmatter `gates`)
    └─ Membership(user, role, harnesses[])
 User · Session · AccessToken · AuthIdentity(provider: local | entra-id)
@@ -28,8 +28,8 @@ Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord �
 
 | Package | Main types |
 |---|---|
-| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `Role`, `Raci`, `Performer`, `MemberHarnessId`, `RuntimeAgentId`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `ScorecardCriterion`, `RulebookRef`, `RulebookManifest`, `PackManifest`, `PipelineDefinition`, `Waiver`, `RuleFrontmatter`, `RunnerSpec`, `CapabilityName` (open), `CapabilityMaturity`, `checkReadiness()` |
-| [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts) | `JobSpec`, `JobEvent`, `JobHandle`, `AgentRuntime`, `ToolPolicy`, `JobOutputRule`, `LlmProviderConfig`, `AgentModelBinding` |
+| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `Role`, `Raci`, `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `ScorecardCriterion`, `RulebookRef`, `RulebookManifest`, `PackManifest`, `PipelineDefinition`, `Waiver`, `RuleFrontmatter`, `RunnerSpec`, `RunnerJobSpec`, `CompareReport`, `CapabilityName` (open), `CapabilityMaturity`, `checkReadiness()` |
+| [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts) | `JobSpec`, `AgentDefinition`, `AgentSkill`, `JobLimits`, `JobEvent`, `JobFailureReason`, `JobHandle`, `AgentRuntime`, `LlmProviderConfig`, `AgentModelBinding` |
 | [`packages/harness-sdk`](../../packages/harness-sdk/src/index.ts) | `TaskPack`, `PluginManifest`, `PublishedPlugin`, `MarketplaceFile`, `HarnessPluginSupport`, `MarketplaceGenerator`, `HarnessRendererConfig`, `AssetRenderer`, `HarnessActivity`, `TelemetryNormalizer`, `HarnessPolicy` |
 
 ## Provenance

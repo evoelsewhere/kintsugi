@@ -26,13 +26,13 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 | A1 Projects & Applications | Programs, projects, applications, code repos, workspace repo | One installation = one organization |
 | A2 Identity & Access | Username/password sign-in; PATs for CLI/MCP (Entra ID later); users; RACI roles; project-scoped RBAC | [Identity and access](concepts/identity-and-access.md) |
 | A3 Connectors | Git servers (any number and kind), Jira / Confluence / SharePoint, source databases (read-only), observability tools | Credentials encrypted in Postgres |
-| A4 LLM Providers & Harness Registry | Runtime LLM providers (every pi provider + custom), credentials, test connection, model binding per runtime agent, allowlist, budget; member harness registry (plugin support per harness, built-in + installation fallback renderers, transformer plugins) | [LLM configuration](concepts/llm-configuration.md) |
+| A4 LLM Providers & Harness Registry | Runtime LLM providers (every pi provider + custom), credentials, test connection, model binding per runtime agent id, allowlist, budget; member harness registry (plugin support per harness, built-in + installation fallback renderers, transformer plugins) | [LLM configuration](concepts/llm-configuration.md) |
 | A7 Extension Allowlists | Runner image allowlist; harness transformer plugins | [Security](concepts/security.md) |
 | A5 Templates | SDLC / pipeline templates per 7R, deliverable templates, RACI templates, the workspace starter template | Shipped stack-agnostic; project specifics go into the rulebook |
 | A6 Project Build | Create / join / copy-from a workspace repo; register source and target repos; packs and pipelines per application; rulebook editor and **resolved view** per unit; readiness board (per pack / kind / application); promote, suspend and waiver PR flows; `rulebook upgrade` for vendored content | [Build a project](../guides/build-project.md) |
 
 ### B. Delivery
-Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/delivery-pipeline.md)).
+Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/delivery-pipeline.md)). The runtime agents named here (`assessment`, `task-planner`, `gate-reviewer`, …) are planned, not shipped; each will be an agent definition supplied per job ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)).
 
 | Sub-module | Phase | Main functions |
 |---|---|---|
@@ -72,7 +72,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | E1 Workflow Orchestrator | pg-boss job queue + phase / stage / gate state machine driven by the application's **pipeline definition** from the rulebook. Transitions are validated by the API, persisted as unit-file commits and indexed in Postgres (ADR-0012); retries; fan-out per wave |
 | E2 Knowledge Hub | AS-IS / TO-BE KB: sources in Git, text chunks + embeddings (pgvector) in Postgres, no code graph; ingestion; search API |
 | E3 Rulebook & Assets | Validates and **composes** the project rulebook (vendor → packs → overrides), indexes rules, capabilities, pipelines and waivers, computes the resolved view per unit and readiness per stage, and combines it with built-in assets for runtime jobs and harness rendering ([rulebook reference](../reference/rulebook.md)) |
-| E4 Kintsugi Runtime (pi) | Runs [runtime agents](../reference/runtime-agents.md), one container per job |
+| E4 Kintsugi Runtime (pi) | Generic agent kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)): runs one agent job whose [agent definition](../reference/runtime-agents.md) is supplied with the job, one container per job; ships no agents |
 | E5 Harness Hub | MCP server, CLI backend, plugin validation and **marketplace generation** (vendored built-in plugin + publishable rulebook plugins), fallback rendering, policy distribution, telemetry ingest ([harness integration](../reference/harness-integration.md)) |
 | E6 Git Sync & Writer | Sync many repos across many Git servers; commit / PR runtime results and unit state changes to the workspace repo (fetch → rebase → retry) |
 | E7 Events | Domain events (job.started, pr.opened, gate.passed, artifact.registered…) via outbox + `LISTEN/NOTIFY` |
@@ -97,14 +97,14 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 |---|---|---|
 | `kintsugi-app` | API, portal, Harness Hub (MCP, CLI API), job gateway | `apps/api`, `apps/portal`, `services/harness-hub` |
 | `kintsugi-worker` | Orchestrator, Git Sync & Writer, ingestion, job launcher | `services/orchestrator`, `services/knowledge`, `services/runtime` (launcher) |
-| `kintsugi-runner` | Runtime agent execution (per job) | `services/runtime` (runner + built-in agents: prompts, skills, tools) |
+| `kintsugi-runner` | Runtime agent execution (per job) | `services/runtime` (runner + kernel: locked-down pi session, kernel tools, limits; no agents) |
 
 Shared libraries and assets:
 
 | Path | Content |
 |---|---|
 | `packages/domain` | Shared vocabulary: phases, 7R, roles, work items, provenance, Git servers / repositories, scorecard |
-| `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `JobEvent`, LLM provider configuration types |
+| `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `AgentDefinition`, `JobEvent`, LLM provider configuration types |
 | `packages/harness-sdk` | `TaskPack`, `AssetRenderer`, `HarnessActivity`, `HarnessPolicy` |
 | `plugins/` | Built-in agent plugin `kintsugi` for member harnesses (skills, hooks, Kintsugi MCP server) |
 | `.claude-plugin/marketplace.json` | Marketplace listing the built-in plugin, for local testing |

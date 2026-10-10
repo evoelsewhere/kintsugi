@@ -20,7 +20,7 @@
 | **PAT** | Personal Access Token, used by the CLI and MCP clients |
 | **Resolved view** | The rules that apply to one unit after composing vendored content, packs and overrides, each with the layer it came from |
 | **Rulebook** | The project's rules in `rulebook/` of the workspace repo: packs (stack pairs, unit kinds, conventions, mappings, review rules, runners), pipelines, harness renderers, waivers |
-| **Runtime agent** | A platform agent executed by the runtime (assessment, task-planner, gate-reviewer…) |
+| **Runtime agent** | A platform agent executed by the runtime kernel: an agent definition (instructions, skills, tool allowlist) supplied with each job. None ships yet; planned examples are assessment, task-planner and gate-reviewer ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)) |
 | **Scorecard** | Weighted assessment of an application across business, technical, feasibility, cost and risk criteria |
 | **Source repo** | A legacy code repo; always read-only for the runtime |
 | **Agent plugin** | A package in the Claude Code plugin format (`.claude-plugin/plugin.json` + skills, agents, commands, hooks, MCP) installed into member harnesses; the built-in one is `kintsugi` |

@@ -1,45 +1,71 @@
-# Runtime agents
+# Runtime agents and the job contract
 
-Runtime agents are Kintsugi's built-in agents. They run on the Kintsugi Runtime (pi), one container per job.
+The Kintsugi Runtime is a **generic agent kernel** on pi ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)). It runs one agent job at a time, one sandbox per job ([ADR-0004](../decisions/0004-runner-container-per-job.md)), and knows no agent or use case.
 
-- **Fixed in code** ([ADR-0014](../decisions/0014-no-code-graph-no-agent-config.md)):
-  - The agent set, and each agent's prompt, skills, tools, policy and default budget, are defined in [`services/runtime`](../../services/runtime/README.md) and versioned with the Kintsugi release.
-  - There is no agent configuration file in any repo, and projects cannot add agents.
-- **What a project controls**:
-  - the **model** each agent uses (Admin → LLM Providers → agent bindings, [LLM configuration](../architecture/concepts/llm-configuration.md));
-  - the **rulebook content** agents read for the job's units: packs, overrides, vendored content, pipelines.
-- **How agents read code**: directly, with file tools on the read-only checkout, plus `kb.search`. There is no code graph or parser.
-- **Readiness**: the capabilities a job needs come from the **pipeline stage** it runs (`requires` in `pipelines/*.yaml`). The worker checks every layer providing each capability for each unit:
-  - `ready` passes; `draft` passes only for pilot units;
-  - otherwise an unexpired waiver is needed;
-  - `suspended` always blocks.
+- **An agent is data, supplied whole with each job.** The runner is stateless and never looks an agent up.
+- **No agent ships with Kintsugi**, in code or in seed data. Where agent definitions are stored and edited is decided when the first agent is introduced.
+- **No agent configuration in project repos.** Projects control the model each agent id uses (Admin → LLM Providers → agent bindings, [LLM configuration](../architecture/concepts/llm-configuration.md)).
+- **How agents read code**: directly, with the kernel's file tools on the read-only workspace. There is no code graph or parser.
 
-  If the check fails, the job is refused and the missing capability and layer are named.
+Contract types: `JobSpec`, `AgentDefinition`, `JobEvent`, `JobHandle`, `AgentRuntime` in [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts). Implementation: [`services/runtime`](../../services/runtime/README.md).
 
-## Catalog
+## Job spec
 
-| Agent | Phase | Trigger | Input | Typical capabilities | Output |
-|---|---|---|---|---|---|
-| `knowledge-ingest` | P1, continuous | Repo registered, new commits | Source and target repos + workspace repo (read-only): source files, xlsx/docx, KT transcripts, DB schema exports | `understand` | Text chunks + embeddings in Postgres; generated AS-IS docs + gap candidates → `knowledge/` |
-| `kb-assistant` | All | Portal chat, MCP `kb.ask` | Question + KB + source files | — | Answer with citations (`repo@commit:path`, `path:line`) |
-| `assessment` | P1 | Manual, `kb.ingest.completed` | `kintsugi.yaml`, unit files, KB, source | `understand` | `assessment/<app>/scorecard.md` + proposed unit files (`units/<app>/**`, incl. `dependsOn`) as a PR |
-| `wave-planner` | P1–P2 | Manual | Scorecards, unit files (`dependsOn`, `kind`) | `understand` | Proposed wave plan (PR) |
-| `to-be-analyst` | P2 | Manual | AS-IS KB, new requirements, target base | — (helps shape `conventions`) | Gap list, draft ADRs, co-existence options, draft `conventions/target.md` → PR |
-| `task-planner` | P3–P4 | Pipeline stage, backlog change | TO-BE KB, unit file, resolved rules | `conventions`, `mapping`, `convert` | Task packs → `tasks/` (auto-commit) |
-| `gate-reviewer` | P4–P5 | `pr.opened`, `pr.synchronized` | PR diff, task pack, resolved rules, KB, CI results | `review`, `conventions` | PR comments citing rule IDs, gate checklist; record → `reviews/` |
-| `insight` | All | Schedule | Events, telemetry, tracker, unit files | — | Progress reports, AI metrics, risks, rulebook readiness |
+| Field | Description |
+|---|---|
+| `agent` | The `AgentDefinition` (below) |
+| `task` | The user prompt for this job |
+| `model` | `{ provider, id, thinking? }`: `provider` is an LLM provider config id; `thinking` overrides the agent's default |
+| `workspace.readOnly` | Directories the agent may read; the first one is its working directory |
+| `workspace.outDir` | The only directory the agent may write to |
+| `limits` | `timeoutSec` (required), `maxTurns`, `maxCostUsd` |
+| `metadata` | Opaque correlation data (e.g. project id, trigger), echoed on `job.started`; never shown to the agent |
 
-The capabilities above are what the built-in pipeline templates ask for. What a project actually requires is whatever its own pipeline definitions declare.
+Higher layers (orchestrator) translate their concepts (projects, units, rulebook content) into these fields. The kernel refuses a job before it starts if the agent id, instructions or task is empty, a tool is unknown, a skill name is invalid or duplicated, a deny pattern is not a valid regular expression, a workspace directory is missing, or a limit is invalid.
 
-## Tools (fixed per agent, for reference)
+## Agent definition
+
+| Field | Description |
+|---|---|
+| `id`, `version` | Identify the agent; model bindings name agents by `id` |
+| `instructions` | The system prompt, used verbatim |
+| `skills` | Optional inline skills `{ name, content }` (`name` matches `[a-z][a-z0-9-]*`), appended to the system prompt |
+| `tools` | Tool allowlist by name (kernel tools below); `[]` = no tools |
+| `denyCommandPatterns` | Optional regular expressions; a tool call whose `command` input matches is blocked before it runs |
+| `thinking` | Default thinking level |
+
+## Kernel tools
+
+Only tools in the agent's allowlist are created; pi registers nothing else.
 
 | Tool | Access | Description |
 |---|---|---|
-| `read`, `grep`, `find`, `ls` | Read `/src` | pi built-ins on the read-only checkout |
-| `kb.search` | Read | Semantic / full-text search over the project's KB |
-| `task.get` | Read | Task pack and unit details |
-| `write-out` | Write `/out` only | Write an output file for the worker to commit |
-| `pr.comment` | Write (via gateway) | Post a review comment on a member's PR |
-| `gate.report` | Write (via gateway) | Report a gate checklist result |
+| `read`, `ls`, `grep`, `find` | Read, confined to `workspace.readOnly` | File tools on the read-only sources (symlinks resolved) |
+| `outputs_write` | Write, confined to `workspace.outDir` | Write an output file; the caller decides what happens to it (the worker commits outputs, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
 
-Contract types: `JobSpec`, `JobEvent`, `JobOutputRule` in [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts).
+Further tools (for example knowledge-base search) are added to the kernel tool registry by code, with a review of their security boundary.
+
+## Session lockdown
+
+- No discovery from the checkout or the host: no context files, `.pi/` resources, settings files, packages, `SYSTEM.md`, MCP, codemode or tool search.
+- Provider, models and credentials are registered in memory, never written to disk.
+- Path confinement and the tool allowlist are defence in depth; the isolation boundary is the job sandbox ([security](../architecture/concepts/security.md)).
+
+## Events
+
+| Event | Content |
+|---|---|
+| `job.started` | Runtime version, agent id, `metadata` |
+| `message.delta` | Streamed assistant text |
+| `tool.call` | Tool, input, `allowed` / `blocked` (with reason) |
+| `tool.result` | Success flag, summary |
+| `output` | Path of a file written to `outDir` |
+| `usage` | Model, input/output tokens, cost |
+| `job.completed` | Summary |
+| `job.failed` | `reason` and error message |
+
+`job.failed` reasons: `error` (LLM or kernel error, empty response, output token limit), `timeout` (`timeoutSec` exceeded), `max-turns`, `budget` (`maxCostUsd` exceeded), `aborted`. LLM errors, aborts, timeouts and exceeded limits never end as `job.completed`.
+
+## Planned agents
+
+The product intends runtime agents for platform work — knowledge ingestion, KB assistant, assessment, wave and task planning, to-be analysis, gate review and insight reporting. None exists yet. When introduced, each is an `AgentDefinition` supplied per job, using kernel tools only.

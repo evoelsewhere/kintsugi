@@ -35,7 +35,7 @@ Use this for vLLM, Ollama, LM Studio, LiteLLM or any internal gateway.
 
 ## Bind models to runtime agents
 
-1. Admin → LLM Providers → **Agent bindings**: choose a provider and model per runtime agent. This sets the installation default.
+1. Admin → LLM Providers → **Agent bindings**: choose a provider and model per runtime agent id. This sets the installation default. Agents are supplied per job and none ships with Kintsugi yet, so a binding may name an agent that does not exist yet.
 2. To use a different model for a single project, override the binding in that project's settings.
 
 ## Notes

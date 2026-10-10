@@ -2,7 +2,7 @@
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| pi APIs change quickly (1.0 shipped 2026-10-01; releases near-daily) | Runner breakage on upgrade | Pin the exact version; wrap pi inside `services/runtime`; run the eval suite before upgrading (D27) |
+| pi APIs change quickly (1.0 shipped 2026-10-01; releases near-daily) | Runner breakage on upgrade | Pin the exact version; wrap pi inside `services/runtime`; run the kernel smoke suite before upgrading (D27, ADR-0023) |
 | Earendil's future licensing of non-core layers | Licensing exposure | Depend only on pi's MIT core packages |
 | Worker's Docker API access | Host compromise if the worker is compromised | docker-socket-proxy restricted to container lifecycle; image and mount allowlist (D32) |
 | Prompt injection from legacy repos | Data exfiltration, misleading outputs | Read-only mounts, egress allowlist, no repo context files, worker-side validation of `/out`, human review via PRs |

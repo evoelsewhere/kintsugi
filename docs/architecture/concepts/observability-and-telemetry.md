@@ -9,7 +9,7 @@
   - tool results
   - outputs
   - usage
-  - completed / failed
+  - completed / failed (failure reason: `error`, `timeout`, `max-turns`, `budget` or `aborted`)
 - **Storage and live view**: events are stored in Postgres and pushed to the portal over SSE (`LISTEN/NOTIFY`).
 - **Usage and cost**: recorded per job, agent, model and project (`UsageRecord`), from pi's `usage.cost`.
 - **Session replay**: the session JSONL can be kept for replay and debugging.

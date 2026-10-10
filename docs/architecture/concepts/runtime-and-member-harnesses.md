@@ -6,8 +6,8 @@ Kintsugi has two kinds of agents with separate roles ([ADR-0001](../../decisions
 |---|---|---|
 | Where it runs | The project's Kintsugi installation, one Docker container per job | Members' machines (IDE, CLI, desktop/web app) |
 | Who drives it | Kintsugi (orchestrator), automatically or on request from the portal | The member, interactively |
-| What it does | **Platform intelligence**: knowledge, assessment, to-be analysis, planning, review / gates, reporting | **The actual work**: write / migrate code, tests, designs, deliverable documents |
-| Writes to project repos | **Not directly.** The runner writes only to `/out`; the worker commits or opens a PR in the workspace repo; on code repos it only comments on PRs | **Yes**, through the member's branches and PRs |
+| What it does | A **generic agent kernel** ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)) for **platform intelligence**; the agents (knowledge, assessment, to-be analysis, planning, review / gates, reporting) are planned and supplied per job as data | **The actual work**: write / migrate code, tests, designs, deliverable documents |
+| Writes to project repos | **Not directly.** The runner writes only to its output directory; the worker commits or opens a PR in the workspace repo | **Yes**, through the member's branches and PRs |
 | LLM license / cost | Providers configured in Kintsugi ([LLM configuration](llm-configuration.md)) | The member's or customer's existing licenses |
 
 ```
@@ -15,7 +15,7 @@ Kintsugi has two kinds of agents with separate roles ([ADR-0001](../../decisions
       │  Portal / API ─ Orchestrator ─ Knowledge Hub ─ Governance               │
       │                      │                                                  │
       │      Kintsugi Runtime (pi, 1 container/job, read-only Git checkout)     │
-      │   knowledge · assessment · to-be · planner · reviewer · insight         │
+      │   generic agent kernel; agents supplied per job (planned)               │
       │                      │                                                  │
       │      Harness Hub: MCP server · CLI API · asset rendering ·              │
       │                   telemetry ingest · policy distribution                │
@@ -29,6 +29,8 @@ Kintsugi has two kinds of agents with separate roles ([ADR-0001](../../decisions
 ```
 
 ## The standard loop
+
+The intended loop; the runtime steps need agents that are not introduced yet ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)).
 
 1. **Runtime prepares.** It pulls AS-IS context from the KB and produces a task pack. The worker commits the task pack to the workspace repo.
 2. **The member implements** in their own harness. The harness uses the KB through the Kintsugi MCP server or CLI.
@@ -58,6 +60,6 @@ Survey as of 2026-10-09:
 
 - Teams already use Copilot, Claude Code or ChatGPT/Codex under existing licenses and habits.
 - The same task pack and the same agent plugins (skills, agents, hooks, MCP) work across harnesses: natively in Claude Code and Copilot CLI, converted for Codex, and rendered elsewhere ([ADR-0015](../../decisions/0015-member-assets-as-agent-plugins.md)).
-- `gate-reviewer` evaluates the **result** (the PR), not how it was produced, so behavior differences between harnesses matter less.
+- The planned gate review evaluates the **result** (the PR), not how it was produced, so behavior differences between harnesses matter less.
 
 Reference: [runtime agents](../../reference/runtime-agents.md) · [harness integration](../../reference/harness-integration.md).
