@@ -23,6 +23,8 @@ export interface GitRunOptions {
   knownHosts?: string;
   /** Allows file:// and local paths — tests and one-off imports only. */
   allowFileProtocol?: boolean;
+  /** Allows plain http for anonymous access (internal servers); refused with a credential. */
+  allowHttp?: boolean;
   /** Milliseconds; default 10 minutes. */
   timeoutMs?: number;
   /** Written to git's stdin. */
@@ -99,6 +101,7 @@ export async function runGit(args: readonly string[], options: GitRunOptions = {
     "protocol.https.allow=always",
     "protocol.ssh.allow=always",
     ...(options.allowFileProtocol === true ? ["protocol.file.allow=always"] : []),
+    ...(options.allowHttp === true ? ["protocol.http.allow=always"] : []),
     "submodule.recurse=false",
     "credential.helper=",
     ...(credential.kind === "token" ? [`credential.helper=${ENV_CREDENTIAL_HELPER}`] : []),
@@ -119,6 +122,9 @@ export async function runGit(args: readonly string[], options: GitRunOptions = {
     secrets.push(credential.token);
     env["KINTSUGI_GIT_USERNAME"] = credential.username ?? "kintsugi";
     env["KINTSUGI_GIT_TOKEN"] = credential.token;
+  }
+  if (options.allowHttp === true && credential.kind !== "none") {
+    throw new GitError("Credentials are never sent over plain http.", null, "");
   }
   // SSH never trusts a host on first use: only the server's pinned keys, never ~/.ssh.
   if (credential.kind === "ssh-key" && (options.knownHosts ?? "").trim() === "") {
