@@ -28,7 +28,7 @@ Start at the [documentation map](docs/README.md). It is organized by purpose (Di
 
 ```
 apps/        portal (React SPA), api (REST + OpenAPI)
-services/    orchestrator (pg-boss jobs, git sync/writer), knowledge (KB), runtime (pi runner + launcher + built-in agents), harness-hub (MCP, CLI API, asset render, telemetry)
+services/    orchestrator (pg-boss jobs, git sync/writer), knowledge (KB), runtime (generic agent kernel on pi + launcher), harness-hub (MCP, CLI API, asset render, telemetry)
 packages/    domain (shared types), runtime-sdk (AgentRuntime contract), harness-sdk (member harness contracts)
 plugins/     built-in agent plugin for member harnesses (Claude Code plugin format: skills, hooks, MCP)
 templates/   workspace repo starter template (incl. neutral starter rulebook)

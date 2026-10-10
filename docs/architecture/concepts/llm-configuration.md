@@ -12,13 +12,13 @@ Decision: [ADR-0009](../../decisions/0009-llm-provider-config.md). This covers L
 
 ## Binding, allowlist and budget
 
-- **Binding**: each runtime agent has a default provider/model (`AgentModelBinding`), which can be overridden per project.
+- **Binding**: a default provider/model per runtime agent id (`AgentModelBinding`), which can be overridden per project. Agents are supplied per job ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)), so a binding may name an agent id that does not exist yet.
 - **Allowlist**: a model allowlist limits what can be bound.
-- **Budget**: budgets are enforced from pi's per-message `usage.cost`. Custom models declare their own cost.
+- **Budget**: budgets are enforced from pi's per-message `usage.cost`; a job over its `maxCostUsd` limit ends as `job.failed` (`budget`). Custom models declare their own cost.
 
 ## At job launch
 
-1. The worker writes a job-scoped `models.json` containing only the provider the job needs.
+1. The launcher registers only the provider and models the job needs with pi, in memory: no `models.json` or `auth.json` is written.
 2. It passes only that provider's credentials, as environment variables.
 3. The `egress-proxy` allowlist is derived from the configured provider endpoints.
 

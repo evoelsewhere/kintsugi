@@ -13,7 +13,7 @@
 | 7 | **Provider-agnostic runtime** | Every LLM provider pi supports, plus custom endpoints, configured in the portal | [0009](../decisions/0009-llm-provider-config.md) |
 | 8 | **Common engine, project-built rules** | Kintsugi is stack-agnostic; each project builds a rulebook in its workspace repo and verifies it (`template` → `draft` → `ready`) before dependent stages run | [0011](../decisions/0011-project-rulebook.md) |
 | 9 | **Open and composable, never locked** | Packs per stack pair, layered overrides, open capabilities, declarative pipelines, runner images, declarative harness renderers, `x-*` extensions; reuse via vendored, pinned snapshots | [0013](../decisions/0013-composable-open-rulebook.md) |
-| 10 | **Keep the engine small** | No code graph or parsers, no unit-discovery or agent configuration; agents read code directly; built-in agents fixed in code | [0014](../decisions/0014-no-code-graph-no-agent-config.md) |
+| 10 | **Keep the engine small** | No code graph or parsers, no unit-discovery or agent configuration; agents read code directly; the runtime is a generic agent kernel with agents supplied per job | [0014](../decisions/0014-no-code-graph-no-agent-config.md), [0023](../decisions/0023-runtime-as-generic-agent-kernel.md) |
 
 ## 4.2 Technology choices
 

@@ -27,7 +27,7 @@ If these answers are not written down **before** work is parallelized, every mem
 ## Shape of the rulebook
 
 ```
-rulebook.yaml ── extends (vendored) ── packs ── pipelines ── agents ── harnesses ── waivers
+rulebook.yaml ── extends (vendored) ── packs ── pipelines ── harnesses ── waivers
                                          │
                        packs/<stack pair or concern>/  (+ overrides/<app>/<module>/)
 ```
@@ -84,9 +84,11 @@ Extensions that widen the trust boundary are controlled at installation level, a
 - runner images;
 - harness transformer plugins.
 
-Built-in runtime agents are fixed in code. Projects shape their behavior only through the rulebook content they read, plus the model binding per agent.
+Runtime agents are not configured in the rulebook: an agent definition is supplied with each job, and none ships with Kintsugi yet ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)). Projects shape agent behavior only through the rulebook content a job reads, plus the model binding per agent id.
 
 ## How the rulebook is consumed
+
+The runtime agents in this table are planned; when introduced, they receive rulebook content through the job's read-only paths and task.
 
 | Consumer | Uses |
 |---|---|
