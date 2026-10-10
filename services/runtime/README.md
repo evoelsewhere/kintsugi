@@ -17,6 +17,10 @@
 - `src/bin/run-job.ts` — dev CLI, see below.
 - `src/mock-agent.ts`, `src/event-stream.ts`, `src/version.ts`.
 
+## Tests
+
+`pnpm test` runs the kernel suite (vitest, `test/`). Kernel tests drive real pi sessions with pi-ai's faux provider: no network, no LLM, no credentials. They cover path confinement, the tool allowlist, the session lockdown, job limits and outcomes, and scratch-directory cleanup.
+
 ## Dev runner
 
 Write an agent definition to a JSON file outside the repo, for example `{"id":"probe","version":"0.1.0","instructions":"Answer briefly.","tools":["read"]}`, then:
