@@ -11,6 +11,8 @@ export interface CustomModelConfig {
   reasoning?: boolean;
   contextWindow?: number;
   maxTokens?: number;
+  cost?: { input: number; output: number; cacheRead?: number; cacheWrite?: number };
+  compat?: Record<string, boolean>;
 }
 
 export interface ProviderView {
@@ -39,7 +41,7 @@ export interface CreateProviderInput {
   // custom
   api?: string;
   baseUrl?: string;
-  headers?: Record<string, string>;
+  headers?: Record<string, string | null>;
   models?: CustomModelConfig[];
 }
 
