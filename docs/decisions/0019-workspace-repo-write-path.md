@@ -1,6 +1,6 @@
 # ADR-0019: One workspace repo per project; the worker writes as `kintsugi-bot`
 
-- Status: Accepted
+- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): the workspace repo is renamed the document repo; the `Kintsugi-Rulebook` trailer is dropped.
 - Date: 2026-10-09
 - Decision register: D29
 
@@ -17,7 +17,7 @@ Everything except source code lives in a per-project workspace repo (ADR-0007): 
 
 - **One dedicated workspace repo per project.** Not a `kintsugi/` folder inside an existing code repo: access, history and review rules differ from code.
 - **Single write path**: state changes and runtime results go through the Kintsugi API → the worker (`services/orchestrator`, Git Sync & Writer) → Git. Nothing else pushes to the workspace repo.
-- **Bot identity**: every automated commit is authored by `kintsugi-bot` and carries trailers (see [workspace repo reference](../reference/workspace-repo.md#commit-conventions)):
+- **Bot identity**: every automated commit is authored by `kintsugi-bot` and carries trailers (see [workspace repo reference](../reference/document-repo.md#commit-conventions)):
   - job results: `Kintsugi-Job`, `Kintsugi-Agent`, `Kintsugi-Rulebook`;
   - state changes on behalf of a user: `Kintsugi-Actor`, `Kintsugi-Unit`.
 - **Branch strategy**:

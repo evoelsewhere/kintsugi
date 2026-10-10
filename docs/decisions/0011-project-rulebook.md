@@ -1,6 +1,6 @@
 # ADR-0011: Every project builds its own rulebook before running the pipeline
 
-- Status: Accepted. Structure amended by [ADR-0013](0013-composable-open-rulebook.md) (packs, open capabilities, declarative pipelines, scoped maturity, waivers, vendoring).
+- Status: Superseded by [ADR-0028](0028-remove-rulebook-single-document-repo.md)
 - Date: 2026-10-09
 - Decision register: D34, D35
 
@@ -17,7 +17,7 @@ Kintsugi is a common tool. The engine, runtime agents and method skills are stac
 Running generic agents on a project that has not encoded this knowledge produces inconsistent, unreviewable results: N units converted N different ways.
 
 ## Decision
-- **Applying Kintsugi to a project starts with a build step.** The team shapes the project by building a **rulebook**. See the [concept](../architecture/concepts/project-rulebook.md), [reference](../reference/rulebook.md) and [guide](../guides/build-project.md).
+- **Applying Kintsugi to a project starts with a build step.** The team shapes the project by building a **rulebook**. The concept and reference pages were removed with ADR-0028.
 - **The rulebook is a project artifact.**
   - It lives only in the project's workspace repo under `rulebook/`.
   - It is pinned by `kintsugi.yaml` (`rulebook: {id, version}`).

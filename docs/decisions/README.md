@@ -29,15 +29,15 @@ This page has two parts:
 | [0008](0008-authentication.md) | Local username/password first, Azure AD (Entra ID) later | Accepted |
 | [0009](0009-llm-provider-config.md) | LLM provider configuration for the pi runtime | Accepted |
 | [0010](0010-postgres-only.md) | PostgreSQL is the only datastore | Accepted (graph tables removed by 0014) |
-| [0011](0011-project-rulebook.md) | Every project builds its own rulebook before running the pipeline | Accepted |
-| [0012](0012-work-items-as-files-in-git.md) | Work items are files in the workspace repo; Postgres indexes them | Accepted |
-| [0013](0013-composable-open-rulebook.md) | Composable, open rulebook | Accepted (decisions 7–8 superseded by 0014) |
+| [0011](0011-project-rulebook.md) | Every project builds its own rulebook before running the pipeline | Superseded by 0028 |
+| [0012](0012-work-items-as-files-in-git.md) | Work items are files in the workspace repo; Postgres indexes them | Accepted (amended by 0028) |
+| [0013](0013-composable-open-rulebook.md) | Composable, open rulebook | Superseded by 0028 |
 | [0014](0014-no-code-graph-no-agent-config.md) | No code graph or parsing, no unit-discovery config, built-in runtime agents fixed in code | Accepted (decision 3 superseded by 0023) |
-| [0015](0015-member-assets-as-agent-plugins.md) | Member-harness assets are agent plugins (Claude Code plugin format) | Accepted |
+| [0015](0015-member-assets-as-agent-plugins.md) | Member-harness assets are agent plugins (Claude Code plugin format) | Accepted (amended by 0028) |
 | [0016](0016-nestjs-api-framework.md) | NestJS is the API framework for `apps/api` | Accepted |
 | [0017](0017-portal-vite-react-shadcn.md) | Portal is a Vite + React SPA with shadcn/ui | Accepted |
 | [0018](0018-pin-pi-exact-version.md) | Pin pi to an exact version; track the latest release | Accepted |
-| [0019](0019-workspace-repo-write-path.md) | One workspace repo per project; the worker writes as `kintsugi-bot` | Accepted |
+| [0019](0019-workspace-repo-write-path.md) | One workspace repo per project; the worker writes as `kintsugi-bot` | Accepted (amended by 0028) |
 | [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Accepted (0021 proposes to supersede it) |
 | [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Proposed |
 | [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Superseded by 0023 |
@@ -45,7 +45,8 @@ This page has two parts:
 | [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
 | [0025](0025-git-core-and-checkout-storage.md) | Git core package and Kintsugi-managed checkout storage | Accepted |
 | [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Accepted |
-| [0027](0027-builtin-modernization-content.md) | Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests | Accepted |
+| [0027](0027-builtin-modernization-content.md) | Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests | Accepted (amended by 0028) |
+| [0028](0028-remove-rulebook-single-document-repo.md) | Remove the rulebook; one document repo per project | Accepted |
 
 ## Decision register
 
@@ -69,8 +70,8 @@ This page has two parts:
 | D16 | Embedding model | 🟠 | Configured like LLM providers; must offer a local option | M1 | ⬜ |
 | D17 | MCP transport + auth | 🟠 | Remote Streamable HTTP on `kintsugi-app`, PAT auth; OAuth with Entra ID | M2 | 🟡 |
 | D18 | Priority member harness + license tier | 🟠 | Copilot first, Claude Code second | M2 | ⬜ |
-| D19 | Asset distribution to harnesses | 🟠 | Agent plugins via marketplaces generated in the workspace repo (vendored built-in plugin + rulebook plugins, relative paths); `kintsugi plugins setup`; fallback rendering for harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
-| D20 | Source of truth for work items | 🟠 | One file per unit in the workspace repo (`units/**`), state in frontmatter; Postgres is a rebuildable index; single write path through the Kintsugi API (bot commits with actor trailer); Jira / Azure DevOps are mirrors | M2 | ✅ [0012](0012-work-items-as-files-in-git.md) |
+| D19 | Asset distribution to harnesses | 🟠 | Agent plugins via marketplaces generated in the document repo (vendored built-in plugin + project plugins from `plugins/`, relative paths); `kintsugi plugins setup`; fallback rendering for harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D20 | Source of truth for work items | 🟠 | One file per unit in the document repo (`units/**`), state in frontmatter; Postgres is a rebuildable index; single write path through the Kintsugi API (bot commits with actor trailer); Jira / Azure DevOps are mirrors | M2 | ✅ [0012](0012-work-items-as-files-in-git.md) |
 | D21 | Measuring "AI-generated" | 🟠 | Mandatory declaration (commit trailer + PR template); telemetry for cross-checking | M3 | 🟡 |
 | D22 | Git servers & repositories | 🔴 | Many Git servers and many repos; plain git everywhere; API adapters GitHub → Azure DevOps → GitLab → Bitbucket → Gitea | M0 | ✅ [0007](0007-git-as-source-of-truth.md) |
 | D23 | Events | — | Postgres outbox + `LISTEN/NOTIFY` → SSE | — | ✅ [0010](0010-postgres-only.md) |
@@ -79,32 +80,33 @@ This page has two parts:
 | D26 | Audit log | 🟢 | Append-only, hash-chained table in Postgres | M4 | 🟡 |
 | D27 | pi versioning | 🟢 | Track latest pi, pin exact versions of `@earendil-works/*` in the runner image; deliberate upgrades | M0 | ✅ [0018](0018-pin-pi-exact-version.md) |
 | D28 | Runtime agent definitions | 🟢 | The runtime is a generic kernel; an agent definition (instructions, skills, tools, policy) is data supplied with each job; none is configured in any repo; built-in and custom agents are installation data (D46) | M1 | ✅ [0023](0023-runtime-as-generic-agent-kernel.md), [0026](0026-runtime-agents-and-agent-builder.md) |
-| D29 | Workspace repo layout + how the runtime writes to Git | 🔴 | One workspace repo per project; worker commits on `kintsugi/*` branches + PR as `kintsugi-bot`; `autoCommitPaths` (`units/**`, `tasks/**`, `knowledge/**/generated/**`) commit directly to the default branch ([reference](../reference/workspace-repo.md)) | M0 | ✅ [0019](0019-workspace-repo-write-path.md) |
+| D29 | Document repo layout + how the runtime writes to Git | 🔴 | One document repo per project (renamed from workspace repo by [0028](0028-remove-rulebook-single-document-repo.md)); worker commits on `kintsugi/*` branches + PR as `kintsugi-bot`; `autoCommitPaths` (`units/**`, `tasks/**`, `knowledge/**/generated/**`) commit directly to the default branch ([reference](../reference/document-repo.md)) | M0 | ✅ [0019](0019-workspace-repo-write-path.md), [0028](0028-remove-rulebook-single-document-repo.md) |
 | D30 | Webhooks vs. polling | 🟠 | Polling by default (1–5 min); webhooks when reachable | M2 | 🟡 |
 | D31 | Large binaries (recordings, video, scanned PDFs) | 🟠 | Git LFS where supported; otherwise the `kintsugi-data` volume + a link file in Git | M1 | ⬜ |
 | D32 | Worker's Docker API access | 🔴 | Decided: docker-socket-proxy limited to container lifecycle, image allowlist ([0020](0020-docker-api-via-socket-proxy.md)). Proposed replacement: runtime jobs as sandboxed child processes (pi-sandbox), no Docker socket ([0021](0021-sandboxed-child-processes.md)) | M0 | 🟡 [0021](0021-sandboxed-child-processes.md) |
-| D34 | Project-specific knowledge | 🔴 | Each project builds a rulebook in its workspace repo; Kintsugi ships only a neutral starter template; reuse = deliberate copy/adapt (`derivedFrom`) | M0 | ✅ [0011](0011-project-rulebook.md) |
-| D35 | Capability maturity & readiness gating | 🔴 | `template` → `draft` → `ready` / `suspended`, scoped per kind / application; all providing layers must allow; waivers with scope + expiry; G3 requires pipeline capabilities `ready`; promotion by PR with evidence | M0 | ✅ [0011](0011-project-rulebook.md), [0013](0013-composable-open-rulebook.md) |
-| D36 | Rulebook structure | 🔴 | Packs + layered overrides; open capabilities; declarative pipelines; scoped maturity + `suspended` + waivers; one rule per file with `appliesTo`; single version; `x-*` extensions; JSON Schema from domain types; `rulebook migrate` | M0 | ✅ [0013](0013-composable-open-rulebook.md) |
-| D37 | Reuse across projects | 🟢 | `extends` = vendored, pinned snapshots + `rulebook upgrade` via PR; an organization library is just a Git repo used as `source` | M4 | ✅ [0013](0013-composable-open-rulebook.md) |
-| D38 | Runner images | 🔴 | Runners declare their image; installation image allowlist; same hardening; network `none` by default; no LLM credentials | M0 | ✅ [0013](0013-composable-open-rulebook.md) |
+| D34 | Project-specific knowledge | 🔴 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
+| D35 | Capability maturity & readiness gating | 🔴 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
+| D36 | Rulebook structure | 🔴 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
+| D37 | Reuse across projects | 🟢 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M4 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
+| D38 | Runner images | 🔴 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D39 | Project runtime agents & runtime MCP | — | Not supported (removed) | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
-| D43 | Member asset packaging | 🟠 | Claude Code plugin format (skills, agents, commands, hooks, MCP, `userConfig`); built-in `kintsugi` plugin with MCP + guardrail/telemetry hooks; project plugins in rulebook packs gated by `convert` maturity | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D43 | Member asset packaging | 🟠 | Claude Code plugin format (skills, agents, commands, hooks, MCP, `userConfig`); built-in `kintsugi` plugin with MCP + guardrail/telemetry hooks; project plugins in the document repo's `plugins/` | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md), [0028](0028-remove-rulebook-single-document-repo.md) |
 | D42 | Unit discovery | — | No discovery config; unit files declared by people or proposed by `assessment` via PR; `dependsOn` written, not computed | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
-| D40 | Member harness registry | 🟠 | Open harness ids; plugin support per harness (native / converted / none); declarative fallback renderers (built-in / installation / project); transformer plugins installed by admins | M2 | ✅ [0013](0013-composable-open-rulebook.md), [0015](0015-member-assets-as-agent-plugins.md) |
-| D41 | Stale units on rule change | 🟠 | Units record `rulesApplied`; changed rules mark units `stale` → re-review queue | M3 | ✅ [0013](0013-composable-open-rulebook.md) |
+| D40 | Member harness registry | 🟠 | Open harness ids; plugin support per harness (native / converted / none); declarative fallback renderers (built-in / installation / project); transformer plugins installed by admins | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D41 | Stale units on rule change | 🟠 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M3 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D44 | Access roles vs. project roles | 🔴 | Keep installation-wide permission-bundle access roles separate from project RACI roles; assign project roles per membership after M0 project persistence | M0 | ✅ [0024](0024-access-roles-vs-project-roles.md) |
 | D45 | Git access and checkout storage | 🔴 | Kintsugi clones from registered URLs into one admin-chosen data directory (`KINTSUGI_DATA_DIR`): bare mirror per repository, per-job worktree at a fixed commit; `packages/git` over the system `git` CLI with per-call credentials; provider REST adapters, no provider CLIs | M0 | ✅ [0025](0025-git-core-and-checkout-storage.md) |
 | D46 | Runtime agents and the Agent Builder | 🔴 | Five built-in read-only agents for understanding (legacy-analyst, business-rules-extractor, version-delta-analyst, architecture-critic, security-auditor) plus admin-created agents; agent files + Agent Skills (format per ADR-0027); draft and immutable published versions; implementation stays with members | M0 | ✅ [0026](0026-runtime-agents-and-agent-builder.md) |
 | D47 | Built-in modernization content | 🔴 | Upstream code-modernization content copied into `packages/agents/builtin/` (pinned, Apache-2.0, no assets) and adapted: runtime and member agents (`metadata.audience`), stage commands, workflows, sandboxed scripts, server-side hooks, tests | M0 | ✅ [0027](0027-builtin-modernization-content.md) |
+| D48 | Project knowledge and repository model | 🔴 | No rulebook; one document repo per project holds everything except code; project knowledge as plain documents in `standards/` and member plugins in `plugins/`; pipelines in `kintsugi.yaml` or built-in; repo roles `legacy` / `legacy-data` (AS-IS, read-only) and `target` with `component` (TO-BE, members only) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
 ## Notes on open points
 
-### D29 — Workspace repo
+### D29 — Document repo (formerly workspace repo)
 | Question | Proposal |
 |---|---|
-| Dedicated workspace repo, or a `kintsugi/` folder in an existing repo? | A dedicated repo (access and history separate from code) |
+| Dedicated document repo, or a `kintsugi/` folder in an existing repo? | A dedicated repo (access and history separate from code) |
 | Do runtime results reach Git through PRs or direct commits? | PRs by default; direct commits for `auto-commit` paths (task packs, generated docs) |
 | Who authors Kintsugi's commits? | `kintsugi-bot` + trailers `Kintsugi-Job`, `Kintsugi-Agent` |
 

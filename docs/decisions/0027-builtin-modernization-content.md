@@ -1,6 +1,6 @@
 # ADR-0027: Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests
 
-- Status: Accepted
+- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): commands that apply project standards read `standards/` in the document repo.
 - Date: 2026-10-10
 - Decision register: D47
 - Amends: ADR-0026 (agent file format and what ships with Kintsugi)
