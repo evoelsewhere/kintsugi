@@ -66,6 +66,9 @@ importers:
       '@types/pg':
         specifier: ^8.23.1
         version: 8.23.1
+      vitest:
+        specifier: ^5.0.3
+        version: 5.0.3(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
 
   apps/portal:
     dependencies:
@@ -141,6 +144,9 @@ importers:
       '@types/node':
         specifier: ^22.19.0
         version: 22.20.5
+      vitest:
+        specifier: ^5.0.3
+        version: 5.0.3(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
 
   services/runtime:
     dependencies:
