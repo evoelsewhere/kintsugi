@@ -2,8 +2,13 @@
 // The API answers with the uniform envelope (apps/api → common/interface/response.ts):
 //   success → { success: true, data }
 //   error   → { success: false, statusCode, error, message, timestamp, path }
+// The session rides an httpOnly cookie (same origin); state-changing requests carry
+// the CSRF header the API requires for cookie sessions.
 
-import { expireSession, getToken } from "./session";
+import { expireSession } from "./session";
+
+const CSRF_HEADER = "x-kintsugi-csrf";
+const SIGN_IN_PATH = "/api/auth/login";
 
 export interface ApiSuccess<T> {
   success: true;
@@ -36,20 +41,21 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getToken();
+  const unsafe = init.method !== undefined && init.method !== "GET";
   const response = await fetch(path, {
     ...init,
+    credentials: "same-origin",
     headers: {
       accept: "application/json",
       ...(init.body === undefined ? {} : { "content-type": "application/json" }),
-      ...(token === null ? {} : { authorization: `Bearer ${token}` }),
+      ...(unsafe ? { [CSRF_HEADER]: "1" } : {}),
       ...init.headers,
     },
   });
   const body = (await response.json().catch(() => null)) as ApiSuccess<T> | ApiErrorBody | null;
 
-  // A rejected token ends the session everywhere (sign-in failures are not session loss).
-  if (response.status === 401 && token !== null) expireSession();
+  // A rejected session ends it everywhere (a failed sign-in is not a lost session).
+  if (response.status === 401 && path !== SIGN_IN_PATH) expireSession();
 
   // No content (e.g. 204 on delete) — nothing to unwrap.
   if (body === null) {

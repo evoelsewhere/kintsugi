@@ -7,8 +7,8 @@ that runner containers post `JobEvent`s to.
 
 Responsibilities beyond the feature modules below:
 
-- Auth: local username/password sessions + Personal Access Tokens; `AuthProvider`
-  interface for Entra ID later (ADR-0008).
+- Auth: local username/password sessions (httpOnly cookie); Personal Access Tokens and an
+  `AuthProvider` interface for Entra ID are planned (ADR-0008).
 - Admin → LLM Providers: runtime provider registry (ADR-0009).
 
 ## Layout
@@ -90,8 +90,10 @@ Rules (enforced by review — see AGENTS.md):
 | `ok()`, `ResponseInterceptor`, `ApiSuccess<T>` | `common/interface/response.js` | uniform response envelope |
 | `sleep()`, `retry()`, `chunk()` | `common/util/async.js` | async utilities |
 | `nowIso()` | `common/util/time.js` | one clock format (ISO-8601 UTC) |
-| `getPool`, `ensureSchema` | `common/db/pool.js` | Postgres access + migrations |
+| `getPool`, `ensureSchema` | `common/db/pool.js` | Postgres access + migrations (advisory-locked) |
+| `withTransaction`, `Queryable` | `common/db/pool.js` | one unit of work across several statements |
 | `@Public()`, `@RequirePermission()`, `@CurrentActor()`, `Actor` | `common/auth/decorators.js` | route access + the caller passed to use cases |
+| `sessionToken`, `setSessionCookie`, `CSRF_HEADER` | `common/auth/session-cookie.js` | session transport (cookie or bearer) + CSRF rule |
 | `encryptSecret`, `decryptSecret` | `@kintsugi/secrets` | AES-256-GCM with `KINTSUGI_SECRET_KEY` (shared with services/runtime) |
 | `HttpExceptionFilter` | `common/filters/…` | uniform error envelope |
 
@@ -127,11 +129,19 @@ values; `ResponseInterceptor` and `HttpExceptionFilter` do the wrapping):
 
 Local username/password sessions first (Entra ID later behind `AuthProvider`):
 
-- **Sign-in** `POST /api/auth/login` → session token (stored as a SHA-256 hash in
-  `core.session`, 7-day expiry). `POST /api/auth/logout` revokes it; `GET /api/auth/me`
-  returns the user with roles and effective permissions.
-- **Route protection** is global (`AuthGuard` + `PermissionsGuard` in `modules/core/auth`):
-  every route needs a bearer token unless marked `@Public()` (login, health); routes can
+- **Sign-in** `POST /api/auth/login` → session in an **httpOnly, SameSite=Strict cookie**
+  (`kintsugi_session`, path `/api`, `Secure` when `KINTSUGI_PUBLIC_URL` is https). The
+  token is stored as a SHA-256 hash in `core.session` (7-day expiry) and never appears in
+  a response body. `POST /api/auth/logout` revokes it and clears the cookie;
+  `GET /api/auth/me` returns the user with roles and effective permissions. Non-browser
+  clients may send the token as `Authorization: Bearer` instead.
+- **CSRF**: unsafe requests (anything but GET/HEAD/OPTIONS) that are not
+  bearer-authenticated must send `x-kintsugi-csrf: 1` (`CsrfGuard`) — sign-in included.
+- **Lockout**: 5 failed sign-ins within 15 minutes lock the account until the oldest
+  failure ages out (429). Per account, in memory (single API process). Unknown usernames
+  cost the same hash check, so timing does not reveal which accounts exist.
+- **Route protection** is global (`CsrfGuard` → `AuthGuard` → `PermissionsGuard` in
+  `modules/core/auth`): every route needs a session unless marked `@Public()` (login, health); routes can
   require permission codes with `@RequirePermission("code", …)` (any one of them; a
   method-level decorator overrides the class-level one). Every write route is gated;
   reads of shared catalogs only need a session. Use cases that depend on who calls
@@ -153,7 +163,7 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
     `members.manage` and `roles.manage`, and nobody removes or disables themselves;
   - a member holds exactly one primary role;
   - resetting a password or disabling a member ends their sessions.
-- **Known behaviors**: passwords use scrypt; no login rate limiting yet (M0 hardening).
+- **Known behaviors**: passwords use scrypt (async), where ADR-0008 says argon2id.
 
 ## Adding a feature module
 

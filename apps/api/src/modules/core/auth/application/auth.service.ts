@@ -1,12 +1,13 @@
 // Application layer: sign-in, sessions and the bootstrap admin (ADR-0008).
 // The first admin comes from KINTSUGI_BOOTSTRAP_ADMIN_* — there is no default password.
 
-import { Injectable, OnApplicationBootstrap, UnauthorizedException } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable, OnApplicationBootstrap, UnauthorizedException } from "@nestjs/common";
 import { loadBootstrapAdmin } from "../../../../common/config/env.js";
 import type { UserRecord } from "../../../admin/users/domain/user.js";
 import { UsersService } from "../../../admin/users/application/users.service.js";
 import { RolesService } from "../../../admin/roles/application/roles.service.js";
-import { PgSessionRepository } from "../infrastructure/pg-session.repository.js";
+import { SessionRepository } from "../domain/session.repository.js";
+import { LoginThrottle } from "./login-throttle.js";
 
 export interface SessionUser {
   id: string;
@@ -21,7 +22,8 @@ export class AuthService implements OnApplicationBootstrap {
   constructor(
     private readonly users: UsersService,
     private readonly roles: RolesService,
-    private readonly sessions: PgSessionRepository,
+    private readonly sessions: SessionRepository,
+    private readonly throttle: LoginThrottle,
   ) {}
 
   /** Creates the first admin when the installation has no users yet. */
@@ -32,8 +34,19 @@ export class AuthService implements OnApplicationBootstrap {
   }
 
   async login(username: string, password: string): Promise<{ token: string; user: SessionUser }> {
+    const retryAfter = this.throttle.retryAfter(username);
+    if (retryAfter !== undefined) {
+      throw new HttpException(
+        `Too many failed sign-ins for this account; try again in ${Math.ceil(retryAfter / 60)} min`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
     const user = await this.users.validateCredentials(username, password);
-    if (user === undefined) throw new UnauthorizedException("Invalid username or password");
+    if (user === undefined) {
+      this.throttle.recordFailure(username);
+      throw new UnauthorizedException("Invalid username or password");
+    }
+    this.throttle.recordSuccess(username);
     const token = await this.sessions.create(user.id);
     return { token, user: await this.sessionUser(user) };
   }
@@ -52,7 +65,7 @@ export class AuthService implements OnApplicationBootstrap {
     };
   }
 
-  /** Validates a bearer token → session user (used by the global AuthGuard). */
+  /** Validates a session token → session user (used by the global AuthGuard). */
   async authenticate(token: string): Promise<SessionUser | undefined> {
     const userId = await this.sessions.validate(token);
     if (userId === undefined) return undefined;

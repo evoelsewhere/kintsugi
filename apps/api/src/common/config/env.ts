@@ -6,12 +6,15 @@ export interface AppEnv {
   port: number;
   /** Nest log level. */
   logLevel: "error" | "warn" | "log" | "debug" | "verbose";
+  /** Session cookies carry `Secure` when the installation is served over HTTPS (KINTSUGI_PUBLIC_URL). */
+  secureCookies: boolean;
 }
 
 export function loadEnv(): AppEnv {
   return {
     port: Number(process.env["PORT"] ?? 3000),
     logLevel: (process.env["LOG_LEVEL"] ?? "log") as AppEnv["logLevel"],
+    secureCookies: (process.env["KINTSUGI_PUBLIC_URL"] ?? "").startsWith("https://"),
   };
 }
 

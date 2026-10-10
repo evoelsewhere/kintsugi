@@ -1,10 +1,12 @@
-// Global guards: authentication everywhere (except @Public routes) and dynamic
-// permission checks (@RequirePermission codes come from core.permission rows).
+// Global guards: CSRF protection for cookie sessions, authentication everywhere
+// (except @Public routes) and dynamic permission checks (@RequirePermission codes
+// come from core.permission rows).
 
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { IS_PUBLIC_KEY, PERMISSION_KEY } from "../../../../common/auth/decorators.js";
+import { passesCsrfCheck, sessionToken } from "../../../../common/auth/session-cookie.js";
 import { AuthService, type SessionUser } from "../application/auth.service.js";
 
 /** Request carrying the authenticated session user (set by AuthGuard). */
@@ -12,9 +14,15 @@ export interface AuthenticatedRequest extends Request {
   sessionUser?: SessionUser;
 }
 
-function bearerToken(request: Request): string | undefined {
-  const header = request.headers.authorization;
-  return header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
+/** Unsafe requests riding the session cookie must carry the CSRF header (see session-cookie.ts). */
+@Injectable()
+export class CsrfGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    if (!passesCsrfCheck(context.switchToHttp().getRequest<Request>())) {
+      throw new ForbiddenException("Missing CSRF header");
+    }
+    return true;
+  }
 }
 
 @Injectable()
@@ -29,8 +37,8 @@ export class AuthGuard implements CanActivate {
     if (isPublic === true) return true;
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const token = bearerToken(request);
-    if (token === undefined) throw new UnauthorizedException("Missing bearer token");
+    const token = sessionToken(request);
+    if (token === undefined) throw new UnauthorizedException("Not signed in");
     const user = await this.auth.authenticate(token);
     if (user === undefined) throw new UnauthorizedException("Invalid or expired session");
     request.sessionUser = user;

@@ -1,10 +1,15 @@
-// Interface layer: sign-in / sign-out / current session.
+// Interface layer: sign-in / sign-out / current session. The session token travels
+// in an httpOnly cookie (common/auth/session-cookie.ts) and never in a response body.
 
-import { Body, Controller, Get, HttpCode, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, Req, Res } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { z } from "zod";
 import { Public } from "../../../../common/auth/decorators.js";
+import { clearSessionCookie, sessionToken, setSessionCookie } from "../../../../common/auth/session-cookie.js";
+import { loadEnv } from "../../../../common/config/env.js";
 import { AuthService, type SessionUser } from "../application/auth.service.js";
+import { SESSION_TTL_SECONDS } from "../domain/session.repository.js";
 import type { AuthenticatedRequest } from "./auth.guard.js";
 
 const loginSchema = z.object({
@@ -16,23 +21,32 @@ type LoginInput = z.infer<typeof loginSchema>;
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
+  readonly #secureCookies = loadEnv().secureCookies;
+
   constructor(private readonly auth: AuthService) {}
 
   @Post("login")
   @Public()
   @HttpCode(200)
-  @ApiOperation({ summary: "Sign in with username and password (ADR-0008)" })
-  @ApiOkResponse({ description: "The session token and the signed-in user." })
-  login(@Body({ schema: loginSchema }) input: LoginInput): Promise<{ token: string; user: SessionUser }> {
-    return this.auth.login(input.username, input.password);
+  @ApiOperation({ summary: "Sign in with username and password; sets the session cookie (ADR-0008)" })
+  @ApiOkResponse({ description: "The signed-in user." })
+  async login(
+    @Body({ schema: loginSchema }) input: LoginInput,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<{ user: SessionUser }> {
+    const { token, user } = await this.auth.login(input.username, input.password);
+    setSessionCookie(response, token, { maxAgeSeconds: SESSION_TTL_SECONDS, secure: this.#secureCookies });
+    return { user };
   }
 
   @Post("logout")
+  @Public()
   @HttpCode(204)
-  @ApiOperation({ summary: "Sign out — revoke the current session" })
-  async logout(@Req() request: AuthenticatedRequest): Promise<void> {
-    const header = request.headers.authorization;
-    if (header?.startsWith("Bearer ")) await this.auth.logout(header.slice("Bearer ".length));
+  @ApiOperation({ summary: "Sign out — revoke the current session and clear the cookie" })
+  async logout(@Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: Response): Promise<void> {
+    const token = sessionToken(request);
+    if (token !== undefined) await this.auth.logout(token);
+    clearSessionCookie(response, { secure: this.#secureCookies });
   }
 
   @Get("me")
