@@ -1,9 +1,13 @@
 // The agent package format, validation against an installation, and the built-in catalog.
 
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { KERNEL_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 import {
   type AgentPackage,
+  BUILTIN_DIR,
   loadBuiltinCatalog,
   parseAgentFile,
   parseAgentPackage,
@@ -160,3 +164,31 @@ describe("built-in catalog", () => {
     expect(parseSkill("---\nname: s\ndescription: d\nfoo: 1\n---\n\nx", "s")).toEqual({ ok: false, problems: ["s/SKILL.md: unknown field `foo`"] });
   });
 });
+
+describe("built-in commands", () => {
+  it("declare who runs them and name only agents of the catalog", async () => {
+    const catalog = await loadBuiltinCatalog();
+    const audienceOf = new Map(catalog.agents.map((agent) => [agent.manifest.name, agent.manifest.audience]));
+    const dir = join(BUILTIN_DIR, "commands");
+    const names = (await readdir(dir)).filter((name) => name.endsWith(".md")).sort();
+    expect(names).toHaveLength(13);
+    for (const name of names) {
+      const text = await readFile(join(dir, name), "utf8");
+      const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
+        arguments: string;
+        metadata: { audience: string; upstream: string; agents: string[]; reads: string[]; writes: string[] };
+      };
+      const { metadata } = frontmatter;
+      expect(["runtime", "member", "portal"], name).toContain(metadata.audience);
+      expect(metadata.upstream, name).toBe(`commands/${name}`);
+      expect(frontmatter.arguments, name).not.toMatch(/\bsystem\b/);
+      for (const agent of metadata.agents) {
+        expect(audienceOf.has(agent), `${name} names unknown agent ${agent}`).toBe(true);
+        if (metadata.audience === "runtime") expect(audienceOf.get(agent), `${name} starts ${agent}`).toBe("runtime");
+      }
+      // The upstream layout is fully mapped onto Kintsugi's repositories.
+      expect(text, name).not.toMatch(/analysis\/(\$system|<system>)|legacy\/\$system|\/code-modernization:|build_report\.py/);
+    }
+  });
+});
+
