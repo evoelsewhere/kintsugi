@@ -1,6 +1,6 @@
 # services/runtime
 
-**Kintsugi Runtime**: a generic agent kernel on [pi](https://github.com/earendil-works/pi) (ADR-0023). It runs one agent job at a time and implements `AgentRuntime` from `packages/runtime-sdk`. It knows no agent and no use case: every `JobSpec` carries the whole agent definition (instructions, skills, tool allowlist, command policy, thinking level), the task, the model, the workspace and the limits. No agent ships with Kintsugi.
+**Kintsugi Runtime**: a generic agent kernel on [pi](https://github.com/earendil-works/pi) (ADR-0023). It runs one agent job at a time and implements `AgentRuntime` from `packages/runtime-sdk`. It knows no agent and no use case: every `JobSpec` carries the whole agent definition (instructions, skills, tool allowlist, command policy, thinking level), the task, the model, the workspace and the limits. Agents (built-in and custom) are installation data resolved by the launcher (ADR-0026); the kernel never looks one up.
 
 ## Code
 
@@ -37,7 +37,7 @@ node dist/bin/run-job.js --agent-file probe.json --read <dir> --out <dir> --task
 
 - **Runner** → a thin process per job inside the job sandbox (ADR-0004; proposed ADR-0021), streaming `JobEvent`s to the job gateway in `kintsugi-app`.
 - **Launcher** → in `kintsugi-worker`: resolves the provider and credentials (ADR-0009), passes provider environment to the runner, prepares the read-only checkout and the output directory, and commits outputs per ADR-0019.
-- **Agents** → none yet. Where agent definitions are stored and edited is decided with the first agent (ADR-0023).
+- **Agents** → installation data managed in the Agent Builder; built-in packages live in `agents/` and `skills/` at the repo root (ADR-0026).
 - **More kernel tools** (knowledge-base search, git history, …) are added to `src/kernel/tools.ts` with a review of their security boundary.
 
 Security rules: [security concept](../../docs/architecture/concepts/security.md), [ADR-0004](../../docs/decisions/0004-runner-container-per-job.md), [ADR-0023](../../docs/decisions/0023-runtime-as-generic-agent-kernel.md).

@@ -25,7 +25,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_JOB_DOCKER_RUNTIME` | no | empty | Set to `runsc` when gVisor is installed |
 | `KINTSUGI_JOB_IMAGE_ALLOWLIST` | no | empty | Comma-separated image patterns rulebook runners may use (e.g. `mcr.microsoft.com/dotnet/*,registry.internal/tools/*`). Empty = runners disabled |
 
-Harness renderers and transformer plugins are configured in the portal (Admin → Harnesses). No runtime agent ships with Kintsugi; agents are supplied per job ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)). The model binding per agent id is configured in the portal (Admin → LLM Providers).
+Harness renderers and transformer plugins are configured in the portal (Admin → Harnesses). Runtime agents (built-in and custom) are managed in the Agent Builder and supplied per job ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)). The model binding per agent id is configured in the portal (Admin → LLM Providers).
 
 ## Internal (set by the compose file)
 

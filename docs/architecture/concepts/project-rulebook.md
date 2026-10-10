@@ -84,7 +84,7 @@ Extensions that widen the trust boundary are controlled at installation level, a
 - runner images;
 - harness transformer plugins.
 
-Runtime agents are not configured in the rulebook: an agent definition is supplied with each job, and none ships with Kintsugi yet ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)). Projects shape agent behavior only through the rulebook content a job reads, plus the model binding per agent id.
+Runtime agents are not configured in the rulebook: agents are installation data managed in the Agent Builder, and the launcher supplies the definition with each job ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md), [ADR-0026](../../decisions/0026-runtime-agents-and-agent-builder.md)). Projects shape agent behavior only through the rulebook content a job reads, plus the model binding per agent id.
 
 ## How the rulebook is consumed
 
