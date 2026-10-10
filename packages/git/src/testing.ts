@@ -1,5 +1,6 @@
-// A local Git smart-HTTP server for integration tests: `git http-backend` behind a tiny
-// CGI bridge on 127.0.0.1, serving fixture repositories over plain http (anonymous).
+// Test support (`@kintsugi/git/testing`): a local Git smart-HTTP server — `git http-backend`
+// behind a tiny CGI bridge on 127.0.0.1, serving fixture repositories over plain http
+// (anonymous). For integration tests only; never used by the product.
 
 import { execFileSync, spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -13,6 +14,8 @@ export interface GitHttpServer {
   baseUrl: string;
   /** Creates a bare repository with one commit on `branch`. */
   createRepository(name: string, branch?: string): Promise<void>;
+  /** Adds a commit to `branch` of an existing repository and returns its id. */
+  commit(name: string, file: string, content: string, branch?: string): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -68,6 +71,14 @@ export async function startGitHttpServer(): Promise<GitHttpServer> {
       fixtureGit(work, "add", "README.md");
       fixtureGit(work, "commit", "-q", "-m", "init");
       fixtureGit(root, "clone", "-q", "--bare", work, `${name}.git`);
+    },
+    async commit(name, file, content, branch = "main") {
+      const work = join(root, `${name}-work`);
+      await writeFile(join(work, file), content);
+      fixtureGit(work, "add", file);
+      fixtureGit(work, "commit", "-q", "-m", `write ${file}`);
+      fixtureGit(work, "push", "-q", join(root, `${name}.git`), `HEAD:${branch}`);
+      return execFileSync("git", ["rev-parse", "HEAD"], { cwd: work, encoding: "utf8" }).trim();
     },
     async close() {
       await new Promise<void>((resolve) => server.close(() => resolve()));
