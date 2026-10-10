@@ -87,10 +87,10 @@ This page has two parts:
 | D38 | Runner images | 🔴 | Runners declare their image; installation image allowlist; same hardening; network `none` by default; no LLM credentials | M0 | ✅ [0013](0013-composable-open-rulebook.md) |
 | D39 | Project runtime agents & runtime MCP | — | Not supported (removed) | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D43 | Member asset packaging | 🟠 | Claude Code plugin format (skills, agents, commands, hooks, MCP, `userConfig`); built-in `kintsugi` plugin with MCP + guardrail/telemetry hooks; project plugins in rulebook packs gated by `convert` maturity | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
-| D44 | Access roles vs. project roles | 🔴 | Keep installation-wide permission-bundle access roles separate from project RACI roles; assign project roles per membership after M0 project persistence | M0 | ✅ [0024](0024-access-roles-vs-project-roles.md) |
 | D42 | Unit discovery | — | No discovery config; unit files declared by people or proposed by `assessment` via PR; `dependsOn` written, not computed | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D40 | Member harness registry | 🟠 | Open harness ids; plugin support per harness (native / converted / none); declarative fallback renderers (built-in / installation / project); transformer plugins installed by admins | M2 | ✅ [0013](0013-composable-open-rulebook.md), [0015](0015-member-assets-as-agent-plugins.md) |
 | D41 | Stale units on rule change | 🟠 | Units record `rulesApplied`; changed rules mark units `stale` → re-review queue | M3 | ✅ [0013](0013-composable-open-rulebook.md) |
+| D44 | Access roles vs. project roles | 🔴 | Keep installation-wide permission-bundle access roles separate from project RACI roles; assign project roles per membership after M0 project persistence | M0 | ✅ [0024](0024-access-roles-vs-project-roles.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
 ## Notes on open points
