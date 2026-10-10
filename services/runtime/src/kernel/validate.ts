@@ -3,7 +3,7 @@
 
 import { statSync } from "node:fs";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
-import { KERNEL_TOOL_NAMES } from "./tools.js";
+import { isKernelToolName, KERNEL_TOOL_NAMES } from "./tool-names.js";
 
 const SKILL_NAME = /^[a-z][a-z0-9-]*$/;
 
@@ -17,7 +17,7 @@ export function validateJobSpec(spec: JobSpec): void {
   if (spec.task.trim() === "") problems.push("task is empty");
 
   for (const tool of agent.tools) {
-    if (!KERNEL_TOOL_NAMES.includes(tool)) problems.push(`unknown tool "${tool}" (available: ${KERNEL_TOOL_NAMES.join(", ")})`);
+    if (!isKernelToolName(tool)) problems.push(`unknown tool "${tool}" (available: ${KERNEL_TOOL_NAMES.join(", ")})`);
   }
   const skillNames = new Set<string>();
   for (const skill of agent.skills ?? []) {
