@@ -1,6 +1,6 @@
 # ADR-0013: Composable, open rulebook
 
-- Status: Accepted. Decisions 7 and 8 superseded by [ADR-0014](0014-no-code-graph-no-agent-config.md).
+- Status: Superseded by [ADR-0028](0028-remove-rulebook-single-document-repo.md)
 - Date: 2026-10-09
 - Decision register: D36, D37, D38, D39, D40, D41
 - Amends: ADR-0011 (rulebook structure), ADR-0004 (runner images), ADR-0005 (harness renderers), ADR-0012 (unit frontmatter)
@@ -27,7 +27,7 @@ An audit of the first rulebook design (ADR-0011) found it open at the data level
 
 ## Decision
 
-The full structure is in the [rulebook reference](../reference/rulebook.md).
+The full structure was in the rulebook reference page, removed with ADR-0028.
 
 1. **Packs.** A rulebook is a set of **packs**: one per stack pair or per concern, e.g. `org-baseline`, `security`.
    - Applications select packs in `kintsugi.yaml`; `defaults.packs` apply to all applications.
