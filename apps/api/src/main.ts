@@ -6,6 +6,7 @@ import "reflect-metadata";
 import { existsSync } from "node:fs";
 import { Logger, StandardSchemaValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
 import { loadEnv } from "./common/config/env.js";
@@ -18,7 +19,9 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
-  const app = await NestFactory.create(AppModule, { logger: [env.logLevel] });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: [env.logLevel] });
+  // Agent packages (Agent Builder import, ADR-0026) are larger than the 100 kB default.
+  app.useBodyParser("json", { limit: "4mb" });
 
   // Never serve on a partly migrated schema: a failed migration stops startup.
   await ensureSchema();
