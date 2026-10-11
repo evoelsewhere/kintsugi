@@ -431,26 +431,34 @@ export class JobRunner {
       },
       metadata: { jobRunId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }) },
     };
-    const handle = await this.#deps.agents.startJob(spec);
-    const onAbort = (): void => void handle.abort(isCancelled(signal) ? "cancelled" : "the worker is stopping");
-    if (signal?.aborted === true) onAbort();
-    else signal?.addEventListener("abort", onAbort, { once: true });
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0 };
     const stepId = run.id === ws.rootId ? undefined : run.id;
     const roots = { src: ws.src, in: ws.in, out: ws.out };
-    try {
-      for await (const event of handle.events) {
-        this.#count(event, usage);
-        if (event.type === "tool.call") {
-          const line = summarizeToolCall(event.tool, event.input, roots);
-          const reason = event.reason === undefined ? "" : ` (${event.reason})`;
-          await this.#event(ws, stepId, "tool", event.decision === "blocked" ? `blocked: ${line}${reason}` : line, { tool: event.tool, decision: event.decision });
+    const attempt = async (): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
+      const handle = await this.#deps.agents.startJob(spec);
+      const onAbort = (): void => void handle.abort(isCancelled(signal) ? "cancelled" : "the worker is stopping");
+      if (signal?.aborted === true) onAbort();
+      else signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        for await (const event of handle.events) {
+          this.#count(event, usage);
+          if (event.type === "tool.call") {
+            const line = summarizeToolCall(event.tool, event.input, roots);
+            const reason = event.reason === undefined ? "" : ` (${event.reason})`;
+            await this.#event(ws, stepId, "tool", event.decision === "blocked" ? `blocked: ${line}${reason}` : line, { tool: event.tool, decision: event.decision });
+          }
         }
+      } finally {
+        signal?.removeEventListener("abort", onAbort);
       }
-    } finally {
-      signal?.removeEventListener("abort", onAbort);
+      return handle.done;
+    };
+    let done = await attempt();
+    // A provider that drops its response stalls the job (the launcher's idle watchdog): try once more.
+    if (done.type === "job.failed" && done.reason === "timeout" && done.error.startsWith("stalled") && signal?.aborted !== true) {
+      await this.#event(ws, stepId, "log", `agent ${run.name} stalled (${redactText(done.error).slice(0, 120)}); retrying once`);
+      done = await attempt();
     }
-    const done = await handle.done;
     if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
     if (this.#deps.mockOutputs ?? mock) {
       await writeMockOutputs({
