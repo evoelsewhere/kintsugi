@@ -2,8 +2,8 @@
 
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
-import { RolesModule } from "#modules/admin/roles/roles.module.js";
-import { UsersModule } from "#modules/admin/users/users.module.js";
+import { RolesModule } from "#modules/admin/roles/index.js";
+import { UsersModule } from "#modules/admin/users/index.js";
 import { AuthService } from "./application/auth.service.js";
 import { LoginThrottle } from "./application/login-throttle.js";
 import { SessionRepository } from "./domain/session.repository.js";

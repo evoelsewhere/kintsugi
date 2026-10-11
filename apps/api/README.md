@@ -83,7 +83,7 @@ Rules (enforced by review — see AGENTS.md):
 
 ## Shared kernel (`src/common/`)
 
-Import it through the `#common/*` alias (Node subpath imports in `package.json`), for example `import { CrudService } from "#common/application/crud.service.js"`, and another module's exports through `#modules/*`. Relative imports stay within a feature module; lint rejects any that climb two or more folders.
+Import it through the `#common/*` alias (Node subpath imports in `package.json`), for example `import { CrudService } from "#common/application/crud.service.js"`, and another module through `#modules/<area>/<module>/index.js`, its public surface (lint rejects imports of its internals). Relative imports stay within a feature module; lint rejects any that climb two or more folders.
 
 | Piece | Import | Use |
 |---|---|---|
