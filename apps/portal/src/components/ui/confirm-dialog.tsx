@@ -1,4 +1,4 @@
-// ConfirmDialog — a small Modal for irreversible actions (remove, revoke). Runs the
+// ConfirmDialog — a small Modal for irreversible actions (remove, revoke, publish). Runs the
 // action itself: the confirm button disables while it runs, and an error stays in the
 // dialog instead of closing it.
 
@@ -14,11 +14,13 @@ export interface ConfirmDialogProps {
   children: React.ReactNode;
   confirmLabel: string;
   busyLabel?: string;
+  /** `danger` (default) for destructive actions, `solid` for ones that create something. */
+  confirmVariant?: "danger" | "solid";
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }
 
-export function ConfirmDialog({ open, title, description, children, confirmLabel, busyLabel, onConfirm, onClose }: ConfirmDialogProps): React.JSX.Element {
+export function ConfirmDialog({ open, title, description, children, confirmLabel, busyLabel, confirmVariant = "danger", onConfirm, onClose }: ConfirmDialogProps): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +55,7 @@ export function ConfirmDialog({ open, title, description, children, confirmLabel
           <Button variant="ghost" disabled={busy} onClick={close}>
             Cancel
           </Button>
-          <Button variant="danger" disabled={busy} onClick={() => void confirm()}>
+          <Button variant={confirmVariant} disabled={busy} onClick={() => void confirm()}>
             {busy ? (busyLabel ?? `${confirmLabel}…`) : confirmLabel}
           </Button>
         </>
