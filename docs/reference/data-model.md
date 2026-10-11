@@ -70,11 +70,26 @@ Runtime job runs ([ADR-0027](../decisions/0027-builtin-modernization-content.md)
 
 | Table | Key | Content |
 |---|---|---|
-| `workflow.job_run` | `id` | `project_id`, `application_id`, `parent_id`, `kind` (`stage`, `script`, `agent`, `workflow`), `name` (stage, script file, agent or workflow id), `status` (`queued`, `running`, `succeeded`, `failed`, `cancelled`), `failure_reason` (redacted), `source_repository_id` + `source_commit`, `inputs` and `limits` (jsonb), `script_hash` (sha256 of the script that ran), `agent` (`<agent>@<version>`), `actor`, `output_summary` (counts, sizes, hook summary, usage; never file content), `document_write_id`, `started_at`, `finished_at`, `created_at` |
+| `workflow.job_run` | `id` | `project_id`, `application_id`, `parent_id`, `kind` (`stage`, `script`, `agent`, `workflow`), `name` (stage, script file, agent or workflow id), `status` (`queued`, `running`, `succeeded`, `failed`, `cancelled`), `failure_reason` (redacted), `source_repository_id` + `source_commit`, `inputs` and `limits` (jsonb), `script_hash` (sha256 of the script that ran), `agent` (`<agent>@<version>`), `actor`, `output_summary` (counts, sizes, hook summary, usage; never file content), `document_write_id`, `cancel_requested_at` + `cancel_requested_by` (a person asked to cancel the running run; migration 011), `started_at`, `finished_at`, `created_at` |
+| `workflow.job_event` | `id` (increasing) | the run's live record (migration 011): `job_run_id` (the top-level run), `step_run_id` (the step it came from), `kind` (`status`, `step.started`, `step.finished`, `tool`, `log`), `message` (one redacted line), `data` (small detail: status, step kind and name, tool and decision), `at`. Agent tool calls carry the tool and the workspace path only, never file content. Streamed to the portal over SSE |
 | `workflow.artifact` | (`job_run_id`, `path`) | `sha256`, `size`, `provenance` (jsonb, [Provenance](#provenance)); `path` is relative to the job's output, i.e. the path in the document repo |
 | `governance.restricted_record` | (`job_run_id`, `path`) | a file the job wrote under `restricted/`, encrypted with `KINTSUGI_SECRET_KEY` (`ciphertext`, `iv`, `auth_tag`), `size`; never committed, logged or summarized; readable through the API with `restricted.read` |
 
-Permissions added by the migration: `jobs.run` (start stages and jobs) and `restricted.read`, both granted to `admin`.
+Permissions added by the migration: `jobs.run` (start and cancel stages and jobs) and `restricted.read`, both granted to `admin`.
+
+## Audit log
+
+`governance.audit_event` (migration [`011_job_events_audit_settings.sql`](../../apps/api/migrations/011_job_events_audit_settings.sql)) is append-only: triggers refuse `update`, `delete` and `truncate`.
+
+| Table | Key | Content |
+|---|---|---|
+| `governance.audit_event` | `id` (increasing) | `at`, `actor` (user id), `action` (e.g. `restricted.read`), `project_id`, `subject` (e.g. the job run), `detail` (jsonb, e.g. the record's path and the reader's sign-in name); never the content acted on |
+
+Every read of a restricted record writes one entry before the record is returned; when the entry cannot be written, nothing is returned. The log is listed with `GET /api/governance/audit` and needs `audit.read` (added by the migration, granted to `admin`).
+
+## Installation settings
+
+`admin.installation_setting` (migration 011): installation-wide settings managed in the portal, `key` → `value` (jsonb) with `updated_by` and `updated_at`. First key: `commit-identity` (`{ name, email }` of kintsugi-bot's commits; Settings → Git, `git.manage`), read by the document repo writer for each write ([commit conventions](document-repo.md#commit-conventions)).
 
 ## Provenance
 
