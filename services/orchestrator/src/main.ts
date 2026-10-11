@@ -1,8 +1,8 @@
 // kintsugi-worker entry point (ADR-0003, ADR-0025, ADR-0029). Configuration is deployment
 // environment only: DATABASE_URL, KINTSUGI_SECRET_KEY (decrypts Git and LLM credentials),
-// KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL, KINTSUGI_BOT_EMAIL and the job settings
+// KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL and the job settings
 // (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_* including KINTSUGI_JOB_RETENTION_DAYS, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_WORKFLOW_*,
-// KINTSUGI_PYTHON, KINTSUGI_NODE). Git servers, repositories and LLM providers are
+// KINTSUGI_PYTHON, KINTSUGI_NODE). Git servers, repositories, LLM providers and the commit identity are
 // configured in the portal.
 
 import { existsSync } from "node:fs";
@@ -12,7 +12,7 @@ import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { Pool } from "pg";
 import { DEFAULT_JOB_RETENTION_DAYS } from "./jobs/cleanup.js";
 import { DEFAULT_JOB_LIMITS, type JobDefaults } from "./jobs/runner.js";
-import { DEFAULT_BOT_EMAIL, startWorker } from "./worker.js";
+import { startWorker } from "./worker.js";
 
 /** Local development configuration lives in .env (gitignored); the compose package passes env directly. */
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -62,9 +62,6 @@ async function main(): Promise<void> {
   const pollIntervalSeconds = Number(process.env["KINTSUGI_GIT_POLL_INTERVAL"] ?? 180);
   if (!Number.isFinite(pollIntervalSeconds) || pollIntervalSeconds < 30) throw new Error("KINTSUGI_GIT_POLL_INTERVAL must be at least 30 seconds");
 
-  const botEmail = (process.env["KINTSUGI_BOT_EMAIL"] ?? "").trim() || DEFAULT_BOT_EMAIL;
-  if (!/^[^\s<>@]+@[^\s<>@]+$/.test(botEmail)) throw new Error("KINTSUGI_BOT_EMAIL must be a plain email address");
-
   const gitVersion = await checkGitVersion();
   const storage = new CheckoutStorage(dataDirFromEnv());
   const pool = new Pool({ connectionString: databaseUrl, max: 5 });
@@ -75,11 +72,10 @@ async function main(): Promise<void> {
     pool,
     storage,
     pollIntervalSeconds,
-    botEmail,
     jobRetentionDays: positive("KINTSUGI_JOB_RETENTION_DAYS", DEFAULT_JOB_RETENTION_DAYS),
     jobs: { agents, interpreters, defaults: jobDefaults(), concurrency: positive("KINTSUGI_JOB_MAX_CONCURRENCY", 2) },
   });
-  console.log(`[worker] git ${gitVersion}, data ${storage.root}, polling every ${pollIntervalSeconds}s, commits as kintsugi-bot <${botEmail}>`);
+  console.log(`[worker] git ${gitVersion}, data ${storage.root}, polling every ${pollIntervalSeconds}s; commit identity from the portal (Settings → Git)`);
   console.log(`[worker] runtime ${agents.engine}, python ${interpreters.python}, node ${interpreters.node}; jobs run in job workspaces without an OS sandbox, agent jobs as child processes (ADR-0029)`);
 
   const shutdown = async (): Promise<void> => {

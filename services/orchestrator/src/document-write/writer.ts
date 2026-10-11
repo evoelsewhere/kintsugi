@@ -2,12 +2,12 @@
 // One `document-write` job at a time per repository. It brings the mirror up to date,
 // validates the files, commits auto-commit paths straight to the default branch, pushes the
 // rest to `kintsugi/<agent-or-actor>/<job-id>` and opens a pull request there (plain-git
-// servers keep just the branch). Every commit is authored by kintsugi-bot with trailers.
+// servers keep just the branch). Every commit is authored by kintsugi-bot — the commit identity
+// set in the portal, read per write — with trailers.
 
 import { join } from "node:path";
 import { DEFAULT_AUTO_COMMIT_PATHS, repositoryPath } from "@kintsugi/domain";
 import {
-  BOT_NAME,
   CheckoutStorage,
   type FileWrite,
   PullRequestsUnsupportedError,
@@ -32,8 +32,6 @@ export interface WriterDeps {
   writes: DocumentWriteStore;
   repositories: RepositoryStore;
   storage: CheckoutStorage;
-  /** Email of kintsugi-bot (KINTSUGI_BOT_EMAIL). */
-  botEmail: string;
   /** Push attempts per branch (fetch → rebase → retry); default 4. */
   maxPushAttempts?: number;
   /** For tests: the HTTP client of the pull-request adapters. */
@@ -134,7 +132,7 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
       worktree: join(deps.storage.workspace(request.projectId), request.writeId),
       defaultBranch,
       message: request.message,
-      identity: { name: BOT_NAME, email: deps.botEmail },
+      identity: await deps.writes.commitIdentity(),
       trailers: writerTrailers(request),
       ...(deps.maxPushAttempts === undefined ? {} : { maxAttempts: deps.maxPushAttempts }),
     };

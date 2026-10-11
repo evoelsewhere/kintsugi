@@ -1,6 +1,7 @@
 // Git — servers and repositories (Settings → Git, ADR-0025). Users register servers with
 // one credential and the repositories Kintsugi should clone; the worker keeps a mirror
-// of each in Kintsugi's own storage and reports its sync status here.
+// of each in Kintsugi's own storage and reports its sync status here. Admins also set the
+// commit identity of kintsugi-bot here.
 
 import { FolderGit2, Plus, Server, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -9,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import { gitApi, type GitRepositoryView, type GitServerInput, type GitServerView, type SyncStatus } from "@/lib/api/git";
+import { CommitIdentityCard } from "./commit-identity-card";
 import { GitRepositoryDialog } from "./git-repository-dialog";
 import { GitServerDialog } from "./git-server-dialog";
 
@@ -157,6 +159,8 @@ export function GitSection(): React.JSX.Element {
           })
         )}
       </Card>
+
+      <CommitIdentityCard />
 
       <GitServerDialog
         open={serverDialog.open}

@@ -1,7 +1,7 @@
 // services/orchestrator — the kintsugi-worker: pg-boss queues, Git sync, the document repo
 // writer and runtime job runs in job workspaces (ADR-0003, ADR-0019, ADR-0025, ADR-0029).
 
-export { DEFAULT_BOT_EMAIL, GIT_SYNC_QUEUE, QUEUE_SCHEMA, startWorker, type Worker, type WorkerOptions } from "./worker.js";
+export { GIT_SYNC_QUEUE, QUEUE_SCHEMA, startWorker, type Worker, type WorkerOptions } from "./worker.js";
 export {
   DOCUMENT_WRITE_QUEUE,
   DOCUMENT_WRITE_QUEUE_OPTIONS,

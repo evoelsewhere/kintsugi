@@ -6,7 +6,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CheckoutStorage } from "@kintsugi/git";
+import { CheckoutStorage, DEFAULT_COMMIT_IDENTITY } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DocumentWriteStore, type DocumentRepoTarget } from "../src/document-write/store.js";
@@ -17,6 +17,7 @@ import { startWorker } from "../src/worker.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
 
 const API_TOKEN = "TEST-api-token-0123456789";
+const BOT_NAME = "Modernization Bot";
 const BOT_EMAIL = "bot@kintsugi.test";
 
 /**
@@ -80,7 +81,9 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     const storage = new CheckoutStorage(dataDir);
     await storage.prepare();
     const repositories = new RepositoryStore(db.pool);
-    deps = { writes: new TestWriteStore(db.pool, repositories), repositories, storage, botEmail: BOT_EMAIL, fetch: fakeFetch };
+    deps = { writes: new TestWriteStore(db.pool, repositories), repositories, storage, fetch: fakeFetch };
+    // The commit identity is an installation setting managed in the portal, read per write.
+    await db.pool.query("insert into admin.installation_setting (key, value) values ($1, $2)", ["commit-identity", JSON.stringify({ name: BOT_NAME, email: BOT_EMAIL })]);
     // A GitLab server for the pull-request API; its repositories are served by the local remote.
     await project("docs", "gitlab", "gitlab", "https://gitlab.example.invalid");
     await project("plain-docs", "plain", "plain-git", remote.baseUrl);
@@ -89,6 +92,19 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     await remote?.close();
     await db?.drop();
     if (dataDir !== undefined) await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("reads the commit identity per write and falls back to the defaults when it is unset or unusable", async () => {
+    expect(await deps.writes.commitIdentity()).toEqual({ name: BOT_NAME, email: BOT_EMAIL });
+    const set = (value: unknown): Promise<unknown> => db.pool.query("update admin.installation_setting set value = $2 where key = $1", ["commit-identity", JSON.stringify(value)]);
+    try {
+      await set({ name: "Bot <x>", email: "not-an-email" });
+      expect(await deps.writes.commitIdentity()).toEqual(DEFAULT_COMMIT_IDENTITY);
+      await set({});
+      expect(await deps.writes.commitIdentity()).toEqual(DEFAULT_COMMIT_IDENTITY);
+    } finally {
+      await set({ name: BOT_NAME, email: BOT_EMAIL });
+    }
   });
 
   it("auto-commits units/** to main and proposes kintsugi.yaml in a pull request", async () => {
@@ -104,7 +120,7 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     expect(remote.git("docs", "show", "main:units/web/login.md")).toContain("web/auth/login");
     expect(() => remote.git("docs", "show", "main:kintsugi.yaml")).toThrow();
     expect(remote.git("docs", "show", `kintsugi/alice/${write.writeId}:kintsugi.yaml`)).toBe("schemaVersion: 1\n");
-    expect(remote.git("docs", "log", "-1", "--format=%an <%ae>%n%(trailers:only,unfold)", "main").trim()).toBe(`kintsugi-bot <${BOT_EMAIL}>\nKintsugi-Actor: alice`);
+    expect(remote.git("docs", "log", "-1", "--format=%an <%ae>%n%(trailers:only,unfold)", "main").trim()).toBe(`${BOT_NAME} <${BOT_EMAIL}>\nKintsugi-Actor: alice`);
 
     expect(requests[0]).toMatchObject({
       url: "https://gitlab.example.invalid/api/v4/projects/docs/merge_requests",
@@ -178,7 +194,7 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
   });
 
   it("the worker runs queued writes, one per repository at a time", async () => {
-    const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage: deps.storage, pollIntervalSeconds: 3600, botEmail: BOT_EMAIL, log: () => undefined });
+    const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage: deps.storage, pollIntervalSeconds: 3600, log: () => undefined });
     try {
       const writes = [1, 2, 3].map((n) => request("plain-docs", { kind: "state-change", message: `Unit ${n}`, files: [{ path: `units/u${n}.md`, content: `${n}\n` }] }));
       for (const write of writes) await worker.requestWrite("plain-docs", write);

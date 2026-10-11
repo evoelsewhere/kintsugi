@@ -53,7 +53,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       }),
     });
     const storage = new CheckoutStorage(dataDir);
-    const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage, pollIntervalSeconds: 3600, botEmail: "bot@kintsugi.test", log: () => undefined, jobs: { agents } });
+    const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage, pollIntervalSeconds: 3600, log: () => undefined, jobs: { agents } });
     try {
       const id = randomUUID();
       await db.pool.query(

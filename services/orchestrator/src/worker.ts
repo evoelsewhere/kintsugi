@@ -33,9 +33,6 @@ import {
 
 export { GIT_SYNC_QUEUE, QUEUE_SCHEMA } from "./queues.js";
 
-/** Default author email of kintsugi-bot; `.invalid` never delivers mail. */
-export const DEFAULT_BOT_EMAIL = "kintsugi-bot@kintsugi.invalid";
-
 export interface WorkerOptions {
   databaseUrl: string;
   pool: Pool;
@@ -46,8 +43,6 @@ export interface WorkerOptions {
   pendingScanSeconds?: number;
   /** Parallel syncs in this process. */
   concurrency?: number;
-  /** Author email of kintsugi-bot's commits (KINTSUGI_BOT_EMAIL). */
-  botEmail?: string;
   /** For tests: the HTTP client of the pull-request adapters. */
   fetch?: typeof fetch;
   log?: (message: string) => void;
@@ -87,7 +82,6 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     writes: new DocumentWriteStore(options.pool, store),
     repositories: store,
     storage: options.storage,
-    botEmail: options.botEmail ?? DEFAULT_BOT_EMAIL,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   };
   await options.storage.prepare();
