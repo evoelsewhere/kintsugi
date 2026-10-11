@@ -7,9 +7,22 @@ import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
+import { sleep } from "#common/util/async.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import { AUDIT_ACTIONS, AuditService } from "#modules/governance/audit/index.js";
-import { type JobRunDetail, type JobRunView, RUNNABLE_STAGES, type RestrictedRecordView, type RunnableStage } from "../domain/job-run.js";
+import {
+  FINAL_RUN_STATUSES,
+  type JobRunDetail,
+  type JobRunFollowUpdate,
+  type JobRunView,
+  RUNNABLE_STAGES,
+  type RestrictedRecordView,
+  type RunnableStage,
+} from "../domain/job-run.js";
+
+/** How often a follower looks for new events, and how many it takes at a time. */
+const FOLLOW_POLL_MS = 1000;
+const FOLLOW_BATCH = 200;
 import { JobRunQueue, JobRunStore } from "../domain/job-run.ports.js";
 
 @Injectable()
@@ -66,6 +79,53 @@ export class JobRunsService {
    * The restricted records of a run, decrypted. Every record read is audited first (who, when,
    * job run, path; never the content); when the audit entry cannot be stored, nothing is returned.
    */
+  /**
+   * Cancels a top-level run: a queued run is cancelled at once; for a running one the worker is
+   * asked to stop it (its processes are killed, the run ends as `cancelled`).
+   */
+  async cancel(projectId: string, id: string, actor: Actor): Promise<JobRunView> {
+    const run = await this.summary(projectId, id);
+    if (run.parentId !== undefined) throw new BadRequestException(`Job run ${id} is a step of ${run.parentId}; cancel that run instead`);
+    const outcome = await this.store.cancel(projectId, id, actor.username ?? actor.id);
+    if (outcome === "finished") throw new ConflictException(`Job run ${id} has already finished (${run.status})`);
+    return this.summary(projectId, id);
+  }
+
+  /** A run without its steps and artifacts; 404 when unknown. */
+  async summary(projectId: string, id: string): Promise<JobRunView> {
+    const run = await this.store.summary(projectId, id);
+    if (run === undefined) throw new NotFoundException(`Job run ${id} not found in project ${projectId}`);
+    return run;
+  }
+
+  /**
+   * Follows a run for a live view: its events after `afterId`, its status whenever it changes,
+   * and `end` once it has finished and every event was delivered. Stops early when `signal` aborts.
+   */
+  async *follow(projectId: string, id: string, afterId: string | undefined, signal: AbortSignal): AsyncGenerator<JobRunFollowUpdate> {
+    let last = afterId;
+    let status: string | undefined;
+    while (!signal.aborted) {
+      const run = await this.summary(projectId, id);
+      const events = await this.store.events(id, last, FOLLOW_BATCH);
+      for (const event of events) {
+        last = event.id;
+        yield { type: "event", event };
+      }
+      if (run.status !== status) {
+        status = run.status;
+        yield { type: "status", run };
+      }
+      if (FINAL_RUN_STATUSES.includes(run.status) && events.length < FOLLOW_BATCH) {
+        // Events written just before the final status are in this batch or the next query.
+        for (const event of await this.store.events(id, last, FOLLOW_BATCH)) yield { type: "event", event };
+        yield { type: "end", run };
+        return;
+      }
+      if (events.length < FOLLOW_BATCH) await sleep(FOLLOW_POLL_MS, signal);
+    }
+  }
+
   async restricted(projectId: string, id: string, actor: Actor): Promise<RestrictedRecordView[]> {
     await this.get(projectId, id);
     const records = await this.store.restricted(projectId, id);

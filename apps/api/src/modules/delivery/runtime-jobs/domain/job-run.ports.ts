@@ -1,7 +1,7 @@
 // Ports of runtime job runs — the DI tokens of this module: where runs are recorded
 // (Postgres, workflow.job_run and friends) and how they reach the worker (the job queue).
 
-import type { JobRunDetail, JobRunView, NewStageRun, RestrictedRecordView } from "./job-run.js";
+import type { CancelOutcome, JobRunDetail, JobRunEventView, JobRunView, NewStageRun, RestrictedRecordView } from "./job-run.js";
 
 export abstract class JobRunStore {
   /** Records a stage run as `queued`. */
@@ -12,6 +12,15 @@ export abstract class JobRunStore {
   abstract get(projectId: string, id: string): Promise<JobRunDetail | undefined>;
   /** The restricted records of a run and its steps, decrypted. */
   abstract restricted(projectId: string, id: string): Promise<RestrictedRecordView[]>;
+  /** A run of the project without its steps and artifacts; undefined when unknown. */
+  abstract summary(projectId: string, id: string): Promise<JobRunView | undefined>;
+  /**
+   * Cancels a queued run at once ("cancelled"), or asks the worker to cancel a running one
+   * ("requested"); "finished" when the run had already ended.
+   */
+  abstract cancel(projectId: string, id: string, actor: string): Promise<CancelOutcome>;
+  /** Events of a run after the given event id, oldest first. */
+  abstract events(id: string, afterId: string | undefined, limit: number): Promise<JobRunEventView[]>;
   /** Marks a run failed before it reached the worker. */
   abstract markFailed(id: string, reason: string): Promise<void>;
 }
