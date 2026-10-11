@@ -1,6 +1,6 @@
 # ADR-0021: Sandboxed child processes with pi-sandbox instead of per-job containers
 
-- Status: Proposed. To be accepted once the launcher runs jobs under pi-sandbox; until then ADR-0004 and ADR-0020 stand.
+- Status: Superseded by [ADR-0029](0029-job-workspaces-instead-of-os-sandboxes.md) before acceptance: jobs run in cross-platform job workspaces, without an OS-level sandbox.
 - Date: 2026-10-10
 - Decision register: D06, D07, D32
 - Amends: ADR-0004 (runtime job isolation)

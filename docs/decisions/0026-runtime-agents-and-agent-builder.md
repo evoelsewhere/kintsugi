@@ -90,7 +90,7 @@ Kintsugi's split stays: **implementation belongs to members** in their own harne
 - `AGENTS.md`, the runtime-agents reference and the building-block view change from "no agent ships" to "built-in and custom agents, managed in the Agent Builder".
 - Upgrades must report drift between seeded built-ins and the release, and never modify custom agents.
 - Attribution: adapted prompts carry the Apache-2.0 notice of the reference plugin.
-- Real test runs need the job sandbox (ADR-0021: pi-sandbox child processes on Linux and macOS). On Windows, development needs WSL2.
+- Real test runs need the job sandbox (ADR-0021: pi-sandbox child processes on Linux and macOS). On Windows, development needs WSL2. (Superseded by ADR-0029: jobs run in job workspaces on every platform, Windows included.)
 - Follow-up decisions:
   - the read-only exec kernel tool;
   - the eval-suite format;

@@ -1,6 +1,6 @@
 # ADR-0004: One Docker container per runtime job, with a pi SDK runner inside
 
-- Status: Accepted. Amended by [ADR-0013](0013-composable-open-rulebook.md): rulebook runners use their own allowlisted images (see Amendment). Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): rulebook runners are removed.
+- Status: Accepted. Amended by [ADR-0013](0013-composable-open-rulebook.md): rulebook runners use their own allowlisted images (see Amendment). Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): rulebook runners are removed. Amended by [ADR-0029](0029-job-workspaces-instead-of-os-sandboxes.md): runtime jobs run in job workspaces of the worker, not in per-job containers; read-only sources, a single writable output, credentials never on disk and the worker-side output checks stand.
 - Date: 2026-10-09
 
 ## Context
