@@ -10,6 +10,7 @@
 
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Page, PageQuery } from "#common/application/pagination.js";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord, changedFields } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { ADMIN_ROLE_ID, RolesService } from "#modules/admin/roles/index.js";
 import { newId } from "#common/domain/ids.js";
@@ -24,6 +25,7 @@ export class UsersService {
   constructor(
     private readonly users: UserRepository,
     private readonly roles: RolesService,
+    private readonly audit: AuditTrail,
   ) {}
 
   list(): Promise<UserRecord[]> {
@@ -43,7 +45,9 @@ export class UsersService {
   async create(input: CreateUser, actor: Actor): Promise<UserRecord> {
     await this.#assertUsernameFree(input.username);
     await this.#assertAssignable(input.roleIds ?? [], [], actor);
-    return this.users.create(newId(), input, await hashPassword(input.password));
+    const user = await this.users.create(newId(), input, await hashPassword(input.password));
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.userCreate, { subject: user.id, detail: { member: user.username, roleIds: user.roleIds } }));
+    return user;
   }
 
   /** Bootstrap only: the first admin of an empty installation (ADR-0008). */
@@ -65,13 +69,32 @@ export class UsersService {
     const updated = await this.users.update(id, input);
     if (updated === undefined) throw new NotFoundException(`User ${id} not found`);
     if (disabling) await this.users.revokeSessions(id);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.userUpdate, {
+        subject: id,
+        detail: {
+          member: target.username,
+          fields: changedFields(input),
+          ...(input.enabled === undefined || input.enabled === target.enabled ? {} : { enabled: input.enabled }),
+          ...(input.roleIds === undefined
+            ? {}
+            : {
+                rolesAdded: input.roleIds.filter((roleId) => !target.roleIds.includes(roleId)).sort(),
+                rolesRemoved: target.roleIds.filter((roleId) => !input.roleIds!.includes(roleId)).sort(),
+              }),
+        },
+      }),
+    );
     return updated;
   }
 
   async setPassword(id: string, password: string, actor: Actor): Promise<void> {
-    await this.#assertCanManage(await this.get(id), actor);
+    const target = await this.get(id);
+    await this.#assertCanManage(target, actor);
     await this.users.setPassword(id, await hashPassword(password));
     await this.users.revokeSessions(id);
+    // Who reset whose password and when; never the password.
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.userPasswordReset, { subject: id, detail: { member: target.username } }));
   }
 
   async remove(id: string, actor: Actor): Promise<void> {
@@ -80,6 +103,7 @@ export class UsersService {
     await this.#assertCanManage(target, actor);
     await this.#assertNotLastAdmin(target);
     if (!(await this.users.remove(id))) throw new NotFoundException(`User ${id} not found`);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.userDelete, { subject: id, detail: { member: target.username } }));
   }
 
   /**

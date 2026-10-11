@@ -9,6 +9,7 @@ import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 import { DocumentWriteStore } from "./document-write/store.js";
+import { startHeartbeat } from "./heartbeat.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
 import { installedAgents } from "./jobs/agents.js";
@@ -52,6 +53,8 @@ export interface WorkerOptions {
   cleanupIntervalSeconds?: number;
   /** Seconds between checks for cancel requests of the runs this worker runs (default 2). */
   cancelPollSeconds?: number;
+  /** Seconds between heartbeats in workflow.worker_heartbeat (ADR-0030, default 15). */
+  heartbeatSeconds?: number;
   /** Runtime jobs (queue `job-run`); omitted = this worker runs no jobs. */
   jobs?: {
     /** pi in production; the mock backend in tests and mock-mode development. */
@@ -64,6 +67,8 @@ export interface WorkerOptions {
 }
 
 export interface Worker {
+  /** This process's id in workflow.worker_heartbeat. */
+  readonly workerId: string;
   /** Enqueues a sync; deduplicated per repository (one queued and one running at most). */
   requestSync(repositoryId: string): Promise<void>;
   /** Enqueues a document write behind other writes to the same document repository. */
@@ -86,6 +91,19 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   };
   await options.storage.prepare();
 
+  // Jobs in progress in this process (every queue), reported by the heartbeat.
+  let busy = 0;
+  const counted =
+    <A extends unknown[]>(handler: (...args: A) => Promise<void>) =>
+    async (...args: A): Promise<void> => {
+      busy += 1;
+      try {
+        await handler(...args);
+      } finally {
+        busy -= 1;
+      }
+    };
+
   const boss = new PgBoss({ connectionString: options.databaseUrl, schema: QUEUE_SCHEMA });
   boss.on("error", (error) => log(`queue error: ${error.message}`));
   await boss.start();
@@ -99,14 +117,14 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   });
   await ensureDocumentWriteQueue(boss);
 
-  await boss.work<{ repositoryId: string }>(GIT_SYNC_QUEUE, { localConcurrency: options.concurrency ?? 2 }, async ([job]) => {
+  await boss.work<{ repositoryId: string }>(GIT_SYNC_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
     if (job === undefined) return;
     const result = await syncRepository(deps, job.data.repositoryId);
     if (result !== undefined) log(`${result.cloned ? "cloned" : "fetched"} ${result.repositoryId} at ${result.commit.slice(0, 12)}`);
-  });
+  }));
 
   // One active write per document repository (singleton policy); different repositories in parallel.
-  await boss.work<DocumentWriteRequest>(DOCUMENT_WRITE_QUEUE, { localConcurrency: options.concurrency ?? 2 }, async ([job]) => {
+  await boss.work<DocumentWriteRequest>(DOCUMENT_WRITE_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
     if (job === undefined) return;
     try {
       const outcome = await writeDocument(writerDeps, job.data);
@@ -121,7 +139,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       log(`document write ${job.data.writeId} (${job.data.projectId}) failed: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
-  });
+  }));
 
   const requestWrite = (documentRepositoryId: string, request: DocumentWriteRequest): Promise<void> => sendDocumentWrite(boss, documentRepositoryId, request);
 
@@ -141,7 +159,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       requestWrite,
       log,
     });
-    await boss.work<JobRunRequest>(JOB_RUN_QUEUE, { localConcurrency: options.jobs.concurrency ?? 2 }, async ([job]) => {
+    await boss.work<JobRunRequest>(JOB_RUN_QUEUE, { localConcurrency: options.jobs.concurrency ?? 2 }, counted(async ([job]) => {
       if (job === undefined) return;
       // One controller per run: a cancel request aborts this run only (its processes are killed).
       const cancel = new AbortController();
@@ -151,7 +169,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       } finally {
         active.delete(job.data.jobRunId);
       }
-    });
+    }));
   }
   const watchCancels = async (): Promise<void> => {
     if (active.size === 0) return;
@@ -194,7 +212,16 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   void pollAll();
   void pruneJobs();
 
+  const heartbeat = await startHeartbeat({
+    pool: options.pool,
+    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
+    activeJobs: () => busy,
+    ...(options.heartbeatSeconds === undefined ? {} : { intervalSeconds: options.heartbeatSeconds }),
+    log,
+  });
+
   return {
+    workerId: heartbeat.workerId,
     requestSync,
     requestWrite,
     requestJobRun: (request) => sendJobRun(boss, request),
@@ -203,6 +230,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       stopping.abort();
       for (const timer of timers) clearInterval(timer);
       await boss.stop({ graceful: true });
+      await heartbeat.stop();
     },
   };
 }

@@ -46,8 +46,8 @@ export class RolesController {
   @Post()
   @ApiOperation({ summary: "Create an access sub-role (admin-defined: dev, ba, tester, …)" })
   @ApiCreatedResponse({ description: "The created access sub-role." })
-  createSubRole(@Body({ schema: createSubRoleSchema }) input: CreateSubRoleInput): Promise<RoleRecord> {
-    return this.roles.createSubRole(toCreateCommand(input));
+  createSubRole(@Body({ schema: createSubRoleSchema }) input: CreateSubRoleInput, @CurrentActor() actor: Actor): Promise<RoleRecord> {
+    return this.roles.createSubRole(toCreateCommand(input), actor);
   }
 
   @Put(":id/permissions")
@@ -65,7 +65,7 @@ export class RolesController {
   @HttpCode(204)
   @ApiOperation({ summary: "Remove an access sub-role" })
   @ApiNoContentResponse({ description: "The access sub-role is removed." })
-  async removeSubRole(@Param("id") id: string): Promise<void> {
-    await this.roles.removeSubRole(id);
+  async removeSubRole(@Param("id") id: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.roles.removeSubRole(id, actor);
   }
 }

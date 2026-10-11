@@ -5,11 +5,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
 import { sleep } from "#common/util/async.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
-import { AUDIT_ACTIONS, AuditService } from "#modules/governance/audit/index.js";
 import {
   FINAL_RUN_STATUSES,
   type JobRunDetail,
@@ -32,7 +32,7 @@ export class JobRunsService {
     private readonly store: JobRunStore,
     private readonly queue: JobRunQueue,
     private readonly projects: ProjectsService,
-    private readonly audit: AuditService,
+    private readonly audit: AuditTrail,
     private readonly stages: StageCatalog,
   ) {}
 
@@ -79,6 +79,7 @@ export class JobRunsService {
       await this.store.markFailed(run.id, `Could not enqueue the run: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.stageRun, { projectId, subject: run.id, detail: { stage, applicationId } }));
     return run;
   }
 
@@ -122,6 +123,7 @@ export class JobRunsService {
     if (run.parentId !== undefined) throw new BadRequestException(`Job run ${id} is a step of ${run.parentId}; cancel that run instead`);
     const outcome = await this.store.cancel(projectId, id, actor.username ?? actor.id);
     if (outcome === "finished") throw new ConflictException(`Job run ${id} has already finished (${run.status})`);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.jobRunCancel, { projectId, subject: id, detail: { outcome, name: run.name } }));
     return this.summary(projectId, id);
   }
 
@@ -164,13 +166,7 @@ export class JobRunsService {
     await this.get(projectId, id);
     const records = await this.store.restricted(projectId, id);
     await this.audit.record(
-      records.map((record) => ({
-        actor: actor.id,
-        action: AUDIT_ACTIONS.restrictedRead,
-        projectId,
-        subject: record.jobRunId,
-        detail: { path: record.path, topLevelRun: id, ...(actor.username === undefined ? {} : { username: actor.username }) },
-      })),
+      records.map((record) => auditRecord(actor, AUDIT_ACTIONS.restrictedRead, { projectId, subject: record.jobRunId, detail: { path: record.path, topLevelRun: id } })),
     );
     return records;
   }

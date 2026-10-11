@@ -5,7 +5,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Page, PageQuery } from "#common/application/pagination.js";
-import { RequirePermission } from "#common/auth/decorators.js";
+import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { pageQuerySchema } from "#common/interface/pagination.js";
 import { ProjectsService } from "../application/projects.service.js";
 import type { ApplicationRecord, ProjectDetail, ProjectRecord, RenderedManifest } from "../domain/project.js";
@@ -57,16 +57,16 @@ export class ProjectsController {
   @Post()
   @ApiOperation({ summary: "Create a project with its document repository" })
   @ApiCreatedResponse({ description: "The created project." })
-  create(@Body({ schema: createProjectSchema }) input: CreateProjectInput): Promise<ProjectRecord> {
-    return this.projects.createProject(toCreateProject(input));
+  create(@Body({ schema: createProjectSchema }) input: CreateProjectInput, @CurrentActor() actor: Actor): Promise<ProjectRecord> {
+    return this.projects.createProject(toCreateProject(input), actor);
   }
 
   @RequirePermission("projects.manage")
   @Patch(":id")
   @ApiOperation({ summary: "Update a project: name, description, document repository" })
   @ApiOkResponse({ description: "The updated project." })
-  update(@Param("id") id: string, @Body({ schema: updateProjectSchema }) input: UpdateProjectInput): Promise<ProjectRecord> {
-    return this.projects.updateProject(id, toUpdateProject(input));
+  update(@Param("id") id: string, @Body({ schema: updateProjectSchema }) input: UpdateProjectInput, @CurrentActor() actor: Actor): Promise<ProjectRecord> {
+    return this.projects.updateProject(id, toUpdateProject(input), actor);
   }
 
   @RequirePermission("projects.manage")
@@ -74,8 +74,8 @@ export class ProjectsController {
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a project with its applications (the repositories stay registered)" })
   @ApiNoContentResponse({ description: "The project is deleted." })
-  async remove(@Param("id") id: string): Promise<void> {
-    await this.projects.removeProject(id);
+  async remove(@Param("id") id: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.projects.removeProject(id, actor);
   }
 
   @Get(":id/applications/:applicationId")
@@ -89,8 +89,12 @@ export class ProjectsController {
   @Post(":id/applications")
   @ApiOperation({ summary: "Add an application to a project" })
   @ApiCreatedResponse({ description: "The created application." })
-  createApplication(@Param("id") id: string, @Body({ schema: createApplicationSchema }) input: CreateApplicationInput): Promise<ApplicationRecord> {
-    return this.projects.createApplication(id, toCreateApplication(input));
+  createApplication(
+    @Param("id") id: string,
+    @Body({ schema: createApplicationSchema }) input: CreateApplicationInput,
+    @CurrentActor() actor: Actor,
+  ): Promise<ApplicationRecord> {
+    return this.projects.createApplication(id, toCreateApplication(input), actor);
   }
 
   @RequirePermission("projects.manage")
@@ -101,8 +105,9 @@ export class ProjectsController {
     @Param("id") id: string,
     @Param("applicationId") applicationId: string,
     @Body({ schema: updateApplicationSchema }) input: UpdateApplicationInput,
+    @CurrentActor() actor: Actor,
   ): Promise<ApplicationRecord> {
-    return this.projects.updateApplication(id, applicationId, toUpdateApplication(input));
+    return this.projects.updateApplication(id, applicationId, toUpdateApplication(input), actor);
   }
 
   @RequirePermission("projects.manage")
@@ -110,8 +115,8 @@ export class ProjectsController {
   @HttpCode(204)
   @ApiOperation({ summary: "Remove an application and unlink its repositories" })
   @ApiNoContentResponse({ description: "The application is removed." })
-  async removeApplication(@Param("id") id: string, @Param("applicationId") applicationId: string): Promise<void> {
-    await this.projects.removeApplication(id, applicationId);
+  async removeApplication(@Param("id") id: string, @Param("applicationId") applicationId: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.projects.removeApplication(id, applicationId, actor);
   }
 
   @RequirePermission("projects.manage")
@@ -122,8 +127,9 @@ export class ProjectsController {
     @Param("id") id: string,
     @Param("applicationId") applicationId: string,
     @Body({ schema: linkRepositorySchema }) input: LinkRepositoryInput,
+    @CurrentActor() actor: Actor,
   ): Promise<ProjectDetail> {
-    return this.projects.linkRepository(id, applicationId, toLinkRepository(input));
+    return this.projects.linkRepository(id, applicationId, toLinkRepository(input), actor);
   }
 
   @RequirePermission("projects.manage")
@@ -131,7 +137,12 @@ export class ProjectsController {
   @HttpCode(204)
   @ApiOperation({ summary: "Unlink a repository from an application (it stays registered)" })
   @ApiNoContentResponse({ description: "The link is removed." })
-  async unlink(@Param("id") id: string, @Param("applicationId") applicationId: string, @Param("repositoryId") repositoryId: string): Promise<void> {
-    await this.projects.unlinkRepository(id, applicationId, repositoryId);
+  async unlink(
+    @Param("id") id: string,
+    @Param("applicationId") applicationId: string,
+    @Param("repositoryId") repositoryId: string,
+    @CurrentActor() actor: Actor,
+  ): Promise<void> {
+    await this.projects.unlinkRepository(id, applicationId, repositoryId, actor);
   }
 }

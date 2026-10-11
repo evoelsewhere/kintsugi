@@ -4,7 +4,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { AgentModelBinding } from "@kintsugi/runtime-sdk";
-import { RequirePermission } from "#common/auth/decorators.js";
+import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { pageQuerySchema } from "#common/interface/pagination.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";
@@ -51,8 +51,8 @@ export class LlmProvidersController {
   @Put("model-bindings")
   @ApiOperation({ summary: "Replace all agent → provider/model bindings" })
   @ApiOkResponse({ description: "The stored bindings." })
-  replaceBindings(@Body({ schema: replaceBindingsSchema }) bindings: AgentModelBindingInput[]): Promise<AgentModelBinding[]> {
-    return this.providers.replaceBindings(bindings);
+  replaceBindings(@Body({ schema: replaceBindingsSchema }) bindings: AgentModelBindingInput[], @CurrentActor() actor: Actor): Promise<AgentModelBinding[]> {
+    return this.providers.replaceBindings(bindings, actor);
   }
 
   @Get(":id")
@@ -65,15 +65,15 @@ export class LlmProvidersController {
   @Post()
   @ApiOperation({ summary: "Register an LLM provider" })
   @ApiCreatedResponse({ description: "The created provider; the credential is stored encrypted." })
-  create(@Body({ schema: createProviderSchema }) input: CreateProviderInput): Promise<LlmProviderView> {
-    return this.providers.create(toCreateCommand(input));
+  create(@Body({ schema: createProviderSchema }) input: CreateProviderInput, @CurrentActor() actor: Actor): Promise<LlmProviderView> {
+    return this.providers.create(toCreateCommand(input), actor);
   }
 
   @Patch(":id")
   @ApiOperation({ summary: "Replace an LLM provider configuration" })
   @ApiOkResponse({ description: "The updated provider." })
-  replace(@Param("id") id: string, @Body({ schema: replaceProviderSchema }) input: ReplaceProviderInput): Promise<LlmProviderView> {
-    return this.providers.replace(id, toReplaceCommand(id, input));
+  replace(@Param("id") id: string, @Body({ schema: replaceProviderSchema }) input: ReplaceProviderInput, @CurrentActor() actor: Actor): Promise<LlmProviderView> {
+    return this.providers.replace(id, toReplaceCommand(id, input), actor);
   }
 
   @Post(":id/test")
@@ -87,7 +87,7 @@ export class LlmProvidersController {
   @HttpCode(204)
   @ApiOperation({ summary: "Remove an LLM provider" })
   @ApiNoContentResponse({ description: "The provider is removed." })
-  async remove(@Param("id") id: string): Promise<void> {
-    await this.providers.remove(id);
+  async remove(@Param("id") id: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.providers.remove(id, actor);
   }
 }

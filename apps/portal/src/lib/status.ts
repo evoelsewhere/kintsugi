@@ -1,5 +1,5 @@
 // Status vocabulary of the portal: one tone and one label per status of a job run, a
-// document write and a repository mirror. Every page renders statuses through these maps
+// document write, a repository mirror, a gate and a worker. Every page renders statuses through these maps
 // (components/status-badges.tsx), so a status looks the same wherever it appears.
 
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -30,6 +30,19 @@ export const SYNC_STATUS: Record<string, StatusStyle> = {
   cloning: { tone: "blue", label: "Cloning" },
   ready: { tone: "green", label: "Ready" },
   error: { tone: "red", label: "Sync failed" },
+};
+
+export const GATE_STATUS: Record<string, StatusStyle> = {
+  pending: { tone: "orange", label: "Pending" },
+  approved: { tone: "green", label: "Approved" },
+  rejected: { tone: "red", label: "Rejected" },
+  waived: { tone: "purple-light", label: "Waived" },
+};
+
+export const WORKER_STATE: Record<string, StatusStyle> = {
+  up: { tone: "green", label: "Up" },
+  stale: { tone: "red", label: "Not seen" },
+  stopped: { tone: "muted", label: "Stopped" },
 };
 
 const UNKNOWN: StatusStyle = { tone: "muted", label: "Unknown" };
