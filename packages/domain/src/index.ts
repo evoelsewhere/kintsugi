@@ -252,3 +252,7 @@ export interface CompareReport {
   clusters: { id: string; files: string[]; summary: string }[];
   reportPath: string;
 }
+
+// Projects and the kintsugi.yaml manifest (ADR-0028).
+export * from "./project.js";
+export * from "./manifest.js";
