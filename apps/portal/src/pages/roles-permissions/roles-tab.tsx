@@ -5,12 +5,12 @@
 
 import { Plus, Search, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "../../components/ui/button";
-import { Checkbox } from "../../components/ui/checkbox";
-import { Field } from "../../components/ui/field";
-import { Input } from "../../components/ui/input";
-import { Modal } from "../../components/ui/modal";
-import { identityApi, type PermissionRecord, type RoleRecord } from "../../lib/api/identity";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { identityApi, type PermissionRecord, type RoleRecord } from "@/lib/api/identity";
 
 export function RolesTab(): React.JSX.Element {
   const [roles, setRoles] = useState<RoleRecord[]>([]);

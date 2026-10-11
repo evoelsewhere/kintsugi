@@ -1,11 +1,11 @@
 // Diagnostics — installation health snapshot for support and troubleshooting.
 
 import { useEffect, useState } from "react";
-import { fetchHealth, type HealthResponse } from "../../../lib/api";
-import { Badge } from "../../../components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
-import { StatusDot } from "../../../components/ui/status-dot";
-import { useHealth } from "../../../lib/use-health";
+import { fetchHealth, type HealthResponse } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatusDot } from "@/components/ui/status-dot";
+import { useHealth } from "@/lib/use-health";
 
 export function DiagnosticsSection(): React.JSX.Element {
   const health = useHealth();

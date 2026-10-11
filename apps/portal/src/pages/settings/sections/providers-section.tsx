@@ -5,13 +5,13 @@
 import type { ThinkingLevel } from "@kintsugi/domain";
 import { PlugZap, Plus, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
-import { Input } from "../../../components/ui/input";
-import { ConfirmDialog } from "../../../components/ui/confirm-dialog";
-import { ProviderIcon } from "../../../components/ui/provider-icon";
-import { Select, type SelectOption } from "../../../components/ui/select";
-import { StatusDot } from "../../../components/ui/status-dot";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ProviderIcon } from "@/components/ui/provider-icon";
+import { Select, type SelectOption } from "@/components/ui/select";
+import { StatusDot } from "@/components/ui/status-dot";
 import {
   providersApi,
   type AgentModelBindingInput,
@@ -19,8 +19,8 @@ import {
   type ProviderView,
   type ReplaceProviderInput,
   type TestConnectionResult,
-} from "../../../lib/api/providers";
-import { cn } from "../../../lib/utils";
+} from "@/lib/api/providers";
+import { cn } from "@/lib/utils";
 import { ProviderFormDialog } from "./provider-form-dialog";
 
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];

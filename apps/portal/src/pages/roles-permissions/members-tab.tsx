@@ -3,15 +3,15 @@
 
 import { Plus, Search, Settings2, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "../../components/ui/button";
-import { Checkbox } from "../../components/ui/checkbox";
-import { Field } from "../../components/ui/field";
-import { Input } from "../../components/ui/input";
-import { Modal } from "../../components/ui/modal";
-import { Select, type SelectOption } from "../../components/ui/select";
-import { StatusDot } from "../../components/ui/status-dot";
-import { identityApi, type RoleRecord, type UserRecord } from "../../lib/api/identity";
-import { cn } from "../../lib/utils";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { Select, type SelectOption } from "@/components/ui/select";
+import { StatusDot } from "@/components/ui/status-dot";
+import { identityApi, type RoleRecord, type UserRecord } from "@/lib/api/identity";
+import { cn } from "@/lib/utils";
 
 interface FormState {
   id: string | null;

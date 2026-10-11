@@ -4,11 +4,11 @@
 
 import { FolderGit2, Plus, Server, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
-import { ConfirmDialog } from "../../../components/ui/confirm-dialog";
-import { StatusDot, type StatusTone } from "../../../components/ui/status-dot";
-import { gitApi, type GitRepositoryView, type GitServerInput, type GitServerView, type SyncStatus } from "../../../lib/api/git";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
+import { gitApi, type GitRepositoryView, type GitServerInput, type GitServerView, type SyncStatus } from "@/lib/api/git";
 import { GitRepositoryDialog } from "./git-repository-dialog";
 import { GitServerDialog } from "./git-server-dialog";
 

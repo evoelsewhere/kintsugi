@@ -2,7 +2,7 @@
 // dots (~10px), never as background fills or large swaths. "muted" marks inactive
 // or not-yet-implemented state in the neutral gray of the achromatic palette.
 import * as React from "react";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 export type StatusTone =
   | "blue"

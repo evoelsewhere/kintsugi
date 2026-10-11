@@ -1,7 +1,7 @@
 // Field — consistent form field wrapper: label (14px/400) + optional hint.
 
 import * as React from "react";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface FieldProps {
   label: string;

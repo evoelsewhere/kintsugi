@@ -2,7 +2,7 @@
 // Provider ids come from the pi catalog (`/api/admin/llm-providers/supported`).
 
 import { siAnthropic, siCloudflare, siDeepseek, siGoogle, siGooglecloud, siGooglegemini, siMistralai, siOpenrouter, siPerplexity, siVercel } from "simple-icons";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 interface IconShape {
   path: string;

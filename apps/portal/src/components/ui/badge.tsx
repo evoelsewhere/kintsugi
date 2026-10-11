@@ -1,7 +1,7 @@
 // Badge — DESIGN.md §4: pill shapes (9999px) are for badges and tags only.
 // Neutral surface; colored meaning is carried by StatusDot, not by fills.
 import * as React from "react";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 export type BadgeProps = React.HTMLAttributes<HTMLSpanElement>;
 

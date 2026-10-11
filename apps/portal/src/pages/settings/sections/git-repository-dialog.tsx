@@ -4,13 +4,13 @@
 
 import { PlugZap } from "lucide-react";
 import { useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { Field } from "../../../components/ui/field";
-import { Input } from "../../../components/ui/input";
-import { Modal } from "../../../components/ui/modal";
-import { Select } from "../../../components/ui/select";
-import { StatusDot } from "../../../components/ui/status-dot";
-import { gitApi, type GitServerView, type TestAccessResult } from "../../../lib/api/git";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { Select } from "@/components/ui/select";
+import { StatusDot } from "@/components/ui/status-dot";
+import { gitApi, type GitServerView, type TestAccessResult } from "@/lib/api/git";
 
 const REPOSITORY_ID = /^[a-z0-9][a-z0-9-]*$/;
 
