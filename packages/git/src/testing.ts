@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export interface GitHttpServer {
   /** Base URL, e.g. http://127.0.0.1:1234 — repositories live at `${baseUrl}/<name>.git`. */
@@ -87,6 +87,7 @@ export async function startGitHttpServer(): Promise<GitHttpServer> {
       } catch {
         fixtureGit(work, "checkout", "-q", "-B", branch);
       }
+      await mkdir(dirname(join(work, file)), { recursive: true });
       await writeFile(join(work, file), content);
       fixtureGit(work, "add", file);
       fixtureGit(work, "commit", "-q", "-m", `write ${file}`);
