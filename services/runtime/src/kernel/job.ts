@@ -47,6 +47,8 @@ export class KernelJob implements JobHandle {
    * lines for the launcher's idle watchdog.
    */
   lastActivityAt = Date.now();
+  #streamed = { thinking: 0, toolArgs: 0, text: 0 };
+  #progressAt = 0;
 
   constructor(
     readonly jobId: string,
@@ -116,9 +118,29 @@ export class KernelJob implements JobHandle {
     await this.#aborting;
   }
 
+  /** Counts streamed characters and reports them at most every 15 s as a progress event. */
+  #track(update: { type: string; delta?: unknown }): void {
+    const size = typeof update.delta === "string" ? update.delta.length : 0;
+    if (update.type === "thinking_delta") this.#streamed.thinking += size;
+    else if (update.type === "toolcall_delta") this.#streamed.toolArgs += size;
+    else if (update.type === "text_delta") this.#streamed.text += size;
+    const at = Date.now();
+    if (at - this.#progressAt < 15_000) return;
+    this.#progressAt = at;
+    this.events.push({
+      type: "progress",
+      jobId: this.jobId,
+      turn: this.#turns,
+      thinkingChars: this.#streamed.thinking,
+      toolArgsChars: this.#streamed.toolArgs,
+      textChars: this.#streamed.text,
+    });
+  }
+
   #onEvent(event: AgentSessionEvent): void {
     if (this.#ended) return;
     this.lastActivityAt = Date.now();
+    if (event.type === "message_update") this.#track(event.assistantMessageEvent);
     switch (event.type) {
       case "turn_start": {
         this.#turns += 1;

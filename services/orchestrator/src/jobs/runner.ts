@@ -442,7 +442,15 @@ export class JobRunner {
       try {
         for await (const event of handle.events) {
           this.#count(event, usage);
-          if (event.type === "tool.call") {
+          if (event.type === "progress") {
+            const kb = (chars: number): string => (chars < 1000 ? `${chars}` : `${(chars / 1000).toFixed(1)}k`);
+            await this.#event(ws, stepId, "log", `model working: turn ${event.turn}, thinking ${kb(event.thinkingChars)} chars, tool arguments ${kb(event.toolArgsChars)}, text ${kb(event.textChars)}`, {
+              turn: event.turn,
+              thinkingChars: event.thinkingChars,
+              toolArgsChars: event.toolArgsChars,
+              textChars: event.textChars,
+            });
+          } else if (event.type === "tool.call") {
             const line = summarizeToolCall(event.tool, event.input, roots);
             const reason = event.reason === undefined ? "" : ` (${event.reason})`;
             await this.#event(ws, stepId, "tool", event.decision === "blocked" ? `blocked: ${line}${reason}` : line, { tool: event.tool, decision: event.decision });

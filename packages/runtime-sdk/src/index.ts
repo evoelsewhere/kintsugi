@@ -56,6 +56,8 @@ export type JobFailureReason = "error" | "timeout" | "max-turns" | "budget" | "a
 export type JobEvent =
   | { type: "job.started"; jobId: string; at: string; runtimeVersion: string; agent: string; metadata?: Record<string, string> }
   | { type: "message.delta"; jobId: string; text: string }
+  /** Periodic sign of work while the model streams: characters so far per kind and the current turn. */
+  | { type: "progress"; jobId: string; turn: number; thinkingChars: number; toolArgsChars: number; textChars: number }
   | { type: "tool.call"; jobId: string; callId: string; tool: string; input: unknown; decision: "allowed" | "blocked"; reason?: string }
   | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string }
   | { type: "output"; jobId: string; path: string }
