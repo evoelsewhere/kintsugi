@@ -23,6 +23,8 @@ export interface JobRunView {
   outputSummary?: { files?: number; bytes?: number } & Record<string, unknown>;
   documentWrite?: { id: string; status: string; branch?: string; prUrl?: string; error?: string };
   restrictedRecords: number;
+  /** Set while the worker is stopping a run a person cancelled. */
+  cancelRequestedAt?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
@@ -33,6 +35,18 @@ export interface JobRunDetail extends JobRunView {
   artifacts: Array<{ path: string; sha256: string; size: number; provenance: { origin: string; runtimeAgent?: string } }>;
 }
 
+/** One line of a run's live record: redacted by the worker, never file content. */
+export interface JobRunEvent {
+  id: string;
+  at: string;
+  kind: "status" | "step.started" | "step.finished" | "tool" | "log";
+  message: string;
+  stepRunId?: string;
+  data: Record<string, unknown>;
+}
+
+export const isActive = (run: Pick<JobRunView, "status">): boolean => run.status === "queued" || run.status === "running";
+
 const project = (projectId: string): string => `/api/projects/${encodeURIComponent(projectId)}`;
 
 export const jobRunsApi = {
@@ -41,4 +55,19 @@ export const jobRunsApi = {
   list: (projectId: string, applicationId: string, limit = 5) =>
     apiGet<Page<JobRunView>>(`${project(projectId)}/job-runs?applicationId=${encodeURIComponent(applicationId)}&limit=${limit}`),
   get: (projectId: string, id: string) => apiGet<JobRunDetail>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}`),
+  cancel: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/cancel`, "POST"),
+  /**
+   * Follows a run live over Server-Sent Events (the session cookie authenticates the stream).
+   * Returns a function that closes the stream; it also closes itself when the run has ended.
+   */
+  follow(projectId: string, id: string, handlers: { onEvent(event: JobRunEvent): void; onStatus(run: JobRunView): void; onEnd(run: JobRunView): void }): () => void {
+    const source = new EventSource(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/events`);
+    source.addEventListener("job-event", (message) => handlers.onEvent(JSON.parse((message as MessageEvent<string>).data) as JobRunEvent));
+    source.addEventListener("status", (message) => handlers.onStatus(JSON.parse((message as MessageEvent<string>).data) as JobRunView));
+    source.addEventListener("end", (message) => {
+      source.close();
+      handlers.onEnd(JSON.parse((message as MessageEvent<string>).data) as JobRunView);
+    });
+    return () => source.close();
+  },
 };
