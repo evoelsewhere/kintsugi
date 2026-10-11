@@ -22,3 +22,18 @@ export {
 } from "./format.js";
 export { toAgentDefinition, validateAgent, type AgentContext } from "./definition.js";
 export { BUILTIN_DIR, loadBuiltinCatalog, readPackageDir, type BuiltinCatalog } from "./builtin.js";
+export {
+  AgentResolutionError,
+  installationSkills,
+  parseStoredAgent,
+  resolveAgent,
+  resolveAgentDefinition,
+  type AgentSource,
+  type CustomAgentStore,
+  type ResolvedAgent,
+  type Resolution,
+  type ResolveOptions,
+  type StoredAgent,
+  type StoredSkill,
+} from "./catalog.js";
+export { unzipFiles, zipFiles, type UnzipLimits } from "./zip.js";
