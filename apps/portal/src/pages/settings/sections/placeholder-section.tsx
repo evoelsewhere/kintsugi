@@ -1,8 +1,8 @@
 // Reusable skeleton for a settings section that is not implemented yet.
 
-import { Badge } from "../../../components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
-import { StatusDot } from "../../../components/ui/status-dot";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatusDot } from "@/components/ui/status-dot";
 
 export interface PlaceholderSectionProps {
   title: string;

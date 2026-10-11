@@ -9,7 +9,7 @@
 import { X } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 import { useOverlayStack } from "./overlay-stack";
 
 export interface ModalProps {

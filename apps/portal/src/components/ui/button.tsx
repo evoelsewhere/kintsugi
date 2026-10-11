@@ -2,7 +2,7 @@
 // labels 14px/400, keyboard focus = double ring (2px white + 4px blue). No transforms.
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--geist-radius)] text-[14px] leading-none font-normal focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] disabled:pointer-events-none disabled:text-text-muted [&_svg]:size-4 [&_svg]:shrink-0",

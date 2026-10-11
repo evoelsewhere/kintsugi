@@ -8,13 +8,13 @@
 
 import { Check, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { CheckMark, Checkbox } from "../../../components/ui/checkbox";
-import { Field } from "../../../components/ui/field";
-import { Input } from "../../../components/ui/input";
-import { Modal } from "../../../components/ui/modal";
-import { ProviderIcon } from "../../../components/ui/provider-icon";
-import { Select } from "../../../components/ui/select";
+import { Button } from "@/components/ui/button";
+import { CheckMark, Checkbox } from "@/components/ui/checkbox";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { ProviderIcon } from "@/components/ui/provider-icon";
+import { Select } from "@/components/ui/select";
 import {
   providersApi,
   type CreateProviderInput,
@@ -22,8 +22,8 @@ import {
   type ProviderView,
   type ReplaceProviderInput,
   type SupportedProviders,
-} from "../../../lib/api/providers";
-import { cn } from "../../../lib/utils";
+} from "@/lib/api/providers";
+import { cn } from "@/lib/utils";
 
 const PROVIDER_ID = /^[a-z0-9][a-z0-9-]*$/;
 

@@ -4,14 +4,14 @@
 
 import { DISPOSITIONS, type ApplicationRepositoryRole, type Disposition } from "@kintsugi/domain";
 import { useState } from "react";
-import { Button } from "../../components/ui/button";
-import { Field } from "../../components/ui/field";
-import { Input } from "../../components/ui/input";
-import { Modal } from "../../components/ui/modal";
-import { Select, type SelectOption } from "../../components/ui/select";
-import { Textarea } from "../../components/ui/textarea";
-import type { GitRepositoryView } from "../../lib/api/git";
-import type { ApplicationInput, ApplicationView, LinkInput, ProjectInput, ProjectView } from "../../lib/api/projects";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { Select, type SelectOption } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { GitRepositoryView } from "@/lib/api/git";
+import type { ApplicationInput, ApplicationView, LinkInput, ProjectInput, ProjectView } from "@/lib/api/projects";
 
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 

@@ -2,8 +2,8 @@
 
 import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Checkbox } from "../../../components/ui/checkbox";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   clearReducedMotionPreference,
   COLOR_SCHEME_QUERY,
@@ -17,8 +17,8 @@ import {
   setThemePreference,
   type ResolvedTheme,
   type ThemeMode,
-} from "../../../lib/appearance";
-import { cn } from "../../../lib/utils";
+} from "@/lib/appearance";
+import { cn } from "@/lib/utils";
 
 const OPTIONS: Array<{ id: ThemeMode; label: string; description: string; icon: typeof Sun }> = [
   { id: "light", label: "Light", description: "Bright, neutral surfaces", icon: Sun },

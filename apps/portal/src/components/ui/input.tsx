@@ -1,7 +1,7 @@
 // Input — DESIGN.md §4: height 40px (form tokens), 14px/400, radius 6px,
 // shadow-as-border, focus = 1px auto outline #005FCC with the shadow removed.
 import * as React from "react";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 

@@ -1,7 +1,7 @@
 // Textarea — the multi-line sibling of Input (DESIGN.md §4): same radius, border and
 // focus treatment; monospace option for keys and config snippets.
 import * as React from "react";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   mono?: boolean;

@@ -1,7 +1,7 @@
 // Card — DESIGN.md §5/§6: elevated surface, shadow-as-border (no CSS border),
 // radius 12px, padding 24px. Depth composes border layer + subtle drop shadow.
 import * as React from "react";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>): React.JSX.Element {
   return <div className={cn("shadow-border-medium rounded-xl bg-surface p-4", className)} {...props} />;

@@ -3,8 +3,8 @@
 
 import { Activity, Cpu, GitBranch, type LucideIcon, Palette, Settings, Shield } from "lucide-react";
 import { useState } from "react";
-import { useAuth } from "../../lib/auth";
-import { cn } from "../../lib/utils";
+import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import { AppearanceSection } from "./sections/appearance-section";
 import { DiagnosticsSection } from "./sections/diagnostics-section";
 import { GitSection } from "./sections/git-section";

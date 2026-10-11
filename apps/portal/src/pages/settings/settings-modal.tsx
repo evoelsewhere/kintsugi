@@ -1,6 +1,6 @@
 // Settings modal — opens from the sidebar user card or the Settings nav entry.
 
-import { Modal } from "../../components/ui/modal";
+import { Modal } from "@/components/ui/modal";
 import { SettingsTabs } from "./settings-tabs";
 
 export interface SettingsModalProps {

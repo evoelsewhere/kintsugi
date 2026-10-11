@@ -2,9 +2,9 @@
 // Settings -> Git, so point there (or to an admin when the user cannot manage Git).
 
 import { GitBranch } from "lucide-react";
-import { Button } from "../../components/ui/button";
-import { useAuth } from "../../lib/auth";
-import { useShell } from "../../lib/shell";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth";
+import { useShell } from "@/lib/shell";
 
 export function NoRepositories({ onSettingsClosed }: { onSettingsClosed: () => void }): React.JSX.Element {
   const { can } = useAuth();

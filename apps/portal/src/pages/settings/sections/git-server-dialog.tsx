@@ -5,13 +5,13 @@
 
 import { GIT_SERVER_KINDS, type GitServerKind } from "@kintsugi/domain";
 import { useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { Field } from "../../../components/ui/field";
-import { Input } from "../../../components/ui/input";
-import { Modal } from "../../../components/ui/modal";
-import { Select } from "../../../components/ui/select";
-import { Textarea } from "../../../components/ui/textarea";
-import type { GitAuthType, GitServerInput, GitServerView } from "../../../lib/api/git";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { GitAuthType, GitServerInput, GitServerView } from "@/lib/api/git";
 
 const SERVER_ID = /^[a-z0-9][a-z0-9-]*$/;
 

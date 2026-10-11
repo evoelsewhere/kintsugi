@@ -4,12 +4,12 @@
 import { ChevronRight, FolderKanban, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Breadcrumbs } from "../../components/breadcrumbs";
-import { Button } from "../../components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
-import { gitApi, type GitRepositoryView } from "../../lib/api/git";
-import { projectsApi, type ProjectView } from "../../lib/api/projects";
-import { useAuth } from "../../lib/auth";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { gitApi, type GitRepositoryView } from "@/lib/api/git";
+import { projectsApi, type ProjectView } from "@/lib/api/projects";
+import { useAuth } from "@/lib/auth";
 import { NoRepositories } from "./no-repositories";
 import { ProjectDialog } from "./project-dialogs";
 
