@@ -11,7 +11,7 @@
 | Orchestration on pg-boss (Postgres) | [ADR-0003](../decisions/0003-postgres-job-queue.md) |
 | TypeScript on Node ≥ 22; the runner follows pi's requirement (Node ≥ 22.19) | [ADR-0002](../decisions/0002-typescript-monorepo.md) |
 | pi is pinned to an exact version; only its MIT core packages are used | [ADR-0001](../decisions/0001-pi-as-kintsugi-runtime.md) |
-| The runtime never writes to repositories; runner containers are read-only except `/out` | [ADR-0004](../decisions/0004-runner-container-per-job.md) |
+| The runtime never writes to repositories; a job's source and inputs are read-only and it writes only to its output and scratch directories | [ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md) |
 | Kintsugi ships no stack-specific content; projects write their standards in their document repo | [ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md) |
 | Extensions (harness transformer plugins) require installation-level allowlists | [ADR-0015](../decisions/0015-member-assets-as-agent-plugins.md) |
 | No code graph or language parsing; no unit-discovery configuration; no runtime-agent configuration in any project repo | [ADR-0014](../decisions/0014-no-code-graph-no-agent-config.md) |

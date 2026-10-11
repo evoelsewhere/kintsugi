@@ -19,8 +19,7 @@ Decision: [ADR-0009](../../decisions/0009-llm-provider-config.md). This covers L
 ## At job launch
 
 1. The launcher registers only the provider and models the job needs with pi, in memory: no `models.json` or `auth.json` is written.
-2. It passes only that provider's credentials, as environment variables.
-3. The `egress-proxy` allowlist is derived from the configured provider endpoints.
+2. It passes only that provider's credentials to pi, in memory (never to scripts, never on disk); providers that need process environment variables are not supported for in-worker jobs yet.
 
 **Not allowed for the runtime**: consumer OAuth subscription logins (Claude Pro/Max, ChatGPT, Copilot tokens).
 

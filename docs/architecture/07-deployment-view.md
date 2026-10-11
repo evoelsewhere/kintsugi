@@ -3,65 +3,47 @@
 Kintsugi ships as a self-hosted Docker Compose package ([ADR-0006](../decisions/0006-self-hosted-package.md)). One installation runs on one Docker host and serves one organization.
 
 ```
-┌───────────────────────────── Project's Docker host ─────────────────────────────┐
-│                                                                                  │
-│  ┌───────────────────────────┐      ┌───────────────────────────────────┐        │
-│  │ kintsugi-app              │      │ kintsugi-worker                   │        │
-│  │  · API (REST + OpenAPI)   │      │  · pg-boss job consumer           │        │
-│  │  · Portal (static SPA)    │      │  · pipeline / stage state machine │        │
-│  │  · MCP server + CLI API   │◄────►│  · git sync (clone/fetch/poll)    │        │
-│  │  · Job gateway (runner →) │      │  · job launcher (Docker API)      │        │
-│  └──────┬──────────▲─────────┘      │  · git writer (commit / PR)       │        │
-│         │          │                └───────┬───────────────┬───────────┘        │
-│         ▼          │ JobEvent, kb.*         │ docker run    │                    │
-│  ┌──────────────┐  │                ┌───────▼───────────────────────────┐        │
-│  │ postgres     │  └────────────────┤ kintsugi-runner (1 container/job) │        │
-│  │ + pgvector   │                   │  Node + pi SDK (pinned) + ext     │        │
-│  └──────────────┘                   │  /src  read-only (git checkout)   │        │
-│                                     │  /out  writable (results)         │        │
-│  ┌──────────────┐  ┌──────────────┐ └───────┬───────────────────────────┘        │
-│  │ docker-proxy │  │ egress-proxy │◄────────┘ only to configured LLM providers   │
-│  └──────────────┘  └──────┬───────┘                                              │
-└───────────────────────────┼──────────────────────────────────────────────────────┘
-                            ▼                       ▲                    ▲
-                 LLM providers (as configured)   Git servers (many)   Member machines
+Project's Docker host
+  kintsugi-app ── API (REST + OpenAPI), portal (static SPA), MCP server + CLI API
+       │
+       ├── postgres + pgvector
+       │
+  kintsugi-worker ── pg-boss consumer, Git sync, document repo writer,
+                     job runner: job workspaces <data>/jobs/<id>/{src (ro), in (ro), out, tmp}
+                     agent kernel (pi, pinned) · scripts: Python 3.12, Node 22
+       │
+       └──► LLM providers (as configured) · Git servers (many)            Member machines ──► kintsugi-app
 ```
 
 ## 7.1 Containers
 
 | Container | Responsibility | Exposure |
 |---|---|---|
-| `kintsugi-app` | API, portal (static SPA), MCP server, CLI API, job gateway | The only published port, behind the project's reverse proxy / TLS |
-| `kintsugi-worker` | pg-boss consumer, state machine, Git sync & writer, ingestion, job launcher | Outbound to Git servers |
-| `kintsugi-runner` | One container per runtime job; Node + pi SDK | Internal `jobs` network only |
+| `kintsugi-app` | API, portal (static SPA), MCP server, CLI API | The only published port, behind the project's reverse proxy / TLS |
+| `kintsugi-worker` | pg-boss consumer, Git sync & writer, ingestion, runtime jobs in job workspaces ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)) | Outbound to Git servers and LLM providers |
 | `postgres` | `pgvector/pgvector:pg16`; the only stateful service | Internal |
-| `docker-proxy` | Restricted Docker API for the worker ❓ D32 | Internal |
-| `egress-proxy` | Allowlist of LLM provider hosts; the runner's only route to the internet | Internal + outbound |
+
+There is no per-job container, no Docker socket and no egress proxy: jobs run inside the worker container, each in its own job workspace, without OS-level isolation.
 
 ## 7.2 Networks and volumes
 
 | Name | Purpose |
 |---|---|
-| `backend` network | app, worker, postgres, docker-proxy |
-| `jobs` network (`internal: true`) | runner containers, app (job gateway), egress-proxy |
-| `egress` network | egress-proxy → internet |
+| `backend` network | app, worker, postgres |
 | `pg-data` volume | Postgres data (back this up) |
-| `kintsugi-data` volume | Backed by the host directory `KINTSUGI_DATA_DIR`: Git mirrors, the document repo clones, per-job `/src` (read-only worktree) and `/out` mounted via volume subpaths ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
+| `kintsugi-data` volume | Backed by the host directory `KINTSUGI_DATA_DIR`: Git mirrors, document repo worktrees and the job workspaces `jobs/<id>/{src,in,out,tmp}` ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md), [ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)) |
 
-## 7.3 Runner container hardening
+## 7.3 Worker image
 
-- non-root user
-- `--read-only` root filesystem
-- `cap-drop ALL`
-- `no-new-privileges`
-- CPU, memory and wall-clock limits
-- gVisor (`runsc`) when available
+- Git 2.40+, Python 3.12 and Node 22, standard libraries only; nothing is installed at run time.
+- Runs as a non-root user; its only writable location is the data directory.
+- Container memory and CPU limits bound all jobs of the worker together.
 
 Details: [security](concepts/security.md).
 
 ## 7.4 Host requirements (estimate, D33)
 
-- Linux, Docker Engine 24+ (26+ for volume subpaths), Compose v2.
+- Linux, Docker Engine 24+, Compose v2. Without Docker (development), the worker runs directly on Windows, macOS or Linux with Git, Python 3.12 and Node 22.
 - 4 vCPU, 16 GB RAM, 100 GB disk.
 - Outbound access to the configured Git servers and LLM providers.
 

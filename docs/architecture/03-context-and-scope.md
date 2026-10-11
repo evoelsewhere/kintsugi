@@ -34,7 +34,7 @@
 | `kintsugi` CLI | HTTPS REST, PAT | Inbound | |
 | Git (any server) | git over HTTPS (token) or SSH (deploy key) | Outbound from the worker | Clone / fetch / push |
 | Git provider APIs | HTTPS REST (GitHub, Azure DevOps, GitLab, Bitbucket, Gitea) | Outbound; webhooks inbound when reachable | PRs, comments; polling fallback |
-| LLM providers | HTTPS through `egress-proxy` | Outbound from runner containers | Allowlist derived from configured providers |
+| LLM providers | HTTPS | Outbound from `kintsugi-worker` (agent jobs) and `kintsugi-app` (connection tests) | Only the configured providers are called; no egress allowlist is enforced by Kintsugi |
 | Harness telemetry | OTLP/HTTP (optional), vendor metrics APIs | Inbound / outbound polling | [Observability and telemetry](concepts/observability-and-telemetry.md) |
 
 ## 3.3 Out of scope

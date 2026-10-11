@@ -4,7 +4,7 @@
 |---|---|---|
 | pi APIs change quickly (1.0 shipped 2026-10-01; releases near-daily) | Runner breakage on upgrade | Pin the exact version; wrap pi inside `services/runtime`; run the kernel smoke suite before upgrading (D27, ADR-0023) |
 | Earendil's future licensing of non-core layers | Licensing exposure | Depend only on pi's MIT core packages |
-| Worker's Docker API access | Host compromise if the worker is compromised | docker-socket-proxy restricted to container lifecycle; image and mount allowlist (D32) |
+| No OS-level isolation of runtime jobs ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)) | A malicious script or dependency reads what the worker's OS user can read and reaches the network | Job workspace with read-only sources, cleared environment, built-in scripts only (model-written ones hashed), JobOutput hook; worker as a non-root user without credentials on disk; network restrictions at deployment level |
 | Prompt injection from legacy repos | Data exfiltration, misleading outputs | Read-only mounts, egress allowlist, no repo context files, worker-side validation of `/out`, human review via PRs |
 | Uneven telemetry from member harnesses | Incomplete AI metrics | MCP/CLI and PR conventions as the primary source; OTel and vendor APIs as supplementary sources |
 | Members using harnesses outside policy | Code sent to disallowed models | Policy distribution, content exclusions, trailer/declaration gates, training |

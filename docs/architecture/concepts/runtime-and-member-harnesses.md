@@ -4,7 +4,7 @@ Kintsugi has two kinds of agents with separate execution models ([ADR-0001](../.
 
 | | **Kintsugi Runtime (pi)** | **Member harnesses** (Claude Code, GitHub Copilot, ChatGPT/Codex) |
 |---|---|---|
-| Where it runs | The project's Kintsugi installation, one Docker container per job | Members' machines (IDE, CLI, desktop/web app) |
+| Where it runs | The project's Kintsugi installation, in the worker, one job workspace per job | Members' machines (IDE, CLI, desktop/web app) |
 | Who drives it | Kintsugi (orchestrator), automatically or on request from the portal | The member, interactively |
 | What it does | A **generic agent kernel** ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)) for **platform intelligence**; the agents (knowledge, assessment, to-be analysis, planning, review / gates, reporting) are planned and supplied per job as data | **The actual work**: write / migrate code, tests, designs, deliverable documents |
 | Writes to project repos | **Not directly.** The runner writes only to its output directory; the worker commits or opens a PR in the document repo | **Yes**, through the member's branches and PRs |
