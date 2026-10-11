@@ -27,6 +27,8 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_JOB_RETENTION_DAYS` | no | `7` | Days the output directory of a failed or cancelled run, or of a run whose document write failed, is kept under `KINTSUGI_DATA_DIR/jobs/` for inspection and retries. Outputs whose document write is committed, opened as a pull request or unchanged are deleted at once; the worker sweeps expired ones hourly |
 | `KINTSUGI_WORKFLOW_MAX_AGENTS` | no | `50` | Agent jobs one workflow may start |
 | `KINTSUGI_WORKFLOW_CONCURRENCY` | no | `4` | Agent jobs of one workflow running at a time |
+| `KINTSUGI_STAGE_MAX_AGENTS` | no | `200` | Agent jobs one stage run may start, workflow jobs included (a workflow in a stage gets the smaller of what is left and `KINTSUGI_WORKFLOW_MAX_AGENTS`) |
+| `KINTSUGI_STAGE_CONCURRENCY` | no | `4` | Steps of one parallel or per-item group of a stage running at a time |
 | `KINTSUGI_RUNTIME_MODE` | no | `pi` | `pi` runs agent jobs with the configured LLM providers; `mock` runs them without an LLM (development and demos) |
 | `KINTSUGI_PYTHON` | no | `python3` (`python` on Windows) | Python 3.12 interpreter for script steps and hooks |
 | `KINTSUGI_NODE` | no | the worker's Node | Node 22+ interpreter for `.js` script steps |
