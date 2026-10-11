@@ -47,6 +47,61 @@ export interface JobRunEvent {
 
 export const isActive = (run: Pick<JobRunView, "status">): boolean => run.status === "queued" || run.status === "running";
 
+/** A stage of the built-in pipeline (packages/agents/builtin/commands), and whether the portal can run it yet. */
+export interface StageView {
+  id: string;
+  command: string;
+  description: string;
+  /** runtime = Kintsugi jobs; member = members' harnesses; portal = a portal screen. */
+  audience: "runtime" | "member" | "portal";
+  agents: string[];
+  writes: string[];
+  gates: string[];
+  runnable: boolean;
+}
+
+export interface JobRunFilter {
+  status?: JobRunStatus[];
+  projectId?: string;
+  applicationId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Metadata of a restricted record (never its content); opening it is audited. */
+export interface RestrictedRecordSummary {
+  jobRunId: string;
+  topLevelRunId: string;
+  projectId: string;
+  applicationId?: string;
+  runName: string;
+  stepName?: string;
+  path: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface RestrictedRecord {
+  jobRunId: string;
+  path: string;
+  size: number;
+  content: string;
+  createdAt: string;
+}
+
+/** `?a=1&b=2` from the defined entries (arrays joined with commas). */
+export function queryString(entries: object): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(entries) as [string, unknown][]) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      if (value.length > 0) params.set(key, value.join(","));
+    } else if (typeof value === "string" || typeof value === "number") params.set(key, String(value));
+  }
+  const text = params.toString();
+  return text === "" ? "" : `?${text}`;
+}
+
 const project = (projectId: string): string => `/api/projects/${encodeURIComponent(projectId)}`;
 
 export const jobRunsApi = {
@@ -54,6 +109,15 @@ export const jobRunsApi = {
     apiSend<JobRunView>(`${project(projectId)}/applications/${encodeURIComponent(applicationId)}/stages/${stage}/run`, "POST"),
   list: (projectId: string, applicationId: string, limit = 5) =>
     apiGet<Page<JobRunView>>(`${project(projectId)}/job-runs?applicationId=${encodeURIComponent(applicationId)}&limit=${limit}`),
+  /** Top-level runs across projects, newest first. */
+  listAll: (filter: JobRunFilter = {}) =>
+    apiGet<Page<JobRunView>>(`/api/job-runs${queryString({ status: filter.status, projectId: filter.projectId, applicationId: filter.applicationId, limit: filter.limit, offset: filter.offset })}`),
+  stages: () => apiGet<StageView[]>("/api/stages"),
+  /** Restricted records across projects, metadata only (restricted.read). */
+  restrictedRecords: (filter: { projectId?: string; jobRunId?: string; limit?: number; offset?: number } = {}) =>
+    apiGet<Page<RestrictedRecordSummary>>(`/api/governance/restricted-records${queryString(filter)}`),
+  /** Decrypts the restricted records of a top-level run; every record read is audited. */
+  openRestricted: (projectId: string, id: string) => apiGet<RestrictedRecord[]>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/restricted`),
   get: (projectId: string, id: string) => apiGet<JobRunDetail>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}`),
   cancel: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/cancel`, "POST"),
   /**
