@@ -1,16 +1,33 @@
-// The kintsugi-worker process core (ADR-0003, ADR-0019, ADR-0025): pg-boss queues for Git
-// sync and document writes, plus the scheduler that feeds Git sync. New repositories are
+// The kintsugi-worker process core (ADR-0003, ADR-0019, ADR-0025, ADR-0029): pg-boss queues
+// for Git sync, document writes and runtime job runs, plus the scheduler that feeds Git sync. New repositories are
 // picked up within seconds; every repository is re-synced each poll interval; removed ones
 // lose their mirror. Document writes run one at a time per document repository.
 
 import { CheckoutStorage } from "@kintsugi/git";
+import { type Interpreters, interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 import { DocumentWriteStore } from "./document-write/store.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
+import { builtinAgents } from "./jobs/agents.js";
+import { MirrorCheckouts } from "./jobs/checkouts.js";
+import { type JobDefaults, JobRunner } from "./jobs/runner.js";
+import { PgJobStore } from "./jobs/store.js";
 import { pruneMirrors, syncRepository } from "./git-sync/sync.js";
-import { DOCUMENT_WRITE_QUEUE, type DocumentWriteRequest, GIT_SYNC_QUEUE, QUEUE_SCHEMA, ensureDocumentWriteQueue, sendDocumentWrite } from "./queues.js";
+import {
+  DOCUMENT_WRITE_QUEUE,
+  type DocumentWriteRequest,
+  GIT_SYNC_QUEUE,
+  JOB_RUN_QUEUE,
+  type JobRunRequest,
+  QUEUE_SCHEMA,
+  ensureDocumentWriteQueue,
+  ensureJobRunQueue,
+  sendDocumentWrite,
+  sendJobRun,
+} from "./queues.js";
 
 export { GIT_SYNC_QUEUE, QUEUE_SCHEMA } from "./queues.js";
 
@@ -32,6 +49,15 @@ export interface WorkerOptions {
   /** For tests: the HTTP client of the pull-request adapters. */
   fetch?: typeof fetch;
   log?: (message: string) => void;
+  /** Runtime jobs (queue `job-run`); omitted = this worker runs no jobs. */
+  jobs?: {
+    /** pi in production; the mock backend in tests and mock-mode development. */
+    agents: AgentRuntime;
+    interpreters?: Interpreters;
+    defaults?: JobDefaults;
+    /** Parallel job runs in this process (KINTSUGI_JOB_MAX_CONCURRENCY). */
+    concurrency?: number;
+  };
 }
 
 export interface Worker {
@@ -39,6 +65,8 @@ export interface Worker {
   requestSync(repositoryId: string): Promise<void>;
   /** Enqueues a document write behind other writes to the same document repository. */
   requestWrite(documentRepositoryId: string, request: DocumentWriteRequest): Promise<void>;
+  /** Enqueues a job run (the row must exist as `queued`). */
+  requestJobRun(request: JobRunRequest): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -86,6 +114,29 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     }
   });
 
+  const requestWrite = (documentRepositoryId: string, request: DocumentWriteRequest): Promise<void> => sendDocumentWrite(boss, documentRepositoryId, request);
+
+  // Runtime jobs: one job workspace per run (ADR-0029); aborted when the worker stops.
+  const stopping = new AbortController();
+  await ensureJobRunQueue(boss);
+  if (options.jobs !== undefined) {
+    const runner = new JobRunner({
+      store: new PgJobStore(options.pool),
+      storage: options.storage,
+      checkouts: new MirrorCheckouts({ repositories: store, storage: options.storage }),
+      agents: options.jobs.agents,
+      agentDefinitions: builtinAgents(),
+      interpreters: options.jobs.interpreters ?? interpretersFromEnv(),
+      ...(options.jobs.defaults === undefined ? {} : { defaults: options.jobs.defaults }),
+      requestWrite,
+      log,
+    });
+    await boss.work<JobRunRequest>(JOB_RUN_QUEUE, { localConcurrency: options.jobs.concurrency ?? 2 }, async ([job]) => {
+      if (job === undefined) return;
+      await runner.run(job.data.jobRunId, stopping.signal);
+    });
+  }
+
   const requestSync = async (repositoryId: string): Promise<void> => {
     await boss.send(GIT_SYNC_QUEUE, { repositoryId }, { singletonKey: repositoryId });
   };
@@ -115,9 +166,11 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
 
   return {
     requestSync,
-    requestWrite: (documentRepositoryId, request) => sendDocumentWrite(boss, documentRepositoryId, request),
+    requestWrite,
+    requestJobRun: (request) => sendJobRun(boss, request),
     async stop() {
       stopped = true;
+      stopping.abort();
       for (const timer of timers) clearInterval(timer);
       await boss.stop({ graceful: true });
     },

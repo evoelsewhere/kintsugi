@@ -27,9 +27,12 @@
     "dev": "node ../../scripts/dev-service.mjs"
   },
   "dependencies": {
+    "@kintsugi/agents": "workspace:*",
     "@kintsugi/domain": "workspace:*",
     "@kintsugi/git": "workspace:*",
     "@kintsugi/manifest": "workspace:*",
+    "@kintsugi/runtime": "workspace:*",
+    "@kintsugi/runtime-sdk": "workspace:*",
     "@kintsugi/secrets": "workspace:*",
     "pg": "^8.23.1",
     "pg-boss": "12.37.1"
