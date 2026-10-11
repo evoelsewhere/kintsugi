@@ -1,4 +1,4 @@
-// Typed access to the Agent Builder (Settings → Agents, ADR-0026).
+// Typed access to the Agent Builder (Administration → Agents, ADR-0026).
 // Mirrors apps/api → modules/admin/agents.
 
 import type { ThinkingLevel } from "@kintsugi/domain";
