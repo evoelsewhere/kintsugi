@@ -139,6 +139,7 @@ export interface StageDefinition {
   description: string;
   audience: StageAudience;
   agents: string[];
+  reads: string[];
   writes: string[];
   gates: string[];
 }

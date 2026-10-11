@@ -8,7 +8,7 @@ metadata:
   agents: [scaffolder, business-rules-extractor, legacy-analyst, architecture-critic]
   reads: [assessment/<app>/MODERNIZATION_BRIEF.md, assessment/<app>/INTENT.md, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/DATA_OBJECTS.md, assessment/<app>/topology.json, assessment/<app>/ASSESSMENT.md, assessment/<app>/AI_NATIVE_SPEC.md, assessment/<app>/REIMAGINED_ARCHITECTURE.md]
   writes: [assessment/<app>/AI_NATIVE_SPEC.md, assessment/<app>/REIMAGINED_ARCHITECTURE.md]
-  gates: [P0 capabilities and deliberate drops (checkpoint 1), architecture approval before scaffolding (checkpoint 2)]
+  gates: ["P0 capabilities and deliberate drops (checkpoint 1)", "architecture approval before scaffolding (checkpoint 2)"]
 ---
 
 The first token of `$ARGUMENTS` is the application id (`$app`, from `kintsugi.yaml`); **everything after it is the target

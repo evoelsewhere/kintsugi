@@ -8,7 +8,7 @@ metadata:
   agents: []
   reads: [assessment/<app>/MODERNIZATION_BRIEF.md, assessment/<app>/INTENT.md, assessment/<app>/PREFLIGHT.md, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/DELTA_CATALOG.md, assessment/<app>/BASELINE.md, assessment/<app>/baseline/, assessment/<app>/UPLIFT_NOTES.md, assessment/<app>/modules/<module>/TRANSFORMATION_NOTES.md, golden/<module>/cases.json, golden/<module>/fresh-cases.json]
   writes: [golden/<module>/fresh/, golden/<module>/fresh-cases.json, runs/<module>/<run-id>/, assessment/<app>/VERIFICATION.md, assessment/<app>/VERIFICATION.json]
-  gates: [approval of each difference (fresh-input, case or baseline), sign-off of the verification by a named person]
+  gates: ["approval of each difference (fresh-input, case or baseline)", "sign-off of the verification by a named person"]
 ---
 
 Re-check, independently, that the modernized code of `$app` behaves like the legacy, and give each module one
