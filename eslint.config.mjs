@@ -29,6 +29,17 @@ export default tseslint.config(
     },
   },
   {
+    // Deep relative imports break on every move: use the aliases instead
+    // (apps/api: #common/*, #modules/* in package.json "imports"; apps/portal: @/*).
+    files: ["apps/api/src/**/*.ts", "apps/portal/src/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [{ regex: "^(\\.\\./){2,}", message: "Import through #common/*, #modules/* (api) or @/* (portal) instead of climbing two or more folders." }] },
+      ],
+    },
+  },
+  {
     files: ["apps/portal/**/*.{ts,tsx}"],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },
