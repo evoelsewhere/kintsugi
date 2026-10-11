@@ -25,6 +25,16 @@ Responsibilities beyond the feature modules below:
   enqueues it on the worker's `job-run` queue; the worker runs it in a job workspace (ADR-0029).
   `GET /api/projects/:id/job-runs[/:runId]` shows runs, steps, artifacts and the document write;
   `GET …/job-runs/:runId/restricted` (`restricted.read`) decrypts the restricted records.
+  `GET /api/stages` lists the pipeline stages from the built-in commands (who runs each,
+  `runnable` for those the portal can start); `GET /api/job-runs` lists top-level runs across
+  projects (`?status=queued,running&projectId&applicationId`).
+- Cross-project reads (session only): `GET /api/document-writes`
+  (`?status=queued,failed&projectId`); `GET /api/monitoring/overview` (counts, what needs
+  attention, recent activity, the worker's pg-boss queue counts — `null` when unreadable) and
+  `GET /api/monitoring/repositories` (sync state and project links, never credentials).
+- Governance → restricted records: `GET /api/governance/restricted-records` (`restricted.read`)
+  lists record metadata only (run, step, path, size), never content, so it is not audited;
+  reading a record stays the audited per-run read above.
 
 ## Layout
 
@@ -209,7 +219,7 @@ pnpm --filter @kintsugi/api test     # vitest
 ## Tests
 
 - `test/unit/`: pure units (password hashing, sign-in throttle, error filter, environment).
-- `test/integration/`: the real `AppModule`, booted like `src/main.ts` on an ephemeral port and driven over HTTP: session cookie and CSRF, guard order, lockout, member and access-role guard rails, session revocation, hash upgrades, LLM provider permissions and credential confidentiality, Git registration, projects with their repository rules and rendered `kintsugi.yaml`.
+- `test/integration/`: the real `AppModule`, booted like `src/main.ts` on an ephemeral port and driven over HTTP: session cookie and CSRF, guard order, lockout, member and access-role guard rails, session revocation, hash upgrades, LLM provider permissions and credential confidentiality, Git registration, projects with their repository rules and rendered `kintsugi.yaml`, the monitoring overview and the cross-project lists.
 - Integration tests need Postgres: the server comes from `DATABASE_URL` (environment, else the repo-root `.env`). Each test file creates its own `kintsugi_api_test_*` database and drops it afterwards; the database named in `DATABASE_URL` is never touched. Without `DATABASE_URL` the integration suites are skipped.
 - NestJS injection needs decorator metadata: `vitest.config.ts` enables it in Vite's oxc transform.
 - Known gaps are pinned with `it.fails` (the test passes while the gap exists); turn them into plain `it` when fixing the gap.

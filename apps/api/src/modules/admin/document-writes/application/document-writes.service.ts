@@ -8,7 +8,7 @@ import { toPage } from "#common/application/pagination.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
-import type { DocumentWriteRecord, NewDocumentWrite } from "../domain/document-write.js";
+import type { DocumentWriteFilter, DocumentWriteRecord, NewDocumentWrite } from "../domain/document-write.js";
 import { DocumentWriteQueue, DocumentWriteStore } from "../domain/document-write.ports.js";
 
 @Injectable()
@@ -38,6 +38,12 @@ export class DocumentWritesService {
   async list(projectId: string, query: PageQuery): Promise<Page<DocumentWriteRecord>> {
     await this.projects.getProject(projectId); // 404 for an unknown project
     const { items, total } = await this.store.listForProject(projectId, query.limit, query.offset);
+    return toPage(items, total, query);
+  }
+
+  /** Writes across projects (for the activity views), newest first. */
+  async listAll(filter: DocumentWriteFilter, query: PageQuery): Promise<Page<DocumentWriteRecord>> {
+    const { items, total } = await this.store.list(filter, query.limit, query.offset);
     return toPage(items, total, query);
   }
 

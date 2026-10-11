@@ -13,10 +13,13 @@ import type {
   JobRunDetail,
   JobRunEventKind,
   JobRunEventView,
+  JobRunFilter,
   JobRunKind,
   JobRunStatus,
   JobRunView,
   NewStageRun,
+  RestrictedRecordFilter,
+  RestrictedRecordSummary,
   RestrictedRecordView,
 } from "../domain/job-run.js";
 import { JobRunStore } from "../domain/job-run.ports.js";
@@ -119,6 +122,17 @@ export class PgJobRunStore extends JobRunStore {
     return { items: rows.rows.map(toView), total: count.rows[0]?.total ?? 0 };
   }
 
+  async listAll(filter: JobRunFilter, limit: number, offset: number): Promise<{ items: JobRunView[]; total: number }> {
+    const where =
+      "r.parent_id is null and ($1::text[] is null or r.status = any($1)) and ($2::text is null or r.project_id = $2) and ($3::text is null or r.application_id = $3)";
+    const params = [filter.statuses === undefined || filter.statuses.length === 0 ? null : [...filter.statuses], filter.projectId ?? null, filter.applicationId ?? null];
+    const [rows, count] = await Promise.all([
+      this.#pool.query<RunRow>(`${SELECT} where ${where} order by r.created_at desc, r.id limit $4 offset $5`, [...params, limit, offset]),
+      this.#pool.query<{ total: number }>(`select count(*)::int as total from workflow.job_run r where ${where}`, params),
+    ]);
+    return { items: rows.rows.map(toView), total: count.rows[0]?.total ?? 0 };
+  }
+
   async get(projectId: string, id: string): Promise<JobRunDetail | undefined> {
     const result = await this.#pool.query<RunRow>(`${SELECT} where r.project_id = $1 and r.id = $2`, [projectId, id]);
     const row = result.rows[0];
@@ -153,6 +167,49 @@ export class PgJobRunStore extends JobRunStore {
         createdAt: row.created_at.toISOString(),
       };
     });
+  }
+
+  async restrictedSummaries(filter: RestrictedRecordFilter, limit: number, offset: number): Promise<{ items: RestrictedRecordSummary[]; total: number }> {
+    // Metadata only: the ciphertext columns are never selected.
+    const from = `from governance.restricted_record x
+      join workflow.job_run r on r.id = x.job_run_id
+      join workflow.job_run t on t.id = coalesce(r.parent_id, r.id)
+     where ($1::text is null or r.project_id = $1) and ($2::text is null or t.id = $2)`;
+    const params = [filter.projectId ?? null, filter.jobRunId ?? null];
+    const [rows, count] = await Promise.all([
+      this.#pool.query<{
+        job_run_id: string;
+        top_level_run_id: string;
+        project_id: string;
+        application_id: string | null;
+        run_name: string;
+        step_name: string | null;
+        path: string;
+        size: string;
+        created_at: Date;
+      }>(
+        `select x.job_run_id, t.id as top_level_run_id, r.project_id, coalesce(r.application_id, t.application_id) as application_id, t.name as run_name,
+                case when r.parent_id is null then null else r.name end as step_name, x.path, x.size, x.created_at
+           ${from}
+          order by x.created_at desc, x.job_run_id, x.path limit $3 offset $4`,
+        [...params, limit, offset],
+      ),
+      this.#pool.query<{ total: number }>(`select count(*)::int as total ${from}`, params),
+    ]);
+    return {
+      items: rows.rows.map((row) => ({
+        jobRunId: row.job_run_id,
+        topLevelRunId: row.top_level_run_id,
+        projectId: row.project_id,
+        ...optional("applicationId", row.application_id),
+        runName: row.run_name,
+        ...optional("stepName", row.step_name),
+        path: row.path,
+        size: Number(row.size),
+        createdAt: row.created_at.toISOString(),
+      })),
+      total: count.rows[0]?.total ?? 0,
+    };
   }
 
   async summary(projectId: string, id: string): Promise<JobRunView | undefined> {
