@@ -4,12 +4,14 @@
 // link commits to it.
 
 import { GitCommitHorizontal } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { type CommitIdentityView, gitApi } from "@/lib/api/git";
+import { errorText } from "@/lib/format";
 
 const PLAIN_EMAIL = /^[^\s<>@]+@[^\s<>@]+$/;
 // Control characters, as Git refuses them in an identity.
@@ -30,40 +32,46 @@ export function CommitIdentityCard(): React.JSX.Element {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [slow, setSlow] = useState(false);
+  const toast = useToast();
+
+  // Loads the stored identity; says so when the API is slow and offers a retry on failure.
+  const load = useCallback(async (): Promise<void> => {
+    const timer = setTimeout(() => setSlow(true), 6000);
+    try {
+      const identity = await gitApi.commitIdentity();
+      setStored(identity);
+      setName(identity.name);
+      setEmail(identity.email);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(errorText(error));
+    } finally {
+      clearTimeout(timer);
+      setSlow(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    gitApi.commitIdentity().then(
-      (identity) => {
-        if (!active) return;
-        setStored(identity);
-        setName(identity.name);
-        setEmail(identity.email);
-      },
-      (error: unknown) => {
-        if (active) setMessage({ tone: "error", text: error instanceof Error ? error.message : String(error) });
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, []);
+    // load() sets state only after awaiting the API, never synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   const invalid = problems(name, email);
   const changed = stored !== null && (name.trim() !== stored.name || email.trim() !== stored.email);
 
   async function save(): Promise<void> {
     setBusy(true);
-    setMessage(null);
     try {
       const saved = await gitApi.setCommitIdentity({ name: name.trim(), email: email.trim() });
       setStored(saved);
       setName(saved.name);
       setEmail(saved.email);
-      setMessage({ tone: "ok", text: "Saved. The next document write uses this identity." });
+      toast.success("Commit identity saved", "The next document write uses it.");
     } catch (error) {
-      setMessage({ tone: "error", text: error instanceof Error ? error.message : String(error) });
+      toast.error("Could not save the commit identity", error);
     } finally {
       setBusy(false);
     }
@@ -92,12 +100,17 @@ export function CommitIdentityCard(): React.JSX.Element {
           </Field>
         </div>
         {changed && invalid.length > 0 ? <p className="text-[12px] text-[var(--ds-status-red)]">{invalid.join(" ")}</p> : null}
-        {message === null ? null : (
-          <p className={`text-[12px] ${message.tone === "error" ? "text-[var(--ds-status-red)]" : "text-text-secondary"}`}>{message.text}</p>
+        {loadError === null ? null : (
+          <p role="alert" className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--ds-status-red)]">
+            Could not load the commit identity: {loadError}
+            <Button size="small" variant="ghost" onClick={() => void load()}>
+              Retry
+            </Button>
+          </p>
         )}
         <div className="flex items-center justify-between gap-2">
           <p className="text-[12px] text-text-muted">
-            {stored === null ? "Loading…" : stored.isDefault ? "Default identity (not set yet)." : `Set by ${stored.updatedBy ?? "an admin"}${stored.updatedAt === undefined ? "" : ` on ${new Date(stored.updatedAt).toLocaleString()}`}.`}
+            {stored === null ? (loadError !== null ? "Not loaded." : slow ? "Still loading — the API is slow to answer." : "Loading…") : stored.isDefault ? "Default identity (not set yet)." : `Set by ${stored.updatedBy ?? "an admin"}${stored.updatedAt === undefined ? "" : ` on ${new Date(stored.updatedAt).toLocaleString()}`}.`}
           </p>
           <Button size="small" variant="solid" disabled={busy || !changed || invalid.length > 0} onClick={() => void save()}>
             {busy ? "Saving…" : "Save"}
