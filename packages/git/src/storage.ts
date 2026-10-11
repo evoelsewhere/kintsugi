@@ -2,7 +2,7 @@
 // directory chosen at install time (KINTSUGI_DATA_DIR); nobody edits it by hand.
 //
 //   <data>/git/mirrors/<server-id>/<repo-id>.git   bare mirror per registered repository
-//   <data>/git/workspaces/<project-id>/            the worker's clone of the document repo
+//   <data>/git/workspaces/<project-id>/            the writer's scratch worktree of the document repo mirror
 //   <data>/jobs/<job-id>/src                       per-job worktree at a fixed commit (mounted read-only)
 //   <data>/jobs/<job-id>/out                       per-job output
 //

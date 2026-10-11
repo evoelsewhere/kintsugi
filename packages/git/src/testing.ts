@@ -1,6 +1,6 @@
 // Test support (`@kintsugi/git/testing`): a local Git smart-HTTP server — `git http-backend`
 // behind a tiny CGI bridge on 127.0.0.1, serving fixture repositories over plain http
-// (anonymous). For integration tests only; never used by the product.
+// (anonymous; pushes allowed). For integration tests only; never used by the product.
 
 import { execFileSync, spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -14,8 +14,10 @@ export interface GitHttpServer {
   baseUrl: string;
   /** Creates a bare repository with one commit on `branch`. */
   createRepository(name: string, branch?: string): Promise<void>;
-  /** Adds a commit to `branch` of an existing repository and returns its id. */
+  /** Adds a commit to `branch` (on top of its current tip) of an existing repository and returns its id. */
   commit(name: string, file: string, content: string, branch?: string): Promise<string>;
+  /** Runs git in the server-side bare repository, e.g. `show main:README.md`; returns stdout. */
+  git(name: string, ...args: string[]): string;
   close(): Promise<void>;
 }
 
@@ -36,7 +38,11 @@ export async function startGitHttpServer(): Promise<GitHttpServer> {
         QUERY_STRING: url.search.slice(1),
         REQUEST_METHOD: request.method ?? "GET",
         CONTENT_TYPE: request.headers["content-type"] ?? "",
+        HTTP_CONTENT_ENCODING: request.headers["content-encoding"] ?? "",
+        GIT_PROTOCOL: String(request.headers["git-protocol"] ?? ""),
         REMOTE_ADDR: "127.0.0.1",
+        // http-backend accepts pushes (receive-pack) from an authenticated user only.
+        REMOTE_USER: "kintsugi-test",
       },
     });
     request.pipe(cgi.stdin);
@@ -74,11 +80,21 @@ export async function startGitHttpServer(): Promise<GitHttpServer> {
     },
     async commit(name, file, content, branch = "main") {
       const work = join(root, `${name}-work`);
+      // Start from the server's tip: someone (the code under test) may have pushed meanwhile.
+      try {
+        fixtureGit(work, "fetch", "-q", join(root, `${name}.git`), branch);
+        fixtureGit(work, "checkout", "-q", "-B", branch, "FETCH_HEAD");
+      } catch {
+        fixtureGit(work, "checkout", "-q", "-B", branch);
+      }
       await writeFile(join(work, file), content);
       fixtureGit(work, "add", file);
       fixtureGit(work, "commit", "-q", "-m", `write ${file}`);
       fixtureGit(work, "push", "-q", join(root, `${name}.git`), `HEAD:${branch}`);
       return execFileSync("git", ["rev-parse", "HEAD"], { cwd: work, encoding: "utf8" }).trim();
+    },
+    git(name, ...args) {
+      return execFileSync("git", ["--git-dir", join(root, `${name}.git`), ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     },
     async close() {
       await new Promise<void>((resolve) => server.close(() => resolve()));
