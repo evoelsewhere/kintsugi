@@ -56,6 +56,14 @@ Legacy and target repos may be shared between projects (for example a shared leg
 
 The API returns each application's repositories grouped as the portal shows them: `asIs: {legacy, legacyData}` and `toBe: {document, targets}`.
 
+## Document writes
+
+Writes to a project's document repo ([ADR-0019](../decisions/0019-workspace-repo-write-path.md)), in the `workflow` schema (migration [`009_document_writes.sql`](../../apps/api/migrations/009_document_writes.sql)): records of work the worker performs, not configuration. The API (or a worker-side caller) creates a row as `queued`; the writer records the outcome.
+
+| Table | Key | Content |
+|---|---|---|
+| `workflow.document_write` | `id` | `project_id` (cascade on project delete), `kind` (`manifest`, `job-output`, `state-change`), `status` (`queued`, `committed`, `pr-opened`, `unchanged`, `failed`), `message`, `commit_sha` (default-branch commit of auto-commit paths), `branch` + `branch_commit_sha` (the `kintsugi/*` branch of the other paths), `pr_url`, `error` (redacted), provenance `actor`, `job_id`, `agent` |
+
 ## Provenance
 
 Every artifact records how it was produced. This record feeds the [AI metrics](../methodology/ai-metrics.md).

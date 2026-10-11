@@ -1,6 +1,6 @@
 # ADR-0019: One workspace repo per project; the worker writes as `kintsugi-bot`
 
-- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): the workspace repo is renamed the document repo; the `Kintsugi-Rulebook` trailer is dropped.
+- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): the workspace repo is renamed the document repo; the `Kintsugi-Rulebook` trailer is dropped. Implemented (see [Implementation notes](#implementation-notes)).
 - Date: 2026-10-09
 - Decision register: D29
 
@@ -34,6 +34,18 @@ Everything except source code lives in a per-project workspace repo (ADR-0007): 
 - A misbehaving bot is contained: the bot's credentials can only push to the workspace repo, and everything it writes is attributed in trailers.
 - The PR-per-job model needs a Git server with PR support; plain-git-only servers fall back to direct commits on `kintsugi/*` branches (covered by the `GitServerKind` in the domain model).
 - Open (D31): large binaries (recordings, scanned PDFs) — Git LFS where supported, otherwise the `kintsugi-data` volume plus a link file.
+
+## Implementation notes
+
+Settled while building the writer (`services/orchestrator`, `packages/git`); details in the [document repository reference](../reference/document-repo.md#write-path).
+
+- **Queue**: `document-write`, pg-boss `singleton` policy keyed by the document repository id: one active write per repository, the rest wait. Producers share the contract in `@kintsugi/orchestrator/queues`.
+- **Bot email**: `KINTSUGI_BOT_EMAIL` (installation setting), default `kintsugi-bot@kintsugi.invalid`.
+- **Retries**: 4 push attempts per branch (fetch → rebase → retry); a rebase conflict fails the write instead of retrying. Failed jobs are retried twice by the queue; output-rule violations are not retried.
+- **Branch names**: `kintsugi/<agent-or-actor>/<job-id>`, using the write id when there is no job. Only these branches and the default branch are writable; nothing is ever force-pushed.
+- **Without pull requests**: `plain-git` servers, SSH-key-only servers (no API token) and server kinds without an adapter (Bitbucket for now) keep the pushed `kintsugi/*` branch.
+- **Outcome**: recorded in `workflow.document_write` and shown on the project page.
+- **Open**: a secret scan of job output before writing (6.1 of the runtime view) is not implemented yet.
 
 ## Alternatives considered
 
