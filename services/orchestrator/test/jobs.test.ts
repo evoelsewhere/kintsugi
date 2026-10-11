@@ -74,11 +74,15 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     return id;
   };
 
-  it("runs the assess stage: inventory script, legacy-analyst job, hook, restricted record, document write", async () => {
-    const seen: { inventory?: { sourceFileCount: number }; intent?: string; srcWritable?: boolean } = {};
+  const synthesis = (spec: JobSpec): boolean => spec.task.startsWith("Write the assessment of application");
+
+  it("runs the assess stage: inventory script, three analysis jobs, synthesis job, hook, restricted record, document write", async () => {
+    const seen: { inventory?: { sourceFileCount: number }; intent?: string; structure?: string; srcWritable?: boolean } = {};
     const { store, runner, writes, agents } = setup({
-      "legacy-analyst": (spec: JobSpec) => {
+      "legacy-analyst": (spec: JobSpec): Record<string, string> => {
+        if (!synthesis(spec)) return spec.task.startsWith("Build the structural map") ? { "assessment/demo/analysis/structure.md": "# Structure\n\n| domain | files |\n" } : {};
         const [src, inputs] = spec.workspace.readOnly as [string, string];
+        seen.structure = readFileSync(join(inputs, "assessment", "demo", "analysis", "structure.md"), "utf8");
         seen.inventory = JSON.parse(readFileSync(join(inputs, "assessment", "demo", "inventory.json"), "utf8")) as { sourceFileCount: number };
         seen.intent = readFileSync(join(inputs, "assessment", "demo", "INTENT.md"), "utf8");
         try {
@@ -99,32 +103,43 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(run).toMatchObject({ status: "succeeded", kind: "stage", name: "assess" });
     expect(run?.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
 
-    // Steps: a script child with its hash, then an agent child with its version.
-    const [script, agent] = store.children(id);
-    expect(script).toMatchObject({ kind: "script", name: "inventory.py", status: "succeeded", sourceCommit: run?.sourceCommit });
+    // Steps: the script with its hash, three analysis jobs, then the synthesis job.
+    const children = store.children(id);
+    expect(children.map((child) => [child.kind, child.name, child.inputs["label"] ?? null, child.status])).toEqual([
+      ["script", "inventory.py", null, "succeeded"],
+      ["agent", "legacy-analyst", "structure", "succeeded"],
+      ["agent", "legacy-analyst", "debt", "succeeded"],
+      ["agent", "security-auditor", "security", "succeeded"],
+      ["agent", "legacy-analyst", "synthesis", "succeeded"],
+    ]);
+    const [script] = children;
+    const agent = children.at(-1);
+    expect(script?.sourceCommit).toBe(run?.sourceCommit);
     expect(script?.scriptHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(agent).toMatchObject({ kind: "agent", name: "legacy-analyst", status: "succeeded", agent: "legacy-analyst@1.0.0" });
+    expect(agent?.agent).toBe("legacy-analyst@1.0.0");
 
-    // The agent read the script's output and the declared document as read-only inputs, and could not change the source.
+    // The synthesis read the script's output, the analysis notes and the declared document as read-only inputs, and could not change the source.
     expect(seen.inventory?.sourceFileCount).toBe(3);
     expect(seen.intent).toContain("supported platform");
+    expect(seen.structure).toContain("| domain | files |");
     if (process.platform === "win32" || process.getuid?.() !== 0) expect(seen.srcWritable).toBe(false);
-    const spec = agents.specs[0]!;
+    const spec = agents.specs.find(synthesis)!;
     expect(spec.model).toEqual({ provider: "mock", id: "mock" });
     expect(spec.task).toContain("assessment/demo/ASSESSMENT.md");
-    expect(spec.task).not.toContain("{app}");
+    expect(spec.task).not.toMatch(/\{(app|repo|commit|in)\}/);
 
-    // out/ holds what goes to Git; restricted/ went to the restricted record only.
+    // out/ holds what goes to Git (not the intermediate notes); restricted/ went to the restricted record only.
     const out = storage.job(id).out;
     expect(existsSync(join(out, "assessment", "demo", "inventory.json"))).toBe(true);
     expect(readFileSync(join(out, "assessment", "demo", "ASSESSMENT.md"), "utf8")).toContain("3 source files");
+    expect(existsSync(join(out, "assessment", "demo", "analysis"))).toBe(false);
     expect(existsSync(join(out, "restricted"))).toBe(false);
     expect(store.restricted.get(agent!.id)?.get("SECRETS.local.md")).toContain("hu**");
     expect(JSON.stringify(run?.outputSummary)).not.toContain("SECRETS");
 
     // Artifact index with provenance per producer.
     const artifacts = store.artifacts.get(id) ?? [];
-    expect(artifacts.map((entry) => entry.path).sort()).toEqual(["assessment/demo/ASSESSMENT.md", "assessment/demo/inventory.json"]);
+    expect(artifacts.map((entry) => entry.path).sort()).toEqual(["assessment/demo/ARCHITECTURE.mmd", "assessment/demo/ASSESSMENT.md", "assessment/demo/inventory.json"]);
     expect(artifacts.find((entry) => entry.path.endsWith("inventory.json"))?.provenance).toMatchObject({ origin: "tool" });
     expect(artifacts.find((entry) => entry.path.endsWith("ASSESSMENT.md"))?.provenance).toMatchObject({ origin: "runtime-agent", runtimeAgent: "legacy-analyst", model: "mock/mock" });
 
@@ -132,11 +147,11 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({
       repository: "docs",
-      request: { projectId: "demo", kind: "job-output", outputOfJob: id, jobId: id, agent: "legacy-analyst@1.0.0", actor: "alice", message: "Assess demo: inventory and assessment draft" },
+      request: { projectId: "demo", kind: "job-output", outputOfJob: id, jobId: id, agent: "legacy-analyst@1.0.0", actor: "alice", message: "Assess demo: inventory, analysis and assessment" },
     });
     expect(run?.documentWriteId).toBe(writes[0]?.request.writeId);
 
-    // The checkout, inputs, scratch and the steps' workspaces are gone; out/ stays for the writer.
+    // The checkout, inputs, scratch, the intermediate outputs and the steps' workspaces are gone; out/ stays for the writer.
     const left = await readdir(storage.job(id).root);
     expect(left).toEqual(["out"]);
     for (const child of store.children(id)) expect(existsSync(storage.job(child.id).root)).toBe(false);
@@ -144,15 +159,15 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
 
   it("fails the stage when the JobOutput hook finds a credential, with a redacted reason and no write", async () => {
     const { store, runner, writes } = setup({
-      "legacy-analyst": () => ({ "assessment/demo/ASSESSMENT.md": "Config: password = hunter2hunter2\n" }),
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
     });
     const id = await assess(store);
     const run = await runner.run(id);
     expect(run?.status).toBe("failed");
-    expect(run?.failureReason).toMatch(/^Step legacy-analyst failed: JobOutput hook blocked the output: credential-shaped values found — .* at assessment\/demo\/ASSESSMENT\.md:1/);
+    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: credential-shaped values found — .* at assessment\/demo\/ASSESSMENT\.md:1/);
     expect(run?.failureReason).not.toContain("hunter2");
     expect(writes).toHaveLength(0);
-    expect(store.children(id).map((child) => child.status)).toEqual(["succeeded", "failed"]);
+    expect(store.children(id).map((child) => child.status)).toEqual(["succeeded", "succeeded", "succeeded", "succeeded", "failed"]);
   });
 
   it("fails clearly when an agent has no model binding on the pi runtime", async () => {
@@ -170,7 +185,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const id = await assess(store);
     const run = await runner.run(id);
     expect(run?.status).toBe("failed");
-    expect(run?.failureReason).toBe('Step legacy-analyst failed: No model is bound to agent "legacy-analyst" (Settings → LLM Providers)');
+    expect(run?.failureReason).toBe('Step analysis failed: structure: No model is bound to agent "legacy-analyst" (Settings → LLM Providers) (and 2 more)');
     expect(writes).toHaveLength(0);
   });
 
@@ -248,22 +263,25 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   });
 
   it("records the run's live events: status, steps and agent tool calls, without file content", async () => {
-    const { store, runner } = setup({ "legacy-analyst": () => ({ "assessment/demo/ASSESSMENT.md": "# Draft with private detail\n" }) });
+    const { store, runner } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": "# Draft with private detail\n" } : {}) });
     const id = await assess(store);
     await runner.run(id);
     const events = store.events.filter((event) => event.runId === id);
-    const [script, agent] = store.children(id);
+    const children = store.children(id);
     expect(events[0]).toMatchObject({ kind: "status", data: { status: "running" } });
     expect(events.at(-1)).toMatchObject({ kind: "status", data: { status: "succeeded" } });
-    expect(events.filter((event) => event.kind.startsWith("step.")).map((event) => [event.kind, event.stepId, event.data?.["status"] ?? null])).toEqual([
-      ["step.started", script!.id, null],
-      ["step.finished", script!.id, "succeeded"],
-      ["step.started", agent!.id, null],
-      ["step.finished", agent!.id, "succeeded"],
-    ]);
+    const steps = events.filter((event) => event.kind.startsWith("step."));
+    expect(steps).toHaveLength(2 * children.length);
+    for (const child of children) {
+      expect(steps.filter((event) => event.stepId === child.id).map((event) => [event.kind, event.data?.["status"] ?? null])).toEqual([
+        ["step.started", null],
+        ["step.finished", "succeeded"],
+      ]);
+    }
+    const agentIds = new Set(children.filter((child) => child.kind === "agent").map((child) => child.id));
     const tools = events.filter((event) => event.kind === "tool");
     expect(tools.length).toBeGreaterThan(0);
-    expect(tools.every((event) => event.stepId === agent!.id)).toBe(true);
+    expect(tools.every((event) => agentIds.has(event.stepId ?? ""))).toBe(true);
     expect(JSON.stringify(events)).not.toContain("private detail");
   });
 
@@ -309,10 +327,10 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     cancel.abort(new JobCancelled());
     const run = await running;
     expect(run?.status).toBe("cancelled");
-    expect(store.children(id).map((child) => [child.kind, child.status])).toEqual([
-      ["script", "succeeded"],
-      ["agent", "cancelled"],
-    ]);
+    const [script, ...agents] = store.children(id).map((child) => [child.kind, child.status]);
+    expect(script).toEqual(["script", "succeeded"]);
+    expect(agents.length).toBeGreaterThan(0);
+    for (const agent of agents) expect(agent).toEqual(["agent", "cancelled"]);
     expect(writes).toHaveLength(0);
     expect(store.events.at(-1)).toMatchObject({ runId: id, kind: "status", data: { status: "cancelled" } });
   }, 60_000);

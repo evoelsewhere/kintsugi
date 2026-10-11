@@ -13,6 +13,10 @@
     "./queues": {
       "types": "./dist/queues.d.ts",
       "import": "./dist/queues.js"
+    },
+    "./stages": {
+      "types": "./dist/jobs/stages.d.ts",
+      "import": "./dist/jobs/stages.js"
     }
   },
   "engines": {

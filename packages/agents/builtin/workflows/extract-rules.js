@@ -380,7 +380,9 @@ const dedupKey = r => `${(r.source || '').split(':')[0]}::${(r.name || '').toLow
 // the work that does not fit is SKIPPED and reported — a partial catalog with
 // named gaps beats a failed run. `spawned` counts every agent() this script
 // creates; keep it in step with each agent() call site.
-const AGENT_CAP = 1000
+// The orchestrator's own agent cap for this run (budget.agents) is usually lower: plan within it,
+// so the tail phases are never refused mid-run.
+const AGENT_CAP = Math.min(1000, (budget.agents && budget.agents.total) || 1000)
 let spawned = 0
 // Headroom to keep for the phases still to come: two judges per P0 rule
 // confirmed so far, plus the DTO agent.

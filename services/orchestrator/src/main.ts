@@ -1,7 +1,7 @@
 // kintsugi-worker entry point (ADR-0003, ADR-0025, ADR-0029). Configuration is deployment
 // environment only: DATABASE_URL, KINTSUGI_SECRET_KEY (decrypts Git and LLM credentials),
 // KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL and the job settings
-// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_* including KINTSUGI_JOB_RETENTION_DAYS, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_WORKFLOW_*,
+// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_* including KINTSUGI_JOB_RETENTION_DAYS, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_WORKFLOW_*, KINTSUGI_STAGE_*,
 // KINTSUGI_PYTHON, KINTSUGI_NODE). Git servers, repositories, LLM providers and the commit identity are
 // configured in the portal.
 
@@ -40,6 +40,10 @@ function jobDefaults(): JobDefaults {
     workflow: {
       maxAgents: positive("KINTSUGI_WORKFLOW_MAX_AGENTS", DEFAULT_JOB_LIMITS.workflow.maxAgents),
       concurrency: positive("KINTSUGI_WORKFLOW_CONCURRENCY", DEFAULT_JOB_LIMITS.workflow.concurrency),
+    },
+    stage: {
+      maxAgents: positive("KINTSUGI_STAGE_MAX_AGENTS", DEFAULT_JOB_LIMITS.stage.maxAgents),
+      concurrency: positive("KINTSUGI_STAGE_CONCURRENCY", DEFAULT_JOB_LIMITS.stage.concurrency),
     },
   };
 }

@@ -36,6 +36,17 @@ export class MirrorCheckouts implements SourceCheckouts {
     );
   }
 
+  async listDocuments(repositoryId: string, commit: string, dir: string): Promise<string[]> {
+    assertSafeRepoPath(dir.replace(/\/+$/, ""));
+    const target = await this.deps.repositories.target(repositoryId);
+    if (target === undefined) throw new JobFailure(`Repository ${repositoryId} is no longer registered`);
+    const mirror = this.deps.storage.mirror(target.serverId, target.id);
+    return runGit(["--git-dir", mirror, "ls-tree", "-r", "--name-only", "-z", commit, "--", dir], remoteOptions(target)).then(
+      (result) => result.stdout.split("\0").filter((path) => path !== "").sort(),
+      () => [],
+    );
+  }
+
   async release(repositoryId: string, dest: string): Promise<void> {
     await makeWritable(dest);
     const target = await this.deps.repositories.target(repositoryId);

@@ -47,10 +47,10 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
 
   it("runs a queued assess stage and hands its output to the document repo writer", async () => {
     const agents = writingAgentRuntime({
-      "legacy-analyst": () => ({
-        "assessment/web/ASSESSMENT.md": "# Assessment of web (draft)\n",
-        "restricted/SECRETS.local.md": "| preview | location |\n| hu** | main.c:1 |\n",
-      }),
+      "legacy-analyst": (spec): Record<string, string> =>
+        spec.task.startsWith("Write the assessment")
+          ? { "assessment/web/ASSESSMENT.md": "# Assessment of web (draft)\n", "restricted/SECRETS.local.md": "| preview | location |\n| hu** | main.c:1 |\n" }
+          : {},
     });
     const storage = new CheckoutStorage(dataDir);
     const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage, pollIntervalSeconds: 3600, log: () => undefined, jobs: { agents } });
@@ -75,19 +75,23 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       expect(steps.rows.map((row) => [row.kind, row.name, row.status])).toEqual([
         ["script", "inventory.py", "succeeded"],
         ["agent", "legacy-analyst", "succeeded"],
+        ["agent", "legacy-analyst", "succeeded"],
+        ["agent", "security-auditor", "succeeded"],
+        ["agent", "legacy-analyst", "succeeded"],
       ]);
       expect(steps.rows[0]?.script_hash).toMatch(/^[0-9a-f]{64}$/);
-      expect(steps.rows[1]?.agent).toBe("legacy-analyst@1.0.0");
+      expect(steps.rows[4]?.agent).toBe("legacy-analyst@1.0.0");
 
       const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
       expect(artifacts.rows.map((row) => [row.path, row.provenance.origin])).toEqual([
+        ["assessment/web/ARCHITECTURE.mmd", "runtime-agent"],
         ["assessment/web/ASSESSMENT.md", "runtime-agent"],
         ["assessment/web/inventory.json", "tool"],
       ]);
 
       const restricted = await db.pool.query<{ path: string; ciphertext: string; iv: string; auth_tag: string }>(
         "select path, ciphertext, iv, auth_tag from governance.restricted_record where job_run_id = $1",
-        [steps.rows[1]!.id],
+        [steps.rows[4]!.id],
       );
       expect(restricted.rows).toHaveLength(1);
       expect(restricted.rows[0]!.ciphertext).not.toContain("hu**");
@@ -120,16 +124,16 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       await db.pool.query("insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor) values ($1, 'demo', 'web', 'stage', 'assess', 'legacy', 'alice')", [id]);
       await worker.requestJobRun({ jobRunId: id });
       const agentRunning = async (): Promise<boolean> =>
-        (await db.pool.query("select 1 from workflow.job_event where job_run_id = $1 and kind = 'step.started' and data->>'kind' = 'agent'", [id])).rowCount === 1;
+        (await db.pool.query("select 1 from workflow.job_event where job_run_id = $1 and kind = 'step.started' and data->>'kind' = 'agent'", [id])).rowCount! >= 1;
       await expect.poll(agentRunning, { timeout: 60_000, interval: 250 }).toBe(true);
 
       await db.pool.query("update workflow.job_run set cancel_requested_at = now(), cancel_requested_by = 'bob' where id = $1", [id]);
       await expect.poll(async () => (await db.pool.query("select status from workflow.job_run where id = $1", [id])).rows[0]?.status, { timeout: 30_000, interval: 250 }).toBe("cancelled");
       const steps = await db.pool.query<{ kind: string; status: string }>("select kind, status from workflow.job_run where parent_id = $1 order by created_at", [id]);
-      expect(steps.rows.map((row) => [row.kind, row.status])).toEqual([
-        ["script", "succeeded"],
-        ["agent", "cancelled"],
-      ]);
+      const [script, ...agentSteps] = steps.rows.map((row) => [row.kind, row.status]);
+      expect(script).toEqual(["script", "succeeded"]);
+      expect(agentSteps.length).toBeGreaterThan(0);
+      for (const step of agentSteps) expect(step).toEqual(["agent", "cancelled"]);
       const events = await db.pool.query<{ kind: string; message: string }>("select kind, message from workflow.job_event where job_run_id = $1 order by id", [id]);
       expect(events.rows[0]).toEqual({ kind: "status", message: "stage assess started" });
       expect(events.rows.at(-1)).toEqual({ kind: "status", message: "cancelled" });
