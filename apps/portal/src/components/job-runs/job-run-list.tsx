@@ -57,7 +57,7 @@ export function JobRunList({ runs, canCancel, showProject = false, initialOpen, 
                     <RunStatusBadge status={run.status} cancelling={cancelRequested} />
                     {showProject ? (
                       <Link
-                        to={deliveryLink({ projectId: run.projectId, applicationId: run.applicationId, runId: run.id })}
+                        to={deliveryLink({ projectId: run.projectId, applicationId: run.applicationId, stage: run.kind === "stage" ? run.name : undefined, runId: run.id })}
                         className="truncate text-[12px] text-accent hover:underline"
                       >
                         {run.projectId}

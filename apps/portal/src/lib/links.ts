@@ -7,9 +7,19 @@ const query = (entries: Record<string, string | undefined>): string => {
   return text === "" ? "" : `?${text}`;
 };
 
-/** Delivery for a project, optionally an application and an open run. */
-export function deliveryLink(target: { projectId?: string | undefined; applicationId?: string | undefined; runId?: string | undefined; section?: "writes" | undefined }): string {
-  return `/delivery${query({ project: target.projectId, app: target.applicationId, run: target.runId, section: target.section })}`;
+/**
+ * Delivery for a project, optionally an application, a stage page and an open run. A run
+ * without a stage opens the overview, which forwards to the run's stage page.
+ */
+export function deliveryLink(target: {
+  projectId?: string | undefined;
+  applicationId?: string | undefined;
+  stage?: string | undefined;
+  runId?: string | undefined;
+  section?: "writes" | undefined;
+}): string {
+  const path = target.stage === undefined ? "/delivery" : `/delivery/${encodeURIComponent(target.stage)}`;
+  return `${path}${query({ project: target.projectId, app: target.applicationId, run: target.runId, section: target.section })}`;
 }
 
 export type MonitoringTab = "runs" | "repositories" | "writes" | "worker";
