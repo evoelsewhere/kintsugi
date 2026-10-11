@@ -6,8 +6,19 @@
 import { Injectable } from "@nestjs/common";
 import { decryptSecret } from "@kintsugi/secrets";
 import type { Pool } from "pg";
-import { getPool } from "#common/db/pool.js";
-import type { ArtifactView, JobRunDetail, JobRunKind, JobRunStatus, JobRunView, NewStageRun, RestrictedRecordView } from "../domain/job-run.js";
+import { getPool, withTransaction } from "#common/db/pool.js";
+import type {
+  ArtifactView,
+  CancelOutcome,
+  JobRunDetail,
+  JobRunEventKind,
+  JobRunEventView,
+  JobRunKind,
+  JobRunStatus,
+  JobRunView,
+  NewStageRun,
+  RestrictedRecordView,
+} from "../domain/job-run.js";
 import { JobRunStore } from "../domain/job-run.ports.js";
 
 interface RunRow {
@@ -28,6 +39,7 @@ interface RunRow {
   started_at: Date | null;
   finished_at: Date | null;
   created_at: Date;
+  cancel_requested_at: Date | null;
   write_id: string | null;
   write_status: string | null;
   write_branch: string | null;
@@ -39,7 +51,7 @@ interface RunRow {
 const SELECT = `
   select r.id, r.project_id, r.application_id, r.parent_id, r.kind, r.name, r.status, r.failure_reason,
          r.source_repository_id, r.source_commit, r.script_hash, r.agent, r.actor, r.output_summary,
-         r.started_at, r.finished_at, r.created_at,
+         r.started_at, r.finished_at, r.created_at, r.cancel_requested_at,
          w.id as write_id, w.status as write_status, w.branch as write_branch, w.pr_url as write_pr_url, w.error as write_error,
          (select count(*)::int from governance.restricted_record x where x.job_run_id = r.id) as restricted_records
     from workflow.job_run r
@@ -75,6 +87,7 @@ function toView(row: RunRow): JobRunView {
           },
         }),
     restrictedRecords: row.restricted_records,
+    ...optional("cancelRequestedAt", row.cancel_requested_at?.toISOString() ?? null),
     ...optional("startedAt", row.started_at?.toISOString() ?? null),
     ...optional("finishedAt", row.finished_at?.toISOString() ?? null),
     createdAt: row.created_at.toISOString(),
@@ -140,6 +153,57 @@ export class PgJobRunStore extends JobRunStore {
         createdAt: row.created_at.toISOString(),
       };
     });
+  }
+
+  async summary(projectId: string, id: string): Promise<JobRunView | undefined> {
+    const result = await this.#pool.query<RunRow>(`${SELECT} where r.project_id = $1 and r.id = $2`, [projectId, id]);
+    const row = result.rows[0];
+    return row === undefined ? undefined : toView(row);
+  }
+
+  async cancel(projectId: string, id: string, actor: string): Promise<CancelOutcome> {
+    return withTransaction(async (client) => {
+      // Queued: the worker has not started it; it skips runs that are no longer queued.
+      const queued = await client.query(
+        `update workflow.job_run set status = 'cancelled', finished_at = now(), cancel_requested_at = now(), cancel_requested_by = $3
+          where project_id = $1 and id = $2 and status = 'queued'`,
+        [projectId, id, actor],
+      );
+      if ((queued.rowCount ?? 0) > 0) {
+        await client.query("insert into workflow.job_event (job_run_id, kind, message, data) values ($1, 'status', 'cancelled before it started', $2)", [
+          id,
+          JSON.stringify({ status: "cancelled" }),
+        ]);
+        return "cancelled";
+      }
+      // Running: the worker that runs it notices the request and kills its processes.
+      const running = await client.query(
+        `update workflow.job_run set cancel_requested_at = coalesce(cancel_requested_at, now()), cancel_requested_by = coalesce(cancel_requested_by, $3)
+          where project_id = $1 and id = $2 and status = 'running'`,
+        [projectId, id, actor],
+      );
+      if ((running.rowCount ?? 0) > 0) {
+        await client.query("insert into workflow.job_event (job_run_id, kind, message, data) values ($1, 'log', 'cancel requested', '{}')", [id]);
+        return "requested";
+      }
+      return "finished";
+    });
+  }
+
+  async events(id: string, afterId: string | undefined, limit: number): Promise<JobRunEventView[]> {
+    const result = await this.#pool.query<{ id: string; at: Date; kind: JobRunEventKind; message: string; step_run_id: string | null; data: Record<string, unknown> }>(
+      `select id::text, at, kind, message, step_run_id, data from workflow.job_event
+        where job_run_id = $1 and id > $2 order by id limit $3`,
+      [id, afterId ?? "0", limit],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      at: row.at.toISOString(),
+      kind: row.kind,
+      message: row.message,
+      ...optional("stepRunId", row.step_run_id),
+      data: row.data,
+    }));
   }
 
   async markFailed(id: string, reason: string): Promise<void> {

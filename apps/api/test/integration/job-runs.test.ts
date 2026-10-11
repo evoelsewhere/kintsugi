@@ -110,4 +110,75 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     expect(audit.raw).not.toContain("hu**");
     await expect(app.db.query("delete from governance.audit_event")).rejects.toThrow(/append-only/);
   });
+
+  it("cancels a queued run at once and asks the worker to stop a running one; needs jobs.run", async () => {
+    const queued = (await admin.request<RunView>("POST", "/projects/billing/applications/web/stages/assess/run")).body.data!;
+    const { client } = await memberClient(app, admin, "watcher", ["user"]);
+    expect((await client.request("POST", `/projects/billing/job-runs/${queued.id}/cancel`)).status).toBe(403);
+
+    const cancelled = await admin.request<RunView & { cancelRequestedAt?: string }>("POST", `/projects/billing/job-runs/${queued.id}/cancel`);
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body.data).toMatchObject({ id: queued.id, status: "cancelled" });
+    const again = await admin.request("POST", `/projects/billing/job-runs/${queued.id}/cancel`);
+    expect(again.status).toBe(409);
+    expect(again.body).toMatchObject({ success: false, statusCode: 409 });
+
+    const running = (await admin.request<RunView>("POST", "/projects/billing/applications/web/stages/assess/run")).body.data!;
+    await app.db.query("update workflow.job_run set status = 'running' where id = $1", [running.id]);
+    const requested = await admin.request<RunView & { cancelRequestedAt?: string }>("POST", `/projects/billing/job-runs/${running.id}/cancel`);
+    expect(requested.status).toBe(200);
+    expect(requested.body.data?.status).toBe("running");
+    expect(requested.body.data?.cancelRequestedAt).toBeDefined();
+    const row = await app.db.query<{ cancel_requested_by: string }>("select cancel_requested_by from workflow.job_run where id = $1", [running.id]);
+    expect(row.rows[0]?.cancel_requested_by).toBe("admin");
+
+    expect((await admin.request("POST", "/projects/billing/job-runs/step-2/cancel")).status).toBe(400);
+    expect((await admin.request("POST", "/projects/billing/job-runs/missing/cancel")).status).toBe(404);
+  });
+
+  it("streams a run's live events as Server-Sent Events with the session cookie, and ends when the run has finished", async () => {
+    await app.db.query(
+      `insert into workflow.job_event (job_run_id, step_run_id, kind, message, data) values
+         ($1, null, 'status', 'stage assess started', '{"status":"running"}'),
+         ($1, 'step-2', 'tool', 'read src/main.c', '{"tool":"read","decision":"allowed"}'),
+         ($1, null, 'status', 'succeeded', '{"status":"succeeded"}')`,
+      [runId],
+    );
+    const { client } = await memberClient(app, admin, "follower", ["user"]);
+    const read = async (headers: Record<string, string> = {}, query = ""): Promise<{ status: number; type: string | null; events: Array<{ id?: string; event: string; data: { id?: string; message?: string; status?: string } }> }> => {
+      const response = await fetch(`${app.baseUrl}/projects/billing/job-runs/${runId}/events${query}`, { headers: { cookie: client.cookie!, accept: "text/event-stream", ...headers } });
+      const text = await response.text();
+      const events = text
+        .split("\n\n")
+        .map((block) => block.split("\n").filter((line) => line !== "" && !line.startsWith(":") && !line.startsWith("retry:")))
+        .filter((lines) => lines.length > 0)
+        .map((lines) => {
+          const field = (name: string): string | undefined => lines.find((line) => line.startsWith(`${name}: `))?.slice(name.length + 2);
+          return { ...(field("id") === undefined ? {} : { id: field("id") }), event: field("event")!, data: JSON.parse(field("data")!) as { id?: string; message?: string; status?: string } };
+        });
+      return { status: response.status, type: response.headers.get("content-type"), events };
+    };
+
+    const all = await read();
+    expect(all.status).toBe(200);
+    expect(all.type).toMatch(/^text\/event-stream/);
+    expect(all.events.map((event) => [event.event, event.data.message ?? event.data.status])).toEqual([
+      ["job-event", "stage assess started"],
+      ["job-event", "read src/main.c"],
+      ["job-event", "succeeded"],
+      ["status", "succeeded"],
+      ["end", "succeeded"],
+    ]);
+    expect(all.events[1]?.id).toBe(all.events[1]?.data.id);
+
+    // Resume after the first event (EventSource sends Last-Event-ID on reconnect).
+    const resumed = await read({ "last-event-id": all.events[0]!.id! });
+    expect(resumed.events.filter((event) => event.event === "job-event").map((event) => event.data.message)).toEqual(["read src/main.c", "succeeded"]);
+
+    // Errors before the stream opens keep the envelope; no session, no stream.
+    const missing = await fetch(`${app.baseUrl}/projects/billing/job-runs/missing/events`, { headers: { cookie: client.cookie! } });
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ success: false, statusCode: 404 });
+    expect((await fetch(`${app.baseUrl}/projects/billing/job-runs/${runId}/events`)).status).toBe(401);
+  });
 });

@@ -8,6 +8,29 @@ import type { Provenance } from "@kintsugi/domain";
 export type JobRunKind = "stage" | "script" | "agent" | "workflow";
 export type JobRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
+/** Statuses a run does not leave. */
+export const FINAL_RUN_STATUSES: readonly JobRunStatus[] = ["succeeded", "failed", "cancelled"];
+
+export type JobRunEventKind = "status" | "step.started" | "step.finished" | "tool" | "log";
+
+/** One line of a run's live record (workflow.job_event), recorded by the worker; redacted, never file content. */
+export interface JobRunEventView {
+  /** Increasing; the SSE event id (resume with Last-Event-ID). */
+  id: string;
+  at: string;
+  kind: JobRunEventKind;
+  message: string;
+  /** The step (child run) the event came from. */
+  stepRunId?: string;
+  data: Record<string, unknown>;
+}
+
+/** What a client following a run receives: its events, its status when it changes, and the end. */
+export type JobRunFollowUpdate = { type: "event"; event: JobRunEventView } | { type: "status"; run: JobRunView } | { type: "end"; run: JobRunView };
+
+/** Outcome of a cancel request. */
+export type CancelOutcome = "cancelled" | "requested" | "finished";
+
 /** Stages that can be run from the portal (first milestone: the minimal assess path). */
 export const RUNNABLE_STAGES = ["assess"] as const;
 export type RunnableStage = (typeof RUNNABLE_STAGES)[number];
@@ -47,6 +70,8 @@ export interface JobRunView {
   documentWrite?: JobRunDocumentWrite;
   /** Number of restricted records (never their content or names). */
   restrictedRecords: number;
+  /** Set when a person asked to cancel the run while it was running. */
+  cancelRequestedAt?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
