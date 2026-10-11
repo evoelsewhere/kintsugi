@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kintsugi": {
+      "type": "http",
+      "url": "${user_config.kintsugi_url}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${user_config.kintsugi_token}"
+      }
+    }
+  }
+}

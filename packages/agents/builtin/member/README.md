@@ -11,7 +11,7 @@ member` in `../agents/` and `../commands/`), writes it into each project's docum
 | `skills/kintsugi-task` | How to work a task pack: cited standards, read-only legacy repos, trailers, PRs, registration |
 | `skills/reverse-design` | Stack-agnostic reverse-design method |
 | `hooks.json` | `hooks/hooks.json`: calls the `kintsugi` CLI (session context, write guard on legacy repos, activity reporting) |
+| `plugin.json` | `.claude-plugin/plugin.json`: the manifest, with `userConfig` for the installation URL and a sensitive PAT (the version is set to Kintsugi's) |
+| `mcp.json` | `.mcp.json`: the Kintsugi MCP server, authenticated with the PAT |
 
-The manifest (`.claude-plugin/plugin.json`, with `userConfig` for the installation URL and a
-sensitive PAT) and `.mcp.json` (the Kintsugi MCP server) are generated with the plugin. Hooks are
-assistive; gates and server-side checks stay authoritative.
+Hooks are assistive; gates and server-side checks stay authoritative.
