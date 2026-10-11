@@ -2,6 +2,8 @@
 // subject. Entries are append-only and never carry the content that was acted on (for a
 // restricted-record read: the job run and the path, not the record). Pure types.
 
+import type { AuditRecord } from "#common/audit/audit-trail.js";
+
 export interface AuditEntry {
   id: string;
   at: string;
@@ -16,21 +18,18 @@ export interface AuditEntry {
   detail: Record<string, unknown>;
 }
 
-export interface NewAuditEntry {
-  actor: string;
-  action: string;
-  projectId?: string;
-  subject?: string;
-  detail?: Record<string, unknown>;
-}
+/** An entry to append: the shared kernel's audit record. */
+export type NewAuditEntry = AuditRecord;
 
 export interface AuditQuery {
-  action?: string;
+  /** Any of these actions. */
+  actions?: string[];
+  actor?: string;
   subject?: string;
   projectId?: string;
   limit: number;
   offset: number;
 }
 
-/** Audit actions recorded by the API. */
-export const AUDIT_ACTIONS = { restrictedRead: "restricted.read" } as const;
+/** Audit actions recorded by the API (the catalog lives in the shared kernel). */
+export { AUDIT_ACTIONS, AUDIT_ACTION_LIST } from "#common/audit/audit-trail.js";

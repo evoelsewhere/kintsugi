@@ -4,6 +4,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
+import type { Actor } from "#common/auth/decorators.js";
 import {
   type GitRepositoryRecord,
   type GitServerRecord,
@@ -34,11 +36,33 @@ function credentialProblem(input: RegisterGitServer): string | undefined {
   return undefined;
 }
 
+/** A URL for the audit log: HTTP(S) user info (where a token could hide) is dropped. */
+function auditUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!/^https?:$/.test(parsed.protocol) || (parsed.username === "" && parsed.password === "")) return url;
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** The names of the server settings a replacement changes; `credential` when a new one is entered (never its value). */
+function changedServerFields(existing: GitServerRecord, input: RegisterGitServer): string[] {
+  const keys = ["kind", "name", "baseUrl", "authType", "username", "knownHosts"] as const;
+  const fields: string[] = keys.filter((key) => (existing[key] ?? "") !== (input[key] ?? ""));
+  if (hasCredential(input)) fields.push("credential");
+  return fields.sort();
+}
+
 @Injectable()
 export class GitService {
   constructor(
     private readonly registry: GitRegistry,
     private readonly remote: GitRemote,
+    private readonly audit: AuditTrail,
   ) {}
 
   // ---- servers ----
@@ -52,14 +76,21 @@ export class GitService {
     return this.#mustGetServer(id);
   }
 
-  async createServer(input: RegisterGitServer): Promise<GitServerRecord> {
+  async createServer(input: RegisterGitServer, actor: Actor): Promise<GitServerRecord> {
     if ((await this.registry.getServer(input.id)) !== undefined) throw new ConflictException(`Git server ${input.id} already exists`);
     const problem = credentialProblem(input);
     if (problem !== undefined) throw new BadRequestException(problem);
-    return this.registry.createServer(input);
+    const server = await this.registry.createServer(input);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.gitServerCreate, {
+        subject: server.id,
+        detail: { kind: server.kind, name: server.name, baseUrl: auditUrl(server.baseUrl), authType: server.authType },
+      }),
+    );
+    return server;
   }
 
-  async replaceServer(id: string, input: RegisterGitServer): Promise<GitServerRecord> {
+  async replaceServer(id: string, input: RegisterGitServer, actor: Actor): Promise<GitServerRecord> {
     const existing = await this.#mustGetServer(id);
     const fresh = hasCredential(input);
     if (fresh) {
@@ -86,14 +117,18 @@ export class GitService {
     }
     const updated = await this.registry.replaceServer(id, input);
     if (updated === undefined) throw new NotFoundException(`Git server ${id} not found`);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.gitServerUpdate, { subject: id, detail: { name: updated.name, fields: changedServerFields(existing, input) } }),
+    );
     return updated;
   }
 
-  async removeServer(id: string): Promise<void> {
-    await this.#mustGetServer(id);
+  async removeServer(id: string, actor: Actor): Promise<void> {
+    const server = await this.#mustGetServer(id);
     const repositories = await this.registry.countRepositories(id);
     if (repositories > 0) throw new ConflictException(`Git server ${id} still has ${repositories} repositories; remove them first`);
     await this.registry.removeServer(id);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.gitServerDelete, { subject: id, detail: { kind: server.kind, name: server.name } }));
   }
 
   /** "Test access": lists a repository's branches with the server's stored credential. */
@@ -130,15 +165,20 @@ export class GitService {
    * Registers a repository after checking it is reachable with the server's credential.
    * The clone itself is the worker's job (ADR-0025): the repository starts `pending`.
    */
-  async createRepository(input: Omit<RegisterGitRepository, "defaultBranch">): Promise<GitRepositoryRecord> {
+  async createRepository(input: Omit<RegisterGitRepository, "defaultBranch">, actor: Actor): Promise<GitRepositoryRecord> {
     if ((await this.registry.getRepository(input.id)) !== undefined) throw new ConflictException(`Repository ${input.id} already exists`);
     if ((await this.registry.findRepositoryByUrl(input.url)) !== undefined) throw new ConflictException(`${input.url} is already registered`);
     const access = await this.testAccess(input.serverId, input.url);
     if (!access.ok) throw new BadRequestException(`Cannot reach ${input.url}: ${access.message}`);
-    return this.registry.createRepository({ ...input, ...(access.defaultBranch === undefined ? {} : { defaultBranch: access.defaultBranch }) });
+    const repository = await this.registry.createRepository({ ...input, ...(access.defaultBranch === undefined ? {} : { defaultBranch: access.defaultBranch }) });
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.gitRepositoryCreate, { subject: repository.id, detail: { serverId: repository.serverId, url: auditUrl(repository.url) } }),
+    );
+    return repository;
   }
 
-  async removeRepository(id: string): Promise<void> {
+  async removeRepository(id: string, actor: Actor): Promise<void> {
+    const existing = await this.registry.getRepository(id);
     let removed: boolean;
     try {
       removed = await this.registry.removeRepository(id);
@@ -147,6 +187,12 @@ export class GitService {
       throw error;
     }
     if (!removed) throw new NotFoundException(`Repository ${id} not found`);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.gitRepositoryDelete, {
+        subject: id,
+        ...(existing === undefined ? {} : { detail: { serverId: existing.serverId, url: auditUrl(existing.url) } }),
+      }),
+    );
   }
 
   async #mustGetServer(id: string): Promise<GitServerRecord> {

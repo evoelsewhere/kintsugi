@@ -1,19 +1,33 @@
-// Application layer: the audit log. Other modules record through AuditService.record()
-// (fail-closed: when the entry cannot be written, the audited action does not happen);
-// holders of audit.read list it.
+// Application layer: the audit log. Implements the shared kernel's AuditTrail port, so other
+// modules record through `AuditTrail` without importing this module: record() is fail-closed
+// (when the entry cannot be written, the audited action does not happen), recordChange() is for
+// changes that already happened and never throws. Holders of audit.read list it.
 
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { type AuditRecord, AuditTrail } from "#common/audit/audit-trail.js";
 import { type Page, toPage } from "#common/application/pagination.js";
-import type { AuditEntry, AuditQuery, NewAuditEntry } from "../domain/audit-entry.js";
+import { AUDIT_ACTION_LIST, type AuditEntry, type AuditQuery } from "../domain/audit-entry.js";
 import { AuditLog } from "../domain/audit-log.port.js";
 
 @Injectable()
-export class AuditService {
-  constructor(private readonly log: AuditLog) {}
+export class AuditService extends AuditTrail {
+  readonly #logger = new Logger("Audit");
+
+  constructor(private readonly log: AuditLog) {
+    super();
+  }
 
   /** Appends the entries (all or none); throws when they cannot be stored. */
-  async record(entries: readonly NewAuditEntry[]): Promise<void> {
+  async record(entries: readonly AuditRecord[]): Promise<void> {
     await this.log.append(entries);
+  }
+
+  async recordChange(entry: AuditRecord): Promise<void> {
+    try {
+      await this.log.append([entry]);
+    } catch (error) {
+      this.#logger.error(`could not record ${entry.action} on ${entry.subject ?? "-"} by ${entry.actor}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async list(query: AuditQuery): Promise<Page<AuditEntry>> {
@@ -25,5 +39,10 @@ export class AuditService {
     const entry = await this.log.get(id);
     if (entry === undefined) throw new NotFoundException(`Audit entry ${id} not found`);
     return entry;
+  }
+
+  /** The actions the API records, for the audit log's filters. */
+  actions(): readonly string[] {
+    return AUDIT_ACTION_LIST;
   }
 }

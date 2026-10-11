@@ -4,6 +4,7 @@ import { LlmProvidersService } from "#modules/admin/llm-providers/application/ll
 import type { LlmProviderRecord } from "#modules/admin/llm-providers/domain/llm-provider.js";
 import type { LlmProviderRepository } from "#modules/admin/llm-providers/domain/llm-provider.repository.js";
 import type { ProviderCatalog } from "#modules/admin/llm-providers/domain/provider-catalog.js";
+import { MemoryAuditTrail } from "../support/audit.js";
 
 describe("connectionProbe", () => {
   it("uses Bearer auth on /models for OpenAI-style APIs", () => {
@@ -43,7 +44,7 @@ describe("LlmProvidersService.testConnection", () => {
       resolveApiKey: async () => "stored-key",
     } as unknown as LlmProviderRepository;
     const catalog = { list: () => ({ builtin: [], customApis: [] }), endpointOf: () => endpoint } as unknown as ProviderCatalog;
-    return new LlmProvidersService(repository, catalog);
+    return new LlmProvidersService(repository, catalog, new MemoryAuditTrail());
   }
 
   const custom = (api: string): LlmProviderRecord =>
