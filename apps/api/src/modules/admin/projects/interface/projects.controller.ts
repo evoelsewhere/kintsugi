@@ -47,7 +47,7 @@ export class ProjectsController {
   }
 
   @Get(":id/kintsugi.yaml")
-  @ApiOperation({ summary: "Render the project's kintsugi.yaml (read-only; not committed to the document repo yet)" })
+  @ApiOperation({ summary: "Render the project's kintsugi.yaml (publish it with POST :id/kintsugi.yaml/publish)" })
   @ApiOkResponse({ description: "{ fileName, content } with the YAML text." })
   manifest(@Param("id") id: string): Promise<RenderedManifest> {
     return this.projects.renderManifest(id);

@@ -15,6 +15,9 @@ Responsibilities beyond the feature modules below:
 - Admin → Projects: projects, applications and the registered repositories they use,
   grouped AS-IS (`legacy`, `legacy-data`) and TO-BE (`document`, `target` with a component),
   plus the rendered `kintsugi.yaml` (ADR-0028, migration `008_projects.sql`).
+- Admin → Projects → document writes: publishing `kintsugi.yaml` records a write in
+  `workflow.document_write` (migration `009_document_writes.sql`) and enqueues it on the
+  worker's `document-write` queue; only the worker commits to the document repo (ADR-0019).
 
 ## Layout
 
@@ -98,6 +101,7 @@ Import it through the `#common/*` alias (Node subpath imports in `package.json`)
 | `sleep()`, `retry()`, `chunk()` | `#common/util/async.js` | async utilities |
 | `nowIso()` | `#common/util/time.js` | one clock format (ISO-8601 UTC) |
 | `getPool`, `ensureSchema` | `#common/db/pool.js` | Postgres access + migrations (advisory-locked) |
+| `getJobQueue`, `closeJobQueue` | `#common/queue/job-queue.js` | pg-boss producer for the worker's queues (contract in `@kintsugi/orchestrator/queues`) |
 | `withTransaction`, `Queryable` | `#common/db/pool.js` | one unit of work across several statements |
 | `@Public()`, `@RequirePermission()`, `@CurrentActor()`, `Actor` | `#common/auth/decorators.js` | route access + the caller passed to use cases |
 | `sessionToken`, `setSessionCookie`, `CSRF_HEADER` | `#common/auth/session-cookie.js` | session transport (cookie or bearer) + CSRF rule |

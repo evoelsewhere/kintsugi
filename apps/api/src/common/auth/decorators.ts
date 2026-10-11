@@ -12,6 +12,8 @@ export const PERMISSION_KEY = "kintsugi:required-permission";
 /** The signed-in caller as seen by use cases: identity plus effective permissions. */
 export interface Actor {
   id: string;
+  /** Sign-in name, used for provenance (e.g. the `Kintsugi-Actor` commit trailer). */
+  username?: string;
   permissions: string[];
 }
 
