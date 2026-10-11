@@ -1,10 +1,11 @@
 // Project detail (ADR-0028): per application, the AS-IS group (legacy code and legacy data
 // repos, read-only for Kintsugi) and the TO-BE group (the project's document repo and the
 // target repos, each implementing an architecture component), plus the kintsugi.yaml that
-// Kintsugi renders from this state (read-only).
+// Kintsugi renders from this state, its publication to the document repo as a pull request,
+// and the recent writes to the document repo (ADR-0019).
 
 import type { ApplicationRepositoryRole } from "@kintsugi/domain";
-import { FolderGit2, Pencil, Plus, Trash2, Unlink } from "lucide-react";
+import { ExternalLink, FolderGit2, GitPullRequestArrow, Pencil, Plus, RefreshCw, Trash2, Unlink } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -14,12 +15,20 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import { gitApi, type GitRepositoryView } from "@/lib/api/git";
-import { type ApplicationView, type ProjectDetail, type ProjectRepositoryView, projectsApi } from "@/lib/api/projects";
+import { type ApplicationView, type DocumentWriteView, type ProjectDetail, type ProjectRepositoryView, projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { NoRepositories } from "./no-repositories";
 import { ApplicationDialog, LinkDialog, ProjectDialog } from "./project-dialogs";
 
 const SYNC_TONE: Record<string, StatusTone> = { pending: "muted", cloning: "blue", ready: "green", error: "red" };
+const WRITE_TONE: Record<DocumentWriteView["status"], StatusTone> = { queued: "blue", committed: "green", "pr-opened": "purple-light", unchanged: "muted", failed: "red" };
+const WRITE_LABEL: Record<DocumentWriteView["status"], string> = {
+  queued: "Queued",
+  committed: "Committed",
+  "pr-opened": "Pull request opened",
+  unchanged: "No changes",
+  failed: "Failed",
+};
 
 type ConfirmTarget =
   | { kind: "project" }
@@ -35,6 +44,8 @@ export function ProjectDetailPage(): React.JSX.Element {
   const canManage = can("projects.manage");
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [manifest, setManifest] = useState<string>("");
+  const [writes, setWrites] = useState<DocumentWriteView[]>([]);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [repositories, setRepositories] = useState<GitRepositoryView[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editProject, setEditProject] = useState(false);
@@ -44,14 +55,16 @@ export function ProjectDetailPage(): React.JSX.Element {
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const [detail, rendered, registered] = await Promise.all([
+      const [detail, rendered, registered, recent] = await Promise.all([
         projectsApi.get(projectId),
         projectsApi.manifest(projectId),
         canManage || can("git.manage") ? gitApi.listRepositories() : Promise.resolve([]),
+        projectsApi.documentWrites(projectId),
       ]);
       setProject(detail);
       setManifest(rendered.content);
       setRepositories(registered);
+      setWrites(recent.items);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -63,6 +76,22 @@ export function ProjectDetailPage(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  const loadWrites = useCallback(async (): Promise<void> => {
+    try {
+      setWrites((await projectsApi.documentWrites(projectId)).items);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    }
+  }, [projectId]);
+
+  // The worker performs writes in the background: follow queued ones until they settle.
+  const pending = writes.some((write) => write.status === "queued");
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(() => void loadWrites(), 3000);
+    return () => clearInterval(timer);
+  }, [pending, loadWrites]);
 
   if (project === null) {
     return (
@@ -159,12 +188,36 @@ export function ProjectDetailPage(): React.JSX.Element {
           <div>
             <CardTitle>kintsugi.yaml</CardTitle>
             <CardDescription>
-              Rendered from this project, read-only. It is not committed to the document repo yet; unit kinds, pipelines, auto-commit paths and policy show defaults.
+              Rendered from this project. Publishing proposes it to the document repo as a pull request; unit kinds, pipelines, auto-commit paths and policy show defaults.
             </CardDescription>
           </div>
+          {canManage && project.documentRepository !== null ? (
+            <Button size="small" variant="solid" className="shrink-0" onClick={() => setPublishOpen(true)}>
+              <GitPullRequestArrow className="size-4" />
+              Publish kintsugi.yaml
+            </Button>
+          ) : null}
         </CardHeader>
         <pre className="shadow-border mt-3 max-h-[28rem] overflow-auto rounded-[var(--geist-radius)] bg-recessed px-3 py-2 font-mono text-[12px] leading-5 text-text">{manifest}</pre>
       </Card>
+
+      <DocumentWrites writes={writes} onRefresh={() => void loadWrites()} />
+
+      <ConfirmDialog
+        open={publishOpen}
+        title="Publish kintsugi.yaml?"
+        confirmLabel="Publish"
+        busyLabel="Queuing…"
+        confirmVariant="solid"
+        onConfirm={async () => {
+          await projectsApi.publishManifest(projectId);
+          await loadWrites();
+        }}
+        onClose={() => setPublishOpen(false)}
+      >
+        Kintsugi commits the rendered kintsugi.yaml as kintsugi-bot on a new <code className="font-mono">kintsugi/*</code> branch of{" "}
+        {project.documentRepository?.repositoryId ?? "the document repo"} and opens a pull request for review. Plain Git servers get the branch only.
+      </ConfirmDialog>
 
       <ProjectDialog
         open={editProject}
@@ -220,6 +273,52 @@ export function ProjectDetailPage(): React.JSX.Element {
               : null}
       </ConfirmDialog>
     </div>
+  );
+}
+
+function DocumentWrites({ writes, onRefresh }: { writes: DocumentWriteView[]; onRefresh: () => void }): React.JSX.Element {
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Document writes</CardTitle>
+          <CardDescription>Recent commits by kintsugi-bot to the document repo: auto-commit paths land on the default branch, the rest in pull requests.</CardDescription>
+        </div>
+        <Button size="icon" variant="ghost" aria-label="Refresh document writes" onClick={onRefresh}>
+          <RefreshCw className="size-4" />
+        </Button>
+      </CardHeader>
+      {writes.length === 0 ? (
+        <p className="mt-3 text-[13px] text-text-muted">No writes yet.</p>
+      ) : (
+        <ul className="mt-3 flex flex-col gap-1">
+          {writes.map((write) => (
+            <li key={write.id} className="flex items-start gap-2 rounded-[var(--geist-radius)] px-2 py-1.5 hover:bg-hover">
+              <span className="mt-1.5" title={write.status}>
+                <StatusDot tone={WRITE_TONE[write.status]} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] text-text">{write.message}</p>
+                <p className="truncate text-[11px] text-text-muted">
+                  {WRITE_LABEL[write.status]} · {new Date(write.createdAt).toLocaleString()}
+                  {write.actor === undefined ? "" : ` · ${write.actor}`}
+                  {write.agent === undefined ? "" : ` · ${write.agent}`}
+                  {write.branch === undefined ? "" : ` · ${write.branch}`}
+                  {write.commit === undefined ? "" : ` · ${write.commit.slice(0, 12)}`}
+                </p>
+                {write.error === undefined ? null : <p className="mt-0.5 break-words text-[12px] text-[var(--ds-status-red)]">{write.error}</p>}
+              </div>
+              {write.prUrl === undefined ? null : (
+                <a href={write.prUrl} target="_blank" rel="noreferrer" className="flex shrink-0 items-center gap-1 text-[12px] text-accent hover:underline">
+                  Pull request
+                  <ExternalLink className="size-3.5" />
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
