@@ -2,6 +2,7 @@
 // Adding a page: append an item here and register its route in App.tsx.
 import {
   Activity,
+  FolderKanban,
   Gauge,
   type LucideIcon,
   Package,
@@ -62,6 +63,7 @@ export const NAV_SECTIONS: NavSection[] = [
     id: "administration",
     label: "Administration",
     items: [
+      { id: "projects", label: "Projects", icon: FolderKanban, to: "/projects" },
       { id: "members", label: "Members & Permissions", icon: Users, to: "/members" },
     ],
   },

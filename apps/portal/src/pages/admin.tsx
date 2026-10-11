@@ -5,9 +5,9 @@ import { AreaCard, type AreaCardProps } from "../components/area-card";
 const AREAS = [
   {
     title: "A1 · Projects & Applications",
-    description: "Programs, projects, applications, code repos, document repo. One installation = one organization.",
-    status: "not implemented yet",
-    tone: "muted",
+    description: "Projects, applications, their AS-IS and TO-BE repos, the document repo and the rendered kintsugi.yaml. One installation = one organization.",
+    status: "Administration → Projects",
+    tone: "green",
   },
   {
     title: "A2 · Identity & Access",

@@ -10,6 +10,8 @@ import { LoginPage } from "./pages/login";
 import { MonitoringPage } from "./pages/monitoring";
 import { OverviewPage } from "./pages/overview";
 import { MembersPermissionsPage } from "./pages/members-permissions";
+import { ProjectDetailPage } from "./pages/projects/project-detail-page";
+import { ProjectsPage } from "./pages/projects/projects-page";
 
 function RequireAuth({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { user, loading } = useAuth();
@@ -42,6 +44,8 @@ export function App(): React.JSX.Element {
             <Route path="delivery/:areaId" element={<DeliveryAreaPage />} />
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="governance" element={<GovernancePage />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="members" element={<MembersPermissionsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
