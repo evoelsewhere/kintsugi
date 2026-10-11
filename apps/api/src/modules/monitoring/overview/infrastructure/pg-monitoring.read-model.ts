@@ -1,6 +1,7 @@
 // Postgres read model of the monitoring overview (ADR-0010): aggregate queries across
 // admin.project, admin.application, admin.git_repository, admin.project_repository,
-// workflow.job_run and workflow.document_write (migrations 006, 008, 009, 010). Read-only;
+// workflow.job_run, workflow.document_write, governance.gate and workflow.worker_heartbeat
+// (migrations 006, 008, 009, 010, 013, 014). Read-only;
 // time windows use the database clock. Never selects a credential or restricted content.
 
 import { Injectable } from "@nestjs/common";
@@ -9,11 +10,13 @@ import { getPool } from "#common/db/pool.js";
 import type {
   MonitoredRepository,
   OverviewCounts,
+  PendingGateRecord,
   RepositoryErrorRecord,
   RepositoryLink,
   RepositorySyncStatus,
   RunRecord,
   StuckRunRecord,
+  WorkerRecord,
   WorkerTimes,
   WriteRecord,
 } from "../domain/overview.js";
@@ -97,9 +100,11 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
       repositories: number;
       repositories_with_errors: number;
       repositories_not_ready: number;
+      pending_gates: number;
     }>(`
       select (select count(*)::int from admin.project) as projects,
              (select count(*)::int from admin.application) as applications,
+             (select count(*)::int from governance.gate where status = 'pending') as pending_gates,
              runs.queued_runs, runs.running_runs, runs.failed_runs_24h, runs.succeeded_runs_24h,
              writes.pending_writes, writes.pull_requests_7d, writes.failed_writes_24h,
              repos.repositories, repos.repositories_with_errors, repos.repositories_not_ready
@@ -131,7 +136,56 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
       repositories: row.repositories,
       repositoriesWithErrors: row.repositories_with_errors,
       repositoriesNotReady: row.repositories_not_ready,
+      pendingGates: row.pending_gates,
     };
+  }
+
+  async pendingGates(limit: number): Promise<PendingGateRecord[]> {
+    const result = await this.#pool.query<{ id: string; project_id: string; application_id: string | null; gate_key: string; title: string; requested_by: string; at: Date }>(
+      `select id, project_id, application_id, gate_key, title, requested_by, requested_at as at from governance.gate
+        where status = 'pending' order by requested_at, id limit $1`,
+      [limit],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      ...optional("applicationId", row.application_id),
+      gateKey: row.gate_key,
+      title: row.title,
+      requestedBy: row.requested_by,
+      at: row.at.toISOString(),
+    }));
+  }
+
+  async workers(): Promise<WorkerRecord[]> {
+    const result = await this.#pool.query<{
+      worker_id: string;
+      host: string;
+      pid: number;
+      version: string;
+      started_at: Date;
+      last_seen_at: Date;
+      stopped_at: Date | null;
+      seconds_since_seen: number;
+      active_jobs: number;
+      queues: string[];
+    }>(
+      `select worker_id, host, pid, version, started_at, last_seen_at, stopped_at,
+              greatest(0, floor(extract(epoch from now() - last_seen_at)))::int as seconds_since_seen, active_jobs, queues
+         from workflow.worker_heartbeat order by last_seen_at desc, worker_id`,
+    );
+    return result.rows.map((row) => ({
+      workerId: row.worker_id,
+      host: row.host,
+      pid: row.pid,
+      version: row.version,
+      startedAt: row.started_at.toISOString(),
+      lastSeenAt: row.last_seen_at.toISOString(),
+      ...optional("stoppedAt", row.stopped_at?.toISOString() ?? null),
+      secondsSinceSeen: row.seconds_since_seen,
+      activeJobs: row.active_jobs,
+      queues: row.queues,
+    }));
   }
 
   async failedRuns(days: number, limit: number): Promise<RunRecord[]> {

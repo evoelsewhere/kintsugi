@@ -4,7 +4,7 @@
 import { Controller, Get } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { OverviewService } from "../application/overview.service.js";
-import type { MonitoredRepository, MonitoringOverview } from "../domain/overview.js";
+import type { MonitoredRepository, MonitoringOverview, WorkerStatus } from "../domain/overview.js";
 
 @ApiTags("monitoring · overview")
 @Controller("monitoring")
@@ -16,6 +16,13 @@ export class OverviewController {
   @ApiOkResponse({ description: "The overview; `worker.queues` is null when the job queue cannot be read." })
   get(): Promise<MonitoringOverview> {
     return this.overview.overview();
+  }
+
+  @Get("workers")
+  @ApiOperation({ summary: "List worker processes from their heartbeats: host, pid, version, last beat, active jobs, queues and state (up when seen < 45 s ago)" })
+  @ApiOkResponse({ description: "The workers, the latest beat first." })
+  workers(): Promise<WorkerStatus[]> {
+    return this.overview.workers();
   }
 
   @Get("repositories")

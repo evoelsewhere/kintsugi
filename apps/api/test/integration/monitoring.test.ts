@@ -18,9 +18,27 @@ interface Page<T> {
 interface Overview {
   generatedAt: string;
   counts: Record<string, number>;
-  attention: Array<{ kind: string; at: string; title: string; detail?: string; projectId?: string; applicationId?: string; jobRunId?: string; documentWriteId?: string; repositoryId?: string }>;
+  attention: Array<{
+    kind: string;
+    at: string;
+    title: string;
+    detail?: string;
+    projectId?: string;
+    applicationId?: string;
+    jobRunId?: string;
+    documentWriteId?: string;
+    repositoryId?: string;
+    gateId?: string;
+  }>;
   activity: Array<{ kind: string; at: string; status: string; title: string; projectId: string; applicationId?: string; jobRunId?: string; documentWriteId?: string; actor?: string; prUrl?: string; branch?: string }>;
-  worker: { queues: Array<{ name: string; queued: number; active: number; deferred: number }> | null; lastGitSyncAt?: string; oldestQueuedRunAt?: string };
+  worker: {
+    up: boolean;
+    workersUp: number;
+    lastSeenAt?: string;
+    queues: Array<{ name: string; queued: number; active: number; deferred: number }> | null;
+    lastGitSyncAt?: string;
+    oldestQueuedRunAt?: string;
+  };
 }
 
 const SECRET = "| svc-user | hunter2 | config.ini:3 |";
@@ -71,6 +89,18 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
          ('w-queued', 'alpha', 'manifest', 'queued', 'Publish kintsugi.yaml', null, null, null, 'admin', now() - interval '1 minute', now() - interval '1 minute')`,
     );
     await app.db.query("update workflow.job_run set document_write_id = 'w-failed' where id = 'r-failed'");
+    // Gates (one pending, one decided) and worker heartbeats (up, stale, stopped).
+    await app.db.query(
+      `insert into governance.gate (id, project_id, application_id, gate_key, title, status, requested_by, requested_at, decided_by, decided_at, note) values
+         ('g-pending', 'alpha', 'web', 'stage:assess', 'Review the assessment', 'pending', 'kintsugi-worker', now() - interval '90 minutes', null, null, null),
+         ('g-approved', 'beta', null, 'G0', 'Bootstrap', 'approved', 'admin', now() - interval '2 days', 'admin', now() - interval '1 day', 'ok')`,
+    );
+    await app.db.query(
+      `insert into workflow.worker_heartbeat (worker_id, host, pid, version, started_at, last_seen_at, stopped_at, active_jobs, queues) values
+         ('w-up', 'worker-1', 101, '1.0.0', now() - interval '1 hour', now() - interval '5 seconds', null, 2, '{git-sync,document-write,job-run}'),
+         ('w-stale', 'worker-2', 102, '1.0.0', now() - interval '2 hours', now() - interval '10 minutes', null, 1, '{git-sync}'),
+         ('w-stopped', 'worker-3', 103, '0.9.0', now() - interval '1 day', now() - interval '20 hours', now() - interval '20 hours', 0, '{git-sync}')`,
+    );
     const secret = encryptSecret(SECRET);
     for (const [run, path, at] of [
       ["r-step", "SECRETS.local.md", "now() - interval '1 hour'"],
@@ -91,7 +121,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
 
   it("every read needs a session", async () => {
     const anonymous = new Client(app);
-    for (const path of ["/monitoring/overview", "/monitoring/repositories", "/job-runs", "/document-writes", "/governance/restricted-records", "/stages"]) {
+    for (const path of ["/monitoring/overview", "/monitoring/workers", "/governance/gates", "/monitoring/repositories", "/job-runs", "/document-writes", "/governance/restricted-records", "/stages"]) {
       expect((await anonymous.get(path)).status, path).toBe(401);
     }
   });
@@ -116,6 +146,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
       repositories: 5,
       repositoriesWithErrors: 1,
       repositoriesNotReady: 1,
+      pendingGates: 1,
     });
   });
 
@@ -123,13 +154,14 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     const overview = (await admin.get<Overview>("/monitoring/overview")).body.data!;
     expect(isNewestFirst(overview.attention)).toBe(true);
     // The repository error was recorded just now (updated_at); the others are minutes to an hour old.
-    expect(overview.attention.map((item) => item.kind)).toEqual(["repository-error", "write-failed", "run-stuck", "run-failed"]);
+    expect(overview.attention.map((item) => item.kind)).toEqual(["repository-error", "write-failed", "run-stuck", "gate-pending", "run-failed"]);
     expect(overview.attention).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "run-failed", title: "assess failed", detail: "agent timed out", projectId: "alpha", applicationId: "web", jobRunId: "r-failed" }),
         expect.objectContaining({ kind: "run-stuck", title: "assess queued for 14 min", detail: "The worker has not picked it up", projectId: "alpha", jobRunId: "r-stuck" }),
         expect.objectContaining({ kind: "write-failed", title: "Assess web", detail: "push rejected", projectId: "alpha", applicationId: "web", documentWriteId: "w-failed" }),
         expect.objectContaining({ kind: "repository-error", title: "broken", detail: "authentication failed", repositoryId: "broken" }),
+        expect.objectContaining({ kind: "gate-pending", title: "stage:assess · Review the assessment", detail: "Requested by kintsugi-worker", projectId: "alpha", applicationId: "web", gateId: "g-pending" }),
       ]),
     );
     expect(overview.attention.some((item) => item.jobRunId === "r-old" || item.jobRunId === "r-step")).toBe(false);
@@ -156,6 +188,36 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     expect(overview.worker.queues?.map((queue) => queue.name)).toEqual(["job-run", "document-write", "git-sync"]);
     expect(overview.worker.lastGitSyncAt).toBeDefined();
     expect(overview.worker.oldestQueuedRunAt).toBeDefined();
+    expect(overview.worker).toMatchObject({ up: true, workersUp: 1 });
+    expect(overview.worker.lastSeenAt).toBeDefined();
+  });
+
+  it("lists workers from their heartbeats with their state", async () => {
+    const response = await admin.get<Array<{ workerId: string; host: string; pid: number; version: string; state: string; activeJobs: number; queues: string[]; secondsSinceSeen: number; stoppedAt?: string }>>(
+      "/monitoring/workers",
+    );
+    expect(response.status).toBe(200);
+    const workers = response.body.data!;
+    expect(workers.map((worker) => [worker.workerId, worker.state])).toEqual([
+      ["w-up", "up"],
+      ["w-stale", "stale"],
+      ["w-stopped", "stopped"],
+    ]);
+    expect(workers[0]).toMatchObject({ host: "worker-1", pid: 101, version: "1.0.0", activeJobs: 2, queues: ["git-sync", "document-write", "job-run"] });
+    expect(workers[0]?.secondsSinceSeen).toBeLessThan(45);
+    expect(workers[2]?.stoppedAt).toBeDefined();
+  });
+
+  it("reports no worker running once every heartbeat is old", async () => {
+    await app.db.query("update workflow.worker_heartbeat set last_seen_at = now() - interval '1 minute' where worker_id = 'w-up'");
+    try {
+      const overview = (await admin.get<Overview>("/monitoring/overview")).body.data!;
+      expect(overview.worker).toMatchObject({ up: false, workersUp: 0 });
+      expect(overview.attention[0]).toMatchObject({ kind: "worker-down", title: "No worker is running" });
+      expect(overview.attention[0]?.detail).toContain("worker-1");
+    } finally {
+      await app.db.query("update workflow.worker_heartbeat set last_seen_at = now() where worker_id = 'w-up'");
+    }
   });
 
   it("the repository view shows sync state and project links, never credentials", async () => {
@@ -212,7 +274,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     expect((await admin.get<Page<{ jobRunId: string }>>("/governance/restricted-records?jobRunId=r-failed")).body.data?.items.map((record) => record.jobRunId)).toEqual(["r-step"]);
     expect((await admin.get<Page<unknown>>("/governance/restricted-records?projectId=beta")).body.data?.total).toBe(1);
 
-    const audited = await app.db.query<{ count: number }>("select count(*)::int as count from governance.audit_event");
+    const audited = await app.db.query<{ count: number }>("select count(*)::int as count from governance.audit_event where action = 'restricted.read'");
     expect(audited.rows[0]?.count).toBe(0);
   });
 
