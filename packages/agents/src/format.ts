@@ -90,12 +90,12 @@ const SKILL_FIELDS = new Set(["name", "description", "license", "compatibility",
 // Frontmatter
 // ---------------------------------------------------------------------------
 
-interface Document {
+export interface Document {
   data: Record<string, unknown>;
   body: string;
 }
 
-function splitFrontmatter(text: string, file: string): Document | string {
+export function splitFrontmatter(text: string, file: string): Document | string {
   const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
   const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(normalized);
   if (match === null) return `${file}: missing YAML frontmatter (--- … ---)`;

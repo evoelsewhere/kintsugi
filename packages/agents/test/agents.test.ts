@@ -9,6 +9,7 @@ import {
   type AgentPackage,
   BUILTIN_DIR,
   loadBuiltinCatalog,
+  loadBuiltinCommands,
   parseAgentFile,
   parseAgentPackage,
   parseSkill,
@@ -190,5 +191,13 @@ describe("built-in commands", () => {
       expect(text, name).not.toMatch(/analysis\/(\$system|<system>)|legacy\/\$system|\/code-modernization:|build_report\.py/);
     }
   });
-});
 
+  it("load in pipeline order with their stage ids", async () => {
+    const commands = await loadBuiltinCommands();
+    expect(commands).toHaveLength(13);
+    expect(commands[0]).toMatchObject({ id: "modernize", command: "modernize", audience: "portal" });
+    expect(commands.find((command) => command.id === "extract-rules")).toMatchObject({ command: "modernize-extract-rules", agents: ["business-rules-extractor", "legacy-analyst"] });
+    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "map", "extract-rules", "harden"]);
+    expect(commands.find((command) => command.id === "status")).toMatchObject({ writes: [], gates: [] });
+  });
+});

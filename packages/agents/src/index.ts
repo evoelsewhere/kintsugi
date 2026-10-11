@@ -22,6 +22,7 @@ export {
 } from "./format.js";
 export { toAgentDefinition, validateAgent, type AgentContext } from "./definition.js";
 export { BUILTIN_DIR, loadBuiltinCatalog, readPackageDir, type BuiltinCatalog } from "./builtin.js";
+export { COMMAND_AUDIENCES, COMMAND_ORDER, loadBuiltinCommands, type BuiltinCommand, type CommandAudience } from "./commands.js";
 export {
   AgentResolutionError,
   installationSkills,
