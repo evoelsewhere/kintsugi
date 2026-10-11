@@ -2,7 +2,8 @@
 // repos, read-only for Kintsugi) and the TO-BE group (the project's document repo and the
 // target repos, each implementing an architecture component), plus the kintsugi.yaml that
 // Kintsugi renders from this state, its publication to the document repo as a pull request,
-// and the recent writes to the document repo (ADR-0019).
+// the recent writes to the document repo (ADR-0019) and, per application, its runtime job
+// runs with a "Run assess" button (ADR-0029).
 
 import type { ApplicationRepositoryRole } from "@kintsugi/domain";
 import { ExternalLink, FolderGit2, GitPullRequestArrow, Pencil, Plus, RefreshCw, Trash2, Unlink } from "lucide-react";
@@ -17,6 +18,7 @@ import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import { gitApi, type GitRepositoryView } from "@/lib/api/git";
 import { type ApplicationView, type DocumentWriteView, type ProjectDetail, type ProjectRepositoryView, projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
+import { ApplicationJobRuns } from "./application-job-runs";
 import { NoRepositories } from "./no-repositories";
 import { ApplicationDialog, LinkDialog, ProjectDialog } from "./project-dialogs";
 
@@ -172,8 +174,11 @@ export function ProjectDetailPage(): React.JSX.Element {
         project.applications.map((application) => (
           <ApplicationCard
             key={application.id}
+            projectId={project.id}
             application={application}
             canManage={canManage}
+            canRun={can("jobs.run")}
+            hasDocumentRepository={project.documentRepository !== null}
             canLink={linkable.length > 0}
             onEdit={() => setApplicationDialog({ open: true, application })}
             onRemove={() => setConfirm({ kind: "application", application })}
@@ -323,8 +328,11 @@ function DocumentWrites({ writes, onRefresh }: { writes: DocumentWriteView[]; on
 }
 
 interface ApplicationCardProps {
+  projectId: string;
   application: ApplicationView;
   canManage: boolean;
+  canRun: boolean;
+  hasDocumentRepository: boolean;
   canLink: boolean;
   onEdit: () => void;
   onRemove: () => void;
@@ -332,7 +340,12 @@ interface ApplicationCardProps {
   onUnlink: (repository: ProjectRepositoryView) => void;
 }
 
-function ApplicationCard({ application, canManage, canLink, onEdit, onRemove, onLink, onUnlink }: ApplicationCardProps): React.JSX.Element {
+function ApplicationCard({ projectId, application, canManage, canRun, hasDocumentRepository, canLink, onEdit, onRemove, onLink, onUnlink }: ApplicationCardProps): React.JSX.Element {
+  const blocked = !hasDocumentRepository
+    ? "The project has no document repo, so job output has nowhere to go."
+    : application.asIs.legacy.length === 0
+      ? "Link a legacy code repo to run the assess stage."
+      : undefined;
   const group = (title: string, role: ApplicationRepositoryRole, repositories: ProjectRepositoryView[]): React.JSX.Element => (
     <RepositoryList
       title={title}
@@ -385,6 +398,7 @@ function ApplicationCard({ application, canManage, canLink, onEdit, onRemove, on
           {group("Target repos", "target", application.toBe.targets)}
         </section>
       </div>
+      <ApplicationJobRuns projectId={projectId} applicationId={application.id} canRun={canRun} {...(blocked === undefined ? {} : { blocked })} />
     </Card>
   );
 }
