@@ -13,14 +13,18 @@
   - `policy.ts` — system prompt composition and the `denyCommandPatterns` tool-call hook.
   - `job.ts` — maps pi events onto `JobEvent`s, enforces `timeoutSec` / `maxTurns` / `maxCostUsd`, and reads the outcome from the last assistant message (LLM errors and aborts end as `job.failed`).
   - `validate.ts` — rejects jobs with unknown tools, missing directories or invalid limits before anything starts.
-- `src/launcher/` — runs on the worker side: `provider-registry.ts` reads `admin.llm_provider` and decrypts secrets; `model-runtime.ts` builds the job's pi `ModelRuntime` in memory (no `models.json`, no `auth.json`, nothing from the host's `~/.pi`).
+- `src/launcher/` — runs on the worker side, exported as `@kintsugi/runtime/launcher` (ADR-0029); knows no agent, script or stage:
+  - `workspace.ts` — marks a job's `src` and `in` read-only, measures and removes job directories;
+  - `process.ts` — child processes with an explicit command (no shell), a complete environment, a wall-clock timeout, an output-size watch and a process-tree kill (`taskkill /T /F` on Windows, the process group elsewhere);
+  - `script.ts` — script steps: Python as `-I -B -X utf8`, Node with `--permission` limited to the workspace, the cleared job environment (`PATH`, `HOME`/`TEMP` into scratch, no credentials), the script's sha256, a redacted failure reason;
+  - `provider-registry.ts` reads `admin.llm_provider` and decrypts secrets; `model-runtime.ts` builds the job's pi `ModelRuntime` in memory (no `models.json`, no `auth.json`, nothing from the host's `~/.pi`).
 - `src/catalog/provider-catalog.ts` — the builtin providers and models of the pinned pi release plus the supported custom wire protocols, in a pi-agnostic shape. Exported as `@kintsugi/runtime/provider-catalog`; `apps/api` serves it to the portal (`GET /api/admin/llm-providers/supported`), so pi-specific code stays in this service.
 - `src/bin/run-job.ts` — dev CLI, see below.
 - `src/mock-agent.ts`, `src/event-stream.ts`, `src/version.ts`.
 
 ## Tests
 
-`pnpm test` runs the kernel suite (vitest, `test/`). Kernel tests drive real pi sessions with pi-ai's faux provider: no network, no LLM, no credentials. They cover path confinement, the tool allowlist, the session lockdown, job limits and outcomes, and scratch-directory cleanup.
+`pnpm test` runs the kernel suite (vitest, `test/`). Kernel tests drive real pi sessions with pi-ai's faux provider: no network, no LLM, no credentials. They cover path confinement, the tool allowlist, the session lockdown, job limits and outcomes, and scratch-directory cleanup. `launcher.test.ts` runs script steps with the local Python and Node on any OS: cleared environment, read-only marking, timeout with process-tree kill, output cap and Node's permission model.
 
 ## Dev runner
 
@@ -35,9 +39,8 @@ node dist/bin/run-job.js --agent-file probe.json --read <dir> --out <dir> --task
 
 ## Planned
 
-- **Runner** → a thin process per job inside the job sandbox (ADR-0004; proposed ADR-0021), streaming `JobEvent`s to the job gateway in `kintsugi-app`.
-- **Launcher** → in `kintsugi-worker`: resolves the provider and credentials (ADR-0009), passes provider environment to the runner, prepares the read-only checkout and the output directory, and commits outputs per ADR-0019.
+- **Runner process** → agent jobs run in the worker process today (ADR-0029); a child process per agent job, behind the same job workspace, stays possible. Job events are not yet streamed to the portal.
 - **Agents** → installation data managed in the Agent Builder; built-in packages live in `packages/agents/builtin/` (ADR-0026). The kernel tool names are exported without pi as `@kintsugi/runtime/tool-names`, for validating agent tool allowlists.
 - **More kernel tools** (knowledge-base search, git history, …) are added to `src/kernel/tools.ts` with a review of their security boundary.
 
-Security rules: [security concept](../../docs/architecture/concepts/security.md), [ADR-0004](../../docs/decisions/0004-runner-container-per-job.md), [ADR-0023](../../docs/decisions/0023-runtime-as-generic-agent-kernel.md).
+Security rules: [security concept](../../docs/architecture/concepts/security.md), [ADR-0029](../../docs/decisions/0029-job-workspaces-instead-of-os-sandboxes.md), [ADR-0023](../../docs/decisions/0023-runtime-as-generic-agent-kernel.md).

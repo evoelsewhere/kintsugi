@@ -64,6 +64,18 @@ Writes to a project's document repo ([ADR-0019](../decisions/0019-workspace-repo
 |---|---|---|
 | `workflow.document_write` | `id` | `project_id` (cascade on project delete), `kind` (`manifest`, `job-output`, `state-change`), `status` (`queued`, `committed`, `pr-opened`, `unchanged`, `failed`), `message`, `commit_sha` (default-branch commit of auto-commit paths), `branch` + `branch_commit_sha` (the `kintsugi/*` branch of the other paths), `pr_url`, `error` (redacted), provenance `actor`, `job_id`, `agent` |
 
+## Job runs
+
+Runtime job runs ([ADR-0027](../decisions/0027-builtin-modernization-content.md), [ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)), migration [`010_job_runs.sql`](../../apps/api/migrations/010_job_runs.sql). The API creates a stage run as `queued`; the worker records everything else. A stage's steps are child runs (`parent_id`).
+
+| Table | Key | Content |
+|---|---|---|
+| `workflow.job_run` | `id` | `project_id`, `application_id`, `parent_id`, `kind` (`stage`, `script`, `agent`, `workflow`), `name` (stage, script file, agent or workflow id), `status` (`queued`, `running`, `succeeded`, `failed`, `cancelled`), `failure_reason` (redacted), `source_repository_id` + `source_commit`, `inputs` and `limits` (jsonb), `script_hash` (sha256 of the script that ran), `agent` (`<agent>@<version>`), `actor`, `output_summary` (counts, sizes, hook summary, usage; never file content), `document_write_id`, `started_at`, `finished_at`, `created_at` |
+| `workflow.artifact` | (`job_run_id`, `path`) | `sha256`, `size`, `provenance` (jsonb, [Provenance](#provenance)); `path` is relative to the job's output, i.e. the path in the document repo |
+| `governance.restricted_record` | (`job_run_id`, `path`) | a file the job wrote under `restricted/`, encrypted with `KINTSUGI_SECRET_KEY` (`ciphertext`, `iv`, `auth_tag`), `size`; never committed, logged or summarized; readable through the API with `restricted.read` |
+
+Permissions added by the migration: `jobs.run` (start stages and jobs) and `restricted.read`, both granted to `admin`.
+
 ## Provenance
 
 Every artifact records how it was produced. This record feeds the [AI metrics](../methodology/ai-metrics.md).

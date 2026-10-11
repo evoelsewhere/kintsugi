@@ -4,42 +4,34 @@
 
 - **Legacy repositories are untrusted input.** They may contain prompt-injection payloads aimed at agents.
 - **pi provides no isolation.** It has no sandbox and no permission system, and its project trust is not a security boundary.
-- **The worker can start containers.** That makes its Docker API access the most sensitive privilege in an installation.
+- **There is no OS-level sandbox.** Runtime jobs and script steps run in job workspaces of the worker, as the worker's OS user, with network access ([ADR-0029](../../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)). The worker's own privileges bound what a job can reach.
 - **Members' harnesses run outside Kintsugi's control.** Governance there relies on policy distribution and gates.
 
-## Runtime jobs ([ADR-0004](../../decisions/0004-runner-container-per-job.md))
+## Runtime jobs ([ADR-0029](../../decisions/0029-job-workspaces-instead-of-os-sandboxes.md))
 
-1. **Isolation**: one Docker container per job:
-   - non-root user
-   - `--read-only` root filesystem
-   - `cap-drop ALL`
-   - `no-new-privileges`
-   - CPU, memory and time limits
-   - gVisor (`runsc`) when available
-2. **Mounts**: the Git checkout is read-only at `/src` (`workspace.readOnly`). Only `/out` (`workspace.outDir`) is writable, and the worker validates it before committing anything.
-3. **Tools**: only the kernel tools in the agent's allowlist are created ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)): `read`, `ls`, `grep`, `find` confined to the read-only paths, and `outputs_write` confined to the output directory. pi's `bash`, `edit` and `write` are never registered. New kernel tools are added by code, with a review of their security boundary.
+1. **Job workspace**: every job gets `<data>/jobs/<id>/` with `src` (a detached worktree of the source repository at the job's commit) and `in` (the step's inputs), both marked read-only, plus a writable `out` and a scratch `tmp` that is deleted when the step ends. This is the isolation boundary; there is no container, VM or OS sandbox, and **no network blocking**.
+2. **Script steps and hooks**: a child process with explicit path arguments (no shell), `cwd` in the job directory and a cleared environment: no credentials, `DATABASE_URL`, `KINTSUGI_SECRET_KEY` or Kintsugi tokens; `HOME` and `TEMP` point into `tmp`. Python runs isolated (`-I`); Node runs with its permission model (file access limited to the workspace, no child processes). A wall-clock timeout and an output-size cap kill the whole process tree; the script's sha256 is recorded. Nothing is installed at run time.
+3. **Agent jobs and tools**: run in the worker through the kernel ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)); only the kernel tools in the agent's allowlist are created: `read`, `ls`, `grep`, `find` confined (symlinks resolved) to `src` and `in`, and `outputs_write` confined to `out`. pi's `bash`, `edit` and `write` are never registered. New kernel tools are added by code, with a review of their security boundary.
 4. **Untrusted context**: the kernel's pi session discovers nothing from the checkout or the host: no context files, `.pi/` resources, settings files, packages, `SYSTEM.md`, MCP, codemode or tool search. The system prompt is the agent's instructions and skills, verbatim.
-5. **Credentials**: only the credentials of the provider the job uses are injected (env / `ModelRuntime.setRuntimeApiKey`), never written to disk. Provider and models are registered in memory; no `models.json` or `auth.json` is written.
-6. **Network**: the internal `jobs` network reaches only `kintsugi-app` (job gateway) and `egress-proxy`, which allowlists the configured LLM provider hosts. The runner never talks to Git.
-7. **Job token**: short-lived, read-only, scoped to one project.
-8. **Status**: job status comes from events, not from the exit code. LLM errors, aborts, timeouts and exceeded limits (`maxTurns`, `maxCostUsd`) end as `job.failed` with a reason, never `job.completed`.
+5. **Credentials**: the provider's credentials are decrypted per job and handed to pi in memory (`ModelRuntime.setRuntimeApiKey`); no `models.json` or `auth.json` is written, and scripts never see them. Providers that need process environment variables are refused for in-worker jobs.
+6. **Output checks**: after every step, `out/restricted/` is stored encrypted as restricted records (readable with `restricted.read`, never committed or logged) and removed; the JobOutput hook checks `out/` fail-closed for credential-shaped values and malformed artifacts, and the failure reason is built from its redacted report only; then the writer applies its output rules before committing ([ADR-0019](../../decisions/0019-workspace-repo-write-path.md)).
+7. **Status**: job status comes from events and exit codes, never assumed. LLM errors, aborts, timeouts and exceeded limits (`maxTurns`, `maxCostUsd`, output size) end the run as `failed` with a redacted reason.
+8. **Operating the worker**: run it as a dedicated non-root user whose only writable location is the data directory, with no credentials on its filesystem; restrict its egress at the network level if required (Postgres, Git servers, LLM providers). Memory and CPU are bounded for the worker as a whole, not per job.
 9. **Upgrades**: run the kernel smoke suite before upgrading pi ([ADR-0018](../../decisions/0018-pin-pi-exact-version.md), amended by ADR-0023).
 
 ## Installation
 
 - **Exposure**: only `kintsugi-app` is published.
 - **Secrets**: LLM keys and Git credentials are encrypted in Postgres with `KINTSUGI_SECRET_KEY`.
-- **Docker API**: the worker goes through `docker-socket-proxy`, limited to container lifecycle calls ❓ (D32). It accepts:
-  - `kintsugi-runner:<version>` for runtime jobs;
-  - mounts only inside the job directory.
+- **Docker API**: none. The worker starts no containers (ADR-0029).
 - **Extension trust boundary**: each extension has an installation-level control, and every use is audited.
 
   | Extension | Control |
   |---|---|
-  | Runner images | Image allowlist |
+  | Scripts and workflows | Built-in content only (`packages/agents/builtin`), reviewed per release; model-written scripts run in the job workspace with their hash recorded |
   | Harness transformer plugins | Installed by admins only |
 
-  Agents are installation data (built-in or created by admins, ADR-0026) supplied per job by Kintsugi; projects cannot add agents, tools or MCP servers to the runtime. Kernel path confinement and tool allowlists are defence in depth; the job sandbox is the isolation boundary (ADR-0023).
+  Agents are installation data (built-in or created by admins, ADR-0026) supplied per job by Kintsugi; projects cannot add agents, tools or MCP servers to the runtime. Kernel path confinement and tool allowlists are the agents' isolation inside the job workspace (ADR-0023, ADR-0029).
 - **Worker commits**: authored by a bot account and carrying job/agent trailers ([document repo](../../reference/document-repo.md#commit-conventions)).
 
 ## Member harnesses

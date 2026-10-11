@@ -1,6 +1,6 @@
 # Runtime agents and the job contract
 
-The Kintsugi Runtime is a **generic agent kernel** on pi ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)). It runs one agent job at a time, one sandbox per job ([ADR-0004](../decisions/0004-runner-container-per-job.md)), and knows no agent or use case.
+The Kintsugi Runtime is a **generic agent kernel** on pi ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)). It runs one agent job at a time, each in its job workspace ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)), and knows no agent or use case.
 
 - **An agent is data, supplied whole with each job.** The runner is stateless and never looks an agent up.
 - **Agents are installation data** ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)): five built-in read-only agents for the understanding phases ship with their commands, workflows and scripts in `packages/agents/builtin/` ([ADR-0027](../decisions/0027-builtin-modernization-content.md)) and are seeded at startup; admins fork them or create their own in the Agent Builder. The launcher resolves `id` or `id@version` to a published version at job start and embeds it in the job.
@@ -49,7 +49,7 @@ Further tools (for example knowledge-base search) are added to the kernel tool r
 
 - No discovery from the checkout or the host: no context files, `.pi/` resources, settings files, packages, `SYSTEM.md`, MCP, codemode or tool search.
 - Provider, models and credentials are registered in memory, never written to disk.
-- Path confinement and the tool allowlist are defence in depth; the isolation boundary is the job sandbox ([security](../architecture/concepts/security.md)).
+- Path confinement and the tool allowlist are the agent's isolation inside the job workspace; there is no OS sandbox ([security](../architecture/concepts/security.md)).
 
 ## Events
 

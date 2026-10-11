@@ -8,7 +8,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `KINTSUGI_VERSION` | no | `latest` | Image tag for `kintsugi-app`, `kintsugi-worker`, `kintsugi-runner` |
+| `KINTSUGI_VERSION` | no | `latest` | Image tag for `kintsugi-app` and `kintsugi-worker` |
 | `KINTSUGI_REGISTRY` | no | `registry.example.com/kintsugi` | Container registry hosting the images (use a local registry for air-gapped installs) |
 | `KINTSUGI_HTTP_PORT` | no | `8080` | Published port of `kintsugi-app` |
 | `KINTSUGI_PUBLIC_URL` | yes | — | External URL (used for links, MCP and CLI configuration) |
@@ -19,11 +19,19 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_DATA_DIR` | yes | — | Host directory for Git mirrors, document repo clones and per-job checkouts ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)); size it for every registered repository plus running jobs. Without Docker (development) it defaults to `./.kintsugi/data` |
 | `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between full Git re-syncs of every repository (minimum 30); new repositories are cloned within seconds |
 | `KINTSUGI_BOT_EMAIL` | no | `kintsugi-bot@kintsugi.invalid` | Author and committer email of `kintsugi-bot`, the identity of every commit the worker makes to a document repo ([ADR-0019](../decisions/0019-workspace-repo-write-path.md)). Set an address the Git server maps to the bot account to link commits to it |
-| `KINTSUGI_JOB_MAX_CONCURRENCY` | no | `2` | Parallel runtime jobs |
-| `KINTSUGI_JOB_DEFAULT_TIMEOUT` | no | `1800` | Default job timeout (seconds) |
-| `KINTSUGI_JOB_MEMORY` | no | `4g` | Memory limit per runner container |
-| `KINTSUGI_JOB_CPUS` | no | `2` | CPU limit per runner container |
-| `KINTSUGI_JOB_DOCKER_RUNTIME` | no | empty | Set to `runsc` when gVisor is installed |
+| `KINTSUGI_JOB_MAX_CONCURRENCY` | no | `2` | Parallel job runs per worker |
+| `KINTSUGI_JOB_DEFAULT_TIMEOUT` | no | `1800` | Wall-clock limit of an agent job (seconds) |
+| `KINTSUGI_SCRIPT_TIMEOUT` | no | `600` | Wall-clock limit of a script step (seconds); the process tree is killed when it is exceeded |
+| `KINTSUGI_JOB_MAX_OUTPUT_BYTES` | no | `52428800` | Bytes a step may write to its output directory; a script that exceeds it is killed |
+| `KINTSUGI_JOB_MAX_TURNS` | no | `80` | Assistant turns per agent job |
+| `KINTSUGI_JOB_MAX_COST_USD` | no | unset | Cost limit per agent job (USD); unset = no limit |
+| `KINTSUGI_WORKFLOW_MAX_AGENTS` | no | `50` | Agent jobs one workflow may start |
+| `KINTSUGI_WORKFLOW_CONCURRENCY` | no | `4` | Agent jobs of one workflow running at a time |
+| `KINTSUGI_RUNTIME_MODE` | no | `pi` | `pi` runs agent jobs with the configured LLM providers; `mock` runs them without an LLM (development and demos) |
+| `KINTSUGI_PYTHON` | no | `python3` (`python` on Windows) | Python 3.12 interpreter for script steps and hooks |
+| `KINTSUGI_NODE` | no | the worker's Node | Node 22+ interpreter for `.js` script steps |
+
+Runtime jobs run in job workspaces under `KINTSUGI_DATA_DIR/jobs/` without an OS-level sandbox ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)): run the worker as an unprivileged user (never root) whose only writable location is its data directory. Memory and CPU are bounded by the worker container, not per job.
 
 Harness renderers and transformer plugins are configured in the portal (Admin → Harnesses). Runtime agents (built-in and custom) are managed in the Agent Builder and supplied per job ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)). The model binding per agent id is configured in the portal (Admin → LLM Providers).
 
@@ -32,7 +40,3 @@ Harness renderers and transformer plugins are configured in the portal (Admin �
 | Variable | Container | Description |
 |---|---|---|
 | `DATABASE_URL` | app, worker | Postgres connection string |
-| `DOCKER_HOST` | worker | Restricted Docker API (`docker-proxy`) |
-| `KINTSUGI_RUNNER_IMAGE` | worker | Runner image to start per job |
-| `KINTSUGI_JOBS_NETWORK` | worker | Network runner containers join |
-| `KINTSUGI_DATA_VOLUME` | worker | The `kintsugi-data` volume; runner containers get its `jobs/<job-id>/src` (read-only) and `jobs/<job-id>/out` subpaths |

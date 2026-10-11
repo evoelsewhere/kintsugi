@@ -2,8 +2,7 @@
 
 REST + OpenAPI surface of `kintsugi-app` (ADR-0016: **NestJS 12**, ESM). Serves `/api`,
 OpenAPI UI at `/api/docs`. The container also serves the portal's static build, the
-Kintsugi MCP server and CLI API (`services/harness-hub`), and the internal job gateway
-that runner containers post `JobEvent`s to.
+Kintsugi MCP server and CLI API (`services/harness-hub`).
 
 Responsibilities beyond the feature modules below:
 

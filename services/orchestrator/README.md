@@ -1,6 +1,6 @@
 # services/orchestrator
 
-Runs inside `kintsugi-worker`. Postgres-backed job queue (pg-boss, ADR-0003), Git sync, the document repo writer and, later, the pipeline/stage/gate state machine.
+Runs inside `kintsugi-worker`. Postgres-backed job queue (pg-boss, ADR-0003), Git sync, the document repo writer, runtime job runs in job workspaces and, later, the pipeline/stage/gate state machine.
 
 ## Git sync (implemented)
 
@@ -27,13 +27,26 @@ The only component that commits to a project's document repo (ADR-0019):
 - **Pull requests**: GitHub, GitHub Enterprise, GitLab, Gitea and Azure DevOps through `packages/git` REST adapters with the server token. `plain-git` servers, servers authenticated by SSH key and Bitbucket (no adapter yet) keep the pushed branch (status `committed`).
 - **Outcome**: `workflow.document_write` (`queued` → `committed`, `pr-opened`, `unchanged` or `failed` with a redacted error), shown on the project page.
 
+## Runtime job runs (implemented)
+
+Runs stages, script steps, agent jobs and workflows in job workspaces ([ADR-0029](../../docs/decisions/0029-job-workspaces-instead-of-os-sandboxes.md)), recorded in `workflow.job_run` (migration `010_job_runs.sql`):
+
+- **Queue**: `job-run` (payload `{ jobRunId }`, contract in `@kintsugi/orchestrator/queues`), not retried; `KINTSUGI_JOB_MAX_CONCURRENCY` runs per worker. The API creates the row as `queued`.
+- **Workspace** (`src/jobs/runner.ts`): `<data>/jobs/<id>/src` is a detached worktree of the source repository's mirror at the commit of its default branch (recorded on the run), marked read-only; `in` holds the step's inputs (earlier steps' outputs, declared document-repo files), read-only; `out` and `tmp` are writable; `src`, `in` and `tmp` are removed when the run ends.
+- **Stages** (`src/jobs/stages.ts`): ordered steps run as child runs sharing the stage's checkout. First milestone: `assess` = script `inventory.py` → agent `legacy-analyst` writing `assessment/<app>/inventory.json` and the `ASSESSMENT.md` draft.
+- **Script steps**: built-in `packages/agents/builtin/scripts/<name>` or a model-written script among the inputs (`scriptFromInputs`), through `@kintsugi/runtime/launcher` (cleared environment, timeout, output cap, process-tree kill, sha256 recorded).
+- **Agent jobs**: the built-in agent definition (`@kintsugi/agents`) and the agent's model binding (`admin.agent_model_binding`, project first) in a `JobSpec`, run in-process by the agent runtime: pi, or the mock backend (`KINTSUGI_RUNTIME_MODE=mock`). The kernel confines reads to `src` and `in`, writes to `out`.
+- **Workflows** (`src/jobs/workflow.ts`): `builtin/workflows/<id>.js` only, evaluated with injected `args`, `log`, `agent`, `parallel`, `pipeline`, `phase`, `budget`; each `agent()` is a child agent run; agent cap and concurrency from `KINTSUGI_WORKFLOW_*`.
+- **After every step**: `out/restricted/` → `governance.restricted_record` (encrypted) and removed; the JobOutput hook (`hooks/job_output.py`) over `out/`, fail-closed, with a reason from its redacted report; `workflow.artifact` rows with provenance.
+- **Hand-off**: a top-level run with output enqueues a `document-write` with `outputOfJob` = the run (its `out/`), `jobId`, `agent`, `actor`, and records `document_write_id`.
+
 ## Planned
 
-- **Job worktrees**: a per-job worktree at the job's commit, mounted read-only as `/src`.
-- **Secret scan** of job output before it is written.
-- Runtime jobs (via the launcher in `services/runtime`), ingestion, webhooks (D30).
+- Job events streamed to the portal; cancelling a run; cleanup of finished runs' `out/` after their write.
+- More stages (the full assess plan, map, extract-rules, …) and workflows per application source.
+- Ingestion, webhooks (D30).
 
 ## Run
 
 - Development: `make worker` (or `make dev` for everything); reads the root `.env`.
-- Requires `git` 2.40+ on the host or in the image (checked at startup).
+- Requires `git` 2.40+ (checked at startup), Python 3.12 (`KINTSUGI_PYTHON`) and Node 22 on the host or in the image. Works the same on Windows, macOS and Linux.
