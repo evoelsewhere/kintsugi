@@ -58,6 +58,38 @@ export interface KintsugiManifest {
 /** Paths committed straight to the default branch by kintsugi-bot (ADR-0019). */
 export const DEFAULT_AUTO_COMMIT_PATHS: readonly string[] = ["units/**", "tasks/**", "knowledge/**/generated/**"];
 
+/**
+ * Whether a repository path (forward slashes, relative) matches a glob of `autoCommitPaths`:
+ * `**` spans any number of folders (including none), `*` and `?` stay within one path segment.
+ */
+export function matchesPathGlob(path: string, glob: string): boolean {
+  let source = "";
+  for (let i = 0; i < glob.length; i++) {
+    const char = glob[i]!;
+    if (char === "*" && glob[i + 1] === "*") {
+      i++;
+      if (glob[i + 1] === "/") {
+        i++;
+        source += "(?:.*/)?";
+      } else {
+        source += ".*";
+      }
+    } else if (char === "*") {
+      source += "[^/]*";
+    } else if (char === "?") {
+      source += "[^/]";
+    } else {
+      source += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return new RegExp(`^${source}$`).test(path);
+}
+
+/** Whether kintsugi-bot may commit `path` straight to the default branch (ADR-0019). */
+export function isAutoCommitPath(path: string, autoCommitPaths: readonly string[]): boolean {
+  return autoCommitPaths.some((glob) => matchesPathGlob(path, glob));
+}
+
 export type ManifestResult = { ok: true; manifest: KintsugiManifest } | { ok: false; problems: ValidationProblem[] };
 
 const ID = /^[a-z0-9][a-z0-9-]*$/;

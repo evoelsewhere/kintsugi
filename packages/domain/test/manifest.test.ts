@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_AUTO_COMMIT_PATHS, manifestFromProject, repositoryPath, validateManifest } from "../src/index.js";
+import { DEFAULT_AUTO_COMMIT_PATHS, isAutoCommitPath, manifestFromProject, matchesPathGlob, repositoryPath, validateManifest } from "../src/index.js";
 
 const minimal = {
   schemaVersion: 1,
@@ -97,5 +97,25 @@ describe("repository path", () => {
     expect(repositoryPath("https://dev.azure.com/org/Billing/_git/web", "https://dev.azure.com/org")).toBe("Billing/_git/web");
     expect(repositoryPath("git@github.com:org/app.git", "https://github.com")).toBe("org/app");
     expect(repositoryPath("ssh://git@gitlab.example.com:2222/team/app.git", "https://gitlab.example.com")).toBe("team/app");
+  });
+});
+
+describe("autoCommitPaths globs", () => {
+  it("spans folders with ** and stays within a segment with * and ?", () => {
+    expect(matchesPathGlob("units/web/login.md", "units/**")).toBe(true);
+    expect(matchesPathGlob("units.md", "units/**")).toBe(false);
+    expect(matchesPathGlob("knowledge/generated/a.md", "knowledge/**/generated/**")).toBe(true);
+    expect(matchesPathGlob("knowledge/as-is/web/generated/a.md", "knowledge/**/generated/**")).toBe(true);
+    expect(matchesPathGlob("knowledge/as-is/web/a.md", "knowledge/**/generated/**")).toBe(false);
+    expect(matchesPathGlob("tasks/t-1.md", "tasks/*.md")).toBe(true);
+    expect(matchesPathGlob("tasks/a/t-1.md", "tasks/*.md")).toBe(false);
+    expect(matchesPathGlob("runs/a/b.json", "**/b.json")).toBe(true);
+    expect(matchesPathGlob("a+b.md", "a+b.md")).toBe(true);
+  });
+
+  it("splits writes by the defaults", () => {
+    expect(isAutoCommitPath("units/web/a.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("kintsugi.yaml", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("standards/review-rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
   });
 });
