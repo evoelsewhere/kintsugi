@@ -40,7 +40,7 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 - `pnpm install` · `pnpm lint` · `pnpm typecheck` · `pnpm build` · `pnpm test` · `make dev` (API on :3000 and the worker, both with rebuild + restart; portal on :5173)
 
 ## Security
-- Never run the pi runtime against customer code outside a sandbox, and always mount the code read-only (ADR-0004).
+- Run runtime jobs and script steps only in their job workspace: source and inputs read-only, writes only to the job's output and scratch directories, no credentials in the environment (ADR-0029).
 - Never commit credentials; use `.env` (gitignored) locally.
 
 <!-- BEGIN:turborepo-agent-rules -->

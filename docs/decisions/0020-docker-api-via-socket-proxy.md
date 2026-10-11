@@ -1,6 +1,6 @@
 # ADR-0020: The worker reaches Docker only through a socket proxy, with an image allowlist
 
-- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): there are no rulebook runners, so no runner image allowlist.
+- Status: Superseded by [ADR-0029](0029-job-workspaces-instead-of-os-sandboxes.md): the worker starts no containers and has no Docker API access. Previously amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): there are no rulebook runners, so no runner image allowlist.
 - Date: 2026-10-09
 - Decision register: D32
 

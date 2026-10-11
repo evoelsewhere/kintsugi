@@ -22,7 +22,7 @@ This page has two parts:
 | [0001](0001-pi-as-kintsugi-runtime.md) | pi is the Kintsugi Runtime; members implement with their own harnesses | Accepted |
 | [0002](0002-typescript-monorepo.md) | TypeScript monorepo (pnpm + Turborepo) | Proposed |
 | [0003](0003-postgres-job-queue.md) | pg-boss (Postgres-backed job queue) for orchestration | Accepted (state persistence amended by 0012) |
-| [0004](0004-runner-container-per-job.md) | One Docker container per runtime job, with a pi SDK runner inside | Accepted |
+| [0004](0004-runner-container-per-job.md) | One Docker container per runtime job, with a pi SDK runner inside | Accepted (isolation amended by 0029) |
 | [0005](0005-canonical-asset-format.md) | Canonical asset format = Agent Skills + AGENTS.md | Superseded by 0015 |
 | [0006](0006-self-hosted-package.md) | Kintsugi is distributed as a self-hosted package | Accepted |
 | [0007](0007-git-as-source-of-truth.md) | Git is the source of truth for code, documents and assets | Accepted |
@@ -38,15 +38,16 @@ This page has two parts:
 | [0017](0017-portal-vite-react-shadcn.md) | Portal is a Vite + React SPA with shadcn/ui | Accepted |
 | [0018](0018-pin-pi-exact-version.md) | Pin pi to an exact version; track the latest release | Accepted |
 | [0019](0019-workspace-repo-write-path.md) | One workspace repo per project; the worker writes as `kintsugi-bot` | Accepted (amended by 0028) |
-| [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Accepted (0021 proposes to supersede it) |
-| [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Proposed |
+| [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Superseded by 0029 |
+| [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Superseded by 0029 |
 | [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Superseded by 0023 |
 | [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted |
 | [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
 | [0025](0025-git-core-and-checkout-storage.md) | Git core package and Kintsugi-managed checkout storage | Accepted |
 | [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Accepted |
-| [0027](0027-builtin-modernization-content.md) | Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests | Accepted (amended by 0028) |
+| [0027](0027-builtin-modernization-content.md) | Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests | Accepted (amended by 0028, 0029) |
 | [0028](0028-remove-rulebook-single-document-repo.md) | Remove the rulebook; one document repo per project | Accepted |
+| [0029](0029-job-workspaces-instead-of-os-sandboxes.md) | Job workspaces instead of OS sandboxes | Accepted |
 
 ## Decision register
 
@@ -57,8 +58,8 @@ This page has two parts:
 | D03 | Cloud / hosting | — | Not applicable: each project chooses its host; one Docker host is enough | — | ✅ [0006](0006-self-hosted-package.md) |
 | D04 | LLMs for the pi runtime | 🔴 | Provider registry covering every pi provider + custom providers; credentials encrypted in the DB | M0 | ✅ [0009](0009-llm-provider-config.md) |
 | D05 | Data isolation | 🔴 | No multi-tenancy; installation access-role permissions and project scope are separate; project-role assignment follows M0 project persistence | M0 | ✅ [0006](0006-self-hosted-package.md) |
-| D06 | How pi is embedded | 🔴 | Node runner using the pi SDK inside a container, streaming `JobEvent`s out | M0 | ✅ [0004](0004-runner-container-per-job.md) |
-| D07 | Sandbox | 🔴 | One Docker container per job, no Kubernetes; hardening + egress proxy; gVisor when available | M0 | ✅ [0004](0004-runner-container-per-job.md) |
+| D06 | How pi is embedded | 🔴 | The pi SDK runs agent jobs in the worker, in a job workspace (was: a runner container per job) | M0 | ✅ [0004](0004-runner-container-per-job.md), [0029](0029-job-workspaces-instead-of-os-sandboxes.md) |
+| D07 | Sandbox | 🔴 | Job workspace per job, the same on every OS: read-only source and inputs, writable output and scratch, cleared environment, limits, JobOutput hook; no OS-level isolation (was: one Docker container per job) | M0 | ✅ [0029](0029-job-workspaces-instead-of-os-sandboxes.md) |
 | D08 | Orchestration | 🔴 | pg-boss + state machine in the DB; no Temporal | M0 | ✅ [0003](0003-postgres-job-queue.md) |
 | D09 | Sign-in | 🔴 | Username/password + PATs; Entra ID later behind `AuthProvider` | M0 | ✅ [0008](0008-authentication.md) |
 | D10 | API | 🟠 | REST + OpenAPI; NestJS 12 (ESM, Standard Schema validation) | M0 | ✅ [0016](0016-nestjs-api-framework.md) |
@@ -83,7 +84,7 @@ This page has two parts:
 | D29 | Document repo layout + how the runtime writes to Git | 🔴 | One document repo per project (renamed from workspace repo by [0028](0028-remove-rulebook-single-document-repo.md)); worker commits on `kintsugi/*` branches + PR as `kintsugi-bot`; `autoCommitPaths` (`units/**`, `tasks/**`, `knowledge/**/generated/**`) commit directly to the default branch ([reference](../reference/document-repo.md)) | M0 | ✅ [0019](0019-workspace-repo-write-path.md), [0028](0028-remove-rulebook-single-document-repo.md) |
 | D30 | Webhooks vs. polling | 🟠 | Polling by default (1–5 min); webhooks when reachable | M2 | 🟡 |
 | D31 | Large binaries (recordings, video, scanned PDFs) | 🟠 | Git LFS where supported; otherwise the `kintsugi-data` volume + a link file in Git | M1 | ⬜ |
-| D32 | Worker's Docker API access | 🔴 | Decided: docker-socket-proxy limited to container lifecycle, image allowlist ([0020](0020-docker-api-via-socket-proxy.md)). Proposed replacement: runtime jobs as sandboxed child processes (pi-sandbox), no Docker socket ([0021](0021-sandboxed-child-processes.md)) | M0 | 🟡 [0021](0021-sandboxed-child-processes.md) |
+| D32 | Worker's Docker API access | 🔴 | None: jobs run in job workspaces of the worker, no Docker socket (supersedes the socket proxy of 0020 and the pi-sandbox proposal of 0021) | M0 | ✅ [0029](0029-job-workspaces-instead-of-os-sandboxes.md) |
 | D34 | Project-specific knowledge | 🔴 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D35 | Capability maturity & readiness gating | 🔴 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D36 | Rulebook structure | 🔴 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
@@ -97,7 +98,7 @@ This page has two parts:
 | D44 | Access roles vs. project roles | 🔴 | Keep installation-wide permission-bundle access roles separate from project RACI roles; assign project roles per membership after M0 project persistence | M0 | ✅ [0024](0024-access-roles-vs-project-roles.md) |
 | D45 | Git access and checkout storage | 🔴 | Kintsugi clones from registered URLs into one admin-chosen data directory (`KINTSUGI_DATA_DIR`): bare mirror per repository, per-job worktree at a fixed commit; `packages/git` over the system `git` CLI with per-call credentials; provider REST adapters, no provider CLIs | M0 | ✅ [0025](0025-git-core-and-checkout-storage.md) |
 | D46 | Runtime agents and the Agent Builder | 🔴 | Five built-in read-only agents for understanding (legacy-analyst, business-rules-extractor, version-delta-analyst, architecture-critic, security-auditor) plus admin-created agents; agent files + Agent Skills (format per ADR-0027); draft and immutable published versions; implementation stays with members | M0 | ✅ [0026](0026-runtime-agents-and-agent-builder.md) |
-| D47 | Built-in modernization content | 🔴 | Upstream code-modernization content copied into `packages/agents/builtin/` (pinned, Apache-2.0, no assets) and adapted: runtime and member agents (`metadata.audience`), stage commands, workflows, sandboxed scripts, server-side hooks, tests | M0 | ✅ [0027](0027-builtin-modernization-content.md) |
+| D47 | Built-in modernization content | 🔴 | Upstream code-modernization content copied into `packages/agents/builtin/` (pinned, Apache-2.0, no assets) and adapted: runtime and member agents (`metadata.audience`), stage commands, workflows, scripts in the job workspace, server-side hooks, tests | M0 | ✅ [0027](0027-builtin-modernization-content.md), [0029](0029-job-workspaces-instead-of-os-sandboxes.md) |
 | D48 | Project knowledge and repository model | 🔴 | No rulebook; one document repo per project holds everything except code; project knowledge as plain documents in `standards/` and member plugins in `plugins/`; pipelines in `kintsugi.yaml` or built-in; repo roles `legacy` / `legacy-data` (AS-IS, read-only) and `target` with `component` (TO-BE, members only) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
