@@ -125,7 +125,7 @@ Only the worker's writer (`services/orchestrator`, [ADR-0019](../decisions/0019-
 
 ## Commit conventions
 
-Every commit by Kintsugi has author and committer `kintsugi-bot <KINTSUGI_BOT_EMAIL>` ([configuration](configuration.md)) and carries the trailers that apply to it:
+Every commit by Kintsugi has the **commit identity** as author and committer and carries the trailers that apply to it. The commit identity is an installation setting that admins with `git.manage` set in the portal (Settings → Git → Commit identity): a name and a plain email address, by default `kintsugi-bot <kintsugi-bot@kintsugi.invalid>` (`.invalid` never delivers mail). Use an address the Git server maps to the bot account to link the commits to it. The writer reads it for each write, so a change applies from the next write on; an unset or unusable value falls back to the default. The table below writes `kintsugi-bot` for whatever identity is set.
 
 | Who | Branch | Author | Trailers |
 |---|---|---|---|

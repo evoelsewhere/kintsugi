@@ -57,7 +57,21 @@ export interface TestAccessResult {
 const SERVERS = "/api/admin/git-servers";
 const REPOSITORIES = "/api/admin/git-repositories";
 
+/** Name and email of kintsugi-bot's commits to document repos (installation setting). */
+export interface CommitIdentityView {
+  name: string;
+  email: string;
+  /** True while none was set: the built-in defaults apply. */
+  isDefault: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+const COMMIT_IDENTITY = "/api/admin/settings/commit-identity";
+
 export const gitApi = {
+  commitIdentity: () => apiGet<CommitIdentityView>(COMMIT_IDENTITY),
+  setCommitIdentity: (input: { name: string; email: string }) => apiSend<CommitIdentityView>(COMMIT_IDENTITY, "PUT", input),
   listServers: () => apiGetAll<GitServerView>(SERVERS),
   getServer: (id: string) => apiGet<GitServerView>(`${SERVERS}/${id}`),
   createServer: (input: GitServerInput & { id: string }) => apiSend<GitServerView>(SERVERS, "POST", input),

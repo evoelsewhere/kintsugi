@@ -1,7 +1,7 @@
 # Configuration
 
 Installation-level settings come from `.env` ([`deploy/compose/.env.example`](../../deploy/compose/.env.example)).
-- **Configured in the portal**, not in `.env`: Git servers, repositories, LLM providers, users and projects.
+- **Configured in the portal**, not in `.env`: Git servers, repositories, the commit identity of `kintsugi-bot` (Settings → Git), LLM providers, users and projects.
 - **Configured per project** in the [document repo](document-repo.md) (`kintsugi.yaml`).
 
 ## Environment variables
@@ -18,7 +18,6 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `POSTGRES_PASSWORD` | yes | — | Password of the `kintsugi` database user |
 | `KINTSUGI_DATA_DIR` | yes | — | Host directory for Git mirrors, document repo clones and per-job checkouts ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)); size it for every registered repository plus running jobs. Without Docker (development) it defaults to `./.kintsugi/data` |
 | `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between full Git re-syncs of every repository (minimum 30); new repositories are cloned within seconds |
-| `KINTSUGI_BOT_EMAIL` | no | `kintsugi-bot@kintsugi.invalid` | Author and committer email of `kintsugi-bot`, the identity of every commit the worker makes to a document repo ([ADR-0019](../decisions/0019-workspace-repo-write-path.md)). Set an address the Git server maps to the bot account to link commits to it |
 | `KINTSUGI_JOB_MAX_CONCURRENCY` | no | `2` | Parallel job runs per worker |
 | `KINTSUGI_JOB_DEFAULT_TIMEOUT` | no | `1800` | Wall-clock limit of an agent job (seconds) |
 | `KINTSUGI_SCRIPT_TIMEOUT` | no | `600` | Wall-clock limit of a script step (seconds); the process tree is killed when it is exceeded |

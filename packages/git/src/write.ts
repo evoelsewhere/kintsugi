@@ -19,6 +19,30 @@ export interface CommitIdentity {
   email: string;
 }
 
+/** Default email of kintsugi-bot; `.invalid` never delivers mail. */
+export const DEFAULT_BOT_EMAIL = "kintsugi-bot@kintsugi.invalid";
+
+/** The identity of automated commits unless an admin set another one in the portal. */
+export const DEFAULT_COMMIT_IDENTITY: Readonly<CommitIdentity> = { name: BOT_NAME, email: DEFAULT_BOT_EMAIL };
+
+/** Key of the commit identity in the installation settings (admin.installation_setting). */
+export const COMMIT_IDENTITY_SETTING = "commit-identity";
+
+const IDENTITY_NAME_MAX = 100;
+const IDENTITY_EMAIL_MAX = 254;
+const PLAIN_EMAIL = /^[^\s<>@]+@[^\s<>@]+$/;
+
+/** What is wrong with a commit identity someone entered; empty when Git can use it. */
+export function commitIdentityProblems(identity: CommitIdentity): string[] {
+  const problems: string[] = [];
+  const name = identity.name.trim();
+  if (name === "") problems.push("name is empty");
+  if (name.length > IDENTITY_NAME_MAX) problems.push(`name is longer than ${IDENTITY_NAME_MAX} characters`);
+  if (CONTROL.test(identity.name) || /[<>]/.test(identity.name)) problems.push("name may not contain <, > or control characters");
+  if (!PLAIN_EMAIL.test(identity.email) || identity.email.length > IDENTITY_EMAIL_MAX) problems.push("email must be a plain address such as bot@example.com");
+  return problems;
+}
+
 /** One file to write, at a path relative to the repository root (forward slashes). */
 export interface FileWrite {
   path: string;

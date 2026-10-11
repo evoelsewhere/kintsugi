@@ -21,6 +21,10 @@ export {
 export { CheckoutStorage, dataDirFromEnv, type JobPaths } from "./storage.js";
 export {
   BOT_NAME,
+  COMMIT_IDENTITY_SETTING,
+  DEFAULT_BOT_EMAIL,
+  DEFAULT_COMMIT_IDENTITY,
+  commitIdentityProblems,
   WRITER_BRANCH_PREFIX,
   assertSafeRepoPath,
   assertWritableBranch,

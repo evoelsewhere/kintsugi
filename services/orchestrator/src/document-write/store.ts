@@ -2,6 +2,7 @@
 // role `document` only — the writer reaches no other repository), its server, and the
 // outcome rows in workflow.document_write (migration 009_document_writes.sql).
 
+import { COMMIT_IDENTITY_SETTING, type CommitIdentity, DEFAULT_COMMIT_IDENTITY, commitIdentityProblems } from "@kintsugi/git";
 import type { Pool } from "pg";
 import type { RepositoryStore, SyncTarget } from "../git-sync/repositories.js";
 import type { DocumentWriteRequest } from "../queues.js";
@@ -34,6 +35,18 @@ export class DocumentWriteStore {
     private readonly pool: Pool,
     private readonly repositories: RepositoryStore,
   ) {}
+
+  /**
+   * The identity of kintsugi-bot's commits, as set in the portal (installation setting
+   * `commit-identity`); the defaults when it is unset or unusable. Read per write.
+   */
+  async commitIdentity(): Promise<CommitIdentity> {
+    const result = await this.pool.query<{ value: Partial<CommitIdentity> }>("select value from admin.installation_setting where key = $1", [COMMIT_IDENTITY_SETTING]);
+    const value = result.rows[0]?.value;
+    if (typeof value?.name !== "string" || typeof value.email !== "string") return { ...DEFAULT_COMMIT_IDENTITY };
+    const identity = { name: value.name.trim(), email: value.email.trim() };
+    return commitIdentityProblems(identity).length === 0 ? identity : { ...DEFAULT_COMMIT_IDENTITY };
+  }
 
   /** The project's document repo; undefined when the project or its document repo is gone. */
   async target(projectId: string): Promise<DocumentRepoTarget | undefined> {

@@ -40,7 +40,7 @@ Everything except source code lives in a per-project workspace repo (ADR-0007): 
 Settled while building the writer (`services/orchestrator`, `packages/git`); details in the [document repository reference](../reference/document-repo.md#write-path).
 
 - **Queue**: `document-write`, pg-boss `singleton` policy keyed by the document repository id: one active write per repository, the rest wait. Producers share the contract in `@kintsugi/orchestrator/queues`.
-- **Bot email**: `KINTSUGI_BOT_EMAIL` (installation setting), default `kintsugi-bot@kintsugi.invalid`.
+- **Commit identity**: name and email of `kintsugi-bot` are an installation setting managed in the portal (Settings → Git → Commit identity, `admin.installation_setting`), read by the writer for each write; defaults `kintsugi-bot` / `kintsugi-bot@kintsugi.invalid`. (First built as the `KINTSUGI_BOT_EMAIL` environment variable, replaced by the portal setting.)
 - **Retries**: 4 push attempts per branch (fetch → rebase → retry); a rebase conflict fails the write instead of retrying. Failed jobs are retried twice by the queue; output-rule violations are not retried.
 - **Branch names**: `kintsugi/<agent-or-actor>/<job-id>`, using the write id when there is no job. Only these branches and the default branch are writable; nothing is ever force-pushed.
 - **Without pull requests**: `plain-git` servers, SSH-key-only servers (no API token) and server kinds without an adapter (Bitbucket for now) keep the pushed `kintsugi/*` branch.
