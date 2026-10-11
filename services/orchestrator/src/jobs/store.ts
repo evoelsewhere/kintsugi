@@ -5,6 +5,7 @@
 import { encryptSecret } from "@kintsugi/secrets";
 import type { Pool } from "pg";
 import type { DocumentWriteRequest } from "../queues.js";
+import type { WorkspaceState, WorkspaceStates } from "./cleanup.js";
 import type { ArtifactEntry, JobKind, JobRun, JobStatus, JobStore, ModelBinding, NewJobRun, StepLimits } from "./model.js";
 
 interface RunRow {
@@ -53,7 +54,7 @@ function toRun(row: RunRow): JobRun {
   };
 }
 
-export class PgJobStore implements JobStore {
+export class PgJobStore implements JobStore, WorkspaceStates {
   constructor(private readonly pool: Pool) {}
 
   async get(id: string): Promise<JobRun | undefined> {
@@ -138,6 +139,21 @@ export class PgJobStore implements JobStore {
       [request.writeId, request.projectId, request.kind, request.message, request.actor ?? null, request.jobId ?? null, request.agent ?? null],
     );
     await this.pool.query("update workflow.job_run set document_write_id = $2 where id = $1", [id, request.writeId]);
+  }
+
+  async workspaceStates(ids: readonly string[]): Promise<Map<string, WorkspaceState>> {
+    const result = await this.pool.query<{ id: string; status: string; finished_at: Date | null; write_status: string | null }>(
+      `select r.id, r.status, r.finished_at, w.status as write_status
+         from workflow.job_run r left join workflow.document_write w on w.id = r.document_write_id
+        where r.id = any($1)`,
+      [ids],
+    );
+    return new Map(
+      result.rows.map((row) => [
+        row.id,
+        { status: row.status, ...(row.finished_at === null ? {} : { finishedAt: row.finished_at }), ...(row.write_status === null ? {} : { writeStatus: row.write_status }) },
+      ]),
+    );
   }
 
   async legacyRepository(projectId: string, applicationId: string): Promise<string | undefined> {

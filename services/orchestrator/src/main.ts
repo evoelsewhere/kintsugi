@@ -1,7 +1,7 @@
 // kintsugi-worker entry point (ADR-0003, ADR-0025, ADR-0029). Configuration is deployment
 // environment only: DATABASE_URL, KINTSUGI_SECRET_KEY (decrypts Git and LLM credentials),
 // KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL, KINTSUGI_BOT_EMAIL and the job settings
-// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_*, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_WORKFLOW_*,
+// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_* including KINTSUGI_JOB_RETENTION_DAYS, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_WORKFLOW_*,
 // KINTSUGI_PYTHON, KINTSUGI_NODE). Git servers, repositories and LLM providers are
 // configured in the portal.
 
@@ -10,6 +10,7 @@ import { CheckoutStorage, checkGitVersion, dataDirFromEnv } from "@kintsugi/git"
 import { createChildAgentRuntime, interpretersFromEnv, loadProvider } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { Pool } from "pg";
+import { DEFAULT_JOB_RETENTION_DAYS } from "./jobs/cleanup.js";
 import { DEFAULT_JOB_LIMITS, type JobDefaults } from "./jobs/runner.js";
 import { DEFAULT_BOT_EMAIL, startWorker } from "./worker.js";
 
@@ -75,6 +76,7 @@ async function main(): Promise<void> {
     storage,
     pollIntervalSeconds,
     botEmail,
+    jobRetentionDays: positive("KINTSUGI_JOB_RETENTION_DAYS", DEFAULT_JOB_RETENTION_DAYS),
     jobs: { agents, interpreters, defaults: jobDefaults(), concurrency: positive("KINTSUGI_JOB_MAX_CONCURRENCY", 2) },
   });
   console.log(`[worker] git ${gitVersion}, data ${storage.root}, polling every ${pollIntervalSeconds}s, commits as kintsugi-bot <${botEmail}>`);

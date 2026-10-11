@@ -4,6 +4,7 @@
 // stage's output lands in the document repo through the writer.
 
 import { randomBytes, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -94,6 +95,8 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       // The writer commits the stage's out/ to a kintsugi/* branch (plain-git: no pull request).
       const writeId = finished.document_write_id!;
       await expect.poll(async () => (await db.pool.query("select status from workflow.document_write where id = $1", [writeId])).rows[0]?.status, { timeout: 30_000, interval: 250 }).toBe("committed");
+      // The output has landed: the job's workspace is gone.
+      await expect.poll(() => existsSync(storage.job(id).root), { timeout: 10_000, interval: 100 }).toBe(false);
       const write = (await db.pool.query<{ branch: string; job_id: string; agent: string; actor: string }>("select branch, job_id, agent, actor from workflow.document_write where id = $1", [writeId])).rows[0]!;
       expect(write).toMatchObject({ branch: `kintsugi/legacy-analyst/${id}`, job_id: id, agent: "legacy-analyst@1.0.0", actor: "alice" });
       expect(remote.git("docs", "show", `${write.branch}:assessment/web/ASSESSMENT.md`)).toContain("Assessment of web");

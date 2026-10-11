@@ -12,6 +12,7 @@ import { DocumentWriteStore } from "./document-write/store.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
 import { builtinAgents } from "./jobs/agents.js";
+import { DEFAULT_JOB_RETENTION_DAYS, pruneJobWorkspaces, removeJobWorkspace } from "./jobs/cleanup.js";
 import { MirrorCheckouts } from "./jobs/checkouts.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
 import { PgJobStore } from "./jobs/store.js";
@@ -49,6 +50,10 @@ export interface WorkerOptions {
   /** For tests: the HTTP client of the pull-request adapters. */
   fetch?: typeof fetch;
   log?: (message: string) => void;
+  /** Days the output of a failed run or write is kept (KINTSUGI_JOB_RETENTION_DAYS, default 7). */
+  jobRetentionDays?: number;
+  /** Seconds between sweeps of expired job workspaces (default: hourly). */
+  cleanupIntervalSeconds?: number;
   /** Runtime jobs (queue `job-run`); omitted = this worker runs no jobs. */
   jobs?: {
     /** pi in production; the mock backend in tests and mock-mode development. */
@@ -73,6 +78,7 @@ export interface Worker {
 export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const log = options.log ?? ((message: string) => console.log(`[worker] ${message}`));
   const store = new RepositoryStore(options.pool);
+  const jobStore = new PgJobStore(options.pool);
   const deps = { store, storage: options.storage };
   const writerDeps = {
     writes: new DocumentWriteStore(options.pool, store),
@@ -107,6 +113,12 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     if (job === undefined) return;
     try {
       const outcome = await writeDocument(writerDeps, job.data);
+      // The job's output has landed (or was already there): its workspace is no longer needed.
+      if (job.data.outputOfJob !== undefined && outcome.status !== "failed") {
+        await removeJobWorkspace(options.storage, job.data.outputOfJob).catch((error: unknown) =>
+          log(`could not remove the workspace of job ${job.data.outputOfJob}: ${error instanceof Error ? error.message : String(error)}`),
+        );
+      }
       log(`document write ${job.data.writeId} (${job.data.projectId}): ${outcome.status}${"error" in outcome ? ` — ${outcome.error}` : ""}`);
     } catch (error) {
       log(`document write ${job.data.writeId} (${job.data.projectId}) failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -121,7 +133,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   await ensureJobRunQueue(boss);
   if (options.jobs !== undefined) {
     const runner = new JobRunner({
-      store: new PgJobStore(options.pool),
+      store: jobStore,
       storage: options.storage,
       checkouts: new MirrorCheckouts({ repositories: store, storage: options.storage }),
       agents: options.jobs.agents,
@@ -158,11 +170,18 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     for (const id of await store.ids()) await requestSync(id);
     for (const key of await pruneMirrors(deps)) log(`pruned mirror ${key}`);
   });
+  const retentionMs = (options.jobRetentionDays ?? DEFAULT_JOB_RETENTION_DAYS) * 24 * 60 * 60 * 1000;
+  const pruneJobs = tick("job workspace cleanup", async () => {
+    const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
+    if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
+  });
   const timers = [
     setInterval(() => void scanPending(), (options.pendingScanSeconds ?? 5) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),
+    setInterval(() => void pruneJobs(), (options.cleanupIntervalSeconds ?? 60 * 60) * 1000),
   ];
   void pollAll();
+  void pruneJobs();
 
   return {
     requestSync,
