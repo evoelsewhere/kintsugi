@@ -15,7 +15,14 @@ export interface NavChildItem {
   id: string;
   label: string;
   to: string;
+  /** Group heading shown above the first child of a group. */
+  group?: string;
+  /** Small muted note on the right, e.g. "planned". */
+  badge?: string;
 }
+
+/** Children computed at runtime by the sidebar (layout/dynamic-nav.ts). */
+export type NavChildrenSource = "delivery-stages";
 
 export interface NavItem {
   id: string;
@@ -30,6 +37,8 @@ export interface NavItem {
   action?: "open-settings";
   /** Nested destinations displayed while the parent section is active. */
   children?: NavChildItem[];
+  /** Nested destinations loaded at runtime instead of `children`. */
+  childrenFrom?: NavChildrenSource;
 }
 
 export interface NavSection {
@@ -44,7 +53,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Workspace",
     items: [
       { id: "overview", label: "Overview", icon: Gauge, to: "/", end: true },
-      { id: "delivery", label: "Delivery", icon: Package, to: "/delivery" },
+      { id: "delivery", label: "Delivery", icon: Package, to: "/delivery", childrenFrom: "delivery-stages" },
       { id: "monitoring", label: "Monitoring", icon: Activity, to: "/monitoring" },
       { id: "governance", label: "Governance", icon: ShieldCheck, to: "/governance" },
     ],
