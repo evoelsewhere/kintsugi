@@ -9,7 +9,8 @@
 //   parallel(thunks)            runs thunks; a failed thunk yields null (positions are kept)
 //   pipeline(items, fn)         fn(item, item, index) for every item, bounded concurrency
 //   phase(title)                marks a phase
-//   budget                      { total, remaining() } in tokens (total 0 = unlimited)
+//   budget                      { total, remaining() } in tokens (total 0 = unlimited), and
+//                               budget.agents { total, remaining() }: the agent-job cap
 //
 // Budgets: at most `maxAgents` agent jobs per workflow and `concurrency` at a time. The code
 // runs in a separate VM context with only these globals — a convenience, not a security
@@ -73,7 +74,8 @@ export function workflowBody(source: string): string {
   return body;
 }
 
-class Semaphore {
+/** At most `limit` pieces of work at a time, started in call order. */
+export class Semaphore {
   #active = 0;
   readonly #waiting: Array<() => void> = [];
 
@@ -99,7 +101,8 @@ export async function runWorkflow(run: WorkflowRun): Promise<WorkflowOutcome> {
   let failed = 0;
   let tokens = 0;
 
-  const budget = Object.freeze({ total: totalTokens, remaining: () => (totalTokens === 0 ? Number.POSITIVE_INFINITY : totalTokens - tokens) });
+  const agents = Object.freeze({ total: budgets.maxAgents, remaining: () => Math.max(0, budgets.maxAgents - started) });
+  const budget = Object.freeze({ total: totalTokens, remaining: () => (totalTokens === 0 ? Number.POSITIVE_INFINITY : totalTokens - tokens), agents });
 
   const agent = async (prompt: unknown, options: AgentCallOptions = {}): Promise<unknown> => {
     if (typeof prompt !== "string" || prompt.trim() === "") throw new Error("agent(prompt) needs a non-empty prompt");

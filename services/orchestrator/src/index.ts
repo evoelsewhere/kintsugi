@@ -20,11 +20,12 @@ export { pruneMirrors, syncRepository, withMirrorLock, type SyncDeps, type SyncR
 export { DocumentWriteStore, type DocumentRepoTarget, type DocumentWriteOutcome, type DocumentWriteStatus } from "./document-write/store.js";
 export { OUTPUT_LIMITS, OutputRuleError, readOutputDir, splitByAutoCommit, validateOutputs } from "./document-write/outputs.js";
 export { writeDocument, writerBranch, writerTrailers, type WriterDeps } from "./document-write/writer.js";
-export { DEFAULT_JOB_LIMITS, JobRunner, type JobDefaults, type JobRunnerDeps } from "./jobs/runner.js";
+export { DEFAULT_JOB_LIMITS, JobRunner, type JobDefaults, type JobRunnerDeps, type StageBudgets } from "./jobs/runner.js";
 export { PgJobStore } from "./jobs/store.js";
 export { MirrorCheckouts } from "./jobs/checkouts.js";
 export { builtinAgents, installedAgents, pgCustomAgents, type AgentResolver } from "./jobs/agents.js";
 export { JOB_OUTPUT_HOOK, runJobOutputHook, type HookOutcome } from "./jobs/hook.js";
-export { STAGES, STAGE_IDS, fill, type StagePlan, type StageStep } from "./jobs/stages.js";
+export { STAGES, STAGE_IDS, fill, stageInfo, type StageInfo, type StagePlan, type StagePrerequisite, type StageStep } from "./jobs/stages.js";
+export { StagePlanExecutor, type ExecutorDeps, type StageOutcome } from "./jobs/executor.js";
 export { WORKFLOWS_DIR, loadWorkflow, runWorkflow, workflowBody, type WorkflowBudgets, type WorkflowOutcome } from "./jobs/workflow.js";
-export { JobFailure, type ArtifactEntry, type JobKind, type JobRun, type JobStatus, type JobStore, type NewJobRun, type SourceCheckouts, type StepLimits } from "./jobs/model.js";
+export { DEFAULT_GATE_DECIDER, JobFailure, type GateDecider, type GateDecision, type GateRequest, type ArtifactEntry, type JobKind, type JobRun, type JobStatus, type JobStore, type NewJobRun, type SourceCheckouts, type StepLimits } from "./jobs/model.js";

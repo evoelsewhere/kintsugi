@@ -125,6 +125,12 @@ export class LocalCheckouts implements SourceCheckouts {
       () => undefined,
     );
   }
+  async listDocuments(id: string, commit: string, dir: string): Promise<string[]> {
+    return runGit(["--git-dir", this.#mirror(id), "ls-tree", "-r", "--name-only", "-z", commit, "--", dir]).then(
+      (result) => result.stdout.split("\0").filter((path) => path !== "").sort(),
+      () => [],
+    );
+  }
   async release(id: string, dest: string): Promise<void> {
     await makeWritable(dest);
     await removeWorktree(this.#mirror(id), dest).catch(() => undefined);

@@ -17,7 +17,7 @@
 // its provider credentials (launcher/agent-process.ts); scripts never get any.
 
 import { createHash, randomUUID } from "node:crypto";
-import { copyFile, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { BUILTIN_DIR } from "@kintsugi/agents";
 import { THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
@@ -26,21 +26,45 @@ import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } fr
 import type { AgentRuntime, JobEvent, JobSpec } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 import type { AgentResolver } from "./agents.js";
+import { type LeafPlacement, type LeafResult, type LeafRun, StagePlanExecutor } from "./executor.js";
+import { copyTree, listFiles } from "./files.js";
 import { runJobOutputHook } from "./hook.js";
-import { type ArtifactEntry, type JobEventKind, JobFailure, type JobRun, type JobStore, type NewJobRun, type SourceCheckouts, type StepLimits, isCancelled } from "./model.js";
-import { STAGES, type Placeholders, fill } from "./stages.js";
+import { writeMockOutputs } from "./mock-outputs.js";
+import {
+  type ArtifactEntry,
+  DEFAULT_GATE_DECIDER,
+  type GateDecider,
+  type JobEventKind,
+  JobFailure,
+  type JobRun,
+  type JobStore,
+  type NewJobRun,
+  type SourceCheckouts,
+  type StepLimits,
+  isCancelled,
+} from "./model.js";
+import { type Placeholders, fill } from "./plan.js";
+import { STAGES } from "./stages.js";
 import { type AgentCallOptions, type WorkflowBudgets, loadWorkflow, runWorkflow } from "./workflow.js";
+
+/** Budgets of a stage run: agent jobs it may start in total (workflows included), and at a time in a group. */
+export interface StageBudgets {
+  maxAgents: number;
+  concurrency: number;
+}
 
 export interface JobDefaults {
   script: StepLimits;
   agent: StepLimits;
   workflow: WorkflowBudgets;
+  stage: StageBudgets;
 }
 
 export const DEFAULT_JOB_LIMITS: JobDefaults = {
   script: { timeoutSec: 600, maxOutputBytes: 50 * 1024 * 1024 },
   agent: { timeoutSec: 1800, maxOutputBytes: 50 * 1024 * 1024, maxTurns: 80 },
   workflow: { maxAgents: 50, concurrency: 4, maxTokens: 0 },
+  stage: { maxAgents: 200, concurrency: 4 },
 };
 
 export interface JobRunnerDeps {
@@ -58,6 +82,13 @@ export interface JobRunnerDeps {
   scriptsDir?: string;
   workflowsDir?: string;
   hookFile?: string;
+  /** Decides the gates of stage plans; default: the documented default, recorded as defaulted. */
+  gates?: GateDecider;
+  /**
+   * Fill in what a mock agent job would have written (expected files, structured results);
+   * default: when the agent runtime is the mock backend.
+   */
+  mockOutputs?: boolean;
   log?: (message: string) => void;
 }
 
@@ -78,50 +109,42 @@ interface StepOutcome {
   agent?: string;
   /** Provenance of the files in out/, by path. */
   provenance: Map<string, Provenance>;
-  /** Structured result (workflow agent calls). */
+  /** Structured result (workflow agent calls, agent steps with a schema). */
   result?: unknown;
+  /** A script's standard output (bounded, redacted). */
+  stdout?: string;
+  /** Agent jobs a workflow started. */
+  agents?: number;
+}
+
+/** A failed script step, with the end of its error output (redacted) for a repair job. */
+class ScriptFailure extends JobFailure {
+  constructor(
+    message: string,
+    readonly detail: string,
+  ) {
+    super(message);
+  }
+}
+
+/** Where a child run takes its inputs from and where its outputs go. */
+interface ChildPlacement {
+  inputs: readonly string[];
+  out: string;
+  work?: string;
+  intermediate?: boolean | readonly string[];
 }
 
 const BUILTIN_SCRIPT = /^[a-z][a-z0-9_-]{0,63}\.(py|js|mjs)$/;
+const MAX_STDOUT = 20_000;
+const MAX_DETAIL_LINES = 40;
+/** Files of one declared document folder ("standards/") a step gets at most. */
+const MAX_FOLDER_DOCUMENTS = 200;
+/** A relative document-repo path without traversal. */
+const SAFE_OUTPUT_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9._/-]+$/;
 const MAX_RESTRICTED_FILES = 100;
 const MAX_RESTRICTED_BYTES = 1024 * 1024;
 const RESULT_FILE = "result.json";
-
-interface FileEntry {
-  path: string;
-  full: string;
-  size: number;
-}
-
-/** Regular files under `root`, relative POSIX paths; symbolic links and special files are refused. */
-async function listFiles(root: string): Promise<FileEntry[]> {
-  const files: FileEntry[] = [];
-  const walk = async (dir: string, prefix: string): Promise<void> => {
-    const entries = await readdir(dir).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return [] as string[];
-      throw error;
-    });
-    for (const name of entries.sort()) {
-      const full = join(dir, name);
-      const path = prefix === "" ? name : `${prefix}/${name}`;
-      const stat = await lstat(full);
-      if (stat.isSymbolicLink()) throw new JobFailure(`Output "${path}" is a symbolic link`);
-      if (stat.isDirectory()) await walk(full, path);
-      else if (stat.isFile()) files.push({ path, full, size: stat.size });
-      else throw new JobFailure(`Output "${path}" is not a regular file`);
-    }
-  };
-  await walk(root, "");
-  return files;
-}
-
-async function copyTree(from: string, to: string): Promise<void> {
-  for (const file of await listFiles(from)) {
-    const dest = join(to, ...file.path.split("/"));
-    await mkdir(dirname(dest), { recursive: true });
-    await copyFile(file.full, dest);
-  }
-}
 
 const sha256 = (content: Buffer): string => createHash("sha256").update(content).digest("hex");
 
@@ -246,21 +269,47 @@ export class JobRunner {
     return { ...this.#defaults[kind], ...run.limits };
   }
 
-  /** Declared document-repo files (inputs.documents) are copied into in/; missing ones are skipped. */
+  /**
+   * Declared document-repo files are copied into in/ from the default branch tip: inputs.documents,
+   * and for a stage its plan's documents and prerequisites. Missing ones are skipped, except a
+   * stage's prerequisites; an entry ending in "/" is a folder.
+   */
   async #prepareInputs(run: JobRun, ws: StepWorkspace): Promise<void> {
-    const documents = run.inputs["documents"];
-    if (Array.isArray(documents) && documents.length > 0) {
+    const plan = run.kind === "stage" ? STAGES[run.name] : undefined;
+    const declared = run.inputs["documents"];
+    const entries = [
+      ...(Array.isArray(declared) ? declared.filter((entry): entry is string => typeof entry === "string") : []),
+      ...(plan?.documents ?? []),
+      ...(plan?.requires ?? []).map((entry) => entry.path),
+    ];
+    if (entries.length > 0) {
       const repository = await this.#deps.store.documentRepository(run.projectId);
       if (repository !== undefined) {
-        const commit = await this.#deps.checkouts.resolve(repository);
-        for (const entry of documents) {
-          if (typeof entry !== "string") continue;
-          const path = fill(entry, this.#placeholders(run, ws));
-          const content = await this.#deps.checkouts.readDocument(repository, commit, path);
-          if (content === undefined) continue;
-          const dest = join(ws.in, ...path.split("/"));
-          await mkdir(dirname(dest), { recursive: true });
-          await writeFile(dest, content, "utf8");
+        const { checkouts } = this.#deps;
+        const commit = await checkouts.resolve(repository);
+        const values = this.#placeholders(run, ws);
+        for (const entry of new Set(entries.map((item) => fill(item, values)))) {
+          const paths = entry.endsWith("/") ? ((await checkouts.listDocuments?.(repository, commit, entry)) ?? []).slice(0, MAX_FOLDER_DOCUMENTS) : [entry];
+          for (const path of paths) {
+            const content = await checkouts.readDocument(repository, commit, path);
+            if (content === undefined) continue;
+            const dest = join(ws.in, ...path.split("/"));
+            await mkdir(dirname(dest), { recursive: true });
+            await rm(dest, { force: true });
+            await writeFile(dest, content, "utf8");
+          }
+        }
+      }
+      for (const prerequisite of plan?.requires ?? []) {
+        const path = fill(prerequisite.path, this.#placeholders(run, ws));
+        const present = await lstat(join(ws.in, ...path.split("/"))).then(
+          () => true,
+          () => false,
+        );
+        if (!present) {
+          throw new JobFailure(
+            `${path} is not on the default branch of the document repository: run the ${prerequisite.stage} stage first and merge its pull request, then run ${run.name} again`,
+          );
         }
       }
     }
@@ -284,12 +333,35 @@ export class JobRunner {
   #scriptFile(run: JobRun, ws: StepWorkspace): string {
     const fromInputs = run.inputs["scriptFromInputs"];
     if (typeof fromInputs === "string") {
-      const file = resolve(ws.in, ...fromInputs.split("/"));
-      if (!isInside(ws.in, file) || !BUILTIN_SCRIPT.test(file.split(sep).at(-1) ?? "")) throw new JobFailure(`Invalid input script "${fromInputs}"`);
+      const relativePath = fill(fromInputs, this.#placeholders(run, ws));
+      const file = resolve(ws.in, ...relativePath.split("/"));
+      if (!isInside(ws.in, file) || !BUILTIN_SCRIPT.test(file.split(sep).at(-1) ?? "")) throw new JobFailure(`Invalid input script "${relativePath}"`);
       return file;
     }
     if (!BUILTIN_SCRIPT.test(run.name)) throw new JobFailure(`Invalid script name "${run.name}"`);
     return join(this.#deps.scriptsDir ?? join(BUILTIN_DIR, "scripts"), run.name);
+  }
+
+  /** A document-repo path of the step's inputs (expects, resultTo, stdoutTo), filled and checked. */
+  #outputPath(run: JobRun, ws: StepWorkspace, value: unknown, field: string): string {
+    const path = typeof value === "string" ? fill(value, this.#placeholders(run, ws)) : "";
+    if (!SAFE_OUTPUT_PATH.test(path)) throw new JobFailure(`inputs.${field} is not a relative document-repo path`);
+    return path;
+  }
+
+  #expects(run: JobRun, ws: StepWorkspace): string[] {
+    const expects = run.inputs["expects"];
+    return Array.isArray(expects) ? expects.map((entry) => this.#outputPath(run, ws, entry, "expects")) : [];
+  }
+
+  /** Fails the step when a file it must write is missing. */
+  async #checkExpected(run: JobRun, ws: StepWorkspace, what: string): Promise<void> {
+    const missing: string[] = [];
+    for (const path of this.#expects(run, ws)) {
+      const stat = await lstat(join(ws.out, ...path.split("/"))).catch(() => undefined);
+      if (stat?.isFile() !== true) missing.push(path);
+    }
+    if (missing.length > 0) throw new JobFailure(`${what} did not write ${missing.join(", ")}`);
   }
 
   async #script(run: JobRun, ws: StepWorkspace, signal?: AbortSignal): Promise<StepOutcome> {
@@ -308,12 +380,24 @@ export class JobRunner {
       ...(signal === undefined ? {} : { signal }),
     });
     await this.#deps.store.update(run.id, { scriptHash: result.sha256 });
-    if (result.failure !== undefined) throw new JobFailure(`Script ${run.name} ${result.failure}`);
+    if (result.failure !== undefined) {
+      const output = [result.stderr, result.stdout].map((text) => text.trim()).filter((text) => text !== "");
+      const detail = redactText(output.join("\n").split(/\r?\n/).slice(-MAX_DETAIL_LINES).join("\n")).slice(-4000);
+      throw new ScriptFailure(`Script ${run.name} ${result.failure}`, detail === "" ? result.failure : detail);
+    }
+    const stdout = redactText(result.stdout.slice(-MAX_STDOUT));
+    if (run.inputs["stdoutTo"] !== undefined) {
+      const target = join(ws.out, ...this.#outputPath(run, ws, run.inputs["stdoutTo"], "stdoutTo").split("/"));
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, stdout, "utf8");
+    }
+    await this.#checkExpected(run, ws, `Script ${run.name}`);
     const provenance: Provenance = { origin: "tool", assetVersion: `${run.name}@sha256:${result.sha256}` };
     const files = await listFiles(ws.out);
     return {
       summary: { script: run.name, scriptHash: result.sha256, durationMs: result.durationMs },
       provenance: new Map(files.map((entry) => [entry.path, provenance])),
+      stdout,
     };
   }
 
@@ -329,9 +413,14 @@ export class JobRunner {
     const thinking = (THINKING_LEVELS as readonly string[]).includes(binding.thinking ?? "") ? (binding.thinking as ThinkingLevel) : undefined;
     await this.#deps.store.update(run.id, { agent: agentId });
 
+    const schema = run.inputs["schema"];
+    const schemaNote =
+      typeof schema === "object" && schema !== null
+        ? `\n\nReturn your result as JSON matching this schema, written with outputs_write to ${RESULT_FILE} (nothing else in that file):\n${JSON.stringify(schema)}`
+        : "";
     const spec: JobSpec = {
       agent: definition,
-      task: fill(task, this.#placeholders(run, ws)),
+      task: fill(task, this.#placeholders(run, ws)) + schemaNote,
       model: { provider: binding.provider, id: binding.model, ...(thinking === undefined ? {} : { thinking }) },
       // Reads are confined to the checkout and the inputs, writes to out/ (kernel path guard).
       workspace: { readOnly: [...(ws.src === undefined ? [] : [ws.src]), ws.in], outDir: ws.out },
@@ -363,6 +452,17 @@ export class JobRunner {
     }
     const done = await handle.done;
     if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
+    if (this.#deps.mockOutputs ?? mock) {
+      await writeMockOutputs({
+        out: ws.out,
+        ...(ws.src === undefined ? {} : { src: ws.src }),
+        agent: run.name,
+        app: run.applicationId ?? run.projectId,
+        expects: this.#expects(run, ws),
+        ...(run.inputs["resultFile"] === true && typeof schema === "object" && schema !== null ? { schema: schema as Record<string, unknown> } : {}),
+        resultFile: RESULT_FILE,
+      });
+    }
 
     let result: unknown;
     if (run.inputs["resultFile"] === true) {
@@ -375,7 +475,9 @@ export class JobRunner {
       } catch {
         throw new JobFailure(`Agent ${run.name} wrote an invalid ${RESULT_FILE}`);
       }
+      if (run.inputs["resultTo"] !== undefined) await this.#saveResult(run, ws, result);
     }
+    await this.#checkExpected(run, ws, `Agent ${run.name}`);
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
     const files = await listFiles(ws.out);
     return {
@@ -384,6 +486,13 @@ export class JobRunner {
       provenance: new Map(files.filter((entry) => !entry.path.startsWith("restricted/")).map((entry) => [entry.path, provenance])),
       ...(result === undefined ? {} : { result }),
     };
+  }
+
+  /** Saves a structured result as JSON at inputs.resultTo in out/. */
+  async #saveResult(run: JobRun, ws: StepWorkspace, result: unknown): Promise<void> {
+    const target = join(ws.out, ...this.#outputPath(run, ws, run.inputs["resultTo"], "resultTo").split("/"));
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, `${JSON.stringify(result ?? null, null, 2)}\n`, "utf8");
   }
 
   #count(event: JobEvent, usage: { inputTokens: number; outputTokens: number; costUsd: number; toolCalls: number; blocked: number }): void {
@@ -405,8 +514,8 @@ export class JobRunner {
     let agent: string | undefined;
     const runAgent = async (prompt: string, options: AgentCallOptions): Promise<{ result?: unknown; tokens: number }> => {
       if (typeof options.agentType !== "string") throw new Error("agent() needs options.agentType");
-      const schema = options.schema === undefined ? "" : `\n\nReturn your result as JSON matching this schema, written with outputs_write to ${RESULT_FILE} (nothing else in that file):\n${JSON.stringify(options.schema)}`;
-      const child = await this.#child(run, ws, { kind: "agent", name: options.agentType, inputs: { task: prompt + schema, resultFile: options.schema !== undefined, ...(options.label === undefined ? {} : { label: options.label }) } }, signal);
+      const inputs = { task: prompt, ...(options.schema === undefined ? {} : { schema: options.schema, resultFile: true }), ...(options.label === undefined ? {} : { label: options.label }) };
+      const child = await this.#child(run, ws, { kind: "agent", name: options.agentType, inputs }, signal);
       if (!child.ok && signal?.aborted === true) throw new JobFailure("aborted");
       if (!child.ok) return { tokens: 0 };
       for (const [path, value] of child.outcome.provenance) provenance.set(path, value);
@@ -414,10 +523,14 @@ export class JobRunner {
       const usage = child.outcome.summary["usage"] as { inputTokens?: number; outputTokens?: number } | undefined;
       return { result: child.outcome.result ?? child.outcome.summary["outcome"] ?? true, tokens: (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0) };
     };
+    // A stage hands its workflow what is left of the stage's agent budget (inputs.budget.maxAgents).
+    const budget = run.inputs["budget"] as { maxAgents?: unknown } | undefined;
+    const cap = typeof budget?.maxAgents === "number" && Number.isFinite(budget.maxAgents) ? Math.max(0, Math.floor(budget.maxAgents)) : undefined;
+    const budgets = cap === undefined ? this.#defaults.workflow : { ...this.#defaults.workflow, maxAgents: Math.min(this.#defaults.workflow.maxAgents, cap) };
     const outcome = await runWorkflow({
       source,
       args: run.inputs["args"] ?? {},
-      budgets: this.#defaults.workflow,
+      budgets,
       runAgent,
       log: (line) => {
         this.#log(`workflow ${run.name} (${run.id}): ${line}`);
@@ -426,42 +539,77 @@ export class JobRunner {
     }).catch((error: unknown) => {
       throw new JobFailure(`Workflow ${run.name} failed: ${redactText(message(error)).slice(0, 500)}`);
     });
+    if (run.inputs["resultTo"] !== undefined) {
+      await this.#saveResult(run, ws, outcome.result);
+      provenance.set(this.#outputPath(run, ws, run.inputs["resultTo"], "resultTo"), { origin: "tool", assetVersion: `workflow:${run.name}` });
+    }
+    await this.#checkExpected(run, ws, `Workflow ${run.name}`);
     const result = JSON.stringify(outcome.result ?? null);
     return {
       summary: { workflow: run.name, agents: outcome.agents, failedAgents: outcome.failedAgents, tokens: outcome.tokens, result: result.length > 20_000 ? "(too large to keep)" : (JSON.parse(result) as unknown) },
       ...(agent === undefined ? {} : { agent }),
       provenance,
+      agents: outcome.agents,
     };
   }
 
+  /** A stage: its plan (stages.ts) run by the generic executor, every leaf step a child run. */
   async #stage(run: JobRun, ws: StepWorkspace, signal?: AbortSignal): Promise<StepOutcome> {
     const plan = STAGES[run.name];
     if (plan === undefined) throw new JobFailure(`Unknown stage "${run.name}"`);
+    if (run.applicationId === undefined || run.sourceRepositoryId === undefined || ws.commit === undefined) throw new JobFailure(`Stage ${run.name} needs an application with a legacy repository`);
+    const work = join(ws.root, "work");
+    await mkdir(work, { recursive: true });
     const provenance = new Map<string, Provenance>();
-    const steps: Array<{ id: string; kind: string; name: string }> = [];
     let agent: string | undefined;
-    for (const step of plan.steps) {
-      if (signal?.aborted === true) throw new JobFailure("aborted");
-      const child = await this.#child(run, ws, { kind: step.kind, name: step.name, inputs: step.inputs }, signal);
-      steps.push({ id: child.id, kind: step.kind, name: step.name });
-      if (!child.ok) throw new JobFailure(`Step ${step.name} failed: ${child.reason}`);
+    const runLeaf = async (spec: LeafRun, placement: LeafPlacement): Promise<LeafResult> => {
+      const child = await this.#child(run, ws, spec, signal, placement);
+      if (!child.ok) return child.detail === undefined ? { id: child.id, ok: false, reason: child.reason } : { id: child.id, ok: false, reason: child.reason, detail: child.detail };
       for (const [path, value] of child.outcome.provenance) provenance.set(path, value);
       agent = child.outcome.agent ?? agent;
+      return {
+        id: child.id,
+        ok: true,
+        summary: child.outcome.summary,
+        agents: child.outcome.agents ?? 0,
+        ...(child.outcome.stdout === undefined ? {} : { stdout: child.outcome.stdout }),
+      };
+    };
+    try {
+      const executor = new StagePlanExecutor({
+        plan,
+        run: { id: run.id, projectId: run.projectId, applicationId: run.applicationId },
+        values: { app: run.applicationId, repo: run.sourceRepositoryId, commit: ws.commit },
+        dirs: { root: ws.root, in: ws.in, work, out: ws.out },
+        limits: this.#defaults.stage,
+        gates: this.#deps.gates ?? DEFAULT_GATE_DECIDER,
+        runLeaf,
+        log: (line, data) => {
+          this.#log(`stage ${run.name} (${run.id}): ${line}`);
+          return this.#event(ws, undefined, "log", line, data);
+        },
+        ...(signal === undefined ? {} : { signal }),
+      });
+      const outcome = await executor.run();
+      return { summary: { ...outcome }, ...(agent === undefined ? {} : { agent }), provenance };
+    } finally {
+      await removeTree(work).catch(() => undefined);
     }
-    return { summary: { stage: plan.id, steps }, ...(agent === undefined ? {} : { agent }), provenance };
   }
 
   /**
    * Runs one step of a stage or workflow as a child run: its own in/out/tmp, the parent's
-   * source checkout, the parent's outputs so far as its inputs. On success its out/ is merged
-   * into the parent's out/.
+   * source checkout, the parent's inputs and outputs so far as its inputs (for a stage step: the
+   * placement's directories). On success its out/ is merged into the parent's out/; for a stage
+   * step, intermediate files go to the placement's work directory instead.
    */
   async #child(
     parent: JobRun,
     parentWs: StepWorkspace,
     spec: Pick<NewJobRun, "kind" | "name" | "inputs">,
     signal?: AbortSignal,
-  ): Promise<{ id: string; ok: true; outcome: StepOutcome } | { id: string; ok: false; reason: string }> {
+    placement: ChildPlacement = { inputs: [parentWs.in, parentWs.out], out: parentWs.out },
+  ): Promise<{ id: string; ok: true; outcome: StepOutcome } | { id: string; ok: false; reason: string; detail?: string }> {
     const { store, storage } = this.#deps;
     const id = randomUUID();
     await store.create({
@@ -485,13 +633,12 @@ export class JobRunner {
     try {
       if (signal?.aborted === true) throw new JobFailure("aborted");
       for (const dir of [paths.in, paths.out, paths.tmp]) await mkdir(dir, { recursive: true });
-      await copyTree(parentWs.in, ws.in);
-      await copyTree(parentWs.out, ws.in);
+      for (const dir of placement.inputs) await copyTree(dir, ws.in);
       await this.#prepareInputs(run, ws);
       const outcome = await this.#step(run, ws, signal);
       const summary = await this.#finish(run, ws, outcome);
       await store.succeed(id, summary);
-      await copyTree(ws.out, parentWs.out);
+      await this.#merge(ws.out, placement);
       await this.#event(parentWs, id, "step.finished", `${spec.kind} ${spec.name} succeeded`, { kind: spec.kind, name: spec.name, status: "succeeded" });
       return { id, ok: true, outcome };
     } catch (error) {
@@ -503,10 +650,20 @@ export class JobRunner {
       const reason = reasonOf(error);
       await store.fail(id, reason).catch(() => undefined);
       await this.#event(parentWs, id, "step.finished", `${spec.kind} ${spec.name} failed: ${reason}`, { kind: spec.kind, name: spec.name, status: "failed" });
-      return { id, ok: false, reason };
+      return { id, ok: false, reason, ...(error instanceof ScriptFailure ? { detail: error.detail } : {}) };
     } finally {
       await removeTree(paths.root).catch(() => undefined);
     }
+  }
+
+  /** A finished step's out/: published files to placement.out, intermediate ones to placement.work. */
+  async #merge(out: string, placement: ChildPlacement): Promise<void> {
+    const intermediate = placement.intermediate ?? false;
+    if (placement.work === undefined || intermediate === false) return copyTree(out, placement.out);
+    const isIntermediate = (path: string): boolean =>
+      intermediate === true || intermediate.some((prefix) => path === prefix || path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`));
+    await copyTree(out, placement.out, (path) => !isIntermediate(path));
+    await copyTree(out, placement.work, isIntermediate);
   }
 
   // -------------------------------------------------------------------------

@@ -118,9 +118,46 @@ export interface SourceCheckouts {
   checkout(repositoryId: string, commit: string, dest: string): Promise<void>;
   /** A text file of the repository at `commit`; undefined when it does not exist. */
   readDocument(repositoryId: string, commit: string, path: string): Promise<string | undefined>;
+  /** The files under folder `dir` (ending in "/") at `commit`, sorted; none when it does not exist. */
+  listDocuments?(repositoryId: string, commit: string, dir: string): Promise<string[]>;
   /** Removes a worktree made by checkout(). */
   release(repositoryId: string, dest: string): Promise<void>;
 }
+
+/** A human decision a stage plan reaches (a `gate` step). */
+export interface GateRequest {
+  /** The stage run. */
+  runId: string;
+  projectId: string;
+  applicationId?: string;
+  stage: string;
+  /** The gate step's id. */
+  gate: string;
+  question: string;
+  options: readonly string[];
+  /** The documented default, taken when nobody answers. */
+  default: string;
+}
+
+export interface GateDecision {
+  choice: string;
+  /** True when the default was taken without a person's answer. */
+  defaulted: boolean;
+  by?: string;
+}
+
+/**
+ * Decides gates. Persisted gates (portal tasks with a deadline) plug in here; until then the
+ * default decider takes the documented default at once and the stage records it.
+ */
+export interface GateDecider {
+  decide(request: GateRequest, signal?: AbortSignal): Promise<GateDecision>;
+}
+
+/** TODO(gates): replace with a decider backed by persisted gates once they exist. */
+export const DEFAULT_GATE_DECIDER: GateDecider = {
+  decide: async (request) => ({ choice: request.default, defaulted: true }),
+};
 
 /** The abort reason of a run a person cancelled (as opposed to the worker stopping). */
 export class JobCancelled extends Error {
