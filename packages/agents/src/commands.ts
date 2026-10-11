@@ -21,6 +21,8 @@ export interface BuiltinCommand {
   audience: CommandAudience;
   /** Agents the stage starts. */
   agents: string[];
+  /** Paths the stage reads (document repo, source; patterns such as `assessment/<app>/ASSESSMENT.md`). */
+  reads: string[];
   /** Document-repo paths the stage writes (patterns such as `assessment/<app>/ASSESSMENT.md`). */
   writes: string[];
   /** Where a person decides before the stage goes on. */
@@ -73,6 +75,7 @@ function parseCommand(text: string, command: string, problems: string[]): Builti
   const audience = metadata["audience"];
   if (!COMMAND_AUDIENCES.includes(audience as CommandAudience)) problems.push(`${file}: \`metadata.audience\` must be one of ${COMMAND_AUDIENCES.join(", ")}`);
   const agents = commandList(metadata, "agents", file, problems);
+  const reads = commandList(metadata, "reads", file, problems);
   const writes = commandList(metadata, "writes", file, problems);
   const gates = commandList(metadata, "gates", file, problems);
   if (problems.length > before) return undefined;
@@ -82,6 +85,7 @@ function parseCommand(text: string, command: string, problems: string[]): Builti
     description: (description as string).trim(),
     audience: audience as CommandAudience,
     agents,
+    reads,
     writes,
     gates,
   };

@@ -55,7 +55,7 @@ export interface StageView {
   /** runtime = Kintsugi jobs; member = members' harnesses; portal = a portal screen. */
   audience: "runtime" | "member" | "portal";
   agents: string[];
-  /** Document-repo paths the stage reads; optional until the API reports them. */
+  /** Paths the stage reads (document repo, source). */
   reads?: string[];
   /** Document-repo paths the stage writes (patterns such as `assessment/<app>/ASSESSMENT.md`). */
   writes: string[];
