@@ -54,7 +54,7 @@ export interface ChildAgentRuntimeOptions {
 
 type JobEnd = Extract<JobEvent, { type: "job.completed" | "job.failed" }>;
 
-const EVENT_TYPES = new Set<JobEvent["type"]>(["job.started", "message.delta", "tool.call", "tool.result", "output", "usage", "job.completed", "job.failed"]);
+const EVENT_TYPES = new Set<JobEvent["type"]>(["job.started", "message.delta", "progress", "tool.call", "tool.result", "output", "usage", "job.completed", "job.failed"]);
 
 export const AGENT_CHILD_ENTRY = fileURLToPath(new URL("../bin/agent-job.js", import.meta.url));
 
