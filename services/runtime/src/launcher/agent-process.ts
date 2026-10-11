@@ -39,6 +39,12 @@ export interface ChildAgentRuntimeOptions {
   entry?: string;
   /** Seconds past the job's own timeout before the launcher kills the process tree. */
   graceSec?: number;
+  /**
+   * Seconds without any event from the child (text, tool call, usage) before the job counts as
+   * stalled and its process tree is killed: a provider that drops a streaming response leaves the
+   * child waiting with no connection. Defaults to 300; 0 turns the watchdog off.
+   */
+  idleTimeoutSec?: number;
   /** Disables Node's permission model for the child (diagnostics only). */
   permissionModel?: boolean;
   /** The worker's environment, for PATH (tests). */
@@ -112,13 +118,30 @@ class ChildAgentJob implements JobHandle {
   readonly done: Promise<JobEnd>;
   readonly #abort = new AbortController();
   #abortReason = "aborted";
+  #stalledAfterSec: number | undefined;
+  #idle: NodeJS.Timeout | undefined;
   #end: JobEnd | undefined;
   #resolveDone!: (event: JobEnd) => void;
 
-  constructor(readonly jobId: string) {
+  constructor(
+    readonly jobId: string,
+    private readonly idleTimeoutSec: number,
+  ) {
     this.done = new Promise<JobEnd>((resolve) => {
       this.#resolveDone = resolve;
     });
+    this.#touch();
+  }
+
+  /** Restarts the idle watchdog: any line from the child is a sign of life. */
+  #touch(): void {
+    if (this.idleTimeoutSec <= 0 || this.#end !== undefined) return;
+    clearTimeout(this.#idle);
+    this.#idle = setTimeout(() => {
+      this.#stalledAfterSec = this.idleTimeoutSec;
+      this.#abort.abort();
+    }, this.idleTimeoutSec * 1000);
+    this.#idle.unref();
   }
 
   get signal(): AbortSignal {
@@ -131,6 +154,7 @@ class ChildAgentJob implements JobHandle {
   }
 
   onLine(line: string): void {
+    this.#touch();
     const event = parseEvent(line);
     if (event === undefined || this.#end !== undefined) return;
     if (event.type === "job.completed" || event.type === "job.failed") {
@@ -146,6 +170,7 @@ class ChildAgentJob implements JobHandle {
     const fail = (reason: JobFailureReason, message: string): void =>
       this.#finish({ type: "job.failed", jobId: this.jobId, at: now(), reason, error: message });
     if (error !== undefined) fail("error", `could not start the agent process: ${redactText(error instanceof Error ? error.message : String(error))}`);
+    else if (this.#stalledAfterSec !== undefined) fail("timeout", `stalled: no activity from the model for ${this.#stalledAfterSec}s (the provider stopped responding)`);
     else if (result?.stopped === "aborted") fail("aborted", this.#abortReason);
     else if (result?.stopped === "timeout") fail("timeout", `timed out after ${timeoutSec}s`);
     else {
@@ -156,6 +181,7 @@ class ChildAgentJob implements JobHandle {
 
   #finish(event: JobEnd): void {
     if (this.#end !== undefined) return;
+    clearTimeout(this.#idle);
     this.#end = event;
     this.events.push(event);
     this.events.close();
@@ -166,6 +192,7 @@ class ChildAgentJob implements JobHandle {
 /** An AgentRuntime that runs every job in its own child process. */
 export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): AgentRuntime {
   const grace = options.graceSec ?? 30;
+  const idleTimeoutSec = options.idleTimeoutSec ?? 300;
   return {
     engine: options.mode === "mock" ? `mock@${RUNTIME_VERSION}` : PI_ENGINE_ID,
     async startJob(spec: JobSpec): Promise<JobHandle> {
@@ -195,7 +222,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
               ...[...(await childCodeRoots()), entry, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
               ...[spec.workspace.outDir, tmp].map((path) => `--allow-fs-write=${path}`),
             ];
-      const job = new ChildAgentJob(randomUUID());
+      const job = new ChildAgentJob(randomUUID(), idleTimeoutSec);
       const timeoutSec = spec.limits.timeoutSec;
       void runProcess({
         command: options.node ?? process.execPath,

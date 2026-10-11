@@ -45,7 +45,7 @@ describe("agent jobs in child processes", () => {
     agent = await builtinAgents().definition("legacy-analyst");
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   });
 
   it("runs the mock backend in a child and streams its events", async () => {
@@ -128,5 +128,27 @@ process.stdin.on("end", () => {
 
     const timedOut = await runtime.startJob(spec(dirs(), undefined, 1));
     expect(await timedOut.done).toMatchObject({ type: "job.failed", reason: "timeout" });
+  }, 30_000);
+
+  it("kills a child that goes silent, but not one that keeps reporting", async () => {
+    const silent = fixture("silent.mjs", 'process.stdout.write(JSON.stringify({ type: "message.delta", jobId: "x", text: "thinking" }) + "\\n");\nsetInterval(() => undefined, 1000);\n');
+    const stalled = await createChildAgentRuntime({ mode: "mock", entry: silent, idleTimeoutSec: 1 }).startJob(spec(dirs()));
+    const done = await stalled.done;
+    expect(done).toMatchObject({ type: "job.failed", reason: "timeout" });
+    expect(done.type === "job.failed" ? done.error : "").toMatch(/stalled: no activity from the model for 1s/);
+
+    const chatty = fixture(
+      "chatty.mjs",
+      `let n = 0;
+const tick = setInterval(() => {
+  n += 1;
+  const event = n < 6 ? { type: "message.delta", jobId: "x", text: "." } : { type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: "done" };
+  process.stdout.write(JSON.stringify(event) + "\\n");
+  if (n >= 6) { clearInterval(tick); setTimeout(() => process.exit(0), 50); }
+}, 400);
+`,
+    );
+    const busy = await createChildAgentRuntime({ mode: "mock", entry: chatty, idleTimeoutSec: 1 }).startJob(spec(dirs()));
+    expect(await busy.done).toMatchObject({ type: "job.completed", summary: "done" });
   }, 30_000);
 });

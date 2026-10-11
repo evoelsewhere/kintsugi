@@ -1,7 +1,7 @@
 // kintsugi-worker entry point (ADR-0003, ADR-0025, ADR-0029). Configuration is deployment
 // environment only: DATABASE_URL, KINTSUGI_SECRET_KEY (decrypts Git and LLM credentials),
 // KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL and the job settings
-// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_* including KINTSUGI_JOB_RETENTION_DAYS, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_WORKFLOW_*, KINTSUGI_STAGE_*,
+// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_* including KINTSUGI_JOB_RETENTION_DAYS, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_AGENT_IDLE_TIMEOUT, KINTSUGI_WORKFLOW_*, KINTSUGI_STAGE_*,
 // KINTSUGI_PYTHON, KINTSUGI_NODE). Git servers, repositories, LLM providers and the commit identity are
 // configured in the portal.
 
@@ -56,7 +56,10 @@ function jobDefaults(): JobDefaults {
 function agentRuntime(databaseUrl: string, node: string): AgentRuntime {
   const mode = (process.env["KINTSUGI_RUNTIME_MODE"] ?? "pi").trim();
   if (mode !== "pi" && mode !== "mock") throw new Error('KINTSUGI_RUNTIME_MODE must be "pi" or "mock"');
-  return createChildAgentRuntime({ mode, node, loadProvider: (providerId) => loadProvider(providerId, databaseUrl) });
+  const idle = process.env["KINTSUGI_AGENT_IDLE_TIMEOUT"];
+  const idleTimeoutSec = idle === undefined ? undefined : Number(idle);
+  if (idleTimeoutSec !== undefined && !(Number.isInteger(idleTimeoutSec) && idleTimeoutSec >= 0)) throw new Error("KINTSUGI_AGENT_IDLE_TIMEOUT must be a whole number of seconds (0 turns it off)");
+  return createChildAgentRuntime({ mode, node, loadProvider: (providerId) => loadProvider(providerId, databaseUrl), ...(idleTimeoutSec === undefined ? {} : { idleTimeoutSec }) });
 }
 
 async function main(): Promise<void> {
