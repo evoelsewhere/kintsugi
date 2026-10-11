@@ -43,9 +43,11 @@ runs/<unit>/<run-id>/         # small reports per run (EQUIVALENCE.json, test-ru
 | AS-IS (per application) | `legacy-data` | any number: schemas, dumps, reference data | Nobody through Kintsugi; read-only |
 | TO-BE (per application) | `target` | any number, each with `component: <name from the architecture>` | Members only; the runtime never writes |
 
-The document repo holds both the AS-IS analysis and the TO-BE documents; the portal may show it under TO-BE.
+The document repo holds both the AS-IS analysis and the TO-BE documents; the portal shows it under TO-BE.
 
-## `kintsugi.yaml` (draft)
+Further rules: each target repo implements a different component of its application, a repository appears at most once per project, and a document repo belongs to one project only (legacy and target repos may be shared between projects). Projects are managed in the portal (**Administration → Projects**) and stored in Postgres; the repositories are the ones registered in **Settings → Git** ([data model](data-model.md#projects-and-their-repositories)).
+
+## `kintsugi.yaml`
 
 ```yaml
 schemaVersion: 1
@@ -53,11 +55,12 @@ project:
   id: billing-modernization
   name: Billing modernization
 document:
-  server: github-main              # GitServer id registered in the installation
-  path: org/billing-docs
+  server: github-main              # Git server id registered in the installation
+  path: org/billing-docs           # clone URL path relative to the server's base URL, without .git
 unitKinds: [screen, api, batch-job]
 applications:
   - id: billing-web
+    name: Billing web
     disposition: refactor          # 7R
     pipeline: refactor             # a built-in pipeline, or one declared under `pipelines:`
     repos:
@@ -66,6 +69,7 @@ applications:
       - {server: azdo-internal, path: Billing/_git/billing-web, role: target, component: web}
       - {server: azdo-internal, path: Billing/_git/billing-api, role: target, component: api}
   - id: payroll-batch
+    name: Payroll batch
     disposition: rearchitect
     pipeline: payroll-rearchitect
     repos:
@@ -89,6 +93,24 @@ policy:
   harnesses: [copilot, claude-code]
   requireCommitTrailer: true
 ```
+
+Schema (`validateManifest` in `packages/domain`, `parseKintsugiYaml` in `packages/manifest`; every problem is reported with its path, e.g. `applications[0].repos[1].component`; unknown keys are problems):
+
+| Key | Required | Content |
+|---|---|---|
+| `schemaVersion` | yes | `1` |
+| `project` | yes | `id` (kebab-case), `name`, optional `description` |
+| `document` | yes | The document repo: `server` (Git server id), `path` |
+| `unitKinds` | yes | Non-empty list of unit kinds, without duplicates |
+| `applications` | yes | List (may be empty). Each: `id` (kebab-case, unique), optional `name`, `disposition` (7R), optional `pipeline` (id), `repos` |
+| `applications[].repos` | no | Each: `server`, `path`, `role` (`legacy`, `legacy-data` or `target`; `document` is not allowed here), `component` (required for `target`, unique per application, forbidden otherwise). A `server` + `path` pair appears once in the file, the document repo included |
+| `pipelines` | no (default `[]`) | Each: `id` (unique), optional `appliesTo.dispositions`, non-empty `phases` (`id`; `category` required for a custom phase; optional `perUnit`; non-empty `stages` with `id`, `performer` = `{agent: <id>}` or `{member: [<roles>]}`, optional `gate`), optional `gates` |
+| `autoCommitPaths` | no | Default `units/**`, `tasks/**`, `knowledge/**/generated/**` (ADR-0019) |
+| `policy` | no | `harnesses` (default: the built-in member harnesses), `requireCommitTrailer` (default `true`) |
+
+`path` is the repository's clone URL path relative to its server's base URL, without `.git`: `https://dev.azure.com/acme/Billing/_git/web` on a server with base URL `https://dev.azure.com/acme` gives `Billing/_git/web`; `git@github.com:org/app.git` gives `org/app`. Pipeline ids are not yet checked against the built-in pipelines (their list is an open follow-up of ADR-0028).
+
+**Rendered from the portal (read-only).** The project page shows, and `GET /api/admin/projects/:id/kintsugi.yaml` returns, the manifest rendered from the project's state in Postgres: project, document repo, applications and their repos. `unitKinds`, `pipelines`, `autoCommitPaths` and `policy` show defaults until the portal manages them. Kintsugi does not commit the rendered file to the document repo yet: that needs the worker's write path ([ADR-0019](../decisions/0019-workspace-repo-write-path.md)), which is not built. Until then, copy it into the document repo through a pull request.
 
 ## Commit conventions
 

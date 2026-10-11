@@ -23,7 +23,7 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 
 | Sub-module | Function | Notes |
 |---|---|---|
-| A1 Projects & Applications | Programs, projects, applications, code repos, document repo | One installation = one organization |
+| A1 Projects & Applications | Projects, applications, their AS-IS and TO-BE repos, document repo, rendered `kintsugi.yaml` | One installation = one organization |
 | A2 Identity & Access | Username/password sign-in; PATs for CLI/MCP (Entra ID later); installation access roles and permission bundles; project-role assignment with M0 project membership persistence | [Identity and access](concepts/identity-and-access.md) |
 | A3 Connectors | Git servers (any number and kind), Jira / Confluence / SharePoint, source databases (read-only), observability tools | Credentials encrypted in Postgres |
 | A4 LLM Providers & Harness Registry | Runtime LLM providers (every pi provider + custom), credentials, test connection, model binding per runtime agent id, allowlist, budget; member harness registry (plugin support per harness, built-in + installation fallback renderers, transformer plugins) | [LLM configuration](concepts/llm-configuration.md) |
@@ -102,7 +102,8 @@ Shared libraries and assets:
 
 | Path | Content |
 |---|---|
-| `packages/domain` | Shared vocabulary: phases, 7R, project roles, work items, provenance, Git servers / repositories, scorecard |
+| `packages/domain` | Shared vocabulary: phases, 7R, project roles, work items, provenance, Git servers / repositories, scorecard; projects, applications and repository links with their rules; the `kintsugi.yaml` model and validator (dependency-free) |
+| `packages/manifest` | `kintsugi.yaml` as text: parse + validate, render ([document repository](../reference/document-repo.md)) |
 | `packages/agents` | Agent packages (Claude Code agent files + Agent Skills): parsing, validation, conversion of runtime agents to `AgentDefinition`; `builtin/` holds the modernization content (agents, commands, workflows, scripts, hooks, tests) adapted from upstream ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md), [ADR-0027](../decisions/0027-builtin-modernization-content.md)) |
 | `packages/git` | Git core: system `git` CLI wrapper with per-call credentials, checkout storage layout, provider REST adapters ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
 | `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `AgentDefinition`, `JobEvent`, LLM provider configuration types |
