@@ -8,6 +8,7 @@ import { toPage } from "#common/application/pagination.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
+import { AUDIT_ACTIONS, AuditService } from "#modules/governance/audit/index.js";
 import { type JobRunDetail, type JobRunView, RUNNABLE_STAGES, type RestrictedRecordView, type RunnableStage } from "../domain/job-run.js";
 import { JobRunQueue, JobRunStore } from "../domain/job-run.ports.js";
 
@@ -17,6 +18,7 @@ export class JobRunsService {
     private readonly store: JobRunStore,
     private readonly queue: JobRunQueue,
     private readonly projects: ProjectsService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Starts a stage for one application: records the run as `queued` and enqueues it. */
@@ -60,8 +62,22 @@ export class JobRunsService {
     return run;
   }
 
-  async restricted(projectId: string, id: string): Promise<RestrictedRecordView[]> {
+  /**
+   * The restricted records of a run, decrypted. Every record read is audited first (who, when,
+   * job run, path; never the content); when the audit entry cannot be stored, nothing is returned.
+   */
+  async restricted(projectId: string, id: string, actor: Actor): Promise<RestrictedRecordView[]> {
     await this.get(projectId, id);
-    return this.store.restricted(projectId, id);
+    const records = await this.store.restricted(projectId, id);
+    await this.audit.record(
+      records.map((record) => ({
+        actor: actor.id,
+        action: AUDIT_ACTIONS.restrictedRead,
+        projectId,
+        subject: record.jobRunId,
+        detail: { path: record.path, topLevelRun: id, ...(actor.username === undefined ? {} : { username: actor.username }) },
+      })),
+    );
+    return records;
   }
 }

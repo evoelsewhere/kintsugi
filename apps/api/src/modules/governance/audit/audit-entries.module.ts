@@ -1,16 +1,15 @@
-// Wiring of the audit-entries module: interface + application + the
-// infrastructure adapter bound to the domain port.
+// Wiring of the audit module: the use cases plus the Postgres audit log bound to the port.
 
 import { Module } from "@nestjs/common";
-import { AuditEntriesService } from "./application/audit-entries.service.js";
-import { AuditEntryRepository } from "./domain/audit-entry.repository.js";
-import { InMemoryAuditEntryRepository } from "./infrastructure/in-memory-audit-entry.repository.js";
+import { AuditService } from "./application/audit.service.js";
+import { AuditLog } from "./domain/audit-log.port.js";
+import { PgAuditLog } from "./infrastructure/pg-audit-log.js";
 import { AuditEntriesController } from "./interface/audit-entries.controller.js";
 
 /** governance · audit & traceability — docs/architecture/05-building-block-view.md. */
 @Module({
   controllers: [AuditEntriesController],
-  providers: [AuditEntriesService, { provide: AuditEntryRepository, useClass: InMemoryAuditEntryRepository }],
-  exports: [AuditEntriesService, AuditEntryRepository],
+  providers: [AuditService, { provide: AuditLog, useClass: PgAuditLog }],
+  exports: [AuditService],
 })
 export class AuditEntriesModule {}

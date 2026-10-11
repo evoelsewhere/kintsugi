@@ -99,5 +99,15 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     const records = await auditor.client.get<Array<{ jobRunId: string; path: string; content: string }>>(`/projects/billing/job-runs/${runId}/restricted`);
     expect(records.status).toBe(200);
     expect(records.body.data).toMatchObject([{ jobRunId: "step-2", path: "SECRETS.local.md", content: "| hu** | main.c:1 |" }]);
+
+    // Every read is audited (who, job run, path), never the content; the log needs audit.read.
+    expect((await auditor.client.get("/governance/audit")).status).toBe(403);
+    const audit = await admin.get<{ items: Array<{ actor: string; action: string; projectId: string; subject: string; detail: { path: string; username?: string } }>; total: number }>(
+      "/governance/audit?action=restricted.read",
+    );
+    expect(audit.status).toBe(200);
+    expect(audit.body.data?.items).toMatchObject([{ actor: auditor.id, action: "restricted.read", projectId: "billing", subject: "step-2", detail: { path: "SECRETS.local.md", username: "auditor-1" } }]);
+    expect(audit.raw).not.toContain("hu**");
+    await expect(app.db.query("delete from governance.audit_event")).rejects.toThrow(/append-only/);
   });
 });
