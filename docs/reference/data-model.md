@@ -18,6 +18,7 @@ Project 1─* Application 1─* WorkItem (index of units/**) 1─* StageRun ─0
    └─ ProjectMembership(user, projectRole, harnesses[]) — planned with M0 project persistence
 User · AccessRole(core.role/core.user_role) · Permission(core.permission) · Session · AccessToken · AuthIdentity(provider: local | entra-id)
 LlmProvider(config, secretRef) · LlmModel · AgentModelBinding(agent → provider/model)
+Agent(custom; built-ins from the release) 1─* AgentVersion(package files) · SharedSkill(SKILL.md)   (admin.agent, admin.agent_version, admin.agent_skill)
 KbDocument(repo@commit:path) ─* KbChunk(text, embedding)          (no code graph, ADR-0014)
 Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord · AuditEvent (append-only)
 ```
@@ -90,6 +91,18 @@ Every read of a restricted record writes one entry before the record is returned
 ## Installation settings
 
 `admin.installation_setting` (migration 011): installation-wide settings managed in the portal, `key` → `value` (jsonb) with `updated_by` and `updated_at`. First key: `commit-identity` (`{ name, email }` of kintsugi-bot's commits; Settings → Git, `git.manage`), read by the document repo writer for each write ([commit conventions](document-repo.md#commit-conventions)).
+
+## Agents
+
+Custom agents and shared skills of the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md#implementation-notes)), migration [`012_agents.sql`](../../apps/api/migrations/012_agents.sql). Built-in agents and skills are read from the release (`packages/agents/builtin`) and never stored; their names are reserved.
+
+| Table | Key | Content |
+|---|---|---|
+| `admin.agent` | `name` | `audience` (`runtime`, `member`), `version` (current), `package` (jsonb: relative path → file content, the export format), `enabled`, `copied_from` (`<agent>@<version>`), `created_by`, `created_at`, `updated_by`, `updated_at` |
+| `admin.agent_version` | (`name`, `version`) | `package`, `created_by`, `created_at`; immutable, deleted with the agent |
+| `admin.agent_skill` | `name` | `content` (the `SKILL.md` text), `created_by`, `created_at`, `updated_by`, `updated_at` |
+
+Permission added by the migration: `agents.manage`, granted to `admin`. Model bindings (`admin.agent_model_binding`) name agents by `name`.
 
 ## Provenance
 
