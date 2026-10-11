@@ -1,6 +1,6 @@
 # ADR-0026: Built-in and custom runtime agents, packaged and managed in an Agent Builder
 
-- Status: Accepted
+- Status: Accepted. Partly implemented (see [Implementation notes](#implementation-notes)).
 - Date: 2026-10-10
 - Decision register: D46
 - Supersedes: ADR-0023 decision 3 ("no agent ships with Kintsugi")
@@ -95,6 +95,19 @@ Kintsugi's split stays: **implementation belongs to members** in their own harne
   - the read-only exec kernel tool;
   - the eval-suite format;
   - whether published agents can also be exported to members as plugin agents.
+
+## Implementation notes
+
+Settled while building the Agent Builder (`apps/api` module `admin/agents`, `@kintsugi/agents`, Settings → Agents in the portal); details in the [runtime agents reference](../reference/runtime-agents.md#agent-builder).
+
+- **Built-ins are read from the release, not seeded.** The API and the worker load `packages/agents/builtin` directly; Postgres holds custom agents only. Built-ins cannot drift from the release, and upgrades never touch custom agents. Built-in agent and skill names are reserved.
+- **Storage** (migration `012_agents.sql`, schema `admin`): `agent` (the current version of each custom agent, stored as its package files), `agent_version` (every saved version, immutable) and `agent_skill` (custom shared skills, as `SKILL.md` text).
+- **No separate draft.** Every save records a new immutable version, which becomes current; the editor validates the unsaved form live instead. Restoring an older version makes it current again. A version number is never reused.
+- **Fork is "copy".** Copying a built-in or custom agent creates a custom agent with a new name; the source is recorded in `copied_from` and in `metadata.copied-from`.
+- **Permissions.** One code, `agents.manage` (create, edit, copy, import, enable or disable, delete, restore, shared skills), granted to `admin`. Reading the catalog needs a session only. Model bindings stay on the provider endpoints (`providers.manage`).
+- **Resolution.** `resolveAgentDefinition` in `@kintsugi/agents` is the single lookup: a built-in first, else an enabled custom agent, re-validated against the kernel tools and shared skills. The worker uses it for every agent step; the API uses it for "preview job definition".
+- **Import and export.** A ZIP of `<name>.md` and `skills/<n>/SKILL.md` (or the same files as JSON). Importing an existing custom agent saves a new version.
+- **Not yet built:** test runs from the editor, pinning `id@version` in stages, default limits per agent, versioning of shared skills (an edit applies to every agent at its next job) and audit entries beyond the `created_by` / `updated_by` columns and the version history.
 
 ## Alternatives considered
 

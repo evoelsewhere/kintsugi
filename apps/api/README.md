@@ -9,6 +9,9 @@ Responsibilities beyond the feature modules below:
 - Auth: local username/password sessions (httpOnly cookie); Personal Access Tokens and an
   `AuthProvider` interface for Entra ID are planned (ADR-0008).
 - Admin → LLM Providers: runtime provider registry (ADR-0009).
+- Admin → Agents: the Agent Builder (ADR-0026): built-in agents from `packages/agents/builtin`
+  (read-only) plus custom agents and shared skills (migration `012_agents.sql`), with
+  versions, copy, import/export and a job-definition preview; changes need `agents.manage`.
 - Admin → Git: Git servers (encrypted credentials, pinned SSH host keys) and repositories;
   "Test access" runs `git ls-remote` through `packages/git` (ADR-0025).
 - Admin → Projects: projects, applications and the registered repositories they use,
