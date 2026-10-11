@@ -2,7 +2,7 @@
 // (common/application/crud.service.ts) — add module-specific use cases here.
 
 import { Injectable } from "@nestjs/common";
-import { CrudService } from "../../../../common/application/crud.service.js";
+import { CrudService } from "#common/application/crud.service.js";
 import type { CreateIncident, Incident } from "../domain/incident.js";
 import { IncidentRepository } from "../domain/incident.repository.js";
 

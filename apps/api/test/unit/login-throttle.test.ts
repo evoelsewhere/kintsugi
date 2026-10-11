@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LoginThrottle } from "../../src/modules/core/auth/application/login-throttle.js";
+import { LoginThrottle } from "#modules/core/auth/application/login-throttle.js";
 
 const MINUTE = 60_000;
 

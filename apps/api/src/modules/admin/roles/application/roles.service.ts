@@ -1,8 +1,8 @@
 // Application layer: use cases for installation access roles and permissions.
 
-import { type Page, type PageQuery, toPage } from "../../../../common/application/pagination.js";
+import { type Page, type PageQuery, toPage } from "#common/application/pagination.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Actor } from "../../../../common/auth/decorators.js";
+import type { Actor } from "#common/auth/decorators.js";
 import { ADMIN_LOCKED_PERMISSIONS, ADMIN_ROLE_ID, type CreateSubRole, type PermissionRecord, type RoleRecord } from "../domain/role.js";
 import { RoleRepository } from "../domain/role.repository.js";
 

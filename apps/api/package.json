@@ -4,6 +4,16 @@
   "private": true,
   "type": "module",
   "main": "dist/main.js",
+  "imports": {
+    "#common/*": {
+      "source": "./src/common/*",
+      "default": "./dist/common/*"
+    },
+    "#modules/*": {
+      "source": "./src/modules/*",
+      "default": "./dist/modules/*"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",

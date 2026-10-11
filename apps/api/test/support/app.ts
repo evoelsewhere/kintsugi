@@ -31,9 +31,9 @@ export async function startTestApp(): Promise<TestApp> {
     const { Logger, StandardSchemaValidationPipe } = await import("@nestjs/common");
     const { NestFactory } = await import("@nestjs/core");
     const { AppModule } = await import("../../src/app.module.js");
-    const { ensureSchema } = await import("../../src/common/db/pool.js");
-    const { HttpExceptionFilter } = await import("../../src/common/filters/http-exception.filter.js");
-    const { ResponseInterceptor } = await import("../../src/common/interface/response.js");
+    const { ensureSchema } = await import("#common/db/pool.js");
+    const { HttpExceptionFilter } = await import("#common/filters/http-exception.filter.js");
+    const { ResponseInterceptor } = await import("#common/interface/response.js");
 
     Logger.overrideLogger(false);
     app = await NestFactory.create(AppModule, { logger: false });
@@ -57,7 +57,7 @@ export async function startTestApp(): Promise<TestApp> {
     nest: started,
     close: async () => {
       await started.close();
-      const { getPool } = await import("../../src/common/db/pool.js");
+      const { getPool } = await import("#common/db/pool.js");
       await getPool().end();
       await db.drop();
     },

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { connectionProbe } from "../../src/modules/admin/llm-providers/application/connection-probe.js";
-import { LlmProvidersService } from "../../src/modules/admin/llm-providers/application/llm-providers.service.js";
-import type { LlmProviderRecord } from "../../src/modules/admin/llm-providers/domain/llm-provider.js";
-import type { LlmProviderRepository } from "../../src/modules/admin/llm-providers/domain/llm-provider.repository.js";
-import type { ProviderCatalog } from "../../src/modules/admin/llm-providers/domain/provider-catalog.js";
+import { connectionProbe } from "#modules/admin/llm-providers/application/connection-probe.js";
+import { LlmProvidersService } from "#modules/admin/llm-providers/application/llm-providers.service.js";
+import type { LlmProviderRecord } from "#modules/admin/llm-providers/domain/llm-provider.js";
+import type { LlmProviderRepository } from "#modules/admin/llm-providers/domain/llm-provider.repository.js";
+import type { ProviderCatalog } from "#modules/admin/llm-providers/domain/provider-catalog.js";
 
 describe("connectionProbe", () => {
   it("uses Bearer auth on /models for OpenAI-style APIs", () => {

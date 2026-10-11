@@ -5,8 +5,8 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
-import { IS_PUBLIC_KEY, PERMISSION_KEY } from "../../../../common/auth/decorators.js";
-import { passesCsrfCheck, sessionToken } from "../../../../common/auth/session-cookie.js";
+import { IS_PUBLIC_KEY, PERMISSION_KEY } from "#common/auth/decorators.js";
+import { passesCsrfCheck, sessionToken } from "#common/auth/session-cookie.js";
 import { AuthService, type SessionUser } from "../application/auth.service.js";
 
 /** Request carrying the authenticated session user (set by AuthGuard). */

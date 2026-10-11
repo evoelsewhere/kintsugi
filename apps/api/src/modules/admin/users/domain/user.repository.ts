@@ -1,8 +1,8 @@
 // Port of members. Implemented by infrastructure adapters; the application layer
 // depends only on this contract.
 
-import type { Page, PageQuery } from "../../../../common/application/pagination.js";
-import type { PasswordHash } from "../../../../common/security/password.js";
+import type { Page, PageQuery } from "#common/application/pagination.js";
+import type { PasswordHash } from "#common/security/password.js";
 import type { CreateUser, UpdateUser, UserRecord } from "./user.js";
 
 export abstract class UserRepository {

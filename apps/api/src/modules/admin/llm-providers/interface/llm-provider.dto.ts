@@ -6,7 +6,7 @@
 import type { ThinkingLevel } from "@kintsugi/domain";
 import type { AgentModelBinding } from "@kintsugi/runtime-sdk";
 import { z } from "zod";
-import { idSchema } from "../../../../common/interface/dto.js";
+import { idSchema } from "#common/interface/dto.js";
 import type { RegisterLlmProvider } from "../domain/llm-provider.js";
 
 const providerIdSchema = idSchema;

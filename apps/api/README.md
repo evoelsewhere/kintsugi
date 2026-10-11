@@ -83,24 +83,26 @@ Rules (enforced by review — see AGENTS.md):
 
 ## Shared kernel (`src/common/`)
 
+Import it through the `#common/*` alias (Node subpath imports in `package.json`), for example `import { CrudService } from "#common/application/crud.service.js"`, and another module's exports through `#modules/*`. Relative imports stay within a feature module; lint rejects any that climb two or more folders.
+
 | Piece | Import | Use |
 |---|---|---|
-| `Repository<T, C>` | `common/domain/repository.js` | base of every feature port |
-| `newId()` | `common/domain/ids.js` | stable record ids |
-| `CrudService<T, C>` | `common/application/crud.service.js` | base of every feature service |
-| `Page<T>`, `PageQuery`, `toPage()` | `common/application/pagination.js` | pagination payload |
-| `InMemoryRepository<T, C>` | `common/infrastructure/in-memory.repository.js` | dev adapter base |
-| `idSchema`, `stringField()` | `common/interface/dto.js` | zod helpers for request schemas |
-| `pageQuerySchema`, `parsePageQuery()` | `common/interface/pagination.js` | `?limit&offset` query schema |
-| `ok()`, `ResponseInterceptor`, `ApiSuccess<T>` | `common/interface/response.js` | uniform response envelope |
-| `sleep()`, `retry()`, `chunk()` | `common/util/async.js` | async utilities |
-| `nowIso()` | `common/util/time.js` | one clock format (ISO-8601 UTC) |
-| `getPool`, `ensureSchema` | `common/db/pool.js` | Postgres access + migrations (advisory-locked) |
-| `withTransaction`, `Queryable` | `common/db/pool.js` | one unit of work across several statements |
-| `@Public()`, `@RequirePermission()`, `@CurrentActor()`, `Actor` | `common/auth/decorators.js` | route access + the caller passed to use cases |
-| `sessionToken`, `setSessionCookie`, `CSRF_HEADER` | `common/auth/session-cookie.js` | session transport (cookie or bearer) + CSRF rule |
+| `Repository<T, C>` | `#common/domain/repository.js` | base of every feature port |
+| `newId()` | `#common/domain/ids.js` | stable record ids |
+| `CrudService<T, C>` | `#common/application/crud.service.js` | base of every feature service |
+| `Page<T>`, `PageQuery`, `toPage()` | `#common/application/pagination.js` | pagination payload |
+| `InMemoryRepository<T, C>` | `#common/infrastructure/in-memory.repository.js` | dev adapter base |
+| `idSchema`, `stringField()` | `#common/interface/dto.js` | zod helpers for request schemas |
+| `pageQuerySchema`, `parsePageQuery()` | `#common/interface/pagination.js` | `?limit&offset` query schema |
+| `ok()`, `ResponseInterceptor`, `ApiSuccess<T>` | `#common/interface/response.js` | uniform response envelope |
+| `sleep()`, `retry()`, `chunk()` | `#common/util/async.js` | async utilities |
+| `nowIso()` | `#common/util/time.js` | one clock format (ISO-8601 UTC) |
+| `getPool`, `ensureSchema` | `#common/db/pool.js` | Postgres access + migrations (advisory-locked) |
+| `withTransaction`, `Queryable` | `#common/db/pool.js` | one unit of work across several statements |
+| `@Public()`, `@RequirePermission()`, `@CurrentActor()`, `Actor` | `#common/auth/decorators.js` | route access + the caller passed to use cases |
+| `sessionToken`, `setSessionCookie`, `CSRF_HEADER` | `#common/auth/session-cookie.js` | session transport (cookie or bearer) + CSRF rule |
 | `encryptSecret`, `decryptSecret` | `@kintsugi/secrets` | AES-256-GCM with `KINTSUGI_SECRET_KEY` (shared with services/runtime) |
-| `HttpExceptionFilter` | `common/filters/…` | uniform error envelope |
+| `HttpExceptionFilter` | `#common/filters/…` | uniform error envelope |
 
 If two modules need the same logic, it belongs in `common/` (or in `@kintsugi/domain`
 when it is vocabulary or pure domain logic).

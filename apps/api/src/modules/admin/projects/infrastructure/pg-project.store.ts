@@ -4,7 +4,7 @@
 import { Injectable } from "@nestjs/common";
 import type { Disposition, RepositoryRole } from "@kintsugi/domain";
 import type { Pool } from "pg";
-import { getPool, withTransaction } from "../../../../common/db/pool.js";
+import { getPool, withTransaction } from "#common/db/pool.js";
 import {
   type ApplicationRecord,
   type CreateApplication,

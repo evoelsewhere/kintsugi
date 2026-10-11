@@ -2,8 +2,8 @@
 // Depends on the domain ports only; knows nothing about HTTP, Postgres or the git CLI.
 
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Page, PageQuery } from "../../../../common/application/pagination.js";
-import { toPage } from "../../../../common/application/pagination.js";
+import type { Page, PageQuery } from "#common/application/pagination.js";
+import { toPage } from "#common/application/pagination.js";
 import {
   type GitRepositoryRecord,
   type GitServerRecord,

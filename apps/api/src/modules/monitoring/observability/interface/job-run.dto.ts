@@ -2,7 +2,7 @@
 // Schema; validated by `StandardSchemaValidationPipe`).
 
 import { z } from "zod";
-import { stringField } from "../../../../common/interface/dto.js";
+import { stringField } from "#common/interface/dto.js";
 import type { UpdateJobRun } from "../application/job-runs.service.js";
 import type { CreateJobRun } from "../domain/job-run.js";
 

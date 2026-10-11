@@ -1,7 +1,7 @@
 // A Git server's credential is only ever sent to its own host (ADR-0025).
 
 import { describe, expect, it } from "vitest";
-import { pinnedHosts, remoteLocation, repositoryUrlProblem } from "../../src/modules/admin/git/domain/git.js";
+import { pinnedHosts, remoteLocation, repositoryUrlProblem } from "#modules/admin/git/domain/git.js";
 
 describe("remote locations", () => {
   it("reads https, ssh and scp-like URLs", () => {

@@ -3,7 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
-import { getPool } from "../../../../common/db/pool.js";
+import { getPool } from "#common/db/pool.js";
 import { SESSION_TTL_SECONDS, SessionRepository } from "../domain/session.repository.js";
 
 export function hashToken(token: string): string {

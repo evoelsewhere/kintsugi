@@ -21,6 +21,7 @@ Kintsugi is a TypeScript monorepo (pnpm + Turborepo) for an AI-driven migration 
 
 - Feature modules follow the DDD anatomy in [`apps/api/README.md`](apps/api/README.md): `domain/` (entity + port), `application/` (use cases), `infrastructure/` (adapters), `interface/` (controllers + zod DTOs), plus the `<feature>.module.ts` wiring.
 - Dependencies point **inward only**: `interface → application → domain`; `infrastructure` implements `domain` ports. Never import `interface` from `application`/`domain`, never import another module's internals — use its module exports.
+- Import the shared kernel as `#common/*` and other modules' exports as `#modules/*` (the portal uses `@/*`); never climb two or more folders with `../../` (lint enforces it).
 - Reuse the shared kernel in `apps/api/src/common/` (`Repository`, `CrudService`, `InMemoryRepository`, zod helpers, pagination, response envelope, `retry`/`sleep`/`chunk`, `nowIso`, Postgres pool, secret crypto). If two modules need the same logic, it goes to `common/` or `@kintsugi/domain` — never duplicated per module.
 - **Common-first, both directions**: before implementing anything reusable (≥2 call sites, extensible by design), build the common piece first and implement on top of it. Before writing any logic, scan `common/` and `@kintsugi/domain` — if something fits, use it instead of writing new code.
 - Every response uses the uniform envelope: `{ success: true, data }` / `{ success: false, statusCode, error, message, timestamp, path }`. Controllers return plain values; do not hand-wrap responses.

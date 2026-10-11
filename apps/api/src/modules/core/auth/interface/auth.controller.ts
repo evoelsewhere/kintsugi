@@ -5,9 +5,9 @@ import { Body, Controller, Get, HttpCode, Post, Req, Res } from "@nestjs/common"
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
-import { Public } from "../../../../common/auth/decorators.js";
-import { clearSessionCookie, sessionToken, setSessionCookie } from "../../../../common/auth/session-cookie.js";
-import { loadEnv } from "../../../../common/config/env.js";
+import { Public } from "#common/auth/decorators.js";
+import { clearSessionCookie, sessionToken, setSessionCookie } from "#common/auth/session-cookie.js";
+import { loadEnv } from "#common/config/env.js";
 import { AuthService, type SessionUser } from "../application/auth.service.js";
 import { SESSION_TTL_SECONDS } from "../domain/session.repository.js";
 import type { AuthenticatedRequest } from "./auth.guard.js";

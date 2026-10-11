@@ -3,8 +3,8 @@
 
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { AgentModelBinding, CustomModelConfig } from "@kintsugi/runtime-sdk";
-import type { Page, PageQuery } from "../../../../common/application/pagination.js";
-import { toPage } from "../../../../common/application/pagination.js";
+import type { Page, PageQuery } from "#common/application/pagination.js";
+import { toPage } from "#common/application/pagination.js";
 import type { LlmProviderRecord, ProviderConfigInput, ProviderKind, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";

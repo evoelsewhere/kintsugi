@@ -2,7 +2,7 @@
 
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
-import { getPool, withTransaction } from "../../../../common/db/pool.js";
+import { getPool, withTransaction } from "#common/db/pool.js";
 import type { CreateSubRole, PermissionRecord, RoleRecord } from "../domain/role.js";
 import { RoleRepository } from "../domain/role.repository.js";
 

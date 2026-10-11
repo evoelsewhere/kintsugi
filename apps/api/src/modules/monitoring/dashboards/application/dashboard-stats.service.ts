@@ -2,7 +2,7 @@
 // (common/application/crud.service.ts) — add module-specific use cases here.
 
 import { Injectable } from "@nestjs/common";
-import { CrudService } from "../../../../common/application/crud.service.js";
+import { CrudService } from "#common/application/crud.service.js";
 import type { CreateDashboardStat, DashboardStat } from "../domain/dashboard-stat.js";
 import { DashboardStatRepository } from "../domain/dashboard-stat.repository.js";
 

@@ -2,10 +2,10 @@
 // The first admin comes from KINTSUGI_BOOTSTRAP_ADMIN_* — there is no default password.
 
 import { HttpException, HttpStatus, Injectable, OnApplicationBootstrap, UnauthorizedException } from "@nestjs/common";
-import { loadBootstrapAdmin } from "../../../../common/config/env.js";
-import type { UserRecord } from "../../../admin/users/domain/user.js";
-import { UsersService } from "../../../admin/users/application/users.service.js";
-import { RolesService } from "../../../admin/roles/application/roles.service.js";
+import { loadBootstrapAdmin } from "#common/config/env.js";
+import type { UserRecord } from "#modules/admin/users/domain/user.js";
+import { UsersService } from "#modules/admin/users/application/users.service.js";
+import { RolesService } from "#modules/admin/roles/application/roles.service.js";
 import { SessionRepository } from "../domain/session.repository.js";
 import { LoginThrottle } from "./login-throttle.js";
 

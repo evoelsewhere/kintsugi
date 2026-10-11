@@ -3,7 +3,7 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { RequirePermission } from "../../../../common/auth/decorators.js";
+import { RequirePermission } from "#common/auth/decorators.js";
 import type { CutoverChecklist } from "../domain/cutover-checklist.js";
 import { CutoverChecklistsService } from "../application/cutover-checklists.service.js";
 import {

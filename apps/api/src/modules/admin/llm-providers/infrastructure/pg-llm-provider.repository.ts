@@ -6,8 +6,8 @@ import { Injectable, type OnApplicationBootstrap } from "@nestjs/common";
 import type { AgentModelBinding, CustomModelConfig, LlmProviderConfig, SecretRef } from "@kintsugi/runtime-sdk";
 import type { ThinkingLevel } from "@kintsugi/domain";
 import type { Pool } from "pg";
-import { getPool, type Queryable, withTransaction } from "../../../../common/db/pool.js";
-import { readSecret, type SecretTable, secretExists, storeSecret } from "../../../../common/db/secret-store.js";
+import { getPool, type Queryable, withTransaction } from "#common/db/pool.js";
+import { readSecret, type SecretTable, secretExists, storeSecret } from "#common/db/secret-store.js";
 import type { LlmProviderRecord, ProviderConfigInput, ProviderCredentials, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 

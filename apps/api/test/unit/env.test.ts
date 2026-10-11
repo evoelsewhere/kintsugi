@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { loadBootstrapAdmin, loadEnv } from "../../src/common/config/env.js";
+import { loadBootstrapAdmin, loadEnv } from "#common/config/env.js";
 
 const saved = { ...process.env };
 afterEach(() => {
