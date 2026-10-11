@@ -18,6 +18,11 @@ Responsibilities beyond the feature modules below:
 - Admin → Projects → document writes: publishing `kintsugi.yaml` records a write in
   `workflow.document_write` (migration `009_document_writes.sql`) and enqueues it on the
   worker's `document-write` queue; only the worker commits to the document repo (ADR-0019).
+- Delivery → runtime jobs: `POST /api/projects/:id/applications/:appId/stages/assess/run`
+  (`jobs.run`) records a stage run in `workflow.job_run` (migration `010_job_runs.sql`) and
+  enqueues it on the worker's `job-run` queue; the worker runs it in a job workspace (ADR-0029).
+  `GET /api/projects/:id/job-runs[/:runId]` shows runs, steps, artifacts and the document write;
+  `GET …/job-runs/:runId/restricted` (`restricted.read`) decrypts the restricted records.
 
 ## Layout
 
