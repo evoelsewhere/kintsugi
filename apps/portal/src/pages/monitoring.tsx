@@ -1,6 +1,6 @@
 // Monitoring — live state across all projects, refreshing on its own: job runs (status and
 // project filters, durations, the agent or script that ran), the sync status of every
-// registered repository, document writes, and the worker's queues.
+// registered repository, document writes, and the workers (heartbeats) and their queues.
 // URL: /monitoring?tab=runs|repositories|writes|worker&status=<filter>
 
 import { Activity, FolderGit2, GitCommitHorizontal, Play, RefreshCw } from "lucide-react";
@@ -11,7 +11,7 @@ import { DocumentWriteList } from "@/components/document-write-list";
 import { JobRunList } from "@/components/job-runs/job-run-list";
 import { Loaded } from "@/components/loaded";
 import { PageHeading } from "@/components/page-heading";
-import { SyncStatusBadge } from "@/components/status-badges";
+import { SyncStatusBadge, WorkerStateBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -20,7 +20,7 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { Chips, Tabs } from "@/components/ui/tabs";
 import type { Page } from "@/lib/api";
 import { type JobRunStatus, type JobRunView, jobRunsApi } from "@/lib/api/job-runs";
-import { type DocumentWriteStatus, type MonitoredRepository, monitoringApi } from "@/lib/api/monitoring";
+import { type DocumentWriteStatus, type MonitoredRepository, monitoringApi, type WorkerStatus } from "@/lib/api/monitoring";
 import { projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatRelative, shortSha } from "@/lib/format";
@@ -325,14 +325,23 @@ const QUEUE_PURPOSE: Record<string, string> = {
 
 function WorkerView(): React.JSX.Element {
   const overview = useLoader("overview", monitoringApi.overview, { refresh: () => 10000 });
+  const workers = useLoader("monitoring/workers", monitoringApi.workers, { refresh: () => 10000 });
   return (
     <Card>
       <CardHeader>
         <div>
           <CardTitle>Worker</CardTitle>
-          <CardDescription>The worker publishes no heartbeat; its state is judged from its queues and how long queued runs wait.</CardDescription>
+          <CardDescription>Each worker process sends a heartbeat every 15 seconds; a worker not seen for 45 seconds is reported as not running.</CardDescription>
         </div>
-        <Button size="icon" variant="ghost" aria-label="Refresh worker state" onClick={() => void overview.reload()}>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label="Refresh worker state"
+          onClick={() => {
+            void overview.reload();
+            void workers.reload();
+          }}
+        >
           <RefreshCw className="size-4" />
         </Button>
       </CardHeader>
@@ -364,6 +373,9 @@ function WorkerView(): React.JSX.Element {
                     </p>
                   </div>
                 </div>
+                <Loaded loader={workers} rows={2}>
+                  {(list) => <WorkerTable workers={list} />}
+                </Loaded>
                 {data.worker.queues === null ? (
                   <EmptyState icon={Activity} title="Queue counts unavailable" description="The API could not read the job queue. Runs and writes are still listed in the other tabs." />
                 ) : (
@@ -397,5 +409,52 @@ function WorkerView(): React.JSX.Element {
         </Loaded>
       </div>
     </Card>
+  );
+}
+
+function WorkerTable({ workers }: { workers: WorkerStatus[] }): React.JSX.Element {
+  if (workers.length === 0) {
+    return <EmptyState icon={Activity} title="No worker has reported yet" description="Start kintsugi-worker; it appears here within 15 seconds." />;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-left text-[13px]">
+        <thead className="text-[11px] tracking-wide text-text-muted uppercase">
+          <tr>
+            <th className="py-1.5 pr-2 font-normal">Worker</th>
+            <th className="px-2 py-1.5 font-normal">State</th>
+            <th className="px-2 py-1.5 font-normal">Last heartbeat</th>
+            <th className="px-2 py-1.5 font-normal">Started</th>
+            <th className="px-2 py-1.5 text-right font-normal">Active jobs</th>
+            <th className="py-1.5 pl-2 font-normal">Queues</th>
+          </tr>
+        </thead>
+        <tbody>
+          {workers.map((worker) => (
+            <tr key={worker.workerId} className="align-top [box-shadow:0_-1px_0_rgba(0,0,0,0.06)]">
+              <td className="py-2 pr-2">
+                <p className="text-text">
+                  {worker.host} <span className="text-text-muted">· pid {worker.pid}</span>
+                </p>
+                <p className="font-mono text-[11px] text-text-muted" title={worker.workerId}>
+                  {worker.version} · {worker.workerId.slice(0, 8)}
+                </p>
+              </td>
+              <td className="px-2 py-2">
+                <WorkerStateBadge state={worker.state} {...(worker.stoppedAt === undefined ? {} : { title: `Stopped ${formatDateTime(worker.stoppedAt)}` })} />
+              </td>
+              <td className="px-2 py-2 text-[12px] text-text-secondary" title={formatDateTime(worker.lastSeenAt)}>
+                {formatRelative(worker.lastSeenAt)}
+              </td>
+              <td className="px-2 py-2 text-[12px] text-text-secondary" title={formatDateTime(worker.startedAt)}>
+                {formatRelative(worker.startedAt)}
+              </td>
+              <td className="px-2 py-2 text-right tabular-nums">{worker.state === "up" ? worker.activeJobs : "—"}</td>
+              <td className="py-2 pl-2 font-mono text-[11px] text-text-secondary">{worker.queues.join(", ")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
