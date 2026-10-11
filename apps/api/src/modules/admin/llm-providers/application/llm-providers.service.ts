@@ -5,6 +5,8 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import type { AgentModelBinding, CustomModelConfig } from "@kintsugi/runtime-sdk";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
+import type { Actor } from "#common/auth/decorators.js";
 import type { LlmProviderRecord, ProviderConfigInput, ProviderKind, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";
@@ -64,11 +66,41 @@ function endpointOf(config: ProviderConfigInput | LlmProviderRecord["config"]): 
   return config.kind === "builtin" ? `builtin:${config.piProvider}` : `custom:${config.api}:${config.baseUrl.replace(/\/$/, "")}`;
 }
 
+/** The names of the credentials a command enters (never their values): `apiKey` and/or `env`. */
+function credentialFields(credentials: RegisterLlmProvider["credentials"]): string[] {
+  return [...(credentials.apiKey === undefined ? [] : ["apiKey"]), ...(credentials.env === undefined ? [] : ["env"])];
+}
+
+/** What a provider is, for the audit log: kind plus the pi provider or wire protocol (no URLs, headers or keys). */
+function providerSummary(config: ProviderConfigInput | LlmProviderRecord["config"]): Record<string, string> {
+  return config.kind === "builtin" ? { kind: config.kind, piProvider: config.piProvider } : { kind: config.kind, api: config.api };
+}
+
+/** The names of the settings a replacement changes (header and credential values are never compared or recorded). */
+function changedProviderFields(existing: LlmProviderRecord, input: RegisterLlmProvider): string[] {
+  const fields = new Set<string>(credentialFields(input.credentials));
+  if (existing.enabled !== input.enabled) fields.add("enabled");
+  const before = existing.config as unknown as Record<string, unknown>;
+  const after = input.config as unknown as Record<string, unknown>;
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (key === "auth") continue;
+    if (key === "headers") {
+      const kept = Object.keys((before.headers ?? {}) as object).sort().join("\n");
+      const entered = Object.entries((after.headers ?? {}) as Record<string, string | null>);
+      if (kept !== entered.map(([name]) => name).sort().join("\n") || entered.some(([, value]) => value !== null)) fields.add("headers");
+      continue;
+    }
+    if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) fields.add(key);
+  }
+  return [...fields].sort();
+}
+
 @Injectable()
 export class LlmProvidersService {
   constructor(
     private readonly providers: LlmProviderRepository,
     private readonly catalog: ProviderCatalog,
+    private readonly audit: AuditTrail,
   ) {}
 
   /** Providers and models this installation can call (read from the pinned pi release). */
@@ -91,13 +123,20 @@ export class LlmProvidersService {
     return toView(await this.#mustGet(id));
   }
 
-  async create(input: RegisterLlmProvider): Promise<LlmProviderView> {
+  async create(input: RegisterLlmProvider, actor: Actor): Promise<LlmProviderView> {
     const existing = await this.providers.get(input.id);
     if (existing !== undefined) throw new ConflictException(`LLM provider ${input.id} already exists`);
-    return toView(await this.providers.create(input));
+    const created = await this.providers.create(input);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.llmProviderCreate, {
+        subject: created.id,
+        detail: { ...providerSummary(input.config), enabled: created.enabled, credentials: credentialFields(input.credentials) },
+      }),
+    );
+    return toView(created);
   }
 
-  async replace(id: string, input: RegisterLlmProvider): Promise<LlmProviderView> {
+  async replace(id: string, input: RegisterLlmProvider, actor: Actor): Promise<LlmProviderView> {
     const existing = await this.#mustGet(id);
     const hasNewCredentials = input.credentials.apiKey !== undefined || input.credentials.env !== undefined;
     // A stored credential stays bound to the endpoint it was entered for; otherwise
@@ -112,22 +151,34 @@ export class LlmProvidersService {
     }
     const updated = await this.providers.replace(id, input);
     if (updated === undefined) throw new NotFoundException(`LLM provider ${id} not found`);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.llmProviderUpdate, { subject: id, detail: { ...providerSummary(input.config), fields: changedProviderFields(existing, input) } }),
+    );
     return toView(updated);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actor: Actor): Promise<void> {
+    const existing = await this.providers.get(id);
     if (!(await this.providers.remove(id))) throw new NotFoundException(`LLM provider ${id} not found`);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.llmProviderDelete, { subject: id, ...(existing === undefined ? {} : { detail: providerSummary(existing.config) }) }),
+    );
   }
 
   listBindings(): Promise<AgentModelBinding[]> {
     return this.providers.listBindings();
   }
 
-  async replaceBindings(bindings: AgentModelBinding[]): Promise<AgentModelBinding[]> {
+  async replaceBindings(bindings: AgentModelBinding[], actor: Actor): Promise<AgentModelBinding[]> {
     for (const binding of bindings) {
       await this.#mustGet(binding.provider);
     }
     await this.providers.replaceBindings(bindings);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.modelBindingsSave, {
+        detail: { bindings: bindings.map((binding) => (binding.projectId === undefined ? binding.agent : `${binding.agent}@${binding.projectId}`)) },
+      }),
+    );
     return this.providers.listBindings();
   }
 

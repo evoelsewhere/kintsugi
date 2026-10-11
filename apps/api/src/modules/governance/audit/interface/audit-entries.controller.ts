@@ -16,16 +16,24 @@ export class AuditEntriesController {
   constructor(private readonly audit: AuditService) {}
 
   @Get()
-  @ApiOperation({ summary: "List audit entries, newest first (filter by action, subject, project)" })
+  @ApiOperation({ summary: "List audit entries, newest first (filter by actions, actor, subject, project)" })
   @ApiOkResponse({ description: "A page of audit entries." })
   list(@Query({ schema: listAuditQuerySchema }) query: ListAuditQuery): Promise<Page<AuditEntry>> {
     return this.audit.list({
       limit: query.limit,
       offset: query.offset,
-      ...(query.action === undefined ? {} : { action: query.action }),
+      ...(query.action === undefined ? {} : { actions: query.action }),
+      ...(query.actor === undefined ? {} : { actor: query.actor }),
       ...(query.subject === undefined ? {} : { subject: query.subject }),
       ...(query.projectId === undefined ? {} : { projectId: query.projectId }),
     });
+  }
+
+  @Get("actions")
+  @ApiOperation({ summary: "List the actions the audit log records (for filters)" })
+  @ApiOkResponse({ description: "The action names, sorted." })
+  actions(): readonly string[] {
+    return this.audit.actions();
   }
 
   @Get(":id")

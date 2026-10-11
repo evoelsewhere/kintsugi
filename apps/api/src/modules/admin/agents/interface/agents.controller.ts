@@ -28,7 +28,6 @@ import {
 import type { z } from "zod";
 
 const MANAGE = "agents.manage";
-const actorName = (actor: Actor): string => actor.username ?? actor.id;
 
 @ApiTags("admin · agents")
 @Controller("admin/agents")
@@ -63,7 +62,7 @@ export class AgentsController {
   @ApiOperation({ summary: "Import a package (files, or a base64 ZIP): a new agent or a new version of a custom one" })
   @ApiCreatedResponse({ description: "Whether it was created, and the agent." })
   import(@Body({ schema: importAgentSchema }) input: ImportAgentInput, @CurrentActor() actor: Actor): Promise<{ created: boolean; agent: AgentDetail }> {
-    return this.agents.import(toImport(input), actorName(actor));
+    return this.agents.import(toImport(input), actor);
   }
 
   @Post()
@@ -71,7 +70,7 @@ export class AgentsController {
   @ApiOperation({ summary: "Create a custom agent" })
   @ApiCreatedResponse({ description: "The created agent." })
   create(@Body({ schema: agentDraftSchema }) input: AgentDraftInput, @CurrentActor() actor: Actor): Promise<AgentDetail> {
-    return this.agents.create(toDraft(input), actorName(actor));
+    return this.agents.create(toDraft(input), actor);
   }
 
   @Get(":name")
@@ -86,7 +85,7 @@ export class AgentsController {
   @ApiOperation({ summary: "Save a custom agent as a new version" })
   @ApiOkResponse({ description: "The agent at its new version." })
   update(@Param("name") name: string, @Body({ schema: agentDraftSchema }) input: AgentDraftInput, @CurrentActor() actor: Actor): Promise<AgentDetail> {
-    return this.agents.update(name, toDraft(input), actorName(actor));
+    return this.agents.update(name, toDraft(input), actor);
   }
 
   @Patch(":name")
@@ -94,7 +93,7 @@ export class AgentsController {
   @ApiOperation({ summary: "Enable or disable a custom agent" })
   @ApiOkResponse({ description: "The agent." })
   setEnabled(@Param("name") name: string, @Body({ schema: setEnabledSchema }) input: SetEnabledInput, @CurrentActor() actor: Actor): Promise<AgentDetail> {
-    return this.agents.setEnabled(name, input.enabled, actorName(actor));
+    return this.agents.setEnabled(name, input.enabled, actor);
   }
 
   @Delete(":name")
@@ -102,8 +101,8 @@ export class AgentsController {
   @RequirePermission(MANAGE)
   @ApiOperation({ summary: "Delete a custom agent and its versions" })
   @ApiNoContentResponse({ description: "The agent is deleted." })
-  async remove(@Param("name") name: string): Promise<void> {
-    await this.agents.remove(name);
+  async remove(@Param("name") name: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.agents.remove(name, actor);
   }
 
   @Post(":name/copy")
@@ -111,7 +110,7 @@ export class AgentsController {
   @ApiOperation({ summary: "Copy a built-in or custom agent into a new custom agent" })
   @ApiCreatedResponse({ description: "The new agent." })
   copy(@Param("name") name: string, @Body({ schema: copyAgentSchema }) input: CopyAgentInput, @CurrentActor() actor: Actor): Promise<AgentDetail> {
-    return this.agents.copy(name, input.name, actorName(actor));
+    return this.agents.copy(name, input.name, actor);
   }
 
   @Get(":name/definition")
@@ -152,7 +151,7 @@ export class AgentsController {
   @ApiOperation({ summary: "Make a recorded version current again" })
   @ApiOkResponse({ description: "The agent at the restored version." })
   restore(@Param("name") name: string, @Param("version") version: string, @CurrentActor() actor: Actor): Promise<AgentDetail> {
-    return this.agents.restore(name, version, actorName(actor));
+    return this.agents.restore(name, version, actor);
   }
 }
 
@@ -183,7 +182,7 @@ export class AgentSkillsController {
   @ApiOperation({ summary: "Create a custom shared skill" })
   @ApiCreatedResponse({ description: "The skill." })
   create(@Body({ schema: skillDraftSchema }) input: SkillDraftInput, @CurrentActor() actor: Actor): Promise<SharedSkillView> {
-    return this.agents.createSkill(toSkillDraft(input), actorName(actor));
+    return this.agents.createSkill(toSkillDraft(input), actor);
   }
 
   @Put(":name")
@@ -191,7 +190,7 @@ export class AgentSkillsController {
   @ApiOperation({ summary: "Replace a custom shared skill (agents that use it pick it up at their next job)" })
   @ApiOkResponse({ description: "The skill." })
   update(@Param("name") name: string, @Body({ schema: skillDraftSchema }) input: SkillDraftInput, @CurrentActor() actor: Actor): Promise<SharedSkillView> {
-    return this.agents.updateSkill(name, toSkillDraft(input), actorName(actor));
+    return this.agents.updateSkill(name, toSkillDraft(input), actor);
   }
 
   @Delete(":name")
@@ -199,7 +198,7 @@ export class AgentSkillsController {
   @RequirePermission(MANAGE)
   @ApiOperation({ summary: "Delete a custom shared skill no agent uses" })
   @ApiNoContentResponse({ description: "The skill is deleted." })
-  async remove(@Param("name") name: string): Promise<void> {
-    await this.agents.removeSkill(name);
+  async remove(@Param("name") name: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.agents.removeSkill(name, actor);
   }
 }
