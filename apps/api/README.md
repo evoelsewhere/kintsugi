@@ -12,6 +12,9 @@ Responsibilities beyond the feature modules below:
 - Admin → LLM Providers: runtime provider registry (ADR-0009).
 - Admin → Git: Git servers (encrypted credentials, pinned SSH host keys) and repositories;
   "Test access" runs `git ls-remote` through `packages/git` (ADR-0025).
+- Admin → Projects: projects, applications and the registered repositories they use,
+  grouped AS-IS (`legacy`, `legacy-data`) and TO-BE (`document`, `target` with a component),
+  plus the rendered `kintsugi.yaml` (ADR-0028, migration `008_projects.sql`).
 
 ## Layout
 
@@ -192,7 +195,7 @@ pnpm --filter @kintsugi/api test     # vitest
 ## Tests
 
 - `test/unit/`: pure units (password hashing, sign-in throttle, error filter, environment).
-- `test/integration/`: the real `AppModule`, booted like `src/main.ts` on an ephemeral port and driven over HTTP: session cookie and CSRF, guard order, lockout, member and access-role guard rails, session revocation, hash upgrades, LLM provider permissions and credential confidentiality.
+- `test/integration/`: the real `AppModule`, booted like `src/main.ts` on an ephemeral port and driven over HTTP: session cookie and CSRF, guard order, lockout, member and access-role guard rails, session revocation, hash upgrades, LLM provider permissions and credential confidentiality, Git registration, projects with their repository rules and rendered `kintsugi.yaml`.
 - Integration tests need Postgres: the server comes from `DATABASE_URL` (environment, else the repo-root `.env`). Each test file creates its own `kintsugi_api_test_*` database and drops it afterwards; the database named in `DATABASE_URL` is never touched. Without `DATABASE_URL` the integration suites are skipped.
 - NestJS injection needs decorator metadata: `vitest.config.ts` enables it in Vite's oxc transform.
 - Known gaps are pinned with `it.fails` (the test passes while the gap exists); turn them into plain `it` when fixing the gap.

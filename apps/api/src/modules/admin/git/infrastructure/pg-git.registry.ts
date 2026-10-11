@@ -17,6 +17,7 @@ import type {
   RegisterGitServer,
   SyncStatus,
 } from "../domain/git.js";
+import { RepositoryInUseError } from "../domain/git.js";
 import { GitRegistry } from "../domain/git.ports.js";
 
 const SECRETS: SecretTable = { table: "admin.git_secret", ownerColumn: "server_id" };
@@ -147,8 +148,14 @@ export class PgGitRegistry extends GitRegistry {
   }
 
   async removeRepository(id: string): Promise<boolean> {
-    const result = await this.#pool.query("delete from admin.git_repository where id = $1", [id]);
-    return (result.rowCount ?? 0) > 0;
+    try {
+      const result = await this.#pool.query("delete from admin.git_repository where id = $1", [id]);
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      // admin.project_repository references the repository (on delete restrict).
+      if ((error as { code?: string }).code === "23503") throw new RepositoryInUseError(`Repository ${id} is linked to a project; unlink it there first`);
+      throw error;
+    }
   }
 
   async #storeCredential(db: Queryable, serverId: string, authType: GitAuthType, credential: GitServerCredential): Promise<void> {

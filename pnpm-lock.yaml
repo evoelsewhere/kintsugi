@@ -41,6 +41,9 @@ importers:
       '@kintsugi/git':
         specifier: workspace:*
         version: link:../../packages/git
+      '@kintsugi/manifest':
+        specifier: workspace:*
+        version: link:../../packages/manifest
       '@kintsugi/runtime':
         specifier: workspace:*
         version: link:../../services/runtime
