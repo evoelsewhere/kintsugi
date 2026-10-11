@@ -2,7 +2,7 @@
 // the domain port. Repositories come from the Git module (Settings -> Git).
 
 import { Module } from "@nestjs/common";
-import { GitModule } from "../git/git.module.js";
+import { GitModule } from "#modules/admin/git/index.js";
 import { ProjectsService } from "./application/projects.service.js";
 import { ProjectStore } from "./domain/project.store.js";
 import { PgProjectStore } from "./infrastructure/pg-project.store.js";

@@ -3,9 +3,9 @@
 
 import { HttpException, HttpStatus, Injectable, OnApplicationBootstrap, UnauthorizedException } from "@nestjs/common";
 import { loadBootstrapAdmin } from "#common/config/env.js";
-import type { UserRecord } from "#modules/admin/users/domain/user.js";
-import { UsersService } from "#modules/admin/users/application/users.service.js";
-import { RolesService } from "#modules/admin/roles/application/roles.service.js";
+import type { UserRecord } from "#modules/admin/users/index.js";
+import { UsersService } from "#modules/admin/users/index.js";
+import { RolesService } from "#modules/admin/roles/index.js";
 import { SessionRepository } from "../domain/session.repository.js";
 import { LoginThrottle } from "./login-throttle.js";
 

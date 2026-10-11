@@ -40,6 +40,21 @@ export default tseslint.config(
     },
   },
   {
+    // Another API module is reached only through its public surface (index.ts), never its internals.
+    files: ["apps/api/src/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { regex: "^(\\.\\./){2,}", message: "Import through #common/* or #modules/* instead of climbing two or more folders." },
+            { regex: "^#modules/(?!.*/index\\.js$)", message: "Import another module only from its index.js (its public surface)." },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["apps/portal/**/*.{ts,tsx}"],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },
