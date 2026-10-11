@@ -225,6 +225,6 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     expect(stages[0]).toMatchObject({ id: "modernize", command: "modernize", audience: "portal", runnable: false });
     expect(stages.filter((stage) => stage.audience === "runtime").map((stage) => stage.id)).toEqual(["assess", "map", "extract-rules", "harden"]);
     expect(stages.find((stage) => stage.id === "assess")).toMatchObject({ command: "modernize-assess", runnable: true, agents: ["legacy-analyst", "security-auditor"] });
-    expect(stages.find((stage) => stage.id === "map")?.runnable).toBe(false);
+    expect(stages.filter((stage) => stage.runnable).map((stage) => stage.id)).toEqual(["assess", "map", "extract-rules", "harden"]);
   });
 });

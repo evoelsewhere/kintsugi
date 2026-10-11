@@ -32,9 +32,12 @@ export type JobRunFollowUpdate = { type: "event"; event: JobRunEventView } | { t
 /** Outcome of a cancel request. */
 export type CancelOutcome = "cancelled" | "requested" | "finished";
 
-/** Stages that can be run from the portal (first milestone: the minimal assess path). */
-export const RUNNABLE_STAGES = ["assess"] as const;
-export type RunnableStage = (typeof RUNNABLE_STAGES)[number];
+/** A stage the worker has a plan for (runnable from the portal), with what it needs first. */
+export interface StagePlanInfo {
+  id: string;
+  /** Document-repo files written by an earlier stage that this stage reads. */
+  requires: Array<{ stage: string; path: string }>;
+}
 
 export interface ArtifactView {
   /** Path in the document repo (relative to the job's output). */
@@ -149,7 +152,7 @@ export interface NewStageRun {
   id: string;
   projectId: string;
   applicationId: string;
-  stage: RunnableStage;
+  stage: string;
   sourceRepositoryId: string;
   actor?: string;
 }
