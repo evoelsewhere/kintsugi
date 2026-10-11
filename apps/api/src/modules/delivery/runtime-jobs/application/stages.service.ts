@@ -2,7 +2,7 @@
 // command with who runs it, and whether it can be run from the portal yet.
 
 import { Injectable } from "@nestjs/common";
-import { RUNNABLE_STAGES, type StageView } from "../domain/job-run.js";
+import type { StageView } from "../domain/job-run.js";
 import { StageCatalog } from "../domain/job-run.ports.js";
 
 @Injectable()
@@ -10,7 +10,7 @@ export class StagesService {
   constructor(private readonly catalog: StageCatalog) {}
 
   async list(): Promise<StageView[]> {
-    const runnable: readonly string[] = RUNNABLE_STAGES;
-    return (await this.catalog.list()).map((stage) => ({ ...stage, runnable: runnable.includes(stage.id) }));
+    const runnable = new Set(this.catalog.plans().map((plan) => plan.id));
+    return (await this.catalog.list()).map((stage) => ({ ...stage, runnable: runnable.has(stage.id) }));
   }
 }

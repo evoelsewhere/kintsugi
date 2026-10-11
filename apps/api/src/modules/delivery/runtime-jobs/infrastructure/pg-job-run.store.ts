@@ -113,6 +113,14 @@ export class PgJobRunStore extends JobRunStore {
     return toView(result.rows[0]!);
   }
 
+  async hasStageRun(projectId: string, applicationId: string, stage: string, statuses: readonly JobRunStatus[]): Promise<boolean> {
+    const result = await this.#pool.query(
+      "select 1 from workflow.job_run where project_id = $1 and application_id = $2 and kind = 'stage' and name = $3 and parent_id is null and status = any($4) limit 1",
+      [projectId, applicationId, stage, [...statuses]],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async list(projectId: string, applicationId: string | undefined, limit: number, offset: number): Promise<{ items: JobRunView[]; total: number }> {
     const filter = "r.project_id = $1 and r.parent_id is null and ($2::text is null or r.application_id = $2)";
     const [rows, count] = await Promise.all([

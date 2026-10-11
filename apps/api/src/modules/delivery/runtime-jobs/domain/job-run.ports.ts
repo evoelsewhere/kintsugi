@@ -7,11 +7,13 @@ import type {
   JobRunEventView,
   JobRunFilter,
   JobRunView,
+  JobRunStatus,
   NewStageRun,
   RestrictedRecordFilter,
   RestrictedRecordSummary,
   RestrictedRecordView,
   StageDefinition,
+  StagePlanInfo,
 } from "./job-run.js";
 
 export abstract class JobRunStore {
@@ -36,6 +38,8 @@ export abstract class JobRunStore {
   abstract cancel(projectId: string, id: string, actor: string): Promise<CancelOutcome>;
   /** Events of a run after the given event id, oldest first. */
   abstract events(id: string, afterId: string | undefined, limit: number): Promise<JobRunEventView[]>;
+  /** Whether the application has a top-level run of `stage` in one of `statuses`. */
+  abstract hasStageRun(projectId: string, applicationId: string, stage: string, statuses: readonly JobRunStatus[]): Promise<boolean>;
   /** Marks a run failed before it reached the worker. */
   abstract markFailed(id: string, reason: string): Promise<void>;
 }
@@ -48,4 +52,6 @@ export abstract class JobRunQueue {
 export abstract class StageCatalog {
   /** The pipeline stages, in pipeline order. */
   abstract list(): Promise<StageDefinition[]>;
+  /** The stages the worker has a plan for, prerequisites filled for `applicationId` when given. */
+  abstract plans(applicationId?: string): StagePlanInfo[];
 }

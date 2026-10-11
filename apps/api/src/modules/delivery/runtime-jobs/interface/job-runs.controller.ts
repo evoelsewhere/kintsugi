@@ -20,7 +20,7 @@ export class JobRunsController {
   @RequirePermission("jobs.run")
   @Post("applications/:appId/stages/:stage/run")
   @HttpCode(202)
-  @ApiOperation({ summary: "Run a pipeline stage for an application (queued; first milestone: assess)" })
+  @ApiOperation({ summary: "Run a pipeline stage for an application (queued); 409 when it cannot start yet" })
   @ApiAcceptedResponse({ description: "The queued stage run." })
   run(@Param("id") id: string, @Param("appId") appId: string, @Param("stage") stage: string, @CurrentActor() actor: Actor): Promise<JobRunView> {
     return this.runs.runStage(id, appId, stage, actor);

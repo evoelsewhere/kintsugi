@@ -69,6 +69,18 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     const noLegacy = await admin.request("POST", "/projects/billing/applications/batch/stages/assess/run");
     expect(noLegacy.status).toBe(409);
     expect(noLegacy.body.message).toMatch(/no legacy repository/);
+
+    // One run of a stage at a time per application.
+    const again = await admin.request("POST", "/projects/billing/applications/web/stages/assess/run");
+    expect(again.status).toBe(409);
+    expect(again.body.message).toMatch(/already queued or running/);
+
+    // map and extract-rules read the assessment: assess must have succeeded first.
+    for (const stage of ["map", "extract-rules"]) {
+      const early = await admin.request("POST", `/projects/billing/applications/web/stages/${stage}/run`);
+      expect(early.status).toBe(409);
+      expect(early.body.message).toBe(`Run assess for web first: ${stage} reads assessment/web/ASSESSMENT.md, which assess writes (merge its pull request before running ${stage})`);
+    }
   });
 
   it("shows the worker's record: steps, artifacts, document write and restricted records", async () => {
@@ -88,6 +100,12 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     expect(detail.artifacts).toEqual([{ path: "assessment/web/ASSESSMENT.md", sha256: "abc", size: 12, provenance: { origin: "runtime-agent" } }]);
     expect(JSON.stringify(detail)).not.toContain("hu**");
     expect((await admin.get("/projects/billing/job-runs/missing")).status).toBe(404);
+
+    // With assess succeeded, map can start; harden needs nothing first.
+    const map = await admin.request<RunView>("POST", "/projects/billing/applications/web/stages/map/run");
+    expect(map.status).toBe(202);
+    expect(map.body.data).toMatchObject({ kind: "stage", name: "map", status: "queued" });
+    await app.db.query("update workflow.job_run set status = 'cancelled' where id = $1", [map.body.data!.id]);
   });
 
   it("restricted records need restricted.read", async () => {

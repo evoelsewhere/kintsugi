@@ -16,17 +16,15 @@ import {
   type JobRunFilter,
   type JobRunFollowUpdate,
   type JobRunView,
-  RUNNABLE_STAGES,
   type RestrictedRecordFilter,
   type RestrictedRecordSummary,
   type RestrictedRecordView,
-  type RunnableStage,
 } from "../domain/job-run.js";
 
 /** How often a follower looks for new events, and how many it takes at a time. */
 const FOLLOW_POLL_MS = 1000;
 const FOLLOW_BATCH = 200;
-import { JobRunQueue, JobRunStore } from "../domain/job-run.ports.js";
+import { JobRunQueue, JobRunStore, StageCatalog } from "../domain/job-run.ports.js";
 
 @Injectable()
 export class JobRunsService {
@@ -35,12 +33,20 @@ export class JobRunsService {
     private readonly queue: JobRunQueue,
     private readonly projects: ProjectsService,
     private readonly audit: AuditService,
+    private readonly stages: StageCatalog,
   ) {}
 
-  /** Starts a stage for one application: records the run as `queued` and enqueues it. */
+  /**
+   * Starts a stage for one application: records the run as `queued` and enqueues it. 409 when
+   * the stage cannot start: no document or legacy repository, a run of it already queued or
+   * running, or an earlier stage it reads has never succeeded for the application. (Whether that
+   * stage's output is merged on the document repo's default branch is checked by the worker.)
+   */
   async runStage(projectId: string, applicationId: string, stage: string, actor: Actor): Promise<JobRunView> {
-    if (!(RUNNABLE_STAGES as readonly string[]).includes(stage)) {
-      throw new BadRequestException(`Stage "${stage}" cannot be run yet (available: ${RUNNABLE_STAGES.join(", ")})`);
+    const plans = this.stages.plans(applicationId);
+    const plan = plans.find((entry) => entry.id === stage);
+    if (plan === undefined) {
+      throw new BadRequestException(`Stage "${stage}" cannot be run yet (available: ${plans.map((entry) => entry.id).join(", ")})`);
     }
     const project = await this.projects.getProject(projectId);
     const application = project.applications.find((entry) => entry.id === applicationId);
@@ -48,12 +54,22 @@ export class JobRunsService {
     if (project.documentRepository === null) throw new ConflictException(`Project ${projectId} has no document repository`);
     const legacy = application.asIs.legacy[0];
     if (legacy === undefined) throw new ConflictException(`Application ${applicationId} has no legacy repository; register one on the application first`);
+    if (await this.store.hasStageRun(projectId, applicationId, stage, ["queued", "running"])) {
+      throw new ConflictException(`A ${stage} run of ${applicationId} is already queued or running; wait for it or cancel it first`);
+    }
+    for (const prerequisite of plan.requires) {
+      if (!(await this.store.hasStageRun(projectId, applicationId, prerequisite.stage, ["succeeded"]))) {
+        throw new ConflictException(
+          `Run ${prerequisite.stage} for ${applicationId} first: ${stage} reads ${prerequisite.path}, which ${prerequisite.stage} writes (merge its pull request before running ${stage})`,
+        );
+      }
+    }
 
     const run = await this.store.createStageRun({
       id: newId(),
       projectId,
       applicationId,
-      stage: stage as RunnableStage,
+      stage,
       sourceRepositoryId: legacy.repositoryId,
       actor: actor.username ?? actor.id,
     });
