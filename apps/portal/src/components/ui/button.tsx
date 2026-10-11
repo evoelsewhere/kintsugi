@@ -12,7 +12,7 @@ const buttonVariants = cva(
         /* Default: fully transparent, hover fills gray and promotes text */
         ghost: "bg-transparent text-text-secondary hover:bg-hover hover:text-text",
         /* Primary: solid near-black */
-        solid: "bg-text text-background hover:bg-[#000000]",
+        solid: "bg-text text-background hover:bg-[#000000] disabled:bg-hover",
         /* Destructive: ghost-style with red label (status colors are never large fills) */
         danger: "bg-transparent text-[var(--ds-status-red)] hover:bg-hover",
         /* Link-like */
