@@ -1,0 +1,107 @@
+// Job runs through the worker (integration): a queued assess stage on the `job-run` queue,
+// run against a real Git remote and a throwaway database with the mock agent backend; the
+// Postgres store records the steps, artifacts and the encrypted restricted record, and the
+// stage's output lands in the document repo through the writer.
+
+import { randomBytes, randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CheckoutStorage } from "@kintsugi/git";
+import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
+import { decryptSecret } from "@kintsugi/secrets";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { startWorker } from "../src/worker.js";
+import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
+import { writingAgentRuntime } from "./support/jobs.js";
+
+describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () => {
+  let db: TestDatabase;
+  let remote: GitHttpServer;
+  let dataDir: string;
+
+  beforeAll(async () => {
+    process.env["KINTSUGI_SECRET_KEY"] ??= randomBytes(32).toString("base64");
+    db = await createTestDatabase();
+    remote = await startGitHttpServer();
+    dataDir = await mkdtemp(join(tmpdir(), "kintsugi-job-runs-data-"));
+    await remote.createRepository("legacy");
+    await remote.commit("legacy", "main.c", "int main(void) { if (1) return 0; return 1; }\n");
+    await remote.createRepository("docs");
+    await db.pool.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('plain', 'plain-git', 'plain', $1, 'none')", [remote.baseUrl]);
+    for (const id of ["legacy", "docs"]) {
+      await db.pool.query("insert into admin.git_repository (id, server_id, url, default_branch) values ($1, 'plain', $2, 'main')", [id, `${remote.baseUrl}/${id}.git`]);
+    }
+    await db.pool.query("insert into admin.project (id, name) values ('demo', 'Demo')");
+    await db.pool.query("insert into admin.application (project_id, id, name, disposition) values ('demo', 'web', 'Web', 'refactor')");
+    await db.pool.query("insert into admin.project_repository (project_id, repository_id, role) values ('demo', 'docs', 'document')");
+    await db.pool.query("insert into admin.project_repository (project_id, application_id, repository_id, role) values ('demo', 'web', 'legacy', 'legacy')");
+  });
+  afterAll(async () => {
+    await remote?.close();
+    await db?.drop();
+    if (dataDir !== undefined) await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("runs a queued assess stage and hands its output to the document repo writer", async () => {
+    const agents = writingAgentRuntime({
+      "legacy-analyst": () => ({
+        "assessment/web/ASSESSMENT.md": "# Assessment of web (draft)\n",
+        "restricted/SECRETS.local.md": "| preview | location |\n| hu** | main.c:1 |\n",
+      }),
+    });
+    const storage = new CheckoutStorage(dataDir);
+    const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage, pollIntervalSeconds: 3600, botEmail: "bot@kintsugi.test", log: () => undefined, jobs: { agents } });
+    try {
+      const id = randomUUID();
+      await db.pool.query(
+        "insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor) values ($1, 'demo', 'web', 'stage', 'assess', 'legacy', 'alice')",
+        [id],
+      );
+      await worker.requestJobRun({ jobRunId: id });
+
+      const run = async (): Promise<{ status: string; failure_reason: string | null; source_commit: string | null; document_write_id: string | null }> =>
+        (await db.pool.query("select status, failure_reason, source_commit, document_write_id from workflow.job_run where id = $1", [id])).rows[0];
+      await expect.poll(async () => (await run()).status, { timeout: 60_000, interval: 250 }).not.toMatch(/queued|running/);
+      const finished = await run();
+      expect(finished).toMatchObject({ status: "succeeded", failure_reason: null, source_commit: remote.git("legacy", "rev-parse", "main").trim() });
+
+      const steps = await db.pool.query<{ id: string; kind: string; name: string; status: string; script_hash: string | null; agent: string | null }>(
+        "select id, kind, name, status, script_hash, agent from workflow.job_run where parent_id = $1 order by created_at",
+        [id],
+      );
+      expect(steps.rows.map((row) => [row.kind, row.name, row.status])).toEqual([
+        ["script", "inventory.py", "succeeded"],
+        ["agent", "legacy-analyst", "succeeded"],
+      ]);
+      expect(steps.rows[0]?.script_hash).toMatch(/^[0-9a-f]{64}$/);
+      expect(steps.rows[1]?.agent).toBe("legacy-analyst@1.0.0");
+
+      const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
+      expect(artifacts.rows.map((row) => [row.path, row.provenance.origin])).toEqual([
+        ["assessment/web/ASSESSMENT.md", "runtime-agent"],
+        ["assessment/web/inventory.json", "tool"],
+      ]);
+
+      const restricted = await db.pool.query<{ path: string; ciphertext: string; iv: string; auth_tag: string }>(
+        "select path, ciphertext, iv, auth_tag from governance.restricted_record where job_run_id = $1",
+        [steps.rows[1]!.id],
+      );
+      expect(restricted.rows).toHaveLength(1);
+      expect(restricted.rows[0]!.ciphertext).not.toContain("hu**");
+      expect(decryptSecret({ ciphertext: restricted.rows[0]!.ciphertext, iv: restricted.rows[0]!.iv, authTag: restricted.rows[0]!.auth_tag })).toContain("hu**");
+
+      // The writer commits the stage's out/ to a kintsugi/* branch (plain-git: no pull request).
+      const writeId = finished.document_write_id!;
+      await expect.poll(async () => (await db.pool.query("select status from workflow.document_write where id = $1", [writeId])).rows[0]?.status, { timeout: 30_000, interval: 250 }).toBe("committed");
+      const write = (await db.pool.query<{ branch: string; job_id: string; agent: string; actor: string }>("select branch, job_id, agent, actor from workflow.document_write where id = $1", [writeId])).rows[0]!;
+      expect(write).toMatchObject({ branch: `kintsugi/legacy-analyst/${id}`, job_id: id, agent: "legacy-analyst@1.0.0", actor: "alice" });
+      expect(remote.git("docs", "show", `${write.branch}:assessment/web/ASSESSMENT.md`)).toContain("Assessment of web");
+      expect(remote.git("docs", "show", `${write.branch}:assessment/web/inventory.json`)).toContain('"sourceFileCount"');
+      expect(() => remote.git("docs", "show", `${write.branch}:restricted/SECRETS.local.md`)).toThrow();
+      expect(remote.git("docs", "log", "-1", "--format=%(trailers:only,unfold)", write.branch).trim()).toBe(`Kintsugi-Job: ${id}\nKintsugi-Agent: legacy-analyst@1.0.0\nKintsugi-Actor: alice`);
+    } finally {
+      await worker.stop();
+    }
+  });
+});

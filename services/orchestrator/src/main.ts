@@ -1,15 +1,69 @@
-// kintsugi-worker entry point (ADR-0003, ADR-0025). Configuration is deployment
-// environment only: DATABASE_URL, KINTSUGI_SECRET_KEY (decrypts Git credentials),
-// KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL and KINTSUGI_BOT_EMAIL. Git servers and
-// repositories are configured in the portal.
+// kintsugi-worker entry point (ADR-0003, ADR-0025, ADR-0029). Configuration is deployment
+// environment only: DATABASE_URL, KINTSUGI_SECRET_KEY (decrypts Git and LLM credentials),
+// KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL, KINTSUGI_BOT_EMAIL and the job settings
+// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_*, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_WORKFLOW_*,
+// KINTSUGI_PYTHON, KINTSUGI_NODE). Git servers, repositories and LLM providers are
+// configured in the portal.
 
 import { existsSync } from "node:fs";
 import { CheckoutStorage, checkGitVersion, dataDirFromEnv } from "@kintsugi/git";
+import { createAgentRuntime } from "@kintsugi/runtime";
+import { buildModelRuntime, interpretersFromEnv, loadProvider } from "@kintsugi/runtime/launcher";
+import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { Pool } from "pg";
+import { DEFAULT_JOB_LIMITS, type JobDefaults } from "./jobs/runner.js";
 import { DEFAULT_BOT_EMAIL, startWorker } from "./worker.js";
 
 /** Local development configuration lives in .env (gitignored); the compose package passes env directly. */
 if (existsSync(".env")) process.loadEnvFile(".env");
+
+function positive(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number`);
+  return value;
+}
+
+/** Job limits from the environment, with the defaults of DEFAULT_JOB_LIMITS. */
+function jobDefaults(): JobDefaults {
+  const maxOutputBytes = positive("KINTSUGI_JOB_MAX_OUTPUT_BYTES", DEFAULT_JOB_LIMITS.agent.maxOutputBytes);
+  const maxCostUsd = process.env["KINTSUGI_JOB_MAX_COST_USD"] === undefined ? undefined : positive("KINTSUGI_JOB_MAX_COST_USD", 1);
+  return {
+    script: { timeoutSec: positive("KINTSUGI_SCRIPT_TIMEOUT", DEFAULT_JOB_LIMITS.script.timeoutSec), maxOutputBytes },
+    agent: {
+      timeoutSec: positive("KINTSUGI_JOB_DEFAULT_TIMEOUT", DEFAULT_JOB_LIMITS.agent.timeoutSec),
+      maxOutputBytes,
+      maxTurns: positive("KINTSUGI_JOB_MAX_TURNS", DEFAULT_JOB_LIMITS.agent.maxTurns ?? 80),
+      ...(maxCostUsd === undefined ? {} : { maxCostUsd }),
+    },
+    workflow: {
+      maxAgents: positive("KINTSUGI_WORKFLOW_MAX_AGENTS", DEFAULT_JOB_LIMITS.workflow.maxAgents),
+      concurrency: positive("KINTSUGI_WORKFLOW_CONCURRENCY", DEFAULT_JOB_LIMITS.workflow.concurrency),
+    },
+  };
+}
+
+/**
+ * The agent runtime: pi (default) or the mock backend (KINTSUGI_RUNTIME_MODE=mock, no LLM).
+ * pi jobs run in this process; their credentials are decrypted per job and stay in memory.
+ */
+function agentRuntime(databaseUrl: string): AgentRuntime {
+  const mode = (process.env["KINTSUGI_RUNTIME_MODE"] ?? "pi").trim();
+  if (mode === "mock") return createAgentRuntime({ mode: "mock" });
+  if (mode !== "pi") throw new Error('KINTSUGI_RUNTIME_MODE must be "pi" or "mock"');
+  return createAgentRuntime({
+    mode: "pi",
+    resolveModelRuntime: async (spec) => {
+      const { config, credentials } = await loadProvider(spec.model.provider, databaseUrl);
+      // Provider environment would have to go into this shared process; refuse rather than leak it across jobs.
+      if (Object.keys(credentials.env ?? {}).length > 0) {
+        throw new Error(`LLM provider ${spec.model.provider} uses environment credentials, which in-worker jobs do not support yet`);
+      }
+      return buildModelRuntime(config, credentials);
+    },
+  });
+}
 
 async function main(): Promise<void> {
   const databaseUrl = process.env["DATABASE_URL"];
@@ -24,8 +78,18 @@ async function main(): Promise<void> {
   const gitVersion = await checkGitVersion();
   const storage = new CheckoutStorage(dataDirFromEnv());
   const pool = new Pool({ connectionString: databaseUrl, max: 5 });
-  const worker = await startWorker({ databaseUrl, pool, storage, pollIntervalSeconds, botEmail });
+  const agents = agentRuntime(databaseUrl);
+  const interpreters = interpretersFromEnv();
+  const worker = await startWorker({
+    databaseUrl,
+    pool,
+    storage,
+    pollIntervalSeconds,
+    botEmail,
+    jobs: { agents, interpreters, defaults: jobDefaults(), concurrency: positive("KINTSUGI_JOB_MAX_CONCURRENCY", 2) },
+  });
   console.log(`[worker] git ${gitVersion}, data ${storage.root}, polling every ${pollIntervalSeconds}s, commits as kintsugi-bot <${botEmail}>`);
+  console.log(`[worker] runtime ${agents.engine}, python ${interpreters.python}, node ${interpreters.node}; jobs run in job workspaces without an OS sandbox (ADR-0029)`);
 
   const shutdown = async (): Promise<void> => {
     await worker.stop();

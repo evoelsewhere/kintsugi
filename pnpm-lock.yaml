@@ -231,6 +231,9 @@ importers:
 
   services/orchestrator:
     dependencies:
+      '@kintsugi/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@kintsugi/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -240,6 +243,12 @@ importers:
       '@kintsugi/manifest':
         specifier: workspace:*
         version: link:../../packages/manifest
+      '@kintsugi/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@kintsugi/runtime-sdk':
+        specifier: workspace:*
+        version: link:../../packages/runtime-sdk
       '@kintsugi/secrets':
         specifier: workspace:*
         version: link:../../packages/secrets
