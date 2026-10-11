@@ -53,6 +53,8 @@ PLACEHOLDER = re.compile(
     r"your[-_].*|<.*>|\$\{.*\}|\*{3,}|x{3,})$"
 )
 RULE_HEADING = re.compile(r"^### RULE-\d{3}: \S.*$")
+# scripts/render_rules.py writes this line when no rule was confirmed: an empty catalog, not a malformed one.
+NO_RULES_MARKER = "_No business rules were confirmed in this run._"
 RULE_CANDIDATE = re.compile(r"^#{1,6}\s+RULE\b", re.IGNORECASE)
 
 
@@ -222,7 +224,8 @@ def _validate_artifact(relative: str, content: bytes) -> list[tuple[str, int]]:
             if RULE_CANDIDATE.match(line)
         ]
         if not headings:
-            findings.append(("missing_rule_heading", 1))
+            if NO_RULES_MARKER not in text.splitlines():
+                findings.append(("missing_rule_heading", 1))
         else:
             findings.extend(
                 ("invalid_rule_heading", line_number)
