@@ -6,16 +6,18 @@ schemaVersion: 1
 project:
   id: my-project            # TODO: stable id (kebab-case)
   name: My project          # TODO
+  # description: optional free text
 
 # The document repo itself, declared once for the project.
 document:
-  server: my-git-server     # GitServer id registered in the installation
-  path: org/my-project-docs
+  server: my-git-server     # Git server id registered in the installation (Settings -> Git)
+  path: org/my-project-docs # clone URL path relative to the server's base URL, without .git
 
 unitKinds: [module]         # TODO e.g. [screen, api, batch-job, db-object]
 
 applications:
-  - id: my-app              # TODO: one entry per application in scope
+  - id: my-app              # TODO: one entry per application in scope (kebab-case)
+    name: My application    # optional display name
     disposition: refactor   # 7R: retire | retain | rehost | replatform | refactor | rearchitect | rebuild | repurchase
     pipeline: refactor      # a built-in pipeline id, or the id of a pipeline declared under `pipelines:` below
     repos:
@@ -30,7 +32,7 @@ applications:
       - server: my-git-server
         path: org/my-app-web
         role: target
-        component: web                # component name from the TO-BE architecture
+        component: web                # component name from the TO-BE architecture (one target repo per component)
       - server: my-git-server
         path: org/my-app-api
         role: target
