@@ -68,7 +68,7 @@ Further tools (for example knowledge-base search) are added to the kernel tool r
 
 ## Agent Builder
 
-Settings → Agents in the portal; API module `admin/agents` ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md#implementation-notes)).
+Administration → Agents in the portal (`/agents`, an agent at `/agents/<name>`); API module `admin/agents` ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md#implementation-notes)).
 
 - **Catalog**: the built-in agents of the release (read-only, names reserved) plus the installation's custom agents (`admin.agent`, migration `012_agents.sql`). Each has an audience (`runtime` or `member`), a version, a validity (the problems that keep it from running here) and its installation-default model binding.
 - **Package format**: the same for the editor, import and export: `<name>.md` (frontmatter `name`, `version`, `description`, `tools`, `skills`, `thinking`, `deny-command-patterns`, `metadata` with `audience`; body = instructions) plus optional `skills/<n>/SKILL.md`. Saving runs the format checks (`parseAgentPackage`) and the installation checks (`validateAgent`: runtime tools must be kernel tools, shared skills must exist); every problem is returned at once (400).

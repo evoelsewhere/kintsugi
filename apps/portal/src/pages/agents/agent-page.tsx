@@ -1,18 +1,22 @@
-// Agent editor (Settings → Agents, ADR-0026): the frontmatter as a form, the instructions,
-// agent-local skills, live validation against the installation (kernel tools, shared
-// skills), the job definition a runtime agent produces, version history with restore, and
-// the agent's model binding. Built-in agents open read-only, with "Copy to edit".
+// Agent page (Administration → Agents → /agents/:name, /agents/new; ADR-0026): the frontmatter
+// as a form, the instructions, agent-local skills, live validation against the installation
+// (kernel tools, shared skills), the job definition a runtime agent produces, version history
+// with restore, and the agent's model binding. Built-in agents open read-only, with "Copy to
+// edit".
 
 import { THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
-import { Copy, Download, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { PageHeading } from "@/components/page-heading";
+import { useToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -24,11 +28,13 @@ import {
   type AgentVersionView,
   type SkillPackage,
 } from "@/lib/api/agents";
-import { type AgentModelBindingInput, providersApi, type ProviderView } from "@/lib/api/providers";
+import { type AgentModelBindingInput, providersApi, type ProviderView, type SupportedProviders } from "@/lib/api/providers";
 import { useAuth } from "@/lib/auth";
+import { modelOptions } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
+import { CopyAgentDialog } from "./agent-dialogs";
 
-export type EditorTarget = { mode: "create" } | { mode: "open"; name: string };
+type EditorTarget = { mode: "create" } | { mode: "open"; name: string };
 
 type Tab = "agent" | "skills" | "history" | "preview";
 
@@ -75,21 +81,18 @@ function draftOf(detail: AgentDetail): AgentDraft {
   };
 }
 
-interface AgentEditorDialogProps {
-  target: EditorTarget | null;
-  manage: boolean;
-  onClose: () => void;
-  onChanged: () => Promise<void>;
-  onCopy: (name: string) => void;
-}
-
-export function AgentEditorDialog(props: AgentEditorDialogProps): React.JSX.Element | null {
-  if (props.target === null) return null;
+export function AgentPage(): React.JSX.Element {
+  const { name } = useParams();
+  const { can } = useAuth();
+  const target: EditorTarget = name === undefined || name === "new" ? { mode: "create" } : { mode: "open", name };
   // Keyed: every agent opened starts with fresh state.
-  return <AgentEditor key={props.target.mode === "create" ? "new" : props.target.name} {...props} target={props.target} />;
+  return <AgentEditor key={target.mode === "create" ? "new" : target.name} target={target} manage={can("agents.manage")} />;
 }
 
-function AgentEditor({ target, manage, onClose, onChanged, onCopy }: AgentEditorDialogProps & { target: EditorTarget }): React.JSX.Element {
+function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean }): React.JSX.Element {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [copySource, setCopySource] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(target.mode === "open" ? target.name : null);
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [context, setContext] = useState<AgentBuilderContext | null>(null);
@@ -100,7 +103,6 @@ function AgentEditor({ target, manage, onClose, onChanged, onCopy }: AgentEditor
   const [tab, setTab] = useState<Tab>("agent");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<string | null>(null);
 
   const readOnly = !manage || detail?.source === "builtin";
@@ -153,15 +155,20 @@ function AgentEditor({ target, manage, onClose, onChanged, onCopy }: AgentEditor
     setBusy(true);
     setError(null);
     try {
-      const saved = name === null ? await agentsApi.create(draft) : await agentsApi.update(name, draft);
+      const created = name === null;
+      const saved = created ? await agentsApi.create(draft) : await agentsApi.update(name, draft);
+      toast.success(`${created ? "Created" : "Saved"} ${saved.name}`, `Version ${saved.version} is now current.`);
+      if (created) {
+        navigate(`/agents/${encodeURIComponent(saved.name)}`, { replace: true });
+        return;
+      }
       setName(saved.name);
       setDetail(saved);
       setDraft(draftOf(saved));
       setVersions(await agentsApi.versions(saved.name));
-      setNotice(`Saved ${saved.name} ${saved.version}.`);
-      await onChanged();
     } catch (failure) {
       setError(errorText(failure));
+      toast.error("Could not save the agent", failure);
     } finally {
       setBusy(false);
     }
@@ -173,17 +180,16 @@ function AgentEditor({ target, manage, onClose, onChanged, onCopy }: AgentEditor
     setDetail(restored);
     setDraft(draftOf(restored));
     setVersions(await agentsApi.versions(name));
-    setNotice(`Restored ${version}; it is the current version again.`);
-    await onChanged();
+    toast.success(`Restored ${version}`, "It is the current version again.");
   }
 
   async function toggleEnabled(enabled: boolean): Promise<void> {
     if (name === null) return;
     try {
       setDetail(await agentsApi.setEnabled(name, enabled));
-      await onChanged();
+      toast.success(`${name} ${enabled ? "enabled" : "disabled"}`);
     } catch (failure) {
-      setError(errorText(failure));
+      toast.error(`Could not ${enabled ? "enable" : "disable"} ${name}`, failure);
     }
   }
 
@@ -195,46 +201,45 @@ function AgentEditor({ target, manage, onClose, onChanged, onCopy }: AgentEditor
     { id: "preview", label: "Job definition" },
   ];
 
+  const description =
+    detail === null
+      ? "A Claude Code style agent file with optional agent-local skills."
+      : `${detail.source === "builtin" ? "Built-in, read-only" : "Custom"} · ${detail.audience} agent · current version ${detail.version}`;
+
   return (
-    <Modal
-      open
-      size="page"
-      title={title}
-      description={
-        detail === null
-          ? "A Claude Code style agent file with optional agent-local skills."
-          : `${detail.source === "builtin" ? "Built-in, read-only" : "Custom"} · ${detail.audience} agent · current version ${detail.version}`
-      }
-      onClose={() => (busy ? undefined : onClose())}
-      footer={
-        <>
-          {name !== null ? (
-            <Button variant="ghost" onClick={() => void agentsApi.export(name).catch((failure: unknown) => setError(errorText(failure)))}>
-              <Download className="size-4" />
-              Export
-            </Button>
-          ) : null}
-          {manage && name !== null ? (
-            <Button variant="ghost" onClick={() => onCopy(name)}>
-              <Copy className="size-4" />
-              {detail?.source === "builtin" ? "Copy to edit" : "Copy"}
-            </Button>
-          ) : null}
-          <span className="flex-1" />
-          <Button variant="ghost" disabled={busy} onClick={onClose}>
-            Close
-          </Button>
-          {readOnly ? null : (
-            <Button variant="solid" disabled={busy || problems.length > 0 || draft.name === ""} onClick={() => void save()}>
-              {busy ? "Saving…" : name === null ? "Create agent" : `Save as ${draft.version}`}
-            </Button>
-          )}
-        </>
-      }
-    >
+    <div className="flex flex-col gap-5">
+      <Breadcrumbs items={["Administration", "Agents", title]} />
+      <Link to="/agents" className="inline-flex w-fit items-center gap-1.5 text-[12px] text-text-secondary hover:text-text">
+        <ArrowLeft className="size-3.5" />
+        All agents
+      </Link>
+      <PageHeading
+        title={title}
+        description={description}
+        actions={
+          <>
+            {name !== null ? (
+              <Button size="small" variant="ghost" onClick={() => void agentsApi.export(name).catch((failure: unknown) => toast.error(`Could not export ${name}`, failure))}>
+                <Download className="size-4" />
+                Export
+              </Button>
+            ) : null}
+            {manage && name !== null ? (
+              <Button size="small" variant="ghost" onClick={() => setCopySource(name)}>
+                <Copy className="size-4" />
+                {detail?.source === "builtin" ? "Copy to edit" : "Copy"}
+              </Button>
+            ) : null}
+            {readOnly ? null : (
+              <Button size="small" variant="solid" disabled={busy || problems.length > 0 || draft.name === ""} onClick={() => void save()}>
+                {busy ? "Saving…" : name === null ? "Create agent" : `Save as ${draft.version}`}
+              </Button>
+            )}
+          </>
+        }
+      />
       <div className="flex flex-col gap-4">
         {error === null ? null : <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
-        {notice === null ? null : <p className="text-[13px] text-text-secondary">{notice}</p>}
         <ProblemList problems={problems} />
 
         {editing && detail !== null ? (
@@ -286,7 +291,16 @@ function AgentEditor({ target, manage, onClose, onChanged, onCopy }: AgentEditor
       >
         Jobs started from now on run the restored version. The history keeps every version.
       </ConfirmDialog>
-    </Modal>
+
+      <CopyAgentDialog
+        source={copySource}
+        onClose={() => setCopySource(null)}
+        onCopied={async (copied) => {
+          toast.success(`Copied to ${copied}`);
+          navigate(`/agents/${encodeURIComponent(copied)}`);
+        }}
+      />
+    </div>
   );
 }
 
@@ -476,7 +490,9 @@ function DefinitionPreview({ audience, definition, problems }: { audience: Agent
 function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: AgentDetail; onSaved: () => Promise<void> }): React.JSX.Element {
   const { can } = useAuth();
   const allowed = can("providers.manage");
+  const toast = useToast();
   const [providers, setProviders] = useState<ProviderView[]>([]);
+  const [supported, setSupported] = useState<SupportedProviders | undefined>(undefined);
   const [all, setAll] = useState<AgentModelBindingInput[]>([]);
   const [provider, setProvider] = useState(detail.binding?.provider ?? "");
   const [model, setModel] = useState(detail.binding?.model ?? "");
@@ -486,10 +502,11 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
 
   useEffect(() => {
     if (!allowed) return;
-    Promise.all([providersApi.list(), providersApi.listBindings()])
-      .then(([list, bindings]) => {
+    Promise.all([providersApi.list(), providersApi.listBindings(), providersApi.supported()])
+      .then(([list, bindings, catalog]) => {
         setProviders(list);
         setAll(bindings);
+        setSupported(catalog);
       })
       .catch((failure: unknown) => setError(errorText(failure)));
   }, [allowed]);
@@ -501,9 +518,11 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
       const others = all.filter((binding) => !(binding.agent === agent && binding.projectId === undefined));
       const next = remove ? others : [...others, { agent, provider, model: model.trim(), ...(thinking === "" ? {} : { thinking: thinking as ThinkingLevel }) }];
       setAll(await providersApi.replaceBindings(next));
+      toast.success(remove ? `Model binding of ${agent} cleared` : `Model binding of ${agent} saved`, remove ? "Jobs use the installation default." : `${provider} / ${model.trim()}`);
       await onSaved();
     } catch (failure) {
       setError(errorText(failure));
+      toast.error("Could not save the model binding", failure);
     } finally {
       setBusy(false);
     }
@@ -520,8 +539,16 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
         </p>
       ) : (
         <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_1fr_0.8fr_auto_auto]">
-          <Select value={provider} placeholder="Provider" options={providers.map((entry) => ({ value: entry.id, label: entry.id }))} onChange={setProvider} />
-          <Input value={model} placeholder="model id" aria-label="Model id" onChange={(event) => setModel(event.target.value)} />
+          <Select
+            value={provider}
+            placeholder="Provider"
+            options={providers.map((entry) => ({ value: entry.id, label: entry.id, ...(entry.enabled ? {} : { hint: "disabled" }) }))}
+            onChange={(value) => {
+              setProvider(value);
+              setModel("");
+            }}
+          />
+          <Select value={model} placeholder="Model" options={modelOptions(providers.find((entry) => entry.id === provider), supported, model)} disabled={provider === ""} onChange={setModel} />
           <Select value={thinking} options={THINKING_OPTIONS} onChange={setThinking} />
           <Button size="small" variant="solid" disabled={busy || provider === "" || model.trim() === ""} onClick={() => void save(false)}>
             Save binding

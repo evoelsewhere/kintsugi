@@ -1,9 +1,15 @@
-// Agents — the Agent Builder catalog (Settings → Agents, ADR-0026). Built-in agents ship
+// Agents — the Agent Builder catalog (Administration → Agents, ADR-0026). Built-in agents ship
 // with the release and are read-only; admins copy them or create, import and version their
-// own. Shared skills are listed below. Reading needs a session; changes need agents.manage.
+// own. An agent opens on its own page (/agents/:name). Shared skills are listed below.
+// Reading needs a session; changes need agents.manage.
 
 import { Bot, Copy, Download, FileText, Plus, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { PageHeading } from "@/components/page-heading";
+import { SkeletonRows } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +17,6 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusDot } from "@/components/ui/status-dot";
 import { agentsApi, type AgentImport, type AgentSummary, type SharedSkillView } from "@/lib/api/agents";
 import { useAuth } from "@/lib/auth";
-import { AgentEditorDialog, type EditorTarget } from "./agent-editor-dialog";
 import { CopyAgentDialog, SharedSkillDialog } from "./agent-dialogs";
 
 type RemoveTarget = { kind: "agent"; name: string } | { kind: "skill"; name: string };
@@ -33,14 +38,14 @@ async function readImport(file: File): Promise<AgentImport> {
   return { files: { [file.name]: text } };
 }
 
-export function AgentsSection(): React.JSX.Element {
+export function AgentsPage(): React.JSX.Element {
   const { can } = useAuth();
   const manage = can("agents.manage");
-  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [agents, setAgents] = useState<AgentSummary[] | null>(null);
   const [skills, setSkills] = useState<SharedSkillView[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [copySource, setCopySource] = useState<string | null>(null);
   const [skillDialog, setSkillDialog] = useState<{ open: boolean; skill: SharedSkillView | null }>({ open: false, skill: null });
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
@@ -63,40 +68,38 @@ export function AgentsSection(): React.JSX.Element {
     void load();
   }, [load]);
 
-  const run = async (work: () => Promise<void>): Promise<void> => {
+  const run = async (work: () => Promise<void>, failed: string): Promise<void> => {
     try {
       await work();
-      setError(null);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      toast.error(failed, failure);
     }
   };
 
   async function importFile(file: File): Promise<void> {
     await run(async () => {
       const result = await agentsApi.import(await readImport(file));
-      setNotice(`${result.created ? "Imported" : "Saved a new version of"} ${result.agent.name} (${result.agent.version}).`);
+      toast.success(`${result.created ? "Imported" : "Saved a new version of"} ${result.agent.name}`, `Version ${result.agent.version}`);
       await load();
-    });
+    }, `Could not import ${file.name}`);
   }
 
   async function remove(target: RemoveTarget): Promise<void> {
     if (target.kind === "agent") await agentsApi.remove(target.name);
     else await agentsApi.removeSkill(target.name);
+    toast.success(`Deleted ${target.name}`);
     await load();
   }
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h2 className="text-[15px] font-medium text-text">Agents</h2>
-        <p className="mt-0.5 text-[12px] text-text-muted">
-          Runtime agents run Kintsugi&apos;s understanding jobs; member agents are handed to members&apos; harnesses. Built-in agents are read-only: copy one to change it.
-        </p>
-      </div>
+      <Breadcrumbs items={["Administration", "Agents"]} />
+      <PageHeading
+        title="Agents"
+        description="Runtime agents run Kintsugi's understanding jobs; member agents are handed to members' harnesses. Built-in agents are read-only: copy one to change it."
+      />
 
       {error === null ? null : <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
-      {notice === null ? null : <p className="text-[13px] text-text-secondary">{notice}</p>}
 
       <Card className="overflow-hidden p-0">
         <CardHeader className="px-4 pt-3">
@@ -121,7 +124,7 @@ export function AgentsSection(): React.JSX.Element {
                 <Upload className="size-4" />
                 Import
               </Button>
-              <Button size="small" variant="solid" onClick={() => setEditor({ mode: "create" })}>
+              <Button size="small" variant="solid" onClick={() => navigate("/agents/new")}>
                 <Plus className="size-4" />
                 New agent
               </Button>
@@ -136,12 +139,17 @@ export function AgentsSection(): React.JSX.Element {
           <span>Status</span>
           <span className="w-[104px]" />
         </div>
-        {agents.map((agent) => (
+        {agents === null ? (
+          <div className="px-4 pb-3">
+            <SkeletonRows rows={4} />
+          </div>
+        ) : null}
+        {(agents ?? []).map((agent) => (
           <div
             key={agent.name}
             className="grid grid-cols-1 items-center gap-3 px-4 py-2.5 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] sm:grid-cols-[minmax(0,2.2fr)_0.8fr_0.6fr_1.2fr_0.8fr_auto]"
           >
-            <button type="button" className="flex min-w-0 items-center gap-3 text-left" onClick={() => setEditor({ mode: "open", name: agent.name })}>
+            <Link to={`/agents/${encodeURIComponent(agent.name)}`} className="flex min-w-0 items-center gap-3 text-left">
               <Bot className="size-5 shrink-0 text-text-secondary" strokeWidth={1.5} />
               <span className="min-w-0">
                 <span className="flex items-center gap-2">
@@ -152,7 +160,7 @@ export function AgentsSection(): React.JSX.Element {
                   {agent.copiedFrom === undefined ? agent.description : `copy of ${agent.copiedFrom} · ${agent.description}`}
                 </span>
               </span>
-            </button>
+            </Link>
             <span className="text-[13px] text-text-secondary">{agent.audience}</span>
             <span className="font-mono text-[12px] text-text-secondary">{agent.version}</span>
             <span className="truncate text-[12px] text-text-secondary" title={agent.binding === undefined ? undefined : `${agent.binding.provider} / ${agent.binding.model}`}>
@@ -163,7 +171,7 @@ export function AgentsSection(): React.JSX.Element {
               {agent.problems.length > 0 ? `${agent.problems.length} problem${agent.problems.length === 1 ? "" : "s"}` : agent.enabled ? "enabled" : "disabled"}
             </span>
             <div className="flex w-[104px] shrink-0 items-center justify-end gap-0.5">
-              <Button size="icon" variant="ghost" aria-label={`Export ${agent.name}`} title="Export" onClick={() => void run(() => agentsApi.export(agent.name))}>
+              <Button size="icon" variant="ghost" aria-label={`Export ${agent.name}`} title="Export" onClick={() => void run(() => agentsApi.export(agent.name), `Could not export ${agent.name}`)}>
                 <Download className="size-4" />
               </Button>
               {manage ? (
@@ -227,14 +235,12 @@ export function AgentsSection(): React.JSX.Element {
         )}
       </Card>
 
-      <AgentEditorDialog target={editor} manage={manage} onClose={() => setEditor(null)} onChanged={load} onCopy={(name) => setCopySource(name)} />
-
       <CopyAgentDialog
         source={copySource}
         onClose={() => setCopySource(null)}
         onCopied={async (name) => {
-          await load();
-          setEditor({ mode: "open", name });
+          toast.success(`Copied to ${name}`);
+          navigate(`/agents/${encodeURIComponent(name)}`);
         }}
       />
 
@@ -242,7 +248,10 @@ export function AgentsSection(): React.JSX.Element {
         open={skillDialog.open}
         skill={skillDialog.skill}
         onClose={() => setSkillDialog({ open: false, skill: null })}
-        onSaved={load}
+        onSaved={async () => {
+          toast.success("Shared skill saved");
+          await load();
+        }}
       />
 
       <ConfirmDialog
