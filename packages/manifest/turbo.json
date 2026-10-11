@@ -1,0 +1,9 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/templates/document-repo/kintsugi.yaml", "$TURBO_ROOT$/docs/reference/document-repo.md"]
+    }
+  }
+}
