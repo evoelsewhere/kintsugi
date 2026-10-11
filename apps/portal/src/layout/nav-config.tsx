@@ -2,6 +2,7 @@
 // Adding a page: append an item here and register its route in App.tsx.
 import {
   Activity,
+  Bot,
   FolderKanban,
   Gauge,
   type LucideIcon,
@@ -9,7 +10,6 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { DELIVERY_AREAS } from "../lib/delivery-areas";
 
 export interface NavChildItem {
   id: string;
@@ -44,17 +44,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Workspace",
     items: [
       { id: "overview", label: "Overview", icon: Gauge, to: "/", end: true },
-      {
-        id: "delivery",
-        label: "Delivery",
-        icon: Package,
-        to: "/delivery",
-        children: DELIVERY_AREAS.map((area) => ({
-          id: area.id,
-          label: area.title,
-          to: `/delivery/${area.id}`,
-        })),
-      },
+      { id: "delivery", label: "Delivery", icon: Package, to: "/delivery" },
       { id: "monitoring", label: "Monitoring", icon: Activity, to: "/monitoring" },
       { id: "governance", label: "Governance", icon: ShieldCheck, to: "/governance" },
     ],
@@ -64,6 +54,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Administration",
     items: [
       { id: "projects", label: "Projects", icon: FolderKanban, to: "/projects" },
+      { id: "agents", label: "Agents", icon: Bot, to: "/agents" },
       { id: "members", label: "Members & Permissions", icon: Users, to: "/members" },
     ],
   },

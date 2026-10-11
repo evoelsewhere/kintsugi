@@ -2,9 +2,12 @@ import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { subscribeToSystemAppearance } from "./lib/appearance";
 import { PanelShell } from "./layout/panel-shell";
+import { ToastProvider } from "./components/ui/toast";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { AdminPage } from "./pages/admin";
-import { DeliveryAreaPage, DeliveryPage } from "./pages/delivery";
+import { AgentPage } from "./pages/agents/agent-page";
+import { AgentsPage } from "./pages/agents/agents-page";
+import { DeliveryPage } from "./pages/delivery/delivery-page";
 import { GovernancePage } from "./pages/governance";
 import { LoginPage } from "./pages/login";
 import { MonitoringPage } from "./pages/monitoring";
@@ -28,6 +31,7 @@ export function App(): React.JSX.Element {
 
   return (
     <AuthProvider>
+      <ToastProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -41,16 +45,20 @@ export function App(): React.JSX.Element {
             <Route index element={<OverviewPage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="delivery" element={<DeliveryPage />} />
-            <Route path="delivery/:areaId" element={<DeliveryAreaPage />} />
+            {/* Former per-workstream placeholders. */}
+            <Route path="delivery/:areaId" element={<Navigate to="/delivery" replace />} />
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="governance" element={<GovernancePage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+            <Route path="agents" element={<AgentsPage />} />
+            <Route path="agents/:name" element={<AgentPage />} />
             <Route path="members" element={<MembersPermissionsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }

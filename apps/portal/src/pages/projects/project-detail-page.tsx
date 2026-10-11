@@ -1,36 +1,29 @@
-// Project detail (ADR-0028): per application, the AS-IS group (legacy code and legacy data
-// repos, read-only for Kintsugi) and the TO-BE group (the project's document repo and the
-// target repos, each implementing an architecture component), plus the kintsugi.yaml that
-// Kintsugi renders from this state, its publication to the document repo as a pull request,
-// the recent writes to the document repo (ADR-0019) and, per application, its runtime job
-// runs with a "Run assess" button (ADR-0029).
+// Project configuration (Administration → Projects, ADR-0028): the project's fields, per
+// application the AS-IS group (legacy code and legacy data repos, read-only for Kintsugi) and
+// the TO-BE group (the project's document repo and the target repos, each implementing an
+// architecture component), plus the kintsugi.yaml that Kintsugi renders from this state and
+// its publication to the document repo as a pull request. Running stages, job runs and
+// document writes live in Delivery. Repository sync states refresh while not ready.
 
 import type { ApplicationRepositoryRole } from "@kintsugi/domain";
-import { ExternalLink, FolderGit2, GitPullRequestArrow, Pencil, Plus, RefreshCw, Trash2, Unlink } from "lucide-react";
+import { FolderGit2, GitPullRequestArrow, Package, Pencil, Plus, Trash2, Unlink } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
+import { SyncStatusBadge } from "@/components/status-badges";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonRows } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { gitApi, type GitRepositoryView } from "@/lib/api/git";
-import { type ApplicationView, type DocumentWriteView, type ProjectDetail, type ProjectRepositoryView, projectsApi } from "@/lib/api/projects";
+import { type ApplicationView, type ProjectDetail, type ProjectRepositoryView, projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
-import { ApplicationJobRuns } from "./application-job-runs";
+import { deliveryLink } from "@/lib/links";
 import { NoRepositories } from "./no-repositories";
 import { ApplicationDialog, LinkDialog, ProjectDialog } from "./project-dialogs";
-
-const SYNC_TONE: Record<string, StatusTone> = { pending: "muted", cloning: "blue", ready: "green", error: "red" };
-const WRITE_TONE: Record<DocumentWriteView["status"], StatusTone> = { queued: "blue", committed: "green", "pr-opened": "purple-light", unchanged: "muted", failed: "red" };
-const WRITE_LABEL: Record<DocumentWriteView["status"], string> = {
-  queued: "Queued",
-  committed: "Committed",
-  "pr-opened": "Pull request opened",
-  unchanged: "No changes",
-  failed: "Failed",
-};
 
 type ConfirmTarget =
   | { kind: "project" }
@@ -46,7 +39,6 @@ export function ProjectDetailPage(): React.JSX.Element {
   const canManage = can("projects.manage");
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [manifest, setManifest] = useState<string>("");
-  const [writes, setWrites] = useState<DocumentWriteView[]>([]);
   const [publishOpen, setPublishOpen] = useState(false);
   const [repositories, setRepositories] = useState<GitRepositoryView[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -54,19 +46,18 @@ export function ProjectDetailPage(): React.JSX.Element {
   const [applicationDialog, setApplicationDialog] = useState<{ open: boolean; application: ApplicationView | null }>({ open: false, application: null });
   const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null);
   const [confirm, setConfirm] = useState<ConfirmTarget | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const [detail, rendered, registered, recent] = await Promise.all([
+      const [detail, rendered, registered] = await Promise.all([
         projectsApi.get(projectId),
         projectsApi.manifest(projectId),
         canManage || can("git.manage") ? gitApi.listRepositories() : Promise.resolve([]),
-        projectsApi.documentWrites(projectId),
       ]);
       setProject(detail);
       setManifest(rendered.content);
       setRepositories(registered);
-      setWrites(recent.items);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -79,27 +70,23 @@ export function ProjectDetailPage(): React.JSX.Element {
     void load();
   }, [load]);
 
-  const loadWrites = useCallback(async (): Promise<void> => {
-    try {
-      setWrites((await projectsApi.documentWrites(projectId)).items);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-    }
-  }, [projectId]);
-
-  // The worker performs writes in the background: follow queued ones until they settle.
-  const pending = writes.some((write) => write.status === "queued");
+  // The worker clones newly linked repositories in the background: follow them until ready.
+  const settling =
+    project !== null &&
+    [project.documentRepository, ...project.applications.flatMap((application) => [...application.asIs.legacy, ...application.asIs.legacyData, ...application.toBe.targets])].some(
+      (repository) => repository !== null && (repository.syncStatus === "pending" || repository.syncStatus === "cloning"),
+    );
   useEffect(() => {
-    if (!pending) return;
-    const timer = setInterval(() => void loadWrites(), 3000);
+    if (!settling) return;
+    const timer = setInterval(() => void load(), 3000);
     return () => clearInterval(timer);
-  }, [pending, loadWrites]);
+  }, [settling, load]);
 
   if (project === null) {
     return (
       <div className="flex flex-col gap-5">
         <Breadcrumbs items={["Administration", "Projects", projectId]} />
-        <p className={error === null ? "text-[13px] text-text-muted" : "text-[13px] text-[var(--ds-status-red)]"}>{error ?? "Loading…"}</p>
+        {error === null ? <SkeletonRows rows={4} /> : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
       </div>
     );
   }
@@ -118,6 +105,7 @@ export function ProjectDetailPage(): React.JSX.Element {
     }
     if (target.kind === "application") await projectsApi.removeApplication(projectId, target.application.id);
     else await projectsApi.unlink(projectId, target.application.id, target.repository.repositoryId);
+    toast.success(target.kind === "application" ? `Removed ${target.application.name}` : `Unlinked ${target.repository.repositoryId}`);
     await load();
   }
 
@@ -139,8 +127,13 @@ export function ProjectDetailPage(): React.JSX.Element {
               Document repo: {project.documentRepository === null ? "none" : `${project.documentRepository.repositoryId} (${project.documentRepository.url})`}
             </p>
           </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Link to={deliveryLink({ projectId: project.id })} className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-3 text-[14px] text-text-secondary hover:bg-hover hover:text-text">
+              <Package className="size-4" />
+              Open in Delivery
+            </Link>
           {canManage ? (
-            <div className="flex shrink-0 items-center gap-1">
+            <>
               <Button size="small" variant="ghost" onClick={() => setEditProject(true)}>
                 <Pencil className="size-4" />
                 Edit
@@ -148,8 +141,9 @@ export function ProjectDetailPage(): React.JSX.Element {
               <Button size="icon" variant="danger" aria-label="Delete project" onClick={() => setConfirm({ kind: "project" })}>
                 <Trash2 className="size-4" />
               </Button>
-            </div>
+            </>
           ) : null}
+          </div>
         </CardHeader>
       </Card>
 
@@ -169,7 +163,13 @@ export function ProjectDetailPage(): React.JSX.Element {
       </div>
 
       {project.applications.length === 0 ? (
-        <p className="text-[13px] text-text-secondary">No applications yet.</p>
+        <Card>
+          <EmptyState
+            icon={Package}
+            title="No applications yet"
+            description={canManage ? "Add the applications to modernize, then link their legacy repositories so Delivery can run stages." : "Someone with projects.manage adds the applications to modernize."}
+          />
+        </Card>
       ) : (
         project.applications.map((application) => (
           <ApplicationCard
@@ -177,8 +177,6 @@ export function ProjectDetailPage(): React.JSX.Element {
             projectId={project.id}
             application={application}
             canManage={canManage}
-            canRun={can("jobs.run")}
-            hasDocumentRepository={project.documentRepository !== null}
             canLink={linkable.length > 0}
             onEdit={() => setApplicationDialog({ open: true, application })}
             onRemove={() => setConfirm({ kind: "application", application })}
@@ -206,8 +204,6 @@ export function ProjectDetailPage(): React.JSX.Element {
         <pre className="shadow-border mt-3 max-h-[28rem] overflow-auto rounded-[var(--geist-radius)] bg-recessed px-3 py-2 font-mono text-[12px] leading-5 text-text">{manifest}</pre>
       </Card>
 
-      <DocumentWrites writes={writes} onRefresh={() => void loadWrites()} />
-
       <ConfirmDialog
         open={publishOpen}
         title="Publish kintsugi.yaml?"
@@ -216,7 +212,7 @@ export function ProjectDetailPage(): React.JSX.Element {
         confirmVariant="solid"
         onConfirm={async () => {
           await projectsApi.publishManifest(projectId);
-          await loadWrites();
+          toast.success("kintsugi.yaml queued for publishing", "Follow the pull request under Document writes in Delivery.");
         }}
         onClose={() => setPublishOpen(false)}
       >
@@ -232,6 +228,7 @@ export function ProjectDetailPage(): React.JSX.Element {
         onClose={() => setEditProject(false)}
         onSubmit={async (_id, input) => {
           await projectsApi.update(projectId, input);
+          toast.success("Project saved");
           await load();
         }}
       />
@@ -244,6 +241,7 @@ export function ProjectDetailPage(): React.JSX.Element {
         onSubmit={async (id, input) => {
           if (applicationDialog.application === null) await projectsApi.createApplication(projectId, { id, ...input });
           else await projectsApi.updateApplication(projectId, id, input);
+          toast.success(applicationDialog.application === null ? "Application added" : "Application saved", input.name);
           await load();
         }}
       />
@@ -257,6 +255,7 @@ export function ProjectDetailPage(): React.JSX.Element {
         onSubmit={async (input) => {
           if (linkTarget === null) return;
           await projectsApi.link(projectId, linkTarget.application.id, input);
+          toast.success("Repository linked", `${input.repositoryId} → ${linkTarget.application.name}`);
           await load();
         }}
       />
@@ -281,58 +280,10 @@ export function ProjectDetailPage(): React.JSX.Element {
   );
 }
 
-function DocumentWrites({ writes, onRefresh }: { writes: DocumentWriteView[]; onRefresh: () => void }): React.JSX.Element {
-  return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Document writes</CardTitle>
-          <CardDescription>Recent commits by kintsugi-bot to the document repo: auto-commit paths land on the default branch, the rest in pull requests.</CardDescription>
-        </div>
-        <Button size="icon" variant="ghost" aria-label="Refresh document writes" onClick={onRefresh}>
-          <RefreshCw className="size-4" />
-        </Button>
-      </CardHeader>
-      {writes.length === 0 ? (
-        <p className="mt-3 text-[13px] text-text-muted">No writes yet.</p>
-      ) : (
-        <ul className="mt-3 flex flex-col gap-1">
-          {writes.map((write) => (
-            <li key={write.id} className="flex items-start gap-2 rounded-[var(--geist-radius)] px-2 py-1.5 hover:bg-hover">
-              <span className="mt-1.5" title={write.status}>
-                <StatusDot tone={WRITE_TONE[write.status]} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] text-text">{write.message}</p>
-                <p className="truncate text-[11px] text-text-muted">
-                  {WRITE_LABEL[write.status]} · {new Date(write.createdAt).toLocaleString()}
-                  {write.actor === undefined ? "" : ` · ${write.actor}`}
-                  {write.agent === undefined ? "" : ` · ${write.agent}`}
-                  {write.branch === undefined ? "" : ` · ${write.branch}`}
-                  {write.commit === undefined ? "" : ` · ${write.commit.slice(0, 12)}`}
-                </p>
-                {write.error === undefined ? null : <p className="mt-0.5 break-words text-[12px] text-[var(--ds-status-red)]">{write.error}</p>}
-              </div>
-              {write.prUrl === undefined ? null : (
-                <a href={write.prUrl} target="_blank" rel="noreferrer" className="flex shrink-0 items-center gap-1 text-[12px] text-accent hover:underline">
-                  Pull request
-                  <ExternalLink className="size-3.5" />
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
 interface ApplicationCardProps {
   projectId: string;
   application: ApplicationView;
   canManage: boolean;
-  canRun: boolean;
-  hasDocumentRepository: boolean;
   canLink: boolean;
   onEdit: () => void;
   onRemove: () => void;
@@ -340,12 +291,7 @@ interface ApplicationCardProps {
   onUnlink: (repository: ProjectRepositoryView) => void;
 }
 
-function ApplicationCard({ projectId, application, canManage, canRun, hasDocumentRepository, canLink, onEdit, onRemove, onLink, onUnlink }: ApplicationCardProps): React.JSX.Element {
-  const blocked = !hasDocumentRepository
-    ? "The project has no document repo, so job output has nowhere to go."
-    : application.asIs.legacy.length === 0
-      ? "Link a legacy code repo to run the assess stage."
-      : undefined;
+function ApplicationCard({ projectId, application, canManage, canLink, onEdit, onRemove, onLink, onUnlink }: ApplicationCardProps): React.JSX.Element {
   const group = (title: string, role: ApplicationRepositoryRole, repositories: ProjectRepositoryView[]): React.JSX.Element => (
     <RepositoryList
       title={title}
@@ -364,17 +310,25 @@ function ApplicationCard({ projectId, application, canManage, canRun, hasDocumen
             {application.pipeline === undefined ? "" : ` · pipeline ${application.pipeline}`}
           </CardDescription>
         </div>
-        {canManage ? (
-          <div className="flex shrink-0 items-center gap-1">
-            <Button size="small" variant="ghost" onClick={onEdit}>
-              <Pencil className="size-4" />
-              Edit
-            </Button>
-            <Button size="icon" variant="danger" aria-label={`Remove ${application.name}`} onClick={onRemove}>
-              <Trash2 className="size-4" />
-            </Button>
-          </div>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1">
+          <Link
+            to={deliveryLink({ projectId, applicationId: application.id })}
+            className="inline-flex h-[var(--geist-form-small-height)] items-center rounded-[var(--geist-radius)] px-3 text-[14px] text-text-secondary hover:bg-hover hover:text-text"
+          >
+            Runs &amp; stages
+          </Link>
+          {canManage ? (
+            <>
+              <Button size="small" variant="ghost" onClick={onEdit}>
+                <Pencil className="size-4" />
+                Edit
+              </Button>
+              <Button size="icon" variant="danger" aria-label={`Remove ${application.name}`} onClick={onRemove}>
+                <Trash2 className="size-4" />
+              </Button>
+            </>
+          ) : null}
+        </div>
       </CardHeader>
       <div className="mt-3 grid grid-cols-1 gap-px md:grid-cols-2 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)]">
         <section className="flex flex-col gap-3 px-4 py-3">
@@ -398,7 +352,6 @@ function ApplicationCard({ projectId, application, canManage, canRun, hasDocumen
           {group("Target repos", "target", application.toBe.targets)}
         </section>
       </div>
-      <ApplicationJobRuns projectId={projectId} applicationId={application.id} canRun={canRun} {...(blocked === undefined ? {} : { blocked })} />
     </Card>
   );
 }
@@ -427,7 +380,7 @@ function RepositoryList({ title, hint, repositories, onLink, onUnlink }: Reposit
         )}
       </div>
       {repositories.length === 0 ? (
-        <p className="text-[12px] text-text-muted">None.</p>
+        <p className="text-[12px] text-text-muted">{onLink === undefined ? "None linked." : "None linked yet — use Link to add one."}</p>
       ) : (
         repositories.map((repository) => (
           <div key={repository.repositoryId} className="flex items-center gap-2 rounded-[var(--geist-radius)] px-2 py-1.5 hover:bg-hover">
@@ -439,9 +392,7 @@ function RepositoryList({ title, hint, repositories, onLink, onUnlink }: Reposit
               </p>
             </div>
             {repository.component === undefined ? null : <Badge>{repository.component}</Badge>}
-            <span title={repository.syncStatus}>
-              <StatusDot tone={SYNC_TONE[repository.syncStatus] ?? "muted"} />
-            </span>
+            <SyncStatusBadge status={repository.syncStatus} />
             {onUnlink === undefined ? null : (
               <Button size="icon" variant="danger" aria-label={`Unlink ${repository.repositoryId}`} onClick={() => onUnlink(repository)}>
                 <Unlink className="size-4" />
