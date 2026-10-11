@@ -2,6 +2,11 @@
 // (40px, radius 6px, shadow-as-border), menu with --ds-shadow-menu, radius 12px,
 // 14px items with gray hover fill. The menu portals to the document body so it
 // never clips inside a scrolling Modal body.
+//
+// One click = one toggle, also inside a Field (which wraps its control in a <label>): the
+// trigger cancels the label's default action, so the label never replays the click on the
+// trigger, and a press on the enclosing label does not count as "outside" (the label's own
+// click toggles the menu instead of closing and immediately reopening it).
 
 import { Check, ChevronDown } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -62,10 +67,11 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
     if (root === null) return;
     const reposition = (): void => setPlacement(placeMenu(root));
     reposition();
-    const onPointerDown = (event: MouseEvent): void => {
+    const onPointerDown = (event: PointerEvent): void => {
       const target = event.target as Node;
       if (rootRef.current?.contains(target) === true) return;
       if (menuRef.current?.contains(target) === true) return;
+      if (rootRef.current?.closest("label")?.contains(target) === true) return;
       setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -74,13 +80,13 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
       event.preventDefault();
       setOpen(false);
     };
-    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     // Capture phase: also follows scrolling inside Modal bodies.
     window.addEventListener("resize", reposition);
     window.addEventListener("scroll", reposition, true);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
@@ -93,7 +99,11 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
         id={id}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={(event) => {
+          // Inside a <label>, the label would replay this click on the trigger.
+          event.preventDefault();
+          setOpen((prev) => !prev);
+        }}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
