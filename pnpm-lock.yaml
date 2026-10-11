@@ -225,9 +225,15 @@ importers:
 
   services/orchestrator:
     dependencies:
+      '@kintsugi/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@kintsugi/git':
         specifier: workspace:*
         version: link:../../packages/git
+      '@kintsugi/manifest':
+        specifier: workspace:*
+        version: link:../../packages/manifest
       '@kintsugi/secrets':
         specifier: workspace:*
         version: link:../../packages/secrets

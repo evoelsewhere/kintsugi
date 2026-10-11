@@ -1,16 +1,21 @@
-// The kintsugi-worker process core (ADR-0003, ADR-0025): a pg-boss queue for Git sync
-// plus the scheduler that feeds it. New repositories are picked up within seconds;
-// every repository is re-synced each poll interval; removed ones lose their mirror.
+// The kintsugi-worker process core (ADR-0003, ADR-0019, ADR-0025): pg-boss queues for Git
+// sync and document writes, plus the scheduler that feeds Git sync. New repositories are
+// picked up within seconds; every repository is re-synced each poll interval; removed ones
+// lose their mirror. Document writes run one at a time per document repository.
 
 import { CheckoutStorage } from "@kintsugi/git";
 import { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
+import { DocumentWriteStore } from "./document-write/store.js";
+import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
 import { pruneMirrors, syncRepository } from "./git-sync/sync.js";
+import { DOCUMENT_WRITE_QUEUE, type DocumentWriteRequest, GIT_SYNC_QUEUE, QUEUE_SCHEMA, ensureDocumentWriteQueue, sendDocumentWrite } from "./queues.js";
 
-/** pg-boss owns this schema (an infrastructure library, not a domain schema). */
-export const QUEUE_SCHEMA = "pgboss";
-export const GIT_SYNC_QUEUE = "git-sync";
+export { GIT_SYNC_QUEUE, QUEUE_SCHEMA } from "./queues.js";
+
+/** Default author email of kintsugi-bot; `.invalid` never delivers mail. */
+export const DEFAULT_BOT_EMAIL = "kintsugi-bot@kintsugi.invalid";
 
 export interface WorkerOptions {
   databaseUrl: string;
@@ -22,12 +27,18 @@ export interface WorkerOptions {
   pendingScanSeconds?: number;
   /** Parallel syncs in this process. */
   concurrency?: number;
+  /** Author email of kintsugi-bot's commits (KINTSUGI_BOT_EMAIL). */
+  botEmail?: string;
+  /** For tests: the HTTP client of the pull-request adapters. */
+  fetch?: typeof fetch;
   log?: (message: string) => void;
 }
 
 export interface Worker {
   /** Enqueues a sync; deduplicated per repository (one queued and one running at most). */
   requestSync(repositoryId: string): Promise<void>;
+  /** Enqueues a document write behind other writes to the same document repository. */
+  requestWrite(documentRepositoryId: string, request: DocumentWriteRequest): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -35,6 +46,13 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const log = options.log ?? ((message: string) => console.log(`[worker] ${message}`));
   const store = new RepositoryStore(options.pool);
   const deps = { store, storage: options.storage };
+  const writerDeps = {
+    writes: new DocumentWriteStore(options.pool, store),
+    repositories: store,
+    storage: options.storage,
+    botEmail: options.botEmail ?? DEFAULT_BOT_EMAIL,
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+  };
   await options.storage.prepare();
 
   const boss = new PgBoss({ connectionString: options.databaseUrl, schema: QUEUE_SCHEMA });
@@ -48,11 +66,24 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     retryBackoff: true,
     expireInSeconds: 60 * 60,
   });
+  await ensureDocumentWriteQueue(boss);
 
   await boss.work<{ repositoryId: string }>(GIT_SYNC_QUEUE, { localConcurrency: options.concurrency ?? 2 }, async ([job]) => {
     if (job === undefined) return;
     const result = await syncRepository(deps, job.data.repositoryId);
     if (result !== undefined) log(`${result.cloned ? "cloned" : "fetched"} ${result.repositoryId} at ${result.commit.slice(0, 12)}`);
+  });
+
+  // One active write per document repository (singleton policy); different repositories in parallel.
+  await boss.work<DocumentWriteRequest>(DOCUMENT_WRITE_QUEUE, { localConcurrency: options.concurrency ?? 2 }, async ([job]) => {
+    if (job === undefined) return;
+    try {
+      const outcome = await writeDocument(writerDeps, job.data);
+      log(`document write ${job.data.writeId} (${job.data.projectId}): ${outcome.status}${"error" in outcome ? ` — ${outcome.error}` : ""}`);
+    } catch (error) {
+      log(`document write ${job.data.writeId} (${job.data.projectId}) failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
   });
 
   const requestSync = async (repositoryId: string): Promise<void> => {
@@ -84,6 +115,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
 
   return {
     requestSync,
+    requestWrite: (documentRepositoryId, request) => sendDocumentWrite(boss, documentRepositoryId, request),
     async stop() {
       stopped = true;
       for (const timer of timers) clearInterval(timer);
