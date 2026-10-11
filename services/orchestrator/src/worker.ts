@@ -11,7 +11,7 @@ import type { Pool } from "pg";
 import { DocumentWriteStore } from "./document-write/store.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
-import { builtinAgents } from "./jobs/agents.js";
+import { installedAgents } from "./jobs/agents.js";
 import { DEFAULT_JOB_RETENTION_DAYS, pruneJobWorkspaces, removeJobWorkspace } from "./jobs/cleanup.js";
 import { MirrorCheckouts } from "./jobs/checkouts.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
@@ -135,7 +135,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       storage: options.storage,
       checkouts: new MirrorCheckouts({ repositories: store, storage: options.storage }),
       agents: options.jobs.agents,
-      agentDefinitions: builtinAgents(),
+      agentDefinitions: installedAgents({ pool: options.pool }),
       interpreters: options.jobs.interpreters ?? interpretersFromEnv(),
       ...(options.jobs.defaults === undefined ? {} : { defaults: options.jobs.defaults }),
       requestWrite,

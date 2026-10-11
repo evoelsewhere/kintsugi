@@ -3,7 +3,7 @@
 The Kintsugi Runtime is a **generic agent kernel** on pi ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)). It runs one agent job at a time, each in its job workspace ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)), and knows no agent or use case.
 
 - **An agent is data, supplied whole with each job.** The runner is stateless and never looks an agent up.
-- **Agents are installation data** ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)): five built-in read-only agents for the understanding phases ship with their commands, workflows and scripts in `packages/agents/builtin/` ([ADR-0027](../decisions/0027-builtin-modernization-content.md)) and are seeded at startup; admins fork them or create their own in the Agent Builder. The launcher resolves `id` or `id@version` to a published version at job start and embeds it in the job.
+- **Agents are installation data** ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)): five built-in read-only agents for the understanding phases ship with their commands, workflows and scripts in `packages/agents/builtin/` ([ADR-0027](../decisions/0027-builtin-modernization-content.md)); admins copy them or create their own in the [Agent Builder](#agent-builder). The worker resolves the agent name to its current version at job start and embeds the whole definition in the job.
 - **No agent configuration in project repos.** Projects control the model each agent id uses (Admin → LLM Providers → agent bindings, [LLM configuration](../architecture/concepts/llm-configuration.md)).
 - **How agents read code**: directly, with the kernel's file tools on the read-only workspace. There is no code graph or parser.
 
@@ -65,6 +65,31 @@ Further tools (for example knowledge-base search) are added to the kernel tool r
 | `job.failed` | `reason` and error message |
 
 `job.failed` reasons: `error` (LLM or kernel error, empty response, output token limit), `timeout` (`timeoutSec` exceeded), `max-turns`, `budget` (`maxCostUsd` exceeded), `aborted`. LLM errors, aborts, timeouts and exceeded limits never end as `job.completed`.
+
+## Agent Builder
+
+Settings → Agents in the portal; API module `admin/agents` ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md#implementation-notes)).
+
+- **Catalog**: the built-in agents of the release (read-only, names reserved) plus the installation's custom agents (`admin.agent`, migration `012_agents.sql`). Each has an audience (`runtime` or `member`), a version, a validity (the problems that keep it from running here) and its installation-default model binding.
+- **Package format**: the same for the editor, import and export: `<name>.md` (frontmatter `name`, `version`, `description`, `tools`, `skills`, `thinking`, `deny-command-patterns`, `metadata` with `audience`; body = instructions) plus optional `skills/<n>/SKILL.md`. Saving runs the format checks (`parseAgentPackage`) and the installation checks (`validateAgent`: runtime tools must be kernel tools, shared skills must exist); every problem is returned at once (400).
+- **Versions**: every save records an immutable version (`admin.agent_version`) and makes it current; a version number is never reused. Restore makes an older version current again.
+- **Shared skills**: built-in skills plus custom ones (`admin.agent_skill`), referenced by name from `skills:`. A skill in use cannot be deleted; an edit applies to every agent that uses it at its next job.
+- **Resolution**: `resolveAgentDefinition` (`@kintsugi/agents`) turns a name into the job's `AgentDefinition`: a built-in first, else an enabled custom agent. Unknown, disabled, member and invalid agents fail the job with the reason.
+- **Access**: reading needs a session; every change needs `agents.manage`; model bindings need `providers.manage`.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/admin/agents` | Catalog (built-in and custom) |
+| `GET /api/admin/agents/context` | Kernel tools, shared skills and reserved names for the editor |
+| `GET /api/admin/agents/:name` | Manifest, instructions, local skills, package files, model bindings |
+| `POST /api/admin/agents` · `PUT /api/admin/agents/:name` | Create · save as a new version |
+| `PATCH /api/admin/agents/:name` · `DELETE /api/admin/agents/:name` | Enable or disable · delete (custom agents only) |
+| `POST /api/admin/agents/:name/copy` | Copy a built-in or custom agent under a new name |
+| `POST /api/admin/agents/preview` | Validate an unsaved draft and show its job definition (dry run) |
+| `GET /api/admin/agents/:name/definition` | The job definition of a saved runtime agent |
+| `POST /api/admin/agents/import` · `GET /api/admin/agents/:name/export[?version=]` | Import files or a base64 ZIP · export a ZIP |
+| `GET /api/admin/agents/:name/versions[/:version]` · `POST …/versions/:version/restore` | History · restore |
+| `GET/POST /api/admin/agent-skills` · `GET/PUT/DELETE /api/admin/agent-skills/:name` | Shared skills |
 
 ## Planned agents
 

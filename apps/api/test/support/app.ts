@@ -36,7 +36,9 @@ export async function startTestApp(): Promise<TestApp> {
     const { ResponseInterceptor } = await import("#common/interface/response.js");
 
     Logger.overrideLogger(false);
-    app = await NestFactory.create(AppModule, { logger: false });
+    const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(AppModule, { logger: false });
+    nest.useBodyParser("json", { limit: "4mb" });
+    app = nest;
     await ensureSchema();
     app.setGlobalPrefix("api");
     app.useGlobalFilters(new HttpExceptionFilter());

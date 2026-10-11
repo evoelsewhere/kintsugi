@@ -23,7 +23,7 @@ export { writeDocument, writerBranch, writerTrailers, type WriterDeps } from "./
 export { DEFAULT_JOB_LIMITS, JobRunner, type JobDefaults, type JobRunnerDeps } from "./jobs/runner.js";
 export { PgJobStore } from "./jobs/store.js";
 export { MirrorCheckouts } from "./jobs/checkouts.js";
-export { builtinAgents, type AgentResolver } from "./jobs/agents.js";
+export { builtinAgents, installedAgents, pgCustomAgents, type AgentResolver } from "./jobs/agents.js";
 export { JOB_OUTPUT_HOOK, runJobOutputHook, type HookOutcome } from "./jobs/hook.js";
 export { STAGES, STAGE_IDS, fill, type StagePlan, type StageStep } from "./jobs/stages.js";
 export { WORKFLOWS_DIR, loadWorkflow, runWorkflow, workflowBody, type WorkflowBudgets, type WorkflowOutcome } from "./jobs/workflow.js";
