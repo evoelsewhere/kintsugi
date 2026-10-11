@@ -17,8 +17,10 @@
   - `workspace.ts` — marks a job's `src` and `in` read-only, measures and removes job directories;
   - `process.ts` — child processes with an explicit command (no shell), a complete environment, a wall-clock timeout, an output-size watch and a process-tree kill (`taskkill /T /F` on Windows, the process group elsewhere);
   - `script.ts` — script steps: Python as `-I -B -X utf8`, Node with `--permission` limited to the workspace, the cleared job environment (`PATH`, `HOME`/`TEMP` into scratch, no credentials), the script's sha256, a redacted failure reason;
+  - `agent-process.ts` — agent jobs as child processes (`createChildAgentRuntime`): `bin/agent-job.js` per job, `cwd` = the job directory, the cleared environment plus the provider's environment credentials, Node's permission model, timeout and tree kill; `JobSpec` and API key on stdin, `JobEvent`s back as JSON lines;
   - `provider-registry.ts` reads `admin.llm_provider` and decrypts secrets; `model-runtime.ts` builds the job's pi `ModelRuntime` in memory (no `models.json`, no `auth.json`, nothing from the host's `~/.pi`).
 - `src/catalog/provider-catalog.ts` — the builtin providers and models of the pinned pi release plus the supported custom wire protocols, in a pi-agnostic shape. Exported as `@kintsugi/runtime/provider-catalog`; `apps/api` serves it to the portal (`GET /api/admin/llm-providers/supported`), so pi-specific code stays in this service.
+- `src/bin/agent-job.ts` — the agent job child process the launcher starts (not a command for people).
 - `src/bin/run-job.ts` — dev CLI, see below.
 - `src/mock-agent.ts`, `src/event-stream.ts`, `src/version.ts`.
 
@@ -39,7 +41,6 @@ node dist/bin/run-job.js --agent-file probe.json --read <dir> --out <dir> --task
 
 ## Planned
 
-- **Runner process** → agent jobs run in the worker process today (ADR-0029); a child process per agent job, behind the same job workspace, stays possible. Job events are not yet streamed to the portal.
 - **Agents** → installation data managed in the Agent Builder; built-in packages live in `packages/agents/builtin/` (ADR-0026). The kernel tool names are exported without pi as `@kintsugi/runtime/tool-names`, for validating agent tool allowlists.
 - **More kernel tools** (knowledge-base search, git history, …) are added to `src/kernel/tools.ts` with a review of their security boundary.
 

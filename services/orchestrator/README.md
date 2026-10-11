@@ -35,14 +35,12 @@ Runs stages, script steps, agent jobs and workflows in job workspaces ([ADR-0029
 - **Workspace** (`src/jobs/runner.ts`): `<data>/jobs/<id>/src` is a detached worktree of the source repository's mirror at the commit of its default branch (recorded on the run), marked read-only; `in` holds the step's inputs (earlier steps' outputs, declared document-repo files), read-only; `out` and `tmp` are writable; `src`, `in` and `tmp` are removed when the run ends.
 - **Stages** (`src/jobs/stages.ts`): ordered steps run as child runs sharing the stage's checkout. First milestone: `assess` = script `inventory.py` → agent `legacy-analyst` writing `assessment/<app>/inventory.json` and the `ASSESSMENT.md` draft.
 - **Script steps**: built-in `packages/agents/builtin/scripts/<name>` or a model-written script among the inputs (`scriptFromInputs`), through `@kintsugi/runtime/launcher` (cleared environment, timeout, output cap, process-tree kill, sha256 recorded).
-- **Agent jobs**: the built-in agent definition (`@kintsugi/agents`) and the agent's model binding (`admin.agent_model_binding`, project first) in a `JobSpec`, run in-process by the agent runtime: pi, or the mock backend (`KINTSUGI_RUNTIME_MODE=mock`). The kernel confines reads to `src` and `in`, writes to `out`.
+- **Agent jobs**: the built-in agent definition (`@kintsugi/agents`) and the agent's model binding (`admin.agent_model_binding`, project first) in a `JobSpec`, run as a child process per job (`createChildAgentRuntime` from `@kintsugi/runtime/launcher`): pi, or the mock backend (`KINTSUGI_RUNTIME_MODE=mock`). The provider's credentials go to that child only (stdin and its environment). The kernel confines reads to `src` and `in`, writes to `out`.
 - **Workflows** (`src/jobs/workflow.ts`): `builtin/workflows/<id>.js` only, evaluated with injected `args`, `log`, `agent`, `parallel`, `pipeline`, `phase`, `budget`; each `agent()` is a child agent run; agent cap and concurrency from `KINTSUGI_WORKFLOW_*`.
 - **After every step**: `out/restricted/` → `governance.restricted_record` (encrypted) and removed; the JobOutput hook (`hooks/job_output.py`) over `out/`, fail-closed, with a reason from its redacted report; `workflow.artifact` rows with provenance.
 - **Hand-off**: a top-level run with output enqueues a `document-write` with `outputOfJob` = the run (its `out/`), `jobId`, `agent`, `actor`, and records `document_write_id`.
-
-## Planned
-
-- Job events streamed to the portal; cancelling a run; cleanup of finished runs' `out/` after their write.
+- **Live events and cancel**: status, steps, agent tool calls (tool and path only) and log lines go to `workflow.job_event`, redacted; cancel requests (`cancel_requested_at`) are polled every 2 seconds and abort the run (processes killed, run `cancelled`).
+- **Cleanup** (`src/jobs/cleanup.ts`): `out/` is deleted once its write is `committed`, `pr-opened` or `unchanged`; failed runs and writes keep it for `KINTSUGI_JOB_RETENTION_DAYS`; an hourly sweep removes expired workspaces.
 - More stages (the full assess plan, map, extract-rules, …) and workflows per application source.
 - Ingestion, webhooks (D30).
 
