@@ -1,15 +1,16 @@
-// The detail of one job run (ADR-0027, ADR-0029): its steps, the artifacts it proposed to the
+// The detail of one job run (ADR-0027, ADR-0029): its steps as a tree (a workflow step opens to
+// its agent jobs and script steps), the artifacts it proposed to the
 // document repo (with the branch, commit and pull request of the document write that carries
 // them) and its live log over Server-Sent Events. Restricted records are only counted here;
 // holders of restricted.read open them in Governance (every read is audited).
 
-import { ExternalLink, FileText, ShieldAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, FileText, ShieldAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { RunStatusBadge, WriteStatusBadge } from "@/components/status-badges";
 import { StatusDot } from "@/components/ui/status-dot";
-import { type JobRunDetail, type JobRunEvent, jobRunsApi } from "@/lib/api/job-runs";
+import { type JobRunDetail, type JobRunEvent, jobRunsApi, type JobRunView } from "@/lib/api/job-runs";
 import { useAuth } from "@/lib/auth";
 import { formatBytes, formatDuration, shortSha } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
@@ -35,26 +36,7 @@ function RunFacts({ run }: { run: JobRunDetail }): React.JSX.Element {
     <div className="flex flex-col gap-3 text-[12px] text-text-secondary">
       <section>
         <h5 className="mb-1 text-[11px] font-medium tracking-wide text-text-muted uppercase">Steps</h5>
-        {run.steps.length === 0 ? (
-          <p className="text-text-muted">No steps recorded yet.</p>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {run.steps.map((step) => (
-              <li key={step.id} className="flex flex-wrap items-center gap-2">
-                <RunStatusBadge status={step.status} />
-                <span className="text-text">
-                  {step.kind} · {step.name}
-                </span>
-                <span className="text-text-muted">
-                  {step.agent === undefined ? "" : step.agent}
-                  {step.scriptHash === undefined ? "" : `sha256 ${step.scriptHash.slice(0, 12)}`}
-                  {step.startedAt === undefined ? "" : ` · ${formatDuration(step.startedAt, step.finishedAt)}`}
-                </span>
-                {step.failureReason === undefined ? null : <span className="w-full break-words text-[var(--ds-status-red)]">{step.failureReason}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
+        {run.steps.length === 0 ? <p className="text-text-muted">No steps recorded yet.</p> : <StepTree projectId={run.projectId} steps={run.steps} version={run.status} />}
       </section>
 
       <section>
@@ -113,6 +95,66 @@ function RunFacts({ run }: { run: JobRunDetail }): React.JSX.Element {
           )}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * The steps of a run as a tree: a workflow step opens to its own child runs (its agent jobs
+ * and script steps), loaded when opened and reloaded while the parent run changes status.
+ */
+function StepTree({ projectId, steps, version }: { projectId: string; steps: JobRunView[]; version: string }): React.JSX.Element {
+  return (
+    <ul className="flex flex-col gap-1">
+      {steps.map((step) => (
+        <StepNode key={step.id} projectId={projectId} step={step} version={version} />
+      ))}
+    </ul>
+  );
+}
+
+function StepNode({ projectId, step, version }: { projectId: string; step: JobRunView; version: string }): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const nested = step.kind === "workflow" || step.kind === "stage";
+  return (
+    <li className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        {nested ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={open ? `Hide the steps of ${step.name}` : `Show the steps of ${step.name}`}
+            onClick={() => setOpen(!open)}
+            className="rounded-[var(--geist-radius)] text-text-muted hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+          >
+            {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          </button>
+        ) : (
+          <span className="size-3.5" aria-hidden />
+        )}
+        <RunStatusBadge status={step.status} />
+        <span className="text-text">
+          {step.kind} · {step.name}
+        </span>
+        <span className="text-text-muted">
+          {step.agent === undefined ? "" : step.agent}
+          {step.scriptHash === undefined ? "" : `sha256 ${step.scriptHash.slice(0, 12)}`}
+          {step.startedAt === undefined ? "" : ` · ${formatDuration(step.startedAt, step.finishedAt)}`}
+        </span>
+        {step.failureReason === undefined ? null : <span className="w-full break-words pl-5.5 text-[var(--ds-status-red)]">{step.failureReason}</span>}
+      </div>
+      {open ? <StepChildren projectId={projectId} stepId={step.id} version={`${version}/${step.status}`} /> : null}
+    </li>
+  );
+}
+
+function StepChildren({ projectId, stepId, version }: { projectId: string; stepId: string; version: string }): React.JSX.Element {
+  const children = useLoader(`step/${projectId}/${stepId}/${version}`, () => jobRunsApi.get(projectId, stepId));
+  return (
+    <div className="ml-1.5 border-l border-black/10 pl-3 dark:border-white/10">
+      <Loaded loader={children} rows={1}>
+        {(detail) => (detail.steps.length === 0 ? <p className="text-text-muted">No child runs recorded yet.</p> : <StepTree projectId={projectId} steps={detail.steps} version={version} />)}
+      </Loaded>
     </div>
   );
 }

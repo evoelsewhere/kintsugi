@@ -3,7 +3,7 @@
 // Items come from nav-config.tsx; the user card and the Settings entry open the
 // settings modal. Styled per DESIGN.md (14px/400 items, gray hover fill).
 import { ChevronDown, LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Settings } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { BrandMark } from "../components/brand-mark";
 import { StatusDot } from "../components/ui/status-dot";
@@ -12,6 +12,7 @@ import { useAuth } from "../lib/auth";
 import { useHealth } from "../lib/use-health";
 import { useMediaQuery } from "../lib/use-media-query";
 import { cn } from "../lib/utils";
+import { useDynamicNavChildren } from "./dynamic-nav";
 import { NAV_SECTIONS, type NavItem } from "./nav-config";
 
 const HEALTH_TONE = { checking: "orange", up: "green", down: "red" } as const;
@@ -67,6 +68,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const health = useHealth();
   const { user, logout } = useAuth();
+  const dynamicChildren = useDynamicNavChildren();
   // Narrow screens always use the icon rail so content keeps its width.
   const rail = collapsed || !isDesktop;
 
@@ -83,13 +85,14 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
     return NAV_SECTIONS.map((section) => ({
       ...section,
       items: section.items.flatMap((item) => {
+        const children = item.childrenFrom === undefined ? item.children : dynamicChildren[item.childrenFrom];
         const matchesParent = item.label.toLowerCase().includes(needle);
-        const matchingChildren = item.children?.filter((child) => child.label.toLowerCase().includes(needle));
+        const matchingChildren = children?.filter((child) => child.label.toLowerCase().includes(needle));
         if (needle.length > 0 && !matchesParent && (matchingChildren?.length ?? 0) === 0) return [];
-        return [{ ...item, children: needle.length > 0 && !matchesParent ? matchingChildren : item.children }];
+        return [{ ...item, children: needle.length > 0 && !matchesParent ? matchingChildren : children }];
       }),
     })).filter((section) => section.items.length > 0);
-  }, [query]);
+  }, [query, dynamicChildren]);
 
   const toggle = (): void => {
     setCollapsed((prev) => {
@@ -202,20 +205,25 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
                       className="ml-[17px] mt-1 flex flex-col gap-0.5 border-l border-black/10 py-1 pl-2 dark:border-white/10"
                       aria-label={`${item.label} subnavigation`}
                     >
-                      {item.children?.map((child) => (
-                        <NavLink
-                          key={child.id}
-                          to={child.to}
-                          end
-                          className={({ isActive }) =>
-                            cn(
-                              "flex min-h-8 items-center rounded-[8px] px-3 text-[13px] text-text-secondary transition-colors hover:bg-hover hover:text-text",
-                              isActive && "bg-hover font-medium text-text",
-                            )
-                          }
-                        >
-                          <span className="truncate">{child.label}</span>
-                        </NavLink>
+                      {item.children?.map((child, index) => (
+                        <Fragment key={child.id}>
+                          {child.group !== undefined && child.group !== item.children?.[index - 1]?.group ? (
+                            <p className="px-3 pt-2 pb-0.5 text-[10px] font-medium tracking-wider text-text-muted uppercase">{child.group}</p>
+                          ) : null}
+                          <NavLink
+                            to={child.to}
+                            end
+                            className={({ isActive }) =>
+                              cn(
+                                "flex min-h-8 items-center gap-2 rounded-[8px] px-3 text-[13px] text-text-secondary transition-colors hover:bg-hover hover:text-text",
+                                isActive && "bg-hover font-medium text-text",
+                              )
+                            }
+                          >
+                            <span className="truncate">{child.label}</span>
+                            {child.badge === undefined ? null : <span className="ml-auto text-[11px] font-normal text-text-muted">{child.badge}</span>}
+                          </NavLink>
+                        </Fragment>
                       ))}
                     </div>
                   ) : null}
