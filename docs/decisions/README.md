@@ -71,7 +71,7 @@ This page has two parts:
 | D16 | Embedding model | 🟠 | Configured like LLM providers; must offer a local option | M1 | ⬜ |
 | D17 | MCP transport + auth | 🟠 | Remote Streamable HTTP on `kintsugi-app`, PAT auth; OAuth with Entra ID | M2 | 🟡 |
 | D18 | Priority member harness + license tier | 🟠 | Copilot first, Claude Code second | M2 | ⬜ |
-| D19 | Asset distribution to harnesses | 🟠 | Agent plugins via marketplaces generated in the document repo (vendored built-in plugin + project plugins from `plugins/`, relative paths); `kintsugi plugins setup`; fallback rendering for harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D19 | Asset distribution to harnesses | 🟠 | Agent plugins via marketplaces generated in the document repo (generated built-in plugin + project plugins, all under `plugins/`, relative paths); `kintsugi plugins setup`; fallback rendering for harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
 | D20 | Source of truth for work items | 🟠 | One file per unit in the document repo (`units/**`), state in frontmatter; Postgres is a rebuildable index; single write path through the Kintsugi API (bot commits with actor trailer); Jira / Azure DevOps are mirrors | M2 | ✅ [0012](0012-work-items-as-files-in-git.md) |
 | D21 | Measuring "AI-generated" | 🟠 | Mandatory declaration (commit trailer + PR template); telemetry for cross-checking | M3 | 🟡 |
 | D22 | Git servers & repositories | 🔴 | Many Git servers and many repos; plain git everywhere; API adapters GitHub → Azure DevOps → GitLab → Bitbucket → Gitea | M0 | ✅ [0007](0007-git-as-source-of-truth.md) |

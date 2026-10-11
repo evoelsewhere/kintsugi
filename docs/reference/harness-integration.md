@@ -26,7 +26,7 @@ Everything Kintsugi gives to a harness is packaged as an **agent plugin** in the
 
 ### 1.2 Built-in plugin `kintsugi`
 
-Source: [`plugins/kintsugi/`](../../plugins/kintsugi/). It is versioned with Kintsugi and vendored into each document repo at `.kintsugi/plugins/kintsugi@<version>/`.
+Sources: [`packages/agents/builtin/member/`](../../packages/agents/builtin/member/) (skills, hooks) plus the member agents and commands of the built-in content. It is versioned with Kintsugi and generated into each document repo as `plugins/kintsugi/` (never edited by hand).
 
 | Component | Content |
 |---|---|
@@ -49,7 +49,7 @@ Project plugins live in the document repo at `plugins/<plugin>/` ([document repo
 
 ### 1.4 Marketplaces
 
-After every change to `plugins/`, the worker auto-commits the generated files below to the document repo. All plugin sources are **relative paths**: the vendored built-in plugin and the project plugins. This works on any Git server.
+After every change to `plugins/`, the worker auto-commits the generated files below to the document repo. All plugin sources are **relative paths** under `plugins/`: the generated built-in plugin and the project plugins. This works on any Git server.
 
 | File | Read by |
 |---|---|

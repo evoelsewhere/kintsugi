@@ -72,7 +72,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | E2 Knowledge Hub | AS-IS / TO-BE KB: sources in Git, text chunks + embeddings (pgvector) in Postgres, no code graph; ingestion; search API |
 | E3 Standards & Assets | Reads `kintsugi.yaml`, `standards/` and `plugins/` from the document repo at a fixed commit, and combines them with built-in assets for runtime jobs and harness rendering ([document repository](../reference/document-repo.md)) |
 | E4 Kintsugi Runtime (pi) | Generic agent kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)): runs one agent job whose [agent definition](../reference/runtime-agents.md) is supplied with the job, in the job's workspace ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)); knows no agent. Built-in and custom agents are installation data managed in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
-| E5 Harness Hub | MCP server, CLI backend, plugin validation and **marketplace generation** (vendored built-in plugin + project plugins from `plugins/`), fallback rendering, policy distribution, telemetry ingest ([harness integration](../reference/harness-integration.md)) |
+| E5 Harness Hub | MCP server, CLI backend, plugin validation and **marketplace generation** (generated built-in plugin + project plugins, all under the document repo's `plugins/`), fallback rendering, policy distribution, telemetry ingest ([harness integration](../reference/harness-integration.md)) |
 | E6 Git Sync & Writer | Sync many repos across many Git servers; the writer, the only component that commits to project repos: commits / PRs runtime results, unit state changes and portal-published files (e.g. `kintsugi.yaml`) to the document repo through the `document-write` queue, one write per repository at a time (fetch → rebase → retry, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
 | E7 Events | Domain events (job.started, pr.opened, gate.passed, artifact.registered…) via outbox + `LISTEN/NOTIFY` |
 | E8 Connectors | Git provider APIs (PRs, comments, webhooks), trackers, wikis, observability |
@@ -107,7 +107,5 @@ Shared libraries and assets:
 | `packages/git` | Git core: system `git` CLI wrapper with per-call credentials, checkout storage layout, provider REST adapters ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
 | `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `AgentDefinition`, `JobEvent`, LLM provider configuration types |
 | `packages/harness-sdk` | `TaskPack`, `AssetRenderer`, `HarnessActivity`, `HarnessPolicy` |
-| `plugins/` | Built-in agent plugin `kintsugi` for member harnesses (skills, hooks, Kintsugi MCP server) |
-| `.claude-plugin/marketplace.json` | Marketplace listing the built-in plugin, for local testing |
 | `templates/document-repo` | Document repo starter template: `kintsugi.yaml`, neutral `standards/` and `plugins/` samples |
 | `deploy/compose` | The Docker Compose package |
