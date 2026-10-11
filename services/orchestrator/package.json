@@ -5,6 +5,16 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./queues": {
+      "types": "./dist/queues.d.ts",
+      "import": "./dist/queues.js"
+    }
+  },
   "engines": {
     "node": ">=22.19.0"
   },
@@ -17,7 +27,9 @@
     "dev": "node ../../scripts/dev-service.mjs"
   },
   "dependencies": {
+    "@kintsugi/domain": "workspace:*",
     "@kintsugi/git": "workspace:*",
+    "@kintsugi/manifest": "workspace:*",
     "@kintsugi/secrets": "workspace:*",
     "pg": "^8.23.1",
     "pg-boss": "12.37.1"

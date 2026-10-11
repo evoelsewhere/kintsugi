@@ -27,7 +27,8 @@ const exists = (path: string): Promise<boolean> =>
 /** A clone or fetch of a large legacy repository can take a while. */
 const GIT_TIMEOUT_MS = 30 * 60 * 1000;
 
-function remoteOptions(target: SyncTarget): RemoteOptions {
+/** How the worker reaches a repository for one Git call. */
+export function remoteOptions(target: SyncTarget): RemoteOptions {
   return {
     credential: target.credential,
     ...(target.knownHosts === undefined ? {} : { knownHosts: target.knownHosts }),
