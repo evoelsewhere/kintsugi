@@ -48,6 +48,7 @@ This page has two parts:
 | [0027](0027-builtin-modernization-content.md) | Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests | Accepted (amended by 0028, 0029) |
 | [0028](0028-remove-rulebook-single-document-repo.md) | Remove the rulebook; one document repo per project | Accepted |
 | [0029](0029-job-workspaces-instead-of-os-sandboxes.md) | Job workspaces instead of OS sandboxes | Accepted |
+| [0030](0030-worker-heartbeat-in-postgres.md) | Worker heartbeat in Postgres | Accepted |
 
 ## Decision register
 
@@ -78,7 +79,7 @@ This page has two parts:
 | D23 | Events | — | Postgres outbox + `LISTEN/NOTIFY` → SSE | — | ✅ [0010](0010-postgres-only.md) |
 | D24 | Observability | 🟢 | Usage/cost/events in Postgres, shown in the portal; optional OTel export | M0 | 🟡 |
 | D25 | Policy engine | 🟢 | TypeScript rules + policy in `kintsugi.yaml`; consider OPA/Cedar in M4 | M4 | 🟡 |
-| D26 | Audit log | 🟢 | Append-only, hash-chained table in Postgres | M4 | 🟡 |
+| D26 | Audit log | 🟢 | Append-only table in Postgres (done: `governance.audit_event`, one `AuditTrail` port, coverage in the [security concept](../architecture/concepts/security.md#audit-coverage)); hash-chaining still proposed | M4 | 🟡 |
 | D27 | pi versioning | 🟢 | Track latest pi, pin exact versions of `@earendil-works/*` in the runner image; deliberate upgrades | M0 | ✅ [0018](0018-pin-pi-exact-version.md) |
 | D28 | Runtime agent definitions | 🟢 | The runtime is a generic kernel; an agent definition (instructions, skills, tools, policy) is data supplied with each job; none is configured in any repo; built-in and custom agents are installation data (D46) | M1 | ✅ [0023](0023-runtime-as-generic-agent-kernel.md), [0026](0026-runtime-agents-and-agent-builder.md) |
 | D29 | Document repo layout + how the runtime writes to Git | 🔴 | One document repo per project (renamed from workspace repo by [0028](0028-remove-rulebook-single-document-repo.md)); worker commits on `kintsugi/*` branches + PR as `kintsugi-bot`; `autoCommitPaths` (`units/**`, `tasks/**`, `knowledge/**/generated/**`) commit directly to the default branch ([reference](../reference/document-repo.md)) | M0 | ✅ [0019](0019-workspace-repo-write-path.md), [0028](0028-remove-rulebook-single-document-repo.md) |
@@ -100,6 +101,7 @@ This page has two parts:
 | D46 | Runtime agents and the Agent Builder | 🔴 | Five built-in read-only agents for understanding (legacy-analyst, business-rules-extractor, version-delta-analyst, architecture-critic, security-auditor) plus admin-created agents; agent files + Agent Skills (format per ADR-0027); draft and immutable published versions; implementation stays with members | M0 | ✅ [0026](0026-runtime-agents-and-agent-builder.md) |
 | D47 | Built-in modernization content | 🔴 | Upstream code-modernization content copied into `packages/agents/builtin/` (pinned, Apache-2.0, no assets) and adapted: runtime and member agents (`metadata.audience`), stage commands, workflows, scripts in the job workspace, server-side hooks, tests | M0 | ✅ [0027](0027-builtin-modernization-content.md), [0029](0029-job-workspaces-instead-of-os-sandboxes.md) |
 | D48 | Project knowledge and repository model | 🔴 | No rulebook; one document repo per project holds everything except code; project knowledge as plain documents in `standards/` and member plugins in `plugins/`; pipelines in `kintsugi.yaml` or built-in; repo roles `legacy` / `legacy-data` (AS-IS, read-only) and `target` with `component` (TO-BE, members only) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
+| D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
 ## Notes on open points

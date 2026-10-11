@@ -32,6 +32,17 @@ Responsibilities beyond the feature modules below:
   (`?status=queued,failed&projectId`); `GET /api/monitoring/overview` (counts, what needs
   attention, recent activity, the worker's pg-boss queue counts — `null` when unreadable) and
   `GET /api/monitoring/repositories` (sync state and project links, never credentials).
+- Worker health (ADR-0030): `GET /api/monitoring/workers` lists worker processes from
+  `workflow.worker_heartbeat` (migration `014_worker_heartbeat.sql`; up when seen < 45 s ago);
+  the overview adds `worker.up`, pending gates and `gate-pending` / `worker-down` attention items.
+- Governance → gates: `governance.gate` (migration `013_gates.sql`): `GET /api/governance/gates`
+  (`?projectId&applicationId&gateKey&status`), `GET …/:id`, `GET …/:id/history` (session);
+  `POST /api/governance/gates` (`gates.request` or `gates.decide`); `POST …/:id/decision`
+  (`gates.decide`; approve, reject or waive, a note is required to reject or waive).
+- Governance → audit: use cases record through the shared `AuditTrail` port
+  (`#common/audit/audit-trail.js`, bound globally by the audit module) — never in controllers.
+  `GET /api/governance/audit` (`?action=a,b&actor&subject&projectId`) and
+  `GET /api/governance/audit/actions` need `audit.read`.
 - Governance → restricted records: `GET /api/governance/restricted-records` (`restricted.read`)
   lists record metadata only (run, step, path, size), never content, so it is not audited;
   reading a record stays the audited per-run read above.
@@ -121,6 +132,7 @@ Import it through the `#common/*` alias (Node subpath imports in `package.json`)
 | `getPool`, `ensureSchema` | `#common/db/pool.js` | Postgres access + migrations (advisory-locked) |
 | `getJobQueue`, `closeJobQueue` | `#common/queue/job-queue.js` | pg-boss producer for the worker's queues (contract in `@kintsugi/orchestrator/queues`) |
 | `withTransaction`, `Queryable` | `#common/db/pool.js` | one unit of work across several statements |
+| `AuditTrail`, `AUDIT_ACTIONS`, `auditRecord()`, `changedFields()` | `#common/audit/audit-trail.js` | the one audit port: `record()` fail-closed before protected content, `recordChange()` after a change |
 | `@Public()`, `@RequirePermission()`, `@CurrentActor()`, `Actor` | `#common/auth/decorators.js` | route access + the caller passed to use cases |
 | `sessionToken`, `setSessionCookie`, `CSRF_HEADER` | `#common/auth/session-cookie.js` | session transport (cookie or bearer) + CSRF rule |
 | `encryptSecret`, `decryptSecret` | `@kintsugi/secrets` | AES-256-GCM with `KINTSUGI_SECRET_KEY` (shared with services/runtime) |
