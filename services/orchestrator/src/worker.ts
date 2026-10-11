@@ -15,6 +15,7 @@ import { builtinAgents } from "./jobs/agents.js";
 import { DEFAULT_JOB_RETENTION_DAYS, pruneJobWorkspaces, removeJobWorkspace } from "./jobs/cleanup.js";
 import { MirrorCheckouts } from "./jobs/checkouts.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
+import { JobCancelled } from "./jobs/model.js";
 import { PgJobStore } from "./jobs/store.js";
 import { pruneMirrors, syncRepository } from "./git-sync/sync.js";
 import {
@@ -54,6 +55,8 @@ export interface WorkerOptions {
   jobRetentionDays?: number;
   /** Seconds between sweeps of expired job workspaces (default: hourly). */
   cleanupIntervalSeconds?: number;
+  /** Seconds between checks for cancel requests of the runs this worker runs (default 2). */
+  cancelPollSeconds?: number;
   /** Runtime jobs (queue `job-run`); omitted = this worker runs no jobs. */
   jobs?: {
     /** pi in production; the mock backend in tests and mock-mode development. */
@@ -130,6 +133,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
 
   // Runtime jobs: one job workspace per run (ADR-0029); aborted when the worker stops.
   const stopping = new AbortController();
+  const active = new Map<string, AbortController>();
   await ensureJobRunQueue(boss);
   if (options.jobs !== undefined) {
     const runner = new JobRunner({
@@ -145,9 +149,20 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     });
     await boss.work<JobRunRequest>(JOB_RUN_QUEUE, { localConcurrency: options.jobs.concurrency ?? 2 }, async ([job]) => {
       if (job === undefined) return;
-      await runner.run(job.data.jobRunId, stopping.signal);
+      // One controller per run: a cancel request aborts this run only (its processes are killed).
+      const cancel = new AbortController();
+      active.set(job.data.jobRunId, cancel);
+      try {
+        await runner.run(job.data.jobRunId, AbortSignal.any([stopping.signal, cancel.signal]));
+      } finally {
+        active.delete(job.data.jobRunId);
+      }
     });
   }
+  const watchCancels = async (): Promise<void> => {
+    if (active.size === 0) return;
+    for (const id of await jobStore.cancelRequested([...active.keys()])) active.get(id)?.abort(new JobCancelled());
+  };
 
   const requestSync = async (repositoryId: string): Promise<void> => {
     await boss.send(GIT_SYNC_QUEUE, { repositoryId }, { singletonKey: repositoryId });
@@ -171,6 +186,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     for (const key of await pruneMirrors(deps)) log(`pruned mirror ${key}`);
   });
   const retentionMs = (options.jobRetentionDays ?? DEFAULT_JOB_RETENTION_DAYS) * 24 * 60 * 60 * 1000;
+  const checkCancels = tick("cancel check", watchCancels);
   const pruneJobs = tick("job workspace cleanup", async () => {
     const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
     if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
@@ -179,6 +195,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void scanPending(), (options.pendingScanSeconds ?? 5) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),
     setInterval(() => void pruneJobs(), (options.cleanupIntervalSeconds ?? 60 * 60) * 1000),
+    setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
   ];
   void pollAll();
   void pruneJobs();

@@ -11,7 +11,7 @@ import { addWorktree, removeWorktree, resolveCommit, runGit } from "@kintsugi/gi
 import { createAgentRuntime } from "@kintsugi/runtime";
 import { makeReadOnly, makeWritable } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
-import type { ArtifactEntry, JobRun, JobStore, ModelBinding, NewJobRun, SourceCheckouts } from "../../src/jobs/model.js";
+import type { ArtifactEntry, JobEventRecord, JobRun, JobStore, ModelBinding, NewJobRun, SourceCheckouts } from "../../src/jobs/model.js";
 import type { DocumentWriteRequest } from "../../src/queues.js";
 
 export class MemoryJobStore implements JobStore {
@@ -30,8 +30,23 @@ export class MemoryJobStore implements JobStore {
   async create(run: NewJobRun): Promise<void> {
     this.runs.set(run.id, { ...run, status: "queued", inputs: run.inputs ?? {}, limits: run.limits ?? {} });
   }
-  async start(id: string): Promise<void> {
-    this.runs.get(id)!.status = "running";
+  readonly events: JobEventRecord[] = [];
+  readonly cancelRequests = new Set<string>();
+  async start(id: string): Promise<boolean> {
+    const run = this.runs.get(id)!;
+    if (run.status !== "queued") return false;
+    run.status = "running";
+    return true;
+  }
+  async cancel(id: string): Promise<void> {
+    const run = this.runs.get(id)!;
+    if (run.status === "queued" || run.status === "running") run.status = "cancelled";
+  }
+  async cancelRequested(ids: readonly string[]): Promise<string[]> {
+    return ids.filter((id) => this.cancelRequests.has(id));
+  }
+  async addEvent(event: JobEventRecord): Promise<void> {
+    this.events.push(event);
   }
   async update(id: string, patch: { sourceCommit?: string; scriptHash?: string; agent?: string }): Promise<void> {
     Object.assign(this.runs.get(id)!, patch);

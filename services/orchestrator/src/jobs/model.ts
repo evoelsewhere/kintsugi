@@ -68,16 +68,35 @@ export interface ModelBinding {
   thinking?: string;
 }
 
+export type JobEventKind = "status" | "step.started" | "step.finished" | "tool" | "log";
+
+/** One line of a run's live record (workflow.job_event): redacted, never file content. */
+export interface JobEventRecord {
+  /** The top-level run the event belongs to. */
+  runId: string;
+  /** The step (child run) it came from; undefined for the run itself. */
+  stepId?: string;
+  kind: JobEventKind;
+  message: string;
+  data?: Record<string, unknown>;
+}
+
 /** Persistence of job runs and what they need to know about the project. */
 export interface JobStore {
   get(id: string): Promise<JobRun | undefined>;
   create(run: NewJobRun): Promise<void>;
-  /** queued → running; records the source commit once known. */
-  start(id: string): Promise<void>;
+  /** queued → running; false when the run is no longer queued (cancelled before it started). */
+  start(id: string): Promise<boolean>;
   update(id: string, patch: { sourceCommit?: string; scriptHash?: string; agent?: string }): Promise<void>;
   succeed(id: string, summary: Record<string, unknown>): Promise<void>;
   /** `reason` must be redacted already. */
   fail(id: string, reason: string, summary?: Record<string, unknown>): Promise<void>;
+  /** Records the run as cancelled (a person asked for it). */
+  cancel(id: string): Promise<void>;
+  /** Of the given runs, those a person asked to cancel. */
+  cancelRequested(ids: readonly string[]): Promise<string[]>;
+  /** Appends an event to a run's live record; must not throw for a failing write (best effort). */
+  addEvent(event: JobEventRecord): Promise<void>;
   addArtifacts(id: string, entries: readonly ArtifactEntry[]): Promise<void>;
   /** Stores one file of the run's restricted/ output, encrypted. */
   addRestricted(id: string, path: string, content: Buffer): Promise<void>;
@@ -102,6 +121,17 @@ export interface SourceCheckouts {
   /** Removes a worktree made by checkout(). */
   release(repositoryId: string, dest: string): Promise<void>;
 }
+
+/** The abort reason of a run a person cancelled (as opposed to the worker stopping). */
+export class JobCancelled extends Error {
+  constructor() {
+    super("cancelled");
+    this.name = "JobCancelled";
+  }
+}
+
+/** True when `signal` was aborted because the run was cancelled. */
+export const isCancelled = (signal: AbortSignal | undefined): boolean => signal?.aborted === true && signal.reason instanceof JobCancelled;
 
 /** A failure whose reason is safe to record and show (already redacted). */
 export class JobFailure extends Error {
