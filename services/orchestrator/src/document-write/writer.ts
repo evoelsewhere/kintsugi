@@ -23,7 +23,7 @@ import {
 } from "@kintsugi/git";
 import { MANIFEST_FILE, parseKintsugiYaml } from "@kintsugi/manifest";
 import type { RepositoryStore } from "../git-sync/repositories.js";
-import { remoteOptions, syncRepository } from "../git-sync/sync.js";
+import { remoteOptions, syncRepository, withMirrorLock } from "../git-sync/sync.js";
 import type { DocumentWriteRequest } from "../queues.js";
 import { OutputRuleError, decodeFiles, readOutputDir, splitByAutoCommit, validateOutputs } from "./outputs.js";
 import type { DocumentWriteOutcome, DocumentWriteStore } from "./store.js";
@@ -143,7 +143,7 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
       if (result.changed) {
         outcome.status = "committed";
         outcome.commit = result.commit;
-        await fetchMirror(mirror, options); // the review branch starts after this commit
+        await withMirrorLock(repository.id, () => fetchMirror(mirror, options)); // the review branch starts after this commit
       }
     }
 
