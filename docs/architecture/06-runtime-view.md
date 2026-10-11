@@ -74,3 +74,22 @@ Questions come from the portal chat or from a member's harness (MCP `kb.ask`).
    - Changes under `plugins/` re-validate the plugins and regenerate the marketplace files.
    - New or updated PRs enqueue `gate-reviewer`.
    - Servers without a provider adapter get sync and branch polling only.
+
+## 6.6 Writing to the document repo
+
+```
+Caller (API, job completion) ─► workflow.document_write (queued) + pg-boss `document-write` (key: document repo)
+                                   │
+                                   ▼
+Worker writer ─ fetch mirror ─ validate files ─┬─ autoCommitPaths ─► commit on default branch ─► push
+                                               └─ other paths ─────► commit on kintsugi/<agent-or-actor>/<job-id> ─► push ─► open PR
+                                   │
+                                   └─► workflow.document_write: committed / pr-opened / unchanged / failed
+```
+
+1. A caller enqueues a write: the files (inline, or a finished job's `/out`), a message and provenance. Example: **Publish kintsugi.yaml** on the project page.
+2. The writer takes one write per document repository at a time, fetches the repository's mirror and validates the files against the output rules.
+3. It splits the paths by `autoCommitPaths` from `kintsugi.yaml` on the default branch, and commits each part as `kintsugi-bot` with trailers, in a scratch worktree of the mirror.
+4. Each push is fast-forward only. A rejection means someone pushed first: the writer fetches, rebases and retries; a conflict fails the write.
+5. For the `kintsugi/*` branch it opens a pull request through the server's REST API; servers without one keep the branch.
+6. The outcome is recorded on the write and shown on the project page ([document repository](../reference/document-repo.md#write-path)).

@@ -105,20 +105,34 @@ Schema (`validateManifest` in `packages/domain`, `parseKintsugiYaml` in `package
 | `applications` | yes | List (may be empty). Each: `id` (kebab-case, unique), optional `name`, `disposition` (7R), optional `pipeline` (id), `repos` |
 | `applications[].repos` | no | Each: `server`, `path`, `role` (`legacy`, `legacy-data` or `target`; `document` is not allowed here), `component` (required for `target`, unique per application, forbidden otherwise). A `server` + `path` pair appears once in the file, the document repo included |
 | `pipelines` | no (default `[]`) | Each: `id` (unique), optional `appliesTo.dispositions`, non-empty `phases` (`id`; `category` required for a custom phase; optional `perUnit`; non-empty `stages` with `id`, `performer` = `{agent: <id>}` or `{member: [<roles>]}`, optional `gate`), optional `gates` |
-| `autoCommitPaths` | no | Default `units/**`, `tasks/**`, `knowledge/**/generated/**` (ADR-0019) |
+| `autoCommitPaths` | no | Globs (`**` spans folders, `*` and `?` stay within one segment); default `units/**`, `tasks/**`, `knowledge/**/generated/**` (ADR-0019). The writer reads them from `kintsugi.yaml` on the default branch, and uses the defaults when the file is missing or invalid |
 | `policy` | no | `harnesses` (default: the built-in member harnesses), `requireCommitTrailer` (default `true`) |
 
 `path` is the repository's clone URL path relative to its server's base URL, without `.git`: `https://dev.azure.com/acme/Billing/_git/web` on a server with base URL `https://dev.azure.com/acme` gives `Billing/_git/web`; `git@github.com:org/app.git` gives `org/app`. Pipeline ids are not yet checked against the built-in pipelines (their list is an open follow-up of ADR-0028).
 
-**Rendered from the portal (read-only).** The project page shows, and `GET /api/admin/projects/:id/kintsugi.yaml` returns, the manifest rendered from the project's state in Postgres: project, document repo, applications and their repos. `unitKinds`, `pipelines`, `autoCommitPaths` and `policy` show defaults until the portal manages them. Kintsugi does not commit the rendered file to the document repo yet: that needs the worker's write path ([ADR-0019](../decisions/0019-workspace-repo-write-path.md)), which is not built. Until then, copy it into the document repo through a pull request.
+**Rendered and published from the portal.** The project page shows, and `GET /api/admin/projects/:id/kintsugi.yaml` returns, the manifest rendered from the project's state in Postgres: project, document repo, applications and their repos. `unitKinds`, `pipelines`, `autoCommitPaths` and `policy` show defaults until the portal manages them. **Publish kintsugi.yaml** (`POST /api/admin/projects/:id/kintsugi.yaml/publish`, permission `projects.manage`) hands the rendered file to the [writer](#write-path): `kintsugi.yaml` is not an auto-commit path, so it arrives as a pull request from `kintsugi/<user>/<write-id>`. The project page lists recent writes with their status and pull-request link (`GET /api/admin/projects/:id/document-writes`).
+
+## Write path
+
+Only the worker's writer (`services/orchestrator`, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) commits to the document repo. Callers (the API, runtime job completion) enqueue a `document-write` job; the writer handles one write per document repository at a time:
+
+1. Resolves the project's repository with role `document` and its server credential; fetches its mirror.
+2. Validates the files: relative paths without `..`, `.`, empty or `.git` segments, no symbolic links; at most 500 files, 5 MiB per file, 50 MiB per write. A violation fails the write.
+3. Commits paths matching `autoCommitPaths` to the default branch, and the other paths to `kintsugi/<agent-or-actor>/<job-id>` (the write id when there is no job).
+4. Pushes fast-forward only: on a rejection it fetches, rebases and retries (4 attempts in all); a rebase conflict fails the write. It never force-pushes and refuses any ref other than the default branch and `kintsugi/*`.
+5. Opens a pull request from the `kintsugi/*` branch with the server's token: GitHub, GitHub Enterprise, GitLab, Gitea and Azure DevOps. `plain-git` servers, servers authenticated by SSH key, and Bitbucket (no adapter yet) keep the pushed branch.
+6. Records the outcome in `workflow.document_write`: `committed`, `pr-opened`, `unchanged` (the files were already identical) or `failed` with a redacted error ([data model](data-model.md#document-writes)).
 
 ## Commit conventions
+
+Every commit by Kintsugi has author and committer `kintsugi-bot <KINTSUGI_BOT_EMAIL>` ([configuration](configuration.md)) and carries the trailers that apply to it:
 
 | Who | Branch | Author | Trailers |
 |---|---|---|---|
 | Kintsugi worker (PR) | `kintsugi/<agent>/<job-id>` | `kintsugi-bot` | `Kintsugi-Job: <id>`, `Kintsugi-Agent: <agent>@<version>` |
 | Kintsugi worker (auto-commit) | default branch | `kintsugi-bot` | same as above |
 | State change on behalf of a user | default branch (`units/**`) | `kintsugi-bot` | `Kintsugi-Actor: <user>`, `Kintsugi-Unit: <unit-id>` |
+| Change published by a user from the portal (e.g. `kintsugi.yaml`) | `kintsugi/<user>/<write-id>` (PR) | `kintsugi-bot` | `Kintsugi-Actor: <user>` |
 | Members | own branches | the member | `Assisted-by: <harness>` when AI-assisted |
 | Standards and plugins changes | own branches, PR reviewed by the architect | the member | — |
 

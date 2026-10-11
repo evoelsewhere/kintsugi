@@ -28,6 +28,7 @@ src/
   common/                  shared kernel — import from here, never duplicate
     config/env.ts          typed environment access (deployment config only)
     db/                    Postgres pool + migrations runner
+    queue/job-queue.ts     pg-boss producer for the worker's queues (ADR-0003)
     domain/repository.ts   generic repository port (DDD)
     application/           generic CRUD use cases over the port
     infrastructure/        in-memory repository adapter (dev skeletons)
