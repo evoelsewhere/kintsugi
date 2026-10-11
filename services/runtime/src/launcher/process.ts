@@ -1,8 +1,9 @@
-// Child processes of the job workspace (ADR-0029): script steps and hooks. Each runs with an
+// Child processes of the job workspace (ADR-0029): script steps, hooks and agent jobs. Each runs with an
 // explicit command and arguments (no shell), a cleared environment, a wall-clock timeout, an
 // output-size cap, and is killed with its whole process tree on timeout, size breach or abort.
 
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import { treeSize } from "./workspace.js";
 
 export interface RunProcessOptions {
@@ -17,6 +18,10 @@ export interface RunProcessOptions {
   /** Directory whose size is watched while the process runs, and its limit in bytes. */
   watch?: { dir: string; maxBytes: number; intervalMs?: number };
   signal?: AbortSignal;
+  /** Written to the process's stdin, which is then closed (stdin is empty otherwise). */
+  input?: string;
+  /** Receives stdout line by line instead of capturing it (agent jobs stream JSON lines). */
+  onLine?: (line: string) => void;
 }
 
 export type ProcessStop = "timeout" | "output-limit" | "aborted";
@@ -88,7 +93,8 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     const child = spawn(options.command, [...options.args], {
       cwd: options.cwd,
       env: options.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      // stdin is always a pipe: it carries `input`, or is closed at once.
+      stdio: ["pipe", "pipe", "pipe"],
       shell: false,
       windowsHide: true,
       // Own process group on POSIX, so the whole tree can be killed.
@@ -96,7 +102,19 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     });
     const stdout = new Capture(max);
     const stderr = new Capture(max);
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    if (options.onLine === undefined) {
+      child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    } else {
+      // Line by line; readline handles CRLF and a last line without a newline.
+      const onLine = options.onLine;
+      createInterface({ input: child.stdout, crlfDelay: Infinity }).on("line", (line) => {
+        if (line.trim() !== "") onLine(line);
+      });
+    }
+    // The process may exit before reading everything; a broken pipe is not an error here.
+    child.stdin.on("error", () => undefined);
+    if (options.input === undefined) child.stdin.end();
+    else child.stdin.end(options.input, "utf8");
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
 
     let stopped: ProcessStop | undefined;

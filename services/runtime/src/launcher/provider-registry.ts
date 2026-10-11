@@ -1,6 +1,6 @@
 // Postgres adapter for the LLM provider registry (ADR-0009, ADR-0010; schema: admin).
 // The launcher runs in kintsugi-worker, which owns Postgres access; it resolves the
-// job's credentials here and passes them to pi as runtime auth or env vars (ADR-0004).
+// job's credentials here; the launcher hands them to the job's child process only (ADR-0029).
 // TODO: move to the worker's shared layer when services/orchestrator lands.
 
 import { decryptSecret } from "@kintsugi/secrets";

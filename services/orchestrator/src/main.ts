@@ -7,8 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { CheckoutStorage, checkGitVersion, dataDirFromEnv } from "@kintsugi/git";
-import { createAgentRuntime } from "@kintsugi/runtime";
-import { buildModelRuntime, interpretersFromEnv, loadProvider } from "@kintsugi/runtime/launcher";
+import { createChildAgentRuntime, interpretersFromEnv, loadProvider } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { Pool } from "pg";
 import { DEFAULT_JOB_LIMITS, type JobDefaults } from "./jobs/runner.js";
@@ -46,23 +45,13 @@ function jobDefaults(): JobDefaults {
 
 /**
  * The agent runtime: pi (default) or the mock backend (KINTSUGI_RUNTIME_MODE=mock, no LLM).
- * pi jobs run in this process; their credentials are decrypted per job and stay in memory.
+ * Every agent job runs in its own child process in its job workspace; the provider's
+ * credentials are decrypted per job and handed to that child only (stdin and its environment).
  */
-function agentRuntime(databaseUrl: string): AgentRuntime {
+function agentRuntime(databaseUrl: string, node: string): AgentRuntime {
   const mode = (process.env["KINTSUGI_RUNTIME_MODE"] ?? "pi").trim();
-  if (mode === "mock") return createAgentRuntime({ mode: "mock" });
-  if (mode !== "pi") throw new Error('KINTSUGI_RUNTIME_MODE must be "pi" or "mock"');
-  return createAgentRuntime({
-    mode: "pi",
-    resolveModelRuntime: async (spec) => {
-      const { config, credentials } = await loadProvider(spec.model.provider, databaseUrl);
-      // Provider environment would have to go into this shared process; refuse rather than leak it across jobs.
-      if (Object.keys(credentials.env ?? {}).length > 0) {
-        throw new Error(`LLM provider ${spec.model.provider} uses environment credentials, which in-worker jobs do not support yet`);
-      }
-      return buildModelRuntime(config, credentials);
-    },
-  });
+  if (mode !== "pi" && mode !== "mock") throw new Error('KINTSUGI_RUNTIME_MODE must be "pi" or "mock"');
+  return createChildAgentRuntime({ mode, node, loadProvider: (providerId) => loadProvider(providerId, databaseUrl) });
 }
 
 async function main(): Promise<void> {
@@ -78,8 +67,8 @@ async function main(): Promise<void> {
   const gitVersion = await checkGitVersion();
   const storage = new CheckoutStorage(dataDirFromEnv());
   const pool = new Pool({ connectionString: databaseUrl, max: 5 });
-  const agents = agentRuntime(databaseUrl);
   const interpreters = interpretersFromEnv();
+  const agents = agentRuntime(databaseUrl, interpreters.node);
   const worker = await startWorker({
     databaseUrl,
     pool,
@@ -89,7 +78,7 @@ async function main(): Promise<void> {
     jobs: { agents, interpreters, defaults: jobDefaults(), concurrency: positive("KINTSUGI_JOB_MAX_CONCURRENCY", 2) },
   });
   console.log(`[worker] git ${gitVersion}, data ${storage.root}, polling every ${pollIntervalSeconds}s, commits as kintsugi-bot <${botEmail}>`);
-  console.log(`[worker] runtime ${agents.engine}, python ${interpreters.python}, node ${interpreters.node}; jobs run in job workspaces without an OS sandbox (ADR-0029)`);
+  console.log(`[worker] runtime ${agents.engine}, python ${interpreters.python}, node ${interpreters.node}; jobs run in job workspaces without an OS sandbox, agent jobs as child processes (ADR-0029)`);
 
   const shutdown = async (): Promise<void> => {
     await worker.stop();
