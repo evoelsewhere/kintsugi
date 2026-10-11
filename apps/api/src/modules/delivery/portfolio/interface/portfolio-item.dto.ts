@@ -2,7 +2,7 @@
 // Schema; validated by `StandardSchemaValidationPipe`).
 
 import { z } from "zod";
-import { stringField } from "../../../../common/interface/dto.js";
+import { stringField } from "#common/interface/dto.js";
 import type { UpdatePortfolioItem } from "../application/portfolio-items.service.js";
 import type { CreatePortfolioItem } from "../domain/portfolio-item.js";
 

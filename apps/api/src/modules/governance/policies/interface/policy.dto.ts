@@ -2,7 +2,7 @@
 // Schema; validated by `StandardSchemaValidationPipe`).
 
 import { z } from "zod";
-import { stringField } from "../../../../common/interface/dto.js";
+import { stringField } from "#common/interface/dto.js";
 import type { UpdatePolicy } from "../application/policies.service.js";
 import type { CreatePolicy } from "../domain/policy.js";
 

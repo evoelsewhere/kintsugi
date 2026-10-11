@@ -13,9 +13,9 @@ import {
   type ValidationProblem,
 } from "@kintsugi/domain";
 import { MANIFEST_FILE, renderKintsugiYaml } from "@kintsugi/manifest";
-import type { Page, PageQuery } from "../../../../common/application/pagination.js";
-import { toPage } from "../../../../common/application/pagination.js";
-import { GitRegistry } from "../../git/domain/git.ports.js";
+import type { Page, PageQuery } from "#common/application/pagination.js";
+import { toPage } from "#common/application/pagination.js";
+import { GitRegistry } from "#modules/admin/git/domain/git.ports.js";
 import {
   type ApplicationRecord,
   type CreateApplication,

@@ -3,7 +3,7 @@
 
 import { GIT_SERVER_KINDS } from "@kintsugi/domain";
 import { z } from "zod";
-import { idSchema } from "../../../../common/interface/dto.js";
+import { idSchema } from "#common/interface/dto.js";
 import type { RegisterGitServer } from "../domain/git.js";
 
 const serverFields = {

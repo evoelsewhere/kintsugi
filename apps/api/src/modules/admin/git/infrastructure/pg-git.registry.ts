@@ -5,8 +5,8 @@
 import { Injectable } from "@nestjs/common";
 import type { GitServerKind } from "@kintsugi/domain";
 import type { Pool } from "pg";
-import { getPool, type Queryable, withTransaction } from "../../../../common/db/pool.js";
-import { readSecret, type SecretTable, secretExists, storeSecret } from "../../../../common/db/secret-store.js";
+import { getPool, type Queryable, withTransaction } from "#common/db/pool.js";
+import { readSecret, type SecretTable, secretExists, storeSecret } from "#common/db/secret-store.js";
 import type {
   GitAccess,
   GitAuthType,

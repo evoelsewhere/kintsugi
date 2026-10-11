@@ -1,11 +1,11 @@
 // Postgres adapter for members (ADR-0008; schema: core). Passwords are stored as
 // argon2id PHC strings (legacy scrypt rows are upgraded at sign-in); roles live in core.user_role.
 
-import { type Page, type PageQuery, toPage } from "../../../../common/application/pagination.js";
+import { type Page, type PageQuery, toPage } from "#common/application/pagination.js";
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
-import type { PasswordHash } from "../../../../common/security/password.js";
-import { getPool, type Queryable, withTransaction } from "../../../../common/db/pool.js";
+import type { PasswordHash } from "#common/security/password.js";
+import { getPool, type Queryable, withTransaction } from "#common/db/pool.js";
 import type { CreateUser, UpdateUser, UserRecord } from "../domain/user.js";
 import { UserRepository } from "../domain/user.repository.js";
 

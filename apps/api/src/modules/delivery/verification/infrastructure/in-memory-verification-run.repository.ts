@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import { InMemoryRepository } from "../../../../common/infrastructure/in-memory.repository.js";
+import { InMemoryRepository } from "#common/infrastructure/in-memory.repository.js";
 import type { CreateVerificationRun, VerificationRun } from "../domain/verification-run.js";
 
 @Injectable()

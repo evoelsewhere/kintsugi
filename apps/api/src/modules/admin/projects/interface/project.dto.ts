@@ -3,7 +3,7 @@
 
 import { APPLICATION_REPOSITORY_ROLES, DISPOSITIONS } from "@kintsugi/domain";
 import { z } from "zod";
-import { idSchema, stringField } from "../../../../common/interface/dto.js";
+import { idSchema, stringField } from "#common/interface/dto.js";
 import type { CreateApplication, CreateProject, LinkRepository, UpdateApplication, UpdateProject } from "../domain/project.js";
 
 const description = z.string().trim().max(2000);

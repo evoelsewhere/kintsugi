@@ -4,9 +4,9 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import type { Page, PageQuery } from "../../../../common/application/pagination.js";
-import { RequirePermission } from "../../../../common/auth/decorators.js";
-import { pageQuerySchema } from "../../../../common/interface/pagination.js";
+import type { Page, PageQuery } from "#common/application/pagination.js";
+import { RequirePermission } from "#common/auth/decorators.js";
+import { pageQuerySchema } from "#common/interface/pagination.js";
 import { ProjectsService } from "../application/projects.service.js";
 import type { ApplicationRecord, ProjectDetail, ProjectRecord, RenderedManifest } from "../domain/project.js";
 import {

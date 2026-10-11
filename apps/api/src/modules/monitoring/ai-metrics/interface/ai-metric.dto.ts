@@ -2,7 +2,7 @@
 // Schema; validated by `StandardSchemaValidationPipe`).
 
 import { z } from "zod";
-import { stringField } from "../../../../common/interface/dto.js";
+import { stringField } from "#common/interface/dto.js";
 import type { UpdateAiMetric } from "../application/ai-metrics.service.js";
 import type { CreateAiMetric } from "../domain/ai-metric.js";
 

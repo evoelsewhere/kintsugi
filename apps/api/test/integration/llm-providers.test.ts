@@ -4,8 +4,8 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PgLlmProviderRepository } from "../../src/modules/admin/llm-providers/infrastructure/pg-llm-provider.repository.js";
-import { LlmProviderRepository } from "../../src/modules/admin/llm-providers/domain/llm-provider.repository.js";
+import { PgLlmProviderRepository } from "#modules/admin/llm-providers/infrastructure/pg-llm-provider.repository.js";
+import { LlmProviderRepository } from "#modules/admin/llm-providers/domain/llm-provider.repository.js";
 import { hasDatabase } from "../support/database.js";
 import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
 

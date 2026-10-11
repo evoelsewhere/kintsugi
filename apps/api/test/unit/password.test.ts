@@ -1,6 +1,6 @@
 import { scryptSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { hashPassword, needsRehash, verifyPassword } from "../../src/common/security/password.js";
+import { hashPassword, needsRehash, verifyPassword } from "#common/security/password.js";
 
 describe("password hashing", () => {
   it("hashes with argon2id at the OWASP baseline, salt inside the PHC string", async () => {

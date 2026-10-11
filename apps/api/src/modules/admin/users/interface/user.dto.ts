@@ -1,7 +1,7 @@
 // Interface layer: request schemas and HTTP-facing mapping for members (ADR-0016).
 
 import { z } from "zod";
-import { idSchema, stringField } from "../../../../common/interface/dto.js";
+import { idSchema, stringField } from "#common/interface/dto.js";
 import type { CreateUser, UpdateUser } from "../domain/user.js";
 
 export const createUserSchema = z.object({

@@ -2,9 +2,9 @@
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import type { Page, PageQuery } from "../../../../common/application/pagination.js";
-import { pageQuerySchema } from "../../../../common/interface/pagination.js";
-import { type Actor, CurrentActor, RequirePermission } from "../../../../common/auth/decorators.js";
+import type { Page, PageQuery } from "#common/application/pagination.js";
+import { pageQuerySchema } from "#common/interface/pagination.js";
+import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import type { PermissionRecord, RoleRecord } from "../domain/role.js";
 import { RolesService } from "../application/roles.service.js";
 import {

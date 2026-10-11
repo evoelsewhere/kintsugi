@@ -4,9 +4,9 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { AgentModelBinding } from "@kintsugi/runtime-sdk";
-import { RequirePermission } from "../../../../common/auth/decorators.js";
-import type { Page, PageQuery } from "../../../../common/application/pagination.js";
-import { pageQuerySchema } from "../../../../common/interface/pagination.js";
+import { RequirePermission } from "#common/auth/decorators.js";
+import type { Page, PageQuery } from "#common/application/pagination.js";
+import { pageQuerySchema } from "#common/interface/pagination.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";
 import { LlmProvidersService, type LlmProviderView, type TestConnectionResult } from "../application/llm-providers.service.js";
 import {

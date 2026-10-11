@@ -1,7 +1,7 @@
 // Interface layer: request schemas and mapping for installation access roles & permissions (ADR-0016).
 
 import { z } from "zod";
-import { idSchema, stringField } from "../../../../common/interface/dto.js";
+import { idSchema, stringField } from "#common/interface/dto.js";
 import type { CreateSubRole } from "../domain/role.js";
 
 export const createSubRoleSchema = z.object({

@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, type ArgumentsHost } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import { HttpExceptionFilter } from "../../src/common/filters/http-exception.filter.js";
+import { HttpExceptionFilter } from "#common/filters/http-exception.filter.js";
 
 function run(exception: unknown): { status: number; body: Record<string, unknown> } {
   const result = { status: 0, body: {} as Record<string, unknown> };
