@@ -43,7 +43,30 @@ export function remoteOptions(target: SyncTarget): RemoteOptions {
  * removed meanwhile. On failure the repository is marked `error` and the error rethrown,
  * so the queue retries it.
  */
-export async function syncRepository({ store, storage }: SyncDeps, repositoryId: string): Promise<SyncResult | undefined> {
+// One mirror operation per repository at a time in this process: the git-sync queue, job
+// checkouts and the document writer all sync mirrors, and two clones of one mirror collide.
+const mirrorLocks = new Map<string, Promise<unknown>>();
+
+/** Runs `operation` after every earlier operation on the same repository's mirror has settled. */
+export function withMirrorLock<T>(repositoryId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = mirrorLocks.get(repositoryId) ?? Promise.resolve();
+  const next = previous.then(operation, operation);
+  const settled = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  mirrorLocks.set(repositoryId, settled);
+  void settled.then(() => {
+    if (mirrorLocks.get(repositoryId) === settled) mirrorLocks.delete(repositoryId);
+  });
+  return next;
+}
+
+export function syncRepository(deps: SyncDeps, repositoryId: string): Promise<SyncResult | undefined> {
+  return withMirrorLock(repositoryId, () => syncUnlocked(deps, repositoryId));
+}
+
+async function syncUnlocked({ store, storage }: SyncDeps, repositoryId: string): Promise<SyncResult | undefined> {
   const target = await store.target(repositoryId);
   if (target === undefined) return undefined;
 
