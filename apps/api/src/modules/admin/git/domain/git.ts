@@ -64,6 +64,9 @@ export interface RegisterGitRepository {
   defaultBranch?: string;
 }
 
+/** A repository still used by a project cannot be removed: unlink it first (ADR-0028). */
+export class RepositoryInUseError extends Error {}
+
 /** Everything needed to reach a server for one call, in plaintext — infrastructure only. */
 export interface GitAccess {
   authType: GitAuthType;

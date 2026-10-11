@@ -78,6 +78,8 @@ export class GitServersController {
 export class GitRepositoriesController {
   constructor(private readonly git: GitService) {}
 
+  // Project managers pick repositories for their projects; the list carries no credentials.
+  @RequirePermission("git.manage", "projects.manage")
   @Get()
   @ApiOperation({ summary: "List registered repositories with their sync status" })
   @ApiOkResponse({ description: "Repositories; the worker clones them into Kintsugi's storage (ADR-0025)." })

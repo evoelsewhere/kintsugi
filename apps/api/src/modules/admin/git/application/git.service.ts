@@ -10,6 +10,7 @@ import {
   type RegisterGitRepository,
   type RegisterGitServer,
   remoteLocation,
+  RepositoryInUseError,
   repositoryUrlProblem,
 } from "../domain/git.js";
 import { GitRegistry, GitRemote } from "../domain/git.ports.js";
@@ -138,7 +139,14 @@ export class GitService {
   }
 
   async removeRepository(id: string): Promise<void> {
-    if (!(await this.registry.removeRepository(id))) throw new NotFoundException(`Repository ${id} not found`);
+    let removed: boolean;
+    try {
+      removed = await this.registry.removeRepository(id);
+    } catch (error) {
+      if (error instanceof RepositoryInUseError) throw new ConflictException(error.message);
+      throw error;
+    }
+    if (!removed) throw new NotFoundException(`Repository ${id} not found`);
   }
 
   async #mustGetServer(id: string): Promise<GitServerRecord> {
