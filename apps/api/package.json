@@ -26,6 +26,7 @@
     "@kintsugi/domain": "workspace:*",
     "@kintsugi/git": "workspace:*",
     "@kintsugi/manifest": "workspace:*",
+    "@kintsugi/orchestrator": "workspace:*",
     "@kintsugi/runtime": "workspace:*",
     "@kintsugi/runtime-sdk": "workspace:*",
     "@kintsugi/secrets": "workspace:*",
@@ -35,6 +36,7 @@
     "@nestjs/swagger": "^12.0.2",
     "@node-rs/argon2": "^2.2.2",
     "pg": "^8.23.1",
+    "pg-boss": "12.37.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^4.6.5"

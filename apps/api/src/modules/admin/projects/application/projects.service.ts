@@ -96,7 +96,7 @@ export class ProjectsService {
     if (!(await this.store.removeProject(id))) throw new NotFoundException(`Project ${id} not found`);
   }
 
-  /** kintsugi.yaml for the project's current state. Render only: committing it to the document repo comes later (ADR-0019). */
+  /** kintsugi.yaml for the project's current state. Render only: the document-writes module publishes it (ADR-0019). */
   async renderManifest(id: string): Promise<RenderedManifest> {
     const detail = await this.getProject(id);
     if (detail.documentRepository === null) throw new ConflictException(`Project ${id} has no document repository`);
