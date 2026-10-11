@@ -26,6 +26,10 @@ class DataError(ValueError):
     """Invalid or unsafe workflow result."""
 
 
+# Written when no rule was confirmed; hooks/job_output.py accepts a BUSINESS_RULES.md without rule headings only with this line.
+NO_RULES_MARKER = '_No business rules were confirmed in this run._'
+
+
 def within(root, path):
     root = os.path.realpath(root)
     real = os.path.realpath(path)
@@ -212,6 +216,9 @@ def main(argv):
         doc.append(f"| RULE-{n:03d} | {one_line(r.get('name'), 80)} | {one_line(r.get('category'), 20)} | "
                    f"{one_line(r.get('priority'), 4)} | `{split_citation(r.get('source'))[0][:80].replace(chr(39), '')}` | {one_line(r.get('confidence'), 10)} |")
     doc.append('')
+    if not numbered:
+        # An empty catalog is a real outcome (a tiny or rule-free estate); say so in a line the JobOutput hook accepts.
+        doc += [NO_RULES_MARKER, '']
     for category in CATEGORIES + [None]:
         group = [n for n, r in numbered if (r.get('category') if r.get('category') in CATEGORIES else None) == category]
         if not group:

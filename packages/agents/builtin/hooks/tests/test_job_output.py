@@ -151,6 +151,17 @@ def test_invalid_topology_and_rule_headings_have_malformed_exit_code(tmp_path: P
     }
 
 
+def test_an_empty_rule_catalog_needs_the_explicit_marker(tmp_path: Path) -> None:
+    rules = tmp_path / "BUSINESS_RULES.md"
+    rules.write_text("# Business Rules\n\nAt extraction: 0 confirmed rules.\n", encoding="utf-8")
+    assert {item["rule"] for item in report(run_hook(tmp_path))["findings"]} == {"missing_rule_heading"}
+
+    rules.write_text("# Business Rules\n\n_No business rules were confirmed in this run._\n", encoding="utf-8")
+    result = run_hook(tmp_path)
+    assert result.returncode == 0
+    assert report(result)["findings"] == []
+
+
 def test_credentials_and_malformed_artifacts_have_combined_exit_code(tmp_path: Path) -> None:
     (tmp_path / "topology.json").write_text("{}", encoding="utf-8")
     (tmp_path / "settings.txt").write_text("password: TEST_ONLY_SECRET_12345\n", encoding="utf-8")
