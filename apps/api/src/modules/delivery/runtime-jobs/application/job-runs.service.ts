@@ -13,9 +13,12 @@ import { AUDIT_ACTIONS, AuditService } from "#modules/governance/audit/index.js"
 import {
   FINAL_RUN_STATUSES,
   type JobRunDetail,
+  type JobRunFilter,
   type JobRunFollowUpdate,
   type JobRunView,
   RUNNABLE_STAGES,
+  type RestrictedRecordFilter,
+  type RestrictedRecordSummary,
   type RestrictedRecordView,
   type RunnableStage,
 } from "../domain/job-run.js";
@@ -66,6 +69,21 @@ export class JobRunsService {
   async list(projectId: string, applicationId: string | undefined, query: PageQuery): Promise<Page<JobRunView>> {
     await this.projects.getProject(projectId); // 404 for an unknown project
     const { items, total } = await this.store.list(projectId, applicationId, query.limit, query.offset);
+    return toPage(items, total, query);
+  }
+
+  /** Top-level runs across projects (for the runs overview), newest first. */
+  async listAll(filter: JobRunFilter, query: PageQuery): Promise<Page<JobRunView>> {
+    const { items, total } = await this.store.listAll(filter, query.limit, query.offset);
+    return toPage(items, total, query);
+  }
+
+  /**
+   * Restricted records across projects, metadata only (never decrypted, so not audited); the
+   * content is read per run through restricted(), which is audited.
+   */
+  async listRestricted(filter: RestrictedRecordFilter, query: PageQuery): Promise<Page<RestrictedRecordSummary>> {
+    const { items, total } = await this.store.restrictedSummaries(filter, query.limit, query.offset);
     return toPage(items, total, query);
   }
 

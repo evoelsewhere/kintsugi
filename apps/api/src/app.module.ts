@@ -24,6 +24,7 @@ import { AiMetricsModule } from "./modules/monitoring/ai-metrics/ai-metrics.modu
 import { CostEntriesModule } from "./modules/monitoring/cost/cost-entries.module.js";
 import { DashboardStatsModule } from "./modules/monitoring/dashboards/dashboard-stats.module.js";
 import { JobRunsModule } from "./modules/monitoring/observability/job-runs.module.js";
+import { OverviewModule } from "./modules/monitoring/overview/overview.module.js";
 import { HealthChecksModule } from "./modules/monitoring/target-health/health-checks.module.js";
 import { AuditEntriesModule } from "./modules/governance/audit/audit-entries.module.js";
 import { GatesModule } from "./modules/governance/gates/gates.module.js";
@@ -66,6 +67,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     CutoverChecklistsModule,
     IncidentsModule,
     // monitoring
+    OverviewModule,
     JobRunsModule,
     DashboardStatsModule,
     AiMetricsModule,

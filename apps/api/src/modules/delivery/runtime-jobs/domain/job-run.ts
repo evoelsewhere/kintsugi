@@ -6,7 +6,8 @@
 import type { Provenance } from "@kintsugi/domain";
 
 export type JobRunKind = "stage" | "script" | "agent" | "workflow";
-export type JobRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export const JOB_RUN_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"] as const;
+export type JobRunStatus = (typeof JOB_RUN_STATUSES)[number];
 
 /** Statuses a run does not leave. */
 export const FINAL_RUN_STATUSES: readonly JobRunStatus[] = ["succeeded", "failed", "cancelled"];
@@ -89,6 +90,59 @@ export interface RestrictedRecordView {
   size: number;
   content: string;
   createdAt: string;
+}
+
+/**
+ * A restricted record without its content, for the governance list: which run and step wrote it,
+ * where and when. Listing never decrypts; reading the content is the audited per-run read.
+ */
+export interface RestrictedRecordSummary {
+  jobRunId: string;
+  /** The top-level run the record belongs to (the run itself, or the parent of its step). */
+  topLevelRunId: string;
+  projectId: string;
+  applicationId?: string;
+  /** Name of the top-level run (e.g. the stage). */
+  runName: string;
+  /** Name of the step that wrote it, when it was written by a step. */
+  stepName?: string;
+  path: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface RestrictedRecordFilter {
+  projectId?: string;
+  /** A top-level run: its records and those of its steps. */
+  jobRunId?: string;
+}
+
+/** Filter of the cross-project run list (top-level runs only). */
+export interface JobRunFilter {
+  statuses?: readonly JobRunStatus[];
+  projectId?: string;
+  applicationId?: string;
+}
+
+/** Who runs a pipeline stage. */
+export type StageAudience = "runtime" | "member" | "portal";
+
+/** A pipeline stage as the built-in commands define it (ADR-0027). */
+export interface StageDefinition {
+  /** Stage id, e.g. `assess`, `extract-rules`. */
+  id: string;
+  /** The command it comes from, e.g. `modernize-assess`. */
+  command: string;
+  description: string;
+  audience: StageAudience;
+  agents: string[];
+  writes: string[];
+  gates: string[];
+}
+
+/** A stage for the portal: its definition plus whether it can be run from the portal yet. */
+export interface StageView extends StageDefinition {
+  runnable: boolean;
 }
 
 export interface NewStageRun {

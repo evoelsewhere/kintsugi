@@ -5,7 +5,7 @@
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
 import { getPool } from "#common/db/pool.js";
-import type { DocumentWriteRecord, DocumentWriteStatus, NewDocumentWrite } from "../domain/document-write.js";
+import type { DocumentWriteFilter, DocumentWriteRecord, DocumentWriteStatus, NewDocumentWrite } from "../domain/document-write.js";
 import { DocumentWriteStore } from "../domain/document-write.ports.js";
 
 interface WriteRow {
@@ -72,6 +72,16 @@ export class PgDocumentWriteStore extends DocumentWriteStore {
         offset,
       ]),
       this.#pool.query<{ total: number }>("select count(*)::int as total from workflow.document_write where project_id = $1", [projectId]),
+    ]);
+    return { items: rows.rows.map(toRecord), total: count.rows[0]?.total ?? 0 };
+  }
+
+  async list(filter: DocumentWriteFilter, limit: number, offset: number): Promise<{ items: DocumentWriteRecord[]; total: number }> {
+    const where = "($1::text[] is null or status = any($1)) and ($2::text is null or project_id = $2)";
+    const params = [filter.statuses === undefined || filter.statuses.length === 0 ? null : [...filter.statuses], filter.projectId ?? null];
+    const [rows, count] = await Promise.all([
+      this.#pool.query<WriteRow>(`select ${COLUMNS} from workflow.document_write where ${where} order by created_at desc, id limit $3 offset $4`, [...params, limit, offset]),
+      this.#pool.query<{ total: number }>(`select count(*)::int as total from workflow.document_write where ${where}`, params),
     ]);
     return { items: rows.rows.map(toRecord), total: count.rows[0]?.total ?? 0 };
   }

@@ -3,7 +3,14 @@
 // The API records the write as `queued` and enqueues it; the worker records the outcome.
 // Pure types — no framework, no I/O.
 
-export type DocumentWriteStatus = "queued" | "committed" | "pr-opened" | "unchanged" | "failed";
+export const DOCUMENT_WRITE_STATUSES = ["queued", "committed", "pr-opened", "unchanged", "failed"] as const;
+export type DocumentWriteStatus = (typeof DOCUMENT_WRITE_STATUSES)[number];
+
+/** Filter of the cross-project write list. */
+export interface DocumentWriteFilter {
+  statuses?: readonly DocumentWriteStatus[];
+  projectId?: string;
+}
 
 /** What produced the files. */
 export type DocumentWriteKind = "manifest" | "job-output" | "state-change";

@@ -1,17 +1,32 @@
 // Ports of runtime job runs — the DI tokens of this module: where runs are recorded
 // (Postgres, workflow.job_run and friends) and how they reach the worker (the job queue).
 
-import type { CancelOutcome, JobRunDetail, JobRunEventView, JobRunView, NewStageRun, RestrictedRecordView } from "./job-run.js";
+import type {
+  CancelOutcome,
+  JobRunDetail,
+  JobRunEventView,
+  JobRunFilter,
+  JobRunView,
+  NewStageRun,
+  RestrictedRecordFilter,
+  RestrictedRecordSummary,
+  RestrictedRecordView,
+  StageDefinition,
+} from "./job-run.js";
 
 export abstract class JobRunStore {
   /** Records a stage run as `queued`. */
   abstract createStageRun(run: NewStageRun): Promise<JobRunView>;
   /** Top-level runs of a project (optionally one application), newest first, with the total. */
   abstract list(projectId: string, applicationId: string | undefined, limit: number, offset: number): Promise<{ items: JobRunView[]; total: number }>;
+  /** Top-level runs across projects, newest first, with the total. */
+  abstract listAll(filter: JobRunFilter, limit: number, offset: number): Promise<{ items: JobRunView[]; total: number }>;
   /** A run of the project with its steps and artifacts; undefined when unknown. */
   abstract get(projectId: string, id: string): Promise<JobRunDetail | undefined>;
   /** The restricted records of a run and its steps, decrypted. */
   abstract restricted(projectId: string, id: string): Promise<RestrictedRecordView[]>;
+  /** Restricted records across projects without their content (never decrypted), newest first, with the total. */
+  abstract restrictedSummaries(filter: RestrictedRecordFilter, limit: number, offset: number): Promise<{ items: RestrictedRecordSummary[]; total: number }>;
   /** A run of the project without its steps and artifacts; undefined when unknown. */
   abstract summary(projectId: string, id: string): Promise<JobRunView | undefined>;
   /**
@@ -28,4 +43,9 @@ export abstract class JobRunStore {
 export abstract class JobRunQueue {
   /** Hands the run to the worker (queue `job-run`). */
   abstract enqueue(jobRunId: string): Promise<void>;
+}
+
+export abstract class StageCatalog {
+  /** The pipeline stages, in pipeline order. */
+  abstract list(): Promise<StageDefinition[]>;
 }
