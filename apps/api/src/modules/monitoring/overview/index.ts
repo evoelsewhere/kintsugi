@@ -2,4 +2,4 @@
 
 export { OverviewModule } from "./overview.module.js";
 export { OverviewService } from "./application/overview.service.js";
-export type { ActivityItem, AttentionItem, MonitoredRepository, MonitoringOverview, OverviewCounts, QueueCount } from "./domain/overview.js";
+export type { ActivityItem, AttentionItem, MonitoredRepository, MonitoringOverview, OverviewCounts, QueueCount, WorkerStatus } from "./domain/overview.js";

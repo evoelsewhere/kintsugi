@@ -1,6 +1,6 @@
 // Domain of the monitoring overview: what the installation is doing right now, read from the
 // records the API and the worker keep (projects, job runs, document writes, Git repositories)
-// and from the worker's job queue. Read-only; counts are of top-level runs (a stage, not its
+// gates and worker heartbeats) and from the worker's job queue. Read-only; counts are of top-level runs (a stage, not its
 // steps). Pure types and constants.
 
 /** Look-back windows and limits of the overview. */
@@ -12,6 +12,8 @@ export const OVERVIEW_LIMITS = {
   attentionDays: 7,
   /** A run still queued after this long has not been picked up by the worker. */
   stuckAfterMinutes: 10,
+  /** A worker seen within this many seconds is up (it beats every 15 s, ADR-0030). */
+  workerUpSeconds: 45,
 } as const;
 
 export interface OverviewCounts {
@@ -32,9 +34,11 @@ export interface OverviewCounts {
   repositoriesWithErrors: number;
   /** Repositories still pending or cloning. */
   repositoriesNotReady: number;
+  /** Gates waiting for a decision. */
+  pendingGates: number;
 }
 
-export type AttentionKind = "run-failed" | "run-stuck" | "write-failed" | "repository-error";
+export type AttentionKind = "run-failed" | "run-stuck" | "write-failed" | "repository-error" | "gate-pending" | "worker-down";
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -46,6 +50,7 @@ export interface AttentionItem {
   jobRunId?: string;
   documentWriteId?: string;
   repositoryId?: string;
+  gateId?: string;
 }
 
 export interface ActivityItem {
@@ -71,7 +76,32 @@ export interface QueueCount {
   deferred: number;
 }
 
+/** up: seen within OVERVIEW_LIMITS.workerUpSeconds; stale: not seen since; stopped: shut down cleanly. */
+export type WorkerState = "up" | "stale" | "stopped";
+
+/** One worker process from its heartbeat (workflow.worker_heartbeat, ADR-0030). */
+export interface WorkerStatus {
+  workerId: string;
+  host: string;
+  pid: number;
+  version: string;
+  startedAt: string;
+  lastSeenAt: string;
+  stoppedAt?: string;
+  /** Seconds since the last beat, by the database clock. */
+  secondsSinceSeen: number;
+  activeJobs: number;
+  queues: string[];
+  state: WorkerState;
+}
+
 export interface WorkerHealth {
+  /** At least one worker is up. */
+  up: boolean;
+  /** Workers that are up. */
+  workersUp: number;
+  /** The latest beat of any worker. */
+  lastSeenAt?: string;
   /** null when the queue could not be read. */
   queues: QueueCount[] | null;
   lastGitSyncAt?: string;
@@ -126,6 +156,21 @@ export interface RepositoryErrorRecord {
   lastError?: string;
   at: string;
 }
+
+/** A pending gate as the overview needs it. */
+export interface PendingGateRecord {
+  id: string;
+  projectId: string;
+  applicationId?: string;
+  gateKey: string;
+  title: string;
+  requestedBy: string;
+  /** requested_at. */
+  at: string;
+}
+
+/** A heartbeat row; the use case derives the state. */
+export type WorkerRecord = Omit<WorkerStatus, "state">;
 
 export interface WorkerTimes {
   lastGitSyncAt?: string;

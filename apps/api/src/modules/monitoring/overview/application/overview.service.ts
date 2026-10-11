@@ -1,6 +1,7 @@
 // Application layer: the monitoring overview. Composes the read model's records into counts,
 // an attention list (what needs a person: failed or stuck runs, failed writes, repositories in
-// sync error) and an activity feed, plus the worker's queue health. A queue that cannot be
+// sync error, pending gates, no worker up) and an activity feed, plus the worker's heartbeat and
+// queue health. A queue that cannot be
 // read never fails the overview: its queues are reported as null.
 
 import { Injectable } from "@nestjs/common";
@@ -11,8 +12,11 @@ import {
   type MonitoredRepository,
   type MonitoringOverview,
   OVERVIEW_LIMITS,
+  type PendingGateRecord,
   type QueueCount,
   type RunRecord,
+  type WorkerRecord,
+  type WorkerStatus,
   type WriteRecord,
 } from "../domain/overview.js";
 import { MonitoringReadModel, QueueHealth } from "../domain/overview.ports.js";
@@ -32,6 +36,20 @@ const runLabel = (run: RunRecord): string => (run.applicationId === undefined ? 
 
 const runRefs = (run: RunRecord) => ({ projectId: run.projectId, ...optional("applicationId", run.applicationId), jobRunId: run.id });
 
+/** The state of a worker from its heartbeat (ADR-0030). */
+export const workerState = (worker: WorkerRecord): WorkerStatus["state"] =>
+  worker.stoppedAt !== undefined ? "stopped" : worker.secondsSinceSeen < OVERVIEW_LIMITS.workerUpSeconds ? "up" : "stale";
+
+const gateItem = (gate: PendingGateRecord): AttentionItem => ({
+  kind: "gate-pending",
+  at: gate.at,
+  title: `${gate.gateKey} · ${gate.title}`,
+  detail: `Requested by ${gate.requestedBy}`,
+  projectId: gate.projectId,
+  ...optional("applicationId", gate.applicationId),
+  gateId: gate.id,
+});
+
 const writeRefs = (write: WriteRecord) => ({ projectId: write.projectId, ...optional("applicationId", write.applicationId), documentWriteId: write.id });
 
 @Injectable()
@@ -43,7 +61,7 @@ export class OverviewService {
 
   async overview(): Promise<MonitoringOverview> {
     const { attention: attentionLimit, activity: activityLimit, attentionDays, stuckAfterMinutes } = OVERVIEW_LIMITS;
-    const [counts, failedRuns, stuckRuns, failedWrites, repositoryErrors, recentRuns, recentWrites, times, queues] = await Promise.all([
+    const [counts, failedRuns, stuckRuns, failedWrites, repositoryErrors, recentRuns, recentWrites, times, pendingGates, workers, queues] = await Promise.all([
       this.model.counts(),
       this.model.failedRuns(attentionDays, attentionLimit),
       this.model.stuckRuns(stuckAfterMinutes, attentionLimit),
@@ -52,6 +70,8 @@ export class OverviewService {
       this.model.recentRuns(activityLimit),
       this.model.recentWrites(activityLimit),
       this.model.workerTimes(),
+      this.model.pendingGates(attentionLimit),
+      this.workers(),
       this.#queues(),
     ]);
 
@@ -68,7 +88,19 @@ export class OverviewService {
       ),
       ...failedWrites.map((write): AttentionItem => ({ kind: "write-failed", at: write.at, title: firstLine(write.message), ...optional("detail", write.error), ...writeRefs(write) })),
       ...repositoryErrors.map((repository): AttentionItem => ({ kind: "repository-error", at: repository.at, title: repository.id, ...optional("detail", repository.lastError), repositoryId: repository.id })),
+      ...pendingGates.map(gateItem),
     ];
+    const generatedAt = nowIso();
+    const workersUp = workers.filter((worker) => worker.state === "up").length;
+    const lastSeen = workers[0];
+    if (workersUp === 0) {
+      attention.push({
+        kind: "worker-down",
+        at: generatedAt,
+        title: "No worker is running",
+        detail: lastSeen === undefined ? "No worker has reported a heartbeat yet" : `Last seen ${lastSeen.lastSeenAt} on ${lastSeen.host}${lastSeen.state === "stopped" ? " (stopped)" : ""}`,
+      });
+    }
 
     const activity: ActivityItem[] = [
       ...recentRuns.map((run): ActivityItem => ({ kind: "run", at: run.at, status: run.status, title: runLabel(run), ...runRefs(run), ...optional("actor", run.actor) })),
@@ -87,12 +119,17 @@ export class OverviewService {
     ];
 
     return {
-      generatedAt: nowIso(),
+      generatedAt,
       counts,
       attention: attention.sort(newestFirst).slice(0, attentionLimit),
       activity: activity.sort(newestFirst).slice(0, activityLimit),
-      worker: { queues, ...times },
+      worker: { up: workersUp > 0, workersUp, ...optional("lastSeenAt", lastSeen?.lastSeenAt), queues, ...times },
     };
+  }
+
+  /** Every worker from its heartbeat, the latest beat first. */
+  async workers(): Promise<WorkerStatus[]> {
+    return (await this.model.workers()).map((worker) => ({ ...worker, state: workerState(worker) }));
   }
 
   repositories(): Promise<MonitoredRepository[]> {

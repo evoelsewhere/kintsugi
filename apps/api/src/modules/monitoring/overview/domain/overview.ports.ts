@@ -4,10 +4,12 @@
 import type {
   MonitoredRepository,
   OverviewCounts,
+  PendingGateRecord,
   QueueCount,
   RepositoryErrorRecord,
   RunRecord,
   StuckRunRecord,
+  WorkerRecord,
   WorkerTimes,
   WriteRecord,
 } from "./overview.js";
@@ -27,6 +29,10 @@ export abstract class MonitoringReadModel {
   /** The latest document writes, by their last change. */
   abstract recentWrites(limit: number): Promise<WriteRecord[]>;
   abstract workerTimes(): Promise<WorkerTimes>;
+  /** Pending gates, oldest request first. */
+  abstract pendingGates(limit: number): Promise<PendingGateRecord[]>;
+  /** Every worker heartbeat row, the latest beat first. */
+  abstract workers(): Promise<WorkerRecord[]>;
   /** Every registered repository with its project links, ordered by id. */
   abstract repositories(): Promise<MonitoredRepository[]>;
 }
