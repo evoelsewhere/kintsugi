@@ -90,7 +90,7 @@ describe.skipIf(!hasDatabase)("gates (integration)", () => {
 
   it("needs gates.request to ask and gates.decide to decide; reading needs a session", async () => {
     await subRole(admin, "gate-requester", ["gates.request"]);
-    const { client } = await memberClient(app, admin, "requester", ["gate-requester"]);
+    const { client } = await memberClient(app, admin, "requester", ["user", "gate-requester"]);
     const viewer = (await memberClient(app, admin, "gate-viewer", ["user"])).client;
 
     expect((await viewer.get("/governance/gates")).status).toBe(200);

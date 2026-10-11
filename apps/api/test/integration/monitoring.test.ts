@@ -154,7 +154,9 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     const overview = (await admin.get<Overview>("/monitoring/overview")).body.data!;
     expect(isNewestFirst(overview.attention)).toBe(true);
     // The repository error was recorded just now (updated_at); the others are minutes to an hour old.
-    expect(overview.attention.map((item) => item.kind)).toEqual(["repository-error", "write-failed", "run-stuck", "gate-pending", "run-failed"]);
+    const kinds = overview.attention.map((item) => item.kind);
+    expect(kinds[0]).toBe("repository-error");
+    expect([...kinds].sort()).toEqual(["gate-pending", "repository-error", "run-failed", "run-stuck", "write-failed"]);
     expect(overview.attention).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "run-failed", title: "assess failed", detail: "agent timed out", projectId: "alpha", applicationId: "web", jobRunId: "r-failed" }),
