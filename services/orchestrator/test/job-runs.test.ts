@@ -4,12 +4,13 @@
 // stage's output lands in the document repo through the writer.
 
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CheckoutStorage } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
+import { createChildAgentRuntime } from "@kintsugi/runtime/launcher";
 import { decryptSecret } from "@kintsugi/secrets";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startWorker } from "../src/worker.js";
@@ -107,4 +108,33 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       await worker.stop();
     }
   });
+
+  it("cancels a running run on request: the worker kills its processes and records it as cancelled, with its live events", async () => {
+    const hang = join(dataDir, "hang.mjs");
+    writeFileSync(hang, "setInterval(() => undefined, 1000);\n");
+    const storage = new CheckoutStorage(dataDir);
+    const agents = createChildAgentRuntime({ mode: "mock", entry: hang });
+    const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage, pollIntervalSeconds: 3600, cancelPollSeconds: 0.2, log: () => undefined, jobs: { agents } });
+    try {
+      const id = randomUUID();
+      await db.pool.query("insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor) values ($1, 'demo', 'web', 'stage', 'assess', 'legacy', 'alice')", [id]);
+      await worker.requestJobRun({ jobRunId: id });
+      const agentRunning = async (): Promise<boolean> =>
+        (await db.pool.query("select 1 from workflow.job_event where job_run_id = $1 and kind = 'step.started' and data->>'kind' = 'agent'", [id])).rowCount === 1;
+      await expect.poll(agentRunning, { timeout: 60_000, interval: 250 }).toBe(true);
+
+      await db.pool.query("update workflow.job_run set cancel_requested_at = now(), cancel_requested_by = 'bob' where id = $1", [id]);
+      await expect.poll(async () => (await db.pool.query("select status from workflow.job_run where id = $1", [id])).rows[0]?.status, { timeout: 30_000, interval: 250 }).toBe("cancelled");
+      const steps = await db.pool.query<{ kind: string; status: string }>("select kind, status from workflow.job_run where parent_id = $1 order by created_at", [id]);
+      expect(steps.rows.map((row) => [row.kind, row.status])).toEqual([
+        ["script", "succeeded"],
+        ["agent", "cancelled"],
+      ]);
+      const events = await db.pool.query<{ kind: string; message: string }>("select kind, message from workflow.job_event where job_run_id = $1 order by id", [id]);
+      expect(events.rows[0]).toEqual({ kind: "status", message: "stage assess started" });
+      expect(events.rows.at(-1)).toEqual({ kind: "status", message: "cancelled" });
+    } finally {
+      await worker.stop();
+    }
+  }, 120_000);
 });

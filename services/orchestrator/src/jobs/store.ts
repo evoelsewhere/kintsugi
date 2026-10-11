@@ -6,7 +6,7 @@ import { encryptSecret } from "@kintsugi/secrets";
 import type { Pool } from "pg";
 import type { DocumentWriteRequest } from "../queues.js";
 import type { WorkspaceState, WorkspaceStates } from "./cleanup.js";
-import type { ArtifactEntry, JobKind, JobRun, JobStatus, JobStore, ModelBinding, NewJobRun, StepLimits } from "./model.js";
+import type { ArtifactEntry, JobEventRecord, JobKind, JobRun, JobStatus, JobStore, ModelBinding, NewJobRun, StepLimits } from "./model.js";
 
 interface RunRow {
   id: string;
@@ -83,8 +83,9 @@ export class PgJobStore implements JobStore, WorkspaceStates {
     );
   }
 
-  async start(id: string): Promise<void> {
-    await this.pool.query("update workflow.job_run set status = 'running', started_at = now() where id = $1", [id]);
+  async start(id: string): Promise<boolean> {
+    const result = await this.pool.query("update workflow.job_run set status = 'running', started_at = now() where id = $1 and status = 'queued'", [id]);
+    return (result.rowCount ?? 0) > 0;
   }
 
   async update(id: string, patch: { sourceCommit?: string; scriptHash?: string; agent?: string }): Promise<void> {
@@ -108,6 +109,28 @@ export class PgJobStore implements JobStore, WorkspaceStates {
       "update workflow.job_run set status = 'failed', failure_reason = $2, output_summary = coalesce($3, output_summary), finished_at = now() where id = $1",
       [id, reason.slice(0, MAX_REASON), summary === undefined ? null : JSON.stringify(summary)],
     );
+  }
+
+  async cancel(id: string): Promise<void> {
+    await this.pool.query("update workflow.job_run set status = 'cancelled', finished_at = now() where id = $1 and status in ('queued', 'running')", [id]);
+  }
+
+  async cancelRequested(ids: readonly string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const result = await this.pool.query<{ id: string }>("select id from workflow.job_run where id = any($1) and cancel_requested_at is not null", [ids]);
+    return result.rows.map((row) => row.id);
+  }
+
+  async addEvent(event: JobEventRecord): Promise<void> {
+    await this.pool
+      .query("insert into workflow.job_event (job_run_id, step_run_id, kind, message, data) values ($1, $2, $3, $4, $5)", [
+        event.runId,
+        event.stepId ?? null,
+        event.kind,
+        event.message.slice(0, MAX_REASON),
+        JSON.stringify(event.data ?? {}),
+      ])
+      .catch(() => undefined);
   }
 
   async addArtifacts(id: string, entries: readonly ArtifactEntry[]): Promise<void> {

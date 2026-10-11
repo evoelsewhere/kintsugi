@@ -27,7 +27,7 @@ import type { AgentRuntime, JobEvent, JobSpec } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 import type { AgentResolver } from "./agents.js";
 import { runJobOutputHook } from "./hook.js";
-import { type ArtifactEntry, JobFailure, type JobRun, type JobStore, type NewJobRun, type SourceCheckouts, type StepLimits } from "./model.js";
+import { type ArtifactEntry, type JobEventKind, JobFailure, type JobRun, type JobStore, type NewJobRun, type SourceCheckouts, type StepLimits, isCancelled } from "./model.js";
 import { STAGES, type Placeholders, fill } from "./stages.js";
 import { type AgentCallOptions, type WorkflowBudgets, loadWorkflow, runWorkflow } from "./workflow.js";
 
@@ -62,6 +62,8 @@ export interface JobRunnerDeps {
 }
 
 interface StepWorkspace {
+  /** The top-level run whose live record gets this step's events. */
+  rootId: string;
   root: string;
   src?: string;
   in: string;
@@ -133,6 +135,31 @@ const isInside = (root: string, path: string): boolean => {
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 };
 
+const MAX_EVENT_TEXT = 300;
+
+/**
+ * One line for an agent tool call: the tool and where it looked or wrote, relative to the job
+ * workspace. Never the content (outputs_write carries file content; only its path is kept).
+ */
+export function summarizeToolCall(tool: string, input: unknown, roots: Record<string, string | undefined>): string {
+  const args = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
+  const shown = (value: unknown): string | undefined => {
+    if (typeof value !== "string" || value.trim() === "") return undefined;
+    for (const [label, root] of Object.entries(roots)) {
+      if (root === undefined) continue;
+      const full = resolve(root, value);
+      if (full === resolve(root)) return label;
+      if (isAbsolute(value) && isInside(root, full)) return `${label}/${relative(root, full).split(sep).join("/")}`;
+    }
+    return isAbsolute(value) ? "(outside the workspace)" : value;
+  };
+  const parts = [tool];
+  const path = shown(args["path"]);
+  if (path !== undefined) parts.push(path);
+  if ((tool === "grep" || tool === "find") && typeof args["pattern"] === "string") parts.push(`"${args["pattern"].slice(0, 80)}"`);
+  return redactText(parts.join(" ")).slice(0, MAX_EVENT_TEXT);
+}
+
 export class JobRunner {
   readonly #deps: JobRunnerDeps;
   readonly #defaults: JobDefaults;
@@ -149,9 +176,11 @@ export class JobRunner {
     const { store, storage, checkouts } = this.#deps;
     const run = await store.get(id);
     if (run === undefined || run.status !== "queued") return run;
-    await store.start(id);
+    // A run cancelled while it waited in the queue is not started.
+    if (!(await store.start(id))) return store.get(id);
     const paths = storage.job(id);
-    const ws: StepWorkspace = { root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp };
+    const ws: StepWorkspace = { rootId: id, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp };
+    await this.#event(ws, undefined, "status", `${run.kind} ${run.name} started`, { status: "running" });
     let checkedOut = false;
     try {
       for (const dir of [paths.in, paths.out, paths.tmp]) await mkdir(dir, { recursive: true });
@@ -169,17 +198,32 @@ export class JobRunner {
       const summary = await this.#finish(run, ws, outcome);
       const write = await this.#publish(run, ws, outcome);
       await store.succeed(id, { ...summary, ...(write === undefined ? {} : { documentWriteId: write }) });
+      await this.#event(ws, undefined, "status", `succeeded${write === undefined ? "" : ", output handed to the document repo writer"}`, { status: "succeeded" });
       this.#log(`${run.kind} ${run.name} (${id}) succeeded${write === undefined ? "" : `, document write ${write}`}`);
     } catch (error) {
-      const reason = reasonOf(error);
-      await store.fail(id, reason).catch(() => undefined);
-      this.#log(`${run.kind} ${run.name} (${id}) failed: ${reason}`);
+      if (isCancelled(signal)) {
+        await store.cancel(id).catch(() => undefined);
+        await this.#event(ws, undefined, "status", "cancelled", { status: "cancelled" });
+        this.#log(`${run.kind} ${run.name} (${id}) cancelled`);
+      } else {
+        const reason = reasonOf(error);
+        await store.fail(id, reason).catch(() => undefined);
+        await this.#event(ws, undefined, "status", `failed: ${reason}`, { status: "failed" });
+        this.#log(`${run.kind} ${run.name} (${id}) failed: ${reason}`);
+      }
     } finally {
       await removeTree(paths.tmp).catch(() => undefined);
       await removeTree(paths.in).catch(() => undefined);
       if (checkedOut && run.sourceRepositoryId !== undefined) await checkouts.release(run.sourceRepositoryId, paths.src).catch(() => undefined);
     }
     return store.get(id);
+  }
+
+  /** Appends to the top-level run's live record (best effort; texts are redacted). */
+  async #event(ws: StepWorkspace, stepId: string | undefined, kind: JobEventKind, message: string, data?: Record<string, unknown>): Promise<void> {
+    await this.#deps.store
+      .addEvent({ runId: ws.rootId, ...(stepId === undefined ? {} : { stepId }), kind, message: redactText(message).slice(0, 1000), ...(data === undefined ? {} : { data }) })
+      .catch(() => undefined);
   }
 
   // -------------------------------------------------------------------------
@@ -299,11 +343,21 @@ export class JobRunner {
       metadata: { jobRunId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }) },
     };
     const handle = await this.#deps.agents.startJob(spec);
-    const onAbort = (): void => void handle.abort("the worker is stopping");
-    signal?.addEventListener("abort", onAbort, { once: true });
+    const onAbort = (): void => void handle.abort(isCancelled(signal) ? "cancelled" : "the worker is stopping");
+    if (signal?.aborted === true) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0 };
+    const stepId = run.id === ws.rootId ? undefined : run.id;
+    const roots = { src: ws.src, in: ws.in, out: ws.out };
     try {
-      for await (const event of handle.events) this.#count(event, usage);
+      for await (const event of handle.events) {
+        this.#count(event, usage);
+        if (event.type === "tool.call") {
+          const line = summarizeToolCall(event.tool, event.input, roots);
+          const reason = event.reason === undefined ? "" : ` (${event.reason})`;
+          await this.#event(ws, stepId, "tool", event.decision === "blocked" ? `blocked: ${line}${reason}` : line, { tool: event.tool, decision: event.decision });
+        }
+      }
     } finally {
       signal?.removeEventListener("abort", onAbort);
     }
@@ -353,6 +407,7 @@ export class JobRunner {
       if (typeof options.agentType !== "string") throw new Error("agent() needs options.agentType");
       const schema = options.schema === undefined ? "" : `\n\nReturn your result as JSON matching this schema, written with outputs_write to ${RESULT_FILE} (nothing else in that file):\n${JSON.stringify(options.schema)}`;
       const child = await this.#child(run, ws, { kind: "agent", name: options.agentType, inputs: { task: prompt + schema, resultFile: options.schema !== undefined, ...(options.label === undefined ? {} : { label: options.label }) } }, signal);
+      if (!child.ok && signal?.aborted === true) throw new JobFailure("aborted");
       if (!child.ok) return { tokens: 0 };
       for (const [path, value] of child.outcome.provenance) provenance.set(path, value);
       agent = child.outcome.agent ?? agent;
@@ -364,7 +419,10 @@ export class JobRunner {
       args: run.inputs["args"] ?? {},
       budgets: this.#defaults.workflow,
       runAgent,
-      log: (line) => this.#log(`workflow ${run.name} (${run.id}): ${line}`),
+      log: (line) => {
+        this.#log(`workflow ${run.name} (${run.id}): ${line}`);
+        void this.#event(ws, run.id === ws.rootId ? undefined : run.id, "log", line);
+      },
     }).catch((error: unknown) => {
       throw new JobFailure(`Workflow ${run.name} failed: ${redactText(message(error)).slice(0, 500)}`);
     });
@@ -383,6 +441,7 @@ export class JobRunner {
     const steps: Array<{ id: string; kind: string; name: string }> = [];
     let agent: string | undefined;
     for (const step of plan.steps) {
+      if (signal?.aborted === true) throw new JobFailure("aborted");
       const child = await this.#child(run, ws, { kind: step.kind, name: step.name, inputs: step.inputs }, signal);
       steps.push({ id: child.id, kind: step.kind, name: step.name });
       if (!child.ok) throw new JobFailure(`Step ${step.name} failed: ${child.reason}`);
@@ -421,8 +480,10 @@ export class JobRunner {
     await store.start(id);
     const run = (await store.get(id))!;
     const paths = storage.job(id);
-    const ws: StepWorkspace = { root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp, ...(parentWs.src === undefined ? {} : { src: parentWs.src }), ...(parentWs.commit === undefined ? {} : { commit: parentWs.commit }) };
+    await this.#event(parentWs, id, "step.started", `${spec.kind} ${spec.name} started`, { kind: spec.kind, name: spec.name });
+    const ws: StepWorkspace = { rootId: parentWs.rootId, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp, ...(parentWs.src === undefined ? {} : { src: parentWs.src }), ...(parentWs.commit === undefined ? {} : { commit: parentWs.commit }) };
     try {
+      if (signal?.aborted === true) throw new JobFailure("aborted");
       for (const dir of [paths.in, paths.out, paths.tmp]) await mkdir(dir, { recursive: true });
       await copyTree(parentWs.in, ws.in);
       await copyTree(parentWs.out, ws.in);
@@ -431,10 +492,17 @@ export class JobRunner {
       const summary = await this.#finish(run, ws, outcome);
       await store.succeed(id, summary);
       await copyTree(ws.out, parentWs.out);
+      await this.#event(parentWs, id, "step.finished", `${spec.kind} ${spec.name} succeeded`, { kind: spec.kind, name: spec.name, status: "succeeded" });
       return { id, ok: true, outcome };
     } catch (error) {
+      if (isCancelled(signal)) {
+        await store.cancel(id).catch(() => undefined);
+        await this.#event(parentWs, id, "step.finished", `${spec.kind} ${spec.name} cancelled`, { kind: spec.kind, name: spec.name, status: "cancelled" });
+        return { id, ok: false, reason: "cancelled" };
+      }
       const reason = reasonOf(error);
       await store.fail(id, reason).catch(() => undefined);
+      await this.#event(parentWs, id, "step.finished", `${spec.kind} ${spec.name} failed: ${reason}`, { kind: spec.kind, name: spec.name, status: "failed" });
       return { id, ok: false, reason };
     } finally {
       await removeTree(paths.root).catch(() => undefined);

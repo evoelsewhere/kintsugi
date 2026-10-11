@@ -10,11 +10,12 @@ import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CheckoutStorage } from "@kintsugi/git";
-import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { createChildAgentRuntime, interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
-import { JobRunner } from "../src/jobs/runner.js";
+import { JobCancelled } from "../src/jobs/model.js";
+import { JobRunner, summarizeToolCall } from "../src/jobs/runner.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
 import { type AgentFiles, LocalCheckouts, MemoryJobStore, fixtureRepository, writingAgentRuntime } from "./support/jobs.js";
 
@@ -245,4 +246,74 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       ["agent", "legacy-analyst", "succeeded"],
     ]);
   });
+
+  it("records the run's live events: status, steps and agent tool calls, without file content", async () => {
+    const { store, runner } = setup({ "legacy-analyst": () => ({ "assessment/demo/ASSESSMENT.md": "# Draft with private detail\n" }) });
+    const id = await assess(store);
+    await runner.run(id);
+    const events = store.events.filter((event) => event.runId === id);
+    const [script, agent] = store.children(id);
+    expect(events[0]).toMatchObject({ kind: "status", data: { status: "running" } });
+    expect(events.at(-1)).toMatchObject({ kind: "status", data: { status: "succeeded" } });
+    expect(events.filter((event) => event.kind.startsWith("step.")).map((event) => [event.kind, event.stepId, event.data?.["status"] ?? null])).toEqual([
+      ["step.started", script!.id, null],
+      ["step.finished", script!.id, "succeeded"],
+      ["step.started", agent!.id, null],
+      ["step.finished", agent!.id, "succeeded"],
+    ]);
+    const tools = events.filter((event) => event.kind === "tool");
+    expect(tools.length).toBeGreaterThan(0);
+    expect(tools.every((event) => event.stepId === agent!.id)).toBe(true);
+    expect(JSON.stringify(events)).not.toContain("private detail");
+  });
+
+  it("summarizes tool calls by tool and workspace path only", () => {
+    const roots = { src: join(dataDir, "jobs", "x", "src"), out: join(dataDir, "jobs", "x", "out") };
+    expect(summarizeToolCall("read", { path: join(roots.src, "lib", "a.c") }, roots)).toBe("read src/lib/a.c");
+    expect(summarizeToolCall("outputs_write", { path: "assessment/x.md", content: "secret body" }, roots)).toBe("outputs_write assessment/x.md");
+    expect(summarizeToolCall("grep", { path: roots.src, pattern: "TODO" }, roots)).toBe('grep src "TODO"');
+    expect(summarizeToolCall("read", { path: join(tmpdir(), "elsewhere.txt") }, roots)).toBe("read (outside the workspace)");
+  });
+
+  it("does not start a run that was cancelled while queued", async () => {
+    const { store, runner } = setup({});
+    const id = await assess(store);
+    await store.cancel(id);
+    const run = await runner.run(id);
+    expect(run?.status).toBe("cancelled");
+    expect(store.children(id)).toHaveLength(0);
+    expect(existsSync(storage.job(id).root)).toBe(false);
+  });
+
+  it("cancels a running stage: kills the agent's process, cancels the step and the run, writes nothing", async () => {
+    const hang = join(dataDir, "hang.mjs");
+    writeFileSync(hang, "setInterval(() => undefined, 1000);\n");
+    const store = new MemoryJobStore();
+    const writes: DocumentWriteRequest[] = [];
+    const runner = new JobRunner({
+      store,
+      storage,
+      checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
+      agents: createChildAgentRuntime({ mode: "mock", entry: hang }),
+      agentDefinitions: builtinAgents(),
+      interpreters: interpretersFromEnv(),
+      requestWrite: async (_repository, request) => {
+        writes.push(request);
+      },
+      log: () => undefined,
+    });
+    const id = await assess(store);
+    const cancel = new AbortController();
+    const running = runner.run(id, cancel.signal);
+    await expect.poll(() => store.events.some((event) => event.kind === "step.started" && event.data?.["kind"] === "agent"), { timeout: 30_000, interval: 50 }).toBe(true);
+    cancel.abort(new JobCancelled());
+    const run = await running;
+    expect(run?.status).toBe("cancelled");
+    expect(store.children(id).map((child) => [child.kind, child.status])).toEqual([
+      ["script", "succeeded"],
+      ["agent", "cancelled"],
+    ]);
+    expect(writes).toHaveLength(0);
+    expect(store.events.at(-1)).toMatchObject({ runId: id, kind: "status", data: { status: "cancelled" } });
+  }, 60_000);
 });
