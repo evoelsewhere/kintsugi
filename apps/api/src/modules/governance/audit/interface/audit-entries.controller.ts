@@ -1,27 +1,37 @@
-// Interface layer: thin HTTP adapter — validates input, maps DTOs to application
-// commands, delegates to the use cases. No business logic here.
+// Interface layer: the audit log, read-only over HTTP (entries are written by the use cases
+// they audit). Needs audit.read.
 
-import { Controller, Get, Param } from "@nestjs/common";
+import { Controller, Get, Param, Query } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { Page } from "#common/application/pagination.js";
+import { RequirePermission } from "#common/auth/decorators.js";
+import { AuditService } from "../application/audit.service.js";
 import type { AuditEntry } from "../domain/audit-entry.js";
-import { AuditEntriesService } from "../application/audit-entries.service.js";
+import { type ListAuditQuery, listAuditQuerySchema } from "./audit.dto.js";
 
 @ApiTags("governance · audit & traceability")
 @Controller("governance/audit")
+@RequirePermission("audit.read")
 export class AuditEntriesController {
-  constructor(private readonly auditEntries: AuditEntriesService) {}
+  constructor(private readonly audit: AuditService) {}
 
   @Get()
-  @ApiOperation({ summary: "List audit entries" })
-  @ApiOkResponse({ description: "The matching records." })
-  list(): Promise<AuditEntry[]> {
-    return this.auditEntries.list();
+  @ApiOperation({ summary: "List audit entries, newest first (filter by action, subject, project)" })
+  @ApiOkResponse({ description: "A page of audit entries." })
+  list(@Query({ schema: listAuditQuerySchema }) query: ListAuditQuery): Promise<Page<AuditEntry>> {
+    return this.audit.list({
+      limit: query.limit,
+      offset: query.offset,
+      ...(query.action === undefined ? {} : { action: query.action }),
+      ...(query.subject === undefined ? {} : { subject: query.subject }),
+      ...(query.projectId === undefined ? {} : { projectId: query.projectId }),
+    });
   }
 
   @Get(":id")
   @ApiOperation({ summary: "Get one audit entry" })
-  @ApiOkResponse({ description: "The record." })
+  @ApiOkResponse({ description: "The entry." })
   get(@Param("id") id: string): Promise<AuditEntry> {
-    return this.auditEntries.get(id);
+    return this.audit.get(id);
   }
 }

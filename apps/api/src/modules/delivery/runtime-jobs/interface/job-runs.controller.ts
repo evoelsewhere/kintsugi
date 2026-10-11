@@ -39,9 +39,9 @@ export class JobRunsController {
 
   @RequirePermission("restricted.read")
   @Get("job-runs/:runId/restricted")
-  @ApiOperation({ summary: "Read the restricted records of a job run and its steps (never committed to Git)" })
+  @ApiOperation({ summary: "Read the restricted records of a job run and its steps (never committed to Git); every read is audited" })
   @ApiOkResponse({ description: "The decrypted restricted files." })
-  restricted(@Param("id") id: string, @Param("runId") runId: string): Promise<RestrictedRecordView[]> {
-    return this.runs.restricted(id, runId);
+  restricted(@Param("id") id: string, @Param("runId") runId: string, @CurrentActor() actor: Actor): Promise<RestrictedRecordView[]> {
+    return this.runs.restricted(id, runId, actor);
   }
 }
