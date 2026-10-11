@@ -1,27 +1,24 @@
 // Git — servers and repositories (Settings → Git, ADR-0025). Users register servers with
 // one credential and the repositories Kintsugi should clone; the worker keeps a mirror
-// of each in Kintsugi's own storage and reports its sync status here. Admins also set the
-// commit identity of kintsugi-bot here.
+// of each in Kintsugi's own storage and reports its sync status here (refreshed every few
+// seconds while a repository is not ready). Admins also set the commit identity of
+// kintsugi-bot here.
 
 import { FolderGit2, Plus, Server, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
-import { gitApi, type GitRepositoryView, type GitServerInput, type GitServerView, type SyncStatus } from "@/lib/api/git";
+import { SyncStatusBadge } from "@/components/status-badges";
+import { StatusDot } from "@/components/ui/status-dot";
+import { useToast } from "@/components/ui/toast";
+import { gitApi, type GitRepositoryView, type GitServerInput, type GitServerView } from "@/lib/api/git";
+import { formatRelative, shortSha } from "@/lib/format";
 import { CommitIdentityCard } from "./commit-identity-card";
 import { GitRepositoryDialog } from "./git-repository-dialog";
 import { GitServerDialog } from "./git-server-dialog";
 
 const AUTH_LABEL: Record<GitServerView["authType"], string> = { token: "access token", "ssh-key": "SSH key", none: "anonymous" };
-
-const SYNC: Record<SyncStatus, { tone: StatusTone; label: string }> = {
-  pending: { tone: "muted", label: "waiting for first clone" },
-  cloning: { tone: "blue", label: "cloning" },
-  ready: { tone: "green", label: "ready" },
-  error: { tone: "red", label: "sync failed" },
-};
 
 type RemoveTarget = { kind: "server"; server: GitServerView } | { kind: "repository"; repository: GitRepositoryView };
 
@@ -32,6 +29,7 @@ export function GitSection(): React.JSX.Element {
   const [serverDialog, setServerDialog] = useState<{ open: boolean; server: GitServerView | null }>({ open: false, server: null });
   const [repositoryDialog, setRepositoryDialog] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -50,15 +48,25 @@ export function GitSection(): React.JSX.Element {
     void load();
   }, [load]);
 
+  // The worker clones new repositories in the background: follow them until they are ready.
+  const settling = repositories.some((repository) => repository.syncStatus === "pending" || repository.syncStatus === "cloning");
+  useEffect(() => {
+    if (!settling) return;
+    const timer = setInterval(() => void load(), 3000);
+    return () => clearInterval(timer);
+  }, [settling, load]);
+
   async function saveServer(id: string, input: GitServerInput): Promise<void> {
     if (serverDialog.server === null) await gitApi.createServer({ id, ...input });
     else await gitApi.replaceServer(id, input);
+    toast.success(serverDialog.server === null ? "Git server added" : "Git server saved", input.name);
     await load();
   }
 
   async function remove(target: RemoveTarget): Promise<void> {
     if (target.kind === "server") await gitApi.removeServer(target.server.id);
     else await gitApi.removeRepository(target.repository.id);
+    toast.success(target.kind === "server" ? `Removed ${target.server.name}` : `Removed ${target.repository.id}`);
     await load();
   }
 
@@ -133,7 +141,6 @@ export function GitSection(): React.JSX.Element {
           </CardContent>
         ) : (
           repositories.map((repository) => {
-            const sync = SYNC[repository.syncStatus];
             return (
               <div key={repository.id} className="flex items-center gap-3 px-4 py-2.5 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)]">
                 <FolderGit2 className="size-5 shrink-0 text-text-secondary" strokeWidth={1.5} />
@@ -142,15 +149,12 @@ export function GitSection(): React.JSX.Element {
                   <p className="truncate text-[12px] text-text-muted">
                     {serverName(repository.serverId)} · {repository.url}
                     {repository.defaultBranch === undefined ? "" : ` · ${repository.defaultBranch}`}
+                    {repository.lastCommit === undefined ? "" : ` · at ${shortSha(repository.lastCommit)}`}
+                    {repository.lastSyncedAt === undefined ? "" : ` · synced ${formatRelative(repository.lastSyncedAt)}`}
                   </p>
+                  {repository.lastError === undefined ? null : <p className="mt-0.5 break-words text-[12px] text-[var(--ds-status-red)]">{repository.lastError}</p>}
                 </div>
-                <span
-                  className="hidden shrink-0 items-center gap-1.5 text-[12px] text-text-secondary sm:inline-flex"
-                  title={repository.lastError ?? (repository.lastCommit === undefined ? undefined : `at ${repository.lastCommit.slice(0, 12)}`)}
-                >
-                  <StatusDot tone={sync.tone} />
-                  {sync.label}
-                </span>
+                <SyncStatusBadge status={repository.syncStatus} />
                 <Button size="icon" variant="danger" aria-label={`Remove ${repository.id}`} onClick={() => setRemoveTarget({ kind: "repository", repository })}>
                   <Trash2 className="size-4" />
                 </Button>
@@ -177,6 +181,7 @@ export function GitSection(): React.JSX.Element {
         onClose={() => setRepositoryDialog(false)}
         onSubmit={async (input) => {
           await gitApi.createRepository(input);
+          toast.success("Repository registered", `${input.id} — the worker clones it now; its status updates here.`);
           await load();
         }}
       />

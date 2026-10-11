@@ -1,25 +1,31 @@
 // Providers — the LLM provider registry UI (Settings → Providers).
 // Full CRUD against /api/admin/llm-providers (ADR-0009): providers as list rows,
-// agent → model bindings as a compact editor. Credentials are write-only.
+// agent → model bindings as a compact editor (agents from the catalog, models from the chosen
+// provider, an optional project scope; "All projects" is the installation default).
+// Credentials are write-only.
 
 import type { ThinkingLevel } from "@kintsugi/domain";
 import { PlugZap, Plus, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ProviderIcon } from "@/components/ui/provider-icon";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
+import { useToast } from "@/components/ui/toast";
+import { agentsApi, type AgentSummary } from "@/lib/api/agents";
+import { projectsApi, type ProjectView } from "@/lib/api/projects";
 import {
   providersApi,
   type AgentModelBindingInput,
   type CreateProviderInput,
   type ProviderView,
   type ReplaceProviderInput,
+  type SupportedProviders,
   type TestConnectionResult,
 } from "@/lib/api/providers";
+import { modelOptions } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
 import { ProviderFormDialog } from "./provider-form-dialog";
 
@@ -30,6 +36,12 @@ const THINKING_OPTIONS: SelectOption[] = [{ value: "", label: "Default" }, ...TH
 export function ProvidersSection(): React.JSX.Element {
   const [providers, setProviders] = useState<ProviderView[]>([]);
   const [bindings, setBindings] = useState<AgentModelBindingInput[]>([]);
+  const [savedBindings, setSavedBindings] = useState<string>("[]");
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [projects, setProjects] = useState<ProjectView[]>([]);
+  const [supported, setSupported] = useState<SupportedProviders | undefined>(undefined);
+  const [savingBindings, setSavingBindings] = useState(false);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ open: boolean; provider: ProviderView | null }>({ open: false, provider: null });
   const [removeTarget, setRemoveTarget] = useState<ProviderView | null>(null);
@@ -37,9 +49,19 @@ export function ProvidersSection(): React.JSX.Element {
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const [all, list] = await Promise.all([providersApi.list(), providersApi.listBindings()]);
+      const [all, list, catalog, allProjects, catalogAgents] = await Promise.all([
+        providersApi.list(),
+        providersApi.listBindings(),
+        providersApi.supported(),
+        projectsApi.list(),
+        agentsApi.list(),
+      ]);
       setProviders(all);
       setBindings(list);
+      setSavedBindings(JSON.stringify(list));
+      setSupported(catalog);
+      setProjects(allProjects);
+      setAgents(catalogAgents.filter((agent) => agent.audience === "runtime"));
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -53,11 +75,13 @@ export function ProvidersSection(): React.JSX.Element {
   async function save(input: CreateProviderInput | ReplaceProviderInput): Promise<void> {
     if (dialog.provider === null) await providersApi.create(input as CreateProviderInput);
     else await providersApi.replace(dialog.provider.id, input as ReplaceProviderInput);
+    toast.success(dialog.provider === null ? "Provider added" : "Provider saved", dialog.provider?.id ?? (input as CreateProviderInput).id);
     await load();
   }
 
   async function remove(provider: ProviderView): Promise<void> {
     await providersApi.remove(provider.id);
+    toast.success(`Removed ${provider.id}`);
     await load();
   }
 
@@ -72,13 +96,26 @@ export function ProvidersSection(): React.JSX.Element {
   }
 
   async function saveBindings(): Promise<void> {
+    setSavingBindings(true);
     try {
-      setBindings(await providersApi.replaceBindings(bindings));
-      setError(null);
+      const saved = await providersApi.replaceBindings(bindings);
+      setBindings(saved);
+      setSavedBindings(JSON.stringify(saved));
+      toast.success("Model bindings saved", `${saved.length} binding${saved.length === 1 ? "" : "s"} — jobs started from now on use them.`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : String(saveError));
+      toast.error("Could not save the model bindings", saveError);
+    } finally {
+      setSavingBindings(false);
     }
   }
+
+  const bindingsChanged = JSON.stringify(bindings) !== savedBindings;
+  const incomplete = bindings.some((binding) => binding.agent === "" || binding.provider === "" || binding.model === "");
+  const agentOptions: SelectOption[] = agents.map((agent) => ({ value: agent.name, label: agent.name, ...(agent.enabled ? {} : { hint: "disabled" }) }));
+  const scopeOptions: SelectOption[] = [{ value: "", label: "All projects", hint: "default" }, ...projects.map((project) => ({ value: project.id, label: project.name, hint: project.id }))];
+  const withCurrent = (options: SelectOption[], value: string): SelectOption[] =>
+    value === "" || options.some((option) => option.value === value) ? options : [{ value, label: value, hint: "not in the catalog" }, ...options];
+  const patch = (index: number, change: Partial<AgentModelBindingInput>): void => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, ...change } : row)));
 
   const providerOptions: SelectOption[] = providers.map((provider) => ({ value: provider.id, label: provider.id, hint: provider.kind }));
 
@@ -158,15 +195,15 @@ export function ProvidersSection(): React.JSX.Element {
         <CardHeader>
           <div>
             <CardTitle>Agent model bindings</CardTitle>
-            <CardDescription>Provider and model per runtime agent — blank = installation default.</CardDescription>
+            <CardDescription>Provider and model per runtime agent, for all projects (the default) or one project. Agents without a binding use the installation default.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Button size="small" variant="ghost" onClick={() => setBindings((prev) => [...prev, { agent: "", provider: providers[0]?.id ?? "", model: "" }])}>
               <Plus className="size-4" />
               Add binding
             </Button>
-            <Button size="small" variant="solid" onClick={() => void saveBindings()} disabled={bindings.length === 0}>
-              Save bindings
+            <Button size="small" variant="solid" onClick={() => void saveBindings()} disabled={savingBindings || !bindingsChanged || incomplete} title={incomplete ? "Choose an agent, provider and model on every row" : undefined}>
+              {savingBindings ? "Saving…" : "Save bindings"}
             </Button>
           </div>
         </CardHeader>
@@ -175,33 +212,48 @@ export function ProvidersSection(): React.JSX.Element {
             <p className="text-[13px] text-text-muted">No bindings yet — agents fall back to the installation default.</p>
           ) : (
             <div className="flex flex-col gap-1.5">
+              <div className="hidden grid-cols-[1.1fr_1fr_0.9fr_1.1fr_0.7fr_auto] gap-2 text-[11px] tracking-wide text-text-muted uppercase sm:grid">
+                <span>Agent</span>
+                <span>Scope</span>
+                <span>Provider</span>
+                <span>Model</span>
+                <span>Thinking</span>
+                <span className="w-8" />
+              </div>
               {bindings.map((binding, index) => (
-                <div key={index} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1.1fr_1fr_1fr_0.8fr_auto]">
-                  <Input
-                    value={binding.agent}
-                    placeholder="agent id"
-                    aria-label="Agent id"
-                    className="h-[var(--geist-form-height)] text-[14px]"
-                    onChange={(event) => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, agent: event.target.value } : row)))}
-                  />
+                <div key={index} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1.1fr_1fr_0.9fr_1.1fr_0.7fr_auto]">
+                  <Select value={binding.agent} placeholder="Agent" options={withCurrent(agentOptions, binding.agent)} onChange={(value) => patch(index, { agent: value })} />
                   <Select
-                    value={binding.provider}
-                    placeholder="Default"
-                    options={providerOptions}
-                    onChange={(value) => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, provider: value } : row)))}
+                    value={binding.projectId ?? ""}
+                    options={withCurrent(scopeOptions, binding.projectId ?? "")}
+                    onChange={(value) =>
+                      setBindings((prev) =>
+                        prev.map((row, i) => {
+                          if (i !== index) return row;
+                          const { projectId: _previous, ...rest } = row;
+                          return value === "" ? rest : { ...rest, projectId: value };
+                        }),
+                      )
+                    }
                   />
-                  <Input
+                  <Select value={binding.provider} placeholder="Provider" options={providerOptions} onChange={(value) => patch(index, { provider: value, model: "" })} />
+                  <Select
                     value={binding.model}
-                    placeholder="model id"
-                    className="h-[var(--geist-form-height)] text-[14px]"
-                    onChange={(event) => setBindings((prev) => prev.map((row, i) => (i === index ? { ...row, model: event.target.value } : row)))}
+                    placeholder="Model"
+                    disabled={binding.provider === ""}
+                    options={modelOptions(providers.find((provider) => provider.id === binding.provider), supported, binding.model)}
+                    onChange={(value) => patch(index, { model: value })}
                   />
                   <Select
                     value={binding.thinking ?? ""}
                     options={THINKING_OPTIONS}
                     onChange={(value) =>
                       setBindings((prev) =>
-                        prev.map((row, i) => (i === index ? { ...row, thinking: (value === "" ? undefined : value) as ThinkingLevel | undefined } : row)),
+                        prev.map((row, i) => {
+                          if (i !== index) return row;
+                          const { thinking: _previous, ...rest } = row;
+                          return value === "" ? rest : { ...rest, thinking: value as ThinkingLevel };
+                        }),
                       )
                     }
                   />

@@ -28,8 +28,8 @@ Use this for vLLM, Ollama, LM Studio, LiteLLM or any internal gateway.
 
 ## Bind models to runtime agents
 
-1. Settings → Providers → **Agent bindings**: choose a provider and model per runtime agent id. This sets the installation default. A binding names an agent id; it may name an agent that is not created yet.
-2. To use a different model for a single project, override the binding in that project's settings.
+1. Settings → Providers → **Agent model bindings**: per row, choose a runtime agent from the catalog, the scope **All projects** (the installation default), a provider and one of its models. **Save bindings** confirms with a notification. An agent's own page (Administration → Agents) sets its installation-default binding too.
+2. To use a different model for a single project, add a second row for the same agent with that project as its scope; it takes precedence over the default.
 
 ## Notes
 
