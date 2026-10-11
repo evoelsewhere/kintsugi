@@ -1,6 +1,6 @@
 # Build a project
 
-> **Planned behavior.** The portal flow described here is part of milestones M0–M3. Until then, follow the same steps directly in the document repo.
+> **Partly available.** The portal manages projects, applications and their repositories, and renders `kintsugi.yaml` (**Administration → Projects**). Creating or joining the document repo from the portal and committing `kintsugi.yaml` to it are planned (milestones M0–M3); until then, commit the rendered file to the document repo through a pull request.
 
 Kintsugi is a common engine. Before the migration starts, the team sets the project up:
 1. create or join the document repo;
@@ -17,26 +17,28 @@ Exact formats: [document repository reference](../reference/document-repo.md).
 
 - The **legacy repos** (code and data) are reachable by Kintsugi. They are always read-only for Kintsugi.
 - The **target repos** have a scaffolded base prepared by the solution architect: framework, layering, conventions, build and CI.
-- Git servers are registered (Admin → Connectors).
+- Git servers and every repository the project uses (document, legacy, legacy-data, target) are registered in **Settings → Git**. Kintsugi clones them into its own storage ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)).
 
 ## Step 1 — Document repo (P0)
 
-Portal → **New project**, then pick one of:
-- **Create**: scaffold a new document repo from the [starter template](../../templates/document-repo/).
-- **Join**: point Kintsugi to an existing document repo; it reads `kintsugi.yaml`.
+Prepare the document repo, then register it in Settings → Git:
+- **New**: create it from the [starter template](../../templates/document-repo/).
+- **Existing**: use the project's existing document repo.
 
-Declare the document repo once, under `document:` in `kintsugi.yaml`.
+Then **Administration → Projects → New project**: name, id and the document repo. A project has exactly one document repo, and a document repo belongs to one project only. In `kintsugi.yaml` it is declared once, under `document:`.
+
+Planned: the portal scaffolds a new document repo from the template, or joins an existing one by reading its `kintsugi.yaml`.
 
 ## Step 2 — Register the repos (P0)
 
-In `kintsugi.yaml`, for each application set:
+On the project page, **Add application** for each application in scope, then **Link** its repositories. The page groups them as they appear in `kintsugi.yaml`; for each application set:
 - `disposition` (7R);
 - `repos`, grouped by role:
   - **AS-IS**: `legacy` (code) and `legacy-data` (schemas, dumps, reference data), any number, read-only;
   - **TO-BE**: `target`, any number, each with `component:` naming the architecture component it implements. Only members write to them;
 - `pipeline`: a built-in pipeline id, or the id of a pipeline you declare under `pipelines:` in the same file (stages, performers, gates; custom phases need a `category`).
 
-Also list the project's `unitKinds`. Commit through a PR. **Gate G0**: the document repo, the repos and the pipelines are declared.
+The project page shows the rendered `kintsugi.yaml`. Add the project's `unitKinds` and any `pipelines` (the portal renders defaults for these), then commit it to the document repo through a PR. **Gate G0**: the document repo, the repos and the pipelines are declared.
 
 ## Step 3 — Write the standards (P1–P3)
 
