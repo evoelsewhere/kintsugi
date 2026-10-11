@@ -14,6 +14,8 @@ import {
 } from "@kintsugi/domain";
 import { MANIFEST_FILE, renderKintsugiYaml } from "@kintsugi/manifest";
 import type { Page, PageQuery } from "#common/application/pagination.js";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord, changedFields } from "#common/audit/audit-trail.js";
+import type { Actor } from "#common/auth/decorators.js";
 import { toPage } from "#common/application/pagination.js";
 import { GitRegistry } from "#modules/admin/git/index.js";
 import {
@@ -42,6 +44,7 @@ export class ProjectsService {
   constructor(
     private readonly store: ProjectStore,
     private readonly git: GitRegistry,
+    private readonly audit: AuditTrail,
   ) {}
 
   // ---- projects ----
@@ -73,14 +76,18 @@ export class ProjectsService {
     };
   }
 
-  async createProject(input: CreateProject): Promise<ProjectRecord> {
+  async createProject(input: CreateProject, actor: Actor): Promise<ProjectRecord> {
     if ((await this.store.getProject(input.id)) !== undefined) throw new ConflictException(`Project ${input.id} already exists`);
     await this.#mustBeRegistered(input.documentRepositoryId);
     await this.#check(input.id, [], [{ projectId: input.id, applicationId: null, repositoryId: input.documentRepositoryId, role: "document" }]);
-    return this.#conflicts(() => this.store.createProject(input));
+    const project = await this.#conflicts(() => this.store.createProject(input));
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.projectCreate, { projectId: project.id, subject: project.id, detail: { name: project.name, documentRepositoryId: input.documentRepositoryId } }),
+    );
+    return project;
   }
 
-  async updateProject(id: string, input: UpdateProject): Promise<ProjectRecord> {
+  async updateProject(id: string, input: UpdateProject, actor: Actor): Promise<ProjectRecord> {
     const project = await this.#mustGetProject(id);
     if (input.documentRepositoryId !== undefined && input.documentRepositoryId !== project.documentRepositoryId) {
       await this.#mustBeRegistered(input.documentRepositoryId);
@@ -89,11 +96,13 @@ export class ProjectsService {
     }
     const updated = await this.#conflicts(() => this.store.updateProject(id, input));
     if (updated === undefined) throw new NotFoundException(`Project ${id} not found`);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.projectUpdate, { projectId: id, subject: id, detail: { fields: changedFields(input) } }));
     return updated;
   }
 
-  async removeProject(id: string): Promise<void> {
+  async removeProject(id: string, actor: Actor): Promise<void> {
     if (!(await this.store.removeProject(id))) throw new NotFoundException(`Project ${id} not found`);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.projectDelete, { projectId: id, subject: id }));
   }
 
   /** kintsugi.yaml for the project's current state. Render only: the document-writes module publishes it (ADR-0019). */
@@ -128,28 +137,38 @@ export class ProjectsService {
     return this.#mustGetApplication(projectId, id);
   }
 
-  async createApplication(projectId: string, input: CreateApplication): Promise<ApplicationRecord> {
+  async createApplication(projectId: string, input: CreateApplication, actor: Actor): Promise<ApplicationRecord> {
     await this.#mustGetProject(projectId);
     if ((await this.store.getApplication(projectId, input.id)) !== undefined) throw new ConflictException(`Application ${input.id} already exists in project ${projectId}`);
-    return this.#conflicts(() => this.store.createApplication(projectId, input));
+    const application = await this.#conflicts(() => this.store.createApplication(projectId, input));
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.applicationCreate, {
+        projectId,
+        subject: `${projectId}/${application.id}`,
+        detail: { name: application.name, disposition: application.disposition },
+      }),
+    );
+    return application;
   }
 
-  async updateApplication(projectId: string, id: string, input: UpdateApplication): Promise<ApplicationRecord> {
+  async updateApplication(projectId: string, id: string, input: UpdateApplication, actor: Actor): Promise<ApplicationRecord> {
     await this.#mustGetProject(projectId);
     const updated = await this.store.updateApplication(projectId, id, input);
     if (updated === undefined) throw new NotFoundException(`Application ${id} not found in project ${projectId}`);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.applicationUpdate, { projectId, subject: `${projectId}/${id}`, detail: { fields: changedFields(input) } }));
     return updated;
   }
 
   /** Removes the application and unlinks its repositories (they stay registered in Settings -> Git). */
-  async removeApplication(projectId: string, id: string): Promise<void> {
+  async removeApplication(projectId: string, id: string, actor: Actor): Promise<void> {
     await this.#mustGetProject(projectId);
     if (!(await this.store.removeApplication(projectId, id))) throw new NotFoundException(`Application ${id} not found in project ${projectId}`);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.applicationDelete, { projectId, subject: `${projectId}/${id}` }));
   }
 
   // ---- repository links ----
 
-  async linkRepository(projectId: string, applicationId: string, input: LinkRepository): Promise<ProjectDetail> {
+  async linkRepository(projectId: string, applicationId: string, input: LinkRepository, actor: Actor): Promise<ProjectDetail> {
     await this.#mustGetProject(projectId);
     await this.#mustGetApplication(projectId, applicationId);
     await this.#mustBeRegistered(input.repositoryId);
@@ -162,14 +181,24 @@ export class ProjectsService {
     };
     await this.#check(projectId, await this.#applicationIds(projectId), [...(await this.store.listLinks(projectId)), link]);
     await this.#conflicts(() => this.store.addLink(link));
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.repositoryLink, {
+        projectId,
+        subject: `${projectId}/${applicationId}`,
+        detail: { repositoryId: link.repositoryId, role: link.role, ...(link.component === undefined ? {} : { component: link.component }) },
+      }),
+    );
     return this.getProject(projectId);
   }
 
-  async unlinkRepository(projectId: string, applicationId: string, repositoryId: string): Promise<void> {
+  async unlinkRepository(projectId: string, applicationId: string, repositoryId: string, actor: Actor): Promise<void> {
     await this.#mustGetProject(projectId);
     const link = (await this.store.listLinks(projectId)).find((entry) => entry.repositoryId === repositoryId && entry.applicationId === applicationId);
     if (link === undefined) throw new NotFoundException(`Repository ${repositoryId} is not linked to application ${applicationId}`);
     await this.store.removeLink(projectId, repositoryId);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.repositoryUnlink, { projectId, subject: `${projectId}/${applicationId}`, detail: { repositoryId, role: link.role } }),
+    );
   }
 
   // ---- helpers ----

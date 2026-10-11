@@ -41,8 +41,13 @@ Runs stages, script steps, agent jobs and workflows in job workspaces ([ADR-0029
 - **Hand-off**: a top-level run with output enqueues a `document-write` with `outputOfJob` = the run (its `out/`), `jobId`, `agent`, `actor`, and records `document_write_id`.
 - **Live events and cancel**: status, steps, agent tool calls (tool and path only) and log lines go to `workflow.job_event`, redacted; cancel requests (`cancel_requested_at`) are polled every 2 seconds and abort the run (processes killed, run `cancelled`).
 - **Cleanup** (`src/jobs/cleanup.ts`): `out/` is deleted once its write is `committed`, `pr-opened` or `unchanged`; failed runs and writes keep it for `KINTSUGI_JOB_RETENTION_DAYS`; an hourly sweep removes expired workspaces.
+- **Gates** (`src/gates.ts`, database only): `requestGate()` opens a pending `governance.gate` (or returns the one already pending for the same project, application, key and subject) and audits it as `gate.request`; `gateState()` reads it; `waitForGate()` polls until a person approves, rejects or waives it (abortable). For stage plans that stop at a gate.
 - More stages (the full assess plan, map, extract-rules, …) and workflows per application source.
 - Ingestion, webhooks (D30).
+
+## Heartbeat (implemented)
+
+`src/heartbeat.ts` ([ADR-0030](../../docs/decisions/0030-worker-heartbeat-in-postgres.md)): every 15 seconds the worker upserts its row in `workflow.worker_heartbeat` (random id per process, host, pid, version from `KINTSUGI_VERSION` or the package, active jobs across all queues, the queues it works); on shutdown it marks the row stopped after the queues stop. A failed beat is logged, never fatal. Rows unseen for 7 days are removed on start.
 
 ## Run
 

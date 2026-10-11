@@ -4,7 +4,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Page, PageQuery } from "#common/application/pagination.js";
-import { RequirePermission } from "#common/auth/decorators.js";
+import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { pageQuerySchema } from "#common/interface/pagination.js";
 import { GitService, type TestAccessResult } from "../application/git.service.js";
 import type { GitRepositoryRecord, GitServerRecord } from "../domain/git.js";
@@ -43,24 +43,24 @@ export class GitServersController {
   @Post()
   @ApiOperation({ summary: "Register a Git server with its credential (stored encrypted, never returned)" })
   @ApiCreatedResponse({ description: "The registered server." })
-  create(@Body({ schema: createGitServerSchema }) input: CreateGitServerInput): Promise<GitServerRecord> {
+  create(@Body({ schema: createGitServerSchema }) input: CreateGitServerInput, @CurrentActor() actor: Actor): Promise<GitServerRecord> {
     const { id, ...fields } = input;
-    return this.git.createServer(toServerCommand(id, fields));
+    return this.git.createServer(toServerCommand(id, fields), actor);
   }
 
   @Patch(":id")
   @ApiOperation({ summary: "Replace a Git server; omit the credential to keep the stored one (same host only)" })
   @ApiOkResponse({ description: "The updated server." })
-  replace(@Param("id") id: string, @Body({ schema: replaceGitServerSchema }) input: ReplaceGitServerInput): Promise<GitServerRecord> {
-    return this.git.replaceServer(id, toServerCommand(id, input));
+  replace(@Param("id") id: string, @Body({ schema: replaceGitServerSchema }) input: ReplaceGitServerInput, @CurrentActor() actor: Actor): Promise<GitServerRecord> {
+    return this.git.replaceServer(id, toServerCommand(id, input), actor);
   }
 
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Remove a Git server that has no repositories" })
   @ApiNoContentResponse({ description: "The server and its credential are removed." })
-  async remove(@Param("id") id: string): Promise<void> {
-    await this.git.removeServer(id);
+  async remove(@Param("id") id: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.git.removeServer(id, actor);
   }
 
   @Post(":id/test")
@@ -97,15 +97,15 @@ export class GitRepositoriesController {
   @Post()
   @ApiOperation({ summary: "Register a repository; it must be reachable with its server's credential" })
   @ApiCreatedResponse({ description: "The repository, pending its first clone." })
-  create(@Body({ schema: createGitRepositorySchema }) input: CreateGitRepositoryInput): Promise<GitRepositoryRecord> {
-    return this.git.createRepository(input);
+  create(@Body({ schema: createGitRepositorySchema }) input: CreateGitRepositoryInput, @CurrentActor() actor: Actor): Promise<GitRepositoryRecord> {
+    return this.git.createRepository(input, actor);
   }
 
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Remove a repository" })
   @ApiNoContentResponse({ description: "The repository is removed." })
-  async remove(@Param("id") id: string): Promise<void> {
-    await this.git.removeRepository(id);
+  async remove(@Param("id") id: string, @CurrentActor() actor: Actor): Promise<void> {
+    await this.git.removeRepository(id, actor);
   }
 }

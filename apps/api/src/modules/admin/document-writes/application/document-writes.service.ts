@@ -5,6 +5,7 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
@@ -17,6 +18,7 @@ export class DocumentWritesService {
     private readonly store: DocumentWriteStore,
     private readonly queue: DocumentWriteQueue,
     private readonly projects: ProjectsService,
+    private readonly audit: AuditTrail,
   ) {}
 
   /** Renders kintsugi.yaml from the project's state and enqueues it as a pull request. */
@@ -24,7 +26,7 @@ export class DocumentWritesService {
     const project = await this.projects.getProject(projectId);
     if (project.documentRepository === null) throw new ConflictException(`Project ${projectId} has no document repository`);
     const manifest = await this.projects.renderManifest(projectId);
-    return this.#enqueue({
+    const write = await this.#enqueue({
       id: newId(),
       projectId,
       documentRepositoryId: project.documentRepository.repositoryId,
@@ -33,6 +35,14 @@ export class DocumentWritesService {
       files: [{ path: manifest.fileName, content: manifest.content }],
       actor: actor.username ?? actor.id,
     });
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.manifestPublish, {
+        projectId,
+        subject: write.id,
+        detail: { path: manifest.fileName, documentRepositoryId: project.documentRepository.repositoryId },
+      }),
+    );
+    return write;
   }
 
   async list(projectId: string, query: PageQuery): Promise<Page<DocumentWriteRecord>> {

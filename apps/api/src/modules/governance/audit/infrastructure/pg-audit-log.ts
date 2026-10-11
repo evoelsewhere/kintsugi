@@ -48,10 +48,12 @@ export class PgAuditLog extends AuditLog {
   }
 
   async list(query: AuditQuery): Promise<{ items: AuditEntry[]; total: number }> {
-    const filter = "($1::text is null or action = $1) and ($2::text is null or subject = $2) and ($3::text is null or project_id = $3)";
-    const params = [query.action ?? null, query.subject ?? null, query.projectId ?? null];
+    const filter =
+      "($1::text[] is null or action = any($1)) and ($2::text is null or subject = $2) and ($3::text is null or project_id = $3) and ($4::text is null or actor = $4 or detail->>'username' = $4)";
+    const actions = query.actions === undefined || query.actions.length === 0 ? null : query.actions;
+    const params = [actions, query.subject ?? null, query.projectId ?? null, query.actor ?? null];
     const [rows, count] = await Promise.all([
-      this.#pool.query<Row>(`select id::text, at, actor, action, project_id, subject, detail from governance.audit_event where ${filter} order by at desc, id desc limit $4 offset $5`, [
+      this.#pool.query<Row>(`select id::text, at, actor, action, project_id, subject, detail from governance.audit_event where ${filter} order by at desc, id desc limit $5 offset $6`, [
         ...params,
         query.limit,
         query.offset,

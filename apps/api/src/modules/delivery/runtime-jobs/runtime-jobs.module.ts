@@ -3,7 +3,6 @@
 
 import { Module } from "@nestjs/common";
 import { ProjectsModule } from "#modules/admin/projects/index.js";
-import { AuditEntriesModule } from "#modules/governance/audit/index.js";
 import { JobRunsService } from "./application/job-runs.service.js";
 import { StagesService } from "./application/stages.service.js";
 import { JobRunQueue, JobRunStore, StageCatalog } from "./domain/job-run.ports.js";
@@ -17,7 +16,7 @@ import { StagesController } from "./interface/stages.controller.js";
 
 /** delivery · runtime jobs (B1 + E1/E4, ADR-0029): the API records and enqueues, the worker runs. */
 @Module({
-  imports: [ProjectsModule, AuditEntriesModule],
+  imports: [ProjectsModule],
   controllers: [JobRunsController, AllJobRunsController, StagesController, RestrictedRecordsController],
   providers: [
     JobRunsService,

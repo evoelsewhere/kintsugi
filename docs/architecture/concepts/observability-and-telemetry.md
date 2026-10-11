@@ -15,6 +15,10 @@
 - **Session replay**: the session JSONL can be kept for replay and debugging.
 - **Export**: OpenTelemetry export is optional (D24). The portal is the default place to look.
 
+## Worker
+
+Every worker process writes a heartbeat to Postgres every 15 seconds (host, pid, version, active jobs, queues; [ADR-0030](../../decisions/0030-worker-heartbeat-in-postgres.md)). The monitoring overview reports a worker as up when it was seen less than 45 seconds ago and flags *No worker is running* otherwise; Monitoring → Worker lists every worker next to the queue counts.
+
 ## Member harnesses
 
 Activity from members' harnesses is normalized into `HarnessActivity` ([`packages/harness-sdk`](../../../packages/harness-sdk/src/index.ts)) from several sources of varying detail. The full list is in [harness integration → telemetry sources](../../reference/harness-integration.md#6-telemetry-sources).

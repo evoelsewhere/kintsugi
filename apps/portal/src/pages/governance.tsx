@@ -1,7 +1,8 @@
-// Governance — the audit log (audit.read) with filters, the restricted records of job runs
-// (restricted.read: listed without content; opening a run's records decrypts them and every
-// record read is audited) and which permission governs what.
-// URL: /governance?tab=audit|restricted|permissions&run=<top-level run id>
+// Governance — quality and stage gates (read with a session, decided with gates.decide), the
+// audit log (audit.read) with filters, the restricted records of job runs (restricted.read:
+// listed without content; opening a run's records decrypts them and every record read is
+// audited) and which permission governs what.
+// URL: /governance?tab=gates|audit|restricted|permissions&status=<gate filter>&run=<top-level run id>
 
 import { Check, Eye, FileLock2, RefreshCw, ScrollText, ShieldCheck } from "lucide-react";
 import { useState } from "react";
@@ -27,26 +28,29 @@ import { projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { formatBytes, formatDateTime, formatRelative } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
+import { type GovernanceTab } from "@/lib/links";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
+import { GatesView } from "./governance-gates";
 
-type GovernanceTab = "audit" | "restricted" | "permissions";
 const PAGE_SIZE = 25;
 
 export function GovernancePage(): React.JSX.Element {
   const { can } = useAuth();
   const [params, setParams] = useSearchParams();
   const tabs: { id: GovernanceTab; label: string }[] = [
+    { id: "gates", label: "Gates" },
     ...(can("audit.read") ? [{ id: "audit" as const, label: "Audit log" }] : []),
     ...(can("restricted.read") ? [{ id: "restricted" as const, label: "Restricted records" }] : []),
     { id: "permissions", label: "Permissions" },
   ];
   const tab = tabs.find((entry) => entry.id === params.get("tab"))?.id ?? tabs[0]!.id;
+  const projectOptions = useProjectOptions();
 
   return (
     <div className="flex flex-col gap-5">
       <Breadcrumbs items={["Governance"]} />
-      <PageHeading title="Governance" description="Who did what, the restricted records runs produced, and the permissions that guard them." />
+      <PageHeading title="Governance" description="Gates waiting for a decision, who did what, the restricted records runs produced, and the permissions that guard them." />
       <Tabs
         label="Governance views"
         tabs={tabs}
@@ -57,12 +61,29 @@ export function GovernancePage(): React.JSX.Element {
               const next = new URLSearchParams(previous);
               next.set("tab", id);
               next.delete("run");
+              next.delete("status");
               return next;
             },
             { replace: true },
           )
         }
       />
+      {tab === "gates" ? (
+        <GatesView
+          status={params.get("status") ?? "pending"}
+          projectOptions={projectOptions}
+          onStatus={(value) =>
+            setParams(
+              (previous) => {
+                const next = new URLSearchParams(previous);
+                next.set("status", value);
+                return next;
+              },
+              { replace: true },
+            )
+          }
+        />
+      ) : null}
       {tab === "audit" ? <AuditView /> : null}
       {tab === "restricted" ? <RestrictedView runFilter={params.get("run") ?? undefined} /> : null}
       {tab === "permissions" ? <PermissionsView /> : null}
@@ -75,13 +96,31 @@ function useProjectOptions(): { value: string; label: string; hint?: string }[] 
   return [{ value: "", label: "All projects" }, ...(projects.data ?? []).map((project) => ({ value: project.id, label: project.name, hint: project.id }))];
 }
 
-const ACTION_OPTIONS = [
-  { value: "", label: "All actions" },
-  { value: "restricted.read", label: "restricted.read", hint: "a restricted record was opened" },
-];
+/** What each audited action means, for the filter list (actions without a hint still show). */
+const ACTION_HINTS: Record<string, string> = {
+  "restricted.read": "a restricted record was opened",
+  "stage.run": "a stage run was requested",
+  "job-run.cancel": "a job run was cancelled",
+  "manifest.publish": "kintsugi.yaml was published",
+  "gate.request": "a gate was requested",
+  "gate.decide": "a gate was approved, rejected or waived",
+  "model-bindings.save": "model bindings were saved",
+  "commit-identity.update": "the commit identity changed",
+  "role.permissions": "a role's permissions changed",
+  "user.password": "a password was reset",
+};
+
+function useActionOptions(): { value: string; label: string; hint?: string }[] {
+  const actions = useLoader("audit/actions", governanceApi.auditActions);
+  return [
+    { value: "", label: "All actions" },
+    ...(actions.data ?? ["restricted.read"]).map((action) => ({ value: action, label: action, ...(ACTION_HINTS[action] === undefined ? {} : { hint: ACTION_HINTS[action] }) })),
+  ];
+}
 
 function AuditView(): React.JSX.Element {
   const projectOptions = useProjectOptions();
+  const actionOptions = useActionOptions();
   const [action, setAction] = useState("");
   const [projectId, setProjectId] = useState("");
   const [subject, setSubject] = useState("");
@@ -110,7 +149,7 @@ function AuditView(): React.JSX.Element {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-48">
-            <Select value={action} options={ACTION_OPTIONS} onChange={(value) => reset(() => setAction(value))} />
+            <Select value={action} options={actionOptions} onChange={(value) => reset(() => setAction(value))} />
           </div>
           <div className="w-52">
             <Select value={projectId} options={projectOptions} onChange={(value) => reset(() => setProjectId(value))} />
@@ -125,7 +164,7 @@ function AuditView(): React.JSX.Element {
         <Loaded loader={audit} rows={5}>
           {(page) =>
             page.items.length === 0 ? (
-              <EmptyState icon={ScrollText} title="No audit entries" description={action === "" && projectId === "" && trimmed === "" ? "Audited actions, such as opening a restricted record, appear here." : "No entry matches these filters."} />
+              <EmptyState icon={ScrollText} title="No audit entries" description={action === "" && projectId === "" && trimmed === "" ? "Audited actions, such as changes to projects, agents and settings, gate decisions or opening a restricted record, appear here." : "No entry matches these filters."} />
             ) : (
               <>
                 <div className="overflow-x-auto">
@@ -372,7 +411,7 @@ function PermissionsView(): React.JSX.Element {
           <CardTitle>Permissions</CardTitle>
           <CardDescription>
             Reading projects, runs, writes and the monitoring views needs a session. Changing state or revealing sensitive content needs a permission — audit.read for the audit log,
-            restricted.read for restricted records — granted to roles in{" "}
+            restricted.read for restricted records, gates.request and gates.decide for gates — granted to roles in{" "}
             <Link to="/members" className="text-accent hover:underline">
               Members &amp; Permissions
             </Link>

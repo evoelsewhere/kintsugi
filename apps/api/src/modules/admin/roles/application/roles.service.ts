@@ -2,6 +2,7 @@
 
 import { type Page, type PageQuery, toPage } from "#common/application/pagination.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { ADMIN_LOCKED_PERMISSIONS, ADMIN_ROLE_ID, type CreateSubRole, type PermissionRecord, type RoleRecord } from "../domain/role.js";
 import { RoleRepository } from "../domain/role.repository.js";
@@ -10,7 +11,10 @@ export { ADMIN_ROLE_ID } from "../domain/role.js";
 
 @Injectable()
 export class RolesService {
-  constructor(private readonly roles: RoleRepository) {}
+  constructor(
+    private readonly roles: RoleRepository,
+    private readonly audit: AuditTrail,
+  ) {}
 
   list(): Promise<RoleRecord[]> {
     return this.roles.list();
@@ -28,16 +32,19 @@ export class RolesService {
     return role;
   }
 
-  async createSubRole(input: CreateSubRole): Promise<RoleRecord> {
+  async createSubRole(input: CreateSubRole, actor: Actor): Promise<RoleRecord> {
     const existing = await this.roles.get(input.id);
     if (existing !== undefined) throw new ConflictException(`Role ${input.id} already exists`);
-    return this.roles.createSubRole(input);
+    const role = await this.roles.createSubRole(input);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.roleCreate, { subject: role.id, detail: { name: role.name, kind: role.kind } }));
+    return role;
   }
 
-  async removeSubRole(id: string): Promise<void> {
+  async removeSubRole(id: string, actor: Actor): Promise<void> {
     const role = await this.get(id);
     if (role.kind !== "sub") throw new ConflictException(`Primary role ${id} cannot be removed`);
     await this.roles.removeSubRole(id);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.roleDelete, { subject: id, detail: { name: role.name } }));
   }
 
   async setPermissions(roleId: string, codes: string[], actor: Actor): Promise<RoleRecord> {
@@ -53,6 +60,15 @@ export class RolesService {
     }
     const updated = await this.roles.setPermissions(role.id, codes);
     if (updated === undefined) throw new NotFoundException(`Role ${roleId} not found`);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.rolePermissionsUpdate, {
+        subject: role.id,
+        detail: {
+          added: codes.filter((code) => !role.permissions.includes(code)).sort(),
+          removed: role.permissions.filter((code) => !codes.includes(code)).sort(),
+        },
+      }),
+    );
     return updated;
   }
 

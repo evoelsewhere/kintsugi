@@ -31,3 +31,10 @@ export function monitoringLink(tab: MonitoringTab, filter?: string): string {
 export function projectLink(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}`;
 }
+
+export type GovernanceTab = "gates" | "audit" | "restricted" | "permissions";
+
+/** Governance on a tab; for gates, optionally filtered by status. */
+export function governanceLink(tab: GovernanceTab, status?: string): string {
+  return `/governance${query({ tab, status })}`;
+}

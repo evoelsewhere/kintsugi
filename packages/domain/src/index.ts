@@ -199,6 +199,23 @@ export interface Provenance {
 /** Quality gates G0–G6 plus per-work-item gates. */
 export type GateId = "G0" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6";
 
+/** The pipeline gates, in order (docs/methodology/delivery-pipeline.md). */
+export const GATE_IDS: readonly GateId[] = ["G0", "G1", "G2", "G3", "G4", "G5", "G6"];
+
+/**
+ * A gate key: a pipeline gate (G0–G6) or a stage gate such as `stage:assess` — lowercase,
+ * starting with a letter or digit, up to 100 characters.
+ */
+export const GATE_KEY_PATTERN = /^(G[0-6]|[a-z0-9][a-z0-9:._-]{0,99})$/;
+
+/** The state of a persisted gate: waiting for a decision, or decided. */
+export type GateStatus = "pending" | "approved" | "rejected" | "waived";
+export const GATE_STATUSES: readonly GateStatus[] = ["pending", "approved", "rejected", "waived"];
+
+/** What a person decides on a pending gate; each decision leads to one final status. */
+export type GateDecision = "approve" | "reject" | "waive";
+export const GATE_DECISION_STATUS: Readonly<Record<GateDecision, Exclude<GateStatus, "pending">>> = { approve: "approved", reject: "rejected", waive: "waived" };
+
 /** Transformation scorecard. Weights sum to 1. */
 export interface ScorecardCriterion {
   key: string;

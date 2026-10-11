@@ -22,6 +22,8 @@ import {
   zipFiles,
 } from "@kintsugi/agents";
 import type { AgentDefinition, AgentModelBinding } from "@kintsugi/runtime-sdk";
+import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
+import type { Actor } from "#common/auth/decorators.js";
 import { LlmProvidersService } from "#modules/admin/llm-providers/index.js";
 import type {
   AgentBuilderContext,
@@ -53,6 +55,8 @@ interface Installation {
 
 const filesOf = (agent: AgentPackage): PackageFileMap => Object.fromEntries(serializeAgentPackage(agent));
 const problemsError = (problems: string[]): BadRequestException => new BadRequestException(problems);
+/** The name stored as an agent's or skill's author (`updatedBy`). */
+const actorName = (actor: Actor): string => actor.username ?? actor.id;
 
 /** The package an editor draft describes, as files (the same format as import and export). */
 export function draftFiles(draft: AgentDraft): PackageFileMap {
@@ -80,6 +84,7 @@ export class AgentsService {
     private readonly agents: AgentRepository,
     private readonly catalog: AgentCatalog,
     private readonly providers: LlmProvidersService,
+    private readonly audit: AuditTrail,
   ) {}
 
   /** Custom agents and skills as @kintsugi/agents resolves them (the same path as job runs). */
@@ -228,9 +233,10 @@ export class AgentsService {
     };
   }
 
-  async create(draft: AgentDraft, actor: string): Promise<AgentDetail> {
+  async create(draft: AgentDraft, actor: Actor): Promise<AgentDetail> {
     const agent = this.#accept(draftFiles(draft), await this.#installation());
-    await this.#insert(agent, actor);
+    await this.#insert(agent, actorName(actor));
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.agentCreate, { subject: agent.manifest.name, detail: versionOf(agent) }));
     return this.get(agent.manifest.name);
   }
 
@@ -244,11 +250,12 @@ export class AgentsService {
   }
 
   /** Saves the draft as a new version of agent `name`. */
-  async update(name: string, draft: AgentDraft, actor: string): Promise<AgentDetail> {
+  async update(name: string, draft: AgentDraft, actor: Actor): Promise<AgentDetail> {
     await this.#mustGetEditable(name);
     const agent = this.#accept(draftFiles(draft), await this.#installation());
     if (agent.manifest.name !== name) throw new BadRequestException(`The name cannot change (${name} → ${agent.manifest.name}); copy the agent instead`);
-    await this.#saveVersion(agent, actor);
+    await this.#saveVersion(agent, actorName(actor));
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.agentUpdate, { subject: name, detail: versionOf(agent) }));
     return this.get(name);
   }
 
@@ -259,7 +266,7 @@ export class AgentsService {
   }
 
   /** Copies a built-in or custom agent into a new custom agent ("copy to edit"). */
-  async copy(name: string, newName: string, actor: string): Promise<AgentDetail> {
+  async copy(name: string, newName: string, actor: Actor): Promise<AgentDetail> {
     const installation = await this.#installation();
     let source = installation.builtin.agents.find((agent) => agent.manifest.name === name);
     if (source === undefined) {
@@ -273,12 +280,13 @@ export class AgentsService {
       manifest: { ...source.manifest, name: newName, metadata: { ...source.manifest.metadata, "copied-from": copiedFrom } },
     };
     const agent = this.#accept(filesOf(copy), installation);
-    await this.#insert(agent, actor, copiedFrom);
+    await this.#insert(agent, actorName(actor), copiedFrom);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.agentCopy, { subject: newName, detail: { ...versionOf(agent), copiedFrom } }));
     return this.get(newName);
   }
 
   /** Imports a package: a new custom agent, or a new version of an existing one. */
-  async import(input: AgentImport, actor: string): Promise<{ created: boolean; agent: AgentDetail }> {
+  async import(input: AgentImport, actor: Actor): Promise<{ created: boolean; agent: AgentDetail }> {
     let files: PackageFileMap;
     if ("zip" in input) {
       try {
@@ -291,8 +299,14 @@ export class AgentsService {
     }
     const agent = this.#accept(files, await this.#installation());
     const existing = await this.agents.get(agent.manifest.name);
-    if (existing === undefined) await this.#insert(agent, actor);
-    else await this.#saveVersion(agent, actor);
+    if (existing === undefined) await this.#insert(agent, actorName(actor));
+    else await this.#saveVersion(agent, actorName(actor));
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.agentImport, {
+        subject: agent.manifest.name,
+        detail: { ...versionOf(agent), created: existing === undefined, format: "zip" in input ? "zip" : "files" },
+      }),
+    );
     return { created: existing === undefined, agent: await this.get(agent.manifest.name) };
   }
 
@@ -315,15 +329,17 @@ export class AgentsService {
   // Lifecycle and versions
   // -------------------------------------------------------------------------
 
-  async setEnabled(name: string, enabled: boolean, actor: string): Promise<AgentDetail> {
+  async setEnabled(name: string, enabled: boolean, actor: Actor): Promise<AgentDetail> {
     await this.#mustGetEditable(name);
-    await this.agents.setEnabled(name, enabled, actor);
+    await this.agents.setEnabled(name, enabled, actorName(actor));
+    await this.audit.recordChange(auditRecord(actor, enabled ? AUDIT_ACTIONS.agentEnable : AUDIT_ACTIONS.agentDisable, { subject: name }));
     return this.get(name);
   }
 
-  async remove(name: string): Promise<void> {
-    await this.#mustGetEditable(name);
+  async remove(name: string, actor: Actor): Promise<void> {
+    const record = await this.#mustGetEditable(name);
     await this.agents.remove(name);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.agentDelete, { subject: name, detail: { version: record.version, audience: record.audience } }));
   }
 
   async versions(name: string): Promise<AgentVersionView[]> {
@@ -339,13 +355,14 @@ export class AgentsService {
   }
 
   /** Makes a recorded version current again, if it still validates on this installation. */
-  async restore(name: string, version: string, actor: string): Promise<AgentDetail> {
+  async restore(name: string, version: string, actor: Actor): Promise<AgentDetail> {
     const found = await this.version(name, version);
     const parsed = parseStoredAgent(found.files);
     if (!parsed.ok) throw problemsError(parsed.problems);
     const problems = this.#validate(parsed.value, await this.#installation());
     if (problems.length > 0) throw problemsError(problems);
-    await this.agents.restore(name, found, parsed.value.manifest.audience, actor);
+    await this.agents.restore(name, found, parsed.value.manifest.audience, actorName(actor));
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.agentRestore, { subject: name, detail: { version } }));
     return this.get(name);
   }
 
@@ -418,26 +435,34 @@ export class AgentsService {
     if (builtin.skills.some((skill) => skill.name === name)) throw new BadRequestException(`Shared skill ${name} is built in and read-only`);
   }
 
-  async createSkill(draft: SkillDraft, actor: string): Promise<SharedSkillView> {
+  async createSkill(draft: SkillDraft, actor: Actor): Promise<SharedSkillView> {
     const builtin = await this.catalog.builtin();
     if (builtin.skills.some((skill) => skill.name === draft.name)) throw new ConflictException(`The name ${draft.name} is reserved by a built-in skill`);
-    if (!(await this.agents.createSkill(draft.name, this.#skillText(draft), actor))) throw new ConflictException(`Shared skill ${draft.name} already exists`);
+    if (!(await this.agents.createSkill(draft.name, this.#skillText(draft), actorName(actor)))) throw new ConflictException(`Shared skill ${draft.name} already exists`);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.skillCreate, { subject: draft.name }));
     return this.getSkill(draft.name);
   }
 
-  async updateSkill(name: string, draft: SkillDraft, actor: string): Promise<SharedSkillView> {
+  async updateSkill(name: string, draft: SkillDraft, actor: Actor): Promise<SharedSkillView> {
     await this.#mustNotBeBuiltinSkill(name);
     if (draft.name !== name) throw new BadRequestException(`The name cannot change (${name} → ${draft.name})`);
-    if (!(await this.agents.updateSkill(name, this.#skillText(draft), actor))) throw new NotFoundException(`Shared skill ${name} not found`);
+    if (!(await this.agents.updateSkill(name, this.#skillText(draft), actorName(actor)))) throw new NotFoundException(`Shared skill ${name} not found`);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.skillUpdate, { subject: name }));
     return this.getSkill(name);
   }
 
-  async removeSkill(name: string): Promise<void> {
+  async removeSkill(name: string, actor: Actor): Promise<void> {
     await this.#mustNotBeBuiltinSkill(name);
     const skill = await this.getSkill(name);
     if (skill.usedBy.length > 0) throw new ConflictException(`Shared skill ${name} is used by ${skill.usedBy.join(", ")}; remove it from those agents first`);
     await this.agents.removeSkill(name);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.skillDelete, { subject: name }));
   }
+}
+
+/** Audit detail of a saved package: its version and audience (never its files). */
+function versionOf(agent: AgentPackage): { version: string; audience: string } {
+  return { version: agent.manifest.version, audience: agent.manifest.audience };
 }
 
 function bindingOf(agent: string, bindings: AgentModelBinding[]): { binding?: AgentSummary["binding"] } {
