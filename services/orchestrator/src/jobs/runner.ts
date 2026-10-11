@@ -11,9 +11,10 @@
 // top-level run then enqueues a document write of its out/ (outputOfJob) with job, agent and
 // actor trailers. Stage steps run as child runs sharing the stage's source checkout.
 //
-// There is no OS sandbox: scripts run with a cleared environment and explicit paths, agent
-// jobs run in-process with the kernel's path confinement (read only under src/in, write only
-// under out). The worker never puts credentials into a script's environment.
+// There is no OS sandbox: scripts and agent jobs run as child processes in the job directory
+// with a cleared environment, limits and a process-tree kill; agent tools are confined by the
+// kernel (read only under src/in, write only under out). Only an agent job's own child gets
+// its provider credentials (launcher/agent-process.ts); scripts never get any.
 
 import { createHash, randomUUID } from "node:crypto";
 import { copyFile, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";

@@ -2,7 +2,7 @@
 // memory: no models.json, no auth.json, nothing read from the host's ~/.pi. Builtin
 // providers come from pi's pinned catalog; custom providers are registered from the
 // record. API keys are runtime-only. Provider environment (Bedrock region, Vertex project…)
-// is returned for the launcher to put in the runner's process environment (ADR-0004).
+// is returned for the launcher to put in the agent job's child process environment (ADR-0029).
 
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
