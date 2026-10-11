@@ -45,11 +45,18 @@
 
 ## Audit
 
-The audit log is append-only and hash-chained. It records:
-- sign-ins
-- provider and policy changes
-- runtime tool calls, allowed or blocked
-- MCP calls
-- worker commits
-- gate decisions
-- asset publications
+The audit log (`governance.audit_event`) is append-only: database triggers refuse updates, deletes and truncation. Hash-chaining the entries is still proposed (D26). Entries say who acted, when, what the action was and what it acted on. They never carry the content acted on, credentials, key values or passwords: only ids, names, changed field names and small detail such as a gate's note.
+
+### Audit coverage
+
+Use cases record through one port (`AuditTrail`, API shared kernel); controllers do not record. Recorded today:
+
+- **Sensitive reads**: every restricted record read (`restricted.read`). This entry is fail-closed: it is written before the content is returned, and nothing is returned when it cannot be written.
+- **Delivery**: stage runs requested, job runs cancelled, `kintsugi.yaml` published.
+- **Configuration**: projects, applications and repository links; Git servers and repositories; LLM providers (never key values) and model bindings; agents and shared skills (create, update, delete, enable, disable, import, copy, restore); the commit identity.
+- **Access**: roles created and deleted, role permissions changed (added and removed codes), members created, updated (roles added and removed, enabled), password resets (never the password) and deletions.
+- **Gates**: requests (by a person or the worker) and decisions with their note.
+
+Changes are recorded after they succeed. A failed append is logged as an error and does not undo the change, so an operator sees the gap in the logs. The full action list is in the [data model](../../reference/data-model.md#audit-log).
+
+Still planned: sign-ins, runtime tool calls (allowed or blocked), MCP calls, worker commits (today they are traceable through `workflow.document_write` and commit trailers) and asset publications.

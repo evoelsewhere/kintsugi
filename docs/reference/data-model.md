@@ -15,19 +15,21 @@ Project 1─* Application 1─* WorkItem (index of units/**) 1─* StageRun ─0
    ├─ ProjectRepository(role document, no application) → GitRepository  [exactly one] ─ GitSyncState(last seen commit per repo)
    │     └─ HarnessRendererConfig
    ├─ PipelineTemplate (phase/stage/gate) ─ GateDecision (index of unit frontmatter `gates`)
+   ├─ Gate(gateKey G0–G6 | stage:<id>, status, requested/decided by, note)        (governance.gate)
    └─ ProjectMembership(user, projectRole, harnesses[]) — planned with M0 project persistence
 User · AccessRole(core.role/core.user_role) · Permission(core.permission) · Session · AccessToken · AuthIdentity(provider: local | entra-id)
 LlmProvider(config, secretRef) · LlmModel · AgentModelBinding(agent → provider/model)
 Agent(custom; built-ins from the release) 1─* AgentVersion(package files) · SharedSkill(SKILL.md)   (admin.agent, admin.agent_version, admin.agent_skill)
 KbDocument(repo@commit:path) ─* KbChunk(text, embedding)          (no code graph, ADR-0014)
 Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord · AuditEvent (append-only)
+WorkerHeartbeat(host, pid, version, lastSeenAt, activeJobs, queues)          (workflow.worker_heartbeat)
 ```
 
 ## Shared types
 
 | Package | Main types |
 |---|---|
-| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `ProjectRole` (open), `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `ScorecardCriterion`, `RepositoryRole`, `StagePerformer`, `PipelineDefinition`, `CompareReport`, `Project`, `Application`, `ProjectRepositoryLink`, `projectRepositoryProblems`, `groupRepositories`, `KintsugiManifest`, `validateManifest`, `manifestFromProject`, `repositoryPath` |
+| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `ProjectRole` (open), `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `GATE_IDS`, `GateStatus`, `GateDecision`, `GATE_KEY_PATTERN`, `ScorecardCriterion`, `RepositoryRole`, `StagePerformer`, `PipelineDefinition`, `CompareReport`, `Project`, `Application`, `ProjectRepositoryLink`, `projectRepositoryProblems`, `groupRepositories`, `KintsugiManifest`, `validateManifest`, `manifestFromProject`, `repositoryPath` |
 | [`packages/manifest`](../../packages/manifest/src/index.ts) | `parseKintsugiYaml`, `renderKintsugiYaml` |
 | [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts) | `JobSpec`, `AgentDefinition`, `AgentSkill`, `JobLimits`, `JobEvent`, `JobFailureReason`, `JobHandle`, `AgentRuntime`, `LlmProviderConfig`, `AgentModelBinding` |
 | [`packages/harness-sdk`](../../packages/harness-sdk/src/index.ts) | `TaskPack`, `PluginManifest`, `PublishedPlugin`, `MarketplaceFile`, `HarnessPluginSupport`, `MarketplaceGenerator`, `HarnessRendererConfig`, `AssetRenderer`, `HarnessActivity`, `TelemetryNormalizer`, `HarnessPolicy` |
@@ -86,7 +88,45 @@ Permissions added by the migration: `jobs.run` (start and cancel stages and jobs
 |---|---|---|
 | `governance.audit_event` | `id` (increasing) | `at`, `actor` (user id), `action` (e.g. `restricted.read`), `project_id`, `subject` (e.g. the job run), `detail` (jsonb, e.g. the record's path and the reader's sign-in name); never the content acted on |
 
-Every read of a restricted record writes one entry before the record is returned; when the entry cannot be written, nothing is returned. The log is listed with `GET /api/governance/audit` and needs `audit.read` (added by the migration, granted to `admin`).
+Use cases record through one port, `AuditTrail` in the API's shared kernel (`apps/api/src/common/audit/audit-trail.ts`), which also holds the catalog of actions (`AUDIT_ACTIONS`); the worker writes `gate.request` for the gates it opens. There are two ways to record:
+
+- **Fail-closed, before the content**: every read of a restricted record writes one entry before the record is returned; when the entry cannot be written, nothing is returned.
+- **After a change**: the entry is appended once the change has succeeded; a failed append is logged as an error and never undoes or fails the change.
+
+Recorded actions (see [security → audit coverage](../architecture/concepts/security.md#audit-coverage)):
+
+| Area | Actions |
+|---|---|
+| Delivery | `stage.run`, `job-run.cancel`, `manifest.publish` |
+| Projects | `project.create`, `project.update`, `project.delete`, `application.create`, `application.update`, `application.delete`, `repository.link`, `repository.unlink` |
+| Git | `git-server.create`, `git-server.update`, `git-server.delete`, `git-repository.create`, `git-repository.delete` |
+| LLM providers | `llm-provider.create`, `llm-provider.update`, `llm-provider.delete`, `model-bindings.save` |
+| Agents | `agent.create`, `agent.update`, `agent.delete`, `agent.enable`, `agent.disable`, `agent.import`, `agent.copy`, `agent.restore`, `skill.create`, `skill.update`, `skill.delete` |
+| Settings | `commit-identity.update` |
+| Access | `role.create`, `role.permissions`, `role.delete`, `user.create`, `user.update`, `user.password`, `user.delete` |
+| Governance | `gate.request`, `gate.decide`, `restricted.read` |
+
+`detail` names what changed (field names, ids, a gate's decision and note, roles or permissions added and removed), never credential, key or password values. The log is listed with `GET /api/governance/audit` (`?action=a,b&actor&subject&projectId`) and its actions with `GET /api/governance/audit/actions`; both need `audit.read` (added by migration 011, granted to `admin`).
+
+## Gates
+
+Quality gates G0–G6 ([delivery pipeline](../methodology/delivery-pipeline.md)) and stage gates (`stage:<id>`), migration [`013_gates.sql`](../../apps/api/migrations/013_gates.sql). A gate is requested by a person (`gates.request`) or by the worker when a stage plan reaches it (`services/orchestrator/src/gates.ts`). It stays `pending` until a holder of `gates.decide` approves, rejects or waives it. A decision is final; asking again creates a new row, so the rows of one key are its history.
+
+| Table | Key | Content |
+|---|---|---|
+| `governance.gate` | `id` | `project_id` (cascade on project delete), `application_id` (optional), `gate_key` (`G0`–`G6` or a lowercase stage gate key), `title`, `status` (`pending`, `approved`, `rejected`, `waived`), `subject` (what it is about, e.g. a job run id), `detail` (jsonb, small context), `requested_by` + `requested_at`, `decided_by` + `decided_at`, `note` (required to reject or waive) |
+
+At most one gate is pending per project, application, key and subject (partial unique index), which makes the worker's request idempotent. Endpoints: `GET /api/governance/gates` (`?projectId&applicationId&gateKey&status=pending,approved`), `GET …/:id` and `GET …/:id/history` need a session; `POST /api/governance/gates` needs `gates.request` or `gates.decide`; `POST …/:id/decision` needs `gates.decide`. Both permissions are added by the migration and granted to `admin`. The monitoring overview counts and lists pending gates. Gate decisions in unit frontmatter (`GateDecision`, [ADR-0012](../decisions/0012-work-items-as-files-in-git.md)) remain the per-work-item record in Git.
+
+## Worker heartbeats
+
+`workflow.worker_heartbeat` (migration [`014_worker_heartbeat.sql`](../../apps/api/migrations/014_worker_heartbeat.sql), [ADR-0030](../decisions/0030-worker-heartbeat-in-postgres.md)): one row per worker process, upserted every 15 seconds.
+
+| Table | Key | Content |
+|---|---|---|
+| `workflow.worker_heartbeat` | `worker_id` (random per process) | `host`, `pid`, `version` (`KINTSUGI_VERSION`, else the package version), `started_at`, `last_seen_at`, `stopped_at` (clean shutdown), `active_jobs` (job runs, writes and syncs in progress), `queues` (text[]) |
+
+A worker is **up** when its row was seen less than 45 seconds ago (database clock), **stopped** after a clean shutdown and **stale** otherwise. `GET /api/monitoring/workers` lists the rows; the overview reports `worker.up` and raises a `worker-down` attention item when no worker is up. The next worker that starts removes rows not seen for 7 days.
 
 ## Installation settings
 

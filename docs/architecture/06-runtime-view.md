@@ -98,3 +98,30 @@ Worker writer ─ fetch mirror ─ validate files ─┬─ autoCommitPaths ─�
 4. Each push is fast-forward only. A rejection means someone pushed first: the writer fetches, rebases and retries; a conflict fails the write.
 5. For the `kintsugi/*` branch it opens a pull request through the server's REST API; servers without one keep the branch.
 6. The outcome is recorded on the write and shown on the project page ([document repository](../reference/document-repo.md#write-path)).
+
+## 6.7 Worker heartbeat
+
+```
+Worker (every 15 s) ─► upsert workflow.worker_heartbeat (host, pid, version, active jobs, queues, last_seen_at = now())
+Worker (shutdown)   ─► queues drained gracefully ─► stopped_at = now()
+API  ─► GET /api/monitoring/workers · GET /api/monitoring/overview (worker.up, worker-down attention item)
+```
+
+1. On start, the worker removes heartbeat rows not seen for 7 days and writes its own row (a random id per process). It repeats the upsert every 15 seconds with the number of jobs in progress (job runs, document writes, Git syncs) and the queues it works ([ADR-0030](../decisions/0030-worker-heartbeat-in-postgres.md)).
+2. A failed beat is logged and retried at the next tick; it never stops the worker.
+3. On `SIGINT` or `SIGTERM` the worker stops its queues gracefully, then marks its row stopped. A crashed or killed worker simply stops being seen.
+4. The API judges each row by the database clock: **up** when seen less than 45 seconds ago (three missed beats), **stopped** after a clean shutdown, **stale** otherwise. The overview reports whether any worker is up; when none is, *No worker is running* tops what needs attention. Monitoring → Worker lists every worker.
+
+## 6.8 Gates
+
+```
+Person (gates.request) ─► POST /api/governance/gates ─┐
+Stage plan (worker)    ─► requestGate() ──────────────┴─► governance.gate (pending) + audit gate.request
+                                                              │
+Person (gates.decide)  ─► POST …/:id/decision {approve|reject|waive, note} ─► approved / rejected / waived + audit gate.decide
+Stage plan (worker)    ─► waitForGate() polls the row ─► acts on the decision
+```
+
+1. A gate is opened for a project (optionally an application) and a key: a pipeline gate `G0`–`G6` or a stage gate `stage:<id>`, with what it is about (for example the job run that reached it). While it is pending, asking again returns the open gate, so the worker can request it idempotently ([gates](../reference/data-model.md#gates)).
+2. Pending gates show on the overview and in Governance → Gates. A holder of `gates.decide` approves, rejects or waives the gate; rejecting or waiving needs a note. The decision is final and audited.
+3. The worker's helpers (`services/orchestrator/src/gates.ts`) use the database only: a stage plan requests the gate, polls its state and acts on the decision. Asking again after a decision opens a new gate; the rows of one key are its history.
