@@ -3,7 +3,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
-import { RUN_STATUS, styleOf, SYNC_STATUS, WRITE_STATUS } from "@/lib/status";
+import { GATE_STATUS, RUN_STATUS, styleOf, SYNC_STATUS, WORKER_STATE, WRITE_STATUS } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
 export function StatusBadge({ tone, label, title, className }: { tone: StatusTone; label: string; title?: string; className?: string }): React.JSX.Element {
@@ -27,5 +27,15 @@ export function WriteStatusBadge({ status, title }: { status: string; title?: st
 
 export function SyncStatusBadge({ status, title }: { status: string; title?: string }): React.JSX.Element {
   const style = styleOf(SYNC_STATUS, status);
+  return <StatusBadge tone={style.tone} label={style.label} {...(title === undefined ? {} : { title })} />;
+}
+
+export function GateStatusBadge({ status, title }: { status: string; title?: string }): React.JSX.Element {
+  const style = styleOf(GATE_STATUS, status);
+  return <StatusBadge tone={style.tone} label={style.label} {...(title === undefined ? {} : { title })} />;
+}
+
+export function WorkerStateBadge({ state, title }: { state: string; title?: string }): React.JSX.Element {
+  const style = styleOf(WORKER_STATE, state);
   return <StatusBadge tone={style.tone} label={style.label} {...(title === undefined ? {} : { title })} />;
 }

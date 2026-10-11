@@ -1,9 +1,10 @@
 // Overview — the installation at a glance, from real data only (GET /api/monitoring/overview):
 // key figures, what needs attention now (failed or stuck runs, failed document writes,
-// repositories that do not sync) and the recent activity. Refreshes itself, faster while
+// repositories that do not sync, gates waiting for a decision, no worker running) and the
+// recent activity. Refreshes itself, faster while
 // runs are active.
 
-import { AlertTriangle, CircleCheck, Clock, FolderKanban, FolderGit2, GitPullRequestArrow, Play, RefreshCw } from "lucide-react";
+import { AlertTriangle, CircleCheck, Clock, FolderKanban, FolderGit2, GitPullRequestArrow, Play, PowerOff, RefreshCw, ShieldQuestion } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
@@ -18,7 +19,7 @@ import { type ActivityItem, type AttentionItem, monitoringApi, type MonitoringOv
 import { APP_VERSION } from "@/lib/app-info";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatRelative } from "@/lib/format";
-import { deliveryLink, monitoringLink } from "@/lib/links";
+import { deliveryLink, governanceLink, monitoringLink } from "@/lib/links";
 import { useHealth } from "@/lib/use-health";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
@@ -44,7 +45,7 @@ export function OverviewPage(): React.JSX.Element {
         }
       />
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
         <MetricCard title="Projects" value={n(counts?.projects)} subtitle="Configured in Administration → Projects" tone={counts?.projects === 0 ? "muted" : "green"} to="/projects" />
         <MetricCard title="Applications" value={n(counts?.applications)} subtitle="In scope across all projects" tone={counts?.applications === 0 ? "muted" : "green"} to="/delivery" />
         <MetricCard
@@ -75,6 +76,13 @@ export function OverviewPage(): React.JSX.Element {
           tone={counts === undefined ? "muted" : counts.repositoriesWithErrors > 0 ? "red" : counts.repositoriesNotReady > 0 ? "orange" : "green"}
           to={monitoringLink("repositories")}
         />
+        <MetricCard
+          title="Pending gates"
+          value={n(counts?.pendingGates)}
+          subtitle={counts === undefined ? "…" : counts.pendingGates === 0 ? "Nothing waiting for a decision" : "Waiting for a decision in Governance"}
+          tone={counts === undefined ? "muted" : counts.pendingGates > 0 ? "orange" : "green"}
+          to={governanceLink("gates", "pending")}
+        />
       </section>
 
       {counts?.projects === 0 ? (
@@ -101,7 +109,7 @@ export function OverviewPage(): React.JSX.Element {
           <CardHeader>
             <div>
               <CardTitle>Needs attention</CardTitle>
-              <CardDescription>Failed and stuck runs, failed document writes and repositories that do not sync.</CardDescription>
+              <CardDescription>Failed and stuck runs, failed document writes, repositories that do not sync, pending gates and a stopped worker.</CardDescription>
             </div>
           </CardHeader>
           <div className="mt-3">
@@ -138,6 +146,8 @@ const ATTENTION: Record<AttentionItem["kind"], { icon: typeof AlertTriangle; ton
   "run-stuck": { icon: Clock, tone: "orange", label: "Run waiting" },
   "write-failed": { icon: GitPullRequestArrow, tone: "red", label: "Write failed" },
   "repository-error": { icon: FolderGit2, tone: "red", label: "Sync failed" },
+  "gate-pending": { icon: ShieldQuestion, tone: "orange", label: "Gate pending" },
+  "worker-down": { icon: PowerOff, tone: "red", label: "Worker down" },
 };
 
 function attentionLink(item: AttentionItem): string {
@@ -150,12 +160,16 @@ function attentionLink(item: AttentionItem): string {
       return deliveryLink({ projectId: item.projectId, section: "writes" });
     case "repository-error":
       return monitoringLink("repositories");
+    case "gate-pending":
+      return governanceLink("gates", "pending");
+    case "worker-down":
+      return monitoringLink("worker");
   }
 }
 
 function AttentionList({ items }: { items: AttentionItem[] }): React.JSX.Element {
   if (items.length === 0) {
-    return <EmptyState icon={CircleCheck} title="All clear" description="No failed or waiting runs, no failed document writes and every repository syncs." />;
+    return <EmptyState icon={CircleCheck} title="All clear" description="No failed or waiting runs, no failed document writes, every repository syncs, no gate is waiting and the worker is up." />;
   }
   return (
     <ul className="flex flex-col">
@@ -163,7 +177,7 @@ function AttentionList({ items }: { items: AttentionItem[] }): React.JSX.Element
         const style = ATTENTION[item.kind];
         const Icon = style.icon;
         return (
-          <li key={`${item.kind}-${item.jobRunId ?? item.documentWriteId ?? item.repositoryId ?? index}`} className={index > 0 ? "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]" : undefined}>
+          <li key={`${item.kind}-${item.jobRunId ?? item.documentWriteId ?? item.repositoryId ?? item.gateId ?? index}`} className={index > 0 ? "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]" : undefined}>
             <Link to={attentionLink(item)} className="flex items-start gap-3 rounded-[var(--geist-radius)] px-2 py-2 hover:bg-hover">
               <Icon className="mt-0.5 size-4 shrink-0 text-text-secondary" strokeWidth={1.75} />
               <div className="min-w-0 flex-1">
