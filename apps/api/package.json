@@ -23,6 +23,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@kintsugi/agents": "workspace:*",
     "@kintsugi/domain": "workspace:*",
     "@kintsugi/git": "workspace:*",
     "@kintsugi/manifest": "workspace:*",
