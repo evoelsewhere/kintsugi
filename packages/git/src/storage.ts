@@ -3,8 +3,12 @@
 //
 //   <data>/git/mirrors/<server-id>/<repo-id>.git   bare mirror per registered repository
 //   <data>/git/workspaces/<project-id>/            the writer's scratch worktree of the document repo mirror
-//   <data>/jobs/<job-id>/src                       per-job worktree at a fixed commit (mounted read-only)
-//   <data>/jobs/<job-id>/out                       per-job output
+//   <data>/jobs/<job-id>/src                       per-job worktree at a fixed commit (read-only)
+//   <data>/jobs/<job-id>/in                        inputs the step declares (read-only copies)
+//   <data>/jobs/<job-id>/out                       per-job output (the only place a job writes results)
+//   <data>/jobs/<job-id>/tmp                       per-job scratch, deleted when the job ends
+//   <data>/jobs/<job-id>/restricted                out/restricted/, moved aside before the output is checked
+//                                                  (stored encrypted, never committed; ADR-0029)
 //
 // SSH host keys are not stored here: they live with each Git server and are passed per call.
 
@@ -22,7 +26,10 @@ function segment(kind: string, value: string): string {
 export interface JobPaths {
   root: string;
   src: string;
+  in: string;
   out: string;
+  tmp: string;
+  restricted: string;
 }
 
 export class CheckoutStorage {
@@ -43,7 +50,7 @@ export class CheckoutStorage {
 
   job(jobId: string): JobPaths {
     const root = join(this.root, "jobs", segment("job id", jobId));
-    return { root, src: join(root, "src"), out: join(root, "out") };
+    return { root, src: join(root, "src"), in: join(root, "in"), out: join(root, "out"), tmp: join(root, "tmp"), restricted: join(root, "restricted") };
   }
 
   /** Creates the top-level layout; safe to call on every start. */

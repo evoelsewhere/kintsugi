@@ -39,6 +39,10 @@
     "./tool-names": {
       "types": "./dist/kernel/tool-names.d.ts",
       "import": "./dist/kernel/tool-names.js"
+    },
+    "./launcher": {
+      "types": "./dist/launcher/index.d.ts",
+      "import": "./dist/launcher/index.js"
     }
   }
 }
