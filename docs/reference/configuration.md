@@ -20,7 +20,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between full Git re-syncs of every repository (minimum 30); new repositories are cloned within seconds |
 | `KINTSUGI_JOB_MAX_CONCURRENCY` | no | `2` | Parallel job runs per worker |
 | `KINTSUGI_JOB_DEFAULT_TIMEOUT` | no | `1800` | Wall-clock limit of an agent job (seconds) |
-| `KINTSUGI_AGENT_IDLE_TIMEOUT` | no | `300` | Seconds without any event from an agent job (text, tool call, usage) before it counts as stalled and is killed; `0` turns the watchdog off |
+| `KINTSUGI_AGENT_IDLE_TIMEOUT` | no | `300` | Seconds without any sign of work from an agent job (text, thinking, tool-call arguments, tool calls) before it counts as stalled and is killed; `0` turns the watchdog off |
 | `KINTSUGI_SCRIPT_TIMEOUT` | no | `600` | Wall-clock limit of a script step (seconds); the process tree is killed when it is exceeded |
 | `KINTSUGI_JOB_MAX_OUTPUT_BYTES` | no | `52428800` | Bytes a step may write to its output directory; a script that exceeds it is killed |
 | `KINTSUGI_JOB_MAX_TURNS` | no | `80` | Assistant turns per agent job |

@@ -40,7 +40,8 @@ export interface ChildAgentRuntimeOptions {
   /** Seconds past the job's own timeout before the launcher kills the process tree. */
   graceSec?: number;
   /**
-   * Seconds without any event from the child (text, tool call, usage) before the job counts as
+   * Seconds without any line from the child (events, or its liveness lines while the model thinks
+   * or streams tool-call arguments) before the job counts as
    * stalled and its process tree is killed: a provider that drops a streaming response leaves the
    * child waiting with no connection. Defaults to 300; 0 turns the watchdog off.
    */

@@ -41,6 +41,12 @@ export class KernelJob implements JobHandle {
   #outputTokens = 0;
   #costUsd = 0;
   #last: AssistantLike | undefined;
+  /**
+   * When the session last showed any sign of work: every session event, including thinking and
+   * tool-call argument deltas that produce no JobEvent. The agent child turns it into liveness
+   * lines for the launcher's idle watchdog.
+   */
+  lastActivityAt = Date.now();
 
   constructor(
     readonly jobId: string,
@@ -112,6 +118,7 @@ export class KernelJob implements JobHandle {
 
   #onEvent(event: AgentSessionEvent): void {
     if (this.#ended) return;
+    this.lastActivityAt = Date.now();
     switch (event.type) {
       case "turn_start": {
         this.#turns += 1;
