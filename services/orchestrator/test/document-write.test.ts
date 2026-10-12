@@ -135,6 +135,22 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     });
   });
 
+  it("puts auto-commit paths in the pull request too when the write asks for review of everything", async () => {
+    const write = request("docs", {
+      reviewAll: true,
+      files: [
+        { path: "knowledge/as-is/web/auth/login.md", content: "# Login\n" },
+        { path: "units/web/auth/proposed.md", content: "---\nid: web/auth/proposed\n---\n" },
+      ],
+    });
+    const before = remote.git("docs", "rev-parse", "main").trim();
+    expect(await writeDocument(deps, write)).toMatchObject({ status: "pr-opened", branch: `kintsugi/alice/${write.writeId}` });
+    expect(remote.git("docs", "rev-parse", "main").trim()).toBe(before);
+    expect(() => remote.git("docs", "show", "main:units/web/auth/proposed.md")).toThrow();
+    expect(remote.git("docs", "show", `kintsugi/alice/${write.writeId}:units/web/auth/proposed.md`)).toContain("web/auth/proposed");
+    expect(remote.git("docs", "show", `kintsugi/alice/${write.writeId}:knowledge/as-is/web/auth/login.md`)).toBe("# Login\n");
+  });
+
   it("follows autoCommitPaths from kintsugi.yaml on the default branch", async () => {
     const manifest = [
       "schemaVersion: 1",

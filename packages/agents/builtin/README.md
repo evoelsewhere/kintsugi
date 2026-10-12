@@ -38,7 +38,7 @@ For reader functions, `reader/layout.ts` exposes logical namespaces: `assessment
 ## Package contents
 
 - `agents/`: runtime and member agent definitions. Runtime definitions use kernel tools only; member definitions are context assets and are not converted into runtime jobs.
-- `commands/`: task contracts for assessment, mapping, rules, hardening, review, verification, and the selected modernization route.
+- `commands/`: task contracts for assessment, mapping, rules, hardening, the per-unit AS-IS specification (`understand`, Kintsugi's own), review, verification, and the selected modernization route.
 - `workflows/`: runtime job fan-out and member workflow specifications, with the audience distinction kept explicit.
 - `scripts/`: deterministic standard-library helpers used by script steps; they do not replace a human approval gate.
 - `hooks/job_output.py`: server-side lifecycle check for credential-shaped values and required artifact shape; see [hooks/JOB-OUTPUT.md](hooks/JOB-OUTPUT.md).

@@ -271,7 +271,7 @@ export class JobRunner {
 
   /**
    * Declared document-repo files are copied into in/ from the default branch tip: inputs.documents,
-   * and for a stage its plan's documents and prerequisites. Missing ones are skipped, except a
+   * and for a stage its plan's documents, prerequisites and optional inputs. Missing ones are skipped, except a
    * stage's prerequisites; an entry ending in "/" is a folder.
    */
   async #prepareInputs(run: JobRun, ws: StepWorkspace): Promise<void> {
@@ -281,6 +281,7 @@ export class JobRunner {
       ...(Array.isArray(declared) ? declared.filter((entry): entry is string => typeof entry === "string") : []),
       ...(plan?.documents ?? []),
       ...(plan?.requires ?? []).map((entry) => entry.path),
+      ...(plan?.optional ?? []).map((entry) => entry.path),
     ];
     if (entries.length > 0) {
       const repository = await this.#deps.store.documentRepository(run.projectId);
@@ -748,6 +749,7 @@ export class JobRunner {
       message: plan !== undefined && run.applicationId !== undefined ? plan.message(run.applicationId) : `Output of ${run.kind} ${run.name}`,
       outputOfJob: run.id,
       jobId: run.id,
+      ...(plan?.reviewAll === true ? { reviewAll: true } : {}),
       ...(outcome.agent === undefined ? {} : { agent: outcome.agent }),
       ...(run.actor === undefined ? {} : { actor: run.actor }),
     };

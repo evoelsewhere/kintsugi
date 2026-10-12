@@ -124,7 +124,7 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
     const options = remoteOptions(repository);
     const defaultBranch = repository.defaultBranch ?? (await mirrorDefaultBranch(mirror));
     const head = await resolveCommit(mirror, `refs/heads/${defaultBranch}`);
-    const { autoCommit, review } = splitByAutoCommit(files, await autoCommitPaths(mirror, head, options));
+    const { autoCommit, review } = request.reviewAll === true ? { autoCommit: [], review: files } : splitByAutoCommit(files, await autoCommitPaths(mirror, head, options));
 
     const common = {
       url: repository.url,

@@ -8,12 +8,15 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PHASES } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
 import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
+import type { StageContext } from "../src/jobs/plan.js";
 import { leafCount } from "../src/jobs/plans/map.js";
+import { unitsToSpecify } from "../src/jobs/plans/understand.js";
 import { JobRunner } from "../src/jobs/runner.js";
 import { stageInfo } from "../src/jobs/stages.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
@@ -27,6 +30,36 @@ const SMALL_LEGACY = {
   "src/main.c": "int main(void) {\n  if (1) { return 0; }\n  return 1;\n}\n",
   "src/rates.c": "int rate(int amount) { if (amount > 100) { return amount * 2; } return amount; }\n",
   "package.json": '{ "name": "demo", "dependencies": { "left-pad": "1.0.0" } }\n',
+};
+/** The map of SMALL_LEGACY as the map stage would have merged it: two domains, one data store. */
+const SMALL_TOPOLOGY = {
+  system: "demo",
+  root: {
+    id: "sys",
+    name: "demo",
+    kind: "system",
+    children: [
+      { id: "dom:billing", name: "Billing", kind: "domain", children: [{ id: "MAIN", name: "main", kind: "module", file: "src/main.c", loc: 200 }] },
+      { id: "dom:rates", name: "Rates", kind: "domain", children: [{ id: "RATES", name: "rates", kind: "module", file: "src/rates.c", loc: 300 }] },
+      { id: "dom:data", name: "Data stores", kind: "domain", children: [{ id: "ds:RATES", name: "RATES", kind: "datastore" }] },
+    ],
+  },
+  edges: [
+    { source: "MAIN", target: "RATES", kind: "call" },
+    { source: "RATES", target: "ds:RATES", kind: "read" },
+  ],
+  entryPoints: ["MAIN"],
+  deadEnds: [],
+  observations: [],
+  flows: [],
+};
+/** assess, map and extract-rules merged (harden has not run); one unit already has a work item a person moved on. */
+const MAPPED = {
+  "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n",
+  "assessment/demo/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
+  "assessment/demo/topology.json": JSON.stringify(SMALL_TOPOLOGY),
+  "assessment/demo/BUSINESS_RULES.md": "# Business rules\n\n### RULE-001: Double large amounts\n**Source:** `src/rates.c:1`\n",
+  "units/demo/billing/main.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
 };
 const ASSESSED = {
   "kintsugi.yaml": "version: 1\nproject: { id: demo }\n",
@@ -44,6 +77,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     repos["small"] = fixtureRepository(SMALL_LEGACY);
     repos["docs"] = fixtureRepository(ASSESSED);
     repos["empty-docs"] = fixtureRepository({ "kintsugi.yaml": "version: 1\n" });
+    repos["mapped-docs"] = fixtureRepository(MAPPED);
     dataDir = mkdtempSync(join(tmpdir(), "kintsugi-stages-data-"));
     storage = new CheckoutStorage(dataDir);
     await storage.prepare();
@@ -74,7 +108,9 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     await store.create({ id, projectId: "demo", applicationId: "demo", kind: "stage", name: stage, sourceRepositoryId: options.legacy, actor: "alice" });
     const run = await runner.run(id);
     const out = join(storage.job(id).out, "assessment", "demo");
-    const summary = run?.outputSummary as { steps: Array<{ id: string; status: string; key?: string; round?: number }>; gates: Array<{ id: string; choice: string; defaulted: boolean }>; agents: number } | undefined;
+    const summary = run?.outputSummary as
+      | { steps: Array<{ id: string; status: string; key?: string; round?: number }>; gates: Array<{ id: string; choice: string; defaulted: boolean }>; agents: number; missingInputs?: unknown }
+      | undefined;
     const logs = store.events.filter((event) => event.runId === id && event.kind === "log").map((event) => event.message);
     return { id, run, store, writes, agents, out, summary, logs, artifacts: (store.artifacts.get(id) ?? []).map((entry) => entry.path).sort() };
   }
@@ -85,6 +121,13 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       { id: "map", requires: [{ stage: "assess", path: "assessment/demo/ASSESSMENT.md" }] },
       { id: "extract-rules", requires: [{ stage: "assess", path: "assessment/demo/ASSESSMENT.md" }] },
       { id: "harden", requires: [] },
+      {
+        id: "understand",
+        requires: [
+          { stage: "assess", path: "assessment/demo/ASSESSMENT.md" },
+          { stage: "map", path: "assessment/demo/topology.json" },
+        ],
+      },
     ]);
   });
 
@@ -202,6 +245,122 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       "revise:3:succeeded",
     ]);
   }, 180_000);
+
+  it("runs understand: units from the map, gate defaulted, one spec job per unit, traceability, synthesis, work items in one PR", async () => {
+    const { run, writes, agents, summary, logs, artifacts, id, store, out } = await runStage("understand", { legacy: "small", docs: "mapped-docs" });
+    expect(run?.failureReason).toBeUndefined();
+    expect(run?.status).toBe("succeeded");
+
+    // Units from topology.json; the gate took its default; harden's findings were missing and are recorded.
+    expect(summary?.gates).toEqual([expect.objectContaining({ id: "specify", choice: "all within the budget", defaulted: true })]);
+    expect(logs.some((line) => line.startsWith("gate defaulted: specify — 2 units proposed from the map"))).toBe(true);
+    expect(summary?.missingInputs).toEqual([{ path: "assessment/demo/SECURITY_FINDINGS.md", stage: "harden" }]);
+    expect(logs).toContain("optional input missing: assessment/demo/SECURITY_FINDINGS.md (run harden and merge its pull request to use it)");
+    // The spec jobs run concurrently: they finish in any order.
+    const steps = summary?.steps.map((step) => [step.id, step.status, step.key ?? null]) ?? [];
+    expect(steps.filter((step) => step[0] !== "specify-unit")).toEqual([
+      ["units", "succeeded", null],
+      ["traceability", "succeeded", null],
+      ["synthesis", "succeeded", null],
+      ["work-items", "succeeded", null],
+    ]);
+    expect(steps.slice(1, 3).map((step) => `${step[1]}:${step[2]}`).sort()).toEqual(["succeeded:billing/main", "succeeded:rates/rates"]);
+    expect(summary?.agents).toBe(3);
+
+    // Each spec job got its brief and the structured-result schema.
+    const specs = agents.specs.filter((spec) => spec.task.startsWith("Write the AS-IS specification"));
+    expect(specs.map((spec) => /\/knowledge\/as-is\/demo\/briefs\/([a-z/]+)\.json/.exec(spec.task)?.[1]).sort()).toEqual(["billing/main", "rates/rates"]);
+    const main = specs.find((spec) => spec.task.includes("/briefs/billing/main.json"));
+    expect(main?.task).toContain("knowledge/as-is/demo/billing/main.md with outputs_write");
+    expect(main?.task).toContain('"rulesApplied"');
+
+    // Published: specifications, the overview, the matrix and the new work items; units.json, briefs and fragments stay out.
+    expect(artifacts).toEqual([
+      "knowledge/as-is/demo/README.md",
+      "knowledge/as-is/demo/architecture.md",
+      "knowledge/as-is/demo/billing/main.md",
+      "knowledge/as-is/demo/data-model.md",
+      "knowledge/as-is/demo/integrations.md",
+      "knowledge/as-is/demo/rates/rates.md",
+      "knowledge/as-is/demo/traceability.json",
+      "knowledge/as-is/demo/traceability.md",
+      "units/demo/rates/rates.md",
+    ]);
+    const root = join(out, "..", "..");
+    const asIs = join(root, "knowledge", "as-is", "demo");
+    expect(existsSync(join(asIs, "units.json"))).toBe(false);
+    expect(existsSync(join(asIs, "trace"))).toBe(false);
+    const matrix = JSON.parse(readFileSync(join(asIs, "traceability.json"), "utf8")) as {
+      units: Array<{ id: string; spec: string | null; dependsOn: string[]; rules: string[]; dataStores: Array<{ id: string }> }>;
+      rules: Record<string, string[]>;
+      inputs: { businessRules: boolean; securityFindings: boolean };
+    };
+    expect(matrix.units.map((unit) => [unit.id, unit.spec, unit.dependsOn])).toEqual([
+      ["demo/billing/main", "knowledge/as-is/demo/billing/main.md", ["demo/rates/rates"]],
+      ["demo/rates/rates", "knowledge/as-is/demo/rates/rates.md", []],
+    ]);
+    expect(matrix.rules).toEqual({ "RULE-001": ["demo/rates/rates"] });
+    expect(matrix.units[1]?.dataStores).toEqual([{ id: "ds:RATES", access: ["read"] }]);
+    expect(matrix.inputs).toEqual({ businessRules: true, securityFindings: false });
+    expect(readFileSync(join(asIs, "traceability.md"), "utf8")).toMatch(/^Legacy repository small at [0-9a-f]{40}\n/);
+    expect(readFileSync(join(asIs, "billing", "main.md"), "utf8")).toContain("## Business rules applied");
+
+    // The work item follows the unit-file format; the one a person already has is left alone.
+    const item = readFileSync(join(root, "units", "demo", "rates", "rates.md"), "utf8");
+    const front = Object.fromEntries(
+      /^---\n([\s\S]*?)\n---\n/
+        .exec(item)![1]!
+        .split("\n")
+        .filter((line) => /^[a-zA-Z]+: \S/.test(line))
+        .map((line) => [line.slice(0, line.indexOf(":")), line.slice(line.indexOf(":") + 2)]),
+    );
+    expect(front).toMatchObject({ id: '"demo/rates/rates"', application: '"demo"', module: '"rates"', kind: '"module"', phase: "discover-assess", stage: "understand", status: "pending", complexity: "low", dependsOn: "[]" });
+    expect(PHASES).toContain(front["phase"]);
+    expect(item).toContain('  - {repo: "small", paths: ["src/rates.c"]}');
+    expect(item).toContain('  asIs: "knowledge/as-is/demo/rates/rates.md"\n  businessRules: ["RULE-001"]');
+    expect(existsSync(join(root, "units", "demo", "billing", "main.md"))).toBe(false);
+
+    // One write, all of it through the pull request.
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ outputOfJob: id, message: "Understand demo: AS-IS specifications, traceability and work items", reviewAll: true });
+    expect(store.children(id).filter((child) => child.status === "failed")).toHaveLength(0);
+  }, 180_000);
+
+  it("chooses the units to specify: entry points first, then the largest, within the budget minus the synthesis job", async () => {
+    const units = {
+      units: [
+        { key: "a/small", brief: "briefs/a/small.json", loc: 10 },
+        { key: "a/big", brief: "briefs/a/big.json", loc: 900 },
+        { key: "b/entry", brief: "briefs/b/entry.json", loc: 5, entryPoint: true },
+        { key: "../escape", brief: "briefs/../escape.json", loc: 9999 },
+      ],
+    };
+    const context = (gate: string | undefined, left: number): StageContext => ({
+      app: "demo",
+      repo: "small",
+      commit: "c",
+      round: 0,
+      readText: async () => undefined,
+      readJson: async (path) => (path === "knowledge/as-is/demo/units.json" ? units : undefined),
+      stdout: () => undefined,
+      gate: () => gate,
+      agentsLeft: () => left,
+    });
+    expect(await unitsToSpecify(context("all within the budget", 10))).toEqual(["b/entry", "a/big", "a/small"]);
+    expect(await unitsToSpecify(context("all within the budget", 3))).toEqual(["b/entry", "a/big"]);
+    expect(await unitsToSpecify(context("entry points only", 10))).toEqual(["b/entry"]);
+    expect(await unitsToSpecify(context(undefined, 1))).toEqual([]);
+  });
+
+  it("fails understand before any step when the map is not merged yet", async () => {
+    const { run, store, id, writes } = await runStage("understand", { legacy: "small" });
+    expect(run?.status).toBe("failed");
+    expect(run?.failureReason).toBe(
+      "assessment/demo/topology.json is not on the default branch of the document repository: run the map stage first and merge its pull request, then run understand again",
+    );
+    expect(store.children(id)).toHaveLength(0);
+    expect(writes).toHaveLength(0);
+  });
 
   it("fails a stage whose prerequisite is not on the document repo's default branch, before any step", async () => {
     const { run, store, id, writes } = await runStage("map", { legacy: "small", docs: "empty-docs" });
