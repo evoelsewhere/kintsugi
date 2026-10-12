@@ -28,7 +28,7 @@ says so): an uplift keeps the code, so its Behavior Contract is the recorded bas
 can wait. If a required file is missing, say so and stop: they come from the `assess` and
 `understand` stages (runtime jobs started from the portal), which run first. Four more inputs are conditional:
 
-- **`RULE_REVIEWS.json` / `RULE_REVIEWS.md`**, if they exist (written by the portal's rule review screen, the `review` stage):
+- **`RULE_REVIEWS.json` / `RULE_REVIEWS.md`**, if they exist (a person's review of the extracted rules, recorded in the document repository):
   a person's verdicts on individual rules. Never put a rule marked `wrong` or `discuss` in the Behavior
   Contract as settled behavior: list each in section 7 as an open question with the reviewer's note, and
   block the phase that covers its module on it. A `confirmed` rule counts as confirmed by a person.
