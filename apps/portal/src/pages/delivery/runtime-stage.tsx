@@ -24,7 +24,7 @@ import { type ApplicationView, type DocumentWriteView, type ProjectDetail, proje
 import { useAuth } from "@/lib/auth";
 import { formatBytes, formatDateTime, formatDuration, formatRelative, shortSha } from "@/lib/format";
 import { isActiveStatus } from "@/lib/status";
-import { agentProblems, runBlocker, runsOfStage } from "@/lib/stages";
+import { agentProblems, runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { type Loader, useLoader } from "@/lib/use-loader";
 import { ApplicationFacts } from "./delivery-shell";
 import { DecisionPoints, StageAgents, StagePaths } from "./stage-parts";
@@ -112,7 +112,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
         <div className="flex flex-wrap items-start gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[15px] font-medium text-text">{stage.id}</p>
+              <p className="text-[15px] font-medium text-text">{stageLabel(stage.id)}</p>
               <span className="font-mono text-[11px] text-text-muted">/{stage.command}</span>
               {stage.runnable ? null : <StatusBadge tone="muted" label="Coming soon" />}
             </div>

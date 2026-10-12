@@ -27,7 +27,7 @@ import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { formatRelative } from "@/lib/format";
 import { isActiveStatus, ITEM_STATUS, styleOf } from "@/lib/status";
-import { runBlocker, runsOfStage } from "@/lib/stages";
+import { runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { type Loader, useLoader } from "@/lib/use-loader";
 import { ApplicationFacts } from "./delivery-shell";
 import { CatalogResults, type CatalogSelection } from "./results/catalog-view";
@@ -106,7 +106,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
         <div className="flex flex-wrap items-start gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[15px] font-medium text-text">{stage.id}</p>
+              <p className="text-[15px] font-medium text-text">{stageLabel(stage.id)}</p>
               <span className="font-mono text-[11px] text-text-muted">/{stage.command}</span>
             </div>
             <p className="mt-1 text-[13px] text-text-secondary">Select catalog items or whole modules and run understand on them: one pull request per run, only the paths of its own items.</p>
