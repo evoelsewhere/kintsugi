@@ -61,6 +61,24 @@ P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare
 - **Outputs**: inventory, AS-IS KB, AS-IS docs, gap list, scorecard, 7R decision, wave plan.
 - **Gate G1**: portfolio decision approved by the steering committee.
 
+#### Reverse engineering the AS-IS system (runtime stages)
+The Kintsugi Runtime performs the reverse engineering of each application as a chain of stages, each delivered as a pull request to the document repo that a person reviews and merges ([ADR-0027](../decisions/0027-builtin-modernization-content.md), [ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)):
+
+```
+assess ─► Understand phase:  map ─► extract-rules ─┐
+                                 └► harden ────────┴─► understand
+```
+
+| Stage | Answers | Main outputs |
+|---|---|---|
+| `assess` | What is there, how big, how risky? | `assessment/<app>/inventory.json`, `ASSESSMENT.md` |
+| `map` | How do the pieces connect? | `assessment/<app>/topology.json`, diagrams |
+| `extract-rules` | Which business rules does the code enforce? | `assessment/<app>/BUSINESS_RULES.md`, `DATA_OBJECTS.md` |
+| `harden` | Which vulnerabilities and credentials does it carry? | `assessment/<app>/SECURITY_FINDINGS.md`, remediation patch |
+| `understand` | What does each unit do, end to end? | `knowledge/as-is/<app>/<module>/<unit>.md`, overview, traceability matrix, proposed work items `units/<app>/**` |
+
+`understand` needs `assess` and `map` merged and uses `extract-rules` and `harden` when they are: the units come from the map (no code parsing), each gets an AS-IS specification that links its rules and findings by id, and the work items it proposes become the backlog of the later phases once the pull request is merged.
+
 ### P2 — Define To-Be
 - **Activities**:
   - TO-BE requirements;
