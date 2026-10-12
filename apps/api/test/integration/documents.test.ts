@@ -69,6 +69,44 @@ const TOPOLOGY = JSON.stringify({
   observations: ["One store."],
 });
 
+// What merge_traceability.py writes for two units of web (ADR-0031).
+const TRACEABILITY = JSON.stringify({
+  app: "web",
+  generatedBy: "merge_traceability.py",
+  inputs: { businessRules: true, securityFindings: false },
+  units: [
+    {
+      id: "web/core/a",
+      module: "core",
+      unit: "a",
+      title: "A",
+      kind: "module",
+      loc: 25,
+      entryPoint: true,
+      spec: "knowledge/as-is/web/core/a.md",
+      files: ["src/A.java"],
+      dependsOn: ["web/core/b"],
+      usedBy: [],
+      dataStores: [],
+      externalSystems: [],
+      rules: ["RULE-001"],
+      findings: [],
+      dataObjects: [],
+      entryPoints: ["src/A.java:3"],
+      openQuestions: 1,
+    },
+    { id: "web/core/b", module: "core", unit: "b", title: "B", kind: "module", loc: 15, entryPoint: false, spec: null, files: ["src/B.java"], dependsOn: [], usedBy: ["web/core/a"], dataStores: [{ id: "ds:ACCOUNT", access: ["read"] }], externalSystems: [], rules: [], findings: [], dataObjects: [], entryPoints: [], openQuestions: 0 },
+  ],
+  rules: { "RULE-001": ["web/core/a"] },
+  findings: {},
+  files: { "src/A.java": ["web/core/a"], "src/B.java": ["web/core/b"] },
+  dataStores: { "ds:ACCOUNT": ["web/core/b"] },
+  unmappedRules: ["RULE-002"],
+  unmappedFindings: [],
+  cycles: [],
+  notes: { "unknown rule ids": 1 },
+});
+
 describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
   let app: TestApp;
   let admin: Client;
@@ -90,6 +128,13 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     await remote.commit("docs", "assessment/web/topology.json", TOPOLOGY, "kintsugi/legacy-analyst/run-map");
     await remote.commit("docs", "assessment/web/call-graph.mmd", "graph TD\n  a --> b\n", "kintsugi/legacy-analyst/run-map");
     mapBranchTip = remote.git("docs", "rev-parse", "kintsugi/legacy-analyst/run-map").trim();
+    // understand proposed on its own branch: specifications, synthesis and work items in one pull request.
+    const understand = "kintsugi/legacy-analyst/run-understand";
+    await remote.commit("docs", "knowledge/as-is/web/traceability.json", TRACEABILITY, understand);
+    await remote.commit("docs", "knowledge/as-is/web/README.md", "# Web AS-IS\n", understand);
+    await remote.commit("docs", "knowledge/as-is/web/architecture.md", "# Architecture\n\n```mermaid\nflowchart LR\n  core --> data\n```\n", understand);
+    await remote.commit("docs", "knowledge/as-is/web/core/a.md", "# A\n", understand);
+    await remote.commit("docs", "units/web/core/a.md", '---\nid: "web/core/a"\nstatus: pending\ncomplexity: low\n---\n\nA.\n', understand);
     await cloneMirror(`${remote.baseUrl}/docs.git`, new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
     app = await startTestApp();
@@ -102,7 +147,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
 
     // What the worker records for a merged assess run and an open map run.
     await app.db.query(
-      "insert into workflow.document_write (id, project_id, kind, message, status, branch) values ('w-assess', 'shop', 'job-output', 'Assess web', 'committed', null), ('w-map', 'shop', 'job-output', 'Map web', 'pr-opened', 'kintsugi/legacy-analyst/run-map'), ('w-gone', 'shop', 'job-output', 'Old map', 'pr-opened', 'kintsugi/legacy-analyst/gone')",
+      "insert into workflow.document_write (id, project_id, kind, message, status, branch) values ('w-assess', 'shop', 'job-output', 'Assess web', 'committed', null), ('w-map', 'shop', 'job-output', 'Map web', 'pr-opened', 'kintsugi/legacy-analyst/run-map'), ('w-gone', 'shop', 'job-output', 'Old map', 'pr-opened', 'kintsugi/legacy-analyst/gone'), ('w-understand', 'shop', 'job-output', 'Understand web', 'pr-opened', 'kintsugi/legacy-analyst/run-understand')",
     );
     await app.db.query(
       `insert into workflow.job_run (id, project_id, application_id, kind, name, status, document_write_id, finished_at, created_at) values
@@ -110,6 +155,11 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
         ('run-map-old', 'shop', 'web', 'stage', 'map', 'succeeded', 'w-gone', now() - interval '90 minutes', now() - interval '100 minutes'),
         ('run-map', 'shop', 'web', 'stage', 'map', 'succeeded', 'w-map', now() - interval '1 hour', now() - interval '70 minutes'),
         ('run-harden', 'shop', 'web', 'stage', 'harden', 'failed', null, null, now())`,
+    );
+    await app.db.query(
+      `insert into workflow.job_run (id, project_id, application_id, kind, name, status, document_write_id, output_summary, finished_at, created_at) values
+        ('run-understand', 'shop', 'web', 'stage', 'understand', 'succeeded', 'w-understand', $1, now() - interval '10 minutes', now() - interval '20 minutes')`,
+      [JSON.stringify({ stage: "understand", missingInputs: [{ path: "assessment/web/SECURITY_FINDINGS.md", stage: "harden" }] })],
     );
   });
   afterAll(async () => {
@@ -133,9 +183,10 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     expect(refs.body.data?.defaultBranch).toBe("main");
     expect(refs.body.data?.refs.map((ref) => [ref["kind"], ref["ref"], ref["status"], ref["stage"] ?? null, ref["runId"] ?? null])).toEqual([
       ["default", "refs/heads/main", "default", null, null],
+      ["run", "refs/heads/kintsugi/legacy-analyst/run-understand", "open", "understand", "run-understand"],
       ["run", "refs/heads/kintsugi/legacy-analyst/run-map", "open", "map", "run-map"],
     ]);
-    expect(refs.body.data?.refs[1]?.["commit"]).toBe(mapBranchTip);
+    expect(refs.body.data?.refs[2]?.["commit"]).toBe(mapBranchTip);
   });
 
   it("lists a directory and reads a file at a ref, parsing JSON", async () => {
@@ -224,7 +275,46 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
       ["map", ["2 modules", "2 edges"]],
       ["extract-rules", []],
       ["harden", []],
+      ["understand", ["2 units", "1 module"]],
     ]);
+  });
+
+  it("builds the understand results: units with their work items, the matrix, the synthesis documents and the missing inputs", async () => {
+    const results = await admin.get<{
+      ref: Record<string, unknown>;
+      empty: boolean;
+      units: Array<Record<string, unknown>>;
+      matrix: Record<string, unknown>;
+      documents: Array<{ id: string; path: string; markdown: string }>;
+      missingInputs: unknown[];
+      counts: Record<string, number>;
+      headline: string[];
+      document: { path: string };
+      files: Array<{ path: string }>;
+    }>("/projects/shop/applications/web/stages/understand/results");
+    expect(results.status).toBe(200);
+    const data = results.body.data!;
+    expect(data.ref).toMatchObject({ kind: "run", status: "open", runId: "run-understand", branch: "kintsugi/legacy-analyst/run-understand" });
+    expect(data.empty).toBe(false);
+    expect(data.units.map((unit) => [unit["id"], unit["key"], unit["spec"], unit["workItem"] ?? null])).toEqual([
+      ["web/core/a", "core/a", "knowledge/as-is/web/core/a.md", { path: "units/web/core/a.md", status: "pending", complexity: "low" }],
+      ["web/core/b", "core/b", null, null],
+    ]);
+    expect(data.matrix).toMatchObject({ path: "knowledge/as-is/web/traceability.json", rulesCovered: ["RULE-001"], unmappedRules: ["RULE-002"], dataStores: ["ds:ACCOUNT"], notes: { "unknown rule ids": 1 } });
+    expect(data.documents.map((document) => [document.id, document.path])).toEqual([
+      ["readme", "knowledge/as-is/web/README.md"],
+      ["architecture", "knowledge/as-is/web/architecture.md"],
+    ]);
+    expect(data.documents[1]?.markdown).toContain("```mermaid");
+    expect(data.document.path).toBe("knowledge/as-is/web/README.md");
+    expect(data.missingInputs).toEqual([{ path: "assessment/web/SECURITY_FINDINGS.md", stage: "harden" }]);
+    expect(data.counts).toMatchObject({ units: 2, modules: 1, specified: 1, notWritten: 1, rulesCovered: 1, rulesUncovered: 1, files: 2, workItems: 1, leftOut: 1, openQuestions: 1 });
+    expect(data.headline).toEqual(["2 units", "1 module"]);
+    expect(data.files.map((file) => file.path)).toEqual(["knowledge/as-is/web/traceability.json", "knowledge/as-is/web/README.md", "knowledge/as-is/web/architecture.md"]);
+
+    // Not merged yet: the default branch has no understand output.
+    const onMain = await admin.get<{ empty: boolean; units: unknown[]; matrix: null; documents: unknown[] }>("/projects/shop/applications/web/stages/understand/results?ref=refs/heads/main");
+    expect(onMain.body.data).toMatchObject({ empty: true, units: [], matrix: null, documents: [] });
   });
 
   it("follows the mirror: a newer commit on the run's branch shows after a fetch", async () => {

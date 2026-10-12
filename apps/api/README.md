@@ -34,7 +34,8 @@ Responsibilities beyond the feature modules below:
   `GET …/documents/tree?ref&path` and `GET …/documents/file?ref&path` (text up to 2 MiB, `.json`
   parsed; `ref` is a commit id or `refs/heads/<branch>`; never `restricted/` or `.git`).
   `GET /api/projects/:id/applications/:appId/stages/:stage/results?ref&compare` builds the
-  results of `assess`, `map`, `extract-rules` or `harden` with the parsers of
+  results of `assess`, `map`, `extract-rules`, `harden` or `understand` (units with their work
+  items, the traceability matrix, the AS-IS synthesis documents) with the parsers of
   `@kintsugi/agents/reader` (default ref: the stage's latest successful run, else the default
   branch); `GET …/applications/:appId/results/headlines` gives the overview's headline numbers.
 - Cross-project reads (session only): `GET /api/document-writes`

@@ -1,32 +1,42 @@
 // The results of each stage with a results view, built from the files it wrote under
-// `assessment/<app>/` with the parsers of @kintsugi/agents/reader (never parsed again here).
+// `assessment/<app>/` (understand: `knowledge/as-is/<app>/` and `units/<app>/`) with the parsers of @kintsugi/agents/reader (never parsed again here).
 // Each stage has a full build (the results tab) and a counts build that reads as little as
 // possible (the Delivery overview's headline numbers and the comparison with the previous run).
 
 import {
   bulletsIn,
   findingsOfTable,
+  leftOutTotal,
   paragraphsIn,
   parseInventory,
   parseSecurityFindings,
   parseTopology,
+  parseTraceability,
+  parseWorkItem,
   patchSummary,
   ruleCatalog,
   sectionMatching,
   sectionsOf,
   tablesIn,
+  UNIT_SEGMENT,
   type Inventory,
   type RuleCatalog,
   type SecurityReport,
   type Topology,
+  type Traceability,
 } from "@kintsugi/agents/reader";
-import type { AssessResults, HardenResults, MapDiagram, MapNode, MapResults, ResultStage, RulesResults, StageFile } from "../domain/document.js";
+import { chunk } from "#common/util/async.js";
+import type { AsIsDocument, AssessResults, HardenResults, MapDiagram, MapNode, MapResults, ResultStage, RulesResults, StageFile, UnderstandResults, UnderstandUnit } from "../domain/document.js";
 
 /** The stage's output directory at one commit: what is there, and a reader for a file in it. */
 export interface StageSource {
   files: StageFile[];
-  /** A file by its name in `assessment/<app>/`; null when missing, too large or binary. */
+  /** A file by its name in the stage's directory; null when missing, too large or binary. */
   read(name: string): Promise<string | null>;
+  /** The files of a document-repo directory at the same commit; empty when it is not one. */
+  list(path: string): Promise<StageFile[]>;
+  /** A document-repo file at the same commit (its size from a listing); null when missing, too large or binary. */
+  readPath(path: string, size?: number): Promise<string | null>;
 }
 
 /** What every build returns besides the stage-specific fields. */
@@ -38,8 +48,8 @@ interface Built {
 
 type Full<T> = Omit<T, "stage" | "applicationId" | "ref" | "files" | "empty" | "previous">;
 
-/** The files each stage writes (under assessment/<app>/), its main document and the files its counts need. */
-export const STAGE_OUTPUTS: Record<ResultStage, { files: readonly string[]; main?: string; countsFrom: readonly string[] }> = {
+/** The files each stage writes (in its directory, by default assessment/<app>/), its main document and the files its counts need. */
+export const STAGE_OUTPUTS: Record<ResultStage, { dir?: string; files: readonly string[]; main?: string; countsFrom: readonly string[] }> = {
   assess: { files: ["inventory.json", "ASSESSMENT.md", "ARCHITECTURE.mmd"], main: "ASSESSMENT.md", countsFrom: ["inventory.json"] },
   map: {
     files: ["topology.json", "topology.summary.txt", "call-graph.mmd", "data-lineage.mmd", "critical-path.mmd", "extract_topology.py", "TOPOLOGY_SCRIPT.md"],
@@ -51,7 +61,16 @@ export const STAGE_OUTPUTS: Record<ResultStage, { files: readonly string[]; main
     countsFrom: ["rules_result.json", "BUSINESS_RULES.md"],
   },
   harden: { files: ["SECURITY_FINDINGS.md", "security_remediation.patch"], main: "SECURITY_FINDINGS.md", countsFrom: ["SECURITY_FINDINGS.md"] },
+  understand: {
+    dir: "knowledge/as-is/{app}",
+    files: ["traceability.json", "traceability.md", "README.md", "architecture.md", "data-model.md", "integrations.md"],
+    main: "README.md",
+    countsFrom: ["traceability.json"],
+  },
 };
+
+/** The directory a stage writes its outputs to, for one application. */
+export const stageDir = (stage: ResultStage, applicationId: string): string => (STAGE_OUTPUTS[stage].dir ?? "assessment/{app}").replace("{app}", applicationId);
 
 const plural = (count: number, one: string, many = `${one}s`): string => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
 
@@ -265,4 +284,120 @@ export async function hardenResults(source: StageSource, appDir: string): Promis
 export async function hardenHeadline(source: StageSource): Promise<Pick<Built, "counts" | "headline">> {
   const text = await source.read("SECURITY_FINDINGS.md");
   return hardenCounts(text === null ? null : parseSecurityFindings(text));
+}
+
+// ---- understand -----------------------------------------------------------------------------
+
+function understandCounts(matrix: Traceability | null, workItems = 0): Pick<Built, "counts" | "headline"> {
+  if (matrix === null) return { counts: {}, headline: [] };
+  const { units } = matrix;
+  const modules = new Set(units.map((unit) => unit.module)).size;
+  return {
+    counts: {
+      units: units.length,
+      modules,
+      specified: units.filter((unit) => unit.spec !== null).length,
+      notWritten: units.filter((unit) => unit.spec === null).length,
+      entryPoints: units.filter((unit) => unit.entryPoint).length,
+      rulesCovered: Object.keys(matrix.rules).length,
+      rulesUncovered: matrix.unmappedRules.length,
+      findingsMapped: Object.keys(matrix.findings).length,
+      findingsUnmapped: matrix.unmappedFindings.length,
+      files: Object.keys(matrix.files).length,
+      dataStores: Object.keys(matrix.dataStores).length,
+      cycles: matrix.cycles.length,
+      openQuestions: units.reduce((sum, unit) => sum + unit.openQuestions, 0),
+      leftOut: leftOutTotal(matrix),
+      workItems,
+    },
+    headline: [plural(units.length, "unit"), plural(modules, "module")],
+  };
+}
+
+const AS_IS_DOCUMENTS: Array<Omit<AsIsDocument, "path" | "markdown"> & { file: string }> = [
+  { id: "readme", title: "Overview", file: "README.md" },
+  { id: "architecture", title: "Architecture", file: "architecture.md" },
+  { id: "data-model", title: "Data model", file: "data-model.md" },
+  { id: "integrations", title: "Integrations", file: "integrations.md" },
+];
+
+type WorkItemRef = NonNullable<UnderstandUnit["workItem"]>;
+
+/** Work-item files read at once. */
+const WORK_ITEM_READS = 8;
+
+/** The work item of each unit that has one at the ref (`units/<app>/<module>/<unit>.md`), by unit id. */
+async function workItemsOf(source: StageSource, applicationId: string, units: Traceability["units"]): Promise<Map<string, WorkItemRef>> {
+  const found = new Map<string, WorkItemRef>();
+  if (!UNIT_SEGMENT.test(applicationId)) return found;
+  // Never under restricted/ (the documents API serves nothing there either).
+  const modules = [...new Set(units.map((unit) => unit.module))].filter((module) => UNIT_SEGMENT.test(module) && module !== "restricted");
+  const listed = new Map<string, number>();
+  for (const files of await Promise.all(modules.map((module) => source.list(`units/${applicationId}/${module}`)))) for (const file of files) listed.set(file.path, file.size);
+  const wanted = units.flatMap((unit) => {
+    const path = `units/${applicationId}/${unit.module}/${unit.unit}.md`;
+    const size = listed.get(path);
+    return UNIT_SEGMENT.test(unit.unit) && size !== undefined ? [{ id: unit.id, path, size }] : [];
+  });
+  for (const batch of chunk(wanted, WORK_ITEM_READS)) {
+    await Promise.all(
+      batch.map(async ({ id, path, size }) => {
+        const text = await source.readPath(path, size);
+        const item = text === null ? null : parseWorkItem(text);
+        found.set(id, { path, status: item?.status ?? "unknown", ...(item?.complexity === undefined ? {} : { complexity: item.complexity }) });
+      }),
+    );
+  }
+  return found;
+}
+
+/** `missingInputs` of a stage run's summary, checked. */
+export function missingInputsOf(summary: Record<string, unknown> | undefined): Array<{ path: string; stage: string }> {
+  const raw = summary?.["missingInputs"];
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry: unknown) => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const { path, stage } = entry as Record<string, unknown>;
+    return typeof path === "string" && typeof stage === "string" ? [{ path, stage }] : [];
+  });
+}
+
+export async function understandResults(source: StageSource, appDir: string, applicationId: string, missingInputs: UnderstandResults["missingInputs"]): Promise<Full<UnderstandResults>> {
+  const [traceText, ...texts] = await Promise.all([source.read("traceability.json"), ...AS_IS_DOCUMENTS.map((document) => source.read(document.file))]);
+  const matrix = traceText === null ? null : parseTraceability(traceText);
+  const workItems = matrix === null ? new Map<string, WorkItemRef>() : await workItemsOf(source, applicationId, matrix.units);
+  const documents: AsIsDocument[] = AS_IS_DOCUMENTS.flatMap(({ file, ...document }, index) => {
+    const markdown = texts[index];
+    return markdown === null || markdown === undefined ? [] : [{ ...document, path: `${appDir}/${file}`, markdown }];
+  });
+  const readme = documents.find((document) => document.id === "readme");
+  return {
+    units: (matrix?.units ?? []).map((unit) => {
+      const workItem = workItems.get(unit.id);
+      return workItem === undefined ? unit : { ...unit, workItem };
+    }),
+    matrix:
+      matrix === null
+        ? null
+        : {
+            path: `${appDir}/traceability.json`,
+            inputs: matrix.inputs,
+            rulesCovered: Object.keys(matrix.rules),
+            findingsMapped: Object.keys(matrix.findings),
+            unmappedRules: matrix.unmappedRules,
+            unmappedFindings: matrix.unmappedFindings,
+            dataStores: Object.keys(matrix.dataStores),
+            cycles: matrix.cycles,
+            notes: matrix.notes,
+          },
+    documents,
+    missingInputs,
+    ...understandCounts(matrix, workItems.size),
+    ...(readme === undefined ? {} : { document: { path: readme.path, markdown: readme.markdown } }),
+  };
+}
+
+export async function understandHeadline(source: StageSource): Promise<Pick<Built, "counts" | "headline">> {
+  const text = await source.read("traceability.json");
+  return understandCounts(text === null ? null : parseTraceability(text));
 }
