@@ -71,7 +71,7 @@ function Overview({ results }: { results: AssessResults }): React.JSX.Element {
       )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Section title="Security highlights" description="From the Security Findings section; the harden stage verifies and remediates them.">
+        <Section title="Security highlights" description="From the Security Findings section; the understand stage verifies them per item.">
           {highlights.security.length === 0 ? <p className="text-[12px] text-text-muted">The assessment lists no security findings.</p> : <FindingsTable findings={highlights.security} />}
         </Section>
         <Section title="Languages" description={inventory?.method}>

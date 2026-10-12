@@ -156,7 +156,7 @@ function FindingsTab({ results, open, setOpen }: { results: HardenResults; open:
   const [confidence, setConfidence] = useState("");
   const report = results.report;
   const confidences = useMemo(() => ["High", "Medium", "Low"].filter((level) => report?.findings.some((finding) => finding.confidence === level) === true), [report]);
-  if (report === null) return <EmptyState title="No SECURITY_FINDINGS.md at this ref" description="The harden stage writes it; pick another ref above or run harden." />;
+  if (report === null) return <EmptyState title="No SECURITY_FINDINGS.md at this ref" description="The understand stage writes it; pick another ref above." />;
   if (report.findings.length === 0) {
     return (
       <Section title="Findings">

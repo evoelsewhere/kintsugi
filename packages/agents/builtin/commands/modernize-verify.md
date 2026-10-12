@@ -162,4 +162,4 @@ test or difference: `/kintsugi:modernize-transform $app <module>`, or for an upl
 (also for a baseline typed by hand, which is measured again in its Step 4, and for a silent delta no test names, which gets a
 characterization test there). Removed or changed test files are a person's review, never yours to undo.
 **PROVEN:** it is evidence, not approval. Tell the user to request the **verification sign-off** gate in the portal: a named person
-signs it there (the sign-off block in `assessment/$app/VERIFICATION.md` records it); then the brief's next module, or the `harden` stage.
+signs it there (the sign-off block in `assessment/$app/VERIFICATION.md` records it); then the brief's next module, or the `understand` stage on the next items.

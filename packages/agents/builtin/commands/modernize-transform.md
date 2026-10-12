@@ -137,4 +137,4 @@ Apply HIGH-severity feedback and list the rest in the notes.
 Push the target branch and open the target pull request; open (or update) the document repo pull request with everything under
 `assessment/$app/` this command wrote. Report: tests passing, cases executed, lines of legacy retired, where the artifacts
 are (the portal shows them once the document repo pull request is merged). The next step is the brief's next module, or the
-`harden` stage when the phase is done.
+`understand` stage on the remaining items when the phase is done.

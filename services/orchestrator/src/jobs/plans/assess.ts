@@ -11,7 +11,7 @@
 
 import type { StagePlan } from "../plan.js";
 import { CREDENTIALS, HEADER, RESTRICTED, UNTRUSTED, WORKSPACE } from "./common.js";
-import { topologySteps } from "./map.js";
+import { topologySteps } from "./topology.js";
 
 const DIR = "assessment/{app}";
 const ANALYSIS = `${DIR}/analysis`;

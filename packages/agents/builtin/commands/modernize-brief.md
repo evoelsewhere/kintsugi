@@ -24,9 +24,9 @@ document a steering committee approves and engineering executes. Target stack:
 Read `ASSESSMENT.md`, `topology.json` (and the `.mmd` files beside it; never read
 any rendered view of it; the portal draws the topology from `topology.json`) in `assessment/$app/` first,
 and `BUSINESS_RULES.md` too unless this is a same-technology **uplift** (the intent or the assessment
-says so): an uplift keeps the code, so its Behavior Contract is the recorded baseline and `extract-rules`
-can wait. If a required file is missing, say so and stop: they come from the `assess`, `map` and
-`extract-rules` stages (runtime jobs started from the portal), which run first. Four more inputs are conditional:
+says so): an uplift keeps the code, so its Behavior Contract is the recorded baseline and `understand` rule extraction
+can wait. If a required file is missing, say so and stop: they come from the `assess` and
+`understand` stages (runtime jobs started from the portal), which run first. Four more inputs are conditional:
 
 - **`RULE_REVIEWS.json` / `RULE_REVIEWS.md`**, if they exist (written by the portal's rule review screen, the `review` stage):
   a person's verdicts on individual rules. Never put a rule marked `wrong` or `discuss` in the Behavior
