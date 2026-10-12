@@ -166,22 +166,26 @@ describe("built-in catalog", () => {
   });
 });
 
+/** Commands written for Kintsugi, not adapted from the upstream plugin. */
+const KINTSUGI_COMMANDS = new Set(["modernize-understand.md"]);
+
 describe("built-in commands", () => {
   it("declare who runs them and name only agents of the catalog", async () => {
     const catalog = await loadBuiltinCatalog();
     const audienceOf = new Map(catalog.agents.map((agent) => [agent.manifest.name, agent.manifest.audience]));
     const dir = join(BUILTIN_DIR, "commands");
     const names = (await readdir(dir)).filter((name) => name.endsWith(".md")).sort();
-    expect(names).toHaveLength(13);
+    expect(names).toHaveLength(14);
     for (const name of names) {
       const text = await readFile(join(dir, name), "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
         arguments: string;
-        metadata: { audience: string; upstream: string; agents: string[]; reads: string[]; writes: string[] };
+        metadata: { audience: string; upstream?: string; agents: string[]; reads: string[]; writes: string[] };
       };
       const { metadata } = frontmatter;
       expect(["runtime", "member", "portal"], name).toContain(metadata.audience);
-      expect(metadata.upstream, name).toBe(`commands/${name}`);
+      // Commands adapted from upstream name their source; Kintsugi's own commands name none.
+      expect(metadata.upstream ?? null, name).toBe(KINTSUGI_COMMANDS.has(name) ? null : `commands/${name}`);
       expect(frontmatter.arguments, name).not.toMatch(/\bsystem\b/);
       for (const agent of metadata.agents) {
         expect(audienceOf.has(agent), `${name} names unknown agent ${agent}`).toBe(true);
@@ -194,10 +198,16 @@ describe("built-in commands", () => {
 
   it("load in pipeline order with their stage ids", async () => {
     const commands = await loadBuiltinCommands();
-    expect(commands).toHaveLength(13);
+    expect(commands).toHaveLength(14);
     expect(commands[0]).toMatchObject({ id: "modernize", command: "modernize", audience: "portal" });
     expect(commands.find((command) => command.id === "extract-rules")).toMatchObject({ command: "modernize-extract-rules", agents: ["business-rules-extractor", "legacy-analyst"] });
-    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "map", "extract-rules", "harden"]);
+    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "map", "extract-rules", "harden", "understand"]);
     expect(commands.find((command) => command.id === "status")).toMatchObject({ writes: [], gates: [] });
+    expect(commands.find((command) => command.id === "understand")).toMatchObject({
+      command: "modernize-understand",
+      audience: "runtime",
+      agents: ["legacy-analyst"],
+      writes: expect.arrayContaining(["knowledge/as-is/<app>/<module>/<unit>.md", "knowledge/as-is/<app>/traceability.json", "units/<app>/<module>/<unit>.md"]),
+    });
   });
 });
