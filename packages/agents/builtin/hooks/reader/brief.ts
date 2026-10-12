@@ -1,4 +1,4 @@
-import { linesOf } from './text'
+import { linesOf } from './text.js'
 
 /**
  * `assessment/<app>/MODERNIZATION_BRIEF.md`, read without a model: the

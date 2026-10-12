@@ -1,0 +1,30 @@
+// The readers the portal and the API use (ADR-0027): pure parsers of the artifacts the stages
+// write to the document repo. Built to `dist/reader` and exported as `@kintsugi/agents/reader`.
+
+export { parseInventory, type Inventory, type InventoryFile, type InventoryLanguage } from './inventory.js'
+export { bulletsIn, cellText, columnOf, paragraphsIn, sectionMatching, sectionsOf, tablesIn, type Section, type Table } from './markdown.js'
+export { parseTopology, type TopoEdge, type TopoFlow, type TopoNode, type Topology } from './topology.js'
+export { citationsIn, idOfTitle, needsReview, parseRules, type Citation, type Rule, type RuleSet } from './rules.js'
+export {
+  markDuplicates,
+  nameSimilarity,
+  parseDataObjects,
+  ruleCatalog,
+  type CatalogRule,
+  type DataField,
+  type DataObject,
+  type RuleCatalog,
+  type RuleStatus,
+} from './catalog.js'
+export {
+  SEVERITIES,
+  findingsOfTable,
+  parseSecurityFindings,
+  patchSummary,
+  severityOf,
+  type Finding,
+  type FindingStatus,
+  type Scorecard,
+  type SecurityReport,
+  type Severity,
+} from './findings.js'

@@ -1,16 +1,16 @@
-import { join } from './paths'
-import { assessmentPath, DEFAULT_WORKSPACE_LAYOUT, sourcePath, targetPath } from './layout'
-import { isAppName, isToken, plain } from './text'
-import { parseBrief, type Brief, type Phase } from './brief'
-import { discoverEstate, sourceSizes } from './discover'
-import { estateOfTopology, keysOfUnit, type EstateModel, type EstateUnit } from './estate-model'
-import { dirNamesOf, mtimeOrNull, readOrNull, type ReaderFs } from './fs'
-import { isDone, readModernizedIn, type ModernizedModule, type TestTotals } from './modernized'
-import { needsReview, parseRules, type RuleSet } from './rules'
-import { pickTrack, TRACK_LABELS, type TrackKey } from './tracks'
-import { parseTopology, type Topology } from './topology'
-import { parseVerification, proofOfModule, type ProofState, type Verification } from './verification'
-import { parseLedger } from './ledger'
+import { join } from './paths.js'
+import { assessmentPath, DEFAULT_WORKSPACE_LAYOUT, sourcePath, targetPath } from './layout.js'
+import { isAppName, isToken, plain } from './text.js'
+import { parseBrief, type Brief, type Phase } from './brief.js'
+import { discoverEstate, sourceSizes } from './discover.js'
+import { estateOfTopology, keysOfUnit, type EstateModel, type EstateUnit } from './estate-model.js'
+import { dirNamesOf, mtimeOrNull, readOrNull, type ReaderFs } from './fs.js'
+import { isDone, readModernizedIn, type ModernizedModule, type TestTotals } from './modernized.js'
+import { needsReview, parseRules, type RuleSet } from './rules.js'
+import { pickTrack, TRACK_LABELS, type TrackKey } from './tracks.js'
+import { parseTopology, type Topology } from './topology.js'
+import { parseVerification, proofOfModule, type ProofState, type Verification } from './verification.js'
+import { parseLedger } from './ledger.js'
 import {
   baselineRowOf,
   changedUnitsOf,
@@ -20,7 +20,7 @@ import {
   readUpliftUnits,
   type Baseline,
   type Catalog,
-} from './uplift'
+} from './uplift.js'
 
 /**
  * One reading of an app's modernization state, from repository artifacts

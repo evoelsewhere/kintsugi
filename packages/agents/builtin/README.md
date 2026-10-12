@@ -42,7 +42,7 @@ For reader functions, `reader/layout.ts` exposes logical namespaces: `assessment
 - `workflows/`: runtime job fan-out and member workflow specifications, with the audience distinction kept explicit.
 - `scripts/`: deterministic standard-library helpers used by script steps; they do not replace a human approval gate.
 - `hooks/job_output.py`: server-side lifecycle check for credential-shaped values and required artifact shape; see [hooks/JOB-OUTPUT.md](hooks/JOB-OUTPUT.md).
-- `hooks/reader/`: pure TypeScript artifact parsers and progress snapshot computation for future portal reuse. No plugin registration, host API, pane rendering, telemetry, or writes remain.
+- `hooks/reader/`: pure TypeScript artifact parsers (exported as `@kintsugi/agents/reader`, used by the API for the portal's stage results) and progress snapshot computation. No plugin registration, host API, pane rendering, telemetry, or writes remain.
 - `tests/`: Vitest tests for the retained readers; `hooks/tests/` contains Python tests for JobOutput. The TypeScript reader tests are included in the `@kintsugi/agents` suite and in `builtin/tsconfig.json`; run `pnpm --filter @kintsugi/agents test` and `pnpm --filter @kintsugi/agents typecheck`. Run the hook tests with `python -m pytest -q packages/agents/builtin/hooks/tests` from the repository root.
 
 ## Portal note

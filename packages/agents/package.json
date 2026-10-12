@@ -5,13 +5,23 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./reader": {
+      "types": "./dist/reader/index.d.ts",
+      "import": "./dist/reader/index.js"
+    }
+  },
   "files": [
     "dist",
     "builtin"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json && tsc -p builtin/tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc -p builtin/tsconfig.reader.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json && tsc -p builtin/tsconfig.json && tsc -p builtin/tsconfig.reader.json --noEmit",
     "test": "vitest run",
     "lint": "eslint ."
   },

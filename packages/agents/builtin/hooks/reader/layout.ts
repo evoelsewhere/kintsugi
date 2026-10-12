@@ -1,4 +1,4 @@
-import { isAppName } from './text'
+import { isAppName } from './text.js'
 
 /** Document-repository artifact locations understood by the portal reader. */
 export type WorkspaceLayout = {

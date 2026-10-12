@@ -1,4 +1,4 @@
-import { baseName, norm } from './paths'
+import { baseName, norm } from './paths.js'
 
 /**
  * `assessment/<app>/topology.json`, read into the few shapes the portal progress panel uses.
@@ -20,6 +20,8 @@ export type TopoNode = {
   domain?: string
   /** The language the map recorded for it, as written (`cobol`, `java`, `php`). */
   language?: string
+  /** The node's plain-language paragraph, when the describe step accepted one. */
+  description?: string
 }
 
 export type TopoEdge = { source: string; target: string; kind: string }
@@ -27,6 +29,7 @@ export type TopoEdge = { source: string; target: string; kind: string }
 export type TopoFlow = {
   name: string
   persona?: string
+  description?: string
   steps: { label: string; nodes: string[] }[]
 }
 
@@ -40,6 +43,8 @@ export type Topology = {
   entryPoints: Set<string>
   deadEnds: Set<string>
   flows: TopoFlow[]
+  /** The architect observations the flows job wrote. */
+  observations: string[]
   byId: Map<string, TopoNode>
   /** Lower-cased base name of a node's file, to the nodes that have it. */
   byFileBase: Map<string, TopoNode[]>
@@ -76,6 +81,7 @@ function walk(
   const loc = typeof raw.loc === 'number' && raw.loc > 0 ? raw.loc : 0
   const file = str(raw.file)
   const language = str(raw.language)
+  const description = str(raw.description)
 
   if (children.length === 0 || kind === 'module') {
     out.push({
@@ -86,6 +92,7 @@ function walk(
       ...(file !== undefined && { file: norm(file) }),
       ...(here !== undefined && { domain: here }),
       ...(language !== undefined && { language }),
+      ...(description !== undefined && { description }),
     })
   }
 
@@ -191,10 +198,12 @@ export function parseTopology(text: string): Topology | null {
     }
 
     const persona = str(flow.persona)
+    const description = str(flow.description)
 
     flows.push({
       name,
       ...(persona !== undefined && { persona }),
+      ...(description !== undefined && { description }),
       steps: list(flow.steps)
         .filter(isRecord)
         .map(step => ({
@@ -221,6 +230,7 @@ export function parseTopology(text: string): Topology | null {
     entryPoints: ids(raw.entryPoints),
     deadEnds: ids(raw.deadEnds),
     flows,
+    observations: list(raw.observations).filter((line): line is string => typeof line === 'string' && line !== ''),
     byId,
     byFileBase,
   }
