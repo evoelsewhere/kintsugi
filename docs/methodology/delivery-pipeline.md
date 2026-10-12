@@ -79,6 +79,8 @@ assess ─► Understand phase:  map ─► extract-rules ─┐
 
 `understand` needs `assess` and `map` merged and uses `extract-rules` and `harden` when they are: the units come from the map (no code parsing), each gets an AS-IS specification that links its rules and findings by id, and the work items it proposes become the backlog of the later phases once the pull request is merged.
 
+`harden` uses `assess` and `map` when they are merged: no scanner runs in a runtime job, so its finders review the code by hand, starting from the map's entry points, and `SECURITY_FINDINGS.md` states which files they read and which tools did not run. Every security highlight of `ASSESSMENT.md` ends in it as a confirmed finding or as refuted with the reason, so the two documents never silently disagree.
+
 ### P2 — Define To-Be
 - **Activities**:
   - TO-BE requirements;
