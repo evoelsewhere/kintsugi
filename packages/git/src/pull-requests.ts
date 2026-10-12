@@ -3,7 +3,7 @@
 // derive from the registered server's base URL; the server's token authenticates the call
 // and never appears in errors. Servers without an adapter keep the pushed branch only.
 
-import { GitError } from "./cli.js";
+import { GitError, isLoopbackUrl } from "./cli.js";
 
 /** Server kinds as registered in Settings -> Git (`GitServerKind` in @kintsugi/domain). */
 export type PullRequestServerKind = "github" | "github-enterprise" | "azure-devops" | "gitlab" | "bitbucket" | "gitea" | "plain-git";
@@ -45,7 +45,7 @@ const trimSlash = (url: string): string => url.replace(/\/+$/, "");
 
 /** Calls a provider API and parses JSON; errors carry the status and a short body, never the token. */
 async function call(fetchImpl: Fetch, token: string, url: string, init: { method: string; headers: Record<string, string>; body?: unknown }): Promise<{ status: number; json: unknown }> {
-  if (!url.startsWith("https://")) throw new GitError("Pull-request APIs are only called over https: tokens never travel over plain http", null, "");
+  if (!url.startsWith("https://") && !isLoopbackUrl(url)) throw new GitError("Pull-request APIs are only called over https: tokens never travel over plain http", null, "");
   const response = await fetchImpl(url, {
     method: init.method,
     headers: { accept: "application/json", ...(init.body === undefined ? {} : { "content-type": "application/json" }), ...init.headers },

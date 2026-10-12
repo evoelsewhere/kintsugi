@@ -1,7 +1,7 @@
 // Git core (ADR-0025): every Git operation Kintsugi performs, over the system `git` CLI.
 // Used by the worker (sync, writer, job worktrees) and by the API for "Test access".
 
-export { GitError, runGit, type GitCredential, type GitResult, type GitRunOptions } from "./cli.js";
+export { GitError, isLoopbackUrl, runGit, type GitCredential, type GitResult, type GitRunOptions } from "./cli.js";
 export {
   MIN_GIT_VERSION,
   addWorktree,

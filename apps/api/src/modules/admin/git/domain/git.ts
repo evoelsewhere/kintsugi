@@ -114,10 +114,14 @@ export function pinnedHosts(knownHosts: string | undefined): Set<string> {
   return hosts;
 }
 
+/** Hosts a token may reach over plain HTTP: the traffic never leaves the machine (a local test Git server). */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "::1"]);
+
 /**
  * Why a repository URL cannot use this server's credential, or undefined when it can.
  * A credential is only ever sent to its own server: HTTPS repositories must be on the
- * base URL's host, SSH repositories on a host whose key is pinned for the server.
+ * base URL's host (plain HTTP only on this machine), SSH repositories on a host whose key
+ * is pinned for the server.
  */
 export function repositoryUrlProblem(url: string, server: Pick<GitServerRecord, "baseUrl" | "authType" | "knownHosts">): string | undefined {
   const location = remoteLocation(url);
@@ -128,7 +132,7 @@ export function repositoryUrlProblem(url: string, server: Pick<GitServerRecord, 
     return undefined;
   }
   if (server.authType === "ssh-key") return "This server authenticates with an SSH key; use its SSH clone URL.";
-  if (location.protocol === "http" && server.authType === "token") return "Tokens are only sent over HTTPS.";
+  if (location.protocol === "http" && server.authType === "token" && !LOOPBACK_HOSTS.has(location.host)) return "Tokens are only sent over HTTPS.";
   const serverHost = remoteLocation(server.baseUrl)?.host;
   if (serverHost !== location.host) return `The repository host ${location.host} does not match the server (${serverHost ?? server.baseUrl}).`;
   return undefined;

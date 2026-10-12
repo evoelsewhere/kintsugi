@@ -23,8 +23,13 @@ export interface GitRunOptions {
   knownHosts?: string;
   /** Allows file:// and local paths — tests and one-off imports only. */
   allowFileProtocol?: boolean;
-  /** Allows plain http for anonymous access (internal servers); refused with a credential. */
+  /**
+   * Allows plain http for anonymous access (internal servers). With a credential it is refused
+   * unless `remoteUrl` is on this machine (a local test server: the traffic never leaves it).
+   */
   allowHttp?: boolean;
+  /** The remote this call talks to, checked when a credential would go over plain http. */
+  remoteUrl?: string;
   /** Milliseconds; default 10 minutes. */
   timeoutMs?: number;
   /** Written to git's stdin. */
@@ -45,6 +50,19 @@ export class GitError extends Error {
   ) {
     super(message);
     this.name = "GitError";
+  }
+}
+
+/** Hosts that are this machine: the only ones a credential may reach over plain http. */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** Whether an http(s) URL points at this machine. */
+export function isLoopbackUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:") && LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
   }
 }
 
@@ -123,7 +141,7 @@ export async function runGit(args: readonly string[], options: GitRunOptions = {
     env["KINTSUGI_GIT_USERNAME"] = credential.username ?? "kintsugi";
     env["KINTSUGI_GIT_TOKEN"] = credential.token;
   }
-  if (options.allowHttp === true && credential.kind !== "none") {
+  if (options.allowHttp === true && credential.kind !== "none" && !(options.remoteUrl !== undefined && isLoopbackUrl(options.remoteUrl))) {
     throw new GitError("Credentials are never sent over plain http.", null, "");
   }
   // SSH never trusts a host on first use: only the server's pinned keys, never ~/.ssh.
