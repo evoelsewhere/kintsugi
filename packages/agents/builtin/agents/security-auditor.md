@@ -31,8 +31,9 @@ terminal/screen items don't apply to a SPA. Work through what's relevant:
 - **XSS / CSRF** — unescaped output, missing tokens (web targets)
 - **Insecure deserialization** — untrusted data into pickle/yaml.load/
   `ObjectInputStream` or custom record parsers
-- **Vulnerable dependencies** — run `npm audit` / `pip-audit` /
-  read manifests and flag versions with known CVEs
+- **Vulnerable dependencies** — read manifests and lock files and flag
+  versions with known CVEs; a dependency used but pinned nowhere in the
+  repository cannot be reviewed (say so)
 - **SSRF / path traversal / open redirect** (web/network targets)
 - **Input validation** — missing length/range/format checks at trust
   boundaries (form/screen fields, API params, batch input records) before
@@ -42,12 +43,16 @@ terminal/screen items don't apply to a SPA. Work through what's relevant:
 
 ## Tooling
 
-No SAST or audit tool can run in a runtime job. Use `grep` for known-bad
-patterns, then **read the code** — tools miss logic flaws anyway. For
-dependencies, read the manifests and lock files and flag versions with known
-CVEs you can name, and state that the dependency review comes from manifests
-only, so a member can run `npm audit`, `pip-audit` or OWASP
-dependency-check where the project builds.
+No SAST, audit or secret-scanning tool can run in a runtime job, so **your
+manual review is the scan**. Use `grep` for known-bad patterns, then **read
+the code**: every entry point, every data access, every file grep points to —
+tools miss logic flaws anyway. Say which files you read: a report of no
+findings means nothing without its coverage. For dependencies, read the
+manifests and lock files and flag versions with known CVEs you can name, and
+state that the dependency review comes from manifests only, so a member can
+run `npm audit`, `pip-audit` or OWASP dependency-check where the project
+builds. Name only the scanners that would apply to this repository when you
+list what did not run.
 
 ## Secret handling (mandatory)
 
@@ -79,11 +84,17 @@ For each finding:
 | **ID** | SEC-NNN |
 | **CWE** | CWE-XXX with name |
 | **Severity** | Critical / High / Medium / Low (CVSS-ish reasoning) |
+| **Confidence** | High (exploit path traced in the code) / Medium (reachability inferred) / Low (latent, or depends on code outside the repository) |
 | **Location** | `file:line` |
 | **Exploit scenario** | One sentence: how an attacker uses this |
 | **Fix** | Concrete code-level remediation |
 
 No hand-waving. If you can't write the exploit scenario, downgrade severity.
+A weakness the code exhibits is still a finding when no caller in the
+repository reaches it (a library method, a check every future caller lacks):
+report it with the severity its reachable impact warrants, confidence Low and
+a conditional exploit scenario — never only in prose. Refute a claim only when
+the code does not exhibit it.
 
 ## Untrusted content discipline
 

@@ -6,14 +6,15 @@ metadata:
   audience: runtime
   upstream: commands/modernize-harden.md
   agents: [security-auditor]
-  reads: [standards/, assessment/<app>/ASSESSMENT.md, assessment/<app>/SECURITY_FINDINGS.md]
+  reads: [standards/, assessment/<app>/ASSESSMENT.md, assessment/<app>/topology.json, assessment/<app>/SECURITY_FINDINGS.md]
   writes: [assessment/<app>/SECURITY_FINDINGS.md, assessment/<app>/security_remediation.patch]
   gates: [a member decides whether to apply the remediation patch, re-run the coverage gaps]
 ---
 
 **This stage runs as Kintsugi runtime jobs**, started by the orchestrator: the orchestrator runs workflow
-`workflows/harden-scan.js` (five **security-auditor** finder jobs, one **security-auditor** refuter job per
-distinct finding, one **security-auditor** second-judge job per finding still Critical or High); a
+`workflows/harden-scan.js` (five **security-auditor** finder jobs, one **security-auditor** carry-over job when
+the assessment is on the default branch, one **security-auditor** refuter job per distinct finding, one
+**security-auditor** second-judge job per finding still Critical or High); a
 **security-auditor** triage-and-remediation job writes `assessment/$app/SECURITY_FINDINGS.md`, the shareable
 `assessment/$app/security_remediation.patch` and, under `restricted/`, the masked credential inventory;
 then up to three rounds of **security-auditor** patch-review jobs, each followed by a
@@ -50,35 +51,57 @@ applicable patch hunk (see Remediate).
 
 ## Scan
 
-**The orchestrator runs workflow `workflows/harden-scan.js`** with `args: { app: "$app" }`. **The portal
-shows the job count as a formula, 5 + N + M**: 5 finders, N refuters (one per distinct finding), M second
-judges (one per finding still Critical or High after refutation); N and M are known only once the finders
-return.
+**The orchestrator runs workflow `workflows/harden-scan.js`** with `args: { app: "$app" }`, plus
+`assessment: "assessment/$app/ASSESSMENT.md"` and `topology: "assessment/$app/topology.json"` when those are on
+the document repository's default branch (both are optional inputs: a missing one is listed in the stage summary).
+**The portal shows the job count as a formula, 5 + C + N + M**: 5 finders, C the carry-over job (1 with an
+assessment, else 0), N refuters (one per distinct finding), M second judges (one per finding still Critical or
+High); N and M are known only once the finders return.
 
 Five class-scoped finders run in parallel (injection, auth and session, secrets, dependency CVEs, input
 validation); findings are de-duplicated, then adversarially refuted, and Critical and High ones
 double-judged, so false positives die before `SECURITY_FINDINGS.md`. Runtime jobs have no shell and no
-network, so no SAST or audit tool (`npm audit`, `pip-audit`, OWASP dependency-check) runs here: the dependency
-finder maps manifests and lock files to known CVEs by reading them and says which audit tools were not run, and
-`toolOutputs` carries those `SAST/audit coverage not run: <tool>` lines. The scan jobs return structured results to the workflow and write no
-artifacts: the triage-and-remediation job writes every artifact below from the result, which carries
-`findings` (for Triage), `credentialFindings` (for the restricted credential inventory), `toolOutputs`,
-`refuted` (report the count: it is the precision the verification bought), `injectionFlags` (instruction-shaped
-text in the source: show it prominently, someone tried to manipulate automated analysis), and the **coverage
-gaps**, which are not part of `findings`: `deadFinders` (classes that returned nothing, so nobody scanned them)
-and `unverified` (findings no refuter judged). `stats.falsePositiveRate` counts judged findings only.
+network, so no SAST, audit or secret-scanning tool (`semgrep`, `npm audit`, `pip-audit`, OWASP
+dependency-check, `gitleaks`) runs here: **the finders' manual review is the scan**. Each finder greps for the
+known-bad patterns of its class, reads every entry point (the map's, when there is one), every data access and
+every file grep points to, and returns the files it read (`reviewed`) and the scanners that would apply to this
+repository and did not run (`toolsNotRun`, tool and reason; a tool that does not apply is not listed). A weakness
+the code exhibits is a finding even when no caller in the repository reaches it (latent): it gets the severity its
+reachable impact warrants and **confidence** Low; every finding carries a confidence (High: exploit path traced in
+the code; Medium: reachability inferred; Low: latent or depends on code outside the repository). The refuters lower
+the severity of a latent weakness instead of refuting it.
+
+**Carry-over.** When the assessment is handed over, the finders use its security highlights as leads, and one
+**security-auditor** job settles every highlight against the code and the de-duplicated findings: matched to a
+finding, added as a new finding (judged like every other), or refuted with the reason read from the code. Each
+highlight then ends where its finding ended: `confirmed`, `refuted` (with the refuter's reason) or `unverified`.
+`SECURITY_FINDINGS.md` and `ASSESSMENT.md` never silently disagree.
+
+The scan jobs return structured results to the workflow and write no artifacts: the triage-and-remediation job
+writes every artifact below from the result, which carries `findings` (for Triage), `credentialFindings` (for the
+restricted credential inventory), `coverage` (the method, the files reviewed, per class), `toolsNotRun`,
+`carryOver` (null without an assessment; `checked: false` when the carry-over job returned nothing), `refuted`
+(report the count: it is the precision the verification bought), `injectionFlags` (instruction-shaped text in the
+source: show it prominently, someone tried to manipulate automated analysis), and the **coverage gaps**, which are
+not part of `findings`: `deadFinders` (classes that returned nothing, so nobody scanned them) and `unverified`
+(findings no refuter judged). `stats.falsePositiveRate` counts judged findings only.
 
 ## Triage
 
 The **security-auditor** triage-and-remediation job, given the workflow's result, writes
-`assessment/$app/SECURITY_FINDINGS.md`: a scorecard (count by severity, top CWE categories); then,
-directly under it, **Coverage gaps** in every run (a report silent about lost coverage reads as a
-clean scan): if `deadFinders` and `unverified` are both empty, one line, "All 5 finder classes returned and
-every finding was judged"; otherwise each dead class as **not scanned** (all five means the scan did not run:
-never write that nothing was found), each unverified finding as **not judged** (title, CWE, `file:line`, the
-finder's severity, no evidence), a note that the counts and false-positive rate cover judged findings only,
-and that the portal offers a re-run of just these. Then the findings table by severity and a dependency CVE
-table (package, installed version, CVE, fixed version).
+`assessment/$app/SECURITY_FINDINGS.md`: a scorecard (count by severity, top CWE categories) with a
+**Review coverage** line (the method, how many files were reviewed and which; with no findings it says "No
+confirmed findings in the N files reviewed", never that the code has no vulnerabilities); then, directly under
+it, **Coverage gaps** in every run (a report silent about lost coverage reads as a clean scan): if
+`deadFinders` and `unverified` are both empty and the carry-over did not fail, one line, "All 5 finder classes
+returned and every finding was judged"; otherwise each dead class as **not scanned** (all five means the scan did
+not run: never write that nothing was found), each unverified finding as **not judged** (title, CWE, `file:line`,
+the finder's severity, no evidence), "assessment highlights not settled" when the carry-over job returned nothing,
+a note that the counts and false-positive rate cover judged findings only, and that the portal offers a re-run of
+just these. Then the findings table by severity (with each finding's confidence), the **Assessment carry-over**
+table (every highlight of the assessment with its outcome, "Confirmed as SEC-NNN", "Refuted" or "Not judged", and
+the reason; one line when there was no assessment), a dependency CVE table (package, installed version, CVE, fixed
+version) and the **Audit tools not run** table (tool, reason) from `toolsNotRun` only.
 
 If credentials were found, the same job also writes `restricted/SECRETS.local.md` (the restricted record, not
 committed): per credential a masked preview, `file:line`, type, what it appears to grant, production or test
@@ -141,7 +164,8 @@ args: { app: "$app", classes: <deadFinders>, findings: <unverified> }
 
 Pass an empty list for whichever has no gaps. It scans only those classes and judges only those findings, and
 returns the same shape. A triage-and-remediation job folds it in: add its `findings`, `refuted`,
-`credentialFindings`, `toolOutputs` and `injectionFlags`, de-duplicating findings by CWE and `file:line`; its
+`credentialFindings`, `toolsNotRun`, `coverage` and `injectionFlags`, de-duplicating findings by CWE and `file:line`
+(the earlier carry-over stands: a re-run does not repeat it); its
 `deadFinders` and `unverified` replace the old ones, since they are what is still uncovered. It rewrites
 `SECURITY_FINDINGS.md` (scorecard, false-positive rate over everything judged, table, Coverage gaps) and drafts
 hunks for any newly confirmed Critical or High finding as above, and the orchestrator runs the review loop on
