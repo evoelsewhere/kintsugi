@@ -62,24 +62,25 @@ P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare
 - **Gate G1**: portfolio decision approved by the steering committee.
 
 #### Reverse engineering the AS-IS system (runtime stages)
-The Kintsugi Runtime performs the reverse engineering of each application as a chain of stages, each delivered as a pull request to the document repo that a person reviews and merges ([ADR-0027](../decisions/0027-builtin-modernization-content.md), [ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)):
+The Kintsugi Runtime performs the reverse engineering of each application in two stages, each delivered as a pull request to the document repo that a person reviews and merges ([ADR-0027](../decisions/0027-builtin-modernization-content.md), [ADR-0031](../decisions/0031-understand-stage-as-is-specification.md), [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md)):
 
 ```
-assess ─► Understand phase:  map ─► extract-rules ─┐
-                                 └► harden ────────┴─► understand
+assess (whole application) ─► item catalog ─► understand (a selection of items, repeatable)
+                                                 map ─► extract-rules ∥ harden ─► specify ─► work items
 ```
 
 | Stage | Answers | Main outputs |
 |---|---|---|
-| `assess` | What is there, how big, how risky? | `assessment/<app>/inventory.json`, `ASSESSMENT.md` |
-| `map` | How do the pieces connect? | `assessment/<app>/topology.json`, diagrams |
-| `extract-rules` | Which business rules does the code enforce? | `assessment/<app>/BUSINESS_RULES.md`, `DATA_OBJECTS.md` |
-| `harden` | Which vulnerabilities and credentials does it carry? | `assessment/<app>/SECURITY_FINDINGS.md`, remediation patch |
-| `understand` | What does each unit do, end to end? | `knowledge/as-is/<app>/<module>/<unit>.md`, overview, traceability matrix, proposed work items `units/<app>/**` |
+| `assess` | What is there, how big, how risky, and which pieces does it consist of? | `assessment/<app>/inventory.json`, `ASSESSMENT.md`, the skeleton `topology.json`, the **item catalog** `catalog.json` |
+| `understand` | For the items a person selected: how do they connect, which rules do they enforce, which risks do they carry, what does each do end to end? | Per item: topology fragment, rules, findings, the AS-IS specification `knowledge/as-is/<app>/<module>/<item>.md`, trace and meta files, the proposed work item `units/<app>/<module>/<item>.md` |
 
-`understand` needs `assess` and `map` merged and uses `extract-rules` and `harden` when they are: the units come from the map (no code parsing), each gets an AS-IS specification that links its rules and findings by id, and the work items it proposes become the backlog of the later phases once the pull request is merged.
+**The catalog is the menu.** `assess` groups every source file into items (module → item, from the extracted topology, no code parsing), lets a `legacy-analyst` job curate the grouping, and keeps item ids stable across re-assessments. Every item shows a derived status: `not-analysed`, `running`, `in-pr`, `failed`, `understood` or `stale` (understood, but its files changed since), and `retired` for items that no longer exist.
 
-`harden` uses `assess` and `map` when they are merged: no scanner runs in a runtime job, so its finders review the code by hand, starting from the map's entry points, and `SECURITY_FINDINGS.md` states which files they read and which tools did not run. Every security highlight of `ASSESSMENT.md` ends in it as a confirmed finding or as refuted with the reason, so the two documents never silently disagree.
+**`understand` runs on a selection.** A person selects items or whole modules; the run maps them, extracts their rules, reviews their security, writes one specification per item and proposes their work items, all in one pull request. Several selections can be in flight at once: each run writes only its own items' paths, and an item that is running or in an open pull request cannot be selected again until the pull request is merged or abandoned. A failed run can be retried from where it stopped. The whole-application views (topology, rules catalog, security findings, traceability matrix) are rebuilt by a script after each merge and committed under `generated/`; the overview documents (architecture, data model, integrations) are an on-demand run.
+
+Until the scoped `understand` stage is complete, the former stages `map`, `extract-rules` and `harden` remain runnable on the whole application and `understand` works as described in ADR-0031.
+
+`harden` (a step of `understand`) uses the assessment and the map: no scanner runs in a runtime job, so its finders review the code by hand, starting from the map's entry points, and the findings state which files they read and which tools did not run. Every security highlight of `ASSESSMENT.md` ends in it as a confirmed finding or as refuted with the reason, so the two documents never silently disagree.
 
 ### P2 — Define To-Be
 - **Activities**:
