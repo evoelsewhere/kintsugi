@@ -198,6 +198,44 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(store.children(id).map((child) => child.status)).toEqual([...Array<string>(10).fill("succeeded"), "failed"]);
   });
 
+  it("resumes a failed stage: keeps work/, skips the agent jobs that succeeded, reruns the scripts and the failed step", async () => {
+    let fail = true;
+    const { store, runner, writes } = setup({
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": fail ? "Config: password = hunter2hunter2\n" : "# Assessment\n" } : {}),
+    });
+    const first = await assess(store);
+    expect((await runner.run(first))?.status).toBe("failed");
+    // The failed run keeps its steps in the summary, and work/ beside out/.
+    const failed = await store.get(first);
+    const steps = (failed?.outputSummary?.["steps"] ?? []) as Array<{ id: string; status: string }>;
+    expect(steps.map((step) => [step.id, step.status]).at(-1)).toEqual(["synthesis", "failed"]);
+    expect(failed?.outputSummary?.["documentsCommit"]).toMatch(/^[0-9a-f]{40}$/);
+    expect(existsSync(join(storage.job(first).root, "work", "assessment", "demo", "analysis"))).toBe(true);
+
+    fail = false;
+    const second = randomUUID();
+    await store.create({ id: second, projectId: "demo", applicationId: "demo", kind: "stage", name: "assess", sourceRepositoryId: "legacy", sourceCommit: failed!.sourceCommit!, actor: "alice", inputs: { resumeOf: first } });
+    const resumed = await runner.run(second);
+    expect(resumed?.failureReason).toBeUndefined();
+    expect(resumed?.status).toBe("succeeded");
+    // Only the scripts and the synthesis ran again.
+    expect(store.children(second).map((child) => [child.kind, child.inputs["label"] ?? child.name])).toEqual([
+      ["script", "inventory.py"],
+      ["script", "extract_topology.py"],
+      ["script", "catalog_from_topology.py"],
+      ["script", "apply_catalog_edits.py"],
+      ["script", "reconcile_catalog.py"],
+      ["agent", "synthesis"],
+    ]);
+    const summary = resumed?.outputSummary as { resumeOf: string; steps: Array<{ id: string; reused?: boolean }> };
+    expect(summary.resumeOf).toBe(first);
+    expect(summary.steps.filter((step) => step.reused === true).map((step) => step.id).sort()).toEqual(["catalog-curate", "debt", "security", "structure", "topology"]);
+    const out = storage.job(second).out;
+    expect(existsSync(join(out, "assessment", "demo", "tools", "extract_topology.py"))).toBe(true);
+    expect(readFileSync(join(out, "assessment", "demo", "ASSESSMENT.md"), "utf8")).toBe("# Assessment\n");
+    expect(writes).toHaveLength(1);
+  }, 120_000);
+
   it("fails clearly when an agent has no model binding on the pi runtime", async () => {
     const { store, writes } = setup({});
     const runner = new JobRunner({

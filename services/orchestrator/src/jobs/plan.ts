@@ -38,11 +38,21 @@ export function fill(template: string, values: Placeholders, options: { partial?
   });
 }
 
+/** The catalog items a scoped run works on and their files (ADR-0033, inputs.scope). */
+export interface StageScope {
+  /** Catalog item ids, `<module>/<item>`. */
+  readonly items: readonly string[];
+  /** Repository paths of the items' files. */
+  readonly files: readonly string[];
+}
+
 /** What a plan's dynamic parts (conditions, arguments, items) can look at while the stage runs. */
 export interface StageContext {
   readonly app: string;
   readonly repo: string;
   readonly commit: string;
+  /** The selection of a scoped run (understand); undefined for a whole-application stage. */
+  readonly scope: StageScope | undefined;
   /** The current round of the enclosing repeat step (1-based); 0 outside one. */
   readonly round: number;
   /** A file the next step would see under {in} (document-repo path, placeholders filled); undefined when absent. */
