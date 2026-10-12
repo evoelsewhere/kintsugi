@@ -275,6 +275,11 @@ The driver is supplied at deploy time.
     expect(report.reviewCoverage).toMatch(/^manual review of 6 files/)
     expect(report.carryOver?.rows.map(row => row[4])).toEqual(['Confirmed as SEC-001', 'Refuted'])
     expect(report.toolsNotRun?.rows).toEqual([['OWASP Dependency-Check', 'no shell or network in a runtime job; no build manifest to resolve']])
+    expect(report.carryOverItems).toEqual([
+      { id: 'SEC-001', highlight: 'Missing authorization', location: '`src/billing/AccountRepository.java:16-22`', severity: 'Medium', verdict: 'confirmed', findingId: 'SEC-001', reason: 'find() has no ownership check' },
+      { id: 'SEC-004', highlight: 'Negative DAYS_OVERDUE waives the fee', location: '`src/billing/InvoiceService.java:18`', severity: 'Low', verdict: 'refuted', reason: 'a data-quality rule, not an attacker-reachable flaw' },
+    ])
+    expect(report.toolsNotRunItems).toEqual([{ tool: 'OWASP Dependency-Check', reason: 'no shell or network in a runtime job; no build manifest to resolve' }])
     expect(report.coverageComplete).toBe(true)
   })
 
@@ -283,6 +288,27 @@ The driver is supplied at deploy time.
     expect(report.findings).toEqual([])
     expect(report.carryOver).toBeNull()
     expect(report.reviewCoverage).toBeUndefined()
+    expect(report.carryOverItems).toEqual([])
+    expect(report.toolsNotRunItems).toEqual([])
+  })
+
+  test('reads every carry-over verdict and the finding a highlight became', () => {
+    const report = parseSecurityFindings(`# F
+
+## Assessment carry-over
+
+| Highlight | Finding | Verdict | Reason |
+|---|---|---|---|
+| Hardcoded password | SEC-002 | Confirmed | literal in DbConfig |
+| Open redirect | — | Not judged | the refuter returned nothing |
+| Weak hash | SEC-009 | Refuted | used for cache keys only |
+`)
+    expect(report.carryOverItems.map(item => [item.highlight, item.verdict, item.findingId])).toEqual([
+      ['Hardcoded password', 'confirmed', 'SEC-002'],
+      ['Open redirect', 'not judged', undefined],
+      ['Weak hash', 'refuted', 'SEC-009'],
+    ])
+    expect(report.findings).toEqual([])
   })
 
   test('summarises a remediation patch', () => {

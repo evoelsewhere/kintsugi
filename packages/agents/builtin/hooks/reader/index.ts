@@ -18,15 +18,21 @@ export {
 } from './catalog.js'
 export {
   SEVERITIES,
+  carryOverOf,
   findingsOfTable,
   parseSecurityFindings,
   patchSummary,
   severityOf,
+  toolsNotRunOf,
+  type CarryOverItem,
+  type CarryOverVerdict,
+  type Confidence,
   type Finding,
   type FindingStatus,
   type Scorecard,
   type SecurityReport,
   type Severity,
+  type ToolNotRun,
 } from './findings.js'
 export { UNIT_SEGMENT, leftOutTotal, parseTraceability, type TraceDataStore, type TraceUnit, type Traceability } from './traceability.js'
 export { frontmatterOf, parseWorkItem, type Frontmatter, type WorkItemSummary } from './work-item.js'
