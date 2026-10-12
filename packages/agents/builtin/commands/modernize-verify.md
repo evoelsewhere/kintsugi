@@ -37,7 +37,7 @@ Command lines of `BASELINE.md`). **Reimagine:** each service folder in the targe
 `assessment/$app/REIMAGINED_ARCHITECTURE.md`. Name them. With a `$module` (for an uplift, a unit)
 re-run only that one; the pack still judges every built module from its current evidence, never from an earlier run.
 A folder that holds only test code and the files that build it (a parity harness, say) is test tooling: the pack lists it as not judged and leaves it out of the verdict.
-If nothing is built, say so and stop: the next step is the brief's Phase 1 command (the portal's `status` view names it).
+If nothing is built, say so and stop: the next step is the brief's Phase 1 command.
 
 ## 2 — Which rules do the tests name?
 

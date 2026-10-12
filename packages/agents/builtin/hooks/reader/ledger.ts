@@ -2,8 +2,7 @@ import { plain } from './text.js'
 import type { ReviewLedger, ReviewVerdict } from './progress.js'
 
 /**
- * `RULE_REVIEWS.json`, read without trusting it. Two writers keep it: this deck, and the `modernize-review` command
- * for people who work without the portal reader. Each entry is `{ verdict, at, title?, note? }`, the note being the reviewer's
+ * `RULE_REVIEWS.json`, read without trusting it. Each entry is `{ verdict, at, title?, note? }`, the note being the reviewer's
  * own words. The file sits in a workspace anyone may have edited, and a model may have written it, so every value is
  * checked: a verdict is one of three exact words, a rule id is one plain token, a title or a note is cut to one short
  * plain line, and anything else in an entry is dropped.
