@@ -179,14 +179,22 @@ export function serializeSkill(skill: SkillPackage): string {
   );
 }
 
-/** Parses a skill library folder: `<name>/SKILL.md` per skill. */
+/**
+ * Parses a skill library folder: `<name>/SKILL.md` per skill. A skill folder may also carry
+ * supporting files (Agent Skills `references/`, `scripts/`, `assets/`, license texts); they are
+ * kept on disk for people and member harnesses, while the kernel loads SKILL.md only, so a
+ * runtime skill's SKILL.md must stand on its own.
+ */
 export function parseSkillLibrary(files: PackageFiles): Parsed<SkillPackage[]> {
   const problems: string[] = [];
   const skills: SkillPackage[] = [];
+  const folders = new Set([...files.keys()].flatMap((path) => /^([^/]+)\/SKILL\.md$/.exec(path)?.[1] ?? []));
   for (const [path, text] of files) {
     const match = /^([^/]+)\/SKILL\.md$/.exec(path);
     if (match === null) {
-      problems.push(`${path}: unsupported file; a skill library holds <name>/SKILL.md only`);
+      const folder = /^([^/]+)\/(?:(?:references|scripts|assets)\/[^/].*|LICENSE[^/]*|NOTICE[^/]*)$/.exec(path)?.[1];
+      if (folder === undefined) problems.push(`${path}: unsupported file; a skill library holds <name>/SKILL.md with references/, scripts/, assets/ and license files`);
+      else if (!folders.has(folder)) problems.push(`${path}: the folder "${folder}" has no ${SKILL_FILE}`);
       continue;
     }
     const parsed = parseSkill(text, match[1]!, path);
