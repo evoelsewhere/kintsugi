@@ -44,7 +44,7 @@ export function AssessResultsView({ results, compare }: { results: AssessResults
       {tab === "inventory" ? <InventoryTab results={results} /> : null}
       {tab === "document" && results.document !== undefined ? (
         <Section title="ASSESSMENT.md" description={results.document.path}>
-          <Markdown text={results.document.markdown} />
+          <Markdown text={results.document.markdown} path={results.document.path} />
         </Section>
       ) : null}
     </div>
