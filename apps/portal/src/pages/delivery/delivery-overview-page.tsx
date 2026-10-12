@@ -18,7 +18,7 @@ import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
 import { isActiveStatus, RUN_STATUS, styleOf } from "@/lib/status";
-import { AUDIENCE_SHORT, latestRun, runBlocker, stagesByAudience } from "@/lib/stages";
+import { AUDIENCE_SHORT, latestRun, pipelineStages, runBlocker, stagesByAudience } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { DeliveryShell, NoApplications, WithProject } from "./delivery-shell";
@@ -95,9 +95,6 @@ function ProjectOverview({ projectId }: { projectId: string }): React.JSX.Elemen
   );
 }
 
-/** The runtime stages of the pipeline (ADR-0033): map, extract-rules and harden are steps of understand now. */
-const RUNTIME_STAGES = ["assess", "understand"];
-
 interface StripProps {
   project: ProjectDetail;
   application: ApplicationView;
@@ -141,7 +138,7 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
         </div>
       </CardHeader>
       <div className="mt-3 flex flex-col gap-2">
-        {stagesByAudience(stages.filter((stage) => stage.audience !== "runtime" || RUNTIME_STAGES.includes(stage.id))).map((group) => (
+        {stagesByAudience(pipelineStages(stages)).map((group) => (
           <div key={group.audience} className="flex flex-col gap-1 sm:flex-row sm:items-stretch sm:gap-3">
             <p className="w-20 shrink-0 pt-2 text-[11px] font-medium tracking-wide text-text-muted uppercase">{AUDIENCE_SHORT[group.audience]}</p>
             <ol className="flex min-w-0 flex-1 flex-wrap items-center gap-1">

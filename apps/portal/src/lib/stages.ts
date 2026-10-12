@@ -23,6 +23,14 @@ export const AUDIENCE_SHORT: Record<StageAudience, string> = {
 };
 
 /** The stages in pipeline order, grouped by audience (runtime, member, portal); the API order is kept within a group. */
+/** The runtime stages a person runs (ADR-0033): map, extract-rules and harden are steps of understand now. */
+export const RUNTIME_STAGES: readonly string[] = ["assess", "understand"];
+
+/** The stages shown in the pipeline: every member and portal stage, and only the runtime stages a person runs. */
+export function pipelineStages(stages: readonly StageView[]): StageView[] {
+  return stages.filter((stage) => stage.audience !== "runtime" || RUNTIME_STAGES.includes(stage.id));
+}
+
 export function stagesByAudience(stages: readonly StageView[]): Array<{ audience: StageAudience; stages: StageView[] }> {
   return AUDIENCE_ORDER.map((audience) => ({ audience, stages: stages.filter((stage) => stage.audience === audience) })).filter((group) => group.stages.length > 0);
 }
