@@ -1,9 +1,11 @@
-// Results of harden: the severity scorecard, the findings with a detail drawer, coverage gaps
-// and the tools that did not run, the remediation patch as a diff, and the number of restricted
-// records the run stored (a link to Governance, never their content).
+// Results of harden: the severity scorecard with the review coverage, the findings (with their
+// confidence) and a detail drawer, the assessment carry-over, coverage gaps and the tools that did
+// not run, the remediation patch as a diff, and the number of restricted records the run stored
+// (a link to Governance, never their content). Older documents lack confidence, review coverage
+// and the carry-over: those parts are left out.
 
 import { AlertTriangle, CheckCircle2, Lock, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CitationChip, InlineText } from "@/components/results/inline-text";
 import { Markdown } from "@/components/results/lazy-markdown";
@@ -11,29 +13,64 @@ import { StatusBadge } from "@/components/status-badges";
 import { type Column, DataTable } from "@/components/ui/data-table";
 import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
-import type { Finding, HardenResults, Severity } from "@/lib/api/documents";
+import { Select } from "@/components/ui/select";
+import type { CarryOverItem, Finding, HardenResults, Severity } from "@/lib/api/documents";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { SEVERITY_RANK, SEVERITY_TONE } from "./results-format";
-import { CountChip, Field, Kpi, KpiRow, MarkdownTableView, Section, SeverityMark, SubTabs } from "./results-parts";
+import { ConfidenceMark, CountChip, Field, Kpi, KpiRow, MarkdownTableView, Section, SeverityMark, SubTabs } from "./results-parts";
 
-type Tab = "findings" | "patch" | "coverage" | "document";
+type Tab = "findings" | "carryover" | "patch" | "coverage" | "document";
+
+type Report = NonNullable<HardenResults["report"]>;
+
+const CONFIDENCE_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
+
+const VERDICT_BADGE: Record<CarryOverItem["verdict"], { tone: "red" | "green" | "orange"; label: string }> = {
+  confirmed: { tone: "red", label: "Confirmed" },
+  refuted: { tone: "green", label: "Refuted" },
+  "not judged": { tone: "orange", label: "Not judged" },
+};
+
+/** What the report says about a scan without findings: its review coverage, else whether every class was scanned. */
+const noFindingsStatement = (report: Report): string =>
+  report.reviewCoverage ?? (report.coverageComplete ? "All finder classes returned and every candidate was judged." : "Some classes were not scanned or some findings not judged: see Coverage & tools.");
 
 const LEVELS: Severity[] = ["Critical", "High", "Medium", "Low"];
 
 export function HardenResultsView({ results, compare }: { results: HardenResults; compare: boolean }): React.JSX.Element {
   const [tab, setTab] = useState<Tab>("findings");
+  const [open, setOpen] = useState<string | undefined>(undefined);
   const report = results.report;
   const previous = compare ? results.previous?.counts : undefined;
+  const carryOver = report?.carryOverItems ?? [];
+  const noFindings = report !== null && report.scorecard.total === 0;
+  const openFinding = (id: string) => {
+    setOpen(id);
+    setTab("findings");
+  };
   return (
     <div className="flex flex-col gap-4">
       <KpiRow>
         {LEVELS.map((level) => (
           <Kpi key={level} label={level} value={report?.scorecard[level]} previous={previous?.[level.toLowerCase()]} tone={SEVERITY_TONE[level]} higherIsWorse />
         ))}
-        <Kpi label="Total findings" value={report?.scorecard.total} previous={previous?.["findings"]} hint={report?.topCwes === undefined ? undefined : `Top CWE: ${report.topCwes}`} higherIsWorse />
+        <Kpi
+          label="Total findings"
+          value={report?.scorecard.total}
+          display={noFindings ? "None confirmed" : undefined}
+          previous={previous?.["findings"]}
+          hint={noFindings ? noFindingsStatement(report) : report?.topCwes === undefined ? undefined : `Top CWE: ${report.topCwes}`}
+          higherIsWorse
+        />
         <Kpi label="Refuted" value={report?.refutedCount ?? undefined} display={report === null ? "—" : String(report.refutedCount ?? 0)} hint="False positives removed by verification" />
       </KpiRow>
+
+      {report?.reviewCoverage === undefined ? null : (
+        <p className="-mt-1 text-[12px] leading-5 text-text-secondary">
+          <span className="font-medium text-text">Review coverage:</span> <InlineText text={report.reviewCoverage} />
+        </p>
+      )}
 
       <StatusStrip results={results} />
 
@@ -42,13 +79,15 @@ export function HardenResultsView({ results, compare }: { results: HardenResults
         onChange={setTab}
         tabs={[
           { id: "findings", label: "Findings", count: report?.findings.length },
+          { id: "carryover", label: "Assessment carry-over", count: carryOver.length, hidden: carryOver.length === 0 && (report?.carryOver ?? null) === null },
           { id: "patch", label: "Remediation patch", count: results.patch?.hunks },
           { id: "coverage", label: "Coverage & tools", count: report === null ? undefined : coverageCount(report) },
           { id: "document", label: "SECURITY_FINDINGS.md", hidden: results.document === undefined },
         ]}
       />
 
-      {tab === "findings" ? <FindingsTab results={results} /> : null}
+      {tab === "findings" ? <FindingsTab results={results} open={open} setOpen={setOpen} /> : null}
+      {tab === "carryover" && report !== null ? <CarryOverTab report={report} onOpenFinding={openFinding} /> : null}
       {tab === "patch" ? <PatchTab results={results} /> : null}
       {tab === "coverage" ? <CoverageTab results={results} /> : null}
       {tab === "document" && results.document !== undefined ? (
@@ -103,9 +142,10 @@ function StatusStrip({ results }: { results: HardenResults }): React.JSX.Element
   );
 }
 
-function FindingsTab({ results }: { results: HardenResults }): React.JSX.Element {
-  const [open, setOpen] = useState<string | undefined>(undefined);
+function FindingsTab({ results, open, setOpen }: { results: HardenResults; open: string | undefined; setOpen: (id: string | undefined) => void }): React.JSX.Element {
+  const [confidence, setConfidence] = useState("");
   const report = results.report;
+  const confidences = useMemo(() => ["High", "Medium", "Low"].filter((level) => report?.findings.some((finding) => finding.confidence === level) === true), [report]);
   if (report === null) return <EmptyState title="No SECURITY_FINDINGS.md at this ref" description="The harden stage writes it; pick another ref above or run harden." />;
   if (report.findings.length === 0) {
     return (
@@ -113,16 +153,20 @@ function FindingsTab({ results }: { results: HardenResults }): React.JSX.Element
         <EmptyState
           icon={ShieldCheck}
           title={report.coverageComplete ? "No findings survived refutation" : "No findings among the judged candidates"}
-          description={report.coverageComplete ? "All finder classes returned and every candidate was judged; none was confirmed as a real vulnerability." : "Some classes were not scanned or some findings not judged: see Coverage & tools."}
+          description={report.reviewCoverage ?? (report.coverageComplete ? "All finder classes returned and every candidate was judged; none was confirmed as a real vulnerability." : noFindingsStatement(report))}
         />
       </Section>
     );
   }
   const finding = report.findings.find((entry) => entry.id === open);
+  const rows = confidence === "" ? report.findings : report.findings.filter((entry) => entry.confidence === confidence);
   const columns: Column<Finding>[] = [
     { id: "id", header: "ID", cell: (row) => <span className="font-mono text-[12px] whitespace-nowrap text-text">{row.id}</span>, sort: (row) => row.id },
     { id: "title", header: "Finding", cell: (row) => <InlineText text={row.title} className="text-text" />, sort: (row) => row.title, search: (row) => `${row.id} ${row.title} ${row.cwe ?? ""} ${row.location ?? ""}`, className: "min-w-[260px]" },
     { id: "severity", header: "Severity", cell: (row) => <SeverityMark severity={row.severity} />, sort: (row) => SEVERITY_RANK[row.severity] },
+    ...(confidences.length === 0
+      ? []
+      : [{ id: "confidence", header: "Confidence", cell: (row: Finding) => <ConfidenceMark confidence={row.confidence} />, sort: (row: Finding) => CONFIDENCE_RANK[row.confidence ?? ""] ?? 3 } satisfies Column<Finding>]),
     { id: "cwe", header: "CWE", cell: (row) => <span className="text-[12px] whitespace-nowrap text-text-secondary">{row.cwe ?? "—"}</span>, sort: (row) => row.cwe },
     {
       id: "location",
@@ -142,7 +186,28 @@ function FindingsTab({ results }: { results: HardenResults }): React.JSX.Element
   ];
   return (
     <Section title="Findings" description="Confirmed by adversarial refutation; Critical and High ones were judged twice.">
-      <DataTable label="Security findings" rows={report.findings} columns={columns} rowKey={(row) => row.id} onRowClick={(row) => setOpen(row.id)} selectedKey={open} searchPlaceholder="Search findings, CWE, files" initialSort={{ id: "severity" }} minWidth={780} />
+      <DataTable
+        label="Security findings"
+        rows={rows}
+        columns={columns}
+        rowKey={(row) => row.id}
+        onRowClick={(row) => setOpen(row.id)}
+        selectedKey={open}
+        searchPlaceholder="Search findings, CWE, files"
+        initialSort={{ id: "severity" }}
+        minWidth={780}
+        toolbar={
+          confidences.length < 2 ? undefined : (
+            <Select
+              className="h-8 w-40 text-[13px]"
+              value={confidence}
+              onChange={setConfidence}
+              options={[{ value: "", label: "Any confidence" }, ...confidences.map((value) => ({ value, label: `${value} confidence` }))]}
+            />
+          )
+        }
+        empty="No finding matches this filter."
+      />
       <Drawer
         open={finding !== undefined}
         title={finding?.title ?? ""}
@@ -151,6 +216,7 @@ function FindingsTab({ results }: { results: HardenResults }): React.JSX.Element
             <span className="flex flex-wrap items-center gap-2">
               <span className="font-mono">{finding.id}</span>
               <SeverityMark severity={finding.severity} />
+              {finding.confidence === undefined ? null : <span>{finding.confidence} confidence</span>}
               {finding.cwe === undefined ? null : <span>{finding.cwe}</span>}
             </span>
           )
@@ -167,6 +233,14 @@ function FindingsTab({ results }: { results: HardenResults }): React.JSX.Element
                   {finding.citations.map((citation) => (
                     <CitationChip key={`${citation.path}:${citation.from}`} path={citation.path} from={citation.from} to={citation.to} />
                   ))}
+                </span>
+              )}
+            </Field>
+            <Field label="Confidence">
+              {finding.confidence === undefined ? undefined : (
+                <span className="flex items-center gap-2">
+                  <ConfidenceMark confidence={finding.confidence} />
+                  <span className="text-text-muted">{finding.confidence === "Low" ? "A latent weakness, or a pattern the review could not trace to a caller." : finding.confidence === "Medium" ? "Likely, with part of the path unconfirmed." : "Traced from an entry point to the flaw."}</span>
                 </span>
               )}
             </Field>
@@ -225,10 +299,73 @@ export function DiffView({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-type Report = NonNullable<HardenResults["report"]>;
+/** The assessment's security highlights, each with how it ended and a link to its finding. */
+function CarryOverTab({ report, onOpenFinding }: { report: Report; onOpenFinding: (id: string) => void }): React.JSX.Element {
+  const items = report.carryOverItems ?? [];
+  const known = new Set(report.findings.map((finding) => finding.id));
+  if (items.length === 0) {
+    return (
+      <Section title="Assessment carry-over">
+        {report.carryOver === null || report.carryOver === undefined ? <p className="text-[12px] text-text-muted">No assessment highlight was carried over.</p> : <MarkdownTableView table={report.carryOver} label="Assessment carry-over" pageSize={0} />}
+      </Section>
+    );
+  }
+  const columns: Column<CarryOverItem>[] = [
+    {
+      id: "highlight",
+      header: "Highlight",
+      cell: (row) => (
+        <span className="flex flex-col">
+          <InlineText text={row.highlight} className="text-text" />
+          {row.id === undefined && row.location === undefined ? null : <InlineText text={[row.id, row.location].filter((part) => part !== undefined).join(" · ")} className="text-[12px] text-text-muted" />}
+        </span>
+      ),
+      sort: (row) => row.highlight,
+      search: (row) => `${row.id ?? ""} ${row.highlight} ${row.location ?? ""} ${row.reason ?? ""}`,
+      className: "min-w-[240px]",
+    },
+    { id: "severity", header: "Severity", cell: (row) => (row.severity === undefined ? <span className="text-text-muted">—</span> : <SeverityMark severity={row.severity} />), sort: (row) => SEVERITY_RANK[row.severity ?? "Unknown"] },
+    { id: "verdict", header: "Verdict", cell: (row) => <StatusBadge tone={VERDICT_BADGE[row.verdict].tone} label={VERDICT_BADGE[row.verdict].label} />, sort: (row) => row.verdict },
+    {
+      id: "finding",
+      header: "Finding",
+      cell: (row) => {
+        const id = row.findingId;
+        if (id === undefined) return <span className="text-text-muted">—</span>;
+        return known.has(id) ? (
+          <button
+            type="button"
+            className="font-mono text-[12px] whitespace-nowrap text-accent hover:underline"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenFinding(id);
+            }}
+          >
+            {id}
+          </button>
+        ) : (
+          <span className="font-mono text-[12px] whitespace-nowrap text-text-secondary">{id}</span>
+        );
+      },
+      sort: (row) => row.findingId,
+    },
+    { id: "reason", header: "Reason", cell: (row) => <InlineText text={row.reason ?? "—"} className="text-[12px] text-text-secondary" />, className: "min-w-[240px]" },
+  ];
+  const count = (verdict: CarryOverItem["verdict"]) => items.filter((item) => item.verdict === verdict).length;
+  return (
+    <Section title="Assessment carry-over" description="Every security highlight of the assessment, settled against the code: confirmed as a finding, refuted with the reason, or not judged.">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <CountChip label="Confirmed" count={count("confirmed")} tone="red" />
+        <CountChip label="Refuted" count={count("refuted")} tone="green" />
+        <CountChip label="Not judged" count={count("not judged")} tone="orange" />
+      </div>
+      <DataTable label="Assessment carry-over" rows={items} columns={columns} rowKey={(row) => `${row.id ?? ""}|${row.highlight}`} searchPlaceholder="Search highlights, reasons" minWidth={780} />
+    </Section>
+  );
+}
 
-/** Audit tools the report lists as not run (rows of its "tools not run" table). */
-const toolsNotRunCount = (report: Report): number => report.toolsNotRun?.rows.length ?? 0;
+/** Audit tools the report lists as not run, each with its reason. */
+const toolsNotRunCount = (report: Report): number => report.toolsNotRunItems?.length ?? report.toolsNotRun?.rows.length ?? 0;
 
 /** What the Coverage & tools tab counts: coverage gaps plus audit tools that were not run. */
 const coverageCount = (report: Report): number => report.coverageGaps.length + toolsNotRunCount(report);
