@@ -123,6 +123,27 @@ Only the worker's writer (`services/orchestrator`, [ADR-0019](../decisions/0019-
 5. Opens a pull request from the `kintsugi/*` branch with the server's token: GitHub, GitHub Enterprise, GitLab, Gitea and Azure DevOps. `plain-git` servers, servers authenticated by SSH key, and Bitbucket (no adapter yet) keep the pushed branch.
 6. Records the outcome in `workflow.document_write`: `committed`, `pr-opened`, `unchanged` (the files were already identical) or `failed` with a redacted error ([data model](data-model.md#document-writes)).
 
+## Read path and stage results
+
+The API reads the document repo **only from Kintsugi's mirror** under the data directory (`KINTSUGI_DATA_DIR`, kept current by the worker's Git sync), read-only, with plumbing commands of `packages/git`; it never clones, checks out or writes. A session is enough (no permission). Refs are a full commit id or an existing `refs/heads/<branch>`; paths are repository paths (no `..`, `.`, empty or `.git` segments); nothing under `restricted/` is ever served (restricted records are not committed, [ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)).
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/projects/:id/documents/refs` | The default branch tip and the output branches of recent successful stage runs and document writes, each `merged` (its tip is on the default branch) or `open`, newest first. |
+| `GET /api/projects/:id/documents/tree?ref&path` | The entries of a directory at the ref (default: the default branch), directories first. |
+| `GET /api/projects/:id/documents/file?ref&path` | A text file up to 2 MiB (413 above, 415 when binary); `.json` files are parsed too. |
+| `GET /api/projects/:id/applications/:appId/stages/:stage/results?ref&compare` | The results of `assess`, `map`, `extract-rules` or `harden`, built from the files the stage wrote under `assessment/<app>/` with the parsers of `@kintsugi/agents/reader`, plus the raw Markdown of the main document. Default ref: the output of the stage's latest successful run (its branch tip, merged or not), else the default branch. `compare=true` adds the counts of the previous successful run. |
+| `GET /api/projects/:id/applications/:appId/results/headlines` | One or two headline numbers per result stage, for the Delivery overview. |
+
+The portal's stage page (Delivery → *stage*) opens on **Results** once the stage has output, with **Runs & logs** (job runs, live log, latest output) and **Inputs & agents** as secondary tabs. A ref selector shows the latest result, the default branch or an older run, and *Compare with previous run* adds the change of every count:
+
+- **assess**: KPIs (source files, SLOC, KSLOC, complexity index, languages), the executive summary and recommended pattern, security highlights, languages and per-file tables, the technical-debt table, gaps and SME questions, `ARCHITECTURE.mmd` as a diagram, and `ASSESSMENT.md` rendered.
+- **map**: the dependency graph of `topology.json` as a Mermaid flowchart (one group per domain, nodes coloured by domain and shaped by kind, edges labelled by type; filter by domain or focus a node with its neighbours up to 1–3 hops away or all it reaches, at most 120 nodes at once; click a node for a panel with its description, inbound and outbound dependencies and data stores), the nodes table, entry points, data stores, persona flows, architect observations and the call graph, data lineage and critical path diagrams.
+- **extract-rules**: counts by category and priority, the rule catalog with search, filters and a detail drawer (plain English, Given/When/Then, parameters, edge cases, citations, verification notes), likely duplicates flagged (same source lines or near-identical names), refuted candidates, data objects and coverage gaps.
+- **harden**: the severity scorecard, findings with a detail drawer, coverage gaps, tools not run, dependency CVEs, the remediation patch as a diff, and the number of restricted records the run stored (a link to Governance, never their content).
+
+Markdown is rendered without raw HTML; Mermaid runs with `securityLevel: "strict"`. All diagrams, the dependency graph included, are Mermaid; the result views, Markdown and Mermaid load only when needed.
+
 ## Commit conventions
 
 Every commit by Kintsugi has the **commit identity** as author and committer and carries the trailers that apply to it. The commit identity is an installation setting that admins with `git.manage` set in the portal (Settings → Git → Commit identity): a name and a plain email address, by default `kintsugi-bot <kintsugi-bot@kintsugi.invalid>` (`.invalid` never delivers mail). Use an address the Git server maps to the bot account to link the commits to it. The writer reads it for each write, so a change applies from the next write on; an unset or unusable value falls back to the default. The table below writes `kintsugi-bot` for whatever identity is set.
