@@ -53,8 +53,8 @@ export type RuleSet = {
 const CITATION =
   /([A-Za-z0-9_][A-Za-z0-9_./-]*\.[A-Za-z][A-Za-z0-9]{0,7}):(\d+)(?:\s*[-–]\s*(\d+))?/g
 
-/** `P0-052`, `RULE-001`, `BR-D7-09`: letters, optional segments (a domain), then the number. */
-const ID = '[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\\d+[a-z]?'
+/** `P0-052`, `RULE-001`, `BR-D7-09`: letters, optional segments (a domain), then the number; or item-namespaced `RULE-invoicing.invoice-entry-03` (ADR-0033). */
+const ID = '(?:RULE|SEC)-[a-z0-9][a-z0-9-]*\\.[a-z0-9][a-z0-9-]*-\\d+|[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\\d+[a-z]?'
 
 const CARD_HEADING = new RegExp(`^#{3,4}\\s+(${ID})\\s*[·:\\-–—]\\s*(.+?)\\s*$`)
 

@@ -228,3 +228,49 @@ def unique_id(module, base, taken):
         count += 1
         candidate = f'{module}/{base}-{count}'
     return candidate
+
+
+# ---------------------------------------------------------------------------
+# Scoped understand runs (ADR-0033): the selected items of a catalog.
+# ---------------------------------------------------------------------------
+
+def load_catalog(path):
+    """The catalog's items by id (every status) and its modules; DataError when it is not a catalog."""
+    data = read_json(path, 'catalog.json')
+    if not isinstance(data, dict) or not isinstance(data.get('items'), list):
+        raise DataError('catalog.json must be an object with an items list')
+    items = {}
+    for item in data['items']:
+        if isinstance(item, dict) and ITEM_ID_RE.match(str(item.get('id', ''))):
+            files = item.get('files') if isinstance(item.get('files'), list) else []
+            items[item['id']] = {**item, 'files': sorted({rel for rel in (norm_path(value) for value in files) if rel})}
+    return items, data
+
+
+def selected(items, value):
+    """The active items named by --items (comma-separated ids), in id order; DataError for an unknown or retired id."""
+    ids = sorted({part.strip() for part in str(value or '').split(',') if part.strip()})
+    if not ids:
+        raise DataError('--items names no item')
+    unknown = [item_id for item_id in ids if item_id not in items or items[item_id].get('status') == 'retired']
+    if unknown:
+        raise DataError(f'unknown or retired item(s): {", ".join(unknown[:10])}')
+    return [items[item_id] for item_id in ids]
+
+
+def owner_of(items):
+    """{file: item id} over the given items."""
+    owner = {}
+    for item in items:
+        for rel in item['files']:
+            owner.setdefault(rel, item['id'])
+    return owner
+
+
+def namespaced(prefix, item_id, number):
+    """An item-namespaced id: RULE-invoicing.invoice-entry-03 (ADR-0033 §5)."""
+    return f'{prefix}-{item_id.replace("/", ".")}-{number:02d}'
+
+
+ITEM_RULE_ID = re.compile(rf'^RULE-{SEGMENT}\.{SEGMENT}-\d{{2,}}$')
+ITEM_FINDING_ID = re.compile(rf'^SEC-{SEGMENT}\.{SEGMENT}-\d{{2,}}$')

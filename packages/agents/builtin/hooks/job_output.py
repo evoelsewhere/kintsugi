@@ -60,7 +60,8 @@ PLACEHOLDER = re.compile(
     r"(?i)^(?:changeme|change-me|example|placeholder|redacted|not-set|"
     r"your[-_].*|<.*>|\$\{.*\}|\*{3,}|x{3,})$"
 )
-RULE_HEADING = re.compile(r"^### RULE-\d{3}: \S.*$")
+# RULE-NNN, or item-namespaced RULE-<module>.<item>-NN (ADR-0033).
+RULE_HEADING = re.compile(r"^### RULE-(?:\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,}): \S.*$")
 # scripts/render_rules.py writes this line when no rule was confirmed: an empty catalog, not a malformed one.
 NO_RULES_MARKER = "_No business rules were confirmed in this run._"
 RULE_CANDIDATE = re.compile(r"^#{1,6}\s+RULE\b", re.IGNORECASE)
