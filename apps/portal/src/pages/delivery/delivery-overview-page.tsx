@@ -1,6 +1,7 @@
 // Delivery → Overview: every application of the selected project with a compact pipeline
-// strip — each stage's latest status and age, linked to its stage page — and the project's
-// document writes. Active runs refresh on their own.
+// strip — each stage's latest status and age plus one or two headline numbers of its results
+// ("52 SLOC · 6 files"), linked to its stage page — and the project's document writes. Active
+// runs refresh on their own.
 // URL: /delivery?project=<id>&section=writes. An old deep link with &run=<id> forwards to the
 // run's stage page.
 
@@ -10,6 +11,7 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
+import { documentsApi, type StageHeadline } from "@/lib/api/documents";
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -103,6 +105,11 @@ interface StripProps {
 function ApplicationStrip({ project, application, stages, runs }: StripProps): React.JSX.Element {
   const blocked = runBlocker(project, application);
   const active = runs?.filter((run) => isActiveStatus(run.status)).length ?? 0;
+  // Read again whenever a stage of the application succeeds again.
+  const succeeded = (runs ?? []).filter((run) => run.status === "succeeded" && run.kind === "stage").map((run) => `${run.id}:${run.documentWrite?.status ?? ""}`).join(",");
+  const headlines = useLoader(`headlines/${project.id}/${application.id}/${succeeded}`, () =>
+    project.documentRepository === null || succeeded === "" ? Promise.resolve([] as StageHeadline[]) : documentsApi.headlines(project.id, application.id),
+  );
   return (
     <Card>
       <CardHeader>
@@ -128,7 +135,13 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
               {group.stages.map((stage, index) => (
                 <li key={stage.id} className="flex items-center gap-1">
                   {index === 0 ? null : <ChevronRight className="size-3 shrink-0 text-text-muted" strokeWidth={1.75} />}
-                  <StageChip stage={stage} last={runs === undefined ? undefined : latestRun(runs, stage.id)} loading={runs === undefined} to={deliveryLink({ projectId: project.id, applicationId: application.id, stage: stage.id })} />
+                  <StageChip
+                    stage={stage}
+                    last={runs === undefined ? undefined : latestRun(runs, stage.id)}
+                    loading={runs === undefined}
+                    headline={headlines.data?.find((entry) => entry.stage === stage.id)?.headline}
+                    to={deliveryLink({ projectId: project.id, applicationId: application.id, stage: stage.id })}
+                  />
                 </li>
               ))}
             </ol>
@@ -139,8 +152,8 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
   );
 }
 
-/** One stage in a strip: a status dot, its id and the latest run's status and age. */
-function StageChip({ stage, last, loading, to }: { stage: StageView; last: JobRunView | undefined; loading: boolean; to: string }): React.JSX.Element {
+/** One stage in a strip: a status dot, its id, the latest run's status and age, and its headline numbers. */
+function StageChip({ stage, last, loading, headline, to }: { stage: StageView; last: JobRunView | undefined; loading: boolean; headline: string[] | undefined; to: string }): React.JSX.Element {
   let tone: StatusTone = "muted";
   let status: string;
   if (stage.audience === "member") status = "In members' harnesses";
@@ -166,6 +179,7 @@ function StageChip({ stage, last, loading, to }: { stage: StageView; last: JobRu
         {stage.id}
       </span>
       <span className="truncate text-[11px] text-text-muted">{status}</span>
+      {headline === undefined || headline.length === 0 ? null : <span className="truncate text-[11px] font-medium text-text-secondary tabular-nums">{headline.join(" · ")}</span>}
     </Link>
   );
 }

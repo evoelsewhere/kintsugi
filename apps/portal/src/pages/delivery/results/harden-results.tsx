@@ -1,0 +1,284 @@
+// Results of harden: the severity scorecard, the findings with a detail drawer, coverage gaps
+// and the tools that did not run, the remediation patch as a diff, and the number of restricted
+// records the run stored (a link to Governance, never their content).
+
+import { AlertTriangle, CheckCircle2, Lock, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { CitationChip, InlineText } from "@/components/results/inline-text";
+import { Markdown } from "@/components/results/lazy-markdown";
+import { StatusBadge } from "@/components/status-badges";
+import { type Column, DataTable } from "@/components/ui/data-table";
+import { Drawer } from "@/components/ui/drawer";
+import { EmptyState } from "@/components/ui/empty-state";
+import type { Finding, HardenResults, Severity } from "@/lib/api/documents";
+import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+import { SEVERITY_RANK, SEVERITY_TONE } from "./results-format";
+import { Field, Kpi, KpiRow, MarkdownTableView, Section, SeverityMark, SubTabs } from "./results-parts";
+
+type Tab = "findings" | "patch" | "coverage" | "document";
+
+const LEVELS: Severity[] = ["Critical", "High", "Medium", "Low"];
+
+export function HardenResultsView({ results, compare }: { results: HardenResults; compare: boolean }): React.JSX.Element {
+  const [tab, setTab] = useState<Tab>("findings");
+  const report = results.report;
+  const previous = compare ? results.previous?.counts : undefined;
+  return (
+    <div className="flex flex-col gap-4">
+      <KpiRow>
+        {LEVELS.map((level) => (
+          <Kpi key={level} label={level} value={report?.scorecard[level]} previous={previous?.[level.toLowerCase()]} tone={SEVERITY_TONE[level]} higherIsWorse />
+        ))}
+        <Kpi label="Total findings" value={report?.scorecard.total} previous={previous?.["findings"]} hint={report?.topCwes === undefined ? undefined : `Top CWE: ${report.topCwes}`} higherIsWorse />
+        <Kpi label="Refuted" value={report?.refutedCount ?? undefined} display={report === null ? "—" : String(report.refutedCount ?? 0)} hint="False positives removed by verification" />
+      </KpiRow>
+
+      <StatusStrip results={results} />
+
+      <SubTabs<Tab>
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "findings", label: "Findings", count: report?.findings.length },
+          { id: "patch", label: "Remediation patch", count: results.patch?.hunks },
+          { id: "coverage", label: "Coverage & tools", count: report?.coverageGaps.length },
+          { id: "document", label: "SECURITY_FINDINGS.md", hidden: results.document === undefined },
+        ]}
+      />
+
+      {tab === "findings" ? <FindingsTab results={results} /> : null}
+      {tab === "patch" ? <PatchTab results={results} /> : null}
+      {tab === "coverage" ? <CoverageTab results={results} /> : null}
+      {tab === "document" && results.document !== undefined ? (
+        <Section title="SECURITY_FINDINGS.md" description={results.document.path}>
+          <Markdown text={results.document.markdown} />
+        </Section>
+      ) : null}
+    </div>
+  );
+}
+
+/** Coverage, injection flags and restricted records at a glance. */
+function StatusStrip({ results }: { results: HardenResults }): React.JSX.Element | null {
+  const { can } = useAuth();
+  const report = results.report;
+  if (report === null) return null;
+  const injection = report.injectionFlags !== undefined && !/^none\b/i.test(report.injectionFlags);
+  const items: Array<{ icon: typeof ShieldCheck; tone: string; text: React.ReactNode }> = [
+    report.coverageComplete || report.coverageGaps.length === 0
+      ? { icon: CheckCircle2, tone: "var(--ds-status-green)", text: "Every finder class returned and every finding was judged." }
+      : { icon: AlertTriangle, tone: "var(--ds-status-orange)", text: `${report.coverageGaps.length} coverage gap${report.coverageGaps.length === 1 ? "" : "s"}: the counts cover judged findings only.` },
+    injection
+      ? { icon: AlertTriangle, tone: "var(--ds-status-red)", text: "Instruction-shaped text was found in the source: see Coverage & tools." }
+      : { icon: ShieldCheck, tone: "var(--ds-status-green)", text: "No instruction-shaped text in the source." },
+    {
+      icon: Lock,
+      tone: "var(--ds-text-muted)",
+      text: (
+        <>
+          {results.restrictedRecords === 0 ? "No restricted records" : `${results.restrictedRecords} restricted record${results.restrictedRecords === 1 ? "" : "s"}`} stored by this run (never committed).
+          {results.restrictedRecords === 0 || results.runId === undefined || !can("restricted.read") ? null : (
+            <>
+              {" "}
+              <Link to={`/governance?tab=restricted&run=${encodeURIComponent(results.runId)}`} className="text-accent hover:underline">
+                Open in Governance
+              </Link>
+            </>
+          )}
+        </>
+      ),
+    },
+  ];
+  return (
+    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+      {items.map((item, index) => (
+        <div key={index} className="flex items-start gap-2 rounded-lg bg-recessed/60 px-3 py-2 text-[12px] leading-5 text-text-secondary">
+          <item.icon className="mt-0.5 size-4 shrink-0" style={{ color: item.tone }} strokeWidth={1.75} />
+          <span>{item.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FindingsTab({ results }: { results: HardenResults }): React.JSX.Element {
+  const [open, setOpen] = useState<string | undefined>(undefined);
+  const report = results.report;
+  if (report === null) return <EmptyState title="No SECURITY_FINDINGS.md at this ref" description="The harden stage writes it; pick another ref above or run harden." />;
+  if (report.findings.length === 0) {
+    return (
+      <Section title="Findings">
+        <EmptyState
+          icon={ShieldCheck}
+          title={report.coverageComplete ? "No findings survived refutation" : "No findings among the judged candidates"}
+          description={report.coverageComplete ? "All finder classes returned and every candidate was judged; none was confirmed as a real vulnerability." : "Some classes were not scanned or some findings not judged: see Coverage & tools."}
+        />
+      </Section>
+    );
+  }
+  const finding = report.findings.find((entry) => entry.id === open);
+  const columns: Column<Finding>[] = [
+    { id: "id", header: "ID", cell: (row) => <span className="font-mono text-[12px] whitespace-nowrap text-text">{row.id}</span>, sort: (row) => row.id },
+    { id: "title", header: "Finding", cell: (row) => <InlineText text={row.title} className="text-text" />, sort: (row) => row.title, search: (row) => `${row.id} ${row.title} ${row.cwe ?? ""} ${row.location ?? ""}`, className: "min-w-[260px]" },
+    { id: "severity", header: "Severity", cell: (row) => <SeverityMark severity={row.severity} />, sort: (row) => SEVERITY_RANK[row.severity] },
+    { id: "cwe", header: "CWE", cell: (row) => <span className="text-[12px] whitespace-nowrap text-text-secondary">{row.cwe ?? "—"}</span>, sort: (row) => row.cwe },
+    {
+      id: "location",
+      header: "Location",
+      cell: (row) => {
+        const first = row.citations[0];
+        return first === undefined ? <InlineText text={row.location ?? "—"} className="text-[12px] text-text-muted" /> : <CitationChip path={first.path} from={first.from} to={first.to} className="max-w-[240px]" />;
+      },
+      sort: (row) => row.location,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (row) => <StatusBadge tone={row.status === "confirmed" ? "red" : row.status === "refuted" ? "green" : "orange"} label={row.status === "confirmed" ? "Confirmed" : row.status === "refuted" ? "Refuted" : "Not judged"} />,
+      sort: (row) => row.status,
+    },
+  ];
+  return (
+    <Section title="Findings" description="Confirmed by adversarial refutation; Critical and High ones were judged twice.">
+      <DataTable label="Security findings" rows={report.findings} columns={columns} rowKey={(row) => row.id} onRowClick={(row) => setOpen(row.id)} selectedKey={open} searchPlaceholder="Search findings, CWE, files" initialSort={{ id: "severity" }} minWidth={780} />
+      <Drawer
+        open={finding !== undefined}
+        title={finding?.title ?? ""}
+        subtitle={
+          finding === undefined ? undefined : (
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="font-mono">{finding.id}</span>
+              <SeverityMark severity={finding.severity} />
+              {finding.cwe === undefined ? null : <span>{finding.cwe}</span>}
+            </span>
+          )
+        }
+        onClose={() => setOpen(undefined)}
+      >
+        {finding === undefined ? null : (
+          <div className="flex flex-col gap-5">
+            <Field label="Location">
+              {finding.citations.length === 0 ? (
+                <InlineText text={finding.location} />
+              ) : (
+                <span className="flex flex-wrap gap-1.5">
+                  {finding.citations.map((citation) => (
+                    <CitationChip key={`${citation.path}:${citation.from}`} path={citation.path} from={citation.from} to={citation.to} />
+                  ))}
+                </span>
+              )}
+            </Field>
+            <Field label="Status">{finding.status === "confirmed" ? "Confirmed by the refuters." : finding.status === "refuted" ? "Refuted as a false positive." : "Not judged: no refuter returned a verdict."}</Field>
+            <Field label="Details">{finding.detail === undefined ? undefined : <InlineText text={finding.detail} />}</Field>
+            <Field label="Remediation">
+              {results.patch?.findings.includes(finding.id) === true ? "The remediation patch carries a hunk for this finding (Remediation patch tab)." : "No hunk in the remediation patch: only Critical and High findings get one, credentials are changed by hand."}
+            </Field>
+          </div>
+        )}
+      </Drawer>
+    </Section>
+  );
+}
+
+function PatchTab({ results }: { results: HardenResults }): React.JSX.Element {
+  const patch = results.patch;
+  if (patch === undefined) return <EmptyState title="No remediation patch at this ref" description="harden writes security_remediation.patch with a hunk per Critical or High finding." />;
+  return (
+    <Section
+      title="Remediation patch"
+      description={`${patch.path} · ${patch.hunks} hunk${patch.hunks === 1 ? "" : "s"}${patch.files.length === 0 ? "" : ` in ${patch.files.length} file${patch.files.length === 1 ? "" : "s"}`}. A member decides whether it is applied; Kintsugi never applies it.`}
+    >
+      {patch.hunks === 0 ? <p className="mb-3 text-[12px] text-text-muted">The patch carries no hunks: there was nothing to fix in code.</p> : null}
+      <DiffView text={patch.text} />
+    </Section>
+  );
+}
+
+/** A unified diff, line by line: additions green, removals red, hunk headers and comments muted. */
+export function DiffView({ text }: { text: string }): React.JSX.Element {
+  const lines = text.replace(/\n$/, "").split("\n");
+  return (
+    <div className="overflow-x-auto rounded-lg bg-recessed/60 py-2 font-mono text-[12px] leading-5">
+      {lines.map((line, index) => {
+        const kind = line.startsWith("+++") || line.startsWith("---") ? "file" : line.startsWith("@@") ? "hunk" : line.startsWith("+") ? "add" : line.startsWith("-") ? "remove" : line.startsWith("#") ? "comment" : "context";
+        return (
+          <div
+            key={index}
+            className={cn(
+              "flex min-w-max px-3 whitespace-pre",
+              kind === "add" && "bg-[color-mix(in_srgb,var(--ds-status-green)_14%,transparent)] text-text",
+              kind === "remove" && "bg-[color-mix(in_srgb,var(--ds-status-red)_14%,transparent)] text-text",
+              kind === "hunk" && "text-[var(--ds-status-purple-dark)]",
+              kind === "file" && "font-semibold text-text",
+              kind === "comment" && "text-text-muted italic",
+              kind === "context" && "text-text-secondary",
+            )}
+          >
+            <span className="mr-3 w-8 shrink-0 text-right text-text-muted select-none">{index + 1}</span>
+            {line === "" ? " " : line}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CoverageTab({ results }: { results: HardenResults }): React.JSX.Element {
+  const report = results.report;
+  if (report === null) return <EmptyState title="No SECURITY_FINDINGS.md at this ref" />;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Section title="Coverage gaps" description="Finder classes that did not return and findings no refuter judged.">
+          {report.coverageGaps.length === 0 ? (
+            <p className="flex items-center gap-2 text-[13px] text-text-secondary">
+              <CheckCircle2 className="size-4 text-[var(--ds-status-green)]" strokeWidth={1.75} />
+              Every finder class returned and every finding was judged.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2 text-[13px] leading-6 text-text-secondary">
+              {report.coverageGaps.map((gap) => (
+                <li key={gap} className="flex gap-2">
+                  <AlertTriangle className="mt-1 size-4 shrink-0 text-[var(--ds-status-orange)]" strokeWidth={1.75} />
+                  <InlineText text={gap} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+        <Section title="Injection flags and credentials">
+          <div className="flex flex-col gap-3 text-[13px] leading-6 text-text-secondary">
+            <Field label="Instruction-shaped text">{report.injectionFlags === undefined ? "Not reported." : <InlineText text={report.injectionFlags} />}</Field>
+            <Field label="Credentials">{report.credentials === undefined ? "Not reported." : <InlineText text={report.credentials} />}</Field>
+          </div>
+        </Section>
+      </div>
+      {report.toolsNotRun === null ? null : (
+        <Section title="Audit tools that were not run" description="Runtime jobs have no shell and no network: run these where the project builds.">
+          <MarkdownTableView table={report.toolsNotRun} label="Audit tools" pageSize={0} />
+        </Section>
+      )}
+      <Section title="Dependency CVEs">
+        {report.cves === null ? <p className="text-[12px] text-text-muted">No dependency CVE is listed.</p> : <MarkdownTableView table={report.cves} label="Dependency CVEs" />}
+      </Section>
+      {report.remediationLog === null ? null : (
+        <Section title="Remediation log">
+          <MarkdownTableView table={report.remediationLog} label="Remediation log" pageSize={0} />
+        </Section>
+      )}
+      {report.patchReview.length === 0 ? null : (
+        <Section title="Patch review">
+          <ul className="flex list-disc flex-col gap-1 pl-5 text-[13px] text-text-secondary">
+            {report.patchReview.map((line) => (
+              <li key={line}>
+                <InlineText text={line} />
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+    </div>
+  );
+}
