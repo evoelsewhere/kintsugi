@@ -34,4 +34,11 @@ describe("repository URL rules", () => {
     expect(repositoryUrlProblem("https://dev.azure.com/org/p/_git/r", ssh)).toMatch(/SSH clone URL/);
     expect(repositoryUrlProblem("git@evil.example.com:org/repo.git", ssh)).toMatch(/No SSH host key is pinned/);
   });
+
+  it("lets a token reach a server on this machine over plain http, and only that server", () => {
+    const local = { baseUrl: "http://localhost:3300", authType: "token" as const };
+    expect(repositoryUrlProblem("http://localhost:3300/org/repo.git", local)).toBeUndefined();
+    expect(repositoryUrlProblem("http://127.0.0.1:3300/org/repo.git", local)).toMatch(/does not match/);
+    expect(repositoryUrlProblem("http://git.internal/org/repo.git", { baseUrl: "http://git.internal", authType: "token" })).toMatch(/only sent over HTTPS/);
+  });
 });

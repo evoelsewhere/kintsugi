@@ -2,7 +2,7 @@
 // credential for this one call. Errors from @kintsugi/git are already redacted.
 
 import { Injectable } from "@nestjs/common";
-import { type GitCredential, lsRemote } from "@kintsugi/git";
+import { type GitCredential, isLoopbackUrl, lsRemote } from "@kintsugi/git";
 import type { GitAccess, RemoteProbe } from "../domain/git.js";
 import { GitRemote } from "../domain/git.ports.js";
 
@@ -22,8 +22,9 @@ export class CliGitRemote extends GitRemote {
     const credential = credentialOf(access);
     const info = await lsRemote(url, {
       credential,
-      // Plain http only for anonymous servers; the domain already refuses tokens over http.
-      allowHttp: credential.kind === "none",
+      // Plain http only for anonymous servers or a server on this machine; the domain refuses tokens over http elsewhere.
+      allowHttp: credential.kind === "none" || isLoopbackUrl(url),
+      remoteUrl: url,
       ...(access.knownHosts === undefined ? {} : { knownHosts: access.knownHosts }),
       timeoutMs: PROBE_TIMEOUT_MS,
     });

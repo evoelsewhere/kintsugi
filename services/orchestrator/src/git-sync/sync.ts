@@ -4,7 +4,7 @@
 
 import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { CheckoutStorage, cloneMirror, fetchMirror, type RemoteOptions, resolveCommit } from "@kintsugi/git";
+import { CheckoutStorage, cloneMirror, fetchMirror, isLoopbackUrl, type RemoteOptions, resolveCommit } from "@kintsugi/git";
 import type { RepositoryStore, SyncTarget } from "./repositories.js";
 
 export interface SyncDeps {
@@ -32,8 +32,9 @@ export function remoteOptions(target: SyncTarget): RemoteOptions {
   return {
     credential: target.credential,
     ...(target.knownHosts === undefined ? {} : { knownHosts: target.knownHosts }),
-    // Plain http only for anonymous servers (the API refuses tokens over http).
-    allowHttp: target.credential.kind === "none",
+    // Plain http only for anonymous servers or a server on this machine (the API refuses tokens over http elsewhere).
+    allowHttp: target.credential.kind === "none" || isLoopbackUrl(target.url),
+    remoteUrl: target.url,
     timeoutMs: GIT_TIMEOUT_MS,
   };
 }

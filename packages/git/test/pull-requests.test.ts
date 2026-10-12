@@ -2,7 +2,7 @@
 // authentication headers, reuse of an existing pull request, and redacted errors.
 
 import { describe, expect, it } from "vitest";
-import { GitError, type OpenPullRequest, PullRequestsUnsupportedError, pullRequestProvider } from "../src/index.js";
+import { GitError, isLoopbackUrl, type OpenPullRequest, PullRequestsUnsupportedError, pullRequestProvider } from "../src/index.js";
 
 interface Call {
   method: string;
@@ -74,6 +74,14 @@ describe("GitHub", () => {
     const mock = mockFetch();
     await expect(pullRequestProvider("github-enterprise", mock.fetch)!.open(input("http://ghe.example.com", "org/docs"))).rejects.toThrow(/https/);
     expect(mock.calls).toHaveLength(0);
+  });
+
+  it("calls a server on this machine over plain http (a local test server)", async () => {
+    const mock = mockFetch({ status: 201, json: { html_url: "http://localhost:3300/org/docs/pulls/1", number: 1 } });
+    expect(await pullRequestProvider("gitea", mock.fetch)!.open(input("http://localhost:3300", "org/docs"))).toMatchObject({ number: 1 });
+    expect(isLoopbackUrl("http://127.0.0.1:8080/x")).toBe(true);
+    expect(isLoopbackUrl("http://localhost.example.com/x")).toBe(false);
+    expect(isLoopbackUrl("http://10.0.0.5/x")).toBe(false);
   });
 });
 
