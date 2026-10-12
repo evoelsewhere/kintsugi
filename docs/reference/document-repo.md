@@ -144,6 +144,7 @@ autoCommitPaths:
   - units/**                      # state changes, committed by kintsugi-bot
   - tasks/**
   - knowledge/**/generated/**
+  - assessment/**/generated/**   # whole-application views rebuilt after a merge (ADR-0033)
 policy:
   harnesses: [copilot, claude-code]
   requireCommitTrailer: true
@@ -242,4 +243,4 @@ One file per work item ([ADR-0012](../decisions/0012-work-items-as-files-in-git.
 ## Resolved by ADR-0019
 
 - **Dedicated repo, or a `kintsugi/` folder inside an existing repo?** A dedicated document repo per project.
-- **Which paths are auto-committed by default?** `units/**`, `tasks/**`, `knowledge/**/generated/**` (`autoCommitPaths` in `kintsugi.yaml`); everything else lands on `kintsugi/<agent>/<job-id>` branches as pull requests.
+- **Which paths are auto-committed by default?** `units/**`, `tasks/**`, `knowledge/**/generated/**`, `assessment/**/generated/**` (`autoCommitPaths` in `kintsugi.yaml`); everything else lands on `kintsugi/<agent>/<job-id>` branches as pull requests.

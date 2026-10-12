@@ -158,8 +158,8 @@ interface ChildPlacement {
 const BUILTIN_SCRIPT = /^[a-z][a-z0-9_-]{0,63}\.(py|js|mjs)$/;
 const MAX_STDOUT = 20_000;
 const MAX_DETAIL_LINES = 40;
-/** Files of one declared document folder ("standards/") a step gets at most. */
-const MAX_FOLDER_DOCUMENTS = 200;
+/** Files of one declared document folder ("standards/", an application's items) a step gets at most. */
+const MAX_FOLDER_DOCUMENTS = 5000;
 /** A relative document-repo path without traversal. */
 const SAFE_OUTPUT_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9._/-]+$/;
 const MAX_RESTRICTED_FILES = 100;

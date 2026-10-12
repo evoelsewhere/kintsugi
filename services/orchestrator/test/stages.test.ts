@@ -15,6 +15,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { leafCount } from "../src/jobs/plans/map.js";
 import { understandMessage } from "../src/jobs/plans/understand.js";
+import { appsTouched } from "../src/aggregates.js";
+import { DEFAULT_AUTO_COMMIT_PATHS, isAutoCommitPath } from "@kintsugi/domain";
 import { JobRunner } from "../src/jobs/runner.js";
 import { stageInfo } from "../src/jobs/stages.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
@@ -127,6 +129,12 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     repos["mapped-docs"] = fixtureRepository(MAPPED);
     repos["cataloged-docs"] = fixtureRepository(CATALOGED);
     repos["cataloged-small-docs"] = fixtureRepository(CATALOGED_SMALL);
+    repos["understood-docs"] = fixtureRepository({
+      ...CATALOGED_SMALL,
+      "assessment/demo/items/rates/rates/rules.json": JSON.stringify({ rules: [{ id: "RULE-rates.rates-01", name: "Double large amounts", category: "Calculation", priority: "P0", source: "src/rates.c:1", confidence: "High" }] }),
+      "knowledge/as-is/demo/items/rates/rates/meta.json": JSON.stringify({ digest: "sha256:rates", commit: "a".repeat(40) }),
+      "knowledge/as-is/demo/items/rates/rates/trace.json": JSON.stringify({ rulesApplied: ["RULE-rates.rates-01"], findings: [], dependencies: [] }),
+    });
     dataDir = mkdtempSync(join(tmpdir(), "kintsugi-stages-data-"));
     storage = new CheckoutStorage(dataDir);
     await storage.prepare();
@@ -171,6 +179,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       { id: "extract-rules", requires: [{ stage: "assess", path: "assessment/demo/ASSESSMENT.md" }] },
       { id: "harden", requires: [] },
       { id: "understand", requires: [{ stage: "assess", path: "assessment/demo/catalog.json" }] },
+      { id: "rebuild", requires: [{ stage: "assess", path: "assessment/demo/catalog.json" }] },
     ]);
   });
 
@@ -434,6 +443,29 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     );
     expect(store.children(id)).toHaveLength(0);
     expect(writes).toHaveLength(0);
+  });
+
+  it("rebuilds the generated views from the per-item files: script only, everything under generated/", async () => {
+    const { run, writes, artifacts } = await runStage("rebuild", { legacy: "small", docs: "understood-docs" });
+    expect(run?.failureReason).toBeUndefined();
+    expect(run?.status).toBe("succeeded");
+    expect(artifacts).toEqual([
+      "assessment/demo/generated/BUSINESS_RULES.md",
+      "assessment/demo/generated/DATA_OBJECTS.md",
+      "assessment/demo/generated/SECURITY_FINDINGS.md",
+      "assessment/demo/generated/rules_result.json",
+      "assessment/demo/generated/topology.json",
+      "knowledge/as-is/demo/generated/README.md",
+      "knowledge/as-is/demo/generated/traceability.json",
+      "knowledge/as-is/demo/generated/traceability.md",
+    ]);
+    // Every output is under the default autoCommitPaths: the writer commits it without a pull request.
+    expect(artifacts.every((path) => isAutoCommitPath(path, DEFAULT_AUTO_COMMIT_PATHS))).toBe(true);
+    expect(writes[0]).toMatchObject({ message: "Rebuild the generated views of demo from its understood items" });
+  }, 120_000);
+
+  it("finds the applications whose items a default-branch move touched", () => {
+    expect(appsTouched(["assessment/web/items/a/b/rules.json", "knowledge/as-is/shop/items/x/y/meta.json", "assessment/web/generated/topology.json", "units/web/a/b.md", "assessment/Bad/items/a"])).toEqual(["shop", "web"]);
   });
 
   it("fails a stage whose prerequisite is not on the document repo's default branch, before any step", async () => {
