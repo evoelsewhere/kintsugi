@@ -8,6 +8,7 @@ import { ASSESS } from "./plans/assess.js";
 import { EXTRACT_RULES } from "./plans/extract-rules.js";
 import { HARDEN } from "./plans/harden.js";
 import { MAP } from "./plans/map.js";
+import { REBUILD } from "./plans/rebuild.js";
 import { UNDERSTAND } from "./plans/understand.js";
 
 export const STAGES: Readonly<Record<string, StagePlan>> = {
@@ -16,6 +17,7 @@ export const STAGES: Readonly<Record<string, StagePlan>> = {
   "extract-rules": EXTRACT_RULES,
   harden: HARDEN,
   understand: UNDERSTAND,
+  rebuild: REBUILD,
 };
 
 export const STAGE_IDS = Object.keys(STAGES);

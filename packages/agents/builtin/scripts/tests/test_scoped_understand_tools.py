@@ -147,6 +147,29 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertIn('dependsOn: ["billing/invoicing/entry"]', unit)
         self.assertIn('businessRules: ["RULE-tax.calc-01"]', unit)
 
+    def test_rebuild_aggregates_merges_the_items(self):
+        docs = os.path.join(self.root, 'docs')
+        write(os.path.join(docs, 'assessment', 'billing', 'catalog.json'), CATALOG)
+        scoped = run('scope_items.py', 'billing', '--catalog', self.catalog, '--topology', self.topology, '--items', 'tax/calc,invoicing/entry', '--out', docs)
+        self.assertEqual(scoped.returncode, 0, scoped.stderr)
+        write(os.path.join(docs, 'assessment', 'billing', 'items', 'tax', 'calc', 'rules.json'), {'rules': [{'id': 'RULE-tax.calc-01', 'name': 'Round', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAX.cbl:3', 'confidence': 'High'}], 'dataObjects': []})
+        write(os.path.join(docs, 'assessment', 'billing', 'items', 'tax', 'calc', 'findings.json'), {'findings': [{'id': 'SEC-tax.calc-01', 'cwe': 'CWE-89', 'severity': 'High', 'source': 'src/TAX.cbl:9', 'title': 'SQL'}]})
+        write(os.path.join(docs, 'knowledge', 'as-is', 'billing', 'items', 'tax', 'calc', 'meta.json'), {'digest': 'sha256:tax/calc', 'commit': 'a' * 40})
+        write(os.path.join(docs, 'knowledge', 'as-is', 'billing', 'items', 'tax', 'calc', 'trace.json'), {'rulesApplied': ['RULE-tax.calc-01'], 'findings': ['SEC-tax.calc-01'], 'dependencies': []})
+        result = run('rebuild_aggregates.py', 'billing', '--docs', docs, '--out', self.out)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('1 of 2 item(s) understood', result.stdout)
+        gen = os.path.join(self.out, 'assessment', 'billing', 'generated')
+        topology = load(os.path.join(gen, 'topology.json'))
+        self.assertEqual([d['id'] for d in topology['root']['children']], ['dom:invoicing', 'dom:tax'])
+        self.assertEqual(topology['entryPoints'], ['INV01'])
+        with open(os.path.join(gen, 'BUSINESS_RULES.md'), encoding='utf-8') as handle:
+            self.assertIn('### RULE-tax.calc-01: Round', handle.read())
+        with open(os.path.join(gen, 'SECURITY_FINDINGS.md'), encoding='utf-8') as handle:
+            self.assertIn('| SEC-tax.calc-01 | CWE-89 | High |', handle.read())
+        trace = load(os.path.join(self.out, 'knowledge', 'as-is', 'billing', 'generated', 'traceability.json'))
+        self.assertEqual([(row['id'], row['stale']) for row in trace['units']], [('billing/tax/calc', False)])
+
 
 if __name__ == '__main__':
     unittest.main()

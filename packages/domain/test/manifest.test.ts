@@ -115,6 +115,8 @@ describe("autoCommitPaths globs", () => {
 
   it("splits writes by the defaults", () => {
     expect(isAutoCommitPath("units/web/a.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("assessment/web/generated/topology.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("assessment/web/items/a/b/rules.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("kintsugi.yaml", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("standards/review-rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
   });
