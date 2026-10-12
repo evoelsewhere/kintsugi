@@ -103,13 +103,19 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(run).toMatchObject({ status: "succeeded", kind: "stage", name: "assess" });
     expect(run?.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
 
-    // Steps: the script with its hash, three analysis jobs, then the synthesis job.
+    // Steps: the script with its hash, three analysis jobs, the topology extraction, the item catalog, then the synthesis job.
     const children = store.children(id);
     expect(children.map((child) => [child.kind, child.name, child.inputs["label"] ?? null, child.status])).toEqual([
       ["script", "inventory.py", null, "succeeded"],
       ["agent", "legacy-analyst", "structure", "succeeded"],
       ["agent", "legacy-analyst", "debt", "succeeded"],
       ["agent", "security-auditor", "security", "succeeded"],
+      ["agent", "legacy-analyst", "topology", "succeeded"],
+      ["script", "extract_topology.py", null, "succeeded"],
+      ["script", "catalog_from_topology.py", null, "succeeded"],
+      ["agent", "legacy-analyst", "catalog-curate", "succeeded"],
+      ["script", "apply_catalog_edits.py", null, "succeeded"],
+      ["script", "reconcile_catalog.py", null, "succeeded"],
       ["agent", "legacy-analyst", "synthesis", "succeeded"],
     ]);
     const [script] = children;
@@ -133,13 +139,35 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(existsSync(join(out, "assessment", "demo", "inventory.json"))).toBe(true);
     expect(readFileSync(join(out, "assessment", "demo", "ASSESSMENT.md"), "utf8")).toContain("3 source files");
     expect(existsSync(join(out, "assessment", "demo", "analysis"))).toBe(false);
+    expect(existsSync(join(out, "assessment", "demo", "catalog-draft"))).toBe(false);
+    // The item catalog: every inventory file in one item or unassigned (mock topology: one module per top folder).
+    const catalog = JSON.parse(readFileSync(join(out, "assessment", "demo", "catalog.json"), "utf8")) as {
+      generatedBy: string;
+      items: Array<{ id: string; files: string[]; status: string; digest: string }>;
+      unassigned: string[];
+      curation?: unknown;
+      reconciled: { from: string };
+    };
+    expect(catalog.generatedBy).toBe("reconcile_catalog.py");
+    expect(catalog.items.map((item) => [item.id, item.files, item.status])).toEqual([["src/src", ["src/main.c", "src/util.c"], "active"]]);
+    expect(catalog.items[0]?.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(catalog.unassigned).toEqual(["README.md"]);
+    expect(catalog.curation).toEqual({ applied: 0, rejected: [] });
+    expect(catalog.reconciled.from).toBe("none");
     expect(existsSync(join(out, "restricted"))).toBe(false);
     expect(store.restricted.get(agent!.id)?.get("SECRETS.local.md")).toContain("hu**");
     expect(JSON.stringify(run?.outputSummary)).not.toContain("SECRETS");
 
     // Artifact index with provenance per producer.
     const artifacts = store.artifacts.get(id) ?? [];
-    expect(artifacts.map((entry) => entry.path).sort()).toEqual(["assessment/demo/ARCHITECTURE.mmd", "assessment/demo/ASSESSMENT.md", "assessment/demo/inventory.json"]);
+    expect(artifacts.map((entry) => entry.path).sort()).toEqual([
+      "assessment/demo/ARCHITECTURE.mmd",
+      "assessment/demo/ASSESSMENT.md",
+      "assessment/demo/catalog.json",
+      "assessment/demo/inventory.json",
+      "assessment/demo/tools/extract_topology.py",
+      "assessment/demo/topology.json",
+    ]);
     expect(artifacts.find((entry) => entry.path.endsWith("inventory.json"))?.provenance).toMatchObject({ origin: "tool" });
     expect(artifacts.find((entry) => entry.path.endsWith("ASSESSMENT.md"))?.provenance).toMatchObject({ origin: "runtime-agent", runtimeAgent: "legacy-analyst", model: "mock/mock" });
 
@@ -147,7 +175,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({
       repository: "docs",
-      request: { projectId: "demo", kind: "job-output", outputOfJob: id, jobId: id, agent: "legacy-analyst@1.1.0", actor: "alice", message: "Assess demo: inventory, analysis and assessment" },
+      request: { projectId: "demo", kind: "job-output", outputOfJob: id, jobId: id, agent: "legacy-analyst@1.1.0", actor: "alice", message: "Assess demo: inventory, item catalog and assessment" },
     });
     expect(run?.documentWriteId).toBe(writes[0]?.request.writeId);
 
@@ -167,8 +195,46 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: credential-shaped values found — .* at assessment\/demo\/ASSESSMENT\.md:1/);
     expect(run?.failureReason).not.toContain("hunter2");
     expect(writes).toHaveLength(0);
-    expect(store.children(id).map((child) => child.status)).toEqual(["succeeded", "succeeded", "succeeded", "succeeded", "failed"]);
+    expect(store.children(id).map((child) => child.status)).toEqual([...Array<string>(10).fill("succeeded"), "failed"]);
   });
+
+  it("resumes a failed stage: keeps work/, skips the agent jobs that succeeded, reruns the scripts and the failed step", async () => {
+    let fail = true;
+    const { store, runner, writes } = setup({
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": fail ? "Config: password = hunter2hunter2\n" : "# Assessment\n" } : {}),
+    });
+    const first = await assess(store);
+    expect((await runner.run(first))?.status).toBe("failed");
+    // The failed run keeps its steps in the summary, and work/ beside out/.
+    const failed = await store.get(first);
+    const steps = (failed?.outputSummary?.["steps"] ?? []) as Array<{ id: string; status: string }>;
+    expect(steps.map((step) => [step.id, step.status]).at(-1)).toEqual(["synthesis", "failed"]);
+    expect(failed?.outputSummary?.["documentsCommit"]).toMatch(/^[0-9a-f]{40}$/);
+    expect(existsSync(join(storage.job(first).root, "work", "assessment", "demo", "analysis"))).toBe(true);
+
+    fail = false;
+    const second = randomUUID();
+    await store.create({ id: second, projectId: "demo", applicationId: "demo", kind: "stage", name: "assess", sourceRepositoryId: "legacy", sourceCommit: failed!.sourceCommit!, actor: "alice", inputs: { resumeOf: first } });
+    const resumed = await runner.run(second);
+    expect(resumed?.failureReason).toBeUndefined();
+    expect(resumed?.status).toBe("succeeded");
+    // Only the scripts and the synthesis ran again.
+    expect(store.children(second).map((child) => [child.kind, child.inputs["label"] ?? child.name])).toEqual([
+      ["script", "inventory.py"],
+      ["script", "extract_topology.py"],
+      ["script", "catalog_from_topology.py"],
+      ["script", "apply_catalog_edits.py"],
+      ["script", "reconcile_catalog.py"],
+      ["agent", "synthesis"],
+    ]);
+    const summary = resumed?.outputSummary as { resumeOf: string; steps: Array<{ id: string; reused?: boolean }> };
+    expect(summary.resumeOf).toBe(first);
+    expect(summary.steps.filter((step) => step.reused === true).map((step) => step.id).sort()).toEqual(["catalog-curate", "debt", "security", "structure", "topology"]);
+    const out = storage.job(second).out;
+    expect(existsSync(join(out, "assessment", "demo", "tools", "extract_topology.py"))).toBe(true);
+    expect(readFileSync(join(out, "assessment", "demo", "ASSESSMENT.md"), "utf8")).toBe("# Assessment\n");
+    expect(writes).toHaveLength(1);
+  }, 120_000);
 
   it("fails clearly when an agent has no model binding on the pi runtime", async () => {
     const { store, writes } = setup({});

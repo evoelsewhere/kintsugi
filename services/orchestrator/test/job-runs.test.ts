@@ -78,20 +78,29 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
         ["agent", "legacy-analyst", "succeeded"],
         ["agent", "security-auditor", "succeeded"],
         ["agent", "legacy-analyst", "succeeded"],
+        ["script", "extract_topology.py", "succeeded"],
+        ["script", "catalog_from_topology.py", "succeeded"],
+        ["agent", "legacy-analyst", "succeeded"],
+        ["script", "apply_catalog_edits.py", "succeeded"],
+        ["script", "reconcile_catalog.py", "succeeded"],
+        ["agent", "legacy-analyst", "succeeded"],
       ]);
       expect(steps.rows[0]?.script_hash).toMatch(/^[0-9a-f]{64}$/);
-      expect(steps.rows[4]?.agent).toBe("legacy-analyst@1.1.0");
+      expect(steps.rows[10]?.agent).toBe("legacy-analyst@1.1.0");
 
       const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
       expect(artifacts.rows.map((row) => [row.path, row.provenance.origin])).toEqual([
         ["assessment/web/ARCHITECTURE.mmd", "runtime-agent"],
         ["assessment/web/ASSESSMENT.md", "runtime-agent"],
+        ["assessment/web/catalog.json", "tool"],
         ["assessment/web/inventory.json", "tool"],
+        ["assessment/web/tools/extract_topology.py", "runtime-agent"],
+        ["assessment/web/topology.json", "tool"],
       ]);
 
       const restricted = await db.pool.query<{ path: string; ciphertext: string; iv: string; auth_tag: string }>(
         "select path, ciphertext, iv, auth_tag from governance.restricted_record where job_run_id = $1",
-        [steps.rows[4]!.id],
+        [steps.rows[10]!.id],
       );
       expect(restricted.rows).toHaveLength(1);
       expect(restricted.rows[0]!.ciphertext).not.toContain("hu**");

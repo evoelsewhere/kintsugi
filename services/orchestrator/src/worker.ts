@@ -18,7 +18,8 @@ import { MirrorCheckouts } from "./jobs/checkouts.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
 import { JobCancelled } from "./jobs/model.js";
 import { PgJobStore } from "./jobs/store.js";
-import { pruneMirrors, syncRepository } from "./git-sync/sync.js";
+import { onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.js";
+import { triggerRebuilds } from "./aggregates.js";
 import {
   DOCUMENT_WRITE_QUEUE,
   type DocumentWriteRequest,
@@ -176,6 +177,15 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     for (const id of await jobStore.cancelRequested([...active.keys()])) active.get(id)?.abort(new JobCancelled());
   };
 
+  // The aggregate rebuild (ADR-0033): a document repository whose default branch moved and touched
+  // an application's items gets a rebuild run, which only a worker with runtime jobs can run.
+  const stopRebuilds =
+    options.jobs === undefined
+      ? () => undefined
+      : onDefaultTipMove(async (move) => {
+          await triggerRebuilds({ pool: options.pool, enqueue: (jobRunId) => sendJobRun(boss, { jobRunId }), log }, move);
+        });
+
   const requestSync = async (repositoryId: string): Promise<void> => {
     await boss.send(GIT_SYNC_QUEUE, { repositoryId }, { singletonKey: repositoryId });
   };
@@ -227,6 +237,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     requestJobRun: (request) => sendJobRun(boss, request),
     async stop() {
       stopped = true;
+      stopRebuilds();
       stopping.abort();
       for (const timer of timers) clearInterval(timer);
       await boss.stop({ graceful: true });

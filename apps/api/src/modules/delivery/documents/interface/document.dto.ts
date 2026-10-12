@@ -27,3 +27,11 @@ export const resultsQuerySchema = z.object({
     .transform((value) => value === "true" || value === "1"),
 });
 export type ResultsQuery = z.infer<typeof resultsQuerySchema>;
+
+/** `?view&item&ref` of the understand results: the view, and one catalog item or the whole application. */
+export const understandResultsQuerySchema = z.object({
+  view: z.enum(["map", "extract-rules", "harden", "understand"]).default("understand"),
+  item: z.string().min(3).max(130).optional(),
+  ref: refSchema,
+});
+export type UnderstandResultsQuery = z.infer<typeof understandResultsQuerySchema>;

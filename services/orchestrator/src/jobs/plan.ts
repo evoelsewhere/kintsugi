@@ -8,7 +8,7 @@
 //   {src}    the read-only source checkout        {in}    the step's read-only inputs
 //   {out}    the step's output directory          {tmp}   its scratch directory
 //   {commit} the source commit                    {repo}  the source repository id
-//   {app}    the application id
+//   {app}    the application id                 {run}   the stage run's id
 //   {item} {key}         the current item of a forEach step
 //   {round} {maxRounds}  the current round of a repeat step
 //   {error}              why the script a repair step fixes failed (redacted)
@@ -18,7 +18,7 @@
 // `intermediate` are inputs for later steps only; everything else is the stage's output and goes
 // to the document repo through the writer.
 
-export const PLACEHOLDER_NAMES = ["src", "in", "out", "tmp", "commit", "repo", "app", "item", "key", "round", "maxRounds", "error"] as const;
+export const PLACEHOLDER_NAMES = ["src", "in", "out", "tmp", "commit", "repo", "app", "run", "item", "key", "round", "maxRounds", "error"] as const;
 export type PlaceholderName = (typeof PLACEHOLDER_NAMES)[number];
 export type Placeholders = Partial<Record<PlaceholderName, string>>;
 
@@ -38,11 +38,21 @@ export function fill(template: string, values: Placeholders, options: { partial?
   });
 }
 
+/** The catalog items a scoped run works on and their files (ADR-0033, inputs.scope). */
+export interface StageScope {
+  /** Catalog item ids, `<module>/<item>`. */
+  readonly items: readonly string[];
+  /** Repository paths of the items' files. */
+  readonly files: readonly string[];
+}
+
 /** What a plan's dynamic parts (conditions, arguments, items) can look at while the stage runs. */
 export interface StageContext {
   readonly app: string;
   readonly repo: string;
   readonly commit: string;
+  /** The selection of a scoped run (understand); undefined for a whole-application stage. */
+  readonly scope: StageScope | undefined;
   /** The current round of the enclosing repeat step (1-based); 0 outside one. */
   readonly round: number;
   /** A file the next step would see under {in} (document-repo path, placeholders filled); undefined when absent. */
@@ -160,8 +170,8 @@ export interface StagePrerequisite {
 
 export interface StagePlan {
   id: string;
-  /** Commit message of the stage's document write (first line = pull-request title). */
-  message(app: string): string;
+  /** Commit message of the stage's document write (first line = pull-request title); `scope` for a scoped run. */
+  message(app: string, scope?: StageScope): string;
   /** Document-repo files (or folders, ending in "/") every step sees under {in}; missing ones are skipped. */
   documents?: readonly string[];
   /** Files that must exist on the document repo's default branch before the stage starts. */

@@ -27,10 +27,11 @@ import sys
 MAX_JSON_BYTES = 8_000_000
 MAX_TEXT_BYTES = 5_000_000
 MAX_LIST = 200
-RULE_ID = re.compile(r'^RULE-\d{3}$')
-FINDING_ID = re.compile(r'^SEC-\d{3}$')
-RULE_HEADING = re.compile(r'^### (RULE-\d{3}): ')
-FINDING_ANY = re.compile(r'\bSEC-\d{3}\b')
+# RULE-NNN, or item-namespaced RULE-<module>.<item>-NN (ADR-0033); the same for SEC.
+RULE_ID = re.compile(r'^RULE-(\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,})$')
+FINDING_ID = re.compile(r'^SEC-(\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,})$')
+RULE_HEADING = re.compile(r'^### (RULE-(?:\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,})): ')
+FINDING_ANY = re.compile(r'\bSEC-(?:\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,})\b')
 
 
 class DataError(ValueError):

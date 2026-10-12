@@ -246,8 +246,8 @@ describe("built-in commands", () => {
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
       command: "modernize-understand",
       audience: "runtime",
-      agents: ["legacy-analyst"],
-      writes: expect.arrayContaining(["knowledge/as-is/<app>/<module>/<unit>.md", "knowledge/as-is/<app>/traceability.json", "units/<app>/<module>/<unit>.md"]),
+      agents: ["legacy-analyst", "security-auditor", "business-rules-extractor"],
+      writes: expect.arrayContaining(["knowledge/as-is/<app>/<module>/<item>.md", "knowledge/as-is/<app>/items/<module>/<item>/meta.json", "units/<app>/<module>/<item>.md"]),
     });
   });
 });

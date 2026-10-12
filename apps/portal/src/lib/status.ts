@@ -17,6 +17,17 @@ export const RUN_STATUS: Record<string, StatusStyle> = {
   cancelled: { tone: "orange", label: "Cancelled" },
 };
 
+/** The derived status of a catalog item (ADR-0033). */
+export const ITEM_STATUS: Record<string, StatusStyle> = {
+  running: { tone: "blue", label: "Running" },
+  "in-pr": { tone: "purple-light", label: "In pull request" },
+  failed: { tone: "red", label: "Failed" },
+  stale: { tone: "orange", label: "Stale" },
+  understood: { tone: "green", label: "Understood" },
+  "not-analysed": { tone: "muted", label: "Not analysed" },
+  retired: { tone: "muted", label: "Retired" },
+};
+
 export const WRITE_STATUS: Record<string, StatusStyle> = {
   queued: { tone: "blue", label: "Queued" },
   committed: { tone: "green", label: "Committed" },

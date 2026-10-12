@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Security scan as class-scoped parallel finders with adversarial per-finding verification — false positives die before SECURITY_FINDINGS.md',
   whenToUse:
-    'Run by the Kintsugi orchestrator for the `harden` stage, as orchestrated runtime jobs. Every job is read-only: its working directory is the source repository of the application at the commit the orchestrator pinned, and every path is relative to the root of that repository. Requires args {app}; optional {assessment, topology} name the document-repository paths of the assessment and the map when they are on the default branch (the orchestrator hands them to every job under {in}): the finders use them as leads and a carry-over job settles every security highlight of the assessment; optional {classes, findings} re-run only the coverage gaps an earlier run returned (deadFinders, unverified). No SAST, dependency-audit or secret-scanning tool runs in a runtime job: the finders review the code by hand and say what they read and which tools did not run. Covers the scan + triage input only — the result is returned to the orchestrator; a security-auditor triage-and-remediation job writes SECURITY_FINDINGS.md, the shareable patch and the restricted credential inventory under assessment/<app>/, and the per-hunk patch review loop runs as separate jobs.',
+    'Run by the Kintsugi orchestrator for the `harden` stage, as orchestrated runtime jobs. Every job is read-only: its working directory is the source repository of the application at the commit the orchestrator pinned, and every path is relative to the root of that repository. Requires args {app}; optional {assessment, topology} name the document-repository paths of the assessment and the map when they are on the default branch (the orchestrator hands them to every job under {in}): the finders use them as leads and a carry-over job settles every security highlight of the assessment; optional {classes, findings} re-run only the coverage gaps an earlier run returned (deadFinders, unverified); optional {files} limits the review to those repository paths (the files of the items a scoped understand run selected) and drops findings outside them. No SAST, dependency-audit or secret-scanning tool runs in a runtime job: the finders review the code by hand and say what they read and which tools did not run. Covers the scan + triage input only — the result is returned to the orchestrator; a security-auditor triage-and-remediation job writes SECURITY_FINDINGS.md, the shareable patch and the restricted credential inventory under assessment/<app>/, and the per-hunk patch review loop runs as separate jobs.',
   phases: [
     { title: 'Find', detail: 'one finder per vulnerability class, a manual review of the code' },
     { title: 'Carry over', detail: "the assessment's security highlights, each tied to a finding or refuted" },
@@ -41,6 +41,21 @@ const docPath = key => {
 }
 const assessmentDoc = docPath('assessment')
 const topologyDoc = docPath('topology')
+
+// A scoped run (the understand stage, ADR-0033) names the files of its selected items: the finders
+// review those files (and what they need to judge them: callers, configuration), and findings
+// outside them are dropped. Without `files` the whole repository is in scope.
+const MAX_SCOPE_FILES = 2000
+const scopeFiles = (() => {
+  const value = ARGS.files
+  if (value == null) return null
+  if (!Array.isArray(value) || value.some(f => typeof f !== 'string' || !f || f.startsWith('/') || f.split('/').includes('..'))) {
+    throw new Error('modernize-harden-scan: args.files must be a list of repository-relative paths')
+  }
+  if (value.length === 0) throw new Error('modernize-harden-scan: args.files is empty — nothing to scan (omit it for the whole repository)')
+  return [...new Set(value)].slice(0, MAX_SCOPE_FILES)
+})()
+const inScope = file => scopeFiles == null || scopeFiles.includes(String(file || '').split(':')[0])
 
 // Finder output is derived from untrusted code — when it flows into a judge
 // prompt it must read as data. Strips embedded fence markers so the fence
@@ -223,6 +238,8 @@ const activeClasses = isRerun ? CLASSES.filter(c => rerunClasses.includes(c.key)
 
 // Leads from earlier stages, when the orchestrator handed them over.
 const LEADS = [
+  scopeFiles &&
+    `Scope: review ONLY these ${scopeFiles.length} files (read configuration, build files and callers only to judge them); report findings located in them only:\n${scopeFiles.join('\n')}`,
   assessmentDoc &&
     `The assessment of this application, {in}/${assessmentDoc} (read-only), lists security highlights. Check every one that falls in your class against the code and report it when the code exhibits it; they are leads, not findings (a separate job settles each of them).`,
   topologyDoc &&
@@ -289,6 +306,7 @@ const toolsNotRun = [...toolsByName.values()]
 const keyOf = f => `${f.source}::${f.cwe}`
 const byKey = new Map()
 for (const f of all) {
+  if (!inScope(f.source)) continue
   const k = keyOf(f)
   if (!byKey.has(k)) byKey.set(k, f)
 }

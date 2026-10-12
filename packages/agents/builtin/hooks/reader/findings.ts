@@ -102,7 +102,7 @@ const confidenceOf = (text: string): Confidence | undefined => {
   return match === undefined ? undefined : ((match[0]?.toUpperCase() + match.slice(1)) as Confidence)
 }
 
-const FINDING_ID = /\b([A-Z][A-Z0-9]*-\d+[a-z]?)\b/
+const FINDING_ID = /\b((?:SEC|RULE)-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*-\d+|[A-Z][A-Z0-9]*-\d+[a-z]?)\b/
 
 /** Sections whose tables are not findings. */
 const NOT_FINDINGS = /scorecard|cve|dependenc|tools?|remediation|patch review|credential|injection|carry-?over|carried/i
@@ -160,7 +160,7 @@ export function findingsOfTable(table: Table, status: FindingStatus = 'confirmed
   return findings
 }
 
-const CARD = /^#{3,4}\s+([A-Z][A-Z0-9]*-\d+[a-z]?)\s*[·:\-–—]\s*(.+?)\s*$/
+const CARD = /^#{3,4}\s+((?:SEC|RULE)-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*-\d+|[A-Z][A-Z0-9]*-\d+[a-z]?)\s*[·:\-–—]\s*(.+?)\s*$/
 
 const labelled = (body: string, name: string): string | undefined => {
   const match = new RegExp(`^[ \\t>*-]*\\*\\*${name}:?\\*\\*:?[ \\t]*(.*)$`, 'im').exec(body)

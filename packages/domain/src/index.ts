@@ -273,3 +273,6 @@ export interface CompareReport {
 // Projects and the kintsugi.yaml manifest (ADR-0028).
 export * from "./project.js";
 export * from "./manifest.js";
+
+// The item catalog of an application (ADR-0033).
+export * from "./catalog.js";

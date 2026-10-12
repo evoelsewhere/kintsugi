@@ -7,14 +7,17 @@ metadata:
   upstream: commands/modernize-assess.md
   agents: [legacy-analyst, security-auditor]
   skills: [mermaid-diagrams]
-  reads: [standards/, kintsugi.yaml, assessment/<app>/INTENT.md, assessment/<app>/telemetry/]
-  writes: [assessment/<app>/inventory.json, assessment/<app>/ASSESSMENT.md, assessment/<app>/ARCHITECTURE.mmd, assessment/portfolio.md, assessment/portfolio.json]
+  reads: [standards/, kintsugi.yaml, assessment/<app>/INTENT.md, assessment/<app>/telemetry/, assessment/<app>/graph/, assessment/<app>/catalog.json, knowledge/as-is/<app>/units.json, units/<app>/]
+  writes: [assessment/<app>/inventory.json, assessment/<app>/tools/extract_topology.py, assessment/<app>/topology.json, assessment/<app>/catalog.json, assessment/<app>/ASSESSMENT.md, assessment/<app>/ARCHITECTURE.mmd, assessment/portfolio.md, assessment/portfolio.json]
 ---
 
 **This stage runs as Kintsugi runtime jobs**, started by the orchestrator. Single-application mode: a script step
-`scripts/inventory.py` (size, complexity and the relative index), three parallel jobs (a **legacy-analyst**
-structure job, a **legacy-analyst** debt job, a **security-auditor** scan job), then a **legacy-analyst**
-synthesis job that writes `assessment/$app/ASSESSMENT.md` and `assessment/$app/ARCHITECTURE.mmd`. Portfolio
+`scripts/inventory.py` (size, complexity, per-file hashes and the relative index), three parallel jobs (a
+**legacy-analyst** structure job, a **legacy-analyst** debt job, a **security-auditor** scan job), the topology
+extraction (a **legacy-analyst** job writes `assessment/$app/tools/extract_topology.py`, a script step runs it),
+the **item catalog** (`scripts/catalog_from_topology.py`, a **legacy-analyst** curation job,
+`scripts/apply_catalog_edits.py`, `scripts/reconcile_catalog.py`), then a **legacy-analyst** synthesis job that
+writes `assessment/$app/ASSESSMENT.md` and `assessment/$app/ARCHITECTURE.mmd`. Portfolio
 mode: per application, the `scripts/inventory.py` script step and one **legacy-analyst** survey job (workflow
 `workflows/portfolio-assess.js`), then a synthesis job that writes `assessment/portfolio.md` and
 `assessment/portfolio.json`. Every job reads the application's legacy repository read-only at a fixed commit
@@ -114,7 +117,30 @@ and rough coverage signal. This is part of the structure job's task (Step 3, job
    validation. Return a CWE-tagged table with file:line and severity. Mask every
    credential (file:line plus a 2–4 character preview, never the value)."
 
-The orchestrator waits for all three and hands their outputs to the synthesis job.
+The orchestrator waits for all three and hands their outputs to the next steps.
+
+## Step 3a — Topology and item catalog
+
+The catalog (ADR-0033) is the menu a person later picks from: the `understand` stage runs on a selection of its
+items. It is built without parsers, from a topology the model-written extraction script produces:
+
+1. **legacy-analyst** writes `assessment/$app/tools/extract_topology.py`, a standard-library script that reads only
+   the source checkout and writes `topology.json` (modules, data stores, edges, entry points; the schema of the
+   `map` stage), starting from the structure job's domains and any dependency export under
+   `assessment/$app/graph/`. A script step runs it in the standard script environment; when it fails, the job
+   gets the error once to fix it. The skeleton `assessment/$app/topology.json` (no descriptions) is committed
+   with the script.
+2. Script step `scripts/catalog_from_topology.py` proposes the catalog: a module per domain, an item per topology
+   leaf (data stores never are; small leaves of one directory grouped), every file of `inventory.json` in exactly
+   one item or `unassigned`, and per item its code lines, a complexity band and a digest of its files' hashes.
+3. A **legacy-analyst** curation job returns structured edits (rename, kind, summaries, merge, split, move files
+   or items, parts). Script step `scripts/apply_catalog_edits.py` applies each edit that keeps every file in
+   exactly one item and rejects the others with a reason.
+4. Script step `scripts/reconcile_catalog.py` keeps the ids of the catalog on the default branch: an item that
+   overlaps an old one by half of their files (Jaccard) keeps its id, a renamed item keeps its old names as
+   aliases, a split keeps the id on its largest piece, and an old item that matches nothing stays as `retired`.
+   Without a previous catalog it keeps the ids of the units the `understand` stage proposed earlier
+   (`knowledge/as-is/$app/units.json`, `units/$app/`). It writes `assessment/$app/catalog.json`.
 
 ## Step 4 — Production runtime overlay (optional)
 
@@ -174,5 +200,6 @@ when the estate is bigger).
 
 ## Step 7 — Finish
 
-The worker commits the outputs; the portal shows the assessment (`assessment/$app/ASSESSMENT.md`) on the
-application's page, and the progress view names the next step: the `map` stage.
+The worker commits the outputs; the portal shows the assessment (`assessment/$app/ASSESSMENT.md`) and the item
+catalog on the application's page. The next step is understanding: a person selects items or modules of the
+catalog and runs `understand` on them.

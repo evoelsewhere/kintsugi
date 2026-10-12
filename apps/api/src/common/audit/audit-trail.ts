@@ -10,6 +10,7 @@ export const AUDIT_ACTIONS = {
   restrictedRead: "restricted.read",
   stageRun: "stage.run",
   jobRunCancel: "job-run.cancel",
+  jobRunAbandon: "job-run.abandon",
   manifestPublish: "manifest.publish",
   projectCreate: "project.create",
   projectUpdate: "project.update",

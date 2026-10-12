@@ -26,6 +26,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.#logger.error(`${request.method} ${request.url} → ${status}`, exception instanceof Error ? exception.stack : undefined);
     }
 
+    const details =
+      typeof body === "object" && body !== null && "details" in body && typeof (body as { details: unknown }).details === "object" && (body as { details: unknown }).details !== null
+        ? (body as { details: Record<string, unknown> }).details
+        : undefined;
+
     // Uniform error envelope (pair of the success envelope in common/interface/response.ts).
     const errorBody: ApiFailure = {
       success: false,
@@ -34,6 +39,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message,
       timestamp: new Date().toISOString(),
       path: request.url,
+      ...(details === undefined ? {} : { details }),
     };
     response.status(status).json(errorBody);
   }

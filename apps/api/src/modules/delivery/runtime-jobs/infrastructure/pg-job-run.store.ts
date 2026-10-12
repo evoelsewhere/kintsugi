@@ -43,6 +43,9 @@ interface RunRow {
   finished_at: Date | null;
   created_at: Date;
   cancel_requested_at: Date | null;
+  scope_items: unknown;
+  resume_of: string | null;
+  abandoned_at: Date | null;
   write_id: string | null;
   write_status: string | null;
   write_branch: string | null;
@@ -55,6 +58,7 @@ const SELECT = `
   select r.id, r.project_id, r.application_id, r.parent_id, r.kind, r.name, r.status, r.failure_reason,
          r.source_repository_id, r.source_commit, r.script_hash, r.agent, r.actor, r.output_summary,
          r.started_at, r.finished_at, r.created_at, r.cancel_requested_at,
+         r.inputs->'scope'->'items' as scope_items, r.inputs->>'resumeOf' as resume_of, r.abandoned_at,
          w.id as write_id, w.status as write_status, w.branch as write_branch, w.pr_url as write_pr_url, w.error as write_error,
          (select count(*)::int from governance.restricted_record x where x.job_run_id = r.id) as restricted_records
     from workflow.job_run r
@@ -91,6 +95,9 @@ function toView(row: RunRow): JobRunView {
         }),
     restrictedRecords: row.restricted_records,
     ...optional("cancelRequestedAt", row.cancel_requested_at?.toISOString() ?? null),
+    ...(Array.isArray(row.scope_items) ? { scope: { items: row.scope_items.filter((item): item is string => typeof item === "string") } } : {}),
+    ...optional("resumeOf", row.resume_of),
+    ...optional("abandonedAt", row.abandoned_at?.toISOString() ?? null),
     ...optional("startedAt", row.started_at?.toISOString() ?? null),
     ...optional("finishedAt", row.finished_at?.toISOString() ?? null),
     createdAt: row.created_at.toISOString(),
@@ -105,12 +112,22 @@ export class PgJobRunStore extends JobRunStore {
 
   async createStageRun(run: NewStageRun): Promise<JobRunView> {
     await this.#pool.query(
-      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor)
-       values ($1, $2, $3, 'stage', $4, $5, $6)`,
-      [run.id, run.projectId, run.applicationId, run.stage, run.sourceRepositoryId, run.actor ?? null],
+      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor, source_commit, inputs)
+       values ($1, $2, $3, 'stage', $4, $5, $6, $7, $8)`,
+      [run.id, run.projectId, run.applicationId, run.stage, run.sourceRepositoryId, run.actor ?? null, run.sourceCommit ?? null, JSON.stringify(run.inputs ?? {})],
     );
     const result = await this.#pool.query<RunRow>(`${SELECT} where r.id = $1`, [run.id]);
     return toView(result.rows[0]!);
+  }
+
+  async abandon(projectId: string, id: string, actor: string): Promise<boolean> {
+    const result = await this.#pool.query("update workflow.job_run set abandoned_at = now(), abandoned_by = $3 where project_id = $1 and id = $2 and abandoned_at is null", [projectId, id, actor]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async inputs(projectId: string, id: string): Promise<Record<string, unknown> | undefined> {
+    const result = await this.#pool.query<{ inputs: Record<string, unknown> }>("select inputs from workflow.job_run where project_id = $1 and id = $2", [projectId, id]);
+    return result.rows[0]?.inputs;
   }
 
   async hasStageRun(projectId: string, applicationId: string, stage: string, statuses: readonly JobRunStatus[]): Promise<boolean> {
