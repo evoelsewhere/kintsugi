@@ -76,6 +76,12 @@ export interface JobRunView {
   restrictedRecords: number;
   /** Set when a person asked to cancel the run while it was running. */
   cancelRequestedAt?: string;
+  /** The catalog items an understand run works on (ADR-0033, inputs.scope.items). */
+  scope?: { items: string[] };
+  /** The failed run this one resumes (inputs.resumeOf). */
+  resumeOf?: string;
+  /** Set when a person abandoned the run's pull request: its items are released. */
+  abandonedAt?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
