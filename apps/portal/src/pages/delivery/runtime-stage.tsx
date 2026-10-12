@@ -33,8 +33,10 @@ const RUN_LIMIT = 100;
 
 // The result views and their libraries (Markdown, Mermaid) load with the Results tab.
 const StageResults = lazy(() => import("./results/stage-results"));
+// The item catalog of the assess stage (ADR-0033).
+const CatalogTab = lazy(() => import("./results/catalog-tab"));
 
-type StageTab = "results" | "runs" | "inputs";
+type StageTab = "results" | "catalog" | "runs" | "inputs";
 
 export function RuntimeStage({ project, application, stage }: { project: ProjectDetail; application: ApplicationView; stage: StageView }): React.JSX.Element {
   const { can } = useAuth();
@@ -58,9 +60,10 @@ export function RuntimeStage({ project, application, stage }: { project: Project
   );
 
   const withResults = hasResultsView(stage.id);
+  const withCatalog = stage.id === "assess";
   const requested = params.get("tab");
   const tab: StageTab =
-    requested === "runs" || requested === "inputs" || (requested === "results" && withResults)
+    requested === "runs" || requested === "inputs" || (requested === "results" && withResults) || (requested === "catalog" && withCatalog)
       ? requested
       : params.get("run") !== null
         ? "runs"
@@ -148,6 +151,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
         onChange={chooseTab}
         tabs={[
           ...(withResults ? [{ id: "results" as const, label: "Results" }] : []),
+          ...(withCatalog ? [{ id: "catalog" as const, label: "Catalog" }] : []),
           { id: "runs" as const, label: "Runs & logs", count: stageRuns?.length },
           { id: "inputs" as const, label: "Inputs & agents" },
         ]}
@@ -162,6 +166,12 @@ export function RuntimeStage({ project, application, stage }: { project: Project
             version={`${latestSucceeded?.id ?? "none"}/${latestSucceeded?.documentWrite?.status ?? ""}`}
             runBlocked={disabledReason}
           />
+        </Suspense>
+      ) : null}
+
+      {tab === "catalog" && withCatalog ? (
+        <Suspense fallback={<Card><SkeletonRows rows={6} /></Card>}>
+          <CatalogTab project={project} application={application} version={`${latestSucceeded?.id ?? "none"}/${latestSucceeded?.documentWrite?.status ?? ""}/${latest?.id ?? ""}`} />
         </Suspense>
       ) : null}
 

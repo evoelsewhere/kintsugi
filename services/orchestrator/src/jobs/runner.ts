@@ -26,7 +26,7 @@ import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } fr
 import type { AgentRuntime, JobEvent, JobSpec } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 import type { AgentResolver } from "./agents.js";
-import { type LeafPlacement, type LeafResult, type LeafRun, StagePlanExecutor } from "./executor.js";
+import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepRecord, stepKey } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
 import { runJobOutputHook } from "./hook.js";
 import { writeMockOutputs } from "./mock-outputs.js";
@@ -43,7 +43,7 @@ import {
   type StepLimits,
   isCancelled,
 } from "./model.js";
-import { type Placeholders, fill } from "./plan.js";
+import { type Placeholders, type StageScope, fill } from "./plan.js";
 import { STAGES } from "./stages.js";
 import { type AgentCallOptions, type WorkflowBudgets, loadWorkflow, runWorkflow } from "./workflow.js";
 
@@ -101,6 +101,26 @@ interface StepWorkspace {
   out: string;
   tmp: string;
   commit?: string;
+  /** The document-repo commit declared documents are read at (pinned for a whole run, ADR-0033). */
+  documentsCommit?: string;
+}
+
+/** What a resumed run takes over from the failed one (ADR-0033). */
+interface ResumeState {
+  from: string;
+  completed: Set<string>;
+  gateChoices: Map<string, string>;
+}
+
+const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** inputs.scope of a scoped run: catalog item ids and their files; undefined when absent or malformed. */
+export function scopeOf(inputs: Record<string, unknown>): StageScope | undefined {
+  const scope = inputs["scope"];
+  if (!isRecord(scope) || !Array.isArray(scope["items"])) return undefined;
+  const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
+  return { items: strings(scope["items"]), files: strings(scope["files"]) };
 }
 
 interface StepOutcome {
@@ -138,8 +158,8 @@ interface ChildPlacement {
 const BUILTIN_SCRIPT = /^[a-z][a-z0-9_-]{0,63}\.(py|js|mjs)$/;
 const MAX_STDOUT = 20_000;
 const MAX_DETAIL_LINES = 40;
-/** Files of one declared document folder ("standards/") a step gets at most. */
-const MAX_FOLDER_DOCUMENTS = 200;
+/** Files of one declared document folder ("standards/", an application's items) a step gets at most. */
+const MAX_FOLDER_DOCUMENTS = 5000;
 /** A relative document-repo path without traversal. */
 const SAFE_OUTPUT_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9._/-]+$/;
 const MAX_RESTRICTED_FILES = 100;
@@ -216,8 +236,11 @@ export class JobRunner {
         ws.src = paths.src;
         ws.commit = commit;
       }
+      const pinned = run.inputs["documentsCommit"];
+      if (typeof pinned === "string" && COMMIT.test(pinned)) ws.documentsCommit = pinned;
+      const resume = typeof run.inputs["resumeOf"] === "string" ? await this.#resume(run, ws, run.inputs["resumeOf"]) : undefined;
       await this.#prepareInputs(run, ws);
-      const outcome = await this.#step(run, ws, signal);
+      const outcome = await this.#step(run, ws, signal, resume);
       const summary = await this.#finish(run, ws, outcome);
       const write = await this.#publish(run, ws, outcome);
       await store.succeed(id, { ...summary, ...(write === undefined ? {} : { documentWriteId: write }) });
@@ -230,7 +253,9 @@ export class JobRunner {
         this.#log(`${run.kind} ${run.name} (${id}) cancelled`);
       } else {
         const reason = reasonOf(error);
-        await store.fail(id, reason).catch(() => undefined);
+        // A failed stage keeps its steps and gate choices, so it can be resumed (ADR-0033).
+        const summary = error instanceof StageFailure ? { ...error.outcome, ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }) } : undefined;
+        await store.fail(id, reason, summary).catch(() => undefined);
         await this.#event(ws, undefined, "status", `failed: ${reason}`, { status: "failed" });
         this.#log(`${run.kind} ${run.name} (${id}) failed: ${reason}`);
       }
@@ -240,6 +265,30 @@ export class JobRunner {
       if (checkedOut && run.sourceRepositoryId !== undefined) await checkouts.release(run.sourceRepositoryId, paths.src).catch(() => undefined);
     }
     return store.get(id);
+  }
+
+  /**
+   * A resume of a failed stage run (inputs.resumeOf): takes over its kept out/ and work/, the
+   * agent and workflow leaves that succeeded and the gate choices it recorded.
+   */
+  async #resume(run: JobRun, ws: StepWorkspace, fromId: string): Promise<ResumeState> {
+    const from = await this.#deps.store.get(fromId);
+    if (from === undefined || from.kind !== "stage" || from.name !== run.name || from.projectId !== run.projectId || from.applicationId !== run.applicationId) {
+      throw new JobFailure(`Run ${fromId} cannot be resumed by this run (not a ${run.name} run of the same application)`);
+    }
+    if (from.status !== "failed") throw new JobFailure(`Run ${fromId} did not fail (${from.status}): only a failed run is resumed`);
+    const old = this.#deps.storage.job(fromId);
+    await copyTree(old.out, ws.out);
+    await copyTree(join(old.root, "work"), join(ws.root, "work"));
+    const summary = from.outputSummary ?? {};
+    const steps = Array.isArray(summary["steps"]) ? (summary["steps"] as unknown[]).filter((step): step is StepRecord => isRecord(step) && typeof step["id"] === "string") : [];
+    const completed = new Set(steps.filter((step) => step.status === "succeeded" && (step.kind === "agent" || step.kind === "workflow")).map((step) => stepKey(step)));
+    const gates = Array.isArray(summary["gates"]) ? (summary["gates"] as unknown[]) : [];
+    const gateChoices = new Map(gates.flatMap((gate) => (isRecord(gate) && typeof gate["id"] === "string" && typeof gate["choice"] === "string" ? [[gate["id"], gate["choice"]] as [string, string]] : [])));
+    const pinned = summary["documentsCommit"];
+    if (ws.documentsCommit === undefined && typeof pinned === "string" && COMMIT.test(pinned)) ws.documentsCommit = pinned;
+    await this.#event(ws, undefined, "log", `resuming run ${fromId}: ${completed.size} agent or workflow step(s) are not run again`, { resumeOf: fromId, reused: completed.size });
+    return { from: fromId, completed, gateChoices };
   }
 
   /** Appends to the top-level run's live record (best effort; texts are redacted). */
@@ -287,7 +336,10 @@ export class JobRunner {
       const repository = await this.#deps.store.documentRepository(run.projectId);
       if (repository !== undefined) {
         const { checkouts } = this.#deps;
-        const commit = await checkouts.resolve(repository);
+        // Every step of a run reads the same document-repo commit: pinned by the run, else the
+        // default branch tip when the run first reads one.
+        const commit = ws.documentsCommit ?? (await checkouts.resolve(repository));
+        ws.documentsCommit = commit;
         const values = this.#placeholders(run, ws);
         for (const entry of new Set(entries.map((item) => fill(item, values)))) {
           const paths = entry.endsWith("/") ? ((await checkouts.listDocuments?.(repository, commit, entry)) ?? []).slice(0, MAX_FOLDER_DOCUMENTS) : [entry];
@@ -317,7 +369,7 @@ export class JobRunner {
     await makeReadOnly(ws.in);
   }
 
-  async #step(run: JobRun, ws: StepWorkspace, signal?: AbortSignal): Promise<StepOutcome> {
+  async #step(run: JobRun, ws: StepWorkspace, signal?: AbortSignal, resume?: ResumeState): Promise<StepOutcome> {
     switch (run.kind) {
       case "script":
         return this.#script(run, ws, signal);
@@ -326,7 +378,7 @@ export class JobRunner {
       case "workflow":
         return this.#workflow(run, ws, signal);
       case "stage":
-        return this.#stage(run, ws, signal);
+        return this.#stage(run, ws, signal, resume);
     }
   }
 
@@ -571,12 +623,13 @@ export class JobRunner {
   }
 
   /** A stage: its plan (stages.ts) run by the generic executor, every leaf step a child run. */
-  async #stage(run: JobRun, ws: StepWorkspace, signal?: AbortSignal): Promise<StepOutcome> {
+  async #stage(run: JobRun, ws: StepWorkspace, signal?: AbortSignal, resume?: ResumeState): Promise<StepOutcome> {
     const plan = STAGES[run.name];
     if (plan === undefined) throw new JobFailure(`Unknown stage "${run.name}"`);
     if (run.applicationId === undefined || run.sourceRepositoryId === undefined || ws.commit === undefined) throw new JobFailure(`Stage ${run.name} needs an application with a legacy repository`);
     const work = join(ws.root, "work");
     await mkdir(work, { recursive: true });
+    const scope = scopeOf(run.inputs);
     const provenance = new Map<string, Provenance>();
     let agent: string | undefined;
     const runLeaf = async (spec: LeafRun, placement: LeafPlacement): Promise<LeafResult> => {
@@ -606,11 +659,25 @@ export class JobRunner {
           return this.#event(ws, undefined, "log", line, data);
         },
         ...(signal === undefined ? {} : { signal }),
+        ...(scope === undefined ? {} : { scope }),
+        ...(resume === undefined ? {} : { completed: resume.completed, gateChoices: resume.gateChoices }),
       });
       const outcome = await executor.run();
-      return { summary: { ...outcome }, ...(agent === undefined ? {} : { agent }), provenance };
-    } finally {
+      // work/ goes only when the stage succeeds: a failed run keeps it beside out/ for a resume
+      // (same retention, cleanup.ts).
       await removeTree(work).catch(() => undefined);
+      return {
+        summary: {
+          ...outcome,
+          ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }),
+          ...(resume === undefined ? {} : { resumeOf: resume.from }),
+        },
+        ...(agent === undefined ? {} : { agent }),
+        provenance,
+      };
+    } catch (error) {
+      if (isCancelled(signal)) await removeTree(work).catch(() => undefined);
+      throw error;
     }
   }
 
@@ -646,7 +713,7 @@ export class JobRunner {
     const run = (await store.get(id))!;
     const paths = storage.job(id);
     await this.#event(parentWs, id, "step.started", `${spec.kind} ${spec.name} started`, { kind: spec.kind, name: spec.name });
-    const ws: StepWorkspace = { rootId: parentWs.rootId, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp, ...(parentWs.src === undefined ? {} : { src: parentWs.src }), ...(parentWs.commit === undefined ? {} : { commit: parentWs.commit }) };
+    const ws: StepWorkspace = { rootId: parentWs.rootId, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp, ...(parentWs.src === undefined ? {} : { src: parentWs.src }), ...(parentWs.commit === undefined ? {} : { commit: parentWs.commit }), ...(parentWs.documentsCommit === undefined ? {} : { documentsCommit: parentWs.documentsCommit }) };
     try {
       if (signal?.aborted === true) throw new JobFailure("aborted");
       for (const dir of [paths.in, paths.out, paths.tmp]) await mkdir(dir, { recursive: true });
@@ -750,7 +817,7 @@ export class JobRunner {
       writeId: randomUUID(),
       projectId: run.projectId,
       kind: "job-output",
-      message: plan !== undefined && run.applicationId !== undefined ? plan.message(run.applicationId) : `Output of ${run.kind} ${run.name}`,
+      message: plan !== undefined && run.applicationId !== undefined ? plan.message(run.applicationId, scopeOf(run.inputs)) : `Output of ${run.kind} ${run.name}`,
       outputOfJob: run.id,
       jobId: run.id,
       ...(plan?.reviewAll === true ? { reviewAll: true } : {}),

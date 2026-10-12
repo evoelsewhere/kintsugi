@@ -25,6 +25,12 @@ export interface JobRunView {
   restrictedRecords: number;
   /** Set while the worker is stopping a run a person cancelled. */
   cancelRequestedAt?: string;
+  /** The catalog items of an understand run (ADR-0033). */
+  scope?: { items: string[] };
+  /** The failed run this one resumes. */
+  resumeOf?: string;
+  /** Set when a person abandoned the run's pull request (its items are released). */
+  abandonedAt?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
@@ -124,6 +130,10 @@ export const jobRunsApi = {
   openRestricted: (projectId: string, id: string) => apiGet<RestrictedRecord[]>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/restricted`),
   get: (projectId: string, id: string) => apiGet<JobRunDetail>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}`),
   cancel: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/cancel`, "POST"),
+  /** Retries a failed stage run from what it kept (a new run). */
+  retry: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/retry`, "POST"),
+  /** Abandons the closed pull request of an understand run: its items are released. */
+  abandon: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/abandon`, "POST"),
   /**
    * Follows a run live over Server-Sent Events (the session cookie authenticates the stream).
    * Returns a function that closes the stream; it also closes itself when the run has ended.

@@ -11,6 +11,7 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
+import { catalogApi } from "@/lib/api/catalog";
 import { documentsApi, type StageHeadline } from "@/lib/api/documents";
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
@@ -94,6 +95,9 @@ function ProjectOverview({ projectId }: { projectId: string }): React.JSX.Elemen
   );
 }
 
+/** The runtime stages of the pipeline (ADR-0033): map, extract-rules and harden are steps of understand now. */
+const RUNTIME_STAGES = ["assess", "understand"];
+
 interface StripProps {
   project: ProjectDetail;
   application: ApplicationView;
@@ -110,6 +114,15 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
   const headlines = useLoader(`headlines/${project.id}/${application.id}/${succeeded}`, () =>
     project.documentRepository === null || succeeded === "" ? Promise.resolve([] as StageHeadline[]) : documentsApi.headlines(project.id, application.id),
   );
+  // understand's headline is the catalog's (ADR-0033): N/M items understood.
+  const catalog = useLoader(`overview-catalog/${project.id}/${application.id}/${succeeded}`, () =>
+    project.documentRepository === null || succeeded === "" ? Promise.resolve(null) : catalogApi.get(project.id, application.id).catch(() => null),
+  );
+  const understood =
+    catalog.data === undefined || catalog.data === null
+      ? undefined
+      : [`${catalog.data.counts.understood ?? 0}/${catalog.data.items.filter((item) => item.status !== "retired").length} items understood`];
+  const headlineOf = (stage: string): string[] | undefined => (stage === "understand" ? understood : headlines.data?.find((entry) => entry.stage === stage)?.headline);
   return (
     <Card>
       <CardHeader>
@@ -128,7 +141,7 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
         </div>
       </CardHeader>
       <div className="mt-3 flex flex-col gap-2">
-        {stagesByAudience(stages).map((group) => (
+        {stagesByAudience(stages.filter((stage) => stage.audience !== "runtime" || RUNTIME_STAGES.includes(stage.id))).map((group) => (
           <div key={group.audience} className="flex flex-col gap-1 sm:flex-row sm:items-stretch sm:gap-3">
             <p className="w-20 shrink-0 pt-2 text-[11px] font-medium tracking-wide text-text-muted uppercase">{AUDIENCE_SHORT[group.audience]}</p>
             <ol className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
@@ -139,7 +152,7 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
                     stage={stage}
                     last={runs === undefined ? undefined : latestRun(runs, stage.id)}
                     loading={runs === undefined}
-                    headline={headlines.data?.find((entry) => entry.stage === stage.id)?.headline}
+                    headline={headlineOf(stage.id)}
                     to={deliveryLink({ projectId: project.id, applicationId: application.id, stage: stage.id })}
                   />
                 </li>

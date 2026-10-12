@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""Build a bounded, deterministic source inventory and complexity estimate."""
+"""Build a bounded, deterministic source inventory and complexity estimate.
+
+Every file record carries the sha256 of its bytes (`sha256`), so the item catalog can tell a changed
+item by its digest; a non-source file larger than MAX_FILE_BYTES has no hash.
+"""
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -14,6 +19,8 @@ MAX_DIRECTORIES = 50_000
 MAX_SOURCE_FILES = 10_000
 MAX_OUTPUT_BYTES = 8_000_000
 
+# The `.git` file of a linked worktree or submodule checkout points at the repository: not source.
+SKIP_FILES = {'.git'}
 SKIP_DIRS = {
     '.git', '.hg', '.svn', '.idea', '.vscode', '__pycache__', '.venv', 'venv',
     'node_modules', 'vendor', 'vendors', 'dist', 'build', 'target', 'out',
@@ -60,6 +67,10 @@ def within(root, path):
 
 
 def read_source(path):
+    return decode_source(read_bounded(path), path)
+
+
+def read_bounded(path):
     try:
         size = os.path.getsize(path)
         if size > MAX_FILE_BYTES:
@@ -70,6 +81,10 @@ def read_source(path):
         raise DataError(f'cannot read source file {path}: {error}') from error
     if len(data) > MAX_FILE_BYTES:
         raise DataError(f'source file exceeds the {MAX_FILE_BYTES}-byte limit: {path}')
+    return data
+
+
+def decode_source(data, path):
     if b'\x00' in data:
         raise DataError(f'unexpected binary content in source file: {path}')
     try:
@@ -176,6 +191,8 @@ def inventory(source, app, source_repository=None, pinned_commit=None):
         directories[:] = kept
         for name in sorted(names):
             path = os.path.join(current, name)
+            if name in SKIP_FILES:
+                continue
             if os.path.islink(path):
                 if not within(root, path):
                     raise DataError(f'source file symlink escapes --source: {os.path.relpath(path, root)}')
@@ -193,12 +210,14 @@ def inventory(source, app, source_repository=None, pinned_commit=None):
             language = language_for(rel)
             record = {'path': rel, 'bytes': size, 'language': language}
             if language != 'Other':
-                text = read_source(path)
-                record = analyze(rel, text, language) | {'bytes': size}
+                data = read_bounded(path)
+                record = analyze(rel, decode_source(data, path), language) | {'bytes': size, 'sha256': hashlib.sha256(data).hexdigest()}
                 files.append(record)
                 if len(files) > MAX_SOURCE_FILES:
                     raise DataError(f'source tree exceeds the {MAX_SOURCE_FILES}-source-file limit')
             else:
+                if size <= MAX_FILE_BYTES:
+                    record['sha256'] = hashlib.sha256(read_bounded(path)).hexdigest()
                 files.append(record)
 
     source_files = [item for item in files if item['language'] != 'Other']

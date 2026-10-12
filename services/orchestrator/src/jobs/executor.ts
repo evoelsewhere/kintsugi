@@ -20,6 +20,7 @@ import {
   type RepeatStep,
   type StageContext,
   type StagePlan,
+  type StageScope,
   type StageStep,
   fill,
 } from "./plan.js";
@@ -60,9 +61,33 @@ export interface ExecutorDeps {
   runLeaf(spec: LeafRun, placement: LeafPlacement): Promise<LeafResult>;
   log(message: string, data?: Record<string, unknown>): Promise<void>;
   signal?: AbortSignal;
+  /** The selection of a scoped run (ADR-0033). */
+  scope?: StageScope;
+  /**
+   * Resume of a failed run: the agent and workflow leaves and forEach items that succeeded in it
+   * (keys of stepKey()); their outputs are already in the stage's out/ and work/, so they are
+   * not run again. Script steps always run again.
+   */
+  completed?: ReadonlySet<string>;
+  /** Resume: the gate choices the failed run recorded, replayed instead of asking again. */
+  gateChoices?: ReadonlyMap<string, string>;
 }
 
-interface StepRecord {
+/** The key of a leaf run in a resume's `completed` set: `<step id>[#<forEach key>][@<round>]`. */
+export const stepKey = (step: { id: string; key?: string; round?: number }): string =>
+  `${step.id}${step.key === undefined ? "" : `#${step.key}`}${step.round === undefined || step.round === 0 ? "" : `@${step.round}`}`;
+
+/** A failed stage, with what it recorded so far (persisted in the run's summary for a resume). */
+export class StageFailure extends JobFailure {
+  constructor(
+    message: string,
+    readonly outcome: StageOutcome,
+  ) {
+    super(message);
+  }
+}
+
+export interface StepRecord {
   id: string;
   kind: string;
   name?: string;
@@ -71,9 +96,11 @@ interface StepRecord {
   round?: number;
   key?: string;
   reason?: string;
+  /** A resume took this step's outputs from the failed run instead of running it. */
+  reused?: boolean;
 }
 
-interface GateRecord {
+export interface GateRecord {
   id: string;
   question: string;
   choice: string;
@@ -107,12 +134,23 @@ export class StagePlanExecutor {
     this.#deps = deps;
   }
 
+  /** Runs the plan; a failure is thrown as a StageFailure carrying the steps recorded so far. */
   async run(): Promise<StageOutcome> {
-    const missingInputs = await this.#missingInputs();
-    for (const step of this.#deps.plan.steps) await this.#runStep(step);
+    let missingInputs: Array<{ path: string; stage: string }> = [];
+    try {
+      missingInputs = await this.#missingInputs();
+      for (const step of this.#deps.plan.steps) await this.#runStep(step);
+    } catch (error) {
+      if (error instanceof JobFailure && !(error instanceof StageFailure)) throw new StageFailure(error.message, this.#outcome(missingInputs));
+      throw error;
+    }
+    return this.#outcome(missingInputs);
+  }
+
+  #outcome(missingInputs: Array<{ path: string; stage: string }>): StageOutcome {
     return {
       stage: this.#deps.plan.id,
-      steps: this.#steps,
+      steps: [...this.#steps],
       gates: [...this.#gates.values()],
       agents: this.#agents,
       ...(this.#deps.plan.optional === undefined ? {} : { missingInputs }),
@@ -142,7 +180,7 @@ export class StagePlanExecutor {
 
   #values(extra: Placeholders = {}): Placeholders {
     const { app, repo, commit } = this.#deps.values;
-    return { app, repo, commit, ...(this.#round === 0 ? {} : { round: String(this.#round) }), ...extra };
+    return { app, repo, commit, run: this.#deps.run.id, ...(this.#round === 0 ? {} : { round: String(this.#round) }), ...extra };
   }
 
   #context(): StageContext {
@@ -158,6 +196,7 @@ export class StagePlanExecutor {
     };
     return {
       ...values,
+      scope: this.#deps.scope,
       round: this.#round,
       readText,
       readJson: async (path) => {
@@ -246,6 +285,12 @@ export class StagePlanExecutor {
 
   async #start(step: LeafStep, placement: LeafPlacement, extra: Placeholders): Promise<LeafResult> {
     const values = this.#values(extra);
+    const key = stepKey({ id: step.id, ...(extra.key === undefined ? {} : { key: extra.key }), round: this.#round });
+    if (step.kind !== "script" && this.#deps.completed?.has(key) === true) {
+      this.#record({ id: step.id, kind: step.kind, status: "succeeded", reused: true, ...(extra.key === undefined ? {} : { key: extra.key }) });
+      await this.#deps.log(`step ${key} succeeded in the resumed run: not run again`, { step: step.id, reused: true });
+      return { id: "", ok: true, summary: { reused: true }, agents: 0 };
+    }
     const spec = await this.#spec(step, values);
     if (spec.kind === "agent" && this.#agents >= this.#deps.limits.maxAgents) {
       throw new JobFailure(`Stage agent cap reached (${this.#deps.limits.maxAgents} agent jobs, KINTSUGI_STAGE_MAX_AGENTS) before step ${step.id}`);
@@ -393,7 +438,8 @@ export class StagePlanExecutor {
   async #gate(step: GateStep): Promise<void> {
     const question = await this.#resolve(step.question);
     const { run, plan, gates, signal } = this.#deps;
-    const decision = await gates.decide(
+    const replayed = this.#deps.gateChoices?.get(step.id);
+    const decision = replayed !== undefined && step.options.includes(replayed) ? { choice: replayed, defaulted: false, by: "resume" } : await gates.decide(
       { runId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }), stage: plan.id, gate: step.id, question, options: step.options, default: step.default },
       signal,
     );

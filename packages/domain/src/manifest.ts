@@ -56,7 +56,7 @@ export interface KintsugiManifest {
 }
 
 /** Paths committed straight to the default branch by kintsugi-bot (ADR-0019). */
-export const DEFAULT_AUTO_COMMIT_PATHS: readonly string[] = ["units/**", "tasks/**", "knowledge/**/generated/**"];
+export const DEFAULT_AUTO_COMMIT_PATHS: readonly string[] = ["units/**", "tasks/**", "knowledge/**/generated/**", "assessment/**/generated/**"];
 
 /**
  * Whether a repository path (forward slashes, relative) matches a glob of `autoCommitPaths`:

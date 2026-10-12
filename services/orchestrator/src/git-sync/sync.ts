@@ -62,6 +62,27 @@ export function withMirrorLock<T>(repositoryId: string, operation: () => Promise
   return next;
 }
 
+/** A default-branch move a sync saw: the tip before and after the fetch. */
+export interface DefaultTipMove {
+  repositoryId: string;
+  mirror: string;
+  previous: string;
+  commit: string;
+}
+
+type TipListener = (move: DefaultTipMove) => Promise<void> | void;
+const tipListeners = new Set<TipListener>();
+
+/**
+ * Calls `listener` whenever any sync of this process (the git-sync queue, job checkouts, the
+ * document writer) moves a mirror's default branch; returns the unsubscribe function. Listener
+ * errors are swallowed: they never fail a sync.
+ */
+export function onDefaultTipMove(listener: TipListener): () => void {
+  tipListeners.add(listener);
+  return () => tipListeners.delete(listener);
+}
+
 export function syncRepository(deps: SyncDeps, repositoryId: string): Promise<SyncResult | undefined> {
   return withMirrorLock(repositoryId, () => syncUnlocked(deps, repositoryId));
 }
@@ -84,11 +105,21 @@ async function syncUnlocked({ store, storage }: SyncDeps, repositoryId: string):
         await rm(mirror, { recursive: true, force: true });
         throw error;
       }
-    } else {
-      await fetchMirror(mirror, options);
     }
-    const commit = await resolveCommit(mirror, target.defaultBranch === undefined ? "HEAD" : `refs/heads/${target.defaultBranch}`);
+    const ref = target.defaultBranch === undefined ? "HEAD" : `refs/heads/${target.defaultBranch}`;
+    const previous = cloned ? undefined : await resolveCommit(mirror, ref).catch(() => undefined);
+    if (!cloned) await fetchMirror(mirror, options);
+    const commit = await resolveCommit(mirror, ref);
     await store.markReady(target.id, commit);
+    if (previous !== undefined && previous !== commit) {
+      for (const listener of tipListeners) {
+        try {
+          await listener({ repositoryId: target.id, mirror, previous, commit });
+        } catch {
+          // A listener never fails the sync.
+        }
+      }
+    }
     return { repositoryId: target.id, commit, cloned };
   } catch (error) {
     await store.markError(target.id, error instanceof Error ? error.message : String(error));

@@ -40,6 +40,10 @@ export abstract class JobRunStore {
   abstract events(id: string, afterId: string | undefined, limit: number): Promise<JobRunEventView[]>;
   /** Whether the application has a top-level run of `stage` in one of `statuses`. */
   abstract hasStageRun(projectId: string, applicationId: string, stage: string, statuses: readonly JobRunStatus[]): Promise<boolean>;
+  /** Marks a succeeded run's pull request abandoned; false when it was already abandoned. */
+  abstract abandon(projectId: string, id: string, actor: string): Promise<boolean>;
+  /** The inputs a run was started with (scope, documentsCommit, resumeOf); undefined when unknown. */
+  abstract inputs(projectId: string, id: string): Promise<Record<string, unknown> | undefined>;
   /** Marks a run failed before it reached the worker. */
   abstract markFailed(id: string, reason: string): Promise<void>;
 }

@@ -18,6 +18,8 @@ export interface ApiFailure {
   message: string | string[];
   timestamp: string;
   path: string;
+  /** Structured detail of a refusal, when the use case gives one (e.g. the conflicts of a 409). */
+  details?: Record<string, unknown>;
 }
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;

@@ -76,8 +76,8 @@ def block(value):
     return '\n'.join(lines).strip()
 
 
-def render_rule(number, rule):
-    rid = f'RULE-{number:03d}'
+def render_rule(number, rule, rid=None):
+    rid = rid or f'RULE-{number:03d}'
     source, also = split_citation(rule.get('source'))
     out = [f"### {rid}: {one_line(rule.get('name'), 120)}",
            f"**Category:** {one_line(rule.get('category'), 20)}",
