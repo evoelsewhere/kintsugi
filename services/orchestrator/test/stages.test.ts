@@ -428,6 +428,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       app: "demo",
       repo: "small",
       commit: "c",
+      scope: undefined,
       round: 0,
       readText: async () => undefined,
       readJson: async (path) => (path === "knowledge/as-is/demo/units.json" ? units : undefined),
