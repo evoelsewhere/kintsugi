@@ -104,15 +104,18 @@ function mockFile(path: string, agent: string, app: string): string {
 
 interface Schema {
   type?: unknown;
+  /** Taken as is when present (JSON Schema `default`). */
+  default?: unknown;
   enum?: unknown[];
   properties?: Record<string, Schema>;
   required?: string[];
   items?: Schema;
 }
 
-/** A value matching a JSON schema: required properties only, one array item, the first enum value. */
+/** A value matching a JSON schema: its default, else required properties only, one array item, the first enum value. */
 export function sampleOf(schema: Schema | undefined, name: string, citation: string): unknown {
   if (schema === undefined) return null;
+  if (schema.default !== undefined) return structuredClone(schema.default);
   if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
   switch (schema.type) {
     case "object": {

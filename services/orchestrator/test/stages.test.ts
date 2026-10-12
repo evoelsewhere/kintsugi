@@ -61,6 +61,21 @@ const MAPPED = {
   "assessment/demo/BUSINESS_RULES.md": "# Business rules\n\n### RULE-001: Double large amounts\n**Source:** `src/rates.c:1`\n",
   "units/demo/billing/main.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
 };
+/** assess ran before: its catalog holds the source folder under another id, and an item whose file is gone. */
+const CATALOGED = {
+  "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n",
+  "assessment/demo/catalog.json": JSON.stringify({
+    schemaVersion: 1,
+    app: "demo",
+    modules: [{ id: "core", name: "Core", summary: "" }],
+    items: [
+      { id: "core/main-program", module: "core", kind: "module", name: "Main program", files: ["src/main.c", "src/rates.c"], status: "active" },
+      { id: "core/gone", module: "core", kind: "module", name: "Gone", files: ["src/gone.c"], status: "active" },
+    ],
+    unassigned: [],
+    ambiguities: [],
+  }),
+};
 const ASSESSED = {
   "kintsugi.yaml": "version: 1\nproject: { id: demo }\n",
   "assessment/demo/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
@@ -78,6 +93,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     repos["docs"] = fixtureRepository(ASSESSED);
     repos["empty-docs"] = fixtureRepository({ "kintsugi.yaml": "version: 1\n" });
     repos["mapped-docs"] = fixtureRepository(MAPPED);
+    repos["cataloged-docs"] = fixtureRepository(CATALOGED);
     dataDir = mkdtempSync(join(tmpdir(), "kintsugi-stages-data-"));
     storage = new CheckoutStorage(dataDir);
     await storage.prepare();
@@ -281,6 +297,43 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       "revise:3:succeeded",
     ]);
   }, 180_000);
+
+  it("re-assesses: topology script under tools/, the catalog keeps the ids of the previous one and retires what is gone", async () => {
+    const { run, summary, artifacts, out, agents } = await runStage("assess", { legacy: "small", docs: "cataloged-docs" });
+    expect(run?.failureReason).toBeUndefined();
+    const ids = summary?.steps.map((step) => step.id) ?? [];
+    // The analysis jobs run in parallel: they finish in any order.
+    expect(ids.slice(1, 4).sort()).toEqual(["debt", "security", "structure"]);
+    expect([ids[0], ...ids.slice(4)]).toEqual([
+      "inventory",
+      "topology",
+      "extract",
+      "catalog",
+      "catalog-curate",
+      "catalog-edits",
+      "catalog-reconcile",
+      "synthesis",
+    ]);
+    expect(artifacts).toEqual(
+      expect.arrayContaining(["assessment/demo/catalog.json", "assessment/demo/topology.json", "assessment/demo/tools/extract_topology.py"]),
+    );
+    expect(artifacts.some((path) => path.includes("catalog-draft"))).toBe(false);
+    const catalog = JSON.parse(readFileSync(join(out, "catalog.json"), "utf8")) as {
+      items: Array<{ id: string; module: string; files: string[]; status: string; aliases: string[] }>;
+      unassigned: string[];
+      reconciled: Record<string, unknown>;
+    };
+    expect(catalog.items.map((item) => [item.id, item.module, item.status])).toEqual([
+      ["core/gone", "core", "retired"],
+      ["core/main-program", "core", "active"],
+    ]);
+    expect(catalog.items[1]).toMatchObject({ files: ["src/main.c", "src/rates.c"], aliases: ["Main program"] });
+    expect(catalog.unassigned).toEqual(["package.json"]);
+    expect(catalog.reconciled).toEqual({ from: "catalog", kept: 1, new: 0, retired: 1, renamed: 1 });
+    // The curation job saw the proposal and got the edit schema.
+    const curate = agents.specs.find((spec) => spec.task.startsWith("Curate the item catalog"));
+    expect(curate?.task).toContain("Return your result as JSON matching this schema");
+  }, 120_000);
 
   it("runs understand: units from the map, gate defaulted, one spec job per unit, traceability, synthesis, work items in one PR", async () => {
     const { run, writes, agents, summary, logs, artifacts, id, store, out } = await runStage("understand", { legacy: "small", docs: "mapped-docs" });
