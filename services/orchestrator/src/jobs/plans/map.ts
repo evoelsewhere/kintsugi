@@ -8,7 +8,7 @@
 // Not wired yet: chunked mapping of big estates (map/<chunk>.json) and the one re-ask of a
 // description the merge rejected (the node keeps no description; the summary says why).
 
-import type { StageContext, StagePlan } from "../plan.js";
+import type { AgentStep, ScriptStep, StageContext, StagePlan } from "../plan.js";
 import { CREDENTIALS, UNTRUSTED, WORKSPACE } from "./common.js";
 
 const DIR = "assessment/{app}";
@@ -27,17 +27,20 @@ const SCHEMA = `{
   "entryPoints": ["<leaf id>"], "deadEnds": ["<leaf id>"], "observations": [], "flows": []
 }`;
 
-const TOPOLOGY_TASK = `Write the topology extraction script of application {app}.
+/** Where the map stage finds the domains the assessment found. */
+const MAP_DOMAINS = `{in}/${DIR}/ASSESSMENT.md and ARCHITECTURE.mmd hold the domains the assessment found`;
+
+const topologyTask = (script: string, domains: string): string => `Write the topology extraction script of application {app}.
 
 ${WORKSPACE}
 
-If present, {in}/${DIR}/ASSESSMENT.md and ARCHITECTURE.mmd hold the domains the assessment found (group modules under
+If present, ${domains} (group modules under
 them), {in}/${DIR}/inventory.json the measured inventory, and {in}/${DIR}/graph/ a dependency export a person attached
 (a compiler index, jdeps, a call graph in JSON, CSV, DOT or GraphML): if one exists, map its nodes and edges instead of
 parsing the code, spot-check about ten edges against the source, and still add what graphs omit (entry points from
 deployment configuration, data stores).
 
-Read the repository, then write ${DIR}/extract_topology.py with outputs_write: a Python 3 script using the standard
+Read the repository, then write ${script} with outputs_write: a Python 3 script using the standard
 library only. It is run as \`python extract_topology.py <source dir> <output dir>\`: it reads only the source directory,
 uses no network, writes <output dir>/topology.json and prints a summary (at most about 200 lines) headed by
 "Legacy repository {repo} at {commit}". It runs in a sandboxed script environment with a time limit, so keep it simple
@@ -61,16 +64,16 @@ credential parameters from any URL or DSN, and never copy raw configuration valu
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
-const REPAIR_TASK = `The topology extraction script of application {app} failed.
+const repairTask = (script: string): string => `The topology extraction script of application {app} failed.
 
 ${WORKSPACE}
 
-The script is {in}/${DIR}/extract_topology.py; it is run as \`python extract_topology.py <source dir> <output dir>\` and
+The script is {in}/${script}; it is run as \`python extract_topology.py <source dir> <output dir>\` and
 must write <output dir>/topology.json. It failed with:
 
 {error}
 
-Fix the script and write the corrected version to ${DIR}/extract_topology.py with outputs_write (standard library
+Fix the script and write the corrected version to ${script} with outputs_write (standard library
 only, no network, reads only the source directory). Keep the topology.json schema and every top-level key.
 
 ${CREDENTIALS}
@@ -125,6 +128,27 @@ quoted labels, at most 40 edges and about 25 nodes each; collapse to domain leve
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
+/**
+ * The topology extraction as two steps: a legacy-analyst job writes the extraction script at `script`
+ * (a document-repo path), a script step runs it into `assessment/{app}/topology.json`, and when it
+ * fails the job gets the error once to fix it. `domains` tells the job where the domains found so far
+ * are. Used by `assess` (ADR-0033) and `map`.
+ */
+export function topologySteps(script: string, domains: string): [AgentStep, ScriptStep] {
+  return [
+    { id: "topology", kind: "agent", agent: "legacy-analyst", task: topologyTask(script, domains), expects: [script] },
+    {
+      id: "extract",
+      kind: "script",
+      script,
+      fromInputs: true,
+      args: ["{src}", `{out}/${DIR}`],
+      expects: [`${DIR}/topology.json`],
+      repair: { id: "topology-fix", kind: "agent", agent: "legacy-analyst", task: repairTask(script), expects: [script] },
+    },
+  ];
+}
+
 interface TreeNode {
   kind?: unknown;
   children?: unknown;
@@ -166,16 +190,7 @@ export const MAP: StagePlan = {
   ],
   requires: [{ path: `${DIR}/ASSESSMENT.md`, stage: "assess" }],
   steps: [
-    { id: "topology", kind: "agent", agent: "legacy-analyst", task: TOPOLOGY_TASK, expects: [`${DIR}/extract_topology.py`] },
-    {
-      id: "extract",
-      kind: "script",
-      script: `${DIR}/extract_topology.py`,
-      fromInputs: true,
-      args: ["{src}", `{out}/${DIR}`],
-      expects: [`${DIR}/topology.json`],
-      repair: { id: "topology-fix", kind: "agent", agent: "legacy-analyst", task: REPAIR_TASK, expects: [`${DIR}/extract_topology.py`] },
-    },
+    ...topologySteps(`${DIR}/extract_topology.py`, MAP_DOMAINS),
     { id: "flows", kind: "agent", agent: "legacy-analyst", task: FLOWS_TASK, intermediate: true, expects: [`${DIR}/flows.json`] },
     {
       id: "describe",
