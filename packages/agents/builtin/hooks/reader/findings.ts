@@ -34,6 +34,25 @@ export type Finding = {
 
 export type Scorecard = Record<Severity, number> & { total: number }
 
+/** How a security highlight of the assessment ended in the harden stage. */
+export type CarryOverVerdict = 'confirmed' | 'refuted' | 'not judged'
+
+/** One row of the Assessment carry-over table. */
+export type CarryOverItem = {
+  /** The highlight's id in the assessment, when the table gives one. */
+  id?: string
+  highlight: string
+  location?: string
+  severity?: Severity
+  verdict: CarryOverVerdict
+  /** The harden finding the highlight became (`Confirmed as SEC-001`). */
+  findingId?: string
+  reason?: string
+}
+
+/** One row of the Audit tools not run table. */
+export type ToolNotRun = { tool: string; reason?: string }
+
 export type SecurityReport = {
   scorecard: Scorecard
   /** Whether the scorecard was read from the document (else it is counted from the findings). */
@@ -50,7 +69,11 @@ export type SecurityReport = {
   cves: Table | null
   /** The assessment's security highlights, each confirmed as a finding, refuted or not judged. */
   carryOver: Table | null
+  /** The carry-over table read into rows (empty for older documents and runs without an assessment). */
+  carryOverItems: CarryOverItem[]
   toolsNotRun: Table | null
+  /** The tools-not-run table read into rows, each with its reason. */
+  toolsNotRunItems: ToolNotRun[]
   remediationLog: Table | null
   patchReview: string[]
   injectionFlags?: string
@@ -182,6 +205,61 @@ function findingsOfCards(text: string, statusOf: (line: number) => FindingStatus
   return findings
 }
 
+const blankRow = (row: readonly string[]): boolean => row.every(cell => /^[-—–\s]*$/.test(cell))
+
+/** The Assessment carry-over table read into rows: the highlight, its verdict, the finding it became and the reason. */
+export function carryOverOf(table: Table | null): CarryOverItem[] {
+  if (table === null) return []
+  const id = columnOf(table, /^(assessment )?(id|#)$/i)
+  const named = columnOf(table, /highlight/i)
+  const highlight = named >= 0 ? named : columnOf(table, /title|summary|issue|description/i)
+  const location = columnOf(table, /location|file|where/i)
+  const severity = columnOf(table, /severity|risk/i)
+  const outcome = columnOf(table, /outcome|verdict|status|result/i)
+  const reason = columnOf(table, /reason|why|note|evidence/i)
+  const linked = columnOf(table, /^(harden )?finding( id)?$/i)
+
+  return table.rows.flatMap(row => {
+    const cell = (column: number) => (column >= 0 ? (row[column] ?? '') : '')
+    if (blankRow(row)) return []
+    const outcomeText = cell(outcome)
+    const verdict: CarryOverVerdict = /refuted|false positive|not (?:a )?(?:real|reachable)/i.test(outcomeText)
+      ? 'refuted'
+      : /confirmed|matched|added|kept/i.test(outcomeText)
+        ? 'confirmed'
+        : 'not judged'
+    const findingId = FINDING_ID.exec(outcomeText)?.[1] ?? FINDING_ID.exec(cell(linked))?.[1]
+    const idText = cell(id)
+    const title = cell(highlight) || idText || (row.find(value => value !== '') ?? '')
+    const level = severity >= 0 ? severityOf(cell(severity)) : 'Unknown'
+    return [
+      {
+        ...(idText !== '' && { id: idText }),
+        highlight: title,
+        ...(cell(location) !== '' && { location: cell(location) }),
+        ...(level !== 'Unknown' && { severity: level }),
+        verdict,
+        ...(findingId !== undefined && { findingId }),
+        ...(cell(reason) !== '' && { reason: cell(reason) }),
+      },
+    ]
+  })
+}
+
+/** The Audit tools not run table read into rows, each tool with its reason. */
+export function toolsNotRunOf(table: Table | null): ToolNotRun[] {
+  if (table === null) return []
+  const tool = Math.max(columnOf(table, /tool|scanner|name/i), 0)
+  const reason = columnOf(table, /reason|why|note/i)
+
+  return table.rows.flatMap(row => {
+    const name = row[tool] ?? ''
+    if (blankRow(row) || name === '') return []
+    const why = reason >= 0 ? (row[reason] ?? '') : row.filter((_, column) => column !== tool && (row[column] ?? '') !== '').join(' · ')
+    return [{ tool: name, ...(why !== '' && { reason: why }) }]
+  })
+}
+
 const statusOfSection = (section: Section | undefined): FindingStatus =>
   section === undefined
     ? 'confirmed'
@@ -275,6 +353,8 @@ export function parseSecurityFindings(text: string): SecurityReport {
   const topCwes = /\*\*Top CWE categories:?\*\*:?\s*(.+)$/im.exec(text)?.[1]
   const reviewCoverage = /\*\*Review coverage:?\*\*:?\s*(.+)$/im.exec(text)?.[1]
   const review = sectionMatching(sections, /patch review/i)
+  const carryOver = firstTable(sectionMatching(sections, /carry-?over|carried/i))
+  const toolsNotRun = firstTable(sectionMatching(sections, /tools?/i))
 
   return {
     scorecard,
@@ -286,8 +366,10 @@ export function parseSecurityFindings(text: string): SecurityReport {
     coverageComplete,
     findings,
     cves: firstTable(sectionMatching(sections, /cve|dependenc/i)),
-    carryOver: firstTable(sectionMatching(sections, /carry-?over|carried/i)),
-    toolsNotRun: firstTable(sectionMatching(sections, /tools?/i)),
+    carryOver,
+    carryOverItems: carryOverOf(carryOver),
+    toolsNotRun,
+    toolsNotRunItems: toolsNotRunOf(toolsNotRun),
     remediationLog: firstTable(sectionMatching(sections, /remediation log/i)),
     patchReview: review === undefined ? [] : [...bulletsIn(review.body), ...tablesIn(review.body).flatMap(table => table.rows.map(row => row.join(' · ')))],
     ...(injection !== undefined && paragraphsIn(injection.body)[0] !== undefined && { injectionFlags: paragraphsIn(injection.body)[0] }),
