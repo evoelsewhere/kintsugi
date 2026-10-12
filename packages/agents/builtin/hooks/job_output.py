@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Fail-closed credential and artifact checks for a runtime job output tree."""
+"""Fail-closed credential and artifact checks for a runtime job output tree.
+
+Mermaid diagrams (`.mmd` files and mermaid fences in Markdown) are also checked with the
+built-in lint (scripts/mermaid_lint.py); what it finds is reported as non-blocking warnings.
+"""
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -25,6 +30,9 @@ MAX_FILES = 10_000
 MAX_DIRECTORIES = 10_000
 MAX_ENTRIES = 20_000
 MAX_FINDINGS = 10_000
+MAX_WARNINGS = 1_000
+DIAGRAM_SUFFIXES = (".mmd", ".md")
+MERMAID_LINT = Path(__file__).resolve().parent.parent / "scripts" / "mermaid_lint.py"
 
 PRIVATE_KEY = re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----")
 CLOUD_KEY = re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b", re.IGNORECASE)
@@ -73,6 +81,7 @@ class JsonArgumentParser(argparse.ArgumentParser):
                     "exit_code": EXIT_USAGE,
                     "checked": {"files": 0, "bytes": 0},
                     "findings": [],
+                    "warnings": [],
                     "errors": [{"path": ".", "code": "invalid_cli"}],
                 },
                 ensure_ascii=True,
@@ -201,6 +210,29 @@ def _valid_topology(value: Any) -> bool:
     return True
 
 
+def _load_mermaid_lint() -> Any:
+    """The built-in Mermaid lint (scripts/mermaid_lint.py), or None when it is not shipped beside the hook."""
+    try:
+        spec = importlib.util.spec_from_file_location("kintsugi_mermaid_lint", MERMAID_LINT)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except (OSError, ImportError, SyntaxError):
+        return None
+
+
+def _diagram_warnings(lint: Any, relative: str, text: str) -> list[tuple[str, int]]:
+    """Mermaid lint problems of a `.mmd` file or of the mermaid fences of a Markdown file: rule and line only."""
+    if lint is None or not relative.lower().endswith(DIAGRAM_SUFFIXES):
+        return []
+    try:
+        return [(str(problem.rule), int(problem.line)) for problem in lint.lint_text(relative, text)]
+    except Exception:  # noqa: BLE001 - a lint defect must never block or break the scan
+        return [("diagram_lint_failed", 1)]
+
+
 def _validate_artifact(relative: str, content: bytes) -> list[tuple[str, int]]:
     findings: list[tuple[str, int]] = []
     name = relative.rsplit("/", 1)[-1]
@@ -237,7 +269,9 @@ def _validate_artifact(relative: str, content: bytes) -> list[tuple[str, int]]:
 
 def _scan(root: Path) -> dict[str, Any]:
     findings: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
+    lint = _load_mermaid_lint()
     checked_files = 0
     checked_bytes = 0
 
@@ -358,8 +392,21 @@ def _scan(root: Path) -> dict[str, Any]:
             if finding_limit_reached:
                 stack.clear()
                 break
+            for rule, line_number in _diagram_warnings(lint, relative, text):
+                if len(warnings) >= MAX_WARNINGS:
+                    break
+                warnings.append(
+                    {
+                        "category": "diagram",
+                        "rule": rule,
+                        "path": report_path,
+                        "line": line_number,
+                        "redacted": True,
+                    }
+                )
 
     findings.sort(key=lambda item: (item["path"], item["line"], item["rule"]))
+    warnings.sort(key=lambda item: (item["path"], item["line"], item["rule"]))
     errors.sort(key=lambda item: (item["path"], item["code"]))
     has_credentials = any(item["category"] == "credential" for item in findings)
     has_malformed = any(item["category"] == "malformed_artifact" for item in findings)
@@ -378,6 +425,7 @@ def _scan(root: Path) -> dict[str, Any]:
         "exit_code": exit_code,
         "checked": {"files": checked_files, "bytes": checked_bytes},
         "findings": findings,
+        "warnings": warnings,
         "errors": errors,
     }
 
@@ -397,6 +445,7 @@ def main(argv: list[str] | None = None) -> int:
             "exit_code": EXIT_INPUT_ERROR,
             "checked": {"files": 0, "bytes": 0},
             "findings": [],
+            "warnings": [],
             "errors": [{"path": ".", "code": str(exc)}],
         }
     print(json.dumps(report, ensure_ascii=True, sort_keys=True))
