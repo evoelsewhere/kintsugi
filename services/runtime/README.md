@@ -8,6 +8,7 @@
 - `src/pi-runtime.ts` — pi backend: validates the job, builds the session, runs the task.
 - `src/kernel/`
   - `session.ts` — a locked-down pi session per job: no context files, `.pi/` resources, settings files, packages, `SYSTEM.md`, MCP, codemode or tool search; an empty scratch agent directory, deleted when the job ends; the system prompt is the agent's instructions plus its skills, verbatim.
+  - `grep.ts` — the kernel `grep`: searches the read-only roots in-process through the path guard (no `ripgrep` on the host or in a job).
   - `tools.ts` — the kernel tool registry: `read`, `ls`, `grep`, `find` (confined to `workspace.readOnly`) and `outputs_write` (confined to `workspace.outDir`). Only allowlisted tools are created; pi registers nothing else.
   - `paths.ts` — path confinement (symlinks resolved).
   - `policy.ts` — system prompt composition and the `denyCommandPatterns` tool-call hook.

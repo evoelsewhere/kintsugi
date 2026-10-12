@@ -37,6 +37,9 @@ closing the session closes the sandbox.
   Windows has no OS-level primitive — the extension runs `enabled: false` and the deployment story
   for Windows is "worker must run on Linux/macOS" (already true for the Compose package).
 - `ripgrep` is a host dependency of the sandbox (checked at sandbox init).
+  - *Update 2026-10-12:* no longer applies. The kernel `grep` tool searches files in-process
+    through the path guard (`services/runtime/src/kernel/grep.ts`), so neither the worker host nor a
+    job needs `ripgrep`.
 - The worker enforces, in addition: never run without the output directory mounted writable,
   never pass credentials on disk, and keep the source checkout read-only at the filesystem level.
 - The `kintsugi-runner` image is no longer required for runtime jobs; if one is kept, it is only a
