@@ -33,7 +33,7 @@ export function useDynamicNavChildren(): Record<NavChildrenSource, NavChildItem[
     const children: NavChildItem[] = [{ id: "overview", label: "Overview", to: `/delivery${suffix}` }];
     for (const group of stagesByAudience(pipelineStages(stages.data))) {
       for (const stage of group.stages) {
-        const badge = group.audience === "portal" ? "planned" : group.audience === "runtime" && !stage.runnable ? "soon" : undefined;
+        const badge = group.audience === "portal" ? "planned" : group.audience === "runtime" && !stage.runnable ? "soon" : stage.id === "design" ? "POC" : undefined;
         children.push({
           id: stage.id,
           label: stageLabel(stage.id),

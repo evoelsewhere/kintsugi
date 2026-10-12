@@ -23,13 +23,23 @@ export const AUDIENCE_SHORT: Record<StageAudience, string> = {
 };
 
 /** The stages in pipeline order, grouped by audience (runtime, member, portal); the API order is kept within a group. */
-/** The runtime stages a person runs (ADR-0033): map, extract-rules and harden are steps of understand now. */
-export const RUNTIME_STAGES: readonly string[] = ["assess", "understand"];
+/** The runtime stages a person runs (ADR-0033): map, extract-rules and harden are steps of understand now; design is a POC. */
+export const RUNTIME_STAGES: readonly string[] = ["assess", "understand", "design"];
 
 /** Display names of the stages whose id alone reads poorly; the rest show their id in title case. */
 const STAGE_LABELS: Record<string, string> = {
   assess: "Assessment & Catalog",
   understand: "AS-IS Understanding",
+  design: "TO-BE Design",
+  preflight: "Preflight Check",
+  brief: "Modernization Brief",
+  transform: "Code Transform",
+  uplift: "Version Uplift",
+  reimagine: "Reimagine & Rebuild",
+  verify: "Behavior Verification",
+  modernize: "Guided Start",
+  review: "Rule Review",
+  status: "Progress & Next Step",
 };
 
 /** The name a person reads for a stage (sidebar, overview, stage header); the id stays the stable key. */
