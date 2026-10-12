@@ -74,6 +74,8 @@ export interface DocumentWriteRequest {
   agent?: string;
   /** Kintsugi-Unit: the work item a state change belongs to. */
   unit?: string;
+  /** Every file goes to the pull request, auto-commit paths included (a stage's proposals). */
+  reviewAll?: boolean;
 }
 
 /** Creates the queue if missing; safe on every start, from any process. */

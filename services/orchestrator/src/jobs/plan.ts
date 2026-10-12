@@ -166,5 +166,15 @@ export interface StagePlan {
   documents?: readonly string[];
   /** Files that must exist on the document repo's default branch before the stage starts. */
   requires?: readonly StagePrerequisite[];
+  /**
+   * Files of earlier stages the plan uses when they are on the default branch: every step sees them
+   * like `documents`, and the stage summary lists the missing ones (`missingInputs`).
+   */
+  optional?: readonly StagePrerequisite[];
+  /**
+   * Every output goes through the pull request, auto-commit paths (`units/**`) included: for
+   * proposals a person reviews as a whole before they become state (default: the writer splits).
+   */
+  reviewAll?: boolean;
   steps: readonly StageStep[];
 }
