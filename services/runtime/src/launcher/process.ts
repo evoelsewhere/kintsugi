@@ -123,7 +123,8 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       stopped = reason;
       killProcessTree(child.pid);
     };
-    const timer = setTimeout(() => stop("timeout"), options.timeoutMs);
+    // timeoutMs <= 0 means no wall-clock limit.
+    const timer = options.timeoutMs > 0 ? setTimeout(() => stop("timeout"), options.timeoutMs) : undefined;
     const onAbort = (): void => stop("aborted");
     options.signal?.addEventListener("abort", onAbort, { once: true });
     let checking = false;

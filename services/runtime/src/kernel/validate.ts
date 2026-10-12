@@ -38,7 +38,7 @@ export function validateJobSpec(spec: JobSpec): void {
     if (!isDirectory(dir)) problems.push(`not a directory: ${dir}`);
   }
 
-  if (!(limits.timeoutSec > 0)) problems.push("limits.timeoutSec must be positive");
+  if (!(limits.timeoutSec >= 0)) problems.push("limits.timeoutSec must be zero (no limit) or positive");
   if (limits.maxTurns !== undefined && !(limits.maxTurns >= 1)) problems.push("limits.maxTurns must be at least 1");
   if (limits.maxCostUsd !== undefined && !(limits.maxCostUsd > 0)) problems.push("limits.maxCostUsd must be positive");
 

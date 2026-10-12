@@ -25,6 +25,14 @@ function positive(name: string, fallback: number): number {
   return value;
 }
 
+function nonNegative(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) throw new Error(`${name} must be zero (no limit) or a positive number`);
+  return value;
+}
+
 /** Job limits from the environment, with the defaults of DEFAULT_JOB_LIMITS. */
 function jobDefaults(): JobDefaults {
   const maxOutputBytes = positive("KINTSUGI_JOB_MAX_OUTPUT_BYTES", DEFAULT_JOB_LIMITS.agent.maxOutputBytes);
@@ -32,7 +40,8 @@ function jobDefaults(): JobDefaults {
   return {
     script: { timeoutSec: positive("KINTSUGI_SCRIPT_TIMEOUT", DEFAULT_JOB_LIMITS.script.timeoutSec), maxOutputBytes },
     agent: {
-      timeoutSec: positive("KINTSUGI_JOB_DEFAULT_TIMEOUT", DEFAULT_JOB_LIMITS.agent.timeoutSec),
+      // 0 = no wall-clock limit (a stalled provider is still caught by the idle watchdog).
+      timeoutSec: nonNegative("KINTSUGI_JOB_DEFAULT_TIMEOUT", DEFAULT_JOB_LIMITS.agent.timeoutSec),
       maxOutputBytes,
       maxTurns: positive("KINTSUGI_JOB_MAX_TURNS", DEFAULT_JOB_LIMITS.agent.maxTurns ?? 80),
       ...(maxCostUsd === undefined ? {} : { maxCostUsd }),

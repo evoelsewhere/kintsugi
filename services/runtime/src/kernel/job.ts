@@ -74,7 +74,9 @@ export class KernelJob implements JobHandle {
     this.#dispose = dispose;
     if (this.#ended) return this.#teardown();
     this.#unsubscribe = session.subscribe((event) => this.#onEvent(event));
-    this.#timer = setTimeout(() => void this.#halt("timeout", `timed out after ${this.spec.limits.timeoutSec}s`), this.spec.limits.timeoutSec * 1000);
+    if (this.spec.limits.timeoutSec > 0) {
+      this.#timer = setTimeout(() => void this.#halt("timeout", `timed out after ${this.spec.limits.timeoutSec}s`), this.spec.limits.timeoutSec * 1000);
+    }
     try {
       await session.prompt(this.spec.task);
       this.#finish();

@@ -231,7 +231,8 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
         cwd: jobDir,
         // The job environment plus this provider's variables — in this child only.
         env: { ...jobEnvironment(tmp, options.hostEnv), ...providerEnv },
-        timeoutMs: (timeoutSec + grace) * 1000,
+        // timeoutSec 0 = no wall-clock limit; the idle watchdog still catches a stalled provider.
+        timeoutMs: timeoutSec > 0 ? (timeoutSec + grace) * 1000 : 0,
         input: JSON.stringify(input),
         onLine: (line) => job.onLine(line),
         signal: job.signal,
