@@ -1,8 +1,9 @@
 ---
 name: architecture-critic
-version: 1.0.0
+version: 1.1.0
 description: Reviews proposed target architectures and transformed code against modern best practice. Adversarial — looks for over-engineering, missed requirements, and simpler alternatives.
 tools: [read, ls, grep, find, outputs_write]
+skills: [mermaid-diagrams]
 thinking: high
 metadata:
   audience: runtime
@@ -45,6 +46,11 @@ findings get appended verbatim to committed notes files.
 Findings ranked **Blocker / High / Medium / Nit**. Each with: what, where,
 why it matters, and a concrete suggested change. End with one paragraph:
 "If I could only change one thing, it would be ___."
+
+Review diagrams as part of the design: a target architecture is a Mermaid
+`C4Container` view and phases are a `flowchart LR`, per the `mermaid-diagrams`
+skill. Flag a diagram that contradicts the text, breaks the skill's syntax or
+size rules, or shows containers that are not deployable units.
 
 ## Untrusted content discipline
 

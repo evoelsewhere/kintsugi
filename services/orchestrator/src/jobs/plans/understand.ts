@@ -57,8 +57,9 @@ files and follow its calls only as far as needed to describe it; the other units
 Write ${ASIS}/{key}.md with outputs_write, with exactly these sections, in this order:
 1. Purpose — what the unit does for the business, in two to four sentences.
 2. Entry points — how the unit is started (routes, transactions, screens, job steps, main programs), file:line each.
-3. Main flows — the unit's main processing paths, step by step; add a Mermaid sequenceDiagram or flowchart in a fenced
-   mermaid block when the flow has more than three participants or branches.
+3. Main flows — the unit's main processing paths, step by step; add a Mermaid sequenceDiagram per main flow
+   (autonumber; alt/opt/loop for branches, options and repetition) in a fenced mermaid block when the flow has more
+   than three participants or branches, per the mermaid-diagrams skill.
 4. Dependencies — inbound (who calls or starts it) and outbound (units, data stores, external systems), as a table:
    direction, target, kind (call, read, write, integration), evidence file:line.
 5. Data objects — the records, tables, DTOs or copybooks it reads or writes, with the fields that matter.
@@ -97,10 +98,12 @@ Write with outputs_write:
   spec), the documents below, and which inputs were missing (no BUSINESS_RULES.md, no SECURITY_FINDINGS.md, units
   without a specification).
 - ${ASIS}/architecture.md — the AS-IS architecture: modules and their responsibilities, how they interact, entry
-  points, batch versus online paths, deployment and runtime as far as the code shows; a Mermaid graph of the modules
-  (at most about 40 edges, in a fenced mermaid block); the dependency cycles of the matrix and what they mean.
+  points, batch versus online paths, deployment and runtime as far as the code shows; a Mermaid flowchart TB of the
+  modules (a subgraph per domain, at most 40 edges, in a fenced mermaid block, per the mermaid-diagrams skill); the
+  dependency cycles of the matrix and what they mean.
 - ${ASIS}/data-model.md — the data stores and data objects, which units read and write each (from the matrix), keys
-  and relationships the code shows, and a Mermaid erDiagram when it helps.
+  and relationships the code shows, and a Mermaid erDiagram (keys marked PK/FK, relationships labelled) of the
+  entities the code shows.
 - ${ASIS}/integrations.md — every external system and interface (files, queues, APIs, screens, batch exchanges):
   direction, protocol or format, the units involved, error handling.
 Cite unit specifications and file:line; do not restate the traceability tables, link to traceability.md instead.

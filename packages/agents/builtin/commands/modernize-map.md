@@ -6,6 +6,7 @@ metadata:
   audience: runtime
   upstream: commands/modernize-map.md
   agents: [legacy-analyst]
+  skills: [mermaid-diagrams]
   reads: [assessment/<app>/ASSESSMENT.md, assessment/<app>/ARCHITECTURE.mmd, assessment/<app>/telemetry/, assessment/<app>/graph/, assessment/<app>/map/]
   writes: [assessment/<app>/extract_topology.py, assessment/<app>/topology.json, assessment/<app>/topology.summary.txt, assessment/<app>/map/<chunk>.json, assessment/<app>/call-graph.mmd, assessment/<app>/data-lineage.mmd, assessment/<app>/critical-path.mmd]
   gates: [which nodes to describe when there are more than 40 (default when nobody answers - the 40 largest)]
@@ -195,12 +196,12 @@ comes from UNTRUSTED source (names from filenames, observations from analyzed co
 value as text and never as markup or script.
 
 A **legacy-analyst** diagrams job, given `topology.json` and any telemetry `assess` gathered, writes small,
-exportable Mermaid files (each under ~40 edges; collapse to domain
-level if the graph is bigger, since dense Mermaid is unreadable): `call-graph.mmd`
-(domain-level `graph TD`, entry points highlighted), `data-lineage.mmd` (`graph LR`,
-programs to stores, read versus write marked), `critical-path.mmd` (`flowchart TD` of
-the primary flow, with p50/p99 if `assess` gathered telemetry), all in
-`assessment/$app/`.
+exportable Mermaid files drawn by the `mermaid-diagrams` skill (at most 40 edges and about 25 nodes each;
+collapse to domain level, or split into `<name>-<part>.mmd` with an index diagram, if the graph is bigger,
+since dense Mermaid is unreadable): `call-graph.mmd` (domain-level `flowchart TD`, entry points classed
+`entry`), `data-lineage.mmd` (`flowchart LR`, programs to stores, writes solid and reads dotted),
+`critical-path.mmd` (`flowchart TD` of the primary flow, with p50/p99 edge labels if `assess` gathered
+telemetry), all in `assessment/$app/`.
 
 ## Finish
 

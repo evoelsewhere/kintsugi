@@ -58,7 +58,8 @@ function mockFile(path: string, agent: string, app: string): string {
     const sections = SPEC_SECTIONS.map((section) => `## ${section}\n\nMock output of ${agent} for ${app} (the mock agent backend calls no LLM).\n`);
     return `# ${name.slice(0, -3)}\n\n${sections.join("\n")}`;
   }
-  if (name.endsWith(".mmd")) return `graph TD\n  mock[${agent}] --> output[${name}]\n`;
+  // A diagram that passes scripts/mermaid_lint.py: quoted labels on sanitized ids.
+  if (name.endsWith(".mmd")) return `flowchart TD\n    n_agent["${agent}"] --> n_output["${name}"]\n`;
   if (name.endsWith(".patch")) return `# mock remediation patch of ${app}: no hunks (written by the mock agent backend)\n`;
   if (name.endsWith(".json")) return "{}\n";
   return `# ${name}\n\nMock output of ${agent} for ${app} (the mock agent backend calls no LLM).\n`;
