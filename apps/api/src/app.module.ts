@@ -17,6 +17,7 @@ import { CutoverChecklistsModule } from "./modules/delivery/cutover/cutover-chec
 import { FactorySetupsModule } from "./modules/delivery/factory/factory-setups.module.js";
 import { IncidentsModule } from "./modules/delivery/hypercare/incidents.module.js";
 import { PortfolioItemsModule } from "./modules/delivery/portfolio/portfolio-items.module.js";
+import { DocumentsModule } from "./modules/delivery/documents/documents.module.js";
 import { RuntimeJobsModule } from "./modules/delivery/runtime-jobs/runtime-jobs.module.js";
 import { VerificationRunsModule } from "./modules/delivery/verification/verification-runs.module.js";
 import { WorkItemsModule } from "./modules/delivery/workbench/work-items.module.js";
@@ -60,6 +61,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     // delivery
     PortfolioItemsModule,
     RuntimeJobsModule,
+    DocumentsModule,
     ArchitectureViewsModule,
     FactorySetupsModule,
     WorkItemsModule,
