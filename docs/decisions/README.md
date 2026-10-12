@@ -49,6 +49,7 @@ This page has two parts:
 | [0028](0028-remove-rulebook-single-document-repo.md) | Remove the rulebook; one document repo per project | Accepted |
 | [0029](0029-job-workspaces-instead-of-os-sandboxes.md) | Job workspaces instead of OS sandboxes | Accepted |
 | [0030](0030-worker-heartbeat-in-postgres.md) | Worker heartbeat in Postgres | Accepted |
+| [0031](0031-understand-stage-as-is-specification.md) | understand stage: per-unit AS-IS specification closes the Understand phase | Accepted |
 
 ## Decision register
 
@@ -101,6 +102,7 @@ This page has two parts:
 | D46 | Runtime agents and the Agent Builder | 🔴 | Five built-in read-only agents for understanding (legacy-analyst, business-rules-extractor, version-delta-analyst, architecture-critic, security-auditor) plus admin-created agents; agent files + Agent Skills (format per ADR-0027); draft and immutable published versions; implementation stays with members | M0 | ✅ [0026](0026-runtime-agents-and-agent-builder.md) |
 | D47 | Built-in modernization content | 🔴 | Upstream code-modernization content copied into `packages/agents/builtin/` (pinned, Apache-2.0, no assets) and adapted: runtime and member agents (`metadata.audience`), stage commands, workflows, scripts in the job workspace, server-side hooks, tests | M0 | ✅ [0027](0027-builtin-modernization-content.md), [0029](0029-job-workspaces-instead-of-os-sandboxes.md) |
 | D48 | Project knowledge and repository model | 🔴 | No rulebook; one document repo per project holds everything except code; project knowledge as plain documents in `standards/` and member plugins in `plugins/`; pipelines in `kintsugi.yaml` or built-in; repo roles `legacy` / `legacy-data` (AS-IS, read-only) and `target` with `component` (TO-BE, members only) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
+| D50 | Reverse engineering of the AS-IS system | 🔴 | Runtime `understand` stage after `map` → `extract-rules` ∥ `harden`: units proposed deterministically from the map's `topology.json` (no parser), one `legacy-analyst` AS-IS specification per unit, application overview, script-merged traceability matrix, proposed work items; everything (`units/**` included) in one pull request | M1 | ✅ [0031](0031-understand-stage-as-is-specification.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
