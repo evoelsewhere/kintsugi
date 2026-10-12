@@ -12,3 +12,20 @@ Changes from the upstream content:
 - Adapted: agent, command, workflow, script, hook-reader, and documentation content to Kintsugi's split between runtime jobs, member harnesses, and the portal; workspace artifact paths and commit boundaries; and the package's test/lint/typecheck setup. The reader functions remain pure and are intended for future portal progress presentation.
 
 The complete Kintsugi adaptation history is recorded in the repository. No Claude Code plugin or plugin marketplace is shipped.
+
+Mermaid diagrams skill
+
+skills/mermaid-diagrams contains material adapted from softaworks/agent-toolkit
+(https://github.com/softaworks/agent-toolkit, skills/mermaid-diagrams and
+skills/c4-architecture) at commit 3027f20f3181758385a1bb8c022d4041dfb4de84.
+Copyright (c) 2026 Leonardo Flores. Licensed under the MIT License; see
+skills/mermaid-diagrams/LICENSE-softaworks. Changes: condensed to Kintsugi
+artifacts, added syntax-safety and size rules, and a stdlib validator
+(scripts/mermaid_lint.py).
+
+Some syntax-safety rules (keywords as ids, ids starting with o or x, comments
+on their own line, linking nodes rather than subgraphs) were informed by the
+ideas of awesome-skills/mermaid-syntax-skill
+(https://github.com/awesome-skills/mermaid-syntax-skill, commit
+933d1a6bc6b438f01aeb8811c6a0f16ab4d5c505); they are written in Kintsugi's own
+words and no text was copied.

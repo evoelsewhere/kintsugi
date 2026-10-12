@@ -80,7 +80,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
         ["agent", "legacy-analyst", "succeeded"],
       ]);
       expect(steps.rows[0]?.script_hash).toMatch(/^[0-9a-f]{64}$/);
-      expect(steps.rows[4]?.agent).toBe("legacy-analyst@1.0.0");
+      expect(steps.rows[4]?.agent).toBe("legacy-analyst@1.1.0");
 
       const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
       expect(artifacts.rows.map((row) => [row.path, row.provenance.origin])).toEqual([
@@ -103,11 +103,11 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       // The output has landed: the job's workspace is gone.
       await expect.poll(() => existsSync(storage.job(id).root), { timeout: 10_000, interval: 100 }).toBe(false);
       const write = (await db.pool.query<{ branch: string; job_id: string; agent: string; actor: string }>("select branch, job_id, agent, actor from workflow.document_write where id = $1", [writeId])).rows[0]!;
-      expect(write).toMatchObject({ branch: `kintsugi/legacy-analyst/${id}`, job_id: id, agent: "legacy-analyst@1.0.0", actor: "alice" });
+      expect(write).toMatchObject({ branch: `kintsugi/legacy-analyst/${id}`, job_id: id, agent: "legacy-analyst@1.1.0", actor: "alice" });
       expect(remote.git("docs", "show", `${write.branch}:assessment/web/ASSESSMENT.md`)).toContain("Assessment of web");
       expect(remote.git("docs", "show", `${write.branch}:assessment/web/inventory.json`)).toContain('"sourceFileCount"');
       expect(() => remote.git("docs", "show", `${write.branch}:restricted/SECRETS.local.md`)).toThrow();
-      expect(remote.git("docs", "log", "-1", "--format=%(trailers:only,unfold)", write.branch).trim()).toBe(`Kintsugi-Job: ${id}\nKintsugi-Agent: legacy-analyst@1.0.0\nKintsugi-Actor: alice`);
+      expect(remote.git("docs", "log", "-1", "--format=%(trailers:only,unfold)", write.branch).trim()).toBe(`Kintsugi-Job: ${id}\nKintsugi-Agent: legacy-analyst@1.1.0\nKintsugi-Actor: alice`);
     } finally {
       await worker.stop();
     }

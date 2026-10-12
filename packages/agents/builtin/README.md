@@ -37,13 +37,14 @@ For reader functions, `reader/layout.ts` exposes logical namespaces: `assessment
 
 ## Package contents
 
+- `skills/`: shared skills that agents load by name (`skills:` in an agent file). `skills/mermaid-diagrams` says how every Kintsugi diagram is drawn: Mermaid only, the diagram type per artifact, syntax-safety rules and size limits; its `references/` hold condensed syntax per diagram type. The runtime kernel loads `SKILL.md` only, so it stands on its own.
 - `agents/`: runtime and member agent definitions. Runtime definitions use kernel tools only; member definitions are context assets and are not converted into runtime jobs.
 - `commands/`: task contracts for assessment, mapping, rules, hardening, the per-unit AS-IS specification (`understand`, Kintsugi's own), review, verification, and the selected modernization route.
 - `workflows/`: runtime job fan-out and member workflow specifications, with the audience distinction kept explicit.
-- `scripts/`: deterministic standard-library helpers used by script steps; they do not replace a human approval gate.
+- `scripts/`: deterministic standard-library helpers used by script steps; they do not replace a human approval gate. `scripts/mermaid_lint.py` checks Mermaid diagrams (`.mmd` files and `mermaid` fences in Markdown) against the `mermaid-diagrams` rules.
 - `hooks/job_output.py`: server-side lifecycle check for credential-shaped values and required artifact shape; see [hooks/JOB-OUTPUT.md](hooks/JOB-OUTPUT.md).
 - `hooks/reader/`: pure TypeScript artifact parsers (exported as `@kintsugi/agents/reader`, used by the API for the portal's stage results) and progress snapshot computation. No plugin registration, host API, pane rendering, telemetry, or writes remain.
-- `tests/`: Vitest tests for the retained readers; `hooks/tests/` contains Python tests for JobOutput. The TypeScript reader tests are included in the `@kintsugi/agents` suite and in `builtin/tsconfig.json`; run `pnpm --filter @kintsugi/agents test` and `pnpm --filter @kintsugi/agents typecheck`. Run the hook tests with `python -m pytest -q packages/agents/builtin/hooks/tests` from the repository root.
+- `tests/`: Vitest tests for the retained readers; `hooks/tests/` contains Python tests for JobOutput. The TypeScript reader tests are included in the `@kintsugi/agents` suite and in `builtin/tsconfig.json`; run `pnpm --filter @kintsugi/agents test` and `pnpm --filter @kintsugi/agents typecheck`. Run the hook and script tests with `python -m pytest -q packages/agents/builtin/hooks/tests packages/agents/builtin/scripts/tests` from the repository root.
 
 ## Portal note
 
@@ -54,3 +55,5 @@ The reader code currently returns progress data only. A future portal integratio
 ## Provenance and license
 
 This content is adapted from Anthropic's `code-modernization` plugin in [`anthropics/claude-plugins-official`](https://github.com/anthropics/claude-plugins-official), pinned at commit `c8874f5ad883e26428f483ffa4d537cc81489e64`. The upstream method and safety properties are preserved where they fit Kintsugi's execution model; host-specific presentation, registration, and telemetry are not. See [`NOTICE`](NOTICE), [`CHANGELOG.md`](CHANGELOG.md), and [`LICENSE`](LICENSE) for provenance, adaptation changes, and license terms.
+
+`skills/mermaid-diagrams` adapts material from [`softaworks/agent-toolkit`](https://github.com/softaworks/agent-toolkit) (`skills/mermaid-diagrams`, `skills/c4-architecture`), pinned at commit `3027f20f3181758385a1bb8c022d4041dfb4de84`, under the MIT License; see [`skills/mermaid-diagrams/LICENSE-softaworks`](skills/mermaid-diagrams/LICENSE-softaworks) and `NOTICE`.

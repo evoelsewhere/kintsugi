@@ -6,6 +6,7 @@ metadata:
   audience: member
   upstream: commands/modernize-reimagine.md
   agents: [scaffolder, business-rules-extractor, legacy-analyst, architecture-critic]
+  skills: [mermaid-diagrams]
   reads: [assessment/<app>/MODERNIZATION_BRIEF.md, assessment/<app>/INTENT.md, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/DATA_OBJECTS.md, assessment/<app>/topology.json, assessment/<app>/ASSESSMENT.md, assessment/<app>/AI_NATIVE_SPEC.md, assessment/<app>/REIMAGINED_ARCHITECTURE.md]
   writes: [assessment/<app>/AI_NATIVE_SPEC.md, assessment/<app>/REIMAGINED_ARCHITECTURE.md]
   gates: ["P0 capabilities and deliberate drops (checkpoint 1)", "architecture approval before scaffolding (checkpoint 2)"]
@@ -52,7 +53,8 @@ agents whose input is missing:
    of $app: inbound (screens, APIs, batch triggers, queues) and outbound (reports, files, downstream calls, DB writes), each
    with name, direction, payload shape, and frequency or SLA if discernible. Mask credentials in endpoints and payload examples."
 3. **legacy-analyst**, only if there is no `topology.json` or `DATA_OBJECTS.md` — "Identify the core domain
-   entities of the legacy repository of $app and their relationships: an entity list and a Mermaid erDiagram."
+   entities of the legacy repository of $app and their relationships: an entity list and a Mermaid erDiagram
+   (keys marked PK/FK, every relationship labelled, per the mermaid-diagrams skill)."
 
 Write `assessment/$app/AI_NATIVE_SPEC.md`: **Capabilities** (what the system must do, from rules and
 interfaces), **Domain Model** (entities and erDiagram), **Interface Contracts** (each external interface as
@@ -71,7 +73,8 @@ from the gate in the spec.
 
 ## Phase C — Architecture, then critique
 
-Design the target architecture for <vision>: a Mermaid C4 Container diagram, service boundaries with
+Design the target architecture for <vision>: a Mermaid `C4Container` diagram (per the `mermaid-diagrams` skill;
+lint it with the skill's `mermaid_lint.py`), service boundaries with
 rationale (which rules and entities live where), technology choices with a one-line justification each, and
 the data migration approach from the legacy stores. Then get the critique: if an architecture-critic review of this design
 from Kintsugi's review stage is already in `reviews/` of the document repository, reuse it; otherwise spawn

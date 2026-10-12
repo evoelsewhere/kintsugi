@@ -116,11 +116,11 @@ ${WORKSPACE}
 The merged map is {in}/${DIR}/topology.json (with flows and observations); telemetry the assessment gathered, if any,
 is under {in}/${DIR}/telemetry/.
 
-Write three Mermaid files with outputs_write, without Markdown fences, each under about 40 edges (collapse to domain
-level if the graph is bigger):
-- ${DIR}/call-graph.mmd — a domain-level \`graph TD\`, entry points highlighted;
-- ${DIR}/data-lineage.mmd — a \`graph LR\` from programs to stores, read versus write marked;
-- ${DIR}/critical-path.mmd — a \`flowchart TD\` of the primary flow, with p50/p99 if telemetry exists.
+Write three Mermaid files with outputs_write, without Markdown fences, per the mermaid-diagrams skill (sanitized ids,
+quoted labels, at most 40 edges and about 25 nodes each; collapse to domain level if the graph is bigger):
+- ${DIR}/call-graph.mmd — a domain-level \`flowchart TD\`, entry points classed \`entry\`;
+- ${DIR}/data-lineage.mmd — a \`flowchart LR\` from programs to stores, writes solid and reads dotted;
+- ${DIR}/critical-path.mmd — a \`flowchart TD\` of the primary flow, with p50/p99 edge labels if telemetry exists.
 
 ${CREDENTIALS}
 ${UNTRUSTED}`;

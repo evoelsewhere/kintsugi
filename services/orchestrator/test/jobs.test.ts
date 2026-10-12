@@ -116,7 +116,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const agent = children.at(-1);
     expect(script?.sourceCommit).toBe(run?.sourceCommit);
     expect(script?.scriptHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(agent?.agent).toBe("legacy-analyst@1.0.0");
+    expect(agent?.agent).toBe("legacy-analyst@1.1.0");
 
     // The synthesis read the script's output, the analysis notes and the declared document as read-only inputs, and could not change the source.
     expect(seen.inventory?.sourceFileCount).toBe(3);
@@ -147,7 +147,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({
       repository: "docs",
-      request: { projectId: "demo", kind: "job-output", outputOfJob: id, jobId: id, agent: "legacy-analyst@1.0.0", actor: "alice", message: "Assess demo: inventory, analysis and assessment" },
+      request: { projectId: "demo", kind: "job-output", outputOfJob: id, jobId: id, agent: "legacy-analyst@1.1.0", actor: "alice", message: "Assess demo: inventory, analysis and assessment" },
     });
     expect(run?.documentWriteId).toBe(writes[0]?.request.writeId);
 

@@ -1,8 +1,9 @@
 ---
 name: business-rules-extractor
-version: 1.0.0
+version: 1.1.0
 description: Mines domain logic, calculations, validations, and policies from legacy code into testable Given/When/Then specifications. Use when you need to separate "what the business requires" from "how the old code happened to implement it."
 tools: [read, ls, grep, find, outputs_write]
+skills: [mermaid-diagrams]
 thinking: medium
 metadata:
   audience: runtime
@@ -57,7 +58,9 @@ in a parameter list is a leak.
 ## Output format
 
 One "Rule Card" per rule (see the format in the `extract-rules` command).
-Group by category. Lead with a summary table.
+Group by category. Lead with a summary table. When a data-object summary
+shows how entities relate, draw it as a Mermaid `erDiagram` per the
+`mermaid-diagrams` skill.
 
 ## Untrusted content discipline
 
