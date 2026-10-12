@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { agentsApi } from "@/lib/api/agents";
 import type { StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type DocumentWriteView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
-import { fileName } from "@/lib/stages";
+import { fileName, stageLabel } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { ApplicationFacts } from "./delivery-shell";
 import { DecisionPoints, StageAgents, StagePaths } from "./stage-parts";
@@ -23,7 +23,7 @@ function StageSummary({ stage, badge, icon: Icon, children }: { stage: StageView
     <Card>
       <div className="flex flex-wrap items-center gap-2">
         <Icon className="size-4 text-text-muted" strokeWidth={1.75} />
-        <p className="text-[15px] font-medium text-text">{stage.id}</p>
+        <p className="text-[15px] font-medium text-text">{stageLabel(stage.id)}</p>
         <span className="font-mono text-[11px] text-text-muted">/{stage.command}</span>
         {badge}
       </div>

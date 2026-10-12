@@ -26,6 +26,17 @@ export const AUDIENCE_SHORT: Record<StageAudience, string> = {
 /** The runtime stages a person runs (ADR-0033): map, extract-rules and harden are steps of understand now. */
 export const RUNTIME_STAGES: readonly string[] = ["assess", "understand"];
 
+/** Display names of the stages whose id alone reads poorly; the rest show their id in title case. */
+const STAGE_LABELS: Record<string, string> = {
+  assess: "Assessment & Catalog",
+  understand: "AS-IS Understanding",
+};
+
+/** The name a person reads for a stage (sidebar, overview, stage header); the id stays the stable key. */
+export function stageLabel(id: string): string {
+  return STAGE_LABELS[id] ?? id.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
 /** The stages shown in the pipeline: every member and portal stage, and only the runtime stages a person runs. */
 export function pipelineStages(stages: readonly StageView[]): StageView[] {
   return stages.filter((stage) => stage.audience !== "runtime" || RUNTIME_STAGES.includes(stage.id));

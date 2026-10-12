@@ -18,7 +18,7 @@ import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
 import { isActiveStatus, RUN_STATUS, styleOf } from "@/lib/status";
-import { AUDIENCE_SHORT, latestRun, pipelineStages, runBlocker, stagesByAudience } from "@/lib/stages";
+import { AUDIENCE_SHORT, latestRun, pipelineStages, runBlocker, stageLabel, stagesByAudience } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { DeliveryShell, NoApplications, WithProject } from "./delivery-shell";
@@ -186,7 +186,7 @@ function StageChip({ stage, last, loading, headline, to }: { stage: StageView; l
     >
       <span className="flex items-center gap-1.5 text-[13px] font-medium text-text">
         <StatusDot tone={tone} className={cn("size-2", last !== undefined && isActiveStatus(last.status) && "animate-pulse")} />
-        {stage.id}
+        {stageLabel(stage.id)}
       </span>
       <span className="truncate text-[11px] text-text-muted">{status}</span>
       {headline === undefined || headline.length === 0 ? null : <span className="truncate text-[11px] font-medium text-text-secondary tabular-nums">{headline.join(" · ")}</span>}

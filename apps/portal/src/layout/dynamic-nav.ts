@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { jobRunsApi } from "../lib/api/job-runs";
-import { AUDIENCE_SHORT, pipelineStages, stagesByAudience } from "../lib/stages";
+import { AUDIENCE_SHORT, pipelineStages, stageLabel, stagesByAudience } from "../lib/stages";
 import { useLoader } from "../lib/use-loader";
 import type { NavChildItem, NavChildrenSource } from "./nav-config";
 
@@ -36,7 +36,7 @@ export function useDynamicNavChildren(): Record<NavChildrenSource, NavChildItem[
         const badge = group.audience === "portal" ? "planned" : group.audience === "runtime" && !stage.runnable ? "soon" : undefined;
         children.push({
           id: stage.id,
-          label: stage.id,
+          label: stageLabel(stage.id),
           to: `/delivery/${encodeURIComponent(stage.id)}${suffix}`,
           group: AUDIENCE_SHORT[group.audience],
           ...(badge === undefined ? {} : { badge }),
