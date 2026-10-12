@@ -22,6 +22,7 @@ import { HardenResultsView } from "./harden-results";
 import { MapResultsView } from "./map-results";
 import { OutputFiles, Section } from "./results-parts";
 import { RulesResultsView } from "./rules-results";
+import { UnderstandResultsView } from "./understand-results";
 
 export interface StageResultsProps {
   project: ProjectDetail;
@@ -38,6 +39,12 @@ const STATUS: Record<DocumentRef["status"], { tone: StatusTone; label: string }>
   merged: { tone: "green", label: "Merged" },
   open: { tone: "orange", label: "Open branch" },
   commit: { tone: "muted", label: "Commit" },
+};
+
+/** What to do first when a stage has no output yet (the stages it builds on). */
+const NEXT_ACTION: Partial<Record<ResultStage, string>> = {
+  understand:
+    "Run understand after assess and map are merged (extract-rules and harden are used when merged too). It proposes the units from the map, writes an AS-IS specification per unit, the traceability matrix and the work items, all in one pull request.",
 };
 
 const refLabel = (ref: DocumentRef): string =>
@@ -113,7 +120,7 @@ export default function StageResults({ project, application, stage, version, run
                 title={`No ${stage} output for ${application.name} at this ref`}
                 description={
                   ref === undefined
-                    ? (runBlocked ?? `Run ${stage} with the Run button above; its results appear here as soon as the run's output reaches the document repo.`)
+                    ? (runBlocked ?? NEXT_ACTION[stage] ?? `Run ${stage} with the Run button above; its results appear here as soon as the run's output reaches the document repo.`)
                     : "Pick “Latest result” or another run above."
                 }
                 {...(ref === undefined ? {} : { action: <Button size="small" variant="ghost" className="shadow-border" onClick={() => update("ref", undefined)}>Show the latest result</Button> })}
@@ -121,7 +128,7 @@ export default function StageResults({ project, application, stage, version, run
             </Card>
           ) : (
             <>
-              <StageView results={loaded} compare={compare} />
+              <StageView results={loaded} compare={compare} projectId={project.id} />
               <Section title="Output files" description={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}.`}>
                 <OutputFiles files={loaded.files} />
               </Section>
@@ -154,7 +161,7 @@ function RefFacts({ results }: { results: StageResults }): React.JSX.Element {
   );
 }
 
-function StageView({ results, compare }: { results: StageResults; compare: boolean }): React.JSX.Element {
+function StageView({ results, compare, projectId }: { results: StageResults; compare: boolean; projectId: string }): React.JSX.Element {
   switch (results.stage) {
     case "assess":
       return <AssessResultsView results={results} compare={compare} />;
@@ -164,5 +171,7 @@ function StageView({ results, compare }: { results: StageResults; compare: boole
       return <RulesResultsView results={results} compare={compare} />;
     case "harden":
       return <HardenResultsView results={results} compare={compare} />;
+    case "understand":
+      return <UnderstandResultsView results={results} compare={compare} projectId={projectId} />;
   }
 }

@@ -14,9 +14,11 @@ export interface DrawerProps {
   subtitle?: React.ReactNode;
   onClose: () => void;
   children: React.ReactNode;
+  /** `wide` for documents (a specification with diagrams). */
+  size?: "default" | "wide";
 }
 
-export function Drawer({ open, title, subtitle, onClose, children }: DrawerProps): React.JSX.Element | null {
+export function Drawer({ open, title, subtitle, onClose, children, size = "default" }: DrawerProps): React.JSX.Element | null {
   const panelRef = React.useRef<HTMLDivElement>(null);
   useOverlayStack(open, onClose, panelRef);
   const titleId = React.useId();
@@ -30,7 +32,7 @@ export function Drawer({ open, title, subtitle, onClose, children }: DrawerProps
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative flex h-full w-full max-w-xl flex-col bg-surface outline-none"
+        className={`relative flex h-full w-full flex-col bg-surface outline-none ${size === "wide" ? "max-w-4xl" : "max-w-xl"}`}
         style={{ boxShadow: "var(--ds-shadow-modal)" }}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 px-5 pt-5 pb-3 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)]">

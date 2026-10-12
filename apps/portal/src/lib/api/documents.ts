@@ -165,9 +165,9 @@ export interface MapDiagram {
   source: string;
 }
 
-export type ResultStage = "assess" | "map" | "extract-rules" | "harden";
+export type ResultStage = "assess" | "map" | "extract-rules" | "harden" | "understand";
 
-export const RESULT_STAGES: readonly ResultStage[] = ["assess", "map", "extract-rules", "harden"];
+export const RESULT_STAGES: readonly ResultStage[] = ["assess", "map", "extract-rules", "harden", "understand"];
 
 export const hasResultsView = (stage: string): stage is ResultStage => (RESULT_STAGES as readonly string[]).includes(stage);
 
@@ -213,7 +213,69 @@ export interface HardenResults extends ResultsBase {
   runId?: string;
 }
 
-export type StageResults = AssessResults | MapResults | RulesResults | HardenResults;
+/** A unit of the understand stage: its row of traceability.json and its work item at the ref. */
+export interface UnderstandUnit {
+  id: string;
+  /** `<module>/<unit>`. */
+  key: string;
+  module: string;
+  unit: string;
+  title: string;
+  kind?: string;
+  loc: number;
+  entryPoint: boolean;
+  /** The specification's path; null when none was written. */
+  spec: string | null;
+  files: string[];
+  dependsOn: string[];
+  usedBy: string[];
+  dataStores: Array<{ id: string; access: string[] }>;
+  externalSystems: string[];
+  rules: string[];
+  findings: string[];
+  dataObjects: string[];
+  entryPoints: string[];
+  openQuestions: number;
+  workItem?: { path: string; status: string; complexity?: string };
+}
+
+export interface AsIsDocument {
+  id: "readme" | "architecture" | "data-model" | "integrations";
+  title: string;
+  path: string;
+  markdown: string;
+}
+
+export interface UnderstandResults extends ResultsBase {
+  stage: "understand";
+  units: UnderstandUnit[];
+  matrix: {
+    path: string;
+    inputs: { businessRules: boolean; securityFindings: boolean };
+    rulesCovered: string[];
+    findingsMapped: string[];
+    unmappedRules: string[];
+    unmappedFindings: string[];
+    dataStores: string[];
+    cycles: string[][];
+    notes: Record<string, number>;
+  } | null;
+  documents: AsIsDocument[];
+  missingInputs: Array<{ path: string; stage: string }>;
+}
+
+export type StageResults = AssessResults | MapResults | RulesResults | HardenResults | UnderstandResults;
+
+/** A text file of the document repo at a ref. */
+export interface DocumentFile {
+  ref: string;
+  commit: string;
+  path: string;
+  size: number;
+  format: "text" | "json";
+  content: string;
+  json?: unknown;
+}
 
 export interface StageHeadline {
   stage: ResultStage;
@@ -225,6 +287,11 @@ const project = (projectId: string): string => `/api/projects/${encodeURICompone
 
 export const documentsApi = {
   refs: (projectId: string): Promise<DocumentRefs> => apiGet(`${project(projectId)}/documents/refs`),
+  file: (projectId: string, path: string, ref?: string): Promise<DocumentFile> => {
+    const query = new URLSearchParams({ path });
+    if (ref !== undefined) query.set("ref", ref);
+    return apiGet(`${project(projectId)}/documents/file?${query.toString()}`);
+  },
   results: (projectId: string, applicationId: string, stage: ResultStage, options: { ref?: string | undefined; compare?: boolean } = {}): Promise<StageResults> => {
     const query = new URLSearchParams();
     if (options.ref !== undefined) query.set("ref", options.ref);

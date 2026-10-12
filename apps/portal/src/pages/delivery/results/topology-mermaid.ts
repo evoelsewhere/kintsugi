@@ -31,7 +31,7 @@ export interface TopologyFlowchart {
 }
 
 /** Mermaid text in a quoted label: entity codes for the characters that end or break it. */
-const label = (text: string): string =>
+export const label = (text: string): string =>
   `"${text.replace(/#/g, "#35;").replace(/"/g, "#quot;").replace(/</g, "#lt;").replace(/>/g, "#gt;").replace(/[\r\n]+/g, " ")}"`;
 
 const SHAPES: Record<string, (text: string) => string> = {
