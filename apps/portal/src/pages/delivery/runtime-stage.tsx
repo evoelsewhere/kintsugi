@@ -1,9 +1,11 @@
-// A runtime stage of one application (ADR-0027): what it does, its inputs and outputs, its
-// agents and their model bindings, the Run button, its job runs with the run detail (steps,
-// live log, artifacts, cancel), its decision points and the latest output in the document repo.
+// A runtime stage of one application (ADR-0027): the header (status, Run), then three tabs —
+// Results (what the stage produced, read from the document repo; the default once any output
+// exists), Runs & logs (its job runs with steps, live log, artifacts, cancel, and the latest
+// output) and Inputs & agents (paths it reads and writes, agents and bindings, decision points).
+// URL: …&tab=results|runs|inputs (&run=<id> opens Runs & logs on that run).
 
 import { FileText, Play } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { JobRunList } from "@/components/job-runs/job-run-list";
 import { Loaded } from "@/components/loaded";
@@ -12,8 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonRows } from "@/components/ui/skeleton";
+import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { agentsApi } from "@/lib/api/agents";
+import { hasResultsView } from "@/lib/api/documents";
 import { type JobRunDetail, type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type DocumentWriteView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
@@ -25,6 +30,11 @@ import { ApplicationFacts } from "./delivery-shell";
 import { DecisionPoints, StageAgents, StagePaths } from "./stage-parts";
 
 const RUN_LIMIT = 100;
+
+// The result views and their libraries (Markdown, Mermaid) load with the Results tab.
+const StageResults = lazy(() => import("./results/stage-results"));
+
+type StageTab = "results" | "runs" | "inputs";
 
 export function RuntimeStage({ project, application, stage }: { project: ProjectDetail; application: ApplicationView; stage: StageView }): React.JSX.Element {
   const { can } = useAuth();
@@ -47,6 +57,26 @@ export function RuntimeStage({ project, application, stage }: { project: Project
     latestSucceeded === undefined ? Promise.resolve(null) : jobRunsApi.get(project.id, latestSucceeded.id),
   );
 
+  const withResults = hasResultsView(stage.id);
+  const requested = params.get("tab");
+  const tab: StageTab =
+    requested === "runs" || requested === "inputs" || (requested === "results" && withResults)
+      ? requested
+      : params.get("run") !== null
+        ? "runs"
+        : withResults && (stageRuns === undefined || latestSucceeded !== undefined)
+          ? "results"
+          : "runs";
+  const chooseTab = (next: StageTab): void =>
+    setParams(
+      (previous) => {
+        const query = new URLSearchParams(previous);
+        query.set("tab", next);
+        return query;
+      },
+      { replace: true },
+    );
+
   const active = latest !== undefined && isActiveStatus(latest.status);
   const blocked = runBlocker(project, application);
   const disabledReason = !stage.runnable
@@ -63,6 +93,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
       (previous) => {
         const next = new URLSearchParams(previous);
         next.set("run", queued.id);
+        next.set("tab", "runs");
         return next;
       },
       { replace: true },
@@ -111,54 +142,83 @@ export function RuntimeStage({ project, application, stage }: { project: Project
         {problems.length === 0 ? null : <p className="mt-3 text-[12px] text-text-secondary">Check the agents below before running: {problems.join("; ")}. Their jobs fail until this is fixed.</p>}
       </Card>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <StagePaths
-          stage={stage}
-          applicationId={application.id}
-          documentRepository={project.documentRepository?.repositoryId}
-          produced={latestDetail.data?.artifacts.map((artifact) => artifact.path)}
-          write={latestSucceeded?.documentWrite}
-        />
-        <div className="flex flex-col gap-5">
-          <StageAgents stage={stage} agents={agents} />
-          <DecisionPoints stage={stage} />
-        </div>
-      </div>
+      <Tabs<StageTab>
+        label={`${stage.id} sections`}
+        value={tab}
+        onChange={chooseTab}
+        tabs={[
+          ...(withResults ? [{ id: "results" as const, label: "Results" }] : []),
+          { id: "runs" as const, label: "Runs & logs", count: stageRuns?.length },
+          { id: "inputs" as const, label: "Inputs & agents" },
+        ]}
+      />
 
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Job runs</CardTitle>
-            <CardDescription>Runs of {stage.id} for {application.name}: open one for its steps, artifacts and live log. Active runs refresh on their own.</CardDescription>
+      {tab === "results" && hasResultsView(stage.id) ? (
+        <Suspense fallback={<Card><SkeletonRows rows={6} /></Card>}>
+          <StageResults
+            project={project}
+            application={application}
+            stage={stage.id}
+            version={`${latestSucceeded?.id ?? "none"}/${latestSucceeded?.documentWrite?.status ?? ""}`}
+            runBlocked={disabledReason}
+          />
+        </Suspense>
+      ) : null}
+
+      {tab === "inputs" ? (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <StagePaths
+            stage={stage}
+            applicationId={application.id}
+            documentRepository={project.documentRepository?.repositoryId}
+            produced={latestDetail.data?.artifacts.map((artifact) => artifact.path)}
+            write={latestSucceeded?.documentWrite}
+          />
+          <div className="flex flex-col gap-5">
+            <StageAgents stage={stage} agents={agents} />
+            <DecisionPoints stage={stage} />
           </div>
-        </CardHeader>
-        <div className="mt-2">
-          <Loaded loader={runs} rows={3}>
-            {() =>
-              stageRuns === undefined || stageRuns.length === 0 ? (
-                <EmptyState
-                  icon={Play}
-                  title={`${stage.id} has not run for ${application.name}`}
-                  description={disabledReason ?? "Run the stage above; its jobs, live log and outputs appear here."}
-                />
-              ) : (
-                <JobRunList
-                  key={initialRun ?? "none"}
-                  runs={stageRuns}
-                  canCancel={can("jobs.run")}
-                  initialOpen={initialRun}
-                  onChanged={() => {
-                    void runs.reload();
-                    void writes.reload();
-                  }}
-                />
-              )
-            }
-          </Loaded>
         </div>
-      </Card>
+      ) : null}
 
-      {latestSucceeded === undefined ? null : <LatestOutput run={latestSucceeded} detail={latestDetail} writes={writes.data} />}
+      {tab === "runs" ? (
+        <>
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Job runs</CardTitle>
+                <CardDescription>Runs of {stage.id} for {application.name}: open one for its steps, artifacts and live log. Active runs refresh on their own.</CardDescription>
+              </div>
+            </CardHeader>
+            <div className="mt-2">
+              <Loaded loader={runs} rows={3}>
+                {() =>
+                  stageRuns === undefined || stageRuns.length === 0 ? (
+                    <EmptyState
+                      icon={Play}
+                      title={`${stage.id} has not run for ${application.name}`}
+                      description={disabledReason ?? "Run the stage above; its jobs, live log and outputs appear here."}
+                    />
+                  ) : (
+                    <JobRunList
+                      key={initialRun ?? "none"}
+                      runs={stageRuns}
+                      canCancel={can("jobs.run")}
+                      initialOpen={initialRun}
+                      onChanged={() => {
+                        void runs.reload();
+                        void writes.reload();
+                      }}
+                    />
+                  )
+                }
+              </Loaded>
+            </div>
+          </Card>
+
+          {latestSucceeded === undefined ? null : <LatestOutput run={latestSucceeded} detail={latestDetail} writes={writes.data} />}
+        </>
+      ) : null}
 
       <ConfirmDialog
         open={confirming}
