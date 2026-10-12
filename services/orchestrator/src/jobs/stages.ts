@@ -5,17 +5,11 @@
 
 import type { StagePlan, StagePrerequisite } from "./plan.js";
 import { ASSESS } from "./plans/assess.js";
-import { EXTRACT_RULES } from "./plans/extract-rules.js";
-import { HARDEN } from "./plans/harden.js";
-import { MAP } from "./plans/map.js";
 import { REBUILD } from "./plans/rebuild.js";
 import { UNDERSTAND } from "./plans/understand.js";
 
 export const STAGES: Readonly<Record<string, StagePlan>> = {
   assess: ASSESS,
-  map: MAP,
-  "extract-rules": EXTRACT_RULES,
-  harden: HARDEN,
   understand: UNDERSTAND,
   rebuild: REBUILD,
 };

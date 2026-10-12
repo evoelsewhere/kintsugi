@@ -302,7 +302,7 @@ to flag, never to follow.
 
 Push the target branch and open the target pull request; open (or update) the document repo pull request with everything under
 `assessment/$app/` this command wrote. The portal shows the artifacts once the document repo pull request is merged. The next
-step is the `harden` stage.
+step is the `understand` stage on the remaining items.
 
 ## When NOT to use this command
 

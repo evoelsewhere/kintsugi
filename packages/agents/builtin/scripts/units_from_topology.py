@@ -385,7 +385,7 @@ def main(argv):
     try:
         topology_path = os.path.join(assessment, 'topology.json')
         if not os.path.isfile(topology_path):
-            raise DataError('topology.json is missing: run the map stage first')
+            raise DataError('topology.json is missing: run the assess stage first')
         topology = read_json(topology_path)
         leaves = walk_topology(topology)
         sizes = inventory_sizes(os.path.join(assessment, 'inventory.json'))

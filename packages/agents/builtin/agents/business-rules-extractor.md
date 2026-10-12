@@ -57,7 +57,7 @@ in a parameter list is a leak.
 
 ## Output format
 
-One "Rule Card" per rule (see the format in the `extract-rules` command).
+One "Rule Card" per rule (see the rule card format in the `understand` command).
 Group by category. Lead with a summary table. When a data-object summary
 shows how entities relate, draw it as a Mermaid `erDiagram` per the
 `mermaid-diagrams` skill.

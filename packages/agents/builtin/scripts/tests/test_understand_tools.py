@@ -169,7 +169,7 @@ class UnitsFromTopologyTests(unittest.TestCase):
             os.makedirs(os.path.join(ws, 'assessment'))
             done = units(ws)
             self.assertEqual(done.returncode, 1)
-            self.assertIn('run the map stage first', done.stderr)
+            self.assertIn('run the assess stage first', done.stderr)
             broken = json.loads(json.dumps(TOPOLOGY))
             broken['root']['children'][0]['children'].append(leaf('INVOICE', 'x.cbl', 1))
             write(ws, 'assessment/topology.json', broken)

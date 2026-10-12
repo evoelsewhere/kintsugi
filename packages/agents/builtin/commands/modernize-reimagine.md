@@ -46,7 +46,7 @@ Reuse what discovery already produced in Kintsugi's understanding stages (honori
 stage wrote there. Spawn concurrently (and tell the user all are running) only the
 agents whose input is missing:
 
-1. **business-rules-extractor**, only if `BUSINESS_RULES.md` is missing (better: run the `extract-rules` stage in the
+1. **business-rules-extractor**, only if `BUSINESS_RULES.md` is missing (better: run the `understand` stage in the
    portal) — "Extract every business rule from the legacy repository of $app (read-only, at the recorded commit) into
    Given/When/Then form, as a structured list."
 2. **legacy-analyst**, only if no interface catalog exists yet — "Catalog every external interface of the legacy repository
@@ -134,4 +134,4 @@ by this file.
 Push the target branch and open the target pull request; open (or update) the document repo pull request with everything under
 `assessment/$app/` this command wrote. Report: services scaffolded, acceptance tests defined, the share of behaviors with a
 home, and where the artifacts are (the portal shows them once the document repo pull request is merged). The next step is
-implementing the pending rules service by service, then the `harden` stage.
+implementing the pending rules service by service, then the `understand` stage on the remaining items.

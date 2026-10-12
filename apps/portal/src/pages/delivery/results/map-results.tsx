@@ -53,7 +53,7 @@ export function MapResultsView({ results, compare }: { results: MapResults; comp
       />
 
       {topology === null && (tab === "graph" || tab === "nodes" || tab === "flows") ? (
-        <EmptyState title="No topology.json at this ref" description="The map stage writes topology.json; pick another ref above or run map." />
+        <EmptyState title="No topology.json at this ref" description="The assess and understand stages write topology.json; pick another ref above." />
       ) : null}
       {tab === "graph" && topology !== null ? <GraphTab topology={topology} /> : null}
       {tab === "nodes" && topology !== null ? <NodesTab topology={topology} onOpen={setDetail} /> : null}

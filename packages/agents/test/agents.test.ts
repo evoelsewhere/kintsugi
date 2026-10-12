@@ -207,7 +207,7 @@ describe("built-in commands", () => {
     const audienceOf = new Map(catalog.agents.map((agent) => [agent.manifest.name, agent.manifest.audience]));
     const dir = join(BUILTIN_DIR, "commands");
     const names = (await readdir(dir)).filter((name) => name.endsWith(".md")).sort();
-    expect(names).toHaveLength(14);
+    expect(names).toHaveLength(8);
     for (const name of names) {
       const text = await readFile(join(dir, name), "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
@@ -237,12 +237,10 @@ describe("built-in commands", () => {
 
   it("load in pipeline order with their stage ids", async () => {
     const commands = await loadBuiltinCommands();
-    expect(commands).toHaveLength(14);
-    expect(commands[0]).toMatchObject({ id: "modernize", command: "modernize", audience: "portal" });
-    expect(commands.find((command) => command.id === "extract-rules")).toMatchObject({ command: "modernize-extract-rules", agents: ["business-rules-extractor", "legacy-analyst"] });
-    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "map", "extract-rules", "harden", "understand"]);
-    expect(commands.find((command) => command.id === "status")).toMatchObject({ skills: [], writes: [], gates: [] });
-    expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "map", "brief", "understand", "reimagine"]);
+    expect(commands).toHaveLength(8);
+    expect(commands[0]).toMatchObject({ id: "preflight", command: "modernize-preflight", audience: "member" });
+    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand"]);
+    expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "brief", "understand", "reimagine"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
       command: "modernize-understand",
       audience: "runtime",

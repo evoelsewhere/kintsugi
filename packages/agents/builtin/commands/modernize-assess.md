@@ -126,7 +126,7 @@ items. It is built without parsers, from a topology the model-written extraction
 
 1. **legacy-analyst** writes `assessment/$app/tools/extract_topology.py`, a standard-library script that reads only
    the source checkout and writes `topology.json` (modules, data stores, edges, entry points; the schema of the
-   `map` stage), starting from the structure job's domains and any dependency export under
+   `understand` stage), starting from the structure job's domains and any dependency export under
    `assessment/$app/graph/`. A script step runs it in the standard script environment; when it fails, the job
    gets the error once to fix it. The skeleton `assessment/$app/topology.json` (no descriptions) is committed
    with the script.
