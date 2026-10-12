@@ -261,7 +261,8 @@ export interface UnderstandUnit {
   dataObjects: string[];
   entryPoints: string[];
   openQuestions: number;
-  workItem?: { path: string; status: string; complexity?: string };
+  /** `statusFrom`: the default branch tip once the item is merged there, else the selected ref (status `proposed`). */
+  workItem?: { path: string; status: string; complexity?: string; statusFrom?: "default-branch" | "ref" };
 }
 
 export interface AsIsDocument {

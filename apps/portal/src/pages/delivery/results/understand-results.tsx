@@ -36,7 +36,16 @@ const WORK_ITEM_TONE: Record<string, StatusTone> = {
   rejected: "red",
   blocked: "red",
   skipped: "muted",
+  proposed: "purple-light",
 };
+
+/** Where a work item's status was read, for the badge's tooltip and the drawer. */
+const statusSourceOf = (workItem: NonNullable<UnderstandUnit["workItem"]>): string | undefined =>
+  workItem.statusFrom === "default-branch"
+    ? "Status from the default branch"
+    : workItem.statusFrom === "ref"
+      ? "Not on the default branch yet: proposed in the run's pull request"
+      : undefined;
 
 const DOCUMENT_HINT: Record<AsIsDocument["id"], string> = {
   readme: "the index of modules and units, and the inputs that were missing",
@@ -143,7 +152,9 @@ function InputNotes({ results }: { results: UnderstandResults }): React.JSX.Elem
 
 function WorkItemMark({ unit }: { unit: UnderstandUnit }): React.JSX.Element {
   if (unit.workItem === undefined) return <span className="text-text-muted">—</span>;
-  return <StatusBadge tone={WORK_ITEM_TONE[unit.workItem.status] ?? "muted"} label={unit.workItem.status} title={unit.workItem.path} />;
+  const { status, path } = unit.workItem;
+  const source = statusSourceOf(unit.workItem);
+  return <StatusBadge tone={WORK_ITEM_TONE[status] ?? "muted"} label={status === "proposed" ? "proposed (in PR)" : status} title={source === undefined ? path : `${source} · ${path}`} />;
 }
 
 function UnitsTab({ units, modules, onOpen }: { units: UnderstandUnit[]; modules: string[]; onOpen: (id: string) => void }): React.JSX.Element {
@@ -447,7 +458,7 @@ function UnitDetail({ unit, byId, projectId, commit, onOpen }: { unit: Understan
         <span className="text-[12px] text-text-muted">{formatCount(unit.loc)} lines · {unit.openQuestions} open {unit.openQuestions === 1 ? "question" : "questions"}</span>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Work item">{unit.workItem === undefined ? "None at this ref." : <span className="flex flex-wrap items-center gap-2"><WorkItemMark unit={unit} /><code className="font-mono text-[11px]">{unit.workItem.path}</code>{unit.workItem.complexity === undefined ? null : <span>complexity {unit.workItem.complexity}</span>}</span>}</Field>
+        <Field label="Work item">{unit.workItem === undefined ? "None at this ref." : <span className="flex flex-wrap items-center gap-2"><WorkItemMark unit={unit} /><code className="font-mono text-[11px]">{unit.workItem.path}</code>{unit.workItem.complexity === undefined ? null : <span>complexity {unit.workItem.complexity}</span>}{statusSourceOf(unit.workItem) === undefined ? null : <span className="text-text-muted">{statusSourceOf(unit.workItem)}</span>}</span>}</Field>
         <Field label="Entry points">{list(unit.entryPoints)}</Field>
         <Field label="Depends on">
           <UnitLinks ids={unit.dependsOn} byId={byId} onOpen={onOpen} />
