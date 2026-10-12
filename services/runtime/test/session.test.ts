@@ -43,6 +43,7 @@ describe("kernel tools inside a pi session", () => {
     fauxToolCall("read", { path: "../outside/token.txt" }, { id: "read-relative" }),
     fauxToolCall("ls", { path: workspace.outside }, { id: "ls-outside" }),
     fauxToolCall("grep", { pattern: "SECRET", path: workspace.outside }, { id: "grep-outside" }),
+    fauxToolCall("grep", { pattern: "hello FROM", ignoreCase: true, glob: "*.txt" }, { id: "grep-inside" }),
     fauxToolCall("find", { pattern: "*.txt", path: workspace.outside }, { id: "find-outside" }),
     fauxToolCall("find", { pattern: "*.txt" }, { id: "find-inside" }),
     fauxToolCall("outputs_write", { path: "../escape.md", content: "x" }, { id: "write-escape" }),
@@ -74,6 +75,11 @@ describe("kernel tools inside a pi session", () => {
       expect(ok(id), id).toBe(false);
     }
     expect(probe.last()).not.toContain("TOP_SECRET_VALUE");
+  });
+
+  it("greps inside the workspace without ripgrep", () => {
+    expect(ok("grep-inside")).toBe(true);
+    expect(probe.last()).toContain("hello.txt:1: hello from the workspace");
   });
 
   it("finds files inside the workspace", () => {

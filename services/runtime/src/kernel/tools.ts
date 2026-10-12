@@ -7,13 +7,13 @@ import { glob as fsGlob, mkdir, readdir, readFile, stat, writeFile } from "node:
 import { dirname } from "node:path";
 import {
   createFindToolDefinition,
-  createGrepToolDefinition,
   createLsToolDefinition,
   createReadToolDefinition,
   defineTool,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { createKernelGrepTool } from "./grep.js";
 import { PathGuard } from "./paths.js";
 import type { KernelToolName } from "./tool-names.js";
 
@@ -67,19 +67,8 @@ const lsTool: ToolFactory = (context) => {
   );
 };
 
-// grep runs ripgrep on the search path; isDirectory() rejects paths outside the workspace
-// before it spawns (ripgrep does not follow symlinks by default).
-const grepTool: ToolFactory = (context) => {
-  const guard = readGuard(context);
-  return erase(
-    createGrepToolDefinition(context.cwd, {
-      operations: {
-        isDirectory: async (path) => (await stat(guard.check(path))).isDirectory(),
-        readFile: (path) => readFile(guard.check(path), "utf8"),
-      },
-    }),
-  );
-};
+// grep searches in-process (grep.ts): pi's grep needs ripgrep, which a job has no way to get.
+const grepTool: ToolFactory = (context) => erase(createKernelGrepTool(context.cwd, readGuard(context)));
 
 const findTool: ToolFactory = (context) => {
   const guard = readGuard(context);
