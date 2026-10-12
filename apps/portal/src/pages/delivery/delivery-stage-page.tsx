@@ -14,6 +14,7 @@ import { ApplicationTabs, DeliveryShell, NoApplications, WithProject } from "./d
 import { useApplication } from "./use-application";
 import { MemberStage, PortalStage } from "./other-stages";
 import { RuntimeStage } from "./runtime-stage";
+import { UnderstandStage } from "./understand-stage";
 
 const DESCRIPTION: Record<StageView["audience"], string> = {
   runtime: "Runs as Kintsugi runtime jobs: read the legacy code read-only, propose the outputs to the document repo.",
@@ -56,7 +57,9 @@ function StageForProject({ project, stage }: { project: ProjectDetail; stage: St
   return (
     <div className="flex flex-col gap-5">
       <ApplicationTabs project={project} value={application.id} onChange={choose} />
-      {stage.audience === "runtime" ? (
+      {stage.id === "understand" ? (
+        <UnderstandStage key={application.id} project={project} application={application} stage={stage} />
+      ) : stage.audience === "runtime" ? (
         <RuntimeStage key={`${application.id}/${stage.id}`} project={project} application={application} stage={stage} />
       ) : stage.audience === "member" ? (
         <MemberStage key={`${application.id}/${stage.id}`} project={project} application={application} stage={stage} />

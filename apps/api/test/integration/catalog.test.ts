@@ -67,6 +67,16 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     // Understood on main: invoice at the catalog's digest, rates at an older one (stale).
     await remote.commit("docs", "knowledge/as-is/web/items/billing/invoice/meta.json", JSON.stringify({ digest: "sha256:billinginvoice", commit: "b".repeat(40), runId: "run-merged" }));
     await remote.commit("docs", "knowledge/as-is/web/items/billing/rates/meta.json", JSON.stringify({ digest: "sha256:old", runId: "run-merged" }));
+    // The per-item files of invoice and the generated views, on main.
+    await remote.commit("docs", "assessment/web/items/billing/invoice/rules.json", JSON.stringify({ rules: [{ id: "RULE-billing.invoice-01", name: "Invoice total", category: "Calculation", priority: "P0", source: "src/Invoice.java:3", confidence: "High" }] }));
+    await remote.commit("docs", "assessment/web/items/billing/invoice/findings.json", JSON.stringify({ findings: [{ id: "SEC-billing.invoice-01", cwe: "CWE-89", severity: "High", source: "src/Invoice.java:9", title: "SQL built from input" }], filesReviewed: ["src/Invoice.java"] }));
+    await remote.commit("docs", "knowledge/as-is/web/items/billing/invoice/trace.json", JSON.stringify({ rulesApplied: ["RULE-billing.invoice-01"], findings: ["SEC-billing.invoice-01"], dependencies: [{ target: "billing/rates", kind: "call", direction: "outbound" }] }));
+    await remote.commit("docs", "knowledge/as-is/web/billing/invoice.md", "# Invoice\n");
+    await remote.commit(
+      "docs",
+      "assessment/web/generated/topology.json",
+      JSON.stringify({ system: "web", root: { id: "sys", name: "web", kind: "system", children: [{ id: "dom:billing", name: "Billing", kind: "domain", children: [{ id: "INV", name: "Invoice", kind: "module", file: "src/Invoice.java" }] }] }, edges: [], entryPoints: ["INV"], deadEnds: [], observations: [], flows: [] }),
+    );
     await remote.commit("docs", "knowledge/as-is/web/billing/tax.md", "# Tax\n", "kintsugi/legacy-analyst/run-open");
     await remote.commit("docs", "knowledge/as-is/web/customers/report.md", "# Report\n", "kintsugi/legacy-analyst/run-abandoned");
     await cloneMirror(`${remote.baseUrl}/docs.git`, new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
@@ -210,5 +220,32 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     const resumed = await admin.request<RunView>("POST", "/projects/shop/applications/web/understand/runs", { body: { resumeOf: "run-failed" } });
     expect(resumed.status).toBe(202);
     expect(resumed.body.data?.resumeOf).toBe("run-failed");
+  });
+
+  it("serves the understand results per view for the application (generated) or one item (its own files)", async () => {
+    type Results = {
+      stage: string;
+      empty: boolean;
+      scope: { item?: string };
+      rules?: Array<{ id: string }>;
+      report?: { findings: Array<{ id: string }> } | null;
+      units?: Array<{ id: string; spec: string | null; dependsOn: string[]; rules: string[] }>;
+      topology?: { nodes: Array<{ id: string }> } | null;
+    };
+    const base = "/projects/shop/applications/web/understand/results";
+    const rules = await admin.get<Results>(`${base}?view=extract-rules&item=billing/invoice`);
+    expect(rules.status).toBe(200);
+    expect(rules.body.data).toMatchObject({ stage: "extract-rules", empty: false, scope: { item: "billing/invoice" } });
+    expect(rules.body.data?.rules?.map((rule) => rule.id)).toEqual(["RULE-billing.invoice-01"]);
+    const findings = await admin.get<Results>(`${base}?view=harden&item=billing/invoice`);
+    expect(findings.body.data?.report?.findings.map((finding) => finding.id)).toEqual(["SEC-billing.invoice-01"]);
+    const trace = await admin.get<Results>(`${base}?view=understand&item=billing/invoice`);
+    expect(trace.body.data?.units?.map((unit) => [unit.id, unit.spec, unit.dependsOn, unit.rules])).toEqual([["web/billing/invoice", "knowledge/as-is/web/billing/invoice.md", ["web/billing/rates"], ["RULE-billing.invoice-01"]]]);
+    const map = await admin.get<Results>(`${base}?view=map`);
+    expect(map.body.data).toMatchObject({ stage: "map", empty: false, scope: {} });
+    expect(map.body.data?.topology?.nodes.map((node) => node.id)).toContain("INV");
+    expect((await admin.get<Results>(`${base}?view=extract-rules`)).body.data?.empty).toBe(true);
+    expect((await admin.get(`${base}?view=assess`)).status).toBe(400);
+    expect((await admin.get(`${base}?view=map&item=..%2Fx`)).status).toBe(400);
   });
 });

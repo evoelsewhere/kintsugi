@@ -4,10 +4,13 @@
 // merged), else the default branch. Also the headline numbers of every stage for the overview.
 
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { parseItemCatalog } from "@kintsugi/agents/reader";
+import { CATALOG_ITEM_ID_PATTERN, catalogPath } from "@kintsugi/domain";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { type DocumentRef, MAX_DOCUMENT_BYTES, RESULT_STAGES, type ResultStage, type StageFile, type StageHeadline, type StageResults } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 import { type DocumentContext, DocumentsService } from "./documents.service.js";
+import { itemFindingsMarkdown, itemRulesResult, itemTraceability } from "./item-results.js";
 import {
   STAGE_OUTPUTS,
   type StageSource,
@@ -89,6 +92,54 @@ export class StageResultsService {
       }
     }
     return results;
+  }
+
+  /**
+   * The results of the understand stage (ADR-0033) as one of the result views — `map` (topology),
+   * `extract-rules` (rules), `harden` (security findings), `understand` (traceability) — for the
+   * whole application (the generated views under generated/) or one catalog item (its per-item
+   * files), at a ref (default: the default branch; a run's branch shows that run's items).
+   */
+  async understandResults(projectId: string, applicationId: string, view: string, item: string | undefined, ref: string | undefined): Promise<StageResults & { scope: { item?: string } }> {
+    if (view === "assess" || !isResultStage(view)) throw new BadRequestException(`View "${view}" is not an understand result (available: map, extract-rules, harden, understand)`);
+    if (item !== undefined && !CATALOG_ITEM_ID_PATTERN.test(item)) throw new BadRequestException(`"${item.slice(0, 130)}" is not a catalog item id`);
+    const context = await this.documents.context(projectId);
+    this.application(context, applicationId);
+    const selected = ref === undefined ? await this.defaultBranchRef(context) : await this.describe(context, ref, []);
+    const overrides = new Map<string, string | null>();
+    let dir: string;
+    if (item === undefined) {
+      dir = view === "understand" ? `knowledge/as-is/${applicationId}/generated` : `assessment/${applicationId}/generated`;
+    } else {
+      dir = `assessment/${applicationId}/items/${item}`;
+      const readAt = (path: string): Promise<string | undefined> => this.documents.readText(context, selected.commit, path);
+      if (view === "extract-rules") overrides.set("rules_result.json", itemRulesResult((await readAt(`${dir}/rules.json`)) ?? null));
+      if (view === "harden") overrides.set("SECURITY_FINDINGS.md", itemFindingsMarkdown(item, (await readAt(`${dir}/findings.json`)) ?? null));
+      if (view === "understand") {
+        const catalogText = await readAt(catalogPath(applicationId));
+        const entry = catalogText === undefined ? undefined : parseItemCatalog(catalogText)?.items.find((candidate) => candidate.id === item);
+        if (entry === undefined) throw new NotFoundException(`${item} is not in the catalog of ${applicationId} at ${selected.ref}`);
+        const trace = await readAt(`knowledge/as-is/${applicationId}/items/${item}/trace.json`);
+        const specified = (await readAt(`knowledge/as-is/${applicationId}/${item}.md`)) !== undefined;
+        overrides.set("traceability.json", trace === undefined && !specified ? null : itemTraceability(applicationId, entry, trace ?? null, specified));
+      }
+    }
+    const source = await this.sourceAt(context, dir, STAGE_OUTPUTS[view].files, selected.commit, overrides);
+    const appDir = view === "understand" ? `knowledge/as-is/${applicationId}` : dir;
+    const empty = !(await Promise.all(STAGE_OUTPUTS[view].countsFrom.map((name) => source.read(name)))).some((text) => text !== null);
+    const common = { applicationId, ref: selected, files: source.files, empty, scope: item === undefined ? {} : { item } };
+    switch (view) {
+      case "map":
+        return { stage: view, ...common, ...(await mapResults(source, appDir)) };
+      case "extract-rules":
+        return { stage: view, ...common, ...(await rulesResults(source, appDir)) };
+      case "harden":
+        return { stage: view, ...common, ...(await hardenResults(source, appDir)), restrictedRecords: 0 };
+      case "understand":
+        return { stage: view, ...common, ...(await understandResults(source, appDir, applicationId, [])) };
+      default:
+        throw new BadRequestException(`View "${view}" is not an understand result`);
+    }
   }
 
   /** The headline numbers of every result stage of an application, at each stage's default ref. */
@@ -186,14 +237,23 @@ export class StageResultsService {
   }
 
   /** The stage's output directory at a commit, and reads of other document-repo paths at the same commit. */
-  private async source(context: DocumentContext, applicationId: string, stage: ResultStage, commit: string): Promise<StageSource> {
-    const dir = stageDir(stage, applicationId);
+  private source(context: DocumentContext, applicationId: string, stage: ResultStage, commit: string): Promise<StageSource> {
+    return this.sourceAt(context, stageDir(stage, applicationId), STAGE_OUTPUTS[stage].files, commit);
+  }
+
+  /** A directory at a commit as a stage source; `overrides` stand in for files of that name (null: absent). */
+  private async sourceAt(context: DocumentContext, dir: string, names: readonly string[], commit: string, overrides: ReadonlyMap<string, string | null> = new Map()): Promise<StageSource> {
     const entries = (await this.reader.list(context.repo, commit, dir)) ?? [];
     const known = new Map(entries.filter((entry) => entry.kind === "file").map((entry) => [entry.name, entry.size ?? 0]));
-    const files: StageFile[] = STAGE_OUTPUTS[stage].files.flatMap((name) => (known.has(name) ? [{ path: `${dir}/${name}`, size: known.get(name) ?? 0 }] : []));
+    // A per-item or generated directory lists every file it holds; a stage directory only the stage's outputs.
+    const listAll = dir.includes("/items/") || dir.endsWith("/generated");
+    const files: StageFile[] = listAll
+      ? [...known.entries()].map(([name, size]) => ({ path: `${dir}/${name}`, size }))
+      : names.flatMap((name) => (known.has(name) ? [{ path: `${dir}/${name}`, size: known.get(name) ?? 0 }] : []));
     return {
       files,
       read: async (name) => {
+        if (overrides.has(name)) return overrides.get(name) ?? null;
         const size = known.get(name);
         if (size === undefined) return null;
         const read = await this.reader.read(context.repo, commit, `${dir}/${name}`, MAX_DOCUMENT_BYTES, size);

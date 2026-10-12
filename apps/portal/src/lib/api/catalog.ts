@@ -2,7 +2,9 @@
 // modules/delivery/catalog: `assessment/<app>/catalog.json` with a status per item derived from
 // the understand runs and the understood items on the default branch.
 
-import { apiGet } from "../api";
+import { apiGet, apiSend } from "../api";
+import type { StageResults } from "./documents";
+import type { JobRunView } from "./job-runs";
 
 export type ItemStatus = "running" | "in-pr" | "failed" | "stale" | "understood" | "not-analysed" | "retired";
 
@@ -42,6 +44,25 @@ export interface CatalogView {
 
 const app = (projectId: string, applicationId: string): string => `/api/projects/${encodeURIComponent(projectId)}/applications/${encodeURIComponent(applicationId)}`;
 
+/** The result views of the understand stage. */
+export type UnderstandView = "understand" | "map" | "extract-rules" | "harden";
+
+/** A conflict of a refused selection (409): an item already running or in an open pull request. */
+export interface SelectionConflict {
+  item: string;
+  runId?: string;
+  state: string;
+}
+
 export const catalogApi = {
   get: (projectId: string, applicationId: string, ref?: string) => apiGet<CatalogView>(`${app(projectId, applicationId)}/catalog${ref === undefined ? "" : `?ref=${encodeURIComponent(ref)}`}`),
+  /** Starts understand on items and whole modules (202); 409 with details.conflicts when some are blocked. */
+  runUnderstand: (projectId: string, applicationId: string, selection: { items?: string[]; modules?: string[] }) => apiSend<JobRunView>(`${app(projectId, applicationId)}/understand/runs`, "POST", selection),
+  /** The understand results as a view, for the whole application (generated views) or one item. */
+  results: (projectId: string, applicationId: string, view: UnderstandView, item?: string, ref?: string) => {
+    const query = new URLSearchParams({ view });
+    if (item !== undefined) query.set("item", item);
+    if (ref !== undefined) query.set("ref", ref);
+    return apiGet<StageResults>(`${app(projectId, applicationId)}/understand/results?${query.toString()}`);
+  },
 };
