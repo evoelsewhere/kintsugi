@@ -28,3 +28,5 @@ export {
   type SecurityReport,
   type Severity,
 } from './findings.js'
+export { UNIT_SEGMENT, leftOutTotal, parseTraceability, type TraceDataStore, type TraceUnit, type Traceability } from './traceability.js'
+export { frontmatterOf, parseWorkItem, type Frontmatter, type WorkItemSummary } from './work-item.js'
