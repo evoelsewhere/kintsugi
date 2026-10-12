@@ -156,6 +156,24 @@ export class DocumentsService {
     };
   }
 
+  /** Every branch of the mirror by name, and the default branch's tip. */
+  async branchTips(context: DocumentContext): Promise<{ tips: Map<string, MirrorBranch>; defaultTip: MirrorBranch | undefined }> {
+    const tips = new Map((await this.reader.branches(context.repo)).map((branch) => [branch.name, branch]));
+    return { tips, defaultTip: tips.get(context.defaultBranch) };
+  }
+
+  /** A text file at a commit; undefined when it is missing, not a file, too large or binary. */
+  async readText(context: DocumentContext, commit: string, path: string, maxBytes = MAX_DOCUMENT_BYTES): Promise<string | undefined> {
+    const read = await this.reader.read(context.repo, commit, servablePath(path, false), maxBytes);
+    return read.status === "ok" ? read.content : undefined;
+  }
+
+  /** The entry names of a directory at a commit; [] when it is not a directory. */
+  async listNames(context: DocumentContext, commit: string, path: string): Promise<Array<{ name: string; kind: "file" | "dir" }>> {
+    const entries = await this.reader.list(context.repo, commit, servablePath(path, true));
+    return (entries ?? []).filter((entry) => isServable(entry.path)).map((entry) => ({ name: entry.name, kind: entry.kind }));
+  }
+
   private async statusOf(context: DocumentContext, tip: MirrorBranch, defaultTip: MirrorBranch | undefined): Promise<"merged" | "open"> {
     if (defaultTip === undefined) return "open";
     return (await this.reader.isAncestor(context.repo, tip.commit, defaultTip.commit)) ? "merged" : "open";
