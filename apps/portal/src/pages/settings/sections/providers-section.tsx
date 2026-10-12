@@ -4,7 +4,7 @@
 // provider, an optional project scope; "All projects" is the installation default).
 // Credentials are write-only.
 
-import type { ThinkingLevel } from "@kintsugi/domain";
+import { THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
 import { PlugZap, Plus, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,13 +25,9 @@ import {
   type SupportedProviders,
   type TestConnectionResult,
 } from "@/lib/api/providers";
-import { modelOptions } from "@/lib/model-options";
+import { modelOptions, modelSupportsReasoning } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
 import { ProviderFormDialog } from "./provider-form-dialog";
-
-const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
-
-const THINKING_OPTIONS: SelectOption[] = [{ value: "", label: "Default" }, ...THINKING_LEVELS.map((level) => ({ value: level, label: level }))];
 
 export function ProvidersSection(): React.JSX.Element {
   const [providers, setProviders] = useState<ProviderView[]>([]);
@@ -192,78 +188,156 @@ export function ProvidersSection(): React.JSX.Element {
 
       {/* Agent model bindings */}
       <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Agent model bindings</CardTitle>
-            <CardDescription>Provider and model per runtime agent, for all projects (the default) or one project. Agents without a binding use the installation default.</CardDescription>
+        <CardHeader className="flex-col gap-3 sm:flex-row sm:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle>Agent model bindings</CardTitle>
+              <span className="rounded-full bg-recessed px-2 py-0.5 text-[11px] text-text-secondary">
+                {bindings.length} {bindings.length === 1 ? "binding" : "bindings"}
+              </span>
+            </div>
+            <CardDescription className="max-w-2xl">
+              Choose a provider and model for each runtime agent. Project-specific bindings override the installation default.
+            </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {bindingsChanged ? (
+              <span role="status" className="inline-flex items-center gap-1.5 pr-1 text-[12px] text-text-secondary">
+                <StatusDot tone="orange" />
+                Unsaved changes
+              </span>
+            ) : null}
             <Button size="small" variant="ghost" onClick={() => setBindings((prev) => [...prev, { agent: "", provider: providers[0]?.id ?? "", model: "" }])}>
               <Plus className="size-4" />
               Add binding
             </Button>
-            <Button size="small" variant="solid" onClick={() => void saveBindings()} disabled={savingBindings || !bindingsChanged || incomplete} title={incomplete ? "Choose an agent, provider and model on every row" : undefined}>
+            <Button size="small" variant="solid" onClick={() => void saveBindings()} disabled={savingBindings || !bindingsChanged || incomplete}>
               {savingBindings ? "Saving…" : "Save bindings"}
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="mt-4">
           {bindings.length === 0 ? (
-            <p className="text-[13px] text-text-muted">No bindings yet — agents fall back to the installation default.</p>
+            <div className="rounded-lg bg-recessed px-4 py-5 text-center">
+              <p className="text-[13px] font-medium text-text">No model bindings yet</p>
+              <p className="mt-1 text-[12px] text-text-secondary">Runtime agents will use the installation default until you add a binding.</p>
+            </div>
           ) : (
-            <div className="flex flex-col gap-1.5">
-              <div className="hidden grid-cols-[1.1fr_1fr_0.9fr_1.1fr_0.7fr_auto] gap-2 text-[11px] tracking-wide text-text-muted uppercase sm:grid">
+            <div className="flex flex-col gap-2">
+              <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,0.75fr)_2rem] gap-2 px-2 text-[11px] font-medium tracking-wide text-text-muted uppercase md:grid">
                 <span>Agent</span>
                 <span>Scope</span>
                 <span>Provider</span>
                 <span>Model</span>
                 <span>Thinking</span>
-                <span className="w-8" />
+                <span className="sr-only">Actions</span>
               </div>
-              {bindings.map((binding, index) => (
-                <div key={index} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1.1fr_1fr_0.9fr_1.1fr_0.7fr_auto]">
-                  <Select value={binding.agent} placeholder="Agent" options={withCurrent(agentOptions, binding.agent)} onChange={(value) => patch(index, { agent: value })} />
-                  <Select
-                    value={binding.projectId ?? ""}
-                    options={withCurrent(scopeOptions, binding.projectId ?? "")}
-                    onChange={(value) =>
-                      setBindings((prev) =>
-                        prev.map((row, i) => {
-                          if (i !== index) return row;
-                          const { projectId: _previous, ...rest } = row;
-                          return value === "" ? rest : { ...rest, projectId: value };
-                        }),
-                      )
-                    }
-                  />
-                  <Select value={binding.provider} placeholder="Provider" options={providerOptions} onChange={(value) => patch(index, { provider: value, model: "" })} />
-                  <Select
-                    value={binding.model}
-                    placeholder="Model"
-                    disabled={binding.provider === ""}
-                    options={modelOptions(providers.find((provider) => provider.id === binding.provider), supported, binding.model)}
-                    onChange={(value) => patch(index, { model: value })}
-                  />
-                  <Select
-                    value={binding.thinking ?? ""}
-                    options={THINKING_OPTIONS}
-                    onChange={(value) =>
-                      setBindings((prev) =>
-                        prev.map((row, i) => {
-                          if (i !== index) return row;
-                          const { thinking: _previous, ...rest } = row;
-                          return value === "" ? rest : { ...rest, thinking: value as ThinkingLevel };
-                        }),
-                      )
-                    }
-                  />
-                  <Button size="icon" variant="danger" aria-label="Remove binding" onClick={() => setBindings((prev) => prev.filter((_, i) => i !== index))}>
-                    <Trash2 className="size-4" />
-                  </Button>
+              {bindings.map((binding, index) => {
+                const provider = providers.find((entry) => entry.id === binding.provider);
+                const reasoningSupported = modelSupportsReasoning(provider, supported, binding.model);
+                const thinkingOptions: SelectOption[] = [
+                  { value: "", label: "Default", ...(!reasoningSupported ? { hint: "No reasoning effort support reported" } : {}) },
+                  ...(reasoningSupported ? THINKING_LEVELS.map((level) => ({ value: level, label: level })) : []),
+                  ...(binding.thinking !== undefined && !reasoningSupported
+                    ? [{ value: binding.thinking, label: binding.thinking, hint: "not supported by this model" }]
+                    : []),
+                ];
+                return (
+                <div key={index} className="grid grid-cols-2 items-end gap-x-3 gap-y-3 rounded-lg bg-background p-3 shadow-border md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,0.75fr)_2rem] md:items-center md:gap-2 md:p-2">
+                  <div className="min-w-0">
+                    <label htmlFor={`binding-agent-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Agent</label>
+                    <Select id={`binding-agent-${index}`} className="min-w-0" value={binding.agent} placeholder="Choose agent" options={withCurrent(agentOptions, binding.agent)} onChange={(value) => patch(index, { agent: value })} />
+                  </div>
+                  <div className="min-w-0">
+                    <label htmlFor={`binding-scope-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Scope</label>
+                    <Select
+                      id={`binding-scope-${index}`}
+                      className="min-w-0"
+                      value={binding.projectId ?? ""}
+                      options={withCurrent(scopeOptions, binding.projectId ?? "")}
+                      onChange={(value) =>
+                        setBindings((prev) =>
+                          prev.map((row, i) => {
+                            if (i !== index) return row;
+                            const { projectId: _previous, ...rest } = row;
+                            return value === "" ? rest : { ...rest, projectId: value };
+                          }),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label htmlFor={`binding-provider-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Provider</label>
+                    <Select
+                      id={`binding-provider-${index}`}
+                      className="min-w-0"
+                      value={binding.provider}
+                      placeholder="Choose provider"
+                      options={providerOptions}
+                      onChange={(value) =>
+                        setBindings((prev) =>
+                          prev.map((row, i) => {
+                            if (i !== index) return row;
+                            const { thinking: _previous, ...rest } = row;
+                            return { ...rest, provider: value, model: "" };
+                          }),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label htmlFor={`binding-model-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Model</label>
+                    <Select
+                      id={`binding-model-${index}`}
+                      className="min-w-0"
+                      value={binding.model}
+                      placeholder="Choose model"
+                      disabled={binding.provider === ""}
+                      options={modelOptions(provider, supported, binding.model)}
+                      onChange={(value) =>
+                        setBindings((prev) =>
+                          prev.map((row, i) => {
+                            if (i !== index) return row;
+                            const next = { ...row, model: value };
+                            if (modelSupportsReasoning(providers.find((provider) => provider.id === row.provider), supported, value)) return next;
+                            const { thinking: _previous, ...rest } = next;
+                            return rest;
+                          }),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label htmlFor={`binding-thinking-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Thinking</label>
+                    <Select
+                      id={`binding-thinking-${index}`}
+                      className="min-w-0"
+                      value={binding.thinking ?? ""}
+                      options={thinkingOptions}
+                      onChange={(value) =>
+                        setBindings((prev) =>
+                          prev.map((row, i) => {
+                            if (i !== index) return row;
+                            const { thinking: _previous, ...rest } = row;
+                            return value === "" ? rest : { ...rest, thinking: value as ThinkingLevel };
+                          }),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="col-span-2 flex justify-end md:col-span-1">
+                    <Button size="icon" variant="danger" aria-label={`Remove ${binding.agent || "new"} model binding`} title="Remove binding" onClick={() => setBindings((prev) => prev.filter((_, i) => i !== index))}>
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
+          {incomplete && bindings.length > 0 ? (
+            <p className="mt-3 text-[12px] text-text-muted">Choose an agent, provider, and model for every binding before saving.</p>
+          ) : null}
         </CardContent>
       </Card>
 
