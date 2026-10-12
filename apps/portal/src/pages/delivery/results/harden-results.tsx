@@ -15,7 +15,7 @@ import type { Finding, HardenResults, Severity } from "@/lib/api/documents";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { SEVERITY_RANK, SEVERITY_TONE } from "./results-format";
-import { Field, Kpi, KpiRow, MarkdownTableView, Section, SeverityMark, SubTabs } from "./results-parts";
+import { CountChip, Field, Kpi, KpiRow, MarkdownTableView, Section, SeverityMark, SubTabs } from "./results-parts";
 
 type Tab = "findings" | "patch" | "coverage" | "document";
 
@@ -43,7 +43,7 @@ export function HardenResultsView({ results, compare }: { results: HardenResults
         tabs={[
           { id: "findings", label: "Findings", count: report?.findings.length },
           { id: "patch", label: "Remediation patch", count: results.patch?.hunks },
-          { id: "coverage", label: "Coverage & tools", count: report?.coverageGaps.length },
+          { id: "coverage", label: "Coverage & tools", count: report === null ? undefined : coverageCount(report) },
           { id: "document", label: "SECURITY_FINDINGS.md", hidden: results.document === undefined },
         ]}
       />
@@ -225,13 +225,26 @@ export function DiffView({ text }: { text: string }): React.JSX.Element {
   );
 }
 
+type Report = NonNullable<HardenResults["report"]>;
+
+/** Audit tools the report lists as not run (rows of its "tools not run" table). */
+const toolsNotRunCount = (report: Report): number => report.toolsNotRun?.rows.length ?? 0;
+
+/** What the Coverage & tools tab counts: coverage gaps plus audit tools that were not run. */
+const coverageCount = (report: Report): number => report.coverageGaps.length + toolsNotRunCount(report);
+
 function CoverageTab({ results }: { results: HardenResults }): React.JSX.Element {
   const report = results.report;
   if (report === null) return <EmptyState title="No SECURITY_FINDINGS.md at this ref" />;
+  const toolsNotRun = toolsNotRunCount(report);
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <CountChip label="Coverage gaps" count={report.coverageGaps.length} tone={report.coverageGaps.length === 0 ? "green" : "orange"} />
+        <CountChip label="Tools not run" count={toolsNotRun} tone={toolsNotRun === 0 ? "green" : "orange"} />
+      </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Section title="Coverage gaps" description="Finder classes that did not return and findings no refuter judged.">
+        <Section title={`Coverage gaps · ${report.coverageGaps.length}`} description="Finder classes that did not return and findings no refuter judged.">
           {report.coverageGaps.length === 0 ? (
             <p className="flex items-center gap-2 text-[13px] text-text-secondary">
               <CheckCircle2 className="size-4 text-[var(--ds-status-green)]" strokeWidth={1.75} />
@@ -256,7 +269,7 @@ function CoverageTab({ results }: { results: HardenResults }): React.JSX.Element
         </Section>
       </div>
       {report.toolsNotRun === null ? null : (
-        <Section title="Audit tools that were not run" description="Runtime jobs have no shell and no network: run these where the project builds.">
+        <Section title={`Audit tools that were not run · ${toolsNotRun}`} description="Runtime jobs have no shell and no network: run these where the project builds.">
           <MarkdownTableView table={report.toolsNotRun} label="Audit tools" pageSize={0} />
         </Section>
       )}
