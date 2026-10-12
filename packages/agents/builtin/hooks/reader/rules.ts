@@ -1,5 +1,5 @@
-import { baseName } from './paths'
-import { linesOf } from './text'
+import { baseName } from './paths.js'
+import { linesOf } from './text.js'
 
 /**
  * `assessment/<app>/BUSINESS_RULES.md`, read into rule cards.

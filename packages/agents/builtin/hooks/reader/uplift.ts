@@ -1,8 +1,8 @@
-import { join } from './paths'
-import { linesOf } from './text'
-import { unitOfPath, type EstateModel, type EstateUnit } from './estate-model'
-import type { ReaderFs } from './fs'
-import { readTests, stateOfUplift, type ModernizedModule, type ModuleState, type TestTotals } from './modernized'
+import { join } from './paths.js'
+import { linesOf } from './text.js'
+import { unitOfPath, type EstateModel, type EstateUnit } from './estate-model.js'
+import type { ReaderFs } from './fs.js'
+import { readTests, stateOfUplift, type ModernizedModule, type ModuleState, type TestTotals } from './modernized.js'
 
 /**
  * What a same-stack uplift leaves on disk, read without knowing the stack: the

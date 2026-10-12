@@ -1,5 +1,5 @@
-import { baseName, dirName, norm, stemOf } from './paths'
-import { nodeOfFile, type Topology } from './topology'
+import { baseName, dirName, norm, stemOf } from './paths.js'
+import { nodeOfFile, type Topology } from './topology.js'
 
 /**
  * The estate: the units an app's code is divided into, whatever its language.

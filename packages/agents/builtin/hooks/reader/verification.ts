@@ -1,5 +1,5 @@
-import { plain } from './text'
-import type { TrackKey } from './tracks'
+import { plain } from './text.js'
+import type { TrackKey } from './tracks.js'
 
 /**
  * `assessment/<app>/VERIFICATION.json`, written by the proof pack (`scripts/proof_pack.py`, run by the verify

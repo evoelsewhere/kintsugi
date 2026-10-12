@@ -1,12 +1,12 @@
-import { baseName, join, stemOf } from './paths'
+import { baseName, join, stemOf } from './paths.js'
 import {
   groupOfDir,
   languageOf,
   weightOf,
   type EstateModel,
   type EstateUnit,
-} from './estate-model'
-import { listOrEmpty, type ReaderFs } from './fs'
+} from './estate-model.js'
+import { listOrEmpty, type ReaderFs } from './fs.js'
 
 /**
  * Reads the estate off the legacy tree when no map exists: any language, any

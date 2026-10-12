@@ -1,5 +1,5 @@
-import { plain } from './text'
-import type { ReviewLedger, ReviewVerdict } from './progress'
+import { plain } from './text.js'
+import type { ReviewLedger, ReviewVerdict } from './progress.js'
 
 /**
  * `RULE_REVIEWS.json`, read without trusting it. Two writers keep it: this deck, and the `modernize-review` command

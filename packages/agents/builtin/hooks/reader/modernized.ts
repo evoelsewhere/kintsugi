@@ -1,6 +1,6 @@
-import { join } from './paths'
-import { linesOf } from './text'
-import { listOrEmpty, readOrNull, type ReaderFs } from './fs'
+import { join } from './paths.js'
+import { linesOf } from './text.js'
+import { listOrEmpty, readOrNull, type ReaderFs } from './fs.js'
 
 /**
  * The state of each transformed module, read from `target/<app>/`:

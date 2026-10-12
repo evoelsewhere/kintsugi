@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest'
 
-import { assessmentPath, goldenPath, runPath, SOURCE_REPOSITORY_ACCESS, sourcePath, targetPath } from '../hooks/reader/layout'
-import { appsOf, readSnapshot } from '../hooks/reader/progress'
-import type { ReaderFs } from '../hooks/reader/fs'
+import { assessmentPath, goldenPath, runPath, SOURCE_REPOSITORY_ACCESS, sourcePath, targetPath } from '../hooks/reader/layout.js'
+import { appsOf, readSnapshot } from '../hooks/reader/progress.js'
+import type { ReaderFs } from '../hooks/reader/fs.js'
 
 type FileValue = { text: string; mtimeMs: number }
 
