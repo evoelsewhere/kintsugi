@@ -1,11 +1,12 @@
 // A Mermaid diagram from an agent-written .mmd file. Mermaid is loaded on first use (it is
 // large) and runs with securityLevel "strict": no HTML labels, no click handlers, no scripts.
-// Pan by dragging, zoom with the buttons or Ctrl + wheel; the source is one click away.
+// Pan by dragging, zoom with the buttons or Ctrl + wheel; the source is one click away. The box
+// is as tall as the drawn diagram, up to `height`; a taller diagram scrolls by dragging or fits.
 // `onNodeClick` reports clicks on flowchart nodes by their Mermaid id, read from the drawn SVG
 // (no Mermaid click callbacks, which "strict" disables).
 
 import { Code2, Maximize2, Minus, Plus } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -35,10 +36,16 @@ function flowchartNodeId(target: EventTarget): string | undefined {
   return node.getAttribute("data-id") ?? /flowchart-(.+)-\d+$/.exec(node.id)?.[1];
 }
 
+/** The smallest box, so a one-node diagram still has room to drag. */
+const MIN_HEIGHT = 96;
+/** The box while the diagram is drawn. */
+const DRAWING_HEIGHT = 160;
+
 export interface MermaidDiagramProps {
   source: string;
   title: string;
   className?: string;
+  /** The tallest the box gets; a smaller diagram gets a box its own height. */
   height?: number;
   /** Called with the Mermaid id of a clicked flowchart node; nodes show a pointer when set. */
   onNodeClick?: (id: string) => void;
@@ -55,6 +62,20 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const drag = useRef<{ x: number; y: number; startX: number; startY: number; node: string | undefined } | null>(null);
   const content = useRef<HTMLDivElement>(null);
+  // The drawn diagram's own height (unscaled: a transform does not change layout size).
+  const [natural, setNatural] = useState<number | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    const element = content.current;
+    if (element === null) return;
+    const measure = (): void => setNatural(element.scrollHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [svg]);
+
+  const boxHeight = svg === null || natural === undefined ? Math.min(height, DRAWING_HEIGHT) : Math.min(height, Math.max(MIN_HEIGHT, natural));
 
   useEffect(() => {
     let cancelled = false;
@@ -77,8 +98,8 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
 
   /** Fits the whole diagram in the view (never enlarges it). */
   const fit = (): void => {
-    const natural = content.current?.scrollHeight ?? 0;
-    setZoom(natural <= height ? 1 : Math.max(0.25, (height - 8) / natural));
+    const drawn = content.current?.scrollHeight ?? 0;
+    setZoom(drawn <= boxHeight ? 1 : Math.max(0.25, (boxHeight - 8) / drawn));
     setOffset({ x: 0, y: 0 });
   };
 
@@ -116,7 +137,7 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
       ) : (
         <div
           className="relative cursor-grab touch-none overflow-hidden rounded-lg bg-recessed/60 select-none active:cursor-grabbing"
-          style={{ height }}
+          style={{ height: boxHeight }}
           onWheel={(event) => {
             if (!event.ctrlKey && !event.metaKey) return;
             event.preventDefault();
