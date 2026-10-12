@@ -15,10 +15,14 @@ export type Severity = (typeof SEVERITIES)[number]
 
 export type FindingStatus = 'confirmed' | 'refuted' | 'unverified'
 
+export type Confidence = 'High' | 'Medium' | 'Low'
+
 export type Finding = {
   id: string
   title: string
   severity: Severity | 'Unknown'
+  /** How sure the scan is (harden findings carry one; older documents do not). */
+  confidence?: Confidence
   cwe?: string
   /** The location as written (`src/a.java:16-22`). */
   location?: string
@@ -37,11 +41,15 @@ export type SecurityReport = {
   topCwes?: string
   /** Findings refuted as false positives, when the document says how many. */
   refutedCount: number | null
+  /** The `**Review coverage:**` line: how the code was reviewed and which files (no scanner runs in a job). */
+  reviewCoverage?: string
   coverageGaps: string[]
   /** True when the document says every finder returned and every finding was judged. */
   coverageComplete: boolean
   findings: Finding[]
   cves: Table | null
+  /** The assessment's security highlights, each confirmed as a finding, refuted or not judged. */
+  carryOver: Table | null
   toolsNotRun: Table | null
   remediationLog: Table | null
   patchReview: string[]
@@ -65,10 +73,16 @@ const cweOf = (text: string): string | undefined => {
   return ids.length === 0 ? undefined : ids.join(', ')
 }
 
+const confidenceOf = (text: string): Confidence | undefined => {
+  const match = /\b(high|medium|low)\b/i.exec(text)?.[1]?.toLowerCase()
+
+  return match === undefined ? undefined : ((match[0]?.toUpperCase() + match.slice(1)) as Confidence)
+}
+
 const FINDING_ID = /\b([A-Z][A-Z0-9]*-\d+[a-z]?)\b/
 
 /** Sections whose tables are not findings. */
-const NOT_FINDINGS = /scorecard|cve|dependenc|tools?|remediation|patch review|credential|injection/i
+const NOT_FINDINGS = /scorecard|cve|dependenc|tools?|remediation|patch review|credential|injection|carry-?over|carried/i
 
 /** Findings in one GFM table, or none when the table has no severity column. */
 export function findingsOfTable(table: Table, status: FindingStatus = 'confirmed'): Finding[] {
@@ -78,6 +92,7 @@ export function findingsOfTable(table: Table, status: FindingStatus = 'confirmed
   const cwe = columnOf(table, /cwe/i)
   const location = columnOf(table, /location|file|where|source/i)
   const verdict = columnOf(table, /status|verdict/i)
+  const confidence = columnOf(table, /confidence/i)
 
   if (severity < 0 || (id < 0 && title < 0)) {
     return []
@@ -100,15 +115,17 @@ export function findingsOfTable(table: Table, status: FindingStatus = 'confirmed
       : /not judged|unverified/i.test(verdictText)
         ? 'unverified'
         : status
-    const used = new Set([severity, id, title, cwe, location, verdict])
+    const used = new Set([severity, id, title, cwe, location, verdict, confidence])
     const rest = row.filter((_, column) => !used.has(column) && (row[column] ?? '') !== '').join(' · ')
     const where = cell(location)
     const cweText = cweOf(cell(cwe)) ?? (cwe >= 0 && cell(cwe) !== '' ? cell(cwe) : cweOf(titleText))
+    const confidenceText = confidenceOf(cell(confidence))
 
     findings.push({
       id: idText,
       title: titleText === '' ? idText : titleText,
       severity: severityOf(cell(severity)),
+      ...(confidenceText !== undefined && { confidence: confidenceText }),
       ...(cweText !== undefined && { cwe: cweText }),
       ...(where !== '' && { location: where }),
       citations: citationsIn(`${where} ${titleText}`),
@@ -146,12 +163,14 @@ function findingsOfCards(text: string, statusOf: (line: number) => FindingStatus
     const severityText = labelled(body, 'Severity') ?? card[2] ?? ''
     const location = labelled(body, '(?:Location|File)')
     const cwe = cweOf(labelled(body, 'CWE') ?? '') ?? cweOf(`${card[2] ?? ''} ${body}`)
-    const detail = paragraphsIn(body.replace(/^[ \t>*-]*\*\*(?:Severity|CWE|Location|File|Status):?\*\*.*$/gim, '')).join('\n\n')
+    const confidence = confidenceOf(labelled(body, 'Confidence') ?? '')
+    const detail = paragraphsIn(body.replace(/^[ \t>*-]*\*\*(?:Severity|Confidence|CWE|Location|File|Status):?\*\*.*$/gim, '')).join('\n\n')
 
     findings.push({
       id: card[1] ?? '',
       title: cellText(card[2] ?? '').replace(/\s*[([]?(Critical|High|Medium|Low)[)\]]?\s*$/i, ''),
       severity: severityOf(severityText),
+      ...(confidence !== undefined && { confidence }),
       ...(cwe !== undefined && { cwe }),
       ...(location !== undefined && { location }),
       citations: citationsIn(location ?? body),
@@ -254,17 +273,20 @@ export function parseSecurityFindings(text: string): SecurityReport {
   const injection = sectionMatching(sections, /injection/i)
   const credentials = sectionMatching(sections, /credential/i)
   const topCwes = /\*\*Top CWE categories:?\*\*:?\s*(.+)$/im.exec(text)?.[1]
+  const reviewCoverage = /\*\*Review coverage:?\*\*:?\s*(.+)$/im.exec(text)?.[1]
   const review = sectionMatching(sections, /patch review/i)
 
   return {
     scorecard,
     scorecardStated: stated,
     ...(topCwes !== undefined && { topCwes: cellText(topCwes) }),
+    ...(reviewCoverage !== undefined && { reviewCoverage: cellText(reviewCoverage) }),
     refutedCount: refuted === undefined ? findings.filter(finding => finding.status === 'refuted').length || null : Number(refuted),
     coverageGaps,
     coverageComplete,
     findings,
     cves: firstTable(sectionMatching(sections, /cve|dependenc/i)),
+    carryOver: firstTable(sectionMatching(sections, /carry-?over|carried/i)),
     toolsNotRun: firstTable(sectionMatching(sections, /tools?/i)),
     remediationLog: firstTable(sectionMatching(sections, /remediation log/i)),
     patchReview: review === undefined ? [] : [...bulletsIn(review.body), ...tablesIn(review.body).flatMap(table => table.rows.map(row => row.join(' · ')))],
