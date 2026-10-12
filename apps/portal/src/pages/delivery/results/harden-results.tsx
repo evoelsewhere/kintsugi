@@ -8,6 +8,7 @@ import { AlertTriangle, CheckCircle2, Lock, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CitationChip, InlineText } from "@/components/results/inline-text";
+import { useDocumentLinkHandler } from "@/components/results/use-document-links";
 import { Markdown } from "@/components/results/lazy-markdown";
 import { StatusBadge } from "@/components/status-badges";
 import { type Column, DataTable } from "@/components/ui/data-table";
@@ -15,6 +16,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import type { CarryOverItem, Finding, HardenResults, Severity } from "@/lib/api/documents";
+import { idOfAnchor } from "@/lib/document-links";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { SEVERITY_RANK, SEVERITY_TONE } from "./results-format";
@@ -49,6 +51,14 @@ export function HardenResultsView({ results, compare }: { results: HardenResults
     setOpen(id);
     setTab("findings");
   };
+  // A SEC-xxx anchor into SECURITY_FINDINGS.md opens the finding's drawer.
+  useDocumentLinkHandler((target) => {
+    if (results.document === undefined || target.path !== results.document.path) return false;
+    const id = idOfAnchor(target.anchor, report?.findings.map((finding) => finding.id) ?? []);
+    if (id === undefined) return false;
+    openFinding(id);
+    return true;
+  });
   return (
     <div className="flex flex-col gap-4">
       <KpiRow>
@@ -92,7 +102,7 @@ export function HardenResultsView({ results, compare }: { results: HardenResults
       {tab === "coverage" ? <CoverageTab results={results} /> : null}
       {tab === "document" && results.document !== undefined ? (
         <Section title="SECURITY_FINDINGS.md" description={results.document.path}>
-          <Markdown text={results.document.markdown} />
+          <Markdown text={results.document.markdown} path={results.document.path} />
         </Section>
       ) : null}
     </div>

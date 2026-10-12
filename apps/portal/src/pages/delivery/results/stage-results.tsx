@@ -7,6 +7,7 @@
 import { GitBranch, GitCommitHorizontal, PackageOpen, RefreshCw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
+import { DocumentLinksProvider } from "@/components/results/document-links";
 import { StatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -128,7 +129,9 @@ export default function StageResults({ project, application, stage, version, run
             </Card>
           ) : (
             <>
-              <StageView results={loaded} compare={compare} projectId={project.id} />
+              <DocumentLinksProvider projectId={project.id} commit={loaded.ref.commit}>
+                <StageView results={loaded} compare={compare} projectId={project.id} />
+              </DocumentLinksProvider>
               <Section title="Output files" description={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}.`}>
                 <OutputFiles files={loaded.files} />
               </Section>

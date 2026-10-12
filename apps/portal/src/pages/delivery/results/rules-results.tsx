@@ -5,6 +5,7 @@
 import { AlertTriangle, Copy, HelpCircle, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CitationChip, InlineText } from "@/components/results/inline-text";
+import { useDocumentLinkHandler } from "@/components/results/use-document-links";
 import { Markdown } from "@/components/results/lazy-markdown";
 import { StatusBadge } from "@/components/status-badges";
 import { type Column, DataTable } from "@/components/ui/data-table";
@@ -12,6 +13,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import type { CatalogRule, DataObject, RulesResults } from "@/lib/api/documents";
+import { idOfAnchor } from "@/lib/document-links";
 import { ConfidenceMark, CountChip, Field, Kpi, KpiRow, PriorityMark, Section, SubTabs } from "./results-parts";
 
 type Tab = "rules" | "data" | "coverage" | "document";
@@ -20,6 +22,16 @@ const needsReview = (rule: CatalogRule): boolean => rule.smeQuestion !== undefin
 
 export function RulesResultsView({ results, compare }: { results: RulesResults; compare: boolean }): React.JSX.Element {
   const [tab, setTab] = useState<Tab>("rules");
+  const [open, setOpen] = useState<string | undefined>(undefined);
+  // A RULE-xxx anchor into BUSINESS_RULES.md opens the rule's drawer.
+  useDocumentLinkHandler((target) => {
+    if (results.document === undefined || target.path !== results.document.path) return false;
+    const id = idOfAnchor(target.anchor, results.rules.map((rule) => rule.id));
+    if (id === undefined) return false;
+    setOpen(id);
+    setTab("rules");
+    return true;
+  });
   const previous = compare ? results.previous?.counts : undefined;
   const counts = results.counts;
   return (
@@ -44,12 +56,12 @@ export function RulesResultsView({ results, compare }: { results: RulesResults; 
         ]}
       />
 
-      {tab === "rules" ? <RulesTab results={results} /> : null}
+      {tab === "rules" ? <RulesTab results={results} open={open} setOpen={setOpen} /> : null}
       {tab === "data" ? <DataObjectsTab objects={results.dataObjects} rules={results.rules} /> : null}
       {tab === "coverage" ? <CoverageTab results={results} /> : null}
       {tab === "document" && results.document !== undefined ? (
         <Section title="BUSINESS_RULES.md" description={results.document.path}>
-          <Markdown text={results.document.markdown} />
+          <Markdown text={results.document.markdown} path={results.document.path} />
         </Section>
       ) : null}
     </div>
@@ -67,9 +79,8 @@ interface Filters {
 
 const NO_FILTERS: Filters = { category: "", priority: "", confidence: "", status: "active", review: false, duplicates: false };
 
-function RulesTab({ results }: { results: RulesResults }): React.JSX.Element {
+function RulesTab({ results, open, setOpen }: { results: RulesResults; open: string | undefined; setOpen: (id: string | undefined) => void }): React.JSX.Element {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [open, setOpen] = useState<string | undefined>(undefined);
   const set = (patch: Partial<Filters>): void => setFilters((previous) => ({ ...previous, ...patch }));
   const active = results.rules.filter((rule) => rule.status !== "refuted");
   const categories = useMemo(() => [...new Set(results.rules.map((rule) => rule.category).filter((value): value is string => value !== undefined))].sort(), [results.rules]);

@@ -1,9 +1,12 @@
 // Markdown written by an agent (ASSESSMENT.md, BUSINESS_RULES.md, …), rendered with GitHub
 // tables. Raw HTML is dropped, link targets are sanitized (react-markdown's default URL
-// transform) and open in a new tab; ```mermaid fences become diagrams.
+// transform); web links open in a new tab, relative links resolve against the document's repo
+// path and open inside the portal (DocumentLink); ```mermaid fences become diagrams.
 
+import { useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { DocumentLink } from "./document-links";
 import { MermaidDiagram } from "./mermaid-diagram";
 
 const components: Components = {
@@ -15,11 +18,6 @@ const components: Components = {
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5">{children}</ol>,
   li: ({ children }) => <li className="leading-6">{children}</li>,
-  a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">
-      {children}
-    </a>
-  ),
   blockquote: ({ children }) => <blockquote className="my-2 pl-3 text-text-secondary [box-shadow:inset_2px_0_0_0_var(--ds-background-300)]">{children}</blockquote>,
   hr: () => <hr className="my-4 border-0 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)]" />,
   table: ({ children }) => (
@@ -46,10 +44,22 @@ const components: Components = {
   },
 };
 
-export default function Markdown({ text }: { text: string }): React.JSX.Element {
+/** `path`: the document's path in the document repo, for its relative links. */
+export default function Markdown({ text, path }: { text: string; path?: string | undefined }): React.JSX.Element {
+  const withLinks = useMemo<Components>(
+    () => ({
+      ...components,
+      a: ({ href, children }) => (
+        <DocumentLink href={href} basePath={path}>
+          {children}
+        </DocumentLink>
+      ),
+    }),
+    [path],
+  );
   return (
     <div className="max-w-none text-[13px] text-text-secondary [&_strong]:font-semibold [&_strong]:text-text">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={withLinks}>
         {text}
       </ReactMarkdown>
     </div>

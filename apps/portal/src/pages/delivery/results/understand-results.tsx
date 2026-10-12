@@ -8,6 +8,7 @@ import { AlertTriangle, CheckCircle2, DoorOpen } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Loaded } from "@/components/loaded";
 import { InlineText } from "@/components/results/inline-text";
+import { useDocumentLinkHandler } from "@/components/results/use-document-links";
 import { Markdown } from "@/components/results/lazy-markdown";
 import { MermaidDiagram } from "@/components/results/mermaid-diagram";
 import { StatusBadge } from "@/components/status-badges";
@@ -53,6 +54,13 @@ export function UnderstandResultsView({ results, compare, projectId }: { results
   const colors = useMemo(() => domainColors(modules), [modules]);
   const byId = useMemo(() => new Map(results.units.map((unit) => [unit.id, unit])), [results.units]);
   const opened = detail === undefined ? undefined : byId.get(detail);
+  // A link to a unit's AS-IS spec or work item opens the unit's drawer in place.
+  useDocumentLinkHandler((target) => {
+    const unit = results.units.find((entry) => entry.spec === target.path || entry.workItem?.path === target.path);
+    if (unit === undefined) return false;
+    setDetail(unit.id);
+    return true;
+  });
   const documentOf = (id: AsIsDocument["id"]): AsIsDocument | undefined => results.documents.find((document) => document.id === id);
 
   return (
@@ -403,7 +411,7 @@ function DocumentTab({ id, document }: { id: AsIsDocument["id"]; document: AsIsD
   }
   return (
     <Section title={document.title} description={document.path}>
-      <Markdown text={document.markdown} />
+      <Markdown text={document.markdown} path={document.path} />
     </Section>
   );
 }
@@ -469,7 +477,7 @@ function SpecDocument({ projectId, commit, path }: { projectId: string; commit: 
     <section className="flex flex-col gap-2 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] pt-3">
       <p className="font-mono text-[11px] text-text-muted">{path}</p>
       <Loaded loader={file} rows={8}>
-        {(loaded) => <Markdown text={loaded.content} />}
+        {(loaded) => <Markdown text={loaded.content} path={path} />}
       </Loaded>
     </section>
   );

@@ -5,10 +5,11 @@ import { SkeletonRows } from "@/components/ui/skeleton";
 
 const Renderer = lazy(() => import("./markdown"));
 
-export function Markdown({ text }: { text: string }): React.JSX.Element {
+/** `path`: the document's path in the document repo, for its relative links. */
+export function Markdown({ text, path }: { text: string; path?: string | undefined }): React.JSX.Element {
   return (
     <Suspense fallback={<SkeletonRows rows={8} />}>
-      <Renderer text={text} />
+      <Renderer text={text} path={path} />
     </Suspense>
   );
 }
