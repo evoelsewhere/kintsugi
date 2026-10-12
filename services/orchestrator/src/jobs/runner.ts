@@ -817,7 +817,7 @@ export class JobRunner {
       writeId: randomUUID(),
       projectId: run.projectId,
       kind: "job-output",
-      message: plan !== undefined && run.applicationId !== undefined ? plan.message(run.applicationId) : `Output of ${run.kind} ${run.name}`,
+      message: plan !== undefined && run.applicationId !== undefined ? plan.message(run.applicationId, scopeOf(run.inputs)) : `Output of ${run.kind} ${run.name}`,
       outputOfJob: run.id,
       jobId: run.id,
       ...(plan?.reviewAll === true ? { reviewAll: true } : {}),

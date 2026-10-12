@@ -180,7 +180,7 @@ export class StagePlanExecutor {
 
   #values(extra: Placeholders = {}): Placeholders {
     const { app, repo, commit } = this.#deps.values;
-    return { app, repo, commit, ...(this.#round === 0 ? {} : { round: String(this.#round) }), ...extra };
+    return { app, repo, commit, run: this.#deps.run.id, ...(this.#round === 0 ? {} : { round: String(this.#round) }), ...extra };
   }
 
   #context(): StageContext {
