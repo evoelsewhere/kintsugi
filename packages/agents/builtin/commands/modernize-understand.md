@@ -5,6 +5,7 @@ arguments: app
 metadata:
   audience: runtime
   agents: [legacy-analyst]
+  skills: [mermaid-diagrams]
   reads: [assessment/<app>/ASSESSMENT.md, assessment/<app>/topology.json, assessment/<app>/inventory.json, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/DATA_OBJECTS.md, assessment/<app>/rules_result.json, assessment/<app>/SECURITY_FINDINGS.md, units/<app>/]
   writes: [knowledge/as-is/<app>/<module>/<unit>.md, knowledge/as-is/<app>/README.md, knowledge/as-is/<app>/architecture.md, knowledge/as-is/<app>/data-model.md, knowledge/as-is/<app>/integrations.md, knowledge/as-is/<app>/traceability.md, knowledge/as-is/<app>/traceability.json, units/<app>/<module>/<unit>.md]
   gates: [which units get a specification (default when nobody answers - all of them within the stage's agent budget), a person reviews and merges the pull request that carries the specifications and the proposed work items]
@@ -71,8 +72,9 @@ exactly these sections:
 
 1. **Purpose** — what the unit does for the business.
 2. **Entry points** — routes, transactions, screens, job steps, main programs, with `file:line`.
-3. **Main flows** — step by step, with a Mermaid sequence diagram or flowchart when the flow has more than three
-   participants or branches.
+3. **Main flows** — step by step, with a Mermaid `sequenceDiagram` per main flow (`autonumber`; `alt`/`opt`/`loop`
+   for branches, options and repetition) when the flow has more than three participants or branches, drawn by the
+   `mermaid-diagrams` skill.
 4. **Dependencies** — inbound and outbound: units, data stores, external systems; kind and evidence.
 5. **Data objects** — the records, tables, DTOs or copybooks it reads or writes.
 6. **Business rules applied** — RULE-NNN ids from `BUSINESS_RULES.md`; a rule the catalog lacks is
@@ -103,9 +105,14 @@ A **legacy-analyst** synthesis job reads the specifications, the matrix and the 
 
 - `knowledge/as-is/$app/README.md` — the index: what the application does, modules and units with links to their
   specifications, the documents below, and the missing inputs;
-- `knowledge/as-is/$app/architecture.md` — the AS-IS architecture with a Mermaid module graph and the cycles;
-- `knowledge/as-is/$app/data-model.md` — data stores and data objects, who reads and writes each;
+- `knowledge/as-is/$app/architecture.md` — the AS-IS architecture with a Mermaid `flowchart TB` module graph (one
+  `subgraph` per domain) and the cycles;
+- `knowledge/as-is/$app/data-model.md` — data stores and data objects, who reads and writes each, with a Mermaid
+  `erDiagram` (keys marked `PK`/`FK`) of the entities the code shows;
 - `knowledge/as-is/$app/integrations.md` — every external system and interface, direction and format.
+
+Every diagram follows the `mermaid-diagrams` skill: its type per artifact, sanitized ids and quoted labels for
+legacy names, and its size limits (collapse or split beyond them).
 
 ## Work items
 

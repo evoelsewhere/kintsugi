@@ -1,8 +1,9 @@
 // The built-in commands (ADR-0027): the stages of the guided modernization, one Markdown file
 // per command under builtin/commands/ (adapted from the upstream code-modernization plugin).
 // Their frontmatter says who runs each stage (`metadata.audience`: the runtime, a member's
-// harness or the portal itself), which agents it starts, what it writes and where a person
-// decides. The portal lists them as the pipeline; only the body is the specification.
+// harness or the portal itself), which agents it starts, which shared skills it relies on,
+// what it writes and where a person decides. The portal lists them as the pipeline; only the
+// body is the specification.
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,6 +22,8 @@ export interface BuiltinCommand {
   audience: CommandAudience;
   /** Agents the stage starts. */
   agents: string[];
+  /** Shared skills the stage relies on (a runtime stage's agents load them; members install them). */
+  skills: string[];
   /** Paths the stage reads (document repo, source; patterns such as `assessment/<app>/ASSESSMENT.md`). */
   reads: string[];
   /** Document-repo paths the stage writes (patterns such as `assessment/<app>/ASSESSMENT.md`). */
@@ -76,6 +79,7 @@ function parseCommand(text: string, command: string, problems: string[]): Builti
   const audience = metadata["audience"];
   if (!COMMAND_AUDIENCES.includes(audience as CommandAudience)) problems.push(`${file}: \`metadata.audience\` must be one of ${COMMAND_AUDIENCES.join(", ")}`);
   const agents = commandList(metadata, "agents", file, problems);
+  const skills = commandList(metadata, "skills", file, problems);
   const reads = commandList(metadata, "reads", file, problems);
   const writes = commandList(metadata, "writes", file, problems);
   const gates = commandList(metadata, "gates", file, problems);
@@ -86,6 +90,7 @@ function parseCommand(text: string, command: string, problems: string[]): Builti
     description: (description as string).trim(),
     audience: audience as CommandAudience,
     agents,
+    skills,
     reads,
     writes,
     gates,

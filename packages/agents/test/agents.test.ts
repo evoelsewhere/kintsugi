@@ -1,7 +1,7 @@
 // The agent package format, validation against an installation, and the built-in catalog.
 
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { KERNEL_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
 import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
@@ -13,6 +13,7 @@ import {
   parseAgentFile,
   parseAgentPackage,
   parseSkill,
+  parseSkillLibrary,
   serializeAgentPackage,
   type SkillPackage,
   toAgentDefinition,
@@ -161,6 +162,37 @@ describe("built-in catalog", () => {
     }
   });
 
+  it("ships the mermaid-diagrams skill and gives it to the agents that draw diagrams", async () => {
+    const catalog = await loadBuiltinCatalog();
+    const skill = catalog.skills.find((entry) => entry.name === "mermaid-diagrams");
+    expect(skill?.content).toContain("Every diagram in Kintsugi is **Mermaid**");
+    expect(skill?.content).toMatch(/#quot;/);
+    const sharedSkills = new Map(catalog.skills.map((entry) => [entry.name, entry]));
+    const users = catalog.agents.filter((agent) => agent.manifest.skills.includes("mermaid-diagrams")).map((agent) => agent.manifest.name);
+    expect(users).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst"]);
+    const analyst = catalog.agents.find((agent) => agent.manifest.name === "legacy-analyst")!;
+    expect(toAgentDefinition(analyst, sharedSkills).skills?.map((entry) => entry.name)).toEqual(["mermaid-diagrams"]);
+    // The references and the license stay beside SKILL.md on disk.
+    const entries = await readdir(join(BUILTIN_DIR, "skills", "mermaid-diagrams"), { recursive: true });
+    expect(entries.map((file) => file.split(sep).join("/"))).toEqual(
+      expect.arrayContaining(["LICENSE-softaworks", "SKILL.md", "references/c4.md", "references/er.md", "references/flowchart.md", "references/sequence.md", "references/state.md"]),
+    );
+  });
+
+  it("keeps supporting files of a skill library and refuses stray ones", () => {
+    const skill = "---\nname: s\ndescription: d\n---\n\nbody";
+    const ok = parseSkillLibrary(files({ "s/SKILL.md": skill, "s/references/a.md": "x", "s/LICENSE-x": "MIT", "s/scripts/lint.py": "" }));
+    expect(ok.ok && ok.value.map((entry) => entry.name)).toEqual(["s"]);
+    expect(parseSkillLibrary(files({ "s/SKILL.md": skill, "s/notes.md": "x", "t/references/a.md": "x", "top.md": "x" }))).toEqual({
+      ok: false,
+      problems: [
+        "s/notes.md: unsupported file; a skill library holds <name>/SKILL.md with references/, scripts/, assets/ and license files",
+        't/references/a.md: the folder "t" has no SKILL.md',
+        "top.md: unsupported file; a skill library holds <name>/SKILL.md with references/, scripts/, assets/ and license files",
+      ],
+    });
+  });
+
   it("parses a skill on its own", () => {
     expect(parseSkill("---\nname: s\ndescription: d\nfoo: 1\n---\n\nx", "s")).toEqual({ ok: false, problems: ["s/SKILL.md: unknown field `foo`"] });
   });
@@ -180,7 +212,7 @@ describe("built-in commands", () => {
       const text = await readFile(join(dir, name), "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
         arguments: string;
-        metadata: { audience: string; upstream?: string; agents: string[]; reads: string[]; writes: string[] };
+        metadata: { audience: string; upstream?: string; agents: string[]; skills?: string[]; reads: string[]; writes: string[] };
       };
       const { metadata } = frontmatter;
       expect(["runtime", "member", "portal"], name).toContain(metadata.audience);
@@ -190,6 +222,13 @@ describe("built-in commands", () => {
       for (const agent of metadata.agents) {
         expect(audienceOf.has(agent), `${name} names unknown agent ${agent}`).toBe(true);
         if (metadata.audience === "runtime") expect(audienceOf.get(agent), `${name} starts ${agent}`).toBe("runtime");
+      }
+      // A stage's skills exist, and a runtime stage's jobs actually load them through an agent.
+      for (const skill of metadata.skills ?? []) {
+        expect(catalog.skills.map((entry) => entry.name), `${name} names unknown skill ${skill}`).toContain(skill);
+        if (metadata.audience !== "runtime") continue;
+        const carriers = catalog.agents.filter((agent) => metadata.agents.includes(agent.manifest.name) && agent.manifest.skills.includes(skill));
+        expect(carriers.length, `${name}: no agent of the stage loads ${skill}`).toBeGreaterThan(0);
       }
       // The upstream layout is fully mapped onto Kintsugi's repositories.
       expect(text, name).not.toMatch(/analysis\/(\$system|<system>)|legacy\/\$system|\/code-modernization:|build_report\.py/);
@@ -202,7 +241,8 @@ describe("built-in commands", () => {
     expect(commands[0]).toMatchObject({ id: "modernize", command: "modernize", audience: "portal" });
     expect(commands.find((command) => command.id === "extract-rules")).toMatchObject({ command: "modernize-extract-rules", agents: ["business-rules-extractor", "legacy-analyst"] });
     expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "map", "extract-rules", "harden", "understand"]);
-    expect(commands.find((command) => command.id === "status")).toMatchObject({ writes: [], gates: [] });
+    expect(commands.find((command) => command.id === "status")).toMatchObject({ skills: [], writes: [], gates: [] });
+    expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "map", "brief", "understand", "reimagine"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
       command: "modernize-understand",
       audience: "runtime",

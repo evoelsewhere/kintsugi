@@ -6,6 +6,7 @@ metadata:
   audience: member
   upstream: commands/modernize-brief.md
   agents: []
+  skills: [mermaid-diagrams]
   reads: [standards/, assessment/<app>/ASSESSMENT.md, assessment/<app>/topology.json, assessment/<app>/*.mmd, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/RULE_REVIEWS.json, assessment/<app>/RULE_REVIEWS.md, assessment/<app>/INTENT.md, assessment/<app>/PREFLIGHT.md, assessment/<app>/DELTA_CATALOG.md, assessment/<app>/BASELINE.md]
   writes: [assessment/<app>/MODERNIZATION_BRIEF.md]
   gates: [the brief is approved in the portal (Phase 1 only or full plan) before any build stage starts]
@@ -61,8 +62,10 @@ with these sections.
 
 **1. Objective.** One paragraph: from what, to what, why now.
 
-**2. Target Architecture.** A Mermaid C4 Container diagram of the end state naming every service,
+**2. Target Architecture.** A Mermaid `C4Container` diagram of the end state naming every service,
 data store and integration, then a table mapping each legacy component to its target component(s).
+Draw every diagram of the brief with the `mermaid-diagrams` skill and run its lint
+(`mermaid_lint.py`, shipped with the skill) on the brief before you open the pull request.
 
 **3. Phased Sequence.** 3–6 phases, ordered by **strangler fig** for a cross-stack rewrite
 (lowest risk and fewest dependencies first) or **build-graph leaf-first** for an uplift
