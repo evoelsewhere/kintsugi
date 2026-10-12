@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { PHASES } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
 import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
@@ -203,8 +203,8 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(workflow.inputs["budget"]).toMatchObject({ maxAgents: expect.any(Number) });
   }, 180_000);
 
-  it("runs harden: scan workflow, triage with a restricted inventory, one clean review round", async () => {
-    const { run, out, summary, artifacts, store, id } = await runStage("harden", {
+  it("runs harden: scan workflow, carry-over of the assessment, triage with a restricted inventory, one clean review round", async () => {
+    const { run, out, summary, artifacts, store, id, agents } = await runStage("harden", {
       legacy: "small",
       files: {
         "security-auditor": (spec: JobSpec): Record<string, string> =>
@@ -223,6 +223,42 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(existsSync(join(out, "patch_review.json"))).toBe(false);
     const triage = store.children(id).find((child) => child.inputs["label"] === "triage")!;
     expect(store.restricted.get(triage.id)?.get("SECRETS.local.md")).toContain("hu**");
+
+    // The assessment is on the default branch: the finders get it as a lead (at their own {in}), a
+    // carry-over job settles its highlights, and the map's absence is recorded.
+    expect(summary?.missingInputs).toEqual([{ path: "assessment/demo/topology.json", stage: "map" }]);
+    const workflow = store.children(id).find((child) => child.kind === "workflow")!;
+    expect(workflow.inputs["args"]).toEqual({ app: "demo", assessment: "assessment/demo/ASSESSMENT.md" });
+    const jobs = store.children(workflow.id);
+    expect(jobs.map((job) => job.inputs["label"]).filter((label) => typeof label === "string" && !label.startsWith("find:"))).toEqual(
+      expect.arrayContaining(["carry-over", expect.stringMatching(/^refute:/)]),
+    );
+    const finder = jobs.find((job) => job.inputs["label"] === "find:injection")!;
+    const finderSpec = agents.specs.find((spec) => spec.metadata?.jobRunId === finder.id)!;
+    expect(finderSpec.task).toContain(`${finder.id}${sep}in/assessment/demo/ASSESSMENT.md (read-only)`);
+    expect(finderSpec.task).not.toContain("{in}");
+    expect(finderSpec.task).toContain("your manual review IS the scan");
+    const result = (workflow.outputSummary as { result: Record<string, unknown> }).result;
+    expect(result["coverage"]).toMatchObject({ filesReviewed: ["mock reviewed"], byClass: { injection: 1, deps: 1 } });
+    expect(result["toolsNotRun"]).toEqual([{ tool: "mock tool", reason: "mock reason" }]);
+    expect(result["carryOver"]).toMatchObject({
+      assessment: "assessment/demo/ASSESSMENT.md",
+      checked: true,
+      highlights: [{ ref: "mock ref", status: "confirmed", finding: { cwe: "CWE-20", confidence: "High" } }],
+    });
+  }, 180_000);
+
+  it("runs harden without an assessment: no carry-over job, both leads recorded as missing", async () => {
+    const { run, summary, store, id } = await runStage("harden", { legacy: "small", docs: "empty-docs" });
+    expect(run?.status).toBe("succeeded");
+    expect(summary?.missingInputs).toEqual([
+      { path: "assessment/demo/ASSESSMENT.md", stage: "assess" },
+      { path: "assessment/demo/topology.json", stage: "map" },
+    ]);
+    const workflow = store.children(id).find((child) => child.kind === "workflow")!;
+    expect(workflow.inputs["args"]).toEqual({ app: "demo" });
+    expect(store.children(workflow.id).some((job) => job.inputs["label"] === "carry-over")).toBe(false);
+    expect((workflow.outputSummary as { result: Record<string, unknown> }).result["carryOver"]).toBeNull();
   }, 180_000);
 
   it("revises the patch while the review is not clean, at most three rounds", async () => {

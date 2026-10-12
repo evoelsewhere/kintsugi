@@ -4,6 +4,9 @@
 // under restricted/, the masked credential inventory; then up to three rounds of patch review,
 // each followed by a revision while any hunk is not clean. The scan result and the review
 // verdicts are intermediate. Applying the patch is a member's decision outside the stage.
+// The assessment and the map are optional inputs: when they are on the default branch the
+// finders use them as leads and the workflow settles every security highlight of the
+// assessment (confirmed as a finding or refuted), so the two documents never silently disagree.
 //
 // Not wired yet: the re-run of coverage gaps (args.classes / args.findings).
 
@@ -40,17 +43,28 @@ const TRIAGE_TASK = `Triage the security scan of application {app} and draft its
 ${WORKSPACE}
 
 The scan result is {in}/${SCAN}: the workflow's returned object with findings (survivors of refutation, Critical and
-High ones double-judged), refuted, unverified, deadFinders, credentialFindings, toolOutputs, injectionFlags and stats.
-If present, {in}/${DIR}/ASSESSMENT.md is the assessment and {in}/standards/ the project's conventions.
+High ones double-judged, each with a confidence), refuted, unverified, deadFinders, credentialFindings, coverage (how
+the code was reviewed and which files), toolsNotRun, carryOver (the assessment's security highlights, each confirmed,
+refuted or unverified; null when there was no assessment), injectionFlags and stats. If present,
+{in}/${DIR}/ASSESSMENT.md is the assessment and {in}/standards/ the project's conventions.
 
-Write ${DIR}/SECURITY_FINDINGS.md with outputs_write: a scorecard (count by severity, top CWE categories, the number of
-findings refuted as false positives and stats.falsePositiveRate); directly under it "Coverage gaps": if deadFinders
-and unverified are both empty, the line "All 5 finder classes returned and every finding was judged", otherwise each
-dead class as not scanned (all five means the scan did not run: never write that nothing was found) and each
-unverified finding as not judged (title, CWE, file:line, the finder's severity), with a note that the counts cover
-judged findings only. Then the findings table by severity (SEC-NNN, CWE, severity, file:line, title, exploit
-scenario), a dependency CVE table (package, installed version, CVE, fixed version), the audit tools that were not run
-(toolOutputs) and, prominently, any injectionFlags (instruction-shaped text in the source).
+Write ${DIR}/SECURITY_FINDINGS.md with outputs_write:
+- "Scorecard": count by severity, top CWE categories, the number of findings refuted as false positives and
+  stats.falsePositiveRate, and a line "**Review coverage:** ..." from coverage: the method (no SAST, dependency-audit or
+  secret-scanning tool ran: the finders reviewed the code by hand), how many files were reviewed and which. With no
+  findings write "No confirmed findings in the N files reviewed", never that the code has no vulnerabilities.
+- "Coverage gaps", directly under it: if deadFinders and unverified are both empty and carryOver.checked is not false,
+  the line "All 5 finder classes returned and every finding was judged"; otherwise each dead class as not scanned (all
+  five means the scan did not run: never write that nothing was found), each unverified finding as not judged (title,
+  CWE, file:line, the finder's severity), "assessment highlights not settled" when carryOver.checked is false, and a
+  note that the counts cover judged findings only.
+- "Findings by severity": a table (SEC-NNN, CWE, severity, confidence, file:line, title, exploit scenario).
+- "Assessment carry-over": when carryOver is null, one line saying no assessment was on the default branch; otherwise a
+  table with one row per highlight (assessment id, title, location, outcome: "Confirmed as SEC-NNN", "Refuted" or
+  "Not judged", reason). Every highlight appears; a refuted one keeps its reason.
+- "Dependency CVEs": a table (package, installed version, CVE, fixed version).
+- "Audit tools not run": a table (tool, reason) from toolsNotRun only; add no tool that is not there.
+- "Injection flags", prominently: any injectionFlags (instruction-shaped text in the source).
 
 ${RESTRICTED} SECURITY_FINDINGS.md then gets one line: "N hardcoded credentials found — inventory in the restricted
 portal record (not committed; not for sharing)."
@@ -106,12 +120,27 @@ const reviewClean = async (ctx: StageContext): Promise<boolean> => {
   return review.clean === true && hunks.every((hunk) => hunk.verdict === "RESOLVES");
 };
 
+/** The workflow's arguments: the assessment and the map, when they are on the default branch, as leads. */
+export async function scanArgs(ctx: StageContext): Promise<Record<string, unknown>> {
+  const assessment = `assessment/${ctx.app}/ASSESSMENT.md`;
+  const topology = `assessment/${ctx.app}/topology.json`;
+  return {
+    app: ctx.app,
+    ...((await ctx.readText(assessment)) === undefined ? {} : { assessment }),
+    ...((await ctx.readText(topology)) === undefined ? {} : { topology }),
+  };
+}
+
 export const HARDEN: StagePlan = {
   id: "harden",
   message: (app) => `Harden ${app}: security findings and remediation patch`,
-  documents: ["kintsugi.yaml", "standards/", `${DIR}/ASSESSMENT.md`, `${DIR}/SECURITY_FINDINGS.md`, `${DIR}/topology.json`],
+  documents: ["kintsugi.yaml", "standards/", `${DIR}/SECURITY_FINDINGS.md`],
+  optional: [
+    { path: `${DIR}/ASSESSMENT.md`, stage: "assess" },
+    { path: `${DIR}/topology.json`, stage: "map" },
+  ],
   steps: [
-    { id: "scan", kind: "workflow", workflow: "harden-scan", args: (ctx) => ({ app: ctx.app }), resultTo: SCAN, intermediate: true },
+    { id: "scan", kind: "workflow", workflow: "harden-scan", args: scanArgs, resultTo: SCAN, intermediate: true },
     {
       id: "triage",
       kind: "agent",
