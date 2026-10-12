@@ -37,7 +37,7 @@ This page has two parts:
 | [0016](0016-nestjs-api-framework.md) | NestJS is the API framework for `apps/api` | Accepted |
 | [0017](0017-portal-vite-react-shadcn.md) | Portal is a Vite + React SPA with shadcn/ui | Accepted |
 | [0018](0018-pin-pi-exact-version.md) | Pin pi to an exact version; track the latest release | Accepted |
-| [0019](0019-workspace-repo-write-path.md) | One workspace repo per project; the worker writes as `kintsugi-bot` | Accepted (amended by 0028) |
+| [0019](0019-workspace-repo-write-path.md) | One workspace repo per project; the worker writes as `kintsugi-bot` | Accepted (amended by 0028, 0033) |
 | [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Superseded by 0029 |
 | [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Superseded by 0029 |
 | [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Superseded by 0023 |
@@ -45,12 +45,13 @@ This page has two parts:
 | [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
 | [0025](0025-git-core-and-checkout-storage.md) | Git core package and Kintsugi-managed checkout storage | Accepted |
 | [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Accepted |
-| [0027](0027-builtin-modernization-content.md) | Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests | Accepted (amended by 0028, 0029) |
+| [0027](0027-builtin-modernization-content.md) | Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests | Accepted (amended by 0028, 0029, 0033) |
 | [0028](0028-remove-rulebook-single-document-repo.md) | Remove the rulebook; one document repo per project | Accepted |
 | [0029](0029-job-workspaces-instead-of-os-sandboxes.md) | Job workspaces instead of OS sandboxes | Accepted |
 | [0030](0030-worker-heartbeat-in-postgres.md) | Worker heartbeat in Postgres | Accepted |
-| [0031](0031-understand-stage-as-is-specification.md) | understand stage: per-unit AS-IS specification closes the Understand phase | Accepted (diagrams amended by 0032) |
+| [0031](0031-understand-stage-as-is-specification.md) | understand stage: per-unit AS-IS specification closes the Understand phase | Accepted (diagrams amended by 0032; §1, §3, §6 superseded by 0033) |
 | [0032](0032-mermaid-diagrams-skill.md) | Mermaid for every diagram, drawn by a built-in skill and checked by a lint | Accepted |
+| [0033](0033-assess-catalog-understand-selection.md) | Two runtime stages: assess builds the item catalog; understand runs on a selection | Accepted |
 
 ## Decision register
 
@@ -104,7 +105,8 @@ This page has two parts:
 | D47 | Built-in modernization content | 🔴 | Upstream code-modernization content copied into `packages/agents/builtin/` (pinned, Apache-2.0, no assets) and adapted: runtime and member agents (`metadata.audience`), stage commands, workflows, scripts in the job workspace, server-side hooks, tests | M0 | ✅ [0027](0027-builtin-modernization-content.md), [0029](0029-job-workspaces-instead-of-os-sandboxes.md) |
 | D48 | Project knowledge and repository model | 🔴 | No rulebook; one document repo per project holds everything except code; project knowledge as plain documents in `standards/` and member plugins in `plugins/`; pipelines in `kintsugi.yaml` or built-in; repo roles `legacy` / `legacy-data` (AS-IS, read-only) and `target` with `component` (TO-BE, members only) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D51 | Diagrams | 🟢 | Mermaid only; built-in `mermaid-diagrams` skill (type per artifact, syntax safety, size limits) loaded by the drawing agents; stdlib `mermaid_lint.py`, run by members and by the JobOutput hook as non-blocking warnings | M1 | ✅ [0032](0032-mermaid-diagrams-skill.md) |
-| D50 | Reverse engineering of the AS-IS system | 🔴 | Runtime `understand` stage after `map` → `extract-rules` ∥ `harden`: units proposed deterministically from the map's `topology.json` (no parser), one `legacy-analyst` AS-IS specification per unit, application overview, script-merged traceability matrix, proposed work items; everything (`units/**` included) in one pull request | M1 | ✅ [0031](0031-understand-stage-as-is-specification.md) |
+| D50 | Reverse engineering of the AS-IS system | 🔴 | Runtime `understand` stage after `map` → `extract-rules` ∥ `harden`: units proposed deterministically from the map's `topology.json` (no parser), one `legacy-analyst` AS-IS specification per unit, application overview, script-merged traceability matrix, proposed work items; everything (`units/**` included) in one pull request | M1 | ✅ [0031](0031-understand-stage-as-is-specification.md), amended by [0033](0033-assess-catalog-understand-selection.md) |
+| D52 | Selective understanding | 🔴 | Two runtime stages: `assess` builds the item catalog (`assessment/<app>/catalog.json`, module → item, from the topology without parsers, curated, reconciled across re-assess); `understand` runs `map`, `extract-rules` and `harden` as steps on a person's selection of items, one pull request per run, per-item outputs, aggregates rebuilt under `generated/` after merge, item-namespaced ids, item status derived, items in an open PR blocked, failed runs resumable | M1 | ✅ [0033](0033-assess-catalog-understand-selection.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 

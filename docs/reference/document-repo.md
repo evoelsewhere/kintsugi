@@ -12,8 +12,15 @@ assessment/<app>/scorecard.md
 assessment/<app>/...           # understanding-phase artifacts (ADR-0027): INTENT.md, PREFLIGHT.md, ASSESSMENT.md,
                               #   topology.json, BUSINESS_RULES.md, DATA_OBJECTS.md, RULE_REVIEWS.json, DELTA_CATALOG.md,
                               #   SECURITY_FINDINGS.md, MODERNIZATION_BRIEF.md, VERIFICATION.md
-knowledge/as-is/<app>/...     # AS-IS documents (generated + human-written); the understand stage (ADR-0031) writes:
-knowledge/as-is/<app>/<module>/<unit>.md   #   one AS-IS specification per unit
+assessment/<app>/catalog.json  # the item catalog written by assess (ADR-0033): module -> item, see below
+assessment/<app>/tools/extract_topology.py  # the model-written topology extraction script assess ran
+assessment/<app>/items/<module>/<item>/     # per-item outputs of understand: topology.json, rules.json, findings.json
+assessment/<app>/flows/<run-id>.json        # persona flows of one understand run
+assessment/<app>/generated/   # aggregates rebuilt after a merge, auto-committed (topology, rules, findings)
+knowledge/as-is/<app>/...     # AS-IS documents (generated + human-written); the understand stage (ADR-0031, ADR-0033) writes:
+knowledge/as-is/<app>/<module>/<unit>.md   #   one AS-IS specification per item (unit)
+knowledge/as-is/<app>/items/<module>/<item>/  #   trace.json and meta.json per specified item
+knowledge/as-is/<app>/generated/           #   traceability matrix and index, rebuilt after a merge
 knowledge/as-is/<app>/README.md            #   index; architecture.md, data-model.md, integrations.md beside it
 knowledge/as-is/<app>/traceability.md      #   unit <-> rules <-> files <-> dependencies <-> findings (+ traceability.json)
 knowledge/to-be/...           # TO-BE documents
@@ -36,6 +43,51 @@ runs/<unit>/<run-id>/         # small reports per run (EQUIVALENCE.json, test-ru
 ```
 
 `standards/` and `plugins/` have no schema and no maturity: a standard applies once it is merged, and every valid plugin is published to the project marketplace.
+
+## Item catalog
+
+`assessment/<app>/catalog.json` lists what an application consists of, as items a person can select for the `understand` stage ([ADR-0033](../decisions/0033-assess-catalog-understand-selection.md)). Only `assess` writes it. Types: `Catalog` and `CatalogItem` in [`packages/domain`](../../packages/domain/src/catalog.ts); reader: `parseItemCatalog` in `@kintsugi/agents/reader`.
+
+```json
+{ "schemaVersion": 1, "app": "billing", "generatedBy": "reconcile_catalog.py",
+  "source": { "repo": "<repository id>", "commit": "<commit>" },
+  "modules": [ { "id": "invoicing", "name": "Invoicing", "summary": "..." } ],
+  "items": [ { "id": "invoicing/invoice-entry", "module": "invoicing", "kind": "screen",
+      "name": "Invoice entry", "summary": "...", "files": ["src/inv/INV01.cbl"], "leaves": ["INV01"],
+      "entryPoints": ["INV01"], "loc": 1840, "complexity": "medium", "digest": "sha256:...",
+      "status": "active", "aliases": [], "parts": [ { "name": "calcTax", "kind": "function", "file": "src/inv/INV01.cbl:210" } ] } ],
+  "unassigned": ["docs/notes.txt"],
+  "ambiguities": ["..."] }
+```
+
+| Field | Meaning |
+|---|---|
+| `items[].id` | `<module>/<item>`, two kebab-case segments. The work item of the item is `<app>/<module>/<item>`: catalog items are the units. Ids survive re-assessment (below) |
+| `kind` | One of `unitKinds` in `kintsugi.yaml`, mapped from the topology leaf kind |
+| `files` | The source files of the item. Every source file of `inventory.json` is in exactly one item or in `unassigned` |
+| `loc`, `complexity` | Code lines summed from `inventory.json`, and a `low`, `medium` or `high` band of the summed cyclomatic complexity |
+| `digest` | `sha256:` over the item's files and their per-file sha256 from `inventory.json`; a different digest means the item changed |
+| `status` | `active`, or `retired` for an item that no longer matches anything after a re-assessment (never deleted) |
+| `aliases` | Earlier names of the item |
+| `parts` | Functions or sections inside the item: shown, never selectable |
+| `leaves` | The topology leaf ids the item was built from; `entryPoints` the ones that are entry points |
+
+**How `assess` builds it**: `catalog_from_topology.py` turns the topology's leaves into items (domain → module, the grouping rules of ADR-0031 §3) and checks file coverage; a `legacy-analyst` job proposes structured edits (rename, kind, merge, split, move files, summaries) that `apply_catalog_edits.py` validates and applies, rejecting any edit that would break coverage; `reconcile_catalog.py` then keeps the ids of the previous catalog on the default branch: an item overlapping an old one by Jaccard ≥ 0.5 on its files keeps the old id (a changed name goes to `aliases`), a split keeps the id on its largest piece, and an old item without a match is kept as `retired`. The first reconcile is seeded from `knowledge/as-is/<app>/units.json` and the existing `units/<app>/**`, so earlier unit ids are kept.
+
+**Item status** is derived by the API, never stored (`GET /api/projects/:id/applications/:appId/catalog`), in this order of precedence:
+
+| Status | When |
+|---|---|
+| `running` | a queued or running `understand` run has the item in its `inputs.scope.items` |
+| `in-pr` | an `understand` run with the item opened a pull request that is still open (and was not abandoned) |
+| `failed` | the item's latest run failed after it was last understood |
+| `stale` | understood, but the `digest` in its `meta.json` differs from the catalog's |
+| `understood` | `knowledge/as-is/<app>/items/<module>/<item>/meta.json` is on the default branch |
+| `not-analysed` | none of the above |
+
+A `retired` item keeps the status `retired`.
+
+**Per-item outputs and aggregates.** An `understand` run writes only the paths of its items (`assessment/<app>/items/<module>/<item>/`, the specification, `knowledge/as-is/<app>/items/<module>/<item>/`, the work item), so concurrent runs never conflict. The whole-application views are rebuilt from those files by a script after a merge and auto-committed under `assessment/<app>/generated/` and `knowledge/as-is/<app>/generated/`; they never appear in a run's pull request. Rule and finding ids are namespaced by item (`RULE-invoicing.invoice-entry-03`, `SEC-invoicing.invoice-entry-01`). The scoped `understand` stage, the per-item outputs and the aggregate rebuild are being rolled out after the catalog; until then `understand` writes the whole-application files listed in the layout.
 
 ## Repository model
 
@@ -108,7 +160,7 @@ Schema (`validateManifest` in `packages/domain`, `parseKintsugiYaml` in `package
 | `applications` | yes | List (may be empty). Each: `id` (kebab-case, unique), optional `name`, `disposition` (7R), optional `pipeline` (id), `repos` |
 | `applications[].repos` | no | Each: `server`, `path`, `role` (`legacy`, `legacy-data` or `target`; `document` is not allowed here), `component` (required for `target`, unique per application, forbidden otherwise). A `server` + `path` pair appears once in the file, the document repo included |
 | `pipelines` | no (default `[]`) | Each: `id` (unique), optional `appliesTo.dispositions`, non-empty `phases` (`id`; `category` required for a custom phase; optional `perUnit`; non-empty `stages` with `id`, `performer` = `{agent: <id>}` or `{member: [<roles>]}`, optional `gate`), optional `gates` |
-| `autoCommitPaths` | no | Globs (`**` spans folders, `*` and `?` stay within one segment); default `units/**`, `tasks/**`, `knowledge/**/generated/**` (ADR-0019). The writer reads them from `kintsugi.yaml` on the default branch, and uses the defaults when the file is missing or invalid |
+| `autoCommitPaths` | no | Globs (`**` spans folders, `*` and `?` stay within one segment); default `units/**`, `tasks/**`, `knowledge/**/generated/**` (ADR-0019); `assessment/**/generated/**` joins them with the aggregate rebuild of ADR-0033. The writer reads them from `kintsugi.yaml` on the default branch, and uses the defaults when the file is missing or invalid |
 | `policy` | no | `harnesses` (default: the built-in member harnesses), `requireCommitTrailer` (default `true`) |
 
 `path` is the repository's clone URL path relative to its server's base URL, without `.git`: `https://dev.azure.com/acme/Billing/_git/web` on a server with base URL `https://dev.azure.com/acme` gives `Billing/_git/web`; `git@github.com:org/app.git` gives `org/app`. Pipeline ids are not yet checked against the built-in pipelines (their list is an open follow-up of ADR-0028).
@@ -136,11 +188,12 @@ The API reads the document repo **only from Kintsugi's mirror** under the data d
 | `GET /api/projects/:id/documents/tree?ref&path` | The entries of a directory at the ref (default: the default branch), directories first. |
 | `GET /api/projects/:id/documents/file?ref&path` | A text file up to 2 MiB (413 above, 415 when binary); `.json` files are parsed too. |
 | `GET /api/projects/:id/applications/:appId/stages/:stage/results?ref&compare` | The results of `assess`, `map`, `extract-rules`, `harden` or `understand`, built from the files the stage wrote under `assessment/<app>/` (`understand`: `knowledge/as-is/<app>/` and the work items under `units/<app>/`) with the parsers of `@kintsugi/agents/reader`, plus the raw Markdown of the main document. Default ref: the output of the stage's latest successful run (its branch tip, merged or not), else the default branch. `compare=true` adds the counts of the previous successful run. |
+| `GET /api/projects/:id/applications/:appId/catalog?ref` | The item catalog of the application (`assessment/<app>/catalog.json` at the ref, default: the default branch) with every item's derived status, its latest `understand` run, its open pull request and when it was understood ([item catalog](#item-catalog)). 404 until `assess` has written a catalog. |
 | `GET /api/projects/:id/applications/:appId/results/headlines` | One or two headline numbers per result stage, for the Delivery overview. |
 
 The portal's stage page (Delivery → *stage*) opens on **Results** once the stage has output, with **Runs & logs** (job runs, live log, latest output) and **Inputs & agents** as secondary tabs. A ref selector shows the latest result, the default branch or an older run, and *Compare with previous run* adds the change of every count:
 
-- **assess**: KPIs (source files, SLOC, KSLOC, complexity index, languages), the executive summary and recommended pattern, security highlights, languages and per-file tables, the technical-debt table, gaps and SME questions, `ARCHITECTURE.mmd` as a diagram, and `ASSESSMENT.md` rendered.
+- **assess**: KPIs (source files, SLOC, KSLOC, complexity index, languages), the executive summary and recommended pattern, security highlights, languages and per-file tables, the technical-debt table, gaps and SME questions, `ARCHITECTURE.mmd` as a diagram, `ASSESSMENT.md` rendered, and the **Catalog**: modules and their items (kind, files, lines, complexity, status), the unassigned files and the ambiguities a person should check.
 - **map**: the dependency graph of `topology.json` as a Mermaid flowchart (one group per domain, nodes coloured by domain and shaped by kind, edges labelled by type; filter by domain or focus a node with its neighbours up to 1–3 hops away or all it reaches, at most 120 nodes at once; click a node for a panel with its description, inbound and outbound dependencies and data stores), the nodes table, entry points, data stores, persona flows, architect observations and the call graph, data lineage and critical path diagrams.
 - **extract-rules**: counts by category and priority, the rule catalog with search, filters and a detail drawer (plain English, Given/When/Then, parameters, edge cases, citations, verification notes), likely duplicates flagged (same source lines or near-identical names), refuted candidates, data objects and coverage gaps.
 - **harden**: the severity scorecard, findings with a detail drawer, coverage gaps and tools not run (counted together on their tab), dependency CVEs, the remediation patch as a diff, and the number of restricted records the run stored (a link to Governance, never their content).

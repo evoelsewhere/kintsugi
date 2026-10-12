@@ -1,6 +1,6 @@
 # ADR-0019: One workspace repo per project; the worker writes as `kintsugi-bot`
 
-- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): the workspace repo is renamed the document repo; the `Kintsugi-Rulebook` trailer is dropped. Implemented (see [Implementation notes](#implementation-notes)).
+- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): the workspace repo is renamed the document repo; the `Kintsugi-Rulebook` trailer is dropped. Amended by [ADR-0033](0033-assess-catalog-understand-selection.md): the default `autoCommitPaths` gain `assessment/**/generated/**` (aggregates rebuilt after a merge). Implemented (see [Implementation notes](#implementation-notes)).
 - Date: 2026-10-09
 - Decision register: D29
 
