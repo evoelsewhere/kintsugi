@@ -196,7 +196,12 @@ export interface HardenResults extends StageResultsBase {
 
 /** A unit of the understand stage: its row of the traceability matrix and its work item, when one is at the ref. */
 export interface UnderstandUnit extends TraceUnit {
-  workItem?: { path: string; status: string; complexity?: string };
+  /**
+   * When the selected ref is not the default branch, `status` comes from the default branch tip
+   * once the work item is there (`statusFrom: "default-branch"`), else it is `proposed` (only in
+   * the run's pull request, `statusFrom: "ref"`). At the default branch it is the item's own status.
+   */
+  workItem?: { path: string; status: string; complexity?: string; statusFrom?: "default-branch" | "ref" };
 }
 
 /** A synthesis document of the understand stage (knowledge/as-is/<app>/). */

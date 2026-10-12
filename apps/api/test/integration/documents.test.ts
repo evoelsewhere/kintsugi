@@ -296,7 +296,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     expect(data.ref).toMatchObject({ kind: "run", status: "open", runId: "run-understand", branch: "kintsugi/legacy-analyst/run-understand" });
     expect(data.empty).toBe(false);
     expect(data.units.map((unit) => [unit["id"], unit["key"], unit["spec"], unit["workItem"] ?? null])).toEqual([
-      ["web/core/a", "core/a", "knowledge/as-is/web/core/a.md", { path: "units/web/core/a.md", status: "pending", complexity: "low" }],
+      ["web/core/a", "core/a", "knowledge/as-is/web/core/a.md", { path: "units/web/core/a.md", status: "proposed", complexity: "low", statusFrom: "ref" }],
       ["web/core/b", "core/b", null, null],
     ]);
     expect(data.matrix).toMatchObject({ path: "knowledge/as-is/web/traceability.json", rulesCovered: ["RULE-001"], unmappedRules: ["RULE-002"], dataStores: ["ds:ACCOUNT"], notes: { "unknown rule ids": 1 } });
@@ -314,6 +314,13 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     // Not merged yet: the default branch has no understand output.
     const onMain = await admin.get<{ empty: boolean; units: unknown[]; matrix: null; documents: unknown[] }>("/projects/shop/applications/web/stages/understand/results?ref=refs/heads/main");
     expect(onMain.body.data).toMatchObject({ empty: true, units: [], matrix: null, documents: [] });
+  });
+
+  it("reads work-item status from the default branch once the item is merged there", async () => {
+    await remote.commit("docs", "units/web/core/a.md", '---\nid: "web/core/a"\nstatus: in-progress\ncomplexity: low\n---\n\nA.\n');
+    await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
+    const results = await admin.get<{ units: Array<{ id: string; workItem?: unknown }> }>("/projects/shop/applications/web/stages/understand/results");
+    expect(results.body.data?.units[0]?.workItem).toEqual({ path: "units/web/core/a.md", status: "in-progress", complexity: "low", statusFrom: "default-branch" });
   });
 
   it("follows the mirror: a newer commit on the run's branch shows after a fetch", async () => {

@@ -362,10 +362,37 @@ export function missingInputsOf(summary: Record<string, unknown> | undefined): A
   });
 }
 
-export async function understandResults(source: StageSource, appDir: string, applicationId: string, missingInputs: UnderstandResults["missingInputs"]): Promise<Full<UnderstandResults>> {
+/**
+ * The work items of the units, their status read where it is current: at the default branch tip
+ * once an item is merged there, else `proposed` (the item exists only at the selected ref).
+ */
+async function currentWorkItems(source: StageSource, statusSource: StageSource | undefined, applicationId: string, units: Traceability["units"]): Promise<Map<string, WorkItemRef>> {
+  const [atRef, atDefault] = await Promise.all([workItemsOf(source, applicationId, units), statusSource === undefined ? undefined : workItemsOf(statusSource, applicationId, units)]);
+  if (atDefault === undefined) return atRef;
+  const merged = new Map<string, WorkItemRef>();
+  for (const unit of units) {
+    const current = atDefault.get(unit.id);
+    const proposed = atRef.get(unit.id);
+    if (current !== undefined) merged.set(unit.id, { ...current, statusFrom: "default-branch" });
+    else if (proposed !== undefined) merged.set(unit.id, { ...proposed, status: "proposed", statusFrom: "ref" });
+  }
+  return merged;
+}
+
+/**
+ * `statusSource`: the default branch tip, when the selected ref is another commit (a run's
+ * branch): work-item status is read there, since members move items on the default branch.
+ */
+export async function understandResults(
+  source: StageSource,
+  appDir: string,
+  applicationId: string,
+  missingInputs: UnderstandResults["missingInputs"],
+  statusSource?: StageSource,
+): Promise<Full<UnderstandResults>> {
   const [traceText, ...texts] = await Promise.all([source.read("traceability.json"), ...AS_IS_DOCUMENTS.map((document) => source.read(document.file))]);
   const matrix = traceText === null ? null : parseTraceability(traceText);
-  const workItems = matrix === null ? new Map<string, WorkItemRef>() : await workItemsOf(source, applicationId, matrix.units);
+  const workItems = matrix === null ? new Map<string, WorkItemRef>() : await currentWorkItems(source, statusSource, applicationId, matrix.units);
   const documents: AsIsDocument[] = AS_IS_DOCUMENTS.flatMap(({ file, ...document }, index) => {
     const markdown = texts[index];
     return markdown === null || markdown === undefined ? [] : [{ ...document, path: `${appDir}/${file}`, markdown }];

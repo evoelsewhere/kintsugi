@@ -76,9 +76,13 @@ export class StageResultsService {
       case "harden":
         results = { stage, ...common, ...(await hardenResults(source, appDir)), restrictedRecords: runId === undefined ? 0 : await this.restrictedCount(projectId, runId), ...(runId === undefined ? {} : { runId }) };
         break;
-      case "understand":
-        results = { stage, ...common, ...(await understandResults(source, appDir, applicationId, missingInputsOf(runs.find((run) => run.id === runId)?.outputSummary))) };
+      case "understand": {
+        // Work-item status is current on the default branch, not on the run's branch.
+        const tip = await this.defaultBranchRef(context);
+        const statusSource = tip.commit === selected.commit ? undefined : await this.source(context, applicationId, stage, tip.commit);
+        results = { stage, ...common, ...(await understandResults(source, appDir, applicationId, missingInputsOf(runs.find((run) => run.id === runId)?.outputSummary), statusSource)) };
         break;
+      }
     }
 
     if (compare) {
