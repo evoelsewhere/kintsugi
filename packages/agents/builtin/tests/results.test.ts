@@ -222,6 +222,69 @@ describe('security findings', () => {
     expect(report.coverageComplete).toBe(true)
   })
 
+  test('reads confidence, review coverage, the assessment carry-over and the tools not run', () => {
+    const report = parseSecurityFindings(`# Security Findings — billing
+
+## Scorecard
+
+| Severity | Count |
+|---|---|
+| Medium | 1 |
+| Low | 1 |
+| **Total** | **2** |
+
+**Review coverage:** manual review of 6 files (\`src/billing/AccountRepository.java\`, …); no SAST, dependency-audit or secret-scanning tool ran.
+
+## Coverage gaps
+
+All 5 finder classes returned and every finding was judged.
+
+## Findings by severity
+
+| ID | CWE | Severity | Confidence | Location | Title |
+|---|---|---|---|---|---|
+| SEC-001 | CWE-862 | Medium | Low | \`src/billing/AccountRepository.java:16-22\` | No authorization on find |
+| SEC-002 | CWE-209 | Low | Medium | \`src/billing/AccountRepository.java:20\` | Account id echoed in the error |
+
+### SEC-003 · Unpinned JDBC driver
+**Severity:** Low
+**Confidence:** Low
+**CWE:** CWE-1104
+
+The driver is supplied at deploy time.
+
+## Assessment carry-over
+
+| Assessment ID | Title | Location | Severity | Outcome | Reason |
+|---|---|---|---|---|---|
+| SEC-001 | Missing authorization | \`src/billing/AccountRepository.java:16-22\` | Medium | Confirmed as SEC-001 | find() has no ownership check |
+| SEC-004 | Negative DAYS_OVERDUE waives the fee | \`src/billing/InvoiceService.java:18\` | Low | Refuted | a data-quality rule, not an attacker-reachable flaw |
+
+## Audit tools not run
+
+| Tool | Reason |
+|---|---|
+| OWASP Dependency-Check | no shell or network in a runtime job; no build manifest to resolve |
+`)
+    expect(report.findings.map(finding => [finding.id, finding.severity, finding.confidence, finding.status])).toEqual([
+      ['SEC-001', 'Medium', 'Low', 'confirmed'],
+      ['SEC-002', 'Low', 'Medium', 'confirmed'],
+      ['SEC-003', 'Low', 'Low', 'confirmed'],
+    ])
+    expect(report.findings[0]?.detail).toBeUndefined()
+    expect(report.reviewCoverage).toMatch(/^manual review of 6 files/)
+    expect(report.carryOver?.rows.map(row => row[4])).toEqual(['Confirmed as SEC-001', 'Refuted'])
+    expect(report.toolsNotRun?.rows).toEqual([['OWASP Dependency-Check', 'no shell or network in a runtime job; no build manifest to resolve']])
+    expect(report.coverageComplete).toBe(true)
+  })
+
+  test('an empty findings table with a dash row is no finding, and older documents have no carry-over', () => {
+    const report = parseSecurityFindings('# F\n\n## Findings by severity\n\n| ID | Severity | Title |\n|---|---|---|\n| — | — | — |\n')
+    expect(report.findings).toEqual([])
+    expect(report.carryOver).toBeNull()
+    expect(report.reviewCoverage).toBeUndefined()
+  })
+
   test('summarises a remediation patch', () => {
     expect(patchSummary('# SEC-001: parameterize\n--- a/src/R.java\n+++ b/src/R.java\n@@ -1,2 +1,2 @@\n-a\n+b\n')).toEqual({ hunks: 1, files: ['src/R.java'], findings: ['SEC-001'] })
     expect(patchSummary('# Nothing to patch')).toEqual({ hunks: 0, files: [], findings: [] })
