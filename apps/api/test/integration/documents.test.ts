@@ -133,7 +133,6 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     await remote.commit("docs", "knowledge/as-is/web/traceability.json", TRACEABILITY, understand);
     await remote.commit("docs", "knowledge/as-is/web/README.md", "# Web AS-IS\n", understand);
     await remote.commit("docs", "knowledge/as-is/web/architecture.md", "# Architecture\n\n```mermaid\nflowchart LR\n  core --> data\n```\n", understand);
-    await remote.commit("docs", "knowledge/as-is/web/core/a.md", "# A\n", understand);
     await remote.commit("docs", "units/web/core/a.md", '---\nid: "web/core/a"\nstatus: pending\ncomplexity: low\n---\n\nA.\n', understand);
     await cloneMirror(`${remote.baseUrl}/docs.git`, new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
@@ -161,7 +160,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
         ('run-understand', 'shop', 'web', 'stage', 'understand', 'succeeded', 'w-understand', $1, now() - interval '10 minutes', now() - interval '20 minutes')`,
       [JSON.stringify({ stage: "understand", missingInputs: [{ path: "assessment/web/SECURITY_FINDINGS.md", stage: "harden" }] })],
     );
-  });
+  }, 180_000); // many fixture commits, each a few git processes: slow when the suites run in parallel
   afterAll(async () => {
     await app?.close();
     await remote?.close();
