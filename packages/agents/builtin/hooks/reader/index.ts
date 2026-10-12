@@ -30,3 +30,4 @@ export {
 } from './findings.js'
 export { UNIT_SEGMENT, leftOutTotal, parseTraceability, type TraceDataStore, type TraceUnit, type Traceability } from './traceability.js'
 export { frontmatterOf, parseWorkItem, type Frontmatter, type WorkItemSummary } from './work-item.js'
+export { ITEM_ID, parseItemCatalog, type ItemCatalog, type ItemCatalogItem, type ItemCatalogModule, type ItemCatalogPart } from './item-catalog.js'
