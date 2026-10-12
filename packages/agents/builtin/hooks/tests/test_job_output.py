@@ -250,3 +250,50 @@ def test_missing_cli_argument_has_machine_readable_usage_error() -> None:
     assert result.stderr == ""
     data = json.loads(result.stdout)
     assert data["errors"] == [{"code": "invalid_cli", "path": "."}]
+
+
+def test_mermaid_problems_are_redacted_warnings_that_do_not_block(tmp_path: Path) -> None:
+    marker = "TEST_ONLY_DIAGRAM_MARKER"
+    app = tmp_path / "assessment" / "sample-app"
+    app.mkdir(parents=True)
+    (app / "ARCHITECTURE.mmd").write_text(
+        f'flowchart TB\n    svc_a["A"] --> end\n    svc_b[{marker}]\n', encoding="utf-8"
+    )
+    (app / "call-graph.mmd").write_text('flowchart TD\n    svc_a["A"] --> svc_b["B"]\n', encoding="utf-8")
+    (app / "notes.md").write_text(
+        "# Notes\n\n```mermaid\nsequenceDiagram\n    svc_a->>svc_b: one; two\n```\n", encoding="utf-8"
+    )
+
+    # The worker runs the hook isolated (-I): the lint still loads from beside the hook.
+    result = subprocess.run(
+        [sys.executable, "-I", str(HOOK), "--output-dir", str(tmp_path)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    data = report(result)
+
+    assert result.returncode == 0
+    assert data["findings"] == []
+    assert data["warnings"] == [
+        {"category": "diagram", "line": 2, "path": "assessment/sample-app/ARCHITECTURE.mmd", "redacted": True, "rule": "reserved-id"},
+        {"category": "diagram", "line": 3, "path": "assessment/sample-app/ARCHITECTURE.mmd", "redacted": True, "rule": "unquoted-label"},
+        {"category": "diagram", "line": 5, "path": "assessment/sample-app/notes.md", "redacted": True, "rule": "unescaped-semicolon"},
+    ]
+    assert marker not in result.stdout + result.stderr
+
+
+def test_diagram_warnings_never_hide_a_credential_finding(tmp_path: Path) -> None:
+    (tmp_path / "ARCHITECTURE.mmd").write_text(
+        'flowchart TB\n    svc_a["password=TEST_ONLY_NOT_A_SECRET_42"] --> end\n', encoding="utf-8"
+    )
+
+    result = run_hook(tmp_path)
+    data = report(result)
+
+    assert result.returncode == 2
+    assert [item["rule"] for item in data["findings"]] == ["credential_assignment"]
+    assert [item["rule"] for item in data["warnings"]] == ["reserved-id"]
+    assert "TEST_ONLY_NOT_A_SECRET_42" not in result.stdout + result.stderr

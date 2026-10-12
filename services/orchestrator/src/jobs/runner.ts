@@ -709,7 +709,11 @@ export class JobRunner {
       files: entries.length,
       bytes: entries.reduce((total, entry) => total + entry.size, 0),
       restrictedFiles: restricted,
-      jobOutputHook: { checkedFiles: hook.checked.files, checkedBytes: hook.checked.bytes },
+      jobOutputHook: {
+        checkedFiles: hook.checked.files,
+        checkedBytes: hook.checked.bytes,
+        ...(hook.warnings.count === 0 ? {} : { diagramWarnings: hook.warnings.count, diagramWarningsFirst: hook.warnings.first }),
+      },
     };
   }
 

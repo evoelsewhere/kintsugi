@@ -55,7 +55,7 @@ describe("agent jobs in child processes", () => {
     const events = await collect(handle.events);
     const done = await handle.done;
     expect(done).toMatchObject({ type: "job.completed" });
-    expect(events[0]).toMatchObject({ type: "job.started", agent: "legacy-analyst@1.0.0" });
+    expect(events[0]).toMatchObject({ type: "job.started", agent: "legacy-analyst@1.1.0" });
     expect(events.some((event) => event.type === "tool.call")).toBe(true);
     expect(events.at(-1)).toEqual(done);
   });

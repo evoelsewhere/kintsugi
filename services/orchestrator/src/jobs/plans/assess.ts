@@ -26,8 +26,9 @@ ${INVENTORY_FIRST}
    batch interfaces, screen maps); test presence and a rough coverage signal.
 
 Write ${ANALYSIS}/structure.md with outputs_write: a domain table (domain, files, responsibilities, depends on), the
-technology fingerprint, and a Mermaid \`graph TD\` of the domains clustered with \`subgraph\`, at most about 40 edges,
-in a fenced \`mermaid\` block. These notes are input for the synthesis job, not a final document.
+technology fingerprint, and a Mermaid \`flowchart TB\` of the domains per the mermaid-diagrams skill (one \`subgraph\` per
+domain, nodes classed by kind, at most 40 edges), in a fenced \`mermaid\` block. These notes are input for the synthesis
+job, not a final document.
 
 ${HEADER}
 ${CREDENTIALS}
@@ -88,8 +89,9 @@ Replace, with a one-paragraph rationale and the stage it routes to: a newer vers
 uplift; a rewrite in another technology piece by piece → transform; a rebuild on a new architecture → reimagine;
 Rehost and Replace change no code, so say so and what the analysis is still good for).
 
-Also write assessment/{app}/ARCHITECTURE.mmd: the domain diagram from the structure notes, a Mermaid \`graph TD\`
-clustered with \`subgraph\`, at most about 40 edges, without a Markdown fence.
+Also write assessment/{app}/ARCHITECTURE.mmd: the domain diagram from the structure notes, one Mermaid \`flowchart TB\`
+per the mermaid-diagrams skill (a \`subgraph\` per domain, nodes classed ui, service, batch, store or external, sanitized
+ids and quoted labels, within its size limits), without a Markdown fence.
 
 Secrets first: the assessment is shared and committed, so masking applies to every section, whichever note a finding
 came from. ${RESTRICTED} Security Findings then points to "Credential inventory in the restricted portal record (not

@@ -6,6 +6,7 @@ metadata:
   audience: runtime
   upstream: commands/modernize-assess.md
   agents: [legacy-analyst, security-auditor]
+  skills: [mermaid-diagrams]
   reads: [standards/, kintsugi.yaml, assessment/<app>/INTENT.md, assessment/<app>/telemetry/]
   writes: [assessment/<app>/inventory.json, assessment/<app>/ASSESSMENT.md, assessment/<app>/ARCHITECTURE.mmd, assessment/portfolio.md, assessment/portfolio.json]
 ---
@@ -99,8 +100,10 @@ and rough coverage signal. This is part of the structure job's task (Step 3, job
 1. **legacy-analyst** — "Build a structural map of the legacy repository of $app: the 5–12 major
    functional domains (group optional subsystems under one umbrella), which
    files belong to each, and how they depend on each other (control flow and
-   shared data). Return a markdown table and a Mermaid `graph TD` of the
-   domains, clustered with `subgraph`, at most ~40 edges. Cite repo-relative
+   shared data). Return a markdown table and a Mermaid `flowchart TB` of the
+   domains drawn by the `mermaid-diagrams` skill: one `subgraph` per domain,
+   nodes classed by kind (ui, service, batch, store, external), at most 40
+   edges. Cite repo-relative
    paths. Flag dangling references." Also: the technology fingerprint of Step 2.
 2. **legacy-analyst** — "Identify technical debt in the legacy repository of $app: dead code,
    deprecated APIs, duplication, god objects, missing error handling, hardcoded
@@ -165,7 +168,9 @@ build check show what the move must carry along; for Replace, `extract-rules` tu
 what the application does into the acceptance criteria a replacement is judged against.
 
 Also write `assessment/$app/ARCHITECTURE.mmd`, the domain diagram from the
-structure job.
+structure job: one `flowchart TB` per the `mermaid-diagrams` skill, without a
+Markdown fence, within its size limits (collapse or split with an index diagram
+when the estate is bigger).
 
 ## Step 7 — Finish
 

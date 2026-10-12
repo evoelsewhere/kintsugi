@@ -4,7 +4,8 @@
 // installation at startup. Read-only; admins fork a built-in agent to change it.
 //
 //   builtin/agents/<name>.md        runtime agents (audience runtime) and member agents
-//   builtin/skills/<name>/SKILL.md  shared skills (optional)
+//   builtin/skills/<name>/SKILL.md  shared skills, referenced by name from agents' `skills:`;
+//                                   references/ and license files beside SKILL.md stay on disk
 //   builtin/commands, workflows, scripts, hooks, tests   read by later stages
 
 import { existsSync } from "node:fs";
