@@ -61,14 +61,26 @@ def rebuild(app, docs):
         meta = item_json(docs, 'knowledge', 'as-is', app, 'items', *parts, 'meta.json')
         if meta:
             trace = item_json(docs, 'knowledge', 'as-is', app, 'items', *parts, 'trace.json')
+            deps = [d for d in trace.get('dependencies') or [] if isinstance(d, dict) and isinstance(d.get('target'), str)]
+            stores = {}
+            for dep in deps:
+                if dep['target'].startswith('ds:'):
+                    stores.setdefault(dep['target'], set()).add(str(dep.get('kind') or 'read'))
+            # The row shape of merge_traceability.py, so the readers and the portal take both.
             rows.append({
-                'id': f'{app}/{item_id}', 'item': item_id, 'module': item.get('module') or parts[0], 'title': cc.clean_text(item.get('name'), cc.MAX_NAME) or item_id,
+                'id': f'{app}/{item_id}', 'item': item_id, 'module': parts[0], 'unit': parts[1], 'title': cc.clean_text(item.get('name'), cc.MAX_NAME) or item_id,
                 'kind': item.get('kind') or 'module', 'loc': item.get('loc') if isinstance(item.get('loc'), int) else 0,
+                'entryPoint': bool(item.get('entryPoints')),
                 'spec': f'knowledge/as-is/{app}/{item_id}.md', 'files': item['files'],
-                'dependsOn': sorted({f'{app}/{d["target"]}' for d in trace.get('dependencies') or [] if isinstance(d, dict) and d.get('target') in items and d.get('direction') != 'inbound'}),
-                'dataStores': sorted({d['target'] for d in trace.get('dependencies') or [] if isinstance(d, dict) and str(d.get('target', '')).startswith('ds:')}),
+                'dependsOn': sorted({f'{app}/{d["target"]}' for d in deps if d['target'] in items and d.get('direction') != 'inbound'}),
+                'usedBy': sorted({f'{app}/{d["target"]}' for d in deps if d['target'] in items and d.get('direction') == 'inbound'}),
+                'dataStores': [{'id': store, 'access': sorted(kinds)} for store, kinds in sorted(stores.items())],
+                'externalSystems': [v for v in trace.get('externalSystems') or [] if isinstance(v, str)],
                 'rules': [r for r in trace.get('rulesApplied') or [] if isinstance(r, str)],
                 'findings': [f for f in trace.get('findings') or [] if isinstance(f, str)],
+                'dataObjects': [v for v in trace.get('dataObjects') or [] if isinstance(v, str)],
+                'entryPoints': [v for v in trace.get('entryPoints') or [] if isinstance(v, str)],
+                'openQuestions': trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) else 0,
                 'stale': meta.get('digest') != item.get('digest'),
                 'understoodAt': meta.get('commit'),
             })
@@ -176,7 +188,14 @@ def main(argv):
             os.path.join(know, 'traceability.md'): traceability_md(args.app, rows, len(active)),
             os.path.join(know, 'README.md'): readme(args.app, active, rows),
         }
-        cc.write_json(os.path.join(know, 'traceability.json'), {'app': args.app, 'generatedBy': 'rebuild_aggregates.py', 'items': len(active), 'units': rows})
+        index = lambda key: {value: sorted(row['id'] for row in rows if value in row[key]) for value in sorted({v for row in rows for v in row[key]})}  # noqa: E731
+        cc.write_json(os.path.join(know, 'traceability.json'), {
+            'app': args.app, 'generatedBy': 'rebuild_aggregates.py', 'items': len(active),
+            'inputs': {'businessRules': bool(rules), 'securityFindings': bool(findings)},
+            'units': rows, 'rules': index('rules'), 'findings': index('findings'), 'files': index('files'),
+            'dataStores': {store: sorted(row['id'] for row in rows if any(entry['id'] == store for entry in row['dataStores'])) for store in sorted({entry['id'] for row in rows for entry in row['dataStores']})},
+            'unmappedRules': [], 'unmappedFindings': [], 'cycles': [], 'notes': {},
+        })
         for path, text in texts.items():
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, 'w', encoding='utf-8', newline='\n') as handle:

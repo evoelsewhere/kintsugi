@@ -22,6 +22,8 @@ export interface ApiErrorBody {
   message: string | string[];
   timestamp: string;
   path: string;
+  /** Structured detail of a refusal (e.g. the conflicts of a 409). */
+  details?: Record<string, unknown>;
 }
 
 export interface Page<T> {

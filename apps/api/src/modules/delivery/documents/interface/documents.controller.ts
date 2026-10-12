@@ -7,7 +7,7 @@ import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { DocumentsService } from "../application/documents.service.js";
 import { StageResultsService } from "../application/stage-results.service.js";
 import type { DocumentFile, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
-import { type FileQuery, type ResultsQuery, type TreeQuery, fileQuerySchema, resultsQuerySchema, treeQuerySchema } from "./document.dto.js";
+import { type FileQuery, type ResultsQuery, type TreeQuery, type UnderstandResultsQuery, fileQuerySchema, resultsQuerySchema, treeQuerySchema, understandResultsQuerySchema } from "./document.dto.js";
 
 @ApiTags("delivery · documents")
 @Controller("projects/:id")
@@ -46,6 +46,16 @@ export class DocumentsController {
   @ApiOkResponse({ description: "A stage-specific payload plus the raw Markdown of the main document." })
   stageResults(@Param("id") id: string, @Param("appId") appId: string, @Param("stage") stage: string, @Query({ schema: resultsQuerySchema }) query: ResultsQuery): Promise<StageResults> {
     return this.results.results(id, appId, stage, query.ref, query.compare);
+  }
+
+  @Get("applications/:appId/understand/results")
+  @ApiOperation({
+    summary: "The results of the understand stage (ADR-0033) as a view: map, extract-rules, harden or understand (traceability)",
+    description: "Without item: the whole application (the generated views under generated/). With item: that catalog item's own files. Default ref: the default branch; a run's branch shows that run's items.",
+  })
+  @ApiOkResponse({ description: "A stage-results payload of the view (stage = the view) plus the scope." })
+  understandResults(@Param("id") id: string, @Param("appId") appId: string, @Query({ schema: understandResultsQuerySchema }) query: UnderstandResultsQuery): Promise<StageResults> {
+    return this.results.understandResults(id, appId, query.view, query.item, query.ref);
   }
 
   @Get("applications/:appId/results/headlines")
