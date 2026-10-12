@@ -162,4 +162,8 @@ export interface NewStageRun {
   stage: string;
   sourceRepositoryId: string;
   actor?: string;
+  /** Pinned source commit (a retry reads what the failed run read). */
+  sourceCommit?: string;
+  /** Run inputs: scope, documentsCommit, resumeOf (ADR-0033). */
+  inputs?: Record<string, unknown>;
 }

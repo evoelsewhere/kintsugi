@@ -49,6 +49,24 @@ export class JobRunsController {
     return this.runs.cancel(id, runId, actor);
   }
 
+  @RequirePermission("jobs.run")
+  @Post("job-runs/:runId/retry")
+  @HttpCode(202)
+  @ApiOperation({ summary: "Retry a failed stage run: a new run on the same commits and scope that skips the agent steps that succeeded (ADR-0033)" })
+  @ApiAcceptedResponse({ description: "The queued retry; 409 unless the run failed." })
+  retry(@Param("id") id: string, @Param("runId") runId: string, @CurrentActor() actor: Actor): Promise<JobRunView> {
+    return this.runs.retry(id, runId, actor);
+  }
+
+  @RequirePermission("jobs.run")
+  @Post("job-runs/:runId/abandon")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Abandon the pull request of an understand run that was closed without merging: its items are released (ADR-0033)" })
+  @ApiOkResponse({ description: "The run with abandonedAt; 409 when it has no pull request or was abandoned already." })
+  abandon(@Param("id") id: string, @Param("runId") runId: string, @CurrentActor() actor: Actor): Promise<JobRunView> {
+    return this.runs.abandon(id, runId, actor);
+  }
+
   @Get("job-runs/:runId/events")
   @ApiProduces("text/event-stream")
   @ApiOperation({

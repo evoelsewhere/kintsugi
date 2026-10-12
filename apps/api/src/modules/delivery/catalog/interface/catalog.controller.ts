@@ -1,16 +1,22 @@
 // Interface layer: the item catalog of an application with the derived status of every item
 // (ADR-0033). Reading needs a session, like the documents it comes from.
 
-import { Controller, Get, Param, Query } from "@nestjs/common";
-import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
+import { ApiAcceptedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
+import type { JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { CatalogService } from "../application/catalog.service.js";
+import { UnderstandRunsService } from "../application/understand-runs.service.js";
 import type { CatalogView } from "../domain/catalog.js";
-import { type CatalogQuery, catalogQuerySchema } from "./catalog.dto.js";
+import { type CatalogQuery, type UnderstandRunBody, catalogQuerySchema, understandRunSchema } from "./catalog.dto.js";
 
 @ApiTags("delivery · item catalog")
 @Controller("projects/:id/applications/:appId")
 export class CatalogController {
-  constructor(private readonly catalog: CatalogService) {}
+  constructor(
+    private readonly catalog: CatalogService,
+    private readonly understand: UnderstandRunsService,
+  ) {}
 
   @Get("catalog")
   @ApiOperation({
@@ -20,5 +26,18 @@ export class CatalogController {
   @ApiOkResponse({ description: "The catalog (modules, unassigned files, ambiguities), its items with status, last run, pull request and understood state, and counts per status." })
   get(@Param("id") id: string, @Param("appId") appId: string, @Query({ schema: catalogQuerySchema }) query: CatalogQuery): Promise<CatalogView> {
     return this.catalog.view(id, appId, query.ref);
+  }
+
+  @RequirePermission("jobs.run")
+  @Post("understand/runs")
+  @HttpCode(202)
+  @ApiOperation({
+    summary: "Run understand on a selection of catalog items (items and whole modules), or resume a failed run",
+    description:
+      "400 for unknown or retired ids; 409 when the catalog is not merged, or (with details.conflicts) when a selected item is running or in an open pull request; 422 above the items cap of a run.",
+  })
+  @ApiAcceptedResponse({ description: "The queued understand run." })
+  run(@Param("id") id: string, @Param("appId") appId: string, @Body({ schema: understandRunSchema }) body: UnderstandRunBody, @CurrentActor() actor: Actor): Promise<JobRunView> {
+    return this.understand.start(id, appId, body, actor);
   }
 }
