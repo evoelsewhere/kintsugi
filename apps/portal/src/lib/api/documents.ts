@@ -78,6 +78,8 @@ export interface Finding {
   id: string;
   title: string;
   severity: Severity | "Unknown";
+  /** How sure the scan is; older documents carry none. */
+  confidence?: "High" | "Medium" | "Low";
   cwe?: string;
   location?: string;
   citations: Citation[];
@@ -85,16 +87,39 @@ export interface Finding {
   detail?: string;
 }
 
+/** A security highlight of the assessment and how it ended in harden. */
+export interface CarryOverItem {
+  id?: string;
+  highlight: string;
+  location?: string;
+  severity?: Severity;
+  verdict: "confirmed" | "refuted" | "not judged";
+  /** The harden finding the highlight became. */
+  findingId?: string;
+  reason?: string;
+}
+
+export interface ToolNotRun {
+  tool: string;
+  reason?: string;
+}
+
 export interface SecurityReport {
   scorecard: Record<Severity, number> & { total: number };
   scorecardStated: boolean;
   topCwes?: string;
   refutedCount: number | null;
+  /** How the code was reviewed and which files (newer documents only). */
+  reviewCoverage?: string;
   coverageGaps: string[];
   coverageComplete: boolean;
   findings: Finding[];
   cves: Table | null;
+  carryOver?: Table | null;
+  /** Optional: payloads of older API builds lack it. */
+  carryOverItems?: CarryOverItem[];
   toolsNotRun: Table | null;
+  toolsNotRunItems?: ToolNotRun[];
   remediationLog: Table | null;
   patchReview: string[];
   injectionFlags?: string;
