@@ -39,8 +39,8 @@ as ids or unquoted labels.
 
 1. **Ids are sanitized, labels carry the text.** An id matches `[A-Za-z][A-Za-z0-9_]*`. Derive it from
    the name: replace every other character with `_`, collapse repeats, and prefix the kind:
-   `ui_`, `svc_`, `job_`, `db_`, `ext_`, `dom_` (subgraphs), `ph_` (phases), `per_` (C4 people),
-   `ctr_` (C4 containers). Make ids unique by suffixing `_2`, `_3`. The original name goes into the label.
+   `ui_`, `svc_`, `job_`, `db_`, `ext_`, `usr_` (people), `dom_` (subgraphs), `chk_` (decisions),
+   `st_` (states), `ph_` (phases), `per_` and `ctr_` (C4 people and containers). Make ids unique by suffixing `_2`, `_3`. The original name goes into the label.
 2. **No bare `o` or `x` start.** An id that starts with `o` or `x` right after an edge turns it into a
    circle or cross edge (`A---orders`). The kind prefix avoids this; never drop it.
 3. **No keywords as ids:** `end`, `default`, `style`, `class`, `classDef`, `linkStyle`, `click`, `call`,

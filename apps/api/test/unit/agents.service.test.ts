@@ -206,7 +206,10 @@ describe("agents service", () => {
 
     await service.remove("house-reviewer", admin);
     await service.removeSkill("house-style", admin);
-    expect(await service.listSkills()).toEqual([]);
+    // Only the built-in shared skills remain, used by the built-in agents that draw diagrams.
+    expect((await service.listSkills()).map((skill) => [skill.name, skill.source, skill.usedBy])).toEqual([
+      ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "legacy-analyst"]],
+    ]);
 
     // Each successful change is audited once; refused ones are not.
     expect(audit.actions()).toEqual(["skill.create", "agent.create", "agent.disable", "agent.delete", "skill.delete"]);
