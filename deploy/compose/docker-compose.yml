@@ -9,6 +9,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://kintsugi:${POSTGRES_PASSWORD}@postgres:5432/kintsugi
+      KINTSUGI_DATA_DIR: /var/lib/kintsugi     # the API reads the document repo mirrors (read-only)
     ports:
       - "${KINTSUGI_HTTP_PORT:-8080}:8080"   # put the project's reverse proxy / TLS in front
     volumes:

@@ -28,6 +28,15 @@ Responsibilities beyond the feature modules below:
   `GET /api/stages` lists the pipeline stages from the built-in commands (who runs each,
   `runnable` for those the portal can start); `GET /api/job-runs` lists top-level runs across
   projects (`?status=queued,running&projectId&applicationId`).
+- Delivery → documents (session only, read-only, from the document repo mirror under
+  `KINTSUGI_DATA_DIR`): `GET /api/projects/:id/documents/refs` (default branch tip plus the
+  output branches of recent successful runs and writes, `merged` or `open`),
+  `GET …/documents/tree?ref&path` and `GET …/documents/file?ref&path` (text up to 2 MiB, `.json`
+  parsed; `ref` is a commit id or `refs/heads/<branch>`; never `restricted/` or `.git`).
+  `GET /api/projects/:id/applications/:appId/stages/:stage/results?ref&compare` builds the
+  results of `assess`, `map`, `extract-rules` or `harden` with the parsers of
+  `@kintsugi/agents/reader` (default ref: the stage's latest successful run, else the default
+  branch); `GET …/applications/:appId/results/headlines` gives the overview's headline numbers.
 - Cross-project reads (session only): `GET /api/document-writes`
   (`?status=queued,failed&projectId`); `GET /api/monitoring/overview` (counts, what needs
   attention, recent activity, the worker's pg-boss queue counts — `null` when unreadable) and
