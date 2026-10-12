@@ -85,9 +85,10 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     const scope = (items: string[]): string => JSON.stringify({ scope: { items, files: [] } });
     await app.db.query(
       `insert into workflow.job_run (id, project_id, application_id, kind, name, status, document_write_id, inputs, output_summary, abandoned_at, created_at) values
+        ('run-assess', 'shop', 'web', 'stage', 'assess', 'succeeded', null, '{}', null, null, now() - interval '6 hours'),
         ('run-merged', 'shop', 'web', 'stage', 'understand', 'succeeded', null, $1, null, null, now() - interval '5 hours'),
         ('run-open', 'shop', 'web', 'stage', 'understand', 'succeeded', 'w-open', $2, null, null, now() - interval '3 hours'),
-        ('run-failed', 'shop', 'web', 'stage', 'understand', 'failed', null, $3, null, null, now() - interval '2 hours'),
+        ('run-failed', 'shop', 'web', 'stage', 'understand', 'failed', null, $3, $7, null, now() - interval '2 hours'),
         ('run-abandoned', 'shop', 'web', 'stage', 'understand', 'succeeded', 'w-abandoned', $4, $5, now(), now() - interval '90 minutes'),
         ('run-active', 'shop', 'web', 'stage', 'understand', 'running', null, $6, null, null, now() - interval '1 hour')`,
       [
@@ -97,6 +98,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
         scope(["customers/report", "customers/lookup"]),
         JSON.stringify({ stage: "understand", steps: [{ id: "specify-item", kind: "agent", status: "failed", key: "customers/lookup" }] }),
         scope(["customers/gone"]),
+        JSON.stringify({ stage: "understand", documentsCommit: "c".repeat(40), steps: [] }),
       ],
     );
   }, 180_000);
@@ -146,5 +148,67 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect((await admin.get("/projects/shop/applications/web/catalog?ref=refs/heads/kintsugi/legacy-analyst/run-open")).status).toBe(200);
     expect((await admin.get("/projects/shop/applications/web/catalog?ref=main")).status).toBe(400);
     expect((await admin.get(`/projects/shop/applications/web/catalog?ref=${"0".repeat(40)}`)).status).toBe(404);
+  });
+
+  type RunView = { id: string; name: string; status: string; scope?: { items: string[] }; resumeOf?: string; abandonedAt?: string };
+  type Failure = { message: string; details?: { conflicts?: Array<{ item: string; runId?: string; state: string }>; unknown?: string[] } };
+
+  it("starts understand on a selection, pinned to the catalog's commit, and refuses unknown, retired, blocked and oversized selections", async () => {
+    const { client } = await memberClient(app, admin, "viewer", ["user"]);
+    expect((await client.request("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["billing/invoice"] } })).status).toBe(403);
+    expect((await admin.request("POST", "/projects/shop/applications/web/stages/understand/run")).status).toBe(400);
+    expect((await admin.request("POST", "/projects/shop/applications/web/understand/runs", { body: {} })).status).toBe(400);
+
+    const retired = await admin.request<Failure>("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["customers/gone", "nope/x"] } });
+    expect(retired.status).toBe(400);
+    expect((retired.body as unknown as Failure).details?.unknown).toEqual(["customers/gone", "nope/x"]);
+
+    // billing/tax is in an open pull request: the module selection takes it and is refused with the conflict.
+    const blocked = await admin.request<Failure>("POST", "/projects/shop/applications/web/understand/runs", { body: { modules: ["billing"] } });
+    expect(blocked.status).toBe(409);
+    expect((blocked.body as unknown as Failure).details?.conflicts).toEqual([{ item: "billing/tax", runId: "run-open", state: "in-pr" }]);
+
+    process.env["KINTSUGI_STAGE_MAX_AGENTS"] = "1";
+    try {
+      expect((await admin.request("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["billing/invoice", "customers/report"] } })).status).toBe(422);
+    } finally {
+      delete process.env["KINTSUGI_STAGE_MAX_AGENTS"];
+    }
+
+    const started = await admin.request<RunView>("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["customers/report", "billing/invoice"] } });
+    expect(started.status, JSON.stringify(started.body)).toBe(202);
+    expect(started.body.data).toMatchObject({ name: "understand", status: "queued", scope: { items: ["billing/invoice", "customers/report"] } });
+    const inputs = await app.db.query<{ inputs: { scope: { files: string[] }; documentsCommit: string } }>("select inputs from workflow.job_run where id = $1", [started.body.data!.id]);
+    expect(inputs.rows[0]?.inputs.scope.files).toEqual(["src/Invoice.java", "src/Report.java"]);
+    expect(inputs.rows[0]?.inputs.documentsCommit).toMatch(/^[0-9a-f]{40}$/);
+
+    // Its items are running now: a second run on one of them is refused.
+    const again = await admin.request<Failure>("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["billing/invoice"] } });
+    expect(again.status).toBe(409);
+    expect((again.body as unknown as Failure).details?.conflicts?.[0]).toMatchObject({ item: "billing/invoice", state: "running" });
+    await app.db.query("update workflow.job_run set status = 'cancelled' where id = $1", [started.body.data!.id]);
+  });
+
+  it("abandons a closed pull request (its items are released) and retries a failed run on the same commits", async () => {
+    expect((await admin.request("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["billing/tax"] } })).status).toBe(409);
+    const abandoned = await admin.request<RunView>("POST", "/projects/shop/job-runs/run-open/abandon");
+    expect(abandoned.status).toBe(200);
+    expect(abandoned.body.data?.abandonedAt).toBeDefined();
+    expect((await admin.request("POST", "/projects/shop/job-runs/run-open/abandon")).status).toBe(409);
+    expect((await admin.request("POST", "/projects/shop/job-runs/run-failed/abandon")).status).toBe(409);
+    const catalog = await admin.get<{ items: Array<{ id: string; status: string }> }>("/projects/shop/applications/web/catalog");
+    expect(catalog.body.data?.items.find((entry) => entry.id === "billing/tax")?.status).toBe("not-analysed");
+
+    expect((await admin.request("POST", "/projects/shop/job-runs/run-open/retry")).status).toBe(409);
+    const retried = await admin.request<RunView>("POST", "/projects/shop/job-runs/run-failed/retry");
+    expect(retried.status).toBe(202);
+    expect(retried.body.data).toMatchObject({ name: "understand", resumeOf: "run-failed", scope: { items: ["customers/update", "billing/rates"] } });
+    const inputs = await app.db.query<{ inputs: { documentsCommit: string; resumeOf: string } }>("select inputs from workflow.job_run where id = $1", [retried.body.data!.id]);
+    expect(inputs.rows[0]?.inputs).toMatchObject({ documentsCommit: "c".repeat(40), resumeOf: "run-failed" });
+    // The same through the selection endpoint.
+    await app.db.query("update workflow.job_run set status = 'cancelled' where id = $1", [retried.body.data!.id]);
+    const resumed = await admin.request<RunView>("POST", "/projects/shop/applications/web/understand/runs", { body: { resumeOf: "run-failed" } });
+    expect(resumed.status).toBe(202);
+    expect(resumed.body.data?.resumeOf).toBe("run-failed");
   });
 });

@@ -75,8 +75,8 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     expect(again.status).toBe(409);
     expect(again.body.message).toMatch(/already queued or running/);
 
-    // map, extract-rules and understand read the assessment: assess must have succeeded first.
-    for (const stage of ["map", "extract-rules", "understand"]) {
+    // map and extract-rules read the assessment: assess must have succeeded first.
+    for (const stage of ["map", "extract-rules"]) {
       const early = await admin.request("POST", `/projects/billing/applications/web/stages/${stage}/run`);
       expect(early.status).toBe(409);
       expect(early.body.message).toBe(`Run assess for web first: ${stage} reads assessment/web/ASSESSMENT.md, which assess writes (merge its pull request before running ${stage})`);
@@ -101,10 +101,10 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     expect(JSON.stringify(detail)).not.toContain("hu**");
     expect((await admin.get("/projects/billing/job-runs/missing")).status).toBe(404);
 
-    // With assess succeeded, understand still needs map; map can start; harden needs nothing first.
+    // understand runs on a selection of catalog items (ADR-0033), never through the stage route; map can start; harden needs nothing first.
     const understand = await admin.request("POST", "/projects/billing/applications/web/stages/understand/run");
-    expect(understand.status).toBe(409);
-    expect(understand.body.message).toBe("Run map for web first: understand reads assessment/web/topology.json, which map writes (merge its pull request before running understand)");
+    expect(understand.status).toBe(400);
+    expect(understand.body.message).toMatch(/understand\/runs/);
     const map = await admin.request<RunView>("POST", "/projects/billing/applications/web/stages/map/run");
     expect(map.status).toBe(202);
     expect(map.body.data).toMatchObject({ kind: "stage", name: "map", status: "queued" });

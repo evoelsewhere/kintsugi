@@ -11,3 +11,15 @@ export const catalogQuerySchema = z.object({
     .optional(),
 });
 export type CatalogQuery = z.infer<typeof catalogQuerySchema>;
+
+const catalogId = z.string().min(1).max(130);
+
+/** Body of POST understand/runs: items and whole modules to understand, or a failed run to resume. */
+export const understandRunSchema = z
+  .object({
+    items: z.array(catalogId).max(500).optional(),
+    modules: z.array(z.string().min(1).max(63)).max(100).optional(),
+    resumeOf: z.string().min(1).max(128).optional(),
+  })
+  .refine((body) => body.resumeOf !== undefined || (body.items?.length ?? 0) + (body.modules?.length ?? 0) > 0, "select items or modules, or name a run to resume");
+export type UnderstandRunBody = z.infer<typeof understandRunSchema>;

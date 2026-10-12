@@ -112,12 +112,22 @@ export class PgJobRunStore extends JobRunStore {
 
   async createStageRun(run: NewStageRun): Promise<JobRunView> {
     await this.#pool.query(
-      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor)
-       values ($1, $2, $3, 'stage', $4, $5, $6)`,
-      [run.id, run.projectId, run.applicationId, run.stage, run.sourceRepositoryId, run.actor ?? null],
+      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor, source_commit, inputs)
+       values ($1, $2, $3, 'stage', $4, $5, $6, $7, $8)`,
+      [run.id, run.projectId, run.applicationId, run.stage, run.sourceRepositoryId, run.actor ?? null, run.sourceCommit ?? null, JSON.stringify(run.inputs ?? {})],
     );
     const result = await this.#pool.query<RunRow>(`${SELECT} where r.id = $1`, [run.id]);
     return toView(result.rows[0]!);
+  }
+
+  async abandon(projectId: string, id: string, actor: string): Promise<boolean> {
+    const result = await this.#pool.query("update workflow.job_run set abandoned_at = now(), abandoned_by = $3 where project_id = $1 and id = $2 and abandoned_at is null", [projectId, id, actor]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async inputs(projectId: string, id: string): Promise<Record<string, unknown> | undefined> {
+    const result = await this.#pool.query<{ inputs: Record<string, unknown> }>("select inputs from workflow.job_run where project_id = $1 and id = $2", [projectId, id]);
+    return result.rows[0]?.inputs;
   }
 
   async hasStageRun(projectId: string, applicationId: string, stage: string, statuses: readonly JobRunStatus[]): Promise<boolean> {
