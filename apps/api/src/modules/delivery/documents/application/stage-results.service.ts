@@ -1,5 +1,5 @@
 // Application layer: the results of a stage for one application, read from the files it wrote
-// to the document repo (assessment/<app>/) at a ref and built with the reader parsers. The
+// to the document repo (assessment/<app>/; understand: knowledge/as-is/<app>/ and units/<app>/) at a ref and built with the reader parsers. The
 // default ref is the output of the stage's latest successful run (its branch tip, open or
 // merged), else the default branch. Also the headline numbers of every stage for the overview.
 
@@ -17,8 +17,12 @@ import {
   hardenResults,
   mapHeadline,
   mapResults,
+  missingInputsOf,
   rulesHeadline,
   rulesResults,
+  stageDir,
+  understandHeadline,
+  understandResults,
 } from "./stage-results.builders.js";
 
 /** How many recent runs of the application are looked at for a stage's refs. */
@@ -29,6 +33,7 @@ const HEADLINES: Record<ResultStage, (source: StageSource) => Promise<{ counts: 
   map: mapHeadline,
   "extract-rules": rulesHeadline,
   harden: hardenHeadline,
+  understand: understandHeadline,
 };
 
 export const isResultStage = (stage: string): stage is ResultStage => (RESULT_STAGES as readonly string[]).includes(stage);
@@ -48,7 +53,7 @@ export class StageResultsService {
     const runs = await this.stageRuns(projectId, applicationId, stage);
     const selected = ref === undefined ? await this.defaultRef(context, runs) : await this.describe(context, ref, runs);
     const source = await this.source(context, applicationId, stage, selected.commit);
-    const appDir = `assessment/${applicationId}`;
+    const appDir = stageDir(stage, applicationId);
     const runId = selected.runId;
     const common = {
       applicationId,
@@ -70,6 +75,9 @@ export class StageResultsService {
         break;
       case "harden":
         results = { stage, ...common, ...(await hardenResults(source, appDir)), restrictedRecords: runId === undefined ? 0 : await this.restrictedCount(projectId, runId), ...(runId === undefined ? {} : { runId }) };
+        break;
+      case "understand":
+        results = { stage, ...common, ...(await understandResults(source, appDir, applicationId, missingInputsOf(runs.find((run) => run.id === runId)?.outputSummary))) };
         break;
     }
 
@@ -177,9 +185,9 @@ export class StageResultsService {
     return undefined;
   }
 
-  /** The stage's output directory at a commit. */
+  /** The stage's output directory at a commit, and reads of other document-repo paths at the same commit. */
   private async source(context: DocumentContext, applicationId: string, stage: ResultStage, commit: string): Promise<StageSource> {
-    const dir = `assessment/${applicationId}`;
+    const dir = stageDir(stage, applicationId);
     const entries = (await this.reader.list(context.repo, commit, dir)) ?? [];
     const known = new Map(entries.filter((entry) => entry.kind === "file").map((entry) => [entry.name, entry.size ?? 0]));
     const files: StageFile[] = STAGE_OUTPUTS[stage].files.flatMap((name) => (known.has(name) ? [{ path: `${dir}/${name}`, size: known.get(name) ?? 0 }] : []));
@@ -189,6 +197,11 @@ export class StageResultsService {
         const size = known.get(name);
         if (size === undefined) return null;
         const read = await this.reader.read(context.repo, commit, `${dir}/${name}`, MAX_DOCUMENT_BYTES, size);
+        return read.status === "ok" ? read.content : null;
+      },
+      list: async (path) => ((await this.reader.list(context.repo, commit, path)) ?? []).flatMap((entry) => (entry.kind === "file" ? [{ path: entry.path, size: entry.size ?? 0 }] : [])),
+      readPath: async (path, size) => {
+        const read = await this.reader.read(context.repo, commit, path, MAX_DOCUMENT_BYTES, size);
         return read.status === "ok" ? read.content : null;
       },
     };

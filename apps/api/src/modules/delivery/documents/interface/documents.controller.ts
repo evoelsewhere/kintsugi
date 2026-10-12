@@ -40,7 +40,7 @@ export class DocumentsController {
 
   @Get("applications/:appId/stages/:stage/results")
   @ApiOperation({
-    summary: "The results of a stage for an application (assess, map, extract-rules, harden), built from its outputs in the document repo",
+    summary: "The results of a stage for an application (assess, map, extract-rules, harden, understand), built from its outputs in the document repo",
     description: "Default ref: the output of the stage's latest successful run (its branch tip), else the default branch. compare=true adds the previous successful run's counts.",
   })
   @ApiOkResponse({ description: "A stage-specific payload plus the raw Markdown of the main document." })

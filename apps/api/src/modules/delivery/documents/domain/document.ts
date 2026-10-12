@@ -3,7 +3,7 @@
 // results of a stage built from the files it wrote. Never read from anywhere but the mirror;
 // never `restricted/` (restricted records are not committed, ADR-0029) or `.git`. Pure types.
 
-import type { CatalogRule, DataObject, Finding, Inventory, SecurityReport, Table, TopoEdge, TopoFlow } from "@kintsugi/agents/reader";
+import type { CatalogRule, DataObject, Finding, Inventory, SecurityReport, Table, TopoEdge, TopoFlow, TraceUnit } from "@kintsugi/agents/reader";
 
 /** The mirror of a project's document repository (ADR-0025). */
 export interface DocumentRepo {
@@ -91,7 +91,7 @@ export type FileRead =
 export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 
 /** Stages with a results view. */
-export const RESULT_STAGES = ["assess", "map", "extract-rules", "harden"] as const;
+export const RESULT_STAGES = ["assess", "map", "extract-rules", "harden", "understand"] as const;
 export type ResultStage = (typeof RESULT_STAGES)[number];
 
 /** A stage output file found at the ref. */
@@ -194,7 +194,43 @@ export interface HardenResults extends StageResultsBase {
   runId?: string;
 }
 
-export type StageResults = AssessResults | MapResults | RulesResults | HardenResults;
+/** A unit of the understand stage: its row of the traceability matrix and its work item, when one is at the ref. */
+export interface UnderstandUnit extends TraceUnit {
+  workItem?: { path: string; status: string; complexity?: string };
+}
+
+/** A synthesis document of the understand stage (knowledge/as-is/<app>/). */
+export interface AsIsDocument {
+  id: "readme" | "architecture" | "data-model" | "integrations";
+  title: string;
+  path: string;
+  markdown: string;
+}
+
+export interface UnderstandResults extends StageResultsBase {
+  stage: "understand";
+  /** The units of traceability.json, each with its work item's status. */
+  units: UnderstandUnit[];
+  /** What the matrix says beyond the units; null without traceability.json. */
+  matrix: {
+    path: string;
+    inputs: { businessRules: boolean; securityFindings: boolean };
+    rulesCovered: string[];
+    findingsMapped: string[];
+    unmappedRules: string[];
+    unmappedFindings: string[];
+    dataStores: string[];
+    cycles: string[][];
+    /** "Left out" counts by reason. */
+    notes: Record<string, number>;
+  } | null;
+  /** README, architecture, data model and integrations, raw Markdown, those that exist. */
+  documents: AsIsDocument[];
+  /** Optional inputs that were not on the default branch when the run started (from its summary). */
+  missingInputs: Array<{ path: string; stage: string }>;
+}
+
+export type StageResults = AssessResults | MapResults | RulesResults | HardenResults | UnderstandResults;
 
 /** Headline numbers of every result stage of one application, for the Delivery overview. */
 export interface StageHeadline {
