@@ -16,7 +16,7 @@ Exit codes:
 
 | Code | Meaning | Commit allowed |
 | ---: | --- | --- |
-| `0` | Scan completed; no credential or malformed-artifact findings | Yes, subject to other job gates |
+| `0` | Scan completed; no credential or malformed-artifact findings (diagram warnings may be present) | Yes, subject to other job gates |
 | `2` | Credential-shaped values found; no malformed artifact | No |
 | `3` | Malformed artifact found; no credential finding | No |
 | `4` | Both credential and malformed-artifact findings | No |
@@ -43,9 +43,20 @@ The report has this shape (values shown are examples, not scan output):
       "redacted": true
     }
   ],
+  "warnings": [
+    {
+      "category": "diagram",
+      "rule": "reserved-id",
+      "path": "assessment/sample-app/ARCHITECTURE.mmd",
+      "line": 7,
+      "redacted": true
+    }
+  ],
   "errors": []
 }
 ```
+
+`warnings` has the same redacted shape as `findings` and never changes the exit code (at most 1,000 are reported). The worker keeps their number and the first 20 on the step's summary (`jobOutputHook.diagramWarnings`, `jobOutputHook.diagramWarningsFirst`).
 
 Each finding contains only a category, a stable rule identifier, a relative path, a one-based line number, and `redacted: true`; it never contains a matched value or source line. Error entries contain a relative path and a stable error code, not exception text. Paths are relative to the supplied output directory.
 
@@ -63,6 +74,8 @@ It also validates artifacts when encountered at any depth:
 
 - `topology.json` must be a JSON object with `system`, `root`, `edges`, `entryPoints`, `deadEnds`, `observations`, and `flows`. The root and edge/flow members must have the documented basic object/list shapes. Duplicate JSON object keys and non-finite numbers are rejected.
 - `BUSINESS_RULES.md` must contain at least one section heading of the form `### RULE-NNN: <title>`. Any heading beginning with `RULE` that does not match that shape is malformed.
+
+Every `.mmd` file and every `mermaid` fence in a Markdown file is checked with the built-in Mermaid lint (`scripts/mermaid_lint.py`, the rules of the `mermaid-diagrams` skill; no rendering). Its problems are **warnings**: runtime agents have no shell to run the lint themselves, the lint is a heuristic subset of Mermaid's grammar, and a diagram problem is not worth discarding an otherwise valid output. A reviewer sees the warnings on the job and fixes the diagram in the pull request. Only the rule id, path and line are reported. If the lint cannot be loaded the scan continues without it; if it fails on a file, that file gets a `diagram_lint_failed` warning.
 
 The checks identify likely credential material and required artifact structure; they do not prove that a value is active or that an artifact is semantically correct. Findings must be reviewed and corrected by the job owner. Never replace a real credential with another real credential in a job output; refer to a secret by managed identifier instead.
 

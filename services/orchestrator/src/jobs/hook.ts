@@ -1,7 +1,8 @@
 // The JobOutput hook (packages/agents/builtin/hooks/job_output.py, contract in JOB-OUTPUT.md):
 // run as a script step over a job's output directory before anything is indexed, stored or
 // committed. Fail-closed: anything but exit 0 blocks the output. The reason recorded is built
-// from the report's redacted fields only (rule, path, line), never from file content.
+// from the report's redacted fields only (rule, path, line), never from file content. Diagram
+// lint warnings (Mermaid) never block; they are kept on the step's summary for reviewers.
 
 import { join } from "node:path";
 import { BUILTIN_DIR } from "@kintsugi/agents";
@@ -13,6 +14,7 @@ interface HookReport {
   exit_code?: number;
   checked?: { files?: number; bytes?: number };
   findings?: Array<{ category?: string; rule?: string; path?: string; line?: number }>;
+  warnings?: Array<{ category?: string; rule?: string; path?: string; line?: number }>;
   errors?: Array<{ path?: string; code?: string }>;
 }
 
@@ -22,7 +24,11 @@ export interface HookOutcome {
   reason?: string;
   checked: { files: number; bytes: number };
   findings: number;
+  /** Non-blocking diagram lint warnings: their number and the first few as `rule at path:line`. */
+  warnings: { count: number; first: string[] };
 }
+
+const MAX_LISTED_WARNINGS = 20;
 
 const EXIT_MEANING: Record<number, string> = {
   2: "credential-shaped values found",
@@ -66,10 +72,15 @@ export async function runJobOutputHook(options: {
   const report = parseReport(result.stdout);
   const checked = { files: report?.checked?.files ?? 0, bytes: report?.checked?.bytes ?? 0 };
   const findings = report?.findings ?? [];
-  if (result.exitCode === 0 && result.stopped === undefined && report !== undefined) return { ok: true, checked, findings: 0 };
+  const reported = Array.isArray(report?.warnings) ? report.warnings : [];
+  const warnings = {
+    count: reported.length,
+    first: reported.slice(0, MAX_LISTED_WARNINGS).map((warning) => `${safe(warning.rule)} at ${safe(warning.path)}:${typeof warning.line === "number" ? warning.line : "?"}`),
+  };
+  if (result.exitCode === 0 && result.stopped === undefined && report !== undefined) return { ok: true, checked, findings: 0, warnings };
 
   if (result.stopped !== undefined || report === undefined) {
-    return { ok: false, reason: `JobOutput hook did not complete (${result.failure ?? "no report"})`, checked, findings: findings.length };
+    return { ok: false, reason: `JobOutput hook did not complete (${result.failure ?? "no report"})`, checked, findings: findings.length, warnings };
   }
   const listed = [
     ...findings.slice(0, 5).map((finding) => `${safe(finding.rule)} at ${safe(finding.path)}:${finding.line ?? "?"}`),
@@ -77,5 +88,5 @@ export async function runJobOutputHook(options: {
   ];
   const more = findings.length > 5 ? ` (+${findings.length - 5} more)` : "";
   const meaning = EXIT_MEANING[result.exitCode ?? -1] ?? `exit code ${result.exitCode}`;
-  return { ok: false, reason: `JobOutput hook blocked the output: ${meaning}${listed.length === 0 ? "" : ` — ${listed.join("; ")}${more}`}`, checked, findings: findings.length };
+  return { ok: false, reason: `JobOutput hook blocked the output: ${meaning}${listed.length === 0 ? "" : ` — ${listed.join("; ")}${more}`}`, checked, findings: findings.length, warnings };
 }
