@@ -87,6 +87,8 @@ export interface StageOutcome {
   steps: StepRecord[];
   gates: GateRecord[];
   agents: number;
+  /** Optional inputs of the plan that were not on the document repo's default branch. */
+  missingInputs?: Array<{ path: string; stage: string }>;
 }
 
 const MAX_STDOUT = 20_000;
@@ -106,8 +108,32 @@ export class StagePlanExecutor {
   }
 
   async run(): Promise<StageOutcome> {
+    const missingInputs = await this.#missingInputs();
     for (const step of this.#deps.plan.steps) await this.#runStep(step);
-    return { stage: this.#deps.plan.id, steps: this.#steps, gates: [...this.#gates.values()], agents: this.#agents };
+    return {
+      stage: this.#deps.plan.id,
+      steps: this.#steps,
+      gates: [...this.#gates.values()],
+      agents: this.#agents,
+      ...(this.#deps.plan.optional === undefined ? {} : { missingInputs }),
+    };
+  }
+
+  /** The plan's optional inputs that are not among the stage's inputs; each is logged. */
+  async #missingInputs(): Promise<Array<{ path: string; stage: string }>> {
+    const missing: Array<{ path: string; stage: string }> = [];
+    for (const entry of this.#deps.plan.optional ?? []) {
+      const path = fill(entry.path, this.#values());
+      if (!SAFE_PATH.test(path)) throw new JobFailure(`Invalid stage path "${path}"`);
+      const present = await readFile(join(this.#deps.dirs.in, ...path.split("/"))).then(
+        () => true,
+        () => false,
+      );
+      if (present) continue;
+      missing.push({ path, stage: entry.stage });
+      await this.#deps.log(`optional input missing: ${path} (run ${entry.stage} and merge its pull request to use it)`, { missing: path, stage: entry.stage });
+    }
+    return missing;
   }
 
   // ---------------------------------------------------------------------------
