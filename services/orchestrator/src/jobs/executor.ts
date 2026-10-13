@@ -118,6 +118,9 @@ export interface StageOutcome {
   missingInputs?: Array<{ path: string; stage: string }>;
 }
 
+/** Agent failures worth one more try: the provider's, not a limit the job hit (timeout, turns, budget). */
+const TRANSIENT_PROVIDER_FAILURE = /finish_reason|content_filter|provider|rate.?limit|overloaded|\b(429|50[0-4])\b|ECONNRESET|ETIMEDOUT|fetch failed|stalled/i;
+
 const MAX_STDOUT = 20_000;
 const SAFE_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[^\\:\0]+$/;
 
@@ -274,7 +277,12 @@ export class StagePlanExecutor {
 
   /** Runs one leaf (with its repair loop for scripts); records it; never throws for a failed step. */
   async #leaf(step: LeafStep, placement: LeafPlacement, extra: Placeholders = {}): Promise<LeafResult> {
-    const first = await this.#start(step, placement, extra);
+    let first = await this.#start(step, placement, extra);
+    if (!first.ok && step.kind === "agent" && TRANSIENT_PROVIDER_FAILURE.test(first.reason) && this.#deps.signal?.aborted !== true) {
+      // A provider hiccup (content filter, overload, dropped connection) is not the step's fault: one more try.
+      await this.#deps.log(`step ${step.id}: the provider failed (${first.reason}); trying once more`, { step: step.id, retry: true });
+      first = await this.#start(step, placement, extra);
+    }
     if (first.ok || step.kind !== "script" || step.repair === undefined || this.#deps.signal?.aborted === true) return first;
     await this.#deps.log(`step ${step.id} failed; ${step.repair.agent} gets the error once to fix it`, { step: step.id, repair: step.repair.id });
     const error = first.detail ?? first.reason;
