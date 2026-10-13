@@ -131,7 +131,7 @@ export function AgentsPage(): React.JSX.Element {
             </div>
           ) : null}
         </CardHeader>
-        <div className="hidden grid-cols-[minmax(0,2.2fr)_0.8fr_0.6fr_1.2fr_0.8fr_auto] gap-3 px-4 py-1.5 text-[11px] tracking-wide text-text-muted uppercase sm:grid">
+        <div className="hidden grid-cols-[minmax(0,2.8fr)_0.8fr_0.7fr_1.1fr_0.9fr_auto] gap-3 px-4 py-1.5 text-[11px] tracking-wide text-text-muted uppercase sm:grid">
           <span>Agent</span>
           <span>Audience</span>
           <span>Version</span>
@@ -147,14 +147,14 @@ export function AgentsPage(): React.JSX.Element {
         {(agents ?? []).map((agent) => (
           <div
             key={agent.name}
-            className="grid grid-cols-1 items-center gap-3 px-4 py-2.5 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] sm:grid-cols-[minmax(0,2.2fr)_0.8fr_0.6fr_1.2fr_0.8fr_auto]"
+            className="grid grid-cols-1 items-center gap-3 px-4 py-2.5 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] sm:grid-cols-[minmax(0,2.8fr)_0.8fr_0.7fr_1.1fr_0.9fr_auto]"
           >
             <Link to={`/agents/${encodeURIComponent(agent.name)}`} className="flex min-w-0 items-center gap-3 text-left">
               <Bot className="size-5 shrink-0 text-text-secondary" strokeWidth={1.5} />
               <span className="min-w-0">
                 <span className="flex items-center gap-2">
                   <span className="truncate text-[14px] text-text hover:underline">{agent.name}</span>
-                  {agent.source === "builtin" ? <Badge>Built-in</Badge> : null}
+                  {agent.source === "builtin" ? <span className="shrink-0"><Badge>Built-in</Badge></span> : null}
                 </span>
                 <span className="block truncate text-[12px] text-text-muted" title={agent.description}>
                   {agent.copiedFrom === undefined ? agent.description : `copy of ${agent.copiedFrom} · ${agent.description}`}
@@ -164,7 +164,7 @@ export function AgentsPage(): React.JSX.Element {
             <span className="text-[13px] text-text-secondary">{agent.audience}</span>
             <span className="font-mono text-[12px] text-text-secondary">{agent.version}</span>
             <span className="truncate text-[12px] text-text-secondary" title={agent.binding === undefined ? undefined : `${agent.binding.provider} / ${agent.binding.model}`}>
-              {agent.audience === "member" ? "—" : agent.binding === undefined ? <span className="text-text-muted">not bound</span> : `${agent.binding.provider} / ${agent.binding.model}`}
+              {agent.audience === "member" ? "—" : agent.binding === undefined ? <span className="text-text-muted">not bound</span> : agent.binding.model}
             </span>
             <span className="inline-flex items-center gap-1.5 text-[12px] text-text-secondary" title={agent.problems.join("\n") || undefined}>
               <StatusDot tone={agent.problems.length > 0 ? "red" : agent.enabled ? "green" : "muted"} />
