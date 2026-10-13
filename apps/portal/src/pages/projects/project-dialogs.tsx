@@ -236,7 +236,7 @@ export function LinkDialog(props: LinkDialogProps): React.JSX.Element | null {
 }
 
 function LinkForm({ role, applicationName, repositories, onClose, onSubmit }: LinkDialogProps): React.JSX.Element {
-  const [repositoryId, setRepositoryId] = useState(repositories[0]?.id ?? "");
+  const [repositoryId, setRepositoryId] = useState("");
   const [component, setComponent] = useState("");
   const { saving, error, setError, run } = useSubmit(onClose);
 
@@ -260,7 +260,7 @@ function LinkForm({ role, applicationName, repositories, onClose, onSubmit }: Li
     >
       <div className="flex flex-col gap-4">
         <Field label="Repository">
-          <Select value={repositoryId} placeholder="No unlinked repositories" options={repositoryOptions(repositories)} onChange={setRepositoryId} />
+          <Select value={repositoryId} placeholder={repositories.length === 0 ? "No unlinked repositories" : "Pick a repository"} options={repositoryOptions(repositories)} onChange={setRepositoryId} />
         </Field>
         {role === "target" ? (
           <Field label="Component" hint="Name of the TO-BE architecture component, e.g. web or api. One target repository per component.">

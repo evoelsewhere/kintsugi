@@ -53,10 +53,10 @@ export function LoginPage(): React.JSX.Element {
             }}
           >
             <Field label="Username">
-              <Input value={username} autoComplete="username" placeholder="admin" onChange={(event) => setUsername(event.target.value)} />
+              <Input value={username} autoComplete="username" placeholder="Username" onChange={(event) => setUsername(event.target.value)} />
             </Field>
             <Field label="Password">
-              <Input type="password" value={password} autoComplete="current-password" placeholder="••••••••" onChange={(event) => setPassword(event.target.value)} />
+              <Input type="password" value={password} autoComplete="current-password" placeholder="Password" onChange={(event) => setPassword(event.target.value)} />
             </Field>
             {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
             <Button type="submit" variant="solid" disabled={submitting || username === "" || password === ""}>
