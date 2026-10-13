@@ -10,6 +10,7 @@ import { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 import { DocumentWriteStore } from "./document-write/store.js";
 import { startHeartbeat } from "./heartbeat.js";
+import { failOrphanedRuns } from "./orphans.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
 import { installedAgents } from "./jobs/agents.js";
@@ -91,6 +92,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   };
   await options.storage.prepare();
+  await failOrphanedRuns(options.pool, log);
 
   // Jobs in progress in this process (every queue), reported by the heartbeat.
   let busy = 0;
