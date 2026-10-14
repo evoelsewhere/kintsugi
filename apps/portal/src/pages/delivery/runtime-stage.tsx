@@ -215,6 +215,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
                       key={initialRun ?? "none"}
                       runs={stageRuns}
                       canCancel={can("jobs.run")}
+                      canRetry={can("jobs.run")}
                       initialOpen={initialRun}
                       onChanged={() => {
                         void runs.reload();

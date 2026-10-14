@@ -162,7 +162,7 @@ function RunsView({ status, onStatus }: { status: string; onStatus: (value: stri
               />
             ) : (
               <>
-                <JobRunList runs={page.items} canCancel={can("jobs.run")} showProject onChanged={() => void runs.reload()} />
+                <JobRunList runs={page.items} canCancel={can("jobs.run")} canRetry={can("jobs.run")} showProject onChanged={() => void runs.reload()} />
                 <Pager page={page} offset={offset} onOffset={setOffset} />
               </>
             )
