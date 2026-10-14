@@ -9,6 +9,27 @@ metadata:
   skills: [mermaid-diagrams]
   reads: [standards/, kintsugi.yaml, assessment/<app>/INTENT.md, assessment/<app>/telemetry/, assessment/<app>/graph/, assessment/<app>/catalog.json, knowledge/as-is/<app>/units.json, units/<app>/]
   writes: [assessment/<app>/inventory.json, assessment/<app>/tools/extract_topology.py, assessment/<app>/topology.json, assessment/<app>/catalog.json, assessment/<app>/ASSESSMENT.md, assessment/<app>/ARCHITECTURE.mmd, assessment/portfolio.md, assessment/portfolio.json]
+  flow:
+    - script: inventory
+    - parallel:
+        - agent: legacy-analyst
+          as: structure
+        - agent: legacy-analyst
+          as: debt
+        - agent: security-auditor
+          as: security
+    - agent: legacy-analyst
+      as: topology script
+    - script: extract_topology
+      generated: true
+      repair: legacy-analyst
+    - script: catalog_from_topology
+    - agent: legacy-analyst
+      as: curate the catalog
+    - script: apply_catalog_edits
+    - script: reconcile_catalog
+    - agent: legacy-analyst
+      as: synthesis
 ---
 
 **This stage runs as Kintsugi runtime jobs**, started by the orchestrator. Single-application mode: a script step

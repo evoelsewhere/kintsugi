@@ -4,7 +4,7 @@
 // Everything is drawn from the plugin's own manifests (PluginFlow, PluginLink).
 
 import { useMemo } from "react";
-import type { PluginFlow, PluginLink } from "@/lib/api/plugins";
+import type { FlowNode, PluginFlow, PluginLink } from "@/lib/api/plugins";
 import { cn } from "@/lib/utils";
 
 /** What a box is. The colors are tinted over the page, so they read on a light and a dark theme. */
@@ -137,10 +137,63 @@ export function PipelineBoard({ flows, pipeline, selected, onSelect }: { flows: 
   );
 }
 
+/** A declared flow as boxes: steps in a row with arrows, parallel steps stacked in a group, per-item steps in a group of their own. */
+function FlowRow({ nodes, flow, onOpenFile }: { nodes: readonly FlowNode[]; flow: PluginFlow; onOpenFile: (path: string) => void }): React.JSX.Element {
+  return (
+    <div className="flex flex-wrap items-stretch gap-y-3">
+      {nodes.map((node, index) => (
+        <div key={index} className="flex items-stretch">
+          <FlowItem node={node} flow={flow} onOpenFile={onOpenFile} />
+          {index < nodes.length - 1 ? <ArrowRight /> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlowItem({ node, flow, onOpenFile }: { node: FlowNode; flow: PluginFlow; onOpenFile: (path: string) => void }): React.JSX.Element {
+  switch (node.kind) {
+    case "script":
+      return (
+        <Box
+          kind="script"
+          title={node.name}
+          subtitle={node.generated === true ? `script written by an agent${node.repair === undefined ? "" : `, fixed once by ${node.repair}`}` : "script"}
+          onOpen={node.generated === true ? undefined : () => onOpenFile(`scripts/${node.name}.py`)}
+          className="min-w-32"
+        />
+      );
+    case "agent":
+      return <Box kind="agent" title={node.name} subtitle={node.label} onOpen={() => onOpenFile(`agents/${node.name}.md`)} className="min-w-32" />;
+    case "workflow": {
+      const agents = flow.steps.find((step) => step.kind === "workflow" && step.name === node.name)?.agents;
+      return <Box kind="workflow" title={node.name} subtitle={agents === undefined ? "workflow" : `workflow · ${agents.join(", ")}`} onOpen={() => onOpenFile(`workflows/${node.name}.js`)} className="min-w-32" />;
+    }
+    case "gate":
+      return <Box kind="gate" title={`✋ ${node.label}`} className="min-w-32 max-w-56" />;
+    case "parallel":
+      return (
+        <Lane title="In parallel" kind="workflow" className="p-2">
+          <div className="flex flex-col gap-2">
+            {node.steps.map((step, index) => (
+              <FlowItem key={index} node={step} flow={flow} onOpenFile={onOpenFile} />
+            ))}
+          </div>
+        </Lane>
+      );
+    case "each":
+      return (
+        <Lane title={`For each ${node.label}`} kind="agent" className="p-2">
+          <FlowItem node={node.step} flow={flow} onOpenFile={onOpenFile} />
+        </Lane>
+      );
+  }
+}
+
 /** One command end to end: who starts it, what it reads, what runs, what it writes, where a person decides. */
 export function CommandBoard({ flow, onOpenFile }: { flow: PluginFlow; onOpenFile: (path: string) => void }): React.JSX.Element {
   const work = flow.steps.filter((step) => step.kind !== "agent");
-  const loose = flow.steps.filter((step) => step.kind === "agent");
+  const loose = flow.flow === undefined ? flow.steps.filter((step) => step.kind === "agent") : [];
   const who = flow.audience === "runtime" ? "A person starts it in the portal; Kintsugi runs it as jobs, read-only" : "A member runs it in their own harness; Kintsugi supplies context and ingests the result";
   return (
     <Board>
@@ -164,7 +217,9 @@ export function CommandBoard({ flow, onOpenFile }: { flow: PluginFlow; onOpenFil
             </>
           )}
           <Lane title="Runs" kind="workflow">
-            {work.length === 0 ? (
+            {flow.flow !== undefined ? (
+              <FlowRow nodes={flow.flow} flow={flow} onOpenFile={onOpenFile} />
+            ) : work.length === 0 ? (
               <p className="text-[13px] text-text-secondary">The command is carried out by the person or harness that runs it; it starts no script or workflow.</p>
             ) : (
               <div className="flex flex-wrap items-stretch gap-y-3">

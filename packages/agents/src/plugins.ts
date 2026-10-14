@@ -8,6 +8,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { BUILTIN_DIR, loadBuiltinCatalog } from "./builtin.js";
 import { type BuiltinCommand, loadBuiltinCommands } from "./commands.js";
+import { type FlowNode, flowComponents } from "./flow.js";
 
 export type PluginComponentKind = "agent" | "command" | "skill" | "workflow" | "script" | "hook";
 export type PluginAudience = "runtime" | "member";
@@ -49,6 +50,8 @@ export interface PluginFlow {
   steps: PluginFlowStep[];
   writes: string[];
   gates: string[];
+  /** What the stage really runs, in order, as the command declares it; absent when it declares none (then `steps` is read from its text). */
+  flow?: FlowNode[];
 }
 
 /** A command whose output another command reads: the plugin's pipeline. */
@@ -199,6 +202,7 @@ async function flowsOf(dir: string, components: readonly PluginComponent[], comm
       steps: steps.map(({ at: _at, ...step }) => step),
       writes: entry.writes,
       gates: entry.gates,
+      ...(entry.flow === undefined ? {} : { flow: entry.flow }),
     });
   }
   return flows;
@@ -258,6 +262,13 @@ export async function loadBuiltinPlugins(dir: string = BUILTIN_DIR): Promise<Bui
     }
 
     const flows = await flowsOf(dir, components, commands, manifest);
+    for (const flow of flows) {
+      for (const used of flowComponents(flow.flow ?? [])) {
+        if (used.generated === true) continue;
+        const known = { script: manifest.scripts, agent: manifest.agents, workflow: manifest.workflows }[used.kind];
+        if (!known.includes(used.name)) problems.push(`plugin ${manifest.name}: /${flow.command} flow uses ${used.kind} ${used.name}, which the plugin does not carry`);
+      }
+    }
     files.set(PLUGIN_MANIFEST_FILE, { path: PLUGIN_MANIFEST_FILE, size: Buffer.byteLength(generatedManifest(manifest)) });
     plugins.push({
       name: manifest.name,
