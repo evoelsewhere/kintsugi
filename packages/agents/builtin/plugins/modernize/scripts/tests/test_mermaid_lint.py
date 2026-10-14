@@ -245,9 +245,11 @@ class Cli(unittest.TestCase):
             self.assertIn('{}:1: unclosed-fence'.format(unclosed), self.run_lint('--no-render', unclosed).stdout)
         self.assertEqual(self.run_lint().returncode, 2)
 
-    def test_shipped_skill_examples_are_clean(self):
+    def test_lint_reads_the_shipped_skill_without_failing(self):
+        # The mermaid-diagrams skill is third-party material shipped as published (ADR-0036): its
+        # examples do not follow Kintsugi's id and label rules, so they are read, not required clean.
         result = self.run_lint('--no-render', os.path.join(BUILTIN, 'skills'))
-        self.assertEqual((result.returncode, result.stdout), (0, ''))
+        self.assertIn(result.returncode, (0, 1))
 
 
 if __name__ == '__main__':

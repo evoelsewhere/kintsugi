@@ -166,8 +166,8 @@ describe("built-in catalog", () => {
   it("ships the mermaid-diagrams skill and gives it to the agents that draw diagrams", async () => {
     const catalog = await loadBuiltinCatalog();
     const skill = catalog.skills.find((entry) => entry.name === "mermaid-diagrams");
-    expect(skill?.content).toContain("Every diagram in Kintsugi is **Mermaid**");
-    expect(skill?.content).toMatch(/#quot;/);
+    expect(skill?.content).toContain("# Mermaid Diagram Generator");
+    expect(skill?.content).toContain("references/flowchart.md");
     const sharedSkills = new Map(catalog.skills.map((entry) => [entry.name, entry]));
     const users = catalog.agents.filter((agent) => agent.manifest.skills.includes("mermaid-diagrams")).map((agent) => agent.manifest.name);
     expect(users).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst"]);
@@ -176,7 +176,7 @@ describe("built-in catalog", () => {
     // The references and the license stay beside SKILL.md on disk.
     const entries = await readdir(join(BUILTIN_DIR, "plugins", "understand", "skills", "mermaid-diagrams"), { recursive: true });
     expect(entries.map((file) => file.split(sep).join("/"))).toEqual(
-      expect.arrayContaining(["LICENSE-softaworks", "SKILL.md", "references/c4.md", "references/er.md", "references/flowchart.md", "references/sequence.md", "references/state.md"]),
+      expect.arrayContaining(["LICENSE", "SKILL.md", "references/c4.md", "references/entityRelationshipDiagram.md", "references/flowchart.md", "references/sequenceDiagram.md", "references/stateDiagram.md"]),
     );
   });
 
