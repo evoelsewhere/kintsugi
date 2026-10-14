@@ -213,7 +213,7 @@ function spawnGit(
       if (failure !== undefined) {
         reject(new GitError(`${command}: ${failure}`, code, err));
       } else if (code !== 0) {
-        reject(new GitError(`${command} failed (exit ${code}): ${err.trim().split("\n").at(-1) ?? ""}`, code, err));
+        reject(new GitError(`${command} failed (exit ${code}): ${failureSummary(err)}`, code, err));
       } else {
         resolve({ stdout: out, stderr: err });
       }
@@ -222,6 +222,21 @@ function spawnGit(
     child.stdin.on("error", () => undefined); // git may exit before reading its input
     child.stdin.end(options.input ?? "");
   });
+}
+
+/**
+ * Why git failed, from its stderr: the remote's reply (`remote:`), the rejected refs (`! [...]`) and
+ * the `fatal:` and `error:` lines, not hints or progress. A push the server refuses ends with the
+ * generic "failed to push some refs"; the reason is on the lines before it.
+ */
+export function failureSummary(stderr: string): string {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  const reasons = [...new Set(lines.filter((line) => /^(remote:|fatal:|error:|!\s*\[)/i.test(line)))].slice(-5);
+  const text = (reasons.length > 0 ? reasons : lines.slice(-1)).join(" | ");
+  return text.length > 600 ? `${text.slice(0, 600)}…` : text;
 }
 
 function redact(text: string, secrets: readonly string[]): string {
