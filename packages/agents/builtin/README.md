@@ -47,7 +47,7 @@ The content is a set of **plugins** (ADR-0035), one folder each under `plugins/`
 Inside a plugin folder:
 
 - `.claude-plugin/plugin.json`: name, version, description (the Claude plugin manifest). `kintsugi.json`: title, audience (`runtime` or `member`) and `requires`.
-- `skills/`: shared skills that agents load by name (`skills:` in an agent file). `skills/mermaid-diagrams` says how every Kintsugi diagram is drawn: Mermaid only, the diagram type per artifact, syntax-safety rules and size limits; its `references/` hold condensed syntax per diagram type. A runtime job gets `SKILL.md` in the system prompt and the `references/`, `scripts/` and `assets/` files read-only beside its inputs, listed in the prompt for the agent to read on demand.
+- `skills/`: shared skills that agents load by name (`skills:` in an agent file). `skills/mermaid-diagrams` is the WH-2099 mermaid skill as published (ADR-0036): a workflow and an index of 23 Mermaid diagram types; its `references/` hold the syntax of each type and the configuration pages. A runtime job gets `SKILL.md` in the system prompt and the `references/`, `scripts/` and `assets/` files read-only beside its inputs, listed in the prompt for the agent to read on demand.
 - `agents/`: runtime and member agent definitions. Runtime definitions use kernel tools only; member definitions are context assets and are not converted into runtime jobs.
 - `commands/`: task contracts, one per stage. A runtime command declares the flow its stage runs in `metadata.flow`; a test in the orchestrator keeps it equal to the stage plan.
 - `workflows/`: runtime job fan-out and member workflow specifications, with the audience distinction kept explicit.
@@ -67,4 +67,4 @@ The reader code currently returns progress data only. A future portal integratio
 
 This content is adapted from Anthropic's `code-modernization` plugin in [`anthropics/claude-plugins-official`](https://github.com/anthropics/claude-plugins-official), pinned at commit `c8874f5ad883e26428f483ffa4d537cc81489e64`. The upstream method and safety properties are preserved where they fit Kintsugi's execution model; host-specific presentation, registration, and telemetry are not. See [`NOTICE`](NOTICE), [`CHANGELOG.md`](CHANGELOG.md), and [`LICENSE`](LICENSE) for provenance, adaptation changes, and license terms.
 
-`skills/mermaid-diagrams` adapts material from [`softaworks/agent-toolkit`](https://github.com/softaworks/agent-toolkit) (`skills/mermaid-diagrams`, `skills/c4-architecture`), pinned at commit `3027f20f3181758385a1bb8c022d4041dfb4de84`, under the MIT License; see [`skills/mermaid-diagrams/LICENSE-softaworks`](skills/mermaid-diagrams/LICENSE-softaworks) and `NOTICE`.
+`skills/mermaid-diagrams` is the [`WH-2099/mermaid-skill`](https://github.com/WH-2099/mermaid-skill) skill (`.claude/skills/mermaid`), commit `982d903`, under the MIT License, with only its frontmatter name changed; see `skills/mermaid-diagrams/LICENSE` and `NOTICE`.
