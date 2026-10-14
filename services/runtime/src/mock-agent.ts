@@ -88,7 +88,7 @@ class MockJob implements JobHandle {
       await tick();
       if (allowed) {
         this.#emit({ type: "tool.result", jobId: this.jobId, callId, ok: true, summary: `${tool} completed (simulated)` });
-        if (tool === "outputs_write") this.#emit({ type: "output", jobId: this.jobId, path: `mock/turn-${turn}.md` });
+        if (tool === "write") this.#emit({ type: "output", jobId: this.jobId, path: `mock/turn-${turn}.md` });
       } else {
         blocked++;
       }

@@ -14,6 +14,6 @@ export const CREDENTIALS = `Never write a credential value anywhere. Cite a cred
 export const HEADER = `Start every Markdown file you write with the line "Legacy repository {repo} at {commit}".`;
 
 /** The restricted credential inventory, as every job that may find credentials is told. */
-export const RESTRICTED = `If credentials were found, write the credential inventory to restricted/SECRETS.local.md with outputs_write: per
+export const RESTRICTED = `If credentials were found, write the credential inventory to restricted/SECRETS.local.md with write: per
 credential a masked preview (2–4 characters), file:line, type, what it grants, production or test guess and rotation
 advice; never a raw value. Everything under restricted/ is stored as a restricted portal record and never committed.`;

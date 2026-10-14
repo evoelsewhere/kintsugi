@@ -36,7 +36,7 @@ ${INVENTORY_FIRST}
    manifest locations; data stores (schemas, copybooks, DDL, ORM configuration); integration points (queues, APIs,
    batch interfaces, screen maps); test presence and a rough coverage signal.
 
-Write ${ANALYSIS}/structure.md with outputs_write: a domain table (domain, files, responsibilities, depends on), the
+Write ${ANALYSIS}/structure.md with write: a domain table (domain, files, responsibilities, depends on), the
 technology fingerprint, and a Mermaid \`flowchart TB\` of the domains per the mermaid-diagrams skill (one \`subgraph\` per
 domain, nodes classed by kind, at most 40 edges), in a fenced \`mermaid\` block. These notes are input for the synthesis
 job, not a final document.
@@ -52,7 +52,7 @@ ${WORKSPACE}
 ${INVENTORY_FIRST}
 
 Look for dead code, deprecated APIs, duplication, god objects, missing error handling and hardcoded configuration.
-Write ${ANALYSIS}/debt.md with outputs_write: the top 10 items by remediation value, each with file:line, what it is
+Write ${ANALYSIS}/debt.md with write: the top 10 items by remediation value, each with file:line, what it is
 and why it matters. These notes are input for the synthesis job, not a final document.
 
 ${HEADER}
@@ -65,7 +65,7 @@ ${WORKSPACE}
 
 Look for injection, authentication and session weaknesses, hardcoded secrets, vulnerable dependencies (read the
 manifests and lock files; no audit tool runs here, say which ones would apply) and missing input validation.
-Write ${ANALYSIS}/security.md with outputs_write: a table with CWE, severity, file:line, title and a one-sentence
+Write ${ANALYSIS}/security.md with write: a table with CWE, severity, file:line, title and a one-sentence
 exploit scenario. For each hardcoded credential add a row to a separate "Credentials" table: masked preview (2–4
 characters), file:line, type, what it appears to grant, production or test guess. These notes are input for the
 synthesis job, not a final document.
@@ -153,7 +153,7 @@ Your inputs, read-only:
 - {in}/assessment/{app}/telemetry/, if present — production exports a person attached (APM, batch logs).
 - {in}/standards/, if present — the project's conventions.
 
-Write assessment/{app}/ASSESSMENT.md with outputs_write, a fact-grounded brief a VP of Engineering could take into a
+Write assessment/{app}/ASSESSMENT.md with write, a fact-grounded brief a VP of Engineering could take into a
 budget meeting, with these sections: Executive Summary (3–4 sentences: what it is, how big, how risky, the headline
 recommendation) · System Inventory (from inventory.json, naming the method that measured it, and the legacy repository
 and commit read) · Architecture at a Glance (the domain table; refer to ARCHITECTURE.mmd) · Production Runtime

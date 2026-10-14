@@ -42,7 +42,7 @@ writes `assessment/$app/ASSESSMENT.md` and `assessment/$app/ARCHITECTURE.mmd`. P
 mode: per application, the `scripts/inventory.py` script step and one **legacy-analyst** survey job (workflow
 `workflows/portfolio-assess.js`), then a synthesis job that writes `assessment/portfolio.md` and
 `assessment/portfolio.json`. Every job reads the application's legacy repository read-only at a fixed commit
-and writes only through `outputs_write`; the worker commits the outputs to the document repository as
+and writes only through `write`; the worker commits the outputs to the document repository as
 `kintsugi-bot`, and the portal shows them.
 
 **Mode.** If `$ARGUMENTS` starts with `--portfolio`, run **Portfolio mode** over every application of the
@@ -180,7 +180,7 @@ top 5 behaviors or subsystems a new engineer would need explained. This is part 
 ## Step 6 — Write the assessment
 
 A **legacy-analyst** synthesis job, given `inventory.json`, the three Step 3 outputs and any telemetry, writes
-the files below via `outputs_write`.
+the files below via `write`.
 
 **Secrets first.** The assessment gets shared and committed, so discovered
 credential values never appear in it. If credentials were found:

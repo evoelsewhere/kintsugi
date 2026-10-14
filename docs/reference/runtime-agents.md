@@ -41,7 +41,7 @@ Only tools in the agent's allowlist are created; pi registers nothing else.
 | Tool | Access | Description |
 |---|---|---|
 | `read`, `ls`, `grep`, `find` | Read, confined to `workspace.readOnly` | File tools on the read-only sources (symlinks resolved); `grep` searches in-process, no `ripgrep` needed |
-| `outputs_write` | Write, confined to `workspace.outDir` | Write an output file; the caller decides what happens to it (the worker commits outputs, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
+| `write`, `edit` | Write, confined to `workspace.outDir` | pi's own tools: create or overwrite an output file, or change one by exact text replacement. A relative path starts at `workspace.outDir`; the read-only roots stay out of reach. The caller decides what happens to the files (the worker commits outputs, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
 
 Further tools (for example knowledge-base search) are added to the kernel tool registry by code, with a review of their security boundary.
 

@@ -9,7 +9,7 @@ describe("mock backend", () => {
   const runtime = createAgentRuntime();
 
   it("follows the job contract without an LLM", async () => {
-    const { events, done } = await runJob(runtime, jobSpec(workspace, agent(["read", "outputs_write"]), { maxTurns: 3 }));
+    const { events, done } = await runJob(runtime, jobSpec(workspace, agent(["read", "write"]), { maxTurns: 3 }));
     expect(done.type).toBe("job.completed");
     expect(events[0]).toMatchObject({ type: "job.started", agent: "test-agent@1.0.0", metadata: { projectId: "p1" } });
     expect(events).toContainEqual(expect.objectContaining({ type: "output" }));

@@ -63,7 +63,7 @@ findings ${DIR}/items/{key}/findings.json (ids SEC-<module>.<item>-NN), ${DIR}/c
 application) and ${DIR}/ASSESSMENT.md. Read the item's source files and follow its calls only as far as needed to
 describe it; the other items have their own specifications.
 
-Write ${ASIS}/{key}.md with outputs_write, with exactly these sections, in this order:
+Write ${ASIS}/{key}.md with write, with exactly these sections, in this order:
 1. Purpose — what the item does for the business, in two to four sentences.
 2. Entry points — how the item is started (routes, transactions, screens, job steps, main programs), file:line each.
 3. Main flows — the main processing paths, step by step; add a Mermaid sequenceDiagram per main flow (autonumber;

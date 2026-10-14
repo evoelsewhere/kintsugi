@@ -46,8 +46,11 @@ describe("kernel tools inside a pi session", () => {
     fauxToolCall("grep", { pattern: "hello FROM", ignoreCase: true, glob: "*.txt" }, { id: "grep-inside" }),
     fauxToolCall("find", { pattern: "*.txt", path: workspace.outside }, { id: "find-outside" }),
     fauxToolCall("find", { pattern: "*.txt" }, { id: "find-inside" }),
-    fauxToolCall("outputs_write", { path: "../escape.md", content: "x" }, { id: "write-escape" }),
-    fauxToolCall("outputs_write", { path: "report/result.md", content: "# ok" }, { id: "write-inside" }),
+    fauxToolCall("write", { path: "../escape.md", content: "x" }, { id: "write-escape" }),
+    fauxToolCall("write", { path: join(workspace.root, "escape-abs.md"), content: "x" }, { id: "write-absolute" }),
+    fauxToolCall("write", { path: "report/result.md", content: "# ok" }, { id: "write-inside" }),
+    fauxToolCall("edit", { path: "report/result.md", edits: [{ oldText: "# ok", newText: "# edited" }] }, { id: "edit-inside" }),
+    fauxToolCall("edit", { path: join(workspace.root, "hello.txt"), edits: [{ oldText: "hello", newText: "pwned" }] }, { id: "edit-input" }),
     fauxToolCall("bash", { command: "echo pwned" }, { id: "bash" }),
   ];
   const probe = capture(calls);
@@ -55,7 +58,7 @@ describe("kernel tools inside a pi session", () => {
 
   beforeAll(async () => {
     const runtime = await fauxRuntime(probe.steps);
-    run = await runJob(runtime, jobSpec(workspace, agent(["read", "ls", "grep", "find", "outputs_write"])));
+    run = await runJob(runtime, jobSpec(workspace, agent(["read", "ls", "grep", "find", "write", "edit"])));
   });
 
   const ok = (callId: string): boolean | undefined =>
@@ -90,15 +93,22 @@ describe("kernel tools inside a pi session", () => {
   it("writes outputs only inside the output directory", () => {
     expect(ok("write-escape")).toBe(false);
     expect(existsSync(join(workspace.root, "escape.md"))).toBe(false);
+    expect(ok("write-absolute")).toBe(false);
+    expect(existsSync(join(workspace.root, "escape-abs.md"))).toBe(false);
     expect(ok("write-inside")).toBe(true);
-    expect(readFileSync(join(workspace.out, "report", "result.md"), "utf8")).toBe("# ok");
     expect(run.events).toContainEqual(expect.objectContaining({ type: "output", path: "report/result.md" }));
+  });
+
+  it("edits only files in the output directory", () => {
+    expect(ok("edit-inside")).toBe(true);
+    expect(readFileSync(join(workspace.out, "report", "result.md"), "utf8")).toBe("# edited");
+    expect(ok("edit-input")).toBe(false);
   });
 
   it("never runs tools outside the allowlist", () => {
     expect(ok("bash")).not.toBe(true);
     const offered = probe.first().flatMap((message) => message.toolsAdded ?? []).map((tool) => tool.name);
-    expect(offered.sort()).toEqual(["find", "grep", "ls", "outputs_write", "read"]);
+    expect(offered.sort()).toEqual(["edit", "find", "grep", "ls", "read", "write"]);
   });
 });
 

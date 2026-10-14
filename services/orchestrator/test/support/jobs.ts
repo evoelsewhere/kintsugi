@@ -1,5 +1,5 @@
 // Test doubles for job runs: an in-memory job store, checkouts of local fixture repositories,
-// and an agent runtime that writes files the way a real agent would through outputs_write
+// and an agent runtime that writes files the way a real agent would through write
 // before running the mock backend (no LLM).
 
 import { execFileSync } from "node:child_process";
@@ -141,7 +141,7 @@ export class LocalCheckouts implements SourceCheckouts {
 /** Files an agent writes, by agent id; a function receives the job's spec. */
 export type AgentFiles = Record<string, (spec: JobSpec) => Record<string, string>>;
 
-/** The mock backend, plus the files a real agent would have written through outputs_write. */
+/** The mock backend, plus the files a real agent would have written through write. */
 export function writingAgentRuntime(files: AgentFiles): AgentRuntime & { specs: JobSpec[] } {
   const mock = createAgentRuntime({ mode: "mock" });
   const specs: JobSpec[] = [];

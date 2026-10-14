@@ -41,7 +41,7 @@ This page has two parts:
 | [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Superseded by 0029 |
 | [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Superseded by 0029 |
 | [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Superseded by 0023 |
-| [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted |
+| [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted (write tool amended by 0037) |
 | [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
 | [0025](0025-git-core-and-checkout-storage.md) | Git core package and Kintsugi-managed checkout storage | Accepted |
 | [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Accepted |
@@ -53,6 +53,7 @@ This page has two parts:
 | [0032](0032-mermaid-diagrams-skill.md) | Mermaid for every diagram, drawn by a built-in skill and checked by a lint | Accepted (§2 skill content superseded by 0036) |
 | [0033](0033-assess-catalog-understand-selection.md) | Two runtime stages: assess builds the item catalog; understand runs on a selection | Accepted |
 | [0034](0034-understand-command-merges-map-rules-harden.md) | One understand command; map, extract-rules and harden are parts of it | Accepted |
+| [0037](0037-kernel-write-and-edit-tools-from-pi.md) | The kernel writes with pi's `write` and `edit`, not a custom `outputs_write` | Accepted (amends 0023) |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amends 0015, 0026, 0027) |
 
