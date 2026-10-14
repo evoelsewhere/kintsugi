@@ -27,7 +27,7 @@ export function SkillPage(): React.JSX.Element {
   const skill = useLoader(`skill:${name}`, () => agentsApi.getSkill(name));
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Plugins", "Agent Builder", name]} />
+      <Breadcrumbs items={["Administration", { label: "Plugins", to: "/plugins" }, { label: "Agent Builder", to: "/plugins/builder" }, name]} />
       <Loaded loader={skill}>{(data) => <SkillFiles key={`${data.name}:${data.updatedAt ?? ""}`} skill={data} onSaved={() => skill.reload()} />}</Loaded>
     </div>
   );

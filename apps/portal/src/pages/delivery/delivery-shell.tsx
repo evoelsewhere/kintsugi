@@ -13,7 +13,7 @@ import { SyncStatusBadge } from "@/components/status-badges";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
-import { projectLink } from "@/lib/links";
+import { deliveryLink, projectLink } from "@/lib/links";
 import { useProjectSelection } from "@/lib/project-selection";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,7 @@ export function DeliveryShell({ crumbs = [], title, description, actions, childr
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={current === undefined ? ["Delivery", ...crumbs] : ["Delivery", current.name, ...crumbs]} />
+      <Breadcrumbs items={current === undefined ? [{ label: "Delivery", to: deliveryLink({ projectId }) }, ...crumbs] : [{ label: "Delivery", to: deliveryLink({ projectId }) }, { label: current.name, to: deliveryLink({ projectId }) }, ...crumbs]} />
       <PageHeading
         title={title}
         description={description}

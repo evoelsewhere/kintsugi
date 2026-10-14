@@ -208,7 +208,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Plugins", "Agent Builder", title]} />
+      <Breadcrumbs items={["Administration", { label: "Plugins", to: "/plugins" }, { label: "Agent Builder", to: "/plugins/builder" }, title]} />
       <Link to="/plugins/builder" className="inline-flex w-fit items-center gap-1.5 text-[12px] text-text-secondary hover:text-text">
         <ArrowLeft className="size-3.5" />
         All agents
