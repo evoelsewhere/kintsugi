@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import { AdminPage } from "./pages/admin";
 import { AgentPage } from "./pages/agents/agent-page";
 import { AgentsPage } from "./pages/agents/agents-page";
+import { SkillPage } from "./pages/agents/skill-page";
 import { DeliveryOverviewPage } from "./pages/delivery/delivery-overview-page";
 import { DeliveryStagePage } from "./pages/delivery/delivery-stage-page";
 import { GovernancePage } from "./pages/governance";
@@ -55,6 +56,7 @@ export function App(): React.JSX.Element {
             <Route path="projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="agents" element={<AgentsPage />} />
             <Route path="agents/:name" element={<AgentPage />} />
+            <Route path="skills/:name" element={<SkillPage />} />
             <Route path="members" element={<MembersPermissionsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

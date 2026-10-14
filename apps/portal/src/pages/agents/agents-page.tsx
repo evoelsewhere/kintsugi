@@ -17,7 +17,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusDot } from "@/components/ui/status-dot";
 import { agentsApi, type AgentImport, type AgentSummary, type SharedSkillView } from "@/lib/api/agents";
 import { useAuth } from "@/lib/auth";
-import { CopyAgentDialog, SharedSkillDialog, SkillViewDialog } from "./agent-dialogs";
+import { CopyAgentDialog, SharedSkillDialog } from "./agent-dialogs";
 
 type RemoveTarget = { kind: "agent"; name: string } | { kind: "skill"; name: string };
 
@@ -47,7 +47,6 @@ export function AgentsPage(): React.JSX.Element {
   const [skills, setSkills] = useState<SharedSkillView[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [copySource, setCopySource] = useState<string | null>(null);
-  const [viewSkill, setViewSkill] = useState<SharedSkillView | null>(null);
   const [skillDialog, setSkillDialog] = useState<{ open: boolean; skill: SharedSkillView | null }>({ open: false, skill: null });
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
@@ -222,7 +221,7 @@ export function AgentsPage(): React.JSX.Element {
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <Button size="small" variant="ghost" onClick={() => setViewSkill(skill)}>
+                <Button size="small" variant="ghost" onClick={() => navigate(`/skills/${encodeURIComponent(skill.name)}`)}>
                   View{skill.files.length > 0 ? ` (${skill.files.length + 1} files)` : ""}
                 </Button>
               </div>
@@ -249,8 +248,6 @@ export function AgentsPage(): React.JSX.Element {
           navigate(`/agents/${encodeURIComponent(name)}`);
         }}
       />
-
-      <SkillViewDialog skill={viewSkill} onClose={() => setViewSkill(null)} />
 
       <SharedSkillDialog
         open={skillDialog.open}

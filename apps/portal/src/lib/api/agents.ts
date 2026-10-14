@@ -143,6 +143,7 @@ export const agentsApi = {
   versions: (name: string) => apiGet<AgentVersionView[]>(`${at(name)}/versions`),
   restore: (name: string, version: string) => apiSend<AgentDetail>(`${at(name)}/versions/${encodeURIComponent(version)}/restore`, "POST"),
   listSkills: () => apiGet<SharedSkillView[]>(SKILLS),
+  getSkill: (name: string) => apiGet<SharedSkillView>(`${SKILLS}/${encodeURIComponent(name)}`),
   createSkill: (skill: SkillPackage) => apiSend<SharedSkillView>(SKILLS, "POST", skill),
   updateSkill: (name: string, skill: SkillPackage) => apiSend<SharedSkillView>(`${SKILLS}/${encodeURIComponent(name)}`, "PUT", skill),
   removeSkill: (name: string) => apiSend<void>(`${SKILLS}/${encodeURIComponent(name)}`, "DELETE"),
