@@ -9,7 +9,11 @@ import type { AgentDefinition } from "@kintsugi/runtime-sdk";
 export function composeSystemPrompt(agent: AgentDefinition): string {
   const parts = [agent.instructions.trim()];
   for (const skill of agent.skills ?? []) {
-    parts.push(`<skill name="${skill.name}">\n${skill.content.trim()}\n</skill>`);
+    const supporting =
+      skill.supporting === undefined || skill.supporting.paths.length === 0
+        ? ""
+        : `\n\nSupporting files of this skill, read only when you need them (read tool), under ${skill.supporting.dir}:\n${skill.supporting.paths.map((path) => `- ${path}`).join("\n")}`;
+    parts.push(`<skill name="${skill.name}">\n${skill.content.trim()}${supporting}\n</skill>`);
   }
   return parts.join("\n\n");
 }

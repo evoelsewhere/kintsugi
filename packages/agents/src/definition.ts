@@ -39,6 +39,12 @@ export function validateAgent(agent: AgentPackage, context: AgentContext): strin
   return problems;
 }
 
+/** The files a job may read beside SKILL.md: references, scripts and assets (never licenses). */
+function runtimeFiles(skill: SkillPackage): { files?: Record<string, string> } {
+  const kept = Object.entries(skill.files ?? {}).filter(([path]) => /^(references|scripts|assets)\//.test(path));
+  return kept.length === 0 ? {} : { files: Object.fromEntries(kept) };
+}
+
 /** The job's agent definition: shared skills first (in manifest order), then local ones. */
 export function toAgentDefinition(agent: AgentPackage, sharedSkills: ReadonlyMap<string, SkillPackage>): AgentDefinition {
   const { manifest } = agent;
@@ -55,7 +61,7 @@ export function toAgentDefinition(agent: AgentPackage, sharedSkills: ReadonlyMap
     id: manifest.name,
     version: manifest.version,
     instructions: agent.instructions,
-    ...(skills.length === 0 ? {} : { skills: skills.map((skill) => ({ name: skill.name, content: skill.content })) }),
+    ...(skills.length === 0 ? {} : { skills: skills.map((skill) => ({ name: skill.name, content: skill.content, ...runtimeFiles(skill) })) }),
     tools: [...manifest.tools],
     ...(manifest.denyCommandPatterns === undefined ? {} : { denyCommandPatterns: [...manifest.denyCommandPatterns] }),
     ...(manifest.thinking === undefined ? {} : { thinking: manifest.thinking }),

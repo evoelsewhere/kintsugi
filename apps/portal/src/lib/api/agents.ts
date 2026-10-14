@@ -91,6 +91,8 @@ export interface SharedSkillView {
   source: AgentSource;
   description: string;
   content: string;
+  /** Files beside SKILL.md (references, scripts, assets, licenses); only built-in skills carry any. */
+  files: Array<{ path: string; content: string }>;
   usedBy: string[];
   problems: string[];
   updatedAt?: string;

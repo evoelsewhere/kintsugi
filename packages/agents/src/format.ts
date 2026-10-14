@@ -28,6 +28,8 @@ export interface SkillPackage {
   content: string;
   license?: string;
   metadata?: Record<string, string>;
+  /** Supporting files beside SKILL.md (`references/…`, `scripts/…`, `assets/…`, licenses), by path relative to the skill folder. */
+  files?: Record<string, string>;
 }
 
 export type AgentAudience = "runtime" | "member";
@@ -182,8 +184,9 @@ export function serializeSkill(skill: SkillPackage): string {
 /**
  * Parses a skill library folder: `<name>/SKILL.md` per skill. A skill folder may also carry
  * supporting files (Agent Skills `references/`, `scripts/`, `assets/`, license texts); they are
- * kept on disk for people and member harnesses, while the kernel loads SKILL.md only, so a
- * runtime skill's SKILL.md must stand on its own.
+ * kept with the skill (`SkillPackage.files`): the Agent Builder shows them, and a runtime job gets
+ * the references, scripts and assets as read-only files its agent reads on demand (the system prompt
+ * carries SKILL.md and lists them); a skill's SKILL.md still has to make sense on its own.
  */
 export function parseSkillLibrary(files: PackageFiles): Parsed<SkillPackage[]> {
   const problems: string[] = [];
@@ -198,8 +201,13 @@ export function parseSkillLibrary(files: PackageFiles): Parsed<SkillPackage[]> {
       continue;
     }
     const parsed = parseSkill(text, match[1]!, path);
-    if (parsed.ok) skills.push(parsed.value);
-    else problems.push(...parsed.problems);
+    if (!parsed.ok) {
+      problems.push(...parsed.problems);
+      continue;
+    }
+    const prefix = `${match[1]!}/`;
+    const supporting = [...files].filter(([other]) => other.startsWith(prefix) && other !== path).map(([other, content]) => [other.slice(prefix.length), content] as const);
+    skills.push(supporting.length === 0 ? parsed.value : { ...parsed.value, files: Object.fromEntries(supporting.sort(([a], [b]) => a.localeCompare(b))) });
   }
   return problems.length > 0 ? { ok: false, problems } : { ok: true, value: skills.sort((a, b) => a.name.localeCompare(b.name)) };
 }
@@ -281,7 +289,7 @@ export function parseAgentPackage(files: PackageFiles): Parsed<AgentPackage> {
     if (path === agentPath) continue;
     const match = /^skills\/([^/]+)\/SKILL\.md$/.exec(path);
     if (match === null) {
-      // Agent Skills folders may carry scripts and references; the kernel loads SKILL.md only.
+      // Agent Skills folders may carry scripts and references; the kernel prompt carries SKILL.md only; the other files are written beside the job inputs.
       problems.push(`${path}: unsupported file; a package holds <name>.md and skills/<name>/${SKILL_FILE}`);
       continue;
     }

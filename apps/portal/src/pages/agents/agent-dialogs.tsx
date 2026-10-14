@@ -64,6 +64,57 @@ export function CopyAgentDialog({ source, onClose, onCopied }: { source: string 
   );
 }
 
+/** One file of a skill folder: SKILL.md first, then the references, scripts and assets beside it. */
+interface SkillFile {
+  path: string;
+  content: string;
+}
+
+/** Read-only view of a whole skill: its file list and the selected file (a skill is a folder, not just SKILL.md). */
+export function SkillViewDialog({ skill, onClose }: { skill: SharedSkillView | null; onClose: () => void }): React.JSX.Element | null {
+  if (skill === null) return null;
+  return <SkillViewer key={skill.name} skill={skill} onClose={onClose} />;
+}
+
+function SkillViewer({ skill, onClose }: { skill: SharedSkillView; onClose: () => void }): React.JSX.Element {
+  const files: SkillFile[] = [{ path: "SKILL.md", content: skill.content }, ...skill.files];
+  const [selected, setSelected] = useState("SKILL.md");
+  const current = files.find((file) => file.path === selected) ?? files[0]!;
+  return (
+    <Modal
+      open
+      size="wide"
+      title={skill.name}
+      description={`${skill.description} · ${files.length} file${files.length === 1 ? "" : "s"}${skill.source === "builtin" ? " · built-in, read-only" : ""}`}
+      onClose={onClose}
+      footer={
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <div className="flex min-h-0 flex-col gap-3 sm:flex-row">
+        <ul className="flex shrink-0 flex-col gap-0.5 sm:w-52" aria-label="Skill files">
+          {files.map((file) => (
+            <li key={file.path}>
+              <button
+                type="button"
+                onClick={() => setSelected(file.path)}
+                aria-current={file.path === current.path}
+                className={`w-full truncate rounded-[var(--geist-radius)] px-2 py-1 text-left font-mono text-[12px] hover:bg-hover ${file.path === current.path ? "bg-hover text-text" : "text-text-secondary"}`}
+                title={file.path}
+              >
+                {file.path}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <pre className="max-h-[55vh] min-w-0 flex-1 overflow-auto rounded-[var(--geist-radius)] p-3 font-mono text-[12px] whitespace-pre-wrap text-text shadow-border">{current.content}</pre>
+      </div>
+    </Modal>
+  );
+}
+
 interface SharedSkillDialogProps {
   open: boolean;
   /** null: create. */
