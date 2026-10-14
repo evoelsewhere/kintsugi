@@ -53,6 +53,7 @@ This page has two parts:
 | [0032](0032-mermaid-diagrams-skill.md) | Mermaid for every diagram, drawn by a built-in skill and checked by a lint | Accepted |
 | [0033](0033-assess-catalog-understand-selection.md) | Two runtime stages: assess builds the item catalog; understand runs on a selection | Accepted |
 | [0034](0034-understand-command-merges-map-rules-harden.md) | One understand command; map, extract-rules and harden are parts of it | Accepted |
+| [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amends 0015, 0026, 0027) |
 
 ## Decision register
 
@@ -109,6 +110,7 @@ This page has two parts:
 | D50 | Reverse engineering of the AS-IS system | 🔴 | Runtime `understand` stage after `map` → `extract-rules` ∥ `harden`: units proposed deterministically from the map's `topology.json` (no parser), one `legacy-analyst` AS-IS specification per unit, application overview, script-merged traceability matrix, proposed work items; everything (`units/**` included) in one pull request | M1 | ✅ [0031](0031-understand-stage-as-is-specification.md), amended by [0033](0033-assess-catalog-understand-selection.md) |
 | D52 | Selective understanding | 🔴 | Two runtime stages: `assess` builds the item catalog (`assessment/<app>/catalog.json`, module → item, from the topology without parsers, curated, reconciled across re-assess); `understand` runs `map`, `extract-rules` and `harden` as steps on a person's selection of items, one pull request per run, per-item outputs, aggregates rebuilt under `generated/` after merge, item-namespaced ids, item status derived, items in an open PR blocked, failed runs resumable | M1 | ✅ [0033](0033-assess-catalog-understand-selection.md) |
 | D53 | Understand command | 🟢 | One `understand` command specifies the phase; `map`, `extract-rules` and `harden` commands and stage plans are removed (their method is its "Method reference") | M1 | ✅ [0034](0034-understand-command-merges-map-rules-harden.md) |
+| D54 | Kintsugi plugins | 🟢 | Plugins (Claude plugin format + workflows/scripts) are the catalog unit; built-in `understand` and `modernize`; project plugins in the document repo; marketplace, file tree + code view, workflow view | M1 | 🟡 [0035](0035-kintsugi-plugins-marketplace.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 

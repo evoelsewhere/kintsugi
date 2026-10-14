@@ -1,4 +1,4 @@
-// Agent page (Administration → Agents → /agents/:name, /agents/new; ADR-0026): the frontmatter
+// Agent page (Administration → Plugins → Agent Builder → /plugins/builder/:name, /plugins/builder/new; ADR-0026): the frontmatter
 // as a form, the instructions, agent-local skills, live validation against the installation
 // (kernel tools, shared skills), the job definition a runtime agent produces, version history
 // with restore, and the agent's model binding. Built-in agents open read-only, with "Copy to
@@ -159,7 +159,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
       const saved = created ? await agentsApi.create(draft) : await agentsApi.update(name, draft);
       toast.success(`${created ? "Created" : "Saved"} ${saved.name}`, `Version ${saved.version} is now current.`);
       if (created) {
-        navigate(`/agents/${encodeURIComponent(saved.name)}`, { replace: true });
+        navigate(`/plugins/builder/${encodeURIComponent(saved.name)}`, { replace: true });
         return;
       }
       setName(saved.name);
@@ -208,8 +208,8 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Agents", title]} />
-      <Link to="/agents" className="inline-flex w-fit items-center gap-1.5 text-[12px] text-text-secondary hover:text-text">
+      <Breadcrumbs items={["Administration", "Plugins", "Agent Builder", title]} />
+      <Link to="/plugins/builder" className="inline-flex w-fit items-center gap-1.5 text-[12px] text-text-secondary hover:text-text">
         <ArrowLeft className="size-3.5" />
         All agents
       </Link>
@@ -297,7 +297,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
         onClose={() => setCopySource(null)}
         onCopied={async (copied) => {
           toast.success(`Copied to ${copied}`);
-          navigate(`/agents/${encodeURIComponent(copied)}`);
+          navigate(`/plugins/builder/${encodeURIComponent(copied)}`);
         }}
       />
     </div>

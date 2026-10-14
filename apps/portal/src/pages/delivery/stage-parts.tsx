@@ -149,7 +149,7 @@ export function StageAgents({ stage, agents }: { stage: StageView; agents: Loade
                 return (
                   <li key={name} className="flex flex-wrap items-center gap-2">
                     <Bot className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} />
-                    {agent === undefined ? <span className="text-text">{name}</span> : <Link to={`/agents/${encodeURIComponent(name)}`} className="text-text hover:underline">{name}</Link>}
+                    {agent === undefined ? <span className="text-text">{name}</span> : <Link to={`/plugins/builder/${encodeURIComponent(name)}`} className="text-text hover:underline">{name}</Link>}
                     {agent === undefined ? (
                       <StatusBadge tone="red" label="Not in the catalog" />
                     ) : !agent.enabled ? (

@@ -1,0 +1,34 @@
+{
+  "plugins": [
+    {
+      "name": "understand",
+      "title": "Understand",
+      "version": "1.0.0",
+      "description": "Read the legacy code, catalog it and write the AS-IS specification per item: assessment, topology, business rules, security findings and work items. Runs as Kintsugi runtime jobs, read-only.",
+      "audience": "runtime",
+      "skills": ["mermaid-diagrams"],
+      "agents": ["legacy-analyst", "business-rules-extractor", "security-auditor"],
+      "commands": ["modernize-assess", "modernize-understand"],
+      "workflows": ["extract-rules", "harden-scan", "portfolio-assess"],
+      "scripts": [
+        "inventory", "catalog_common", "catalog_from_topology", "reconcile_catalog", "apply_catalog_edits", "scope_items",
+        "make_shards", "render_rules", "split_rules", "split_findings", "finish_items", "write_work_items", "merge_topology",
+        "node_packets", "merge_traceability", "rebuild_aggregates", "units_from_topology", "mermaid_lint"
+      ],
+      "hooks": ["hooks"]
+    },
+    {
+      "name": "modernize",
+      "title": "Modernize",
+      "version": "1.0.0",
+      "description": "Move the understood system to its target: preflight, the modernization brief, transform, uplift or reimagine, and evidence-based verification. Driven by members in their own harness; Kintsugi supplies context and ingests results.",
+      "audience": "member",
+      "skills": ["mermaid-diagrams"],
+      "agents": ["test-engineer", "uplift-migrator", "scaffolder", "architecture-critic", "version-delta-analyst"],
+      "commands": ["modernize-preflight", "modernize-brief", "modernize-transform", "modernize-uplift", "modernize-reimagine", "modernize-verify"],
+      "workflows": ["uplift-deltas", "uplift-migrate", "reimagine-scaffold"],
+      "scripts": ["compare", "baseline_diff", "proof_pack", "trace_rules", "uplift_checks", "mermaid_lint"],
+      "hooks": []
+    }
+  ]
+}
