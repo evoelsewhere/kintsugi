@@ -16,14 +16,23 @@ import { formatBytes, formatDuration, shortSha } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
 
 export function RunDetail({ projectId, runId, version, onStatusChange }: { projectId: string; runId: string; version: string; onStatusChange: () => void }): React.JSX.Element {
-  // `version` changes when the run's status or document write changes: the detail reloads.
-  const detail = useLoader(`${projectId}/${runId}/${version}`, () => jobRunsApi.get(projectId, runId));
+  // `version` changes when the run's status or document write changes, and `steps` each time a step of the
+  // run starts or finishes (from the live log): the detail reloads, so a running run shows its steps.
+  const [steps, setSteps] = useState(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // The recorded events replay in a burst when the log opens: one reload for the burst.
+  const stepsChanged = (): void => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setSteps((count) => count + 1), 600);
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const detail = useLoader(`${projectId}/${runId}/${version}/${steps}`, () => jobRunsApi.get(projectId, runId));
   return (
     <div className="flex flex-col gap-3 pt-2 pb-1 pl-7">
       <Loaded loader={detail} rows={2}>
         {(run) => <RunFacts run={run} />}
       </Loaded>
-      <LiveLog projectId={projectId} runId={runId} onStatus={onStatusChange} />
+      <LiveLog projectId={projectId} runId={runId} onStatus={onStatusChange} onStep={stepsChanged} />
     </div>
   );
 }
@@ -168,19 +177,24 @@ const EVENT_TONE: Partial<Record<JobRunEvent["kind"], string>> = {
 };
 
 /** The run's live log: its recorded events, then new ones as the worker records them. */
-export function LiveLog({ projectId, runId, onStatus }: { projectId: string; runId: string; onStatus: () => void }): React.JSX.Element {
+export function LiveLog({ projectId, runId, onStatus, onStep }: { projectId: string; runId: string; onStatus: () => void; onStep?: () => void }): React.JSX.Element {
   const [events, setEvents] = useState<JobRunEvent[]>([]);
   const [live, setLive] = useState(true);
   const box = useRef<HTMLDivElement | null>(null);
   const statusChanged = useRef(onStatus);
+  const stepChanged = useRef(onStep);
   useEffect(() => {
     statusChanged.current = onStatus;
-  }, [onStatus]);
+    stepChanged.current = onStep;
+  }, [onStatus, onStep]);
 
   useEffect(() => {
     let first = true;
     const close = jobRunsApi.follow(projectId, runId, {
-      onEvent: (event) => setEvents((current) => [...current, event].slice(-MAX_LOG_LINES)),
+      onEvent: (event) => {
+        setEvents((current) => [...current, event].slice(-MAX_LOG_LINES));
+        if (event.kind === "step.started" || event.kind === "step.finished") stepChanged.current?.();
+      },
       onStatus: () => {
         // The first status is the current one; later ones are changes.
         if (!first) statusChanged.current();
