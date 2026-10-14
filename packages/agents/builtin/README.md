@@ -37,7 +37,7 @@ For reader functions, `reader/layout.ts` exposes logical namespaces: `assessment
 
 ## Package contents
 
-- `skills/`: shared skills that agents load by name (`skills:` in an agent file). `skills/mermaid-diagrams` says how every Kintsugi diagram is drawn: Mermaid only, the diagram type per artifact, syntax-safety rules and size limits; its `references/` hold condensed syntax per diagram type. The runtime kernel loads `SKILL.md` only, so it stands on its own.
+- `skills/`: shared skills that agents load by name (`skills:` in an agent file). `skills/mermaid-diagrams` says how every Kintsugi diagram is drawn: Mermaid only, the diagram type per artifact, syntax-safety rules and size limits; its `references/` hold condensed syntax per diagram type. A runtime job gets `SKILL.md` in the system prompt and the `references/`, `scripts/` and `assets/` files read-only beside its inputs, listed in the prompt for the agent to read on demand.
 - `agents/`: runtime and member agent definitions. Runtime definitions use kernel tools only; member definitions are context assets and are not converted into runtime jobs.
 - `commands/`: task contracts for assessment, mapping, rules, hardening, the per-unit AS-IS specification (`understand`, Kintsugi's own), review, verification, and the selected modernization route.
 - `workflows/`: runtime job fan-out and member workflow specifications, with the audience distinction kept explicit.

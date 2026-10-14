@@ -26,6 +26,7 @@ import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } fr
 import type { AgentRuntime, JobEvent, JobSpec } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 import type { AgentResolver } from "./agents.js";
+import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepRecord, stepKey } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
 import { runJobOutputHook } from "./hook.js";
@@ -455,7 +456,7 @@ export class JobRunner {
   }
 
   async #agent(run: JobRun, ws: StepWorkspace, signal?: AbortSignal): Promise<StepOutcome> {
-    const definition = await this.#deps.agentDefinitions.definition(run.name);
+    const definition = await materializeSkillFiles(await this.#deps.agentDefinitions.definition(run.name), ws.in);
     const mock = this.#deps.agents.engine.startsWith("mock");
     const binding = (await this.#deps.store.modelBinding(run.name, run.projectId)) ?? (mock ? { provider: "mock", model: "mock" } : undefined);
     if (binding === undefined) throw new JobFailure(`No model is bound to agent "${run.name}" (Settings → LLM Providers)`);

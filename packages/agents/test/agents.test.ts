@@ -183,6 +183,7 @@ describe("built-in catalog", () => {
     const skill = "---\nname: s\ndescription: d\n---\n\nbody";
     const ok = parseSkillLibrary(files({ "s/SKILL.md": skill, "s/references/a.md": "x", "s/LICENSE-x": "MIT", "s/scripts/lint.py": "" }));
     expect(ok.ok && ok.value.map((entry) => entry.name)).toEqual(["s"]);
+    expect(ok.ok && ok.value[0]?.files).toEqual({ "LICENSE-x": "MIT", "references/a.md": "x", "scripts/lint.py": "" });
     expect(parseSkillLibrary(files({ "s/SKILL.md": skill, "s/notes.md": "x", "t/references/a.md": "x", "top.md": "x" }))).toEqual({
       ok: false,
       problems: [

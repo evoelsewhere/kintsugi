@@ -397,6 +397,7 @@ export class AgentsService {
       source: "builtin",
       description: skill.description,
       content: skill.content,
+      files: Object.entries(skill.files ?? {}).map(([path, content]) => ({ path, content })),
       usedBy: users.get(skill.name) ?? [],
       problems: [],
     }));
@@ -407,6 +408,7 @@ export class AgentsService {
         source: "custom",
         description: parsed.ok ? parsed.value.description : "",
         content: parsed.ok ? parsed.value.content : record.content,
+        files: [],
         usedBy: users.get(record.name) ?? [],
         problems: parsed.ok ? [] : parsed.problems,
         updatedAt: record.updatedAt,

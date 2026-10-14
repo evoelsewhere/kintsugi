@@ -11,6 +11,13 @@ export interface AgentSkill {
   /** Lowercase identifier, e.g. "review-checklist" ([a-z][a-z0-9-]*). */
   name: string;
   content: string;
+  /**
+   * Supporting files of the skill (`references/…`), by path relative to the skill folder. The host
+   * that starts the job writes them somewhere the agent can read and replaces this with `supporting`.
+   */
+  files?: Record<string, string>;
+  /** Where the host put the skill's supporting files (a read-only directory) and their relative paths. */
+  supporting?: { dir: string; paths: string[] };
 }
 
 /** A complete agent, supplied with every job. Nothing about agents is stored in the runtime. */
