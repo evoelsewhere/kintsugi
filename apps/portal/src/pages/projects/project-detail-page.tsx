@@ -22,6 +22,7 @@ import { gitApi, type GitRepositoryView } from "@/lib/api/git";
 import { type ApplicationView, type ProjectDetail, type ProjectRepositoryView, projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { deliveryLink } from "@/lib/links";
+import { ProjectInsights } from "./projects-insights";
 import { NoRepositories } from "./no-repositories";
 import { ApplicationDialog, LinkDialog, ProjectDialog } from "./project-dialogs";
 
@@ -85,7 +86,7 @@ export function ProjectDetailPage(): React.JSX.Element {
   if (project === null) {
     return (
       <div className="flex flex-col gap-5">
-        <Breadcrumbs items={["Administration", "Projects", projectId]} />
+        <Breadcrumbs items={["Administration", { label: "Projects", to: "/projects" }, projectId]} />
         {error === null ? <SkeletonRows rows={4} /> : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
       </div>
     );
@@ -111,7 +112,7 @@ export function ProjectDetailPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Projects", project.name]} />
+      <Breadcrumbs items={["Administration", { label: "Projects", to: "/projects" }, project.name]} />
       {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
 
       <Card>
@@ -148,6 +149,8 @@ export function ProjectDetailPage(): React.JSX.Element {
       </Card>
 
       {canManage && repositories.length === 0 ? <NoRepositories onSettingsClosed={() => void load()} /> : null}
+
+      <ProjectInsights project={project} />
 
       <div className="flex items-center justify-between gap-3">
         <div>

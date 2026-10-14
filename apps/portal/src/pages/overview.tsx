@@ -23,6 +23,7 @@ import { deliveryLink, governanceLink, monitoringLink } from "@/lib/links";
 import { useHealth } from "@/lib/use-health";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
+import { OverviewInsights } from "./overview-insights";
 
 const n = (value: number | undefined): string | undefined => (value === undefined ? undefined : String(value));
 
@@ -84,6 +85,8 @@ export function OverviewPage(): React.JSX.Element {
           to={governanceLink("gates", "pending")}
         />
       </section>
+
+      <OverviewInsights counts={counts} />
 
       {counts?.projects === 0 ? (
         <Card>
