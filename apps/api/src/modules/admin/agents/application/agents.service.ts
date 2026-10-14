@@ -11,6 +11,7 @@ import {
   type CustomAgentStore,
   installationSkills,
   parseSkill,
+  parseSkillLibrary,
   parseStoredAgent,
   resolveAgentDefinition,
   serializeAgentPackage,
@@ -55,6 +56,8 @@ interface Installation {
 
 const filesOf = (agent: AgentPackage): PackageFileMap => Object.fromEntries(serializeAgentPackage(agent));
 const problemsError = (problems: string[]): BadRequestException => new BadRequestException(problems);
+/** A skill's supporting files together (the table keeps them in one row). */
+const MAX_SKILL_BYTES = 1_000_000;
 /** The name stored as an agent's or skill's author (`updatedBy`). */
 const actorName = (actor: Actor): string => actor.username ?? actor.id;
 
@@ -93,14 +96,14 @@ export class AgentsService {
       const record = await this.agents.get(name);
       return record === undefined ? undefined : { files: record.files, enabled: record.enabled };
     },
-    skills: async () => (await this.agents.listSkills()).map((skill) => ({ name: skill.name, text: skill.content })),
+    skills: async () => (await this.agents.listSkills()).map((skill) => ({ name: skill.name, text: skill.content, files: skill.files })),
   };
 
   async #installation(): Promise<Installation> {
     const [builtin, storedSkills] = await Promise.all([this.catalog.builtin(), this.agents.listSkills()]);
     const sharedSkills = installationSkills(
       builtin,
-      storedSkills.map((skill) => ({ name: skill.name, text: skill.content })),
+      storedSkills.map((skill) => ({ name: skill.name, text: skill.content, files: skill.files })),
     );
     return { builtin, storedSkills, sharedSkills, knownTools: this.catalog.kernelTools };
   }
@@ -408,7 +411,7 @@ export class AgentsService {
         source: "custom",
         description: parsed.ok ? parsed.value.description : "",
         content: parsed.ok ? parsed.value.content : record.content,
-        files: [],
+        files: Object.entries(record.files).map(([path, content]) => ({ path, content })),
         usedBy: users.get(record.name) ?? [],
         problems: parsed.ok ? [] : parsed.problems,
         updatedAt: record.updatedAt,
@@ -432,6 +435,19 @@ export class AgentsService {
     return text;
   }
 
+  /** The files beside SKILL.md of a draft, checked with the skill library format (folders, names) and size limits. */
+  #skillFiles(draft: SkillDraft, text: string): Record<string, string> {
+    const files = draft.files ?? {};
+    const bytes = Object.values(files).reduce((sum, content) => sum + Buffer.byteLength(content), 0);
+    if (bytes > MAX_SKILL_BYTES) throw new BadRequestException(`A skill's files are limited to ${MAX_SKILL_BYTES / 1_000_000} MB together`);
+    const unsafe = Object.keys(files).filter((path) => path.startsWith("/") || path.includes("\\") || path.includes("\0") || path.split("/").some((part) => part === ".." || part === "." || part === ""));
+    if (unsafe.length > 0) throw problemsError(unsafe.map((path) => `${path}: not a path inside the skill folder`));
+    const library = new Map<string, string>([[`${draft.name}/SKILL.md`, text], ...Object.entries(files).map(([path, content]) => [`${draft.name}/${path}`, content] as const)]);
+    const parsed = parseSkillLibrary(library);
+    if (!parsed.ok) throw problemsError(parsed.problems);
+    return files;
+  }
+
   async #mustNotBeBuiltinSkill(name: string): Promise<void> {
     const builtin = await this.catalog.builtin();
     if (builtin.skills.some((skill) => skill.name === name)) throw new BadRequestException(`Shared skill ${name} is built in and read-only`);
@@ -440,7 +456,8 @@ export class AgentsService {
   async createSkill(draft: SkillDraft, actor: Actor): Promise<SharedSkillView> {
     const builtin = await this.catalog.builtin();
     if (builtin.skills.some((skill) => skill.name === draft.name)) throw new ConflictException(`The name ${draft.name} is reserved by a built-in skill`);
-    if (!(await this.agents.createSkill(draft.name, this.#skillText(draft), actorName(actor)))) throw new ConflictException(`Shared skill ${draft.name} already exists`);
+    const text = this.#skillText(draft);
+    if (!(await this.agents.createSkill(draft.name, text, this.#skillFiles(draft, text), actorName(actor)))) throw new ConflictException(`Shared skill ${draft.name} already exists`);
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.skillCreate, { subject: draft.name }));
     return this.getSkill(draft.name);
   }
@@ -448,7 +465,10 @@ export class AgentsService {
   async updateSkill(name: string, draft: SkillDraft, actor: Actor): Promise<SharedSkillView> {
     await this.#mustNotBeBuiltinSkill(name);
     if (draft.name !== name) throw new BadRequestException(`The name cannot change (${name} → ${draft.name})`);
-    if (!(await this.agents.updateSkill(name, this.#skillText(draft), actorName(actor)))) throw new NotFoundException(`Shared skill ${name} not found`);
+    const text = this.#skillText(draft);
+    // A draft without `files` (the small edit dialog) keeps the files the skill has.
+    const kept = draft.files === undefined ? (await this.agents.getSkill(name))?.files : undefined;
+    if (!(await this.agents.updateSkill(name, text, this.#skillFiles(kept === undefined ? draft : { ...draft, files: kept }, text), actorName(actor)))) throw new NotFoundException(`Shared skill ${name} not found`);
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.skillUpdate, { subject: name }));
     return this.getSkill(name);
   }

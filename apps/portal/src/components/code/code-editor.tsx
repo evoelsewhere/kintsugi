@@ -1,5 +1,6 @@
-// Read-only code view (CodeMirror 6): line numbers, folding, search and syntax colors from the
-// design tokens, so it follows light and dark. Loaded on demand by code-view.tsx.
+// Code view (CodeMirror 6): line numbers, folding, search and syntax colors from the design tokens,
+// so it follows light and dark. Read-only, or editable when `onChange` is given. Loaded on demand
+// by code-view.tsx.
 
 import { javascript } from "@codemirror/lang-javascript";
 import { markdown } from "@codemirror/lang-markdown";
@@ -44,18 +45,37 @@ const theme = EditorView.theme({
   ".cm-panels": { backgroundColor: "var(--ds-background-200)", color: "var(--ds-text-primary)" },
 });
 
-export default function CodeEditor({ text, path }: { text: string; path: string }): React.JSX.Element {
+export default function CodeEditor({ text, path, onChange }: { text: string; path: string; onChange?: ((text: string) => void) | undefined }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
+  const changed = useRef(onChange);
+  const editable = onChange !== undefined;
+  useEffect(() => {
+    changed.current = onChange;
+  }, [onChange]);
+  // An editable view keeps its own document while it is typed in: it is rebuilt for another file only.
+  const rebuildOn = editable ? path : text;
   useEffect(() => {
     if (host.current === null) return;
     const view = new EditorView({
       parent: host.current,
       state: EditorState.create({
         doc: text,
-        extensions: [basicSetup, languageOf(path), syntaxHighlighting(highlight), theme, EditorState.readOnly.of(true), EditorView.editable.of(false), EditorView.lineWrapping],
+        extensions: [
+          basicSetup,
+          languageOf(path),
+          syntaxHighlighting(highlight),
+          theme,
+          EditorState.readOnly.of(!editable),
+          EditorView.editable.of(editable),
+          EditorView.lineWrapping,
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) changed.current?.(update.state.doc.toString());
+          }),
+        ],
       }),
     });
     return () => view.destroy();
-  }, [text, path]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rebuildOn, path, editable]);
   return <div ref={host} className="h-full min-h-0" role="region" aria-label={`Contents of ${path}`} />;
 }

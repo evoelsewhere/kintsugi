@@ -30,6 +30,7 @@ interface VersionRow {
 interface SkillRow {
   name: string;
   content: string;
+  files: Record<string, string>;
   created_by: string | null;
   updated_by: string | null;
   updated_at: Date;
@@ -61,6 +62,7 @@ const toVersion = (row: VersionRow): AgentVersionRecord => ({
 const toSkill = (row: SkillRow): SharedSkillRecord => ({
   name: row.name,
   content: row.content,
+  files: row.files,
   ...(row.created_by === null ? {} : { createdBy: row.created_by }),
   ...(row.updated_by === null ? {} : { updatedBy: row.updated_by }),
   updatedAt: row.updated_at.toISOString(),
@@ -169,19 +171,19 @@ export class PgAgentRepository extends AgentRepository {
   }
 
   async listSkills(): Promise<SharedSkillRecord[]> {
-    const result = await this.#pool.query<SkillRow>("select name, content, created_by, updated_by, updated_at from admin.agent_skill order by name");
+    const result = await this.#pool.query<SkillRow>("select name, content, files, created_by, updated_by, updated_at from admin.agent_skill order by name");
     return result.rows.map(toSkill);
   }
 
   async getSkill(name: string): Promise<SharedSkillRecord | undefined> {
-    const result = await this.#pool.query<SkillRow>("select name, content, created_by, updated_by, updated_at from admin.agent_skill where name = $1", [name]);
+    const result = await this.#pool.query<SkillRow>("select name, content, files, created_by, updated_by, updated_at from admin.agent_skill where name = $1", [name]);
     const row = result.rows[0];
     return row === undefined ? undefined : toSkill(row);
   }
 
-  async createSkill(name: string, content: string, actor: string): Promise<boolean> {
+  async createSkill(name: string, content: string, files: Record<string, string>, actor: string): Promise<boolean> {
     try {
-      await this.#pool.query("insert into admin.agent_skill (name, content, created_by, updated_by) values ($1, $2, $3, $3)", [name, content, actor]);
+      await this.#pool.query("insert into admin.agent_skill (name, content, files, created_by, updated_by) values ($1, $2, $3, $4, $4)", [name, content, JSON.stringify(files), actor]);
       return true;
     } catch (error) {
       if (isUniqueViolation(error)) return false;
@@ -189,8 +191,8 @@ export class PgAgentRepository extends AgentRepository {
     }
   }
 
-  async updateSkill(name: string, content: string, actor: string): Promise<boolean> {
-    const result = await this.#pool.query("update admin.agent_skill set content = $2, updated_by = $3, updated_at = now() where name = $1", [name, content, actor]);
+  async updateSkill(name: string, content: string, files: Record<string, string>, actor: string): Promise<boolean> {
+    const result = await this.#pool.query("update admin.agent_skill set content = $2, files = $3, updated_by = $4, updated_at = now() where name = $1", [name, content, JSON.stringify(files), actor]);
     return (result.rowCount ?? 0) > 0;
   }
 

@@ -18,10 +18,11 @@ export interface StoredAgent {
   enabled: boolean;
 }
 
-/** A custom shared skill as stored: its SKILL.md text. */
+/** A custom shared skill as stored: its SKILL.md text and the files beside it. */
 export interface StoredSkill {
   name: string;
   text: string;
+  files?: Record<string, string>;
 }
 
 /** Where the installation keeps custom agents and shared skills (implemented over admin.*). */
@@ -60,7 +61,7 @@ export function installationSkills(builtin: BuiltinCatalog, stored: readonly Sto
   for (const entry of stored) {
     if (skills.has(entry.name)) continue;
     const parsed = parseSkill(entry.text, entry.name);
-    if (parsed.ok) skills.set(entry.name, parsed.value);
+    if (parsed.ok) skills.set(entry.name, entry.files === undefined || Object.keys(entry.files).length === 0 ? parsed.value : { ...parsed.value, files: entry.files });
   }
   return skills;
 }

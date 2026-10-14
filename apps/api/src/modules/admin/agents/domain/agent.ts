@@ -61,6 +61,8 @@ export interface SkillDraft {
   description: string;
   content: string;
   license?: string;
+  /** Files beside SKILL.md (references/, scripts/, assets/, licenses), by path relative to the skill folder. */
+  files?: Record<string, string>;
 }
 
 /** Import: package files, or a base64 ZIP of `<name>.md` and `skills/<n>/SKILL.md`. */
@@ -70,6 +72,8 @@ export type AgentImport = { files: PackageFileMap } | { zip: string };
 export interface SharedSkillRecord {
   name: string;
   content: string;
+  /** Files beside SKILL.md. */
+  files: Record<string, string>;
   createdBy?: string;
   updatedBy?: string;
   updatedAt: string;
