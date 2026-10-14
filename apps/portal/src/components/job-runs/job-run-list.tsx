@@ -1,8 +1,9 @@
 // A list of job runs (Delivery per application, Monitoring across projects): status, what ran,
 // when, how long, who started it and where its output went; a row opens the run's detail with
-// steps, artifacts and the live log. Active runs can be cancelled with jobs.run.
+// steps, artifacts and the live log. Active runs can be cancelled, and a failed stage run retried
+// (it resumes from the kept outputs and skips the agent steps that succeeded), with jobs.run.
 
-import { ChevronDown, ChevronRight, ExternalLink, Square } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { RunStatusBadge, WriteStatusBadge } from "@/components/status-badges";
@@ -18,6 +19,8 @@ import { RunDetail } from "./run-detail";
 export interface JobRunListProps {
   runs: JobRunView[];
   canCancel: boolean;
+  /** Shows Retry on a failed stage run of an application. */
+  canRetry?: boolean;
   /** Cross-project lists show the project and application of each run, linked to Delivery. */
   showProject?: boolean;
   /** A run to open initially (deep links). */
@@ -26,10 +29,25 @@ export interface JobRunListProps {
   onChanged: () => void;
 }
 
-export function JobRunList({ runs, canCancel, showProject = false, initialOpen, onChanged }: JobRunListProps): React.JSX.Element {
+export function JobRunList({ runs, canCancel, canRetry = false, showProject = false, initialOpen, onChanged }: JobRunListProps): React.JSX.Element {
   const [open, setOpen] = useState<string | null>(initialOpen ?? null);
   const [cancelling, setCancelling] = useState<JobRunView | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
   const toast = useToast();
+
+  async function retry(run: JobRunView): Promise<void> {
+    setRetrying(run.id);
+    try {
+      const next = await jobRunsApi.retry(run.projectId, run.id);
+      toast.success("Retry queued", "It skips the agent jobs that succeeded and reruns the rest.");
+      setOpen(next.id);
+      onChanged();
+    } catch (failure) {
+      toast.error("Could not retry the run", failure);
+    } finally {
+      setRetrying(null);
+    }
+  }
 
   return (
     <>
@@ -84,6 +102,12 @@ export function JobRunList({ runs, canCancel, showProject = false, initialOpen, 
                       <ExternalLink className="size-3.5" />
                     </a>
                   )}
+                  {canRetry && run.status === "failed" && run.kind === "stage" && run.applicationId !== undefined ? (
+                    <Button size="small" variant="ghost" className="shadow-border" disabled={retrying !== null} onClick={() => void retry(run)}>
+                      <RotateCcw className="size-3.5" />
+                      {retrying === run.id ? "Retrying…" : "Retry"}
+                    </Button>
+                  ) : null}
                   {canCancel && isActive(run) && run.cancelRequestedAt === undefined ? (
                     <Button size="small" variant="danger" onClick={() => setCancelling(run)}>
                       <Square className="size-3.5" />
