@@ -82,8 +82,9 @@ def count_lines(path):
         raise DataError(f"unexpected binary content in source file: {path}")
     try:
         text = data.decode('utf-8-sig')
-    except UnicodeDecodeError as error:
-        raise DataError(f"source file is not valid UTF-8: {path}") from error
+    except UnicodeDecodeError:
+        # Legacy single-byte code pages (Windows-1252, Latin-1): Latin-1 decodes any byte.
+        text = data.decode('latin-1')
     return len(text.splitlines())
 
 

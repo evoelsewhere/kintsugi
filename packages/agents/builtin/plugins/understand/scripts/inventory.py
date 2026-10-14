@@ -35,6 +35,8 @@ LANGUAGES = {
     '.py': 'Python', '.rb': 'Ruby', '.rs': 'Rust', '.scala': 'Scala', '.sh': 'Shell',
     '.sql': 'SQL', '.swift': 'Swift', '.ts': 'TypeScript', '.tsx': 'TypeScript',
     '.vb': 'Visual Basic', '.xml': 'XML', '.yaml': 'YAML', '.yml': 'YAML',
+    # Visual Basic 6: classes, forms, user controls and designers.
+    '.cls': 'Visual Basic', '.frm': 'Visual Basic', '.ctl': 'Visual Basic', '.dsr': 'Visual Basic',
 }
 C_FAMILY = {'C', 'C++', 'C#', 'C/C++', 'Java', 'JavaScript', 'TypeScript', 'Go', 'Kotlin', 'Swift', 'PHP', 'Dart', 'Scala'}
 BRANCHES = {
@@ -43,6 +45,8 @@ BRANCHES = {
     'Ruby': ('if', 'unless', 'for', 'while', 'rescue', 'when'),
     'Rust': ('if', 'for', 'while', 'match'),
     'SQL': ('case', 'when'),
+    'Visual Basic': ('if', 'elseif', 'for', 'while', 'case', 'until'),
+    'BASIC': ('if', 'elseif', 'for', 'while', 'case', 'until'),
 }
 DEFAULT_BRANCHES = ('if', 'for', 'while', 'case', 'catch')
 COMMENT_PREFIXES = ('#', '//', '/*', '*', '*/', '--', '<!--', '-->', '*>')
@@ -89,8 +93,10 @@ def decode_source(data, path):
         raise DataError(f'unexpected binary content in source file: {path}')
     try:
         return data.decode('utf-8-sig')
-    except UnicodeDecodeError as error:
-        raise DataError(f'source file is not valid UTF-8: {path}') from error
+    except UnicodeDecodeError:
+        # Legacy sources are often in a single-byte code page (Windows-1252, Latin-1); line and
+        # keyword counts do not depend on the exact characters, and Latin-1 decodes any byte.
+        return data.decode('latin-1')
 
 
 def language_for(path):
@@ -108,7 +114,7 @@ def analyze(path, text, language):
         is_comment = stripped.startswith(COMMENT_PREFIXES)
         if language == 'COBOL' and len(line) > 6 and line[6] in ('*', '/'):
             is_comment = True
-        if language == 'Visual Basic' and stripped.upper().startswith('REM '):
+        if language in ('Visual Basic', 'BASIC') and (stripped.startswith("'") or stripped.upper().startswith('REM ')):
             is_comment = True
         if not stripped:
             blank += 1
@@ -245,7 +251,7 @@ def inventory(source, app, source_repository=None, pinned_commit=None):
         'app': app,
         'sourceRepository': source_repository or os.path.basename(os.path.normpath(source)),
         'sourceCommit': pinned_commit or source_commit(root),
-        'method': 'static UTF-8 inventory; per-file decision keywords are counted as a language-neutral complexity proxy',
+        'method': 'static inventory (UTF-8, Latin-1 fallback); per-file decision keywords are counted as a language-neutral complexity proxy',
         'complexityIndexFormula': '2.94 × KSLOC^1.10',
         'fileCount': len(files),
         'sourceFileCount': len(source_files),
