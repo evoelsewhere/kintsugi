@@ -26,7 +26,7 @@ import { formatBytes, formatDateTime, formatDuration, formatRelative, shortSha }
 import { isActiveStatus } from "@/lib/status";
 import { agentProblems, runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { type Loader, useLoader } from "@/lib/use-loader";
-import { ApplicationFacts } from "./delivery-shell";
+import { CompactFacts, StageHeader } from "./delivery-shell";
 import { DecisionPoints, StageAgents, StagePaths } from "./stage-parts";
 
 const RUN_LIMIT = 100;
@@ -107,50 +107,47 @@ export function RuntimeStage({ project, application, stage }: { project: Project
   const initialRun = params.get("run") ?? undefined;
 
   return (
-    <div className="flex flex-col gap-5">
-      <Card>
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[15px] font-medium text-text">{stageLabel(stage.id)}</p>
-              <span className="font-mono text-[11px] text-text-muted">/{stage.command}</span>
-              {stage.runnable ? null : <StatusBadge tone="muted" label="Coming soon" />}
-            </div>
-            <p className="mt-1 text-[13px] text-text-secondary">{stage.description}</p>
-          </div>
-          <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <div className="flex items-center gap-2">
-              {latest === undefined ? (
-                <span className="text-[12px] text-text-muted">{runs.data === undefined ? "" : "Never run"}</span>
-              ) : (
-                <span className="flex items-center gap-1.5" title={formatDateTime(latest.createdAt)}>
-                  <RunStatusBadge status={latest.status} cancelling={latest.cancelRequestedAt !== undefined && latest.status === "running"} />
-                  <span className="text-[12px] text-text-muted">
-                    {formatRelative(latest.createdAt)}
-                    {latest.startedAt === undefined ? "" : ` · ${isActiveStatus(latest.status) ? "running for " : "took "}${formatDuration(latest.startedAt, latest.finishedAt)}`}
-                  </span>
+    <div className="flex flex-col gap-4">
+      <StageHeader
+        title={stageLabel(stage.id)}
+        command={stage.command}
+        application={application}
+        description={stage.description}
+        badge={stage.runnable ? null : <StatusBadge tone="muted" label="Coming soon" />}
+        facts={<CompactFacts project={project} application={application} />}
+        actions={
+          <>
+            {latest === undefined ? (
+              <span className="text-[12px] text-text-muted">{runs.data === undefined ? "" : "Never run"}</span>
+            ) : (
+              <span className="flex items-center gap-1.5" title={formatDateTime(latest.createdAt)}>
+                <RunStatusBadge status={latest.status} cancelling={latest.cancelRequestedAt !== undefined && latest.status === "running"} />
+                <span className="text-[12px] text-text-muted">
+                  {formatRelative(latest.createdAt)}
+                  {latest.startedAt === undefined ? "" : ` · ${isActiveStatus(latest.status) ? "running for " : "took "}${formatDuration(latest.startedAt, latest.finishedAt)}`}
                 </span>
-              )}
+              </span>
+            )}
+            <span title={disabledReason}>
               <Button size="small" variant="solid" disabled={disabledReason !== undefined || runs.data === undefined} onClick={() => setConfirming(true)}>
                 <Play className="size-3.5" />
                 Run
               </Button>
-            </div>
-            {disabledReason === undefined ? null : <p className="max-w-xs text-right text-[11px] text-text-muted">{disabledReason}</p>}
-          </div>
-        </div>
-        <div className="mt-4 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] pt-3">
-          <ApplicationFacts project={project} application={application} />
-        </div>
-        {problems.length === 0 ? null : <p className="mt-3 text-[12px] text-text-secondary">Check the agents below before running: {problems.join("; ")}. Their jobs fail until this is fixed.</p>}
-      </Card>
+            </span>
+          </>
+        }
+      >
+        {disabledReason === undefined || active ? null : <p className="mt-1.5 text-[12px] text-text-muted">{disabledReason}</p>}
+        {problems.length === 0 ? null : <p className="mt-1.5 text-[12px] text-text-secondary">Check the agents under Inputs &amp; agents before running: {problems.join("; ")}. Their jobs fail until this is fixed.</p>}
+      </StageHeader>
 
       <Tabs<StageTab>
+        sticky
         label={`${stage.id} sections`}
         value={tab}
         onChange={chooseTab}
         tabs={[
-          ...(withResults ? [{ id: "results" as const, label: "Results" }] : []),
+          ...(withResults ? [{ id: "results" as const, label: "Overview" }] : []),
           ...(withCatalog ? [{ id: "catalog" as const, label: "Catalog" }] : []),
           { id: "runs" as const, label: "Runs & logs", count: stageRuns?.length },
           { id: "inputs" as const, label: "Inputs & agents" },
@@ -198,7 +195,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
             <CardHeader>
               <div>
                 <CardTitle>Job runs</CardTitle>
-                <CardDescription>Runs of {stage.id} for {application.name}: open one for its steps, artifacts and live log. Active runs refresh on their own.</CardDescription>
+                <CardDescription>Open a run for its steps, artifacts and live log; active runs refresh on their own.</CardDescription>
               </div>
             </CardHeader>
             <div className="mt-2">

@@ -7,7 +7,6 @@ import { FolderGit2, FolderKanban, Package, Settings2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
-import { PageHeading } from "@/components/page-heading";
 import { ProjectSelector } from "@/components/project-selector";
 import { SyncStatusBadge } from "@/components/status-badges";
 import { Card } from "@/components/ui/card";
@@ -34,31 +33,32 @@ export function DeliveryShell({ crumbs = [], title, description, actions, childr
   const current = projects.data?.find((project) => project.id === projectId);
 
   return (
-    <div className="flex flex-col gap-5">
-      <Breadcrumbs items={current === undefined ? [{ label: "Delivery", to: deliveryLink({ projectId }) }, ...crumbs] : [{ label: "Delivery", to: deliveryLink({ projectId }) }, { label: current.name, to: deliveryLink({ projectId }) }, ...crumbs]} />
-      <PageHeading
-        title={title}
-        description={description}
-        actions={
-          projects.data === undefined || projects.data.length === 0 ? (
-            actions
-          ) : (
-            <>
-              {actions}
-              <ProjectSelector projects={projects.data} value={projectId} onChange={select} />
-              {projectId === undefined ? null : (
-                <Link
-                  to={projectLink(projectId)}
-                  className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-3 text-[13px] text-text-secondary hover:bg-hover hover:text-text"
-                >
-                  <Settings2 className="size-4" />
-                  Configure
-                </Link>
-              )}
-            </>
-          )
-        }
-      />
+    <div className="flex flex-col gap-4">
+      {/* One row: where you are on the left, the project on the right; the page's own title is in its header card. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <Breadcrumbs items={current === undefined ? [{ label: "Delivery", to: deliveryLink({ projectId }) }, ...crumbs] : [{ label: "Delivery", to: deliveryLink({ projectId }) }, { label: current.name, to: deliveryLink({ projectId }) }, ...crumbs]} />
+        {projects.data === undefined || projects.data.length === 0 ? (
+          actions
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {actions}
+            <ProjectSelector projects={projects.data} value={projectId} onChange={select} />
+            {projectId === undefined ? null : (
+              <Link
+                to={projectLink(projectId)}
+                aria-label="Configure the project"
+                title="Configure the project"
+                className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-2.5 text-[13px] text-text-secondary hover:bg-hover hover:text-text"
+              >
+                <Settings2 className="size-4" />
+                Configure
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+      <h1 className="sr-only">{title}</h1>
+      <p className="sr-only">{description}</p>
       <Loaded loader={projects} rows={4}>
         {(list) =>
           list.length === 0 || projectId === undefined ? (
@@ -125,7 +125,7 @@ export function ApplicationTabs({ project, value, onChange }: { project: Project
           aria-current={entry.id === value ? "page" : undefined}
           onClick={() => onChange(entry.id)}
           className={cn(
-            "-mb-px flex items-center gap-1.5 px-3 py-2 text-[13px] text-text-secondary hover:text-text",
+            "-mb-px flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-text-secondary hover:text-text",
             entry.id === value && "font-medium text-text [box-shadow:0_-2px_0_0_var(--color-text)_inset]",
           )}
         >
@@ -167,5 +167,90 @@ function RepoFact({ label, repository, extra }: { label: string; repository: { r
         </p>
       )}
     </div>
+  );
+}
+
+/** One repository of an application in a line: its name and sync state. */
+function InlineRepo({ label, repository, extra }: { label: string; repository: { repositoryId: string; syncStatus: string; url: string } | undefined; extra?: string | undefined }): React.JSX.Element {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5" title={repository?.url}>
+      <span className="text-text-muted">{label}</span>
+      {repository === undefined ? (
+        <span className="text-text">none linked</span>
+      ) : (
+        <>
+          <span className="max-w-40 truncate text-text">{repository.repositoryId}</span>
+          <SyncStatusBadge status={repository.syncStatus} />
+          {extra === undefined ? null : <span className="text-text-muted">{extra}</span>}
+        </>
+      )}
+    </span>
+  );
+}
+
+/** The repositories of an application on one line: legacy code, the document repo and the targets. */
+export function CompactFacts({ project, application }: { project: ProjectDetail; application: ApplicationView }): React.JSX.Element {
+  const legacy = application.asIs.legacy[0];
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-text-secondary">
+      <InlineRepo label="Legacy" repository={legacy} extra={application.asIs.legacy.length > 1 ? `+${application.asIs.legacy.length - 1}` : undefined} />
+      <InlineRepo label="Docs" repository={project.documentRepository ?? undefined} />
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <span className="text-text-muted">Targets</span>
+        <span className="max-w-48 truncate text-text">{application.toBe.targets.length === 0 ? "none linked" : application.toBe.targets.map((target) => target.component ?? target.repositoryId).join(", ")}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The header of a stage page in two lines: the stage, its command, the application and its status
+ * with the primary action on the right; then what the stage does (one line, the rest on hover) and
+ * the repositories of the application.
+ */
+export function StageHeader({
+  title,
+  command,
+  application,
+  badge,
+  description,
+  actions,
+  facts,
+  children,
+}: {
+  title: string;
+  command: string;
+  application?: ApplicationView | undefined;
+  badge?: React.ReactNode;
+  description: string;
+  actions?: React.ReactNode;
+  facts?: React.ReactNode;
+  /** Extra lines under the header (warnings). */
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Card className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+          <p className="text-[16px] font-semibold tracking-tight text-text">{title}</p>
+          <span className="font-mono text-[11px] text-text-muted">/{command}</span>
+          {application === undefined ? null : (
+            <span className="inline-flex items-center gap-1 rounded-[var(--geist-pill-radius)] bg-hover px-2 py-0.5 text-[11.5px] text-text-secondary">
+              <Package className="size-3" strokeWidth={1.75} />
+              {application.name}
+            </span>
+          )}
+          {badge}
+        </div>
+        {actions === undefined ? null : <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-1">
+        <p className="min-w-48 flex-1 truncate text-[12.5px] text-text-secondary" title={description}>
+          {description}
+        </p>
+        {facts}
+      </div>
+      {children}
+    </Card>
   );
 }

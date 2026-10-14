@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { isActive, jobRunsApi, type JobRunView } from "@/lib/api/job-runs";
 import { formatDateTime, formatDuration, formatRelative, shortSha } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
+import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import { RunDetail } from "./run-detail";
 
@@ -27,6 +28,13 @@ export interface JobRunListProps {
   initialOpen?: string | undefined;
   /** Called after a cancel or when an open run changes status. */
   onChanged: () => void;
+}
+
+/** "running for 3m 12s", ticking while the run is active; "took 3m 12s" once it ended. */
+function Elapsed({ run }: { run: JobRunView }): React.JSX.Element {
+  const active = isActive(run);
+  const now = useNow(active);
+  return <>{`${active ? "running for " : "took "}${formatDuration(run.startedAt, run.finishedAt, now)}`}</>;
 }
 
 export function JobRunList({ runs, canCancel, canRetry = false, showProject = false, initialOpen, onChanged }: JobRunListProps): React.JSX.Element {
@@ -56,8 +64,21 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
           const expanded = open === run.id;
           const cancelRequested = run.status === "running" && run.cancelRequestedAt !== undefined;
           return (
-            <li key={run.id} className={cn("px-1 py-2", index > 0 && "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]")}>
-              <div className="flex items-start gap-2">
+            <li
+              key={run.id}
+              className={cn(
+                "my-0.5 rounded-xl px-2 py-2",
+                expanded ? "bg-surface [box-shadow:var(--ds-shadow-border-small)]" : "hover:bg-hover",
+                !expanded && index > 0 && "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]",
+              )}
+            >
+              <div
+                className="flex cursor-pointer items-start gap-2"
+                onClick={(event) => {
+                  // The whole header opens the run; links and buttons inside keep their own action.
+                  if ((event.target as HTMLElement).closest("a,button") === null) setOpen(expanded ? null : run.id);
+                }}
+              >
                 <button
                   type="button"
                   className="mt-0.5 rounded-[var(--geist-radius)] text-text-muted hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
@@ -85,7 +106,8 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
                   </div>
                   <p className="mt-0.5 truncate text-[11px] text-text-muted" title={formatDateTime(run.createdAt)}>
                     {formatRelative(run.createdAt)}
-                    {run.startedAt === undefined ? "" : ` · ${isActive(run) ? "running for " : "took "}${formatDuration(run.startedAt, run.finishedAt)}`}
+                    {run.startedAt === undefined ? "" : " · "}
+                    {run.startedAt === undefined ? null : <Elapsed run={run} />}
                     {run.actor === undefined ? "" : ` · by ${run.actor}`}
                     {run.agent === undefined ? "" : ` · ${run.agent}`}
                     {run.sourceCommit === undefined ? "" : ` · ${run.sourceRepositoryId ?? ""}@${shortSha(run.sourceCommit)}`}

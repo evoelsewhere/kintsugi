@@ -55,8 +55,8 @@ function StageForProject({ project, stage }: { project: ProjectDetail; stage: St
   const { application, choose } = useApplication(project);
   if (application === undefined) return <NoApplications project={project} />;
   return (
-    <div className="flex flex-col gap-5">
-      <ApplicationTabs project={project} value={application.id} onChange={choose} />
+    <div className="flex flex-col gap-4">
+      {project.applications.length > 1 ? <ApplicationTabs project={project} value={application.id} onChange={choose} /> : null}
       {stage.id === "understand" ? (
         <UnderstandStage key={application.id} project={project} application={application} stage={stage} />
       ) : stage.audience === "runtime" ? (

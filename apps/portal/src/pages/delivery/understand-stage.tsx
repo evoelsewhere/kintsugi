@@ -29,7 +29,7 @@ import { formatRelative } from "@/lib/format";
 import { isActiveStatus, ITEM_STATUS, styleOf } from "@/lib/status";
 import { runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { type Loader, useLoader } from "@/lib/use-loader";
-import { ApplicationFacts } from "./delivery-shell";
+import { CompactFacts, StageHeader } from "./delivery-shell";
 import { CatalogResults, type CatalogSelection } from "./results/catalog-view";
 
 // The result views and their libraries (Markdown, Mermaid) load with the Results tab.
@@ -101,37 +101,33 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <Card>
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[15px] font-medium text-text">{stageLabel(stage.id)}</p>
-              <span className="font-mono text-[11px] text-text-muted">/{stage.command}</span>
-            </div>
-            <p className="mt-1 text-[13px] text-text-secondary">Select catalog items or whole modules and run understand on them: one pull request per run, only the paths of its own items.</p>
-          </div>
-          <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <p className="text-[13px] font-medium text-text tabular-nums">{catalog.data === undefined || catalog.data === null ? "" : `${counts?.understood ?? 0}/${total} items understood`}</p>
+    <div className="flex flex-col gap-4">
+      <StageHeader
+        title={stageLabel(stage.id)}
+        command={stage.command}
+        application={application}
+        description="Select catalog items or whole modules and run understand on them: one pull request per run, only the paths of its own items."
+        facts={<CompactFacts project={project} application={application} />}
+        actions={
+          <>
+            <span className="text-[13px] font-medium text-text tabular-nums">{catalog.data === undefined || catalog.data === null ? "" : `${counts?.understood ?? 0}/${total} items understood`}</span>
             <Button size="small" variant="ghost" className="shadow-border" disabled={runDisabled !== undefined || rebuilding || rebuilds.some((run) => isActiveStatus(run.status))} onClick={() => void rebuild()}>
               <RefreshCw className="size-3.5" />
               Rebuild generated views
             </Button>
-          </div>
-        </div>
-        <div className="mt-4 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] pt-3">
-          <ApplicationFacts project={project} application={application} />
-        </div>
-      </Card>
+          </>
+        }
+      />
 
       <Tabs<Tab>
+        sticky
         label="understand sections"
         value={tab}
         onChange={(next) => setParam({ tab: next })}
         tabs={[
           { id: "catalog", label: "Catalog", ...(total === 0 ? {} : { count: total }) },
           { id: "runs", label: "Runs", ...(understandRuns === undefined ? {} : { count: understandRuns.length }) },
-          { id: "results", label: "Results" },
+          { id: "results", label: "Overview" },
         ]}
       />
 
