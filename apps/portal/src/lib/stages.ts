@@ -37,9 +37,6 @@ const STAGE_LABELS: Record<string, string> = {
   uplift: "Version Uplift",
   reimagine: "Reimagine & Rebuild",
   verify: "Behavior Verification",
-  modernize: "Guided Start",
-  review: "Rule Review",
-  status: "Progress & Next Step",
 };
 
 /** The name a person reads for a stage (sidebar, overview, stage header); the id stays the stable key. */
@@ -47,9 +44,9 @@ export function stageLabel(id: string): string {
   return STAGE_LABELS[id] ?? id.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-/** The stages shown in the pipeline: every member and portal stage, and only the runtime stages a person runs. */
+/** The stages shown in the pipeline: only the runtime stages a person runs; member and portal stages are not implemented yet. */
 export function pipelineStages(stages: readonly StageView[]): StageView[] {
-  return stages.filter((stage) => stage.audience !== "runtime" || RUNTIME_STAGES.includes(stage.id));
+  return stages.filter((stage) => stage.audience === "runtime" && RUNTIME_STAGES.includes(stage.id));
 }
 
 export function stagesByAudience(stages: readonly StageView[]): Array<{ audience: StageAudience; stages: StageView[] }> {
