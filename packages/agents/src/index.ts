@@ -21,7 +21,7 @@ export {
   type SkillPackage,
 } from "./format.js";
 export { toAgentDefinition, validateAgent, type AgentContext } from "./definition.js";
-export { BUILTIN_DIR, loadBuiltinCatalog, readPackageDir, type BuiltinCatalog } from "./builtin.js";
+export { BUILTIN_DIR, builtinPluginDirs, findBuiltinFile, loadBuiltinCatalog, readPackageDir, type BuiltinCatalog, type BuiltinPluginDir } from "./builtin.js";
 export {
   loadBuiltinPlugins,
   PLUGIN_MANIFEST_FILE,

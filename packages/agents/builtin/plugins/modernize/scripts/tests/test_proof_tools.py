@@ -1,6 +1,6 @@
 """Tests for the trace, baseline-diff and verification evidence scripts.
 
-Run:  python -m pytest packages/agents/builtin/scripts/tests/test_proof_tools.py
+Run:  python -m pytest packages/agents/builtin/plugins/modernize/scripts/tests/test_proof_tools.py
 Every input here stands in for untrusted text from a legacy code base, so the hostile cases matter as much as the good ones.
 """
 import contextlib

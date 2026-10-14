@@ -7,7 +7,8 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BUILTIN_DIR } from "./builtin.js";
+import { existsSync } from "node:fs";
+import { BUILTIN_DIR, builtinPluginDirs } from "./builtin.js";
 import { type FlowNode, parseFlow } from "./flow.js";
 import { splitFrontmatter } from "./format.js";
 
@@ -19,6 +20,8 @@ export interface BuiltinCommand {
   id: string;
   /** The command: its file name without `.md` (`modernize-assess`). */
   command: string;
+  /** The plugin that carries it. */
+  plugin: string;
   description: string;
   audience: CommandAudience;
   /** Agents the stage starts. */
@@ -60,7 +63,7 @@ function commandList(metadata: Record<string, unknown>, field: string, file: str
 }
 
 /** Parses one command file; `command` is its file name without `.md`. */
-function parseCommand(text: string, command: string, problems: string[]): BuiltinCommand | undefined {
+function parseCommand(text: string, command: string, problems: string[]): Omit<BuiltinCommand, "plugin"> | undefined {
   const file = `commands/${command}.md`;
   const document = splitFrontmatter(text, file);
   if (typeof document === "string") {
@@ -101,15 +104,18 @@ const rank = (id: string): number => {
   return index === -1 ? COMMAND_ORDER.length : index;
 };
 
-/** Loads the built-in commands (`<dir>/commands/*.md`) in pipeline order; throws with every problem when one is invalid. */
+/** Loads the built-in commands (`<dir>/plugins/<plugin>/commands/*.md`) in pipeline order; throws with every problem when one is invalid. */
 export async function loadBuiltinCommands(dir: string = BUILTIN_DIR): Promise<BuiltinCommand[]> {
-  const commandsDir = join(dir, "commands");
   const problems: string[] = [];
   const commands: BuiltinCommand[] = [];
-  for (const entry of await readdir(commandsDir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    const parsed = parseCommand(await readFile(join(commandsDir, entry.name), "utf8"), entry.name.slice(0, -".md".length), problems);
-    if (parsed !== undefined) commands.push(parsed);
+  for (const plugin of builtinPluginDirs(dir)) {
+    const commandsDir = join(plugin.dir, "commands");
+    if (!existsSync(commandsDir)) continue;
+    for (const entry of await readdir(commandsDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+      const parsed = parseCommand(await readFile(join(commandsDir, entry.name), "utf8"), entry.name.slice(0, -".md".length), problems);
+      if (parsed !== undefined) commands.push({ ...parsed, plugin: plugin.name });
+    }
   }
   if (problems.length > 0) throw new Error(`Invalid built-in commands:\n- ${problems.join("\n- ")}`);
   return commands.sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id));

@@ -1,5 +1,5 @@
 // Stage catalog adapter: the pipeline stages are the built-in commands shipped with Kintsugi
-// (packages/agents/builtin/commands, ADR-0027). They change only with a release, so they are
+// (packages/agents/builtin/plugins/<plugin>/commands, ADR-0027). They change only with a release, so they are
 // read once and kept in memory. Which of them can run comes from the worker's stage plans.
 
 import { Injectable } from "@nestjs/common";

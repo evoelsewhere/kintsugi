@@ -8,6 +8,7 @@ import { parse as parseYaml } from "yaml";
 import {
   type AgentPackage,
   BUILTIN_DIR,
+  builtinPluginDirs,
   loadBuiltinCatalog,
   loadBuiltinCommands,
   parseAgentFile,
@@ -173,7 +174,7 @@ describe("built-in catalog", () => {
     const analyst = catalog.agents.find((agent) => agent.manifest.name === "legacy-analyst")!;
     expect(toAgentDefinition(analyst, sharedSkills).skills?.map((entry) => entry.name)).toEqual(["mermaid-diagrams"]);
     // The references and the license stay beside SKILL.md on disk.
-    const entries = await readdir(join(BUILTIN_DIR, "skills", "mermaid-diagrams"), { recursive: true });
+    const entries = await readdir(join(BUILTIN_DIR, "plugins", "understand", "skills", "mermaid-diagrams"), { recursive: true });
     expect(entries.map((file) => file.split(sep).join("/"))).toEqual(
       expect.arrayContaining(["LICENSE-softaworks", "SKILL.md", "references/c4.md", "references/er.md", "references/flowchart.md", "references/sequence.md", "references/state.md"]),
     );
@@ -206,11 +207,15 @@ describe("built-in commands", () => {
   it("declare who runs them and name only agents of the catalog", async () => {
     const catalog = await loadBuiltinCatalog();
     const audienceOf = new Map(catalog.agents.map((agent) => [agent.manifest.name, agent.manifest.audience]));
-    const dir = join(BUILTIN_DIR, "commands");
-    const names = (await readdir(dir)).filter((name) => name.endsWith(".md")).sort();
+    const files: Array<{ name: string; path: string }> = [];
+    for (const plugin of builtinPluginDirs()) {
+      const dir = join(plugin.dir, "commands");
+      for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".md")).sort()) files.push({ name, path: join(dir, name) });
+    }
+    const names = files.map((file) => file.name);
     expect(names).toHaveLength(8);
-    for (const name of names) {
-      const text = await readFile(join(dir, name), "utf8");
+    for (const { name, path } of files) {
+      const text = await readFile(path, "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
         arguments: string;
         metadata: { audience: string; upstream?: string; agents: string[]; skills?: string[]; reads: string[]; writes: string[] };

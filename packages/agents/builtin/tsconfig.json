@@ -7,5 +7,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["hooks/reader/**/*.ts", "tests/**/*.test.ts"]
+  "include": ["plugins/understand/hooks/reader/**/*.ts", "plugins/understand/tests/**/*.test.ts"]
 }

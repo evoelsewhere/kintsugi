@@ -1,6 +1,6 @@
 # Built-in modernization content
 
-Kintsugi ships this modernization method as data and scripts in `@kintsugi/agents`; it is not a Claude Code plugin. The content guides a project from read-only understanding, through a human-approved direction, to member-led target work and evidence-based verification. Runtime jobs and member harnesses are deliberately separate: Kintsugi runs the former, supplies context to the latter, and the portal presents evidence and collects decisions.
+Kintsugi ships this modernization method as data and scripts in `@kintsugi/agents`; each plugin follows the Claude Code plugin layout. The content guides a project from read-only understanding, through a human-approved direction, to member-led target work and evidence-based verification. Runtime jobs and member harnesses are deliberately separate: Kintsugi runs the former, supplies context to the latter, and the portal presents evidence and collects decisions.
 
 ## Stages and ownership
 
@@ -37,14 +37,25 @@ For reader functions, `reader/layout.ts` exposes logical namespaces: `assessment
 
 ## Package contents
 
+The content is a set of **plugins** (ADR-0035), one folder each under `plugins/`, in the Claude Code plugin format extended with `workflows/` and `scripts/`. The portal's Administration → Plugins lists them.
+
+| Plugin | Audience | What it carries |
+| --- | --- | --- |
+| `understand` | runtime | Commands `assess` and `understand`; the agents `legacy-analyst`, `business-rules-extractor` and `security-auditor`; the workflows `extract-rules`, `harden-scan` and `portfolio-assess`; the item-catalog, rules, findings and work-item scripts; the JobOutput hook and the artifact readers. |
+| `modernize` | member | Commands `preflight`, `brief`, `transform`, `uplift`, `reimagine` and `verify`; the agents `test-engineer`, `uplift-migrator`, `scaffolder`, `architecture-critic` and `version-delta-analyst`; the uplift and reimagine workflows; the verification scripts. Requires `understand`. |
+
+Inside a plugin folder:
+
+- `.claude-plugin/plugin.json`: name, version, description (the Claude plugin manifest). `kintsugi.json`: title, audience (`runtime` or `member`) and `requires`.
 - `skills/`: shared skills that agents load by name (`skills:` in an agent file). `skills/mermaid-diagrams` says how every Kintsugi diagram is drawn: Mermaid only, the diagram type per artifact, syntax-safety rules and size limits; its `references/` hold condensed syntax per diagram type. A runtime job gets `SKILL.md` in the system prompt and the `references/`, `scripts/` and `assets/` files read-only beside its inputs, listed in the prompt for the agent to read on demand.
 - `agents/`: runtime and member agent definitions. Runtime definitions use kernel tools only; member definitions are context assets and are not converted into runtime jobs.
-- `commands/`: task contracts for assessment, mapping, rules, hardening, the per-unit AS-IS specification (`understand`, Kintsugi's own), review, verification, and the selected modernization route.
+- `commands/`: task contracts, one per stage. A runtime command declares the flow its stage runs in `metadata.flow`; a test in the orchestrator keeps it equal to the stage plan.
 - `workflows/`: runtime job fan-out and member workflow specifications, with the audience distinction kept explicit.
 - `scripts/`: deterministic standard-library helpers used by script steps; they do not replace a human approval gate. `scripts/mermaid_lint.py` checks Mermaid diagrams (`.mmd` files and `mermaid` fences in Markdown) against the `mermaid-diagrams` rules.
-- `hooks/job_output.py`: server-side lifecycle check for credential-shaped values and required artifact shape; see [hooks/JOB-OUTPUT.md](hooks/JOB-OUTPUT.md).
-- `hooks/reader/`: pure TypeScript artifact parsers (exported as `@kintsugi/agents/reader`, used by the API for the portal's stage results) and progress snapshot computation. No plugin registration, host API, pane rendering, telemetry, or writes remain.
-- `tests/`: Vitest tests for the retained readers; `hooks/tests/` contains Python tests for JobOutput. The TypeScript reader tests are included in the `@kintsugi/agents` suite and in `builtin/tsconfig.json`; run `pnpm --filter @kintsugi/agents test` and `pnpm --filter @kintsugi/agents typecheck`. Run the hook and script tests with `python -m pytest -q packages/agents/builtin/hooks/tests packages/agents/builtin/scripts/tests` from the repository root.
+- `hooks/` (in `understand`): `job_output.py` is the server-side lifecycle check for credential-shaped values and required artifact shape (see [hooks/JOB-OUTPUT.md](plugins/understand/hooks/JOB-OUTPUT.md)); `hooks/reader/` holds the pure TypeScript artifact parsers (exported as `@kintsugi/agents/reader`, used by the API for the portal's stage results) and the progress snapshot computation. No plugin registration, host API, pane rendering, telemetry, or writes remain.
+- `tests/` and `*/tests/`: Vitest tests for the retained readers (`plugins/understand/tests/`) and Python tests next to the scripts and the hook. A plugin stands alone, so a skill or script two plugins need (`mermaid-diagrams`, `mermaid_lint.py`) is copied into both and a test keeps the copies identical.
+
+Run the TypeScript tests with `pnpm --filter @kintsugi/agents test` and `pnpm --filter @kintsugi/agents typecheck`; run the Python tests with `python -m pytest -q packages/agents/builtin/plugins` from the repository root.
 
 ## Portal note
 

@@ -19,7 +19,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { BUILTIN_DIR } from "@kintsugi/agents";
+import { findBuiltinFile } from "@kintsugi/agents";
 import { THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
 import type { CheckoutStorage } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
@@ -79,7 +79,7 @@ export interface JobRunnerDeps {
   defaults?: JobDefaults;
   /** Hands a write to the document repo writer (queue `document-write`). */
   requestWrite(documentRepositoryId: string, request: DocumentWriteRequest): Promise<void>;
-  /** Built-in scripts; defaults to packages/agents/builtin/scripts. */
+  /** Built-in scripts; defaults to the scripts/ folder of the built-in plugin that has the script. */
   scriptsDir?: string;
   workflowsDir?: string;
   hookFile?: string;
@@ -393,7 +393,10 @@ export class JobRunner {
       return file;
     }
     if (!BUILTIN_SCRIPT.test(run.name)) throw new JobFailure(`Invalid script name "${run.name}"`);
-    return join(this.#deps.scriptsDir ?? join(BUILTIN_DIR, "scripts"), run.name);
+    if (this.#deps.scriptsDir !== undefined) return join(this.#deps.scriptsDir, run.name);
+    const file = findBuiltinFile("scripts", run.name);
+    if (file === undefined) throw new JobFailure(`No built-in plugin has a script "${run.name}"`);
+    return file;
   }
 
   /** A document-repo path of the step's inputs (expects, resultTo, stdoutTo), filled and checked. */

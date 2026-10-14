@@ -1,14 +1,13 @@
-// The JobOutput hook (packages/agents/builtin/hooks/job_output.py, contract in JOB-OUTPUT.md):
+// The JobOutput hook (packages/agents/builtin/plugins/understand/hooks/job_output.py, contract in JOB-OUTPUT.md):
 // run as a script step over a job's output directory before anything is indexed, stored or
 // committed. Fail-closed: anything but exit 0 blocks the output. The reason recorded is built
 // from the report's redacted fields only (rule, path, line), never from file content. Diagram
 // lint warnings (Mermaid) never block; they are kept on the step's summary for reviewers.
 
-import { join } from "node:path";
-import { BUILTIN_DIR } from "@kintsugi/agents";
+import { findBuiltinFile } from "@kintsugi/agents";
 import { type Interpreters, runScript } from "@kintsugi/runtime/launcher";
 
-export const JOB_OUTPUT_HOOK = join(BUILTIN_DIR, "hooks", "job_output.py");
+export const JOB_OUTPUT_HOOK = findBuiltinFile("hooks", "job_output.py") ?? "job_output.py";
 
 interface HookReport {
   exit_code?: number;
