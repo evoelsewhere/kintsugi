@@ -41,7 +41,7 @@ describe("validateJobSpec", () => {
   });
 
   it("rejects empty instructions or task and invalid limits", () => {
-    const spec = jobSpec(workspace, agent([], { instructions: " " }), { timeoutSec: 0, maxTurns: 0, maxCostUsd: -1 });
+    const spec = jobSpec(workspace, agent([], { instructions: " " }), { timeoutSec: -1, maxTurns: 0, maxCostUsd: -1 });
     spec.task = "";
     expect(() => validateJobSpec(spec)).toThrow(/instructions is empty.*task is empty.*timeoutSec.*maxTurns.*maxCostUsd/);
   });
