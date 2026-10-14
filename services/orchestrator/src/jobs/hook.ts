@@ -23,11 +23,15 @@ export interface HookOutcome {
   reason?: string;
   checked: { files: number; bytes: number };
   findings: number;
+  /** The redacted findings and errors behind a block: `rule at path:line` (and the path alone), for feeding back to an agent. */
+  items: Array<{ path: string; text: string }>;
   /** Non-blocking diagram lint warnings: their number and the first few as `rule at path:line`. */
   warnings: { count: number; first: string[] };
 }
 
 const MAX_LISTED_WARNINGS = 20;
+const MAX_LISTED_FINDINGS = 5;
+const MAX_ITEMS = 20;
 
 const EXIT_MEANING: Record<number, string> = {
   2: "credential-shaped values found",
@@ -76,16 +80,16 @@ export async function runJobOutputHook(options: {
     count: reported.length,
     first: reported.slice(0, MAX_LISTED_WARNINGS).map((warning) => `${safe(warning.rule)} at ${safe(warning.path)}:${typeof warning.line === "number" ? warning.line : "?"}`),
   };
-  if (result.exitCode === 0 && result.stopped === undefined && report !== undefined) return { ok: true, checked, findings: 0, warnings };
+  if (result.exitCode === 0 && result.stopped === undefined && report !== undefined) return { ok: true, checked, findings: 0, items: [], warnings };
 
   if (result.stopped !== undefined || report === undefined) {
-    return { ok: false, reason: `JobOutput hook did not complete (${result.failure ?? "no report"})`, checked, findings: findings.length, warnings };
+    return { ok: false, reason: `JobOutput hook did not complete (${result.failure ?? "no report"})`, checked, findings: findings.length, items: [], warnings };
   }
-  const listed = [
-    ...findings.slice(0, 5).map((finding) => `${safe(finding.rule)} at ${safe(finding.path)}:${finding.line ?? "?"}`),
-    ...(report.errors ?? []).slice(0, 3).map((error) => `${safe(error.code)} at ${safe(error.path)}`),
-  ];
-  const more = findings.length > 5 ? ` (+${findings.length - 5} more)` : "";
+  const found = findings.map((finding) => ({ path: safe(finding.path), text: `${safe(finding.rule)} at ${safe(finding.path)}:${finding.line ?? "?"}` }));
+  const failed = (report.errors ?? []).map((error) => ({ path: safe(error.path), text: `${safe(error.code)} at ${safe(error.path)}` }));
+  const items = [...found.slice(0, MAX_ITEMS), ...failed.slice(0, 3)];
+  const listed = [...found.slice(0, MAX_LISTED_FINDINGS), ...failed.slice(0, 3)].map((item) => item.text);
+  const more = findings.length > MAX_LISTED_FINDINGS ? ` (+${findings.length - MAX_LISTED_FINDINGS} more)` : "";
   const meaning = EXIT_MEANING[result.exitCode ?? -1] ?? `exit code ${result.exitCode}`;
-  return { ok: false, reason: `JobOutput hook blocked the output: ${meaning}${listed.length === 0 ? "" : ` — ${listed.join("; ")}${more}`}`, checked, findings: findings.length, warnings };
+  return { ok: false, reason: `JobOutput hook blocked the output: ${meaning}${listed.length === 0 ? "" : ` — ${listed.join("; ")}${more}`}`, checked, findings: findings.length, items, warnings };
 }
