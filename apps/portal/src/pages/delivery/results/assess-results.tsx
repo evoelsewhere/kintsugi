@@ -1,5 +1,5 @@
 // Results of assess, in six views over one header of KPIs:
-//   Overview    — code composition, signals, the summary and recommendation, risk and run health
+//   Summary     — code composition, signals, the summary and recommendation, risk and run health
 //   Code        — complexity hotspots, directories, size and complexity distributions, languages
 //   Risk & debt — security highlights and technical debt with their distributions, gaps
 //   Inventory   — every measured file, filterable by language
@@ -47,7 +47,7 @@ export function AssessResultsView({ results, compare, projectId, runs }: { resul
         value={tab}
         onChange={setTab}
         tabs={[
-          { id: "overview", label: "Overview" },
+          { id: "overview", label: "Summary" },
           { id: "code", label: "Code analysis", hidden: inventory === null },
           { id: "risk", label: "Risk & debt", count: highlights.security.length + (highlights.debt?.rows.length ?? 0) },
           { id: "inventory", label: "Inventory", count: inventory?.files.length },

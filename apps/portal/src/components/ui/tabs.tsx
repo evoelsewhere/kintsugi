@@ -10,9 +10,9 @@ export interface TabItem<T extends string> {
   count?: number | undefined;
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: TabItem<T>[]; value: T; onChange: (id: T) => void; label: string }): React.JSX.Element {
+export function Tabs<T extends string>({ tabs, value, onChange, label, sticky = false }: { tabs: TabItem<T>[]; value: T; onChange: (id: T) => void; label: string; /** Stays at the top of the page while its content scrolls. */ sticky?: boolean }): React.JSX.Element {
   return (
-    <div role="tablist" aria-label={label} className="flex flex-wrap gap-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)]">
+    <div role="tablist" aria-label={label} className={cn("flex flex-wrap gap-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)]", sticky && "sticky top-0 z-10 bg-background")}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
