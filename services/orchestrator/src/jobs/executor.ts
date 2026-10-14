@@ -58,7 +58,8 @@ export interface ExecutorDeps {
   dirs: { root: string; in: string; work: string; out: string };
   limits: { maxAgents: number; concurrency: number };
   gates: GateDecider;
-  runLeaf(spec: LeafRun, placement: LeafPlacement): Promise<LeafResult>;
+  /** `abort`: stops this leaf when a sibling of its group failed (the stage's own `signal` still applies). */
+  runLeaf(spec: LeafRun, placement: LeafPlacement, abort?: AbortSignal): Promise<LeafResult>;
   log(message: string, data?: Record<string, unknown>): Promise<void>;
   signal?: AbortSignal;
   /** The selection of a scoped run (ADR-0033). */
@@ -276,22 +277,26 @@ export class StagePlanExecutor {
   }
 
   /** Runs one leaf (with its repair loop for scripts); records it; never throws for a failed step. */
-  async #leaf(step: LeafStep, placement: LeafPlacement, extra: Placeholders = {}): Promise<LeafResult> {
-    let first = await this.#start(step, placement, extra);
+  #stageAborted(): boolean {
+    return this.#deps.signal?.aborted === true;
+  }
+
+  async #leaf(step: LeafStep, placement: LeafPlacement, extra: Placeholders = {}, abort?: AbortSignal): Promise<LeafResult> {
+    let first = await this.#start(step, placement, extra, abort);
     if (!first.ok && step.kind === "agent" && TRANSIENT_PROVIDER_FAILURE.test(first.reason) && this.#deps.signal?.aborted !== true) {
       // A provider hiccup (content filter, overload, dropped connection) is not the step's fault: one more try.
       await this.#deps.log(`step ${step.id}: the provider failed (${first.reason}); trying once more`, { step: step.id, retry: true });
-      first = await this.#start(step, placement, extra);
+      first = await this.#start(step, placement, extra, abort);
     }
     if (first.ok || step.kind !== "script" || step.repair === undefined || this.#deps.signal?.aborted === true) return first;
     await this.#deps.log(`step ${step.id} failed; ${step.repair.agent} gets the error once to fix it`, { step: step.id, repair: step.repair.id });
     const error = first.detail ?? first.reason;
-    const repaired = await this.#start(step.repair, this.#placement(step.repair, { ...extra, error }, { out: placement.out, work: placement.work }), { ...extra, error });
+    const repaired = await this.#start(step.repair, this.#placement(step.repair, { ...extra, error }, { out: placement.out, work: placement.work }), { ...extra, error }, abort);
     if (!repaired.ok) return repaired;
-    return this.#start(step, placement, extra);
+    return this.#start(step, placement, extra, abort);
   }
 
-  async #start(step: LeafStep, placement: LeafPlacement, extra: Placeholders): Promise<LeafResult> {
+  async #start(step: LeafStep, placement: LeafPlacement, extra: Placeholders, abort?: AbortSignal): Promise<LeafResult> {
     const values = this.#values(extra);
     const key = stepKey({ id: step.id, ...(extra.key === undefined ? {} : { key: extra.key }), round: this.#round });
     if (step.kind !== "script" && this.#deps.completed?.has(key) === true) {
@@ -304,7 +309,7 @@ export class StagePlanExecutor {
       throw new JobFailure(`Stage agent cap reached (${this.#deps.limits.maxAgents} agent jobs, KINTSUGI_STAGE_MAX_AGENTS) before step ${step.id}`);
     }
     if (spec.kind === "agent") this.#agents += 1;
-    const result = await this.#deps.runLeaf(spec, placement);
+    const result = await this.#deps.runLeaf(spec, placement, abort);
     if (result.ok) {
       if (spec.kind === "workflow") this.#agents += result.agents;
       if (result.stdout !== undefined) this.#stdout.set(step.id, result.stdout.slice(-MAX_STDOUT));
@@ -380,23 +385,35 @@ export class StagePlanExecutor {
       const slots = new Semaphore(Math.max(1, concurrency));
       const enabled: Array<{ step: LeafStep; extra: Placeholders }> = [];
       for (const member of members) if (await this.#enabled(member.step)) enabled.push(member);
-      // Every member settles before the group ends (no step keeps running behind a failure).
+      // Every member settles before the group ends (no step keeps running behind a failure). When one
+      // fails and the group does not tolerate it, the others are stopped at once: their work is lost anyway.
+      const stop = new AbortController();
+      let firstFailure: { step: string; reason: string } | undefined;
       const results = await Promise.all(
         enabled.map((member) =>
           slots.run(async (): Promise<LeafResult> => {
             if (this.#deps.signal?.aborted === true) return { id: "", ok: false, reason: "aborted" };
+            if (stop.signal.aborted) return { id: "", ok: false, reason: "not started: another step of the group failed" };
+            let result: LeafResult;
             try {
-              return await this.#leaf(member.step, this.#placement(member.step, member.extra, dirs), member.extra);
+              result = await this.#leaf(member.step, this.#placement(member.step, member.extra, dirs), member.extra, stop.signal);
             } catch (error) {
-              return { id: "", ok: false, reason: error instanceof Error ? error.message : String(error) };
+              result = { id: "", ok: false, reason: error instanceof Error ? error.message : String(error) };
             }
+            if (!result.ok && !tolerateFailures && !stop.signal.aborted && !this.#stageAborted()) {
+              firstFailure = { step: member.step.id, reason: result.reason };
+              stop.abort(new Error("another step of the group failed"));
+              await this.#deps.log(`step ${id}: ${member.step.id} failed; stopping the rest of the group`, { step: id, failed: member.step.id });
+            }
+            return result;
           }),
         ),
       );
       this.#checkAborted();
       const failed = results.flatMap((result, index) => (result.ok ? [] : [{ step: enabled[index]!.step.id, reason: result.reason }]));
       if (failed.length > 0 && !tolerateFailures) {
-        throw new JobFailure(`Step ${id} failed: ${failed[0]!.step}: ${failed[0]!.reason}${failed.length > 1 ? ` (and ${failed.length - 1} more)` : ""}`);
+        const first = firstFailure ?? failed[0]!;
+        throw new JobFailure(`Step ${id} failed: ${first.step}: ${first.reason}${failed.length > 1 ? ` (and ${failed.length - 1} more)` : ""}`);
       }
       if (failed.length > 0) await this.#deps.log(`step ${id}: ${failed.length} of ${results.length} failed and are left out`, { step: id, failed: failed.length });
       await copyTree(dirs.out, this.#deps.dirs.out);

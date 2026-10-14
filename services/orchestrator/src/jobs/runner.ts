@@ -636,8 +636,9 @@ export class JobRunner {
     const scope = scopeOf(run.inputs);
     const provenance = new Map<string, Provenance>();
     let agent: string | undefined;
-    const runLeaf = async (spec: LeafRun, placement: LeafPlacement): Promise<LeafResult> => {
-      const child = await this.#child(run, ws, spec, signal, placement);
+    const runLeaf = async (spec: LeafRun, placement: LeafPlacement, groupAbort?: AbortSignal): Promise<LeafResult> => {
+      const effective = groupAbort === undefined ? signal : signal === undefined ? groupAbort : AbortSignal.any([signal, groupAbort]);
+      const child = await this.#child(run, ws, spec, effective, placement);
       if (!child.ok) return child.detail === undefined ? { id: child.id, ok: false, reason: child.reason } : { id: child.id, ok: false, reason: child.reason, detail: child.detail };
       for (const [path, value] of child.outcome.provenance) provenance.set(path, value);
       agent = child.outcome.agent ?? agent;
