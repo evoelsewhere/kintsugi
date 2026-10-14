@@ -198,6 +198,35 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(store.children(id).map((child) => child.status)).toEqual([...Array<string>(10).fill("succeeded"), "failed"]);
   });
 
+  it("gives an agent the redacted findings and one retry when the hook flags its files", async () => {
+    const { store, runner, writes, agents } = setup({
+      "legacy-analyst": (spec): Record<string, string> => {
+        if (!synthesis(spec)) return {};
+        const fixing = spec.task.includes("The output checks rejected the files you wrote");
+        return { "assessment/demo/ASSESSMENT.md": fixing ? "# Assessment\npassword in config.properties:3 (pa****)\n" : "Config: password = hunter2hunter2\n" };
+      },
+    });
+    const id = await assess(store);
+    const run = await runner.run(id);
+    expect(run?.status).toBe("succeeded");
+    expect(writes).toHaveLength(1);
+    const attempts = agents.specs.filter(synthesis);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]?.task).toMatch(/- credential_assignment at assessment\/demo\/ASSESSMENT\.md:1\n/);
+    expect(attempts[1]?.task).not.toContain("hunter2");
+  });
+
+  it("fails after the one retry when the agent keeps the credential in its files", async () => {
+    const { store, runner, writes, agents } = setup({
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
+    });
+    const id = await assess(store);
+    const run = await runner.run(id);
+    expect(run?.status).toBe("failed");
+    expect(agents.specs.filter(synthesis)).toHaveLength(2);
+    expect(writes).toHaveLength(0);
+  });
+
   it("resumes a failed stage: keeps work/, skips the agent jobs that succeeded, reruns the scripts and the failed step", async () => {
     let fail = true;
     const { store, runner, writes } = setup({

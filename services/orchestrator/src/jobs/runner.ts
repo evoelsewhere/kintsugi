@@ -167,6 +167,13 @@ const MAX_RESTRICTED_FILES = 100;
 const MAX_RESTRICTED_BYTES = 1024 * 1024;
 const RESULT_FILE = "result.json";
 
+/** Appended to an agent's task when the output checks flagged its files: what to fix, never the offending content. */
+const outputFixNote = (findings: readonly string[]): string =>
+  `\n\nThe output checks rejected the files you wrote (rule at path:line, paths relative to the output directory):\n${findings.map((finding) => `- ${finding}`).join("\n")}\n` +
+  "Open each of those files with edit and fix the cited lines. A credential-shaped value (password, key, token, connection string, even in a quoted excerpt) must not appear in any output: " +
+  "name the credential and cite its file:line, with at most a 2-4 character preview followed by ****, and no full value. " +
+  "Change only what was flagged, check every other line of those files for the same problem, then stop.";
+
 const sha256 = (content: Buffer): string => createHash("sha256").update(content).digest("hex");
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -491,8 +498,8 @@ export class JobRunner {
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0 };
     const stepId = run.id === ws.rootId ? undefined : run.id;
     const roots = { src: ws.src, in: ws.in, out: ws.out };
-    const attempt = async (): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
-      const handle = await this.#deps.agents.startJob(spec);
+    const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
+      const handle = await this.#deps.agents.startJob({ ...spec, task });
       const onAbort = (): void => void handle.abort(isCancelled(signal) ? "cancelled" : "the worker is stopping");
       if (signal?.aborted === true) onAbort();
       else signal?.addEventListener("abort", onAbort, { once: true });
@@ -525,7 +532,8 @@ export class JobRunner {
       done = await attempt();
     }
     if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
-    if (this.#deps.mockOutputs ?? mock) {
+    const writeMock = async (): Promise<void> => {
+      if (!(this.#deps.mockOutputs ?? mock)) return;
       await writeMockOutputs({
         out: ws.out,
         ...(ws.src === undefined ? {} : { src: ws.src }),
@@ -535,6 +543,18 @@ export class JobRunner {
         ...(run.inputs["resultFile"] === true && typeof schema === "object" && schema !== null ? { schema: schema as Record<string, unknown> } : {}),
         resultFile: RESULT_FILE,
       });
+    };
+    await writeMock();
+
+    // The output checks (#finish) are fail-closed. An agent that slipped a credential or a malformed
+    // artifact into its files gets the redacted findings (rule, path, line: never content) and one
+    // chance to fix just those lines, in the out/ it already wrote.
+    const flagged = await this.#flaggedOutput(ws);
+    if (flagged !== undefined && signal?.aborted !== true) {
+      await this.#event(ws, stepId, "log", `output checks flagged ${flagged.length} finding${flagged.length === 1 ? "" : "s"} in the files of ${run.name}: ${flagged.join("; ")}; asking it to fix them once`);
+      done = await attempt(`${spec.task}${outputFixNote(flagged)}`);
+      if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
+      await writeMock();
     }
 
     let result: unknown;
@@ -759,16 +779,31 @@ export class JobRunner {
   // After a step
   // -------------------------------------------------------------------------
 
-  /** restricted/ → encrypted records; the JobOutput hook over out/; the artifact index. */
-  async #finish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<Record<string, unknown>> {
-    const restricted = await this.#storeRestricted(run, ws);
-    const hook = await runJobOutputHook({
+  #hook(ws: StepWorkspace): ReturnType<typeof runJobOutputHook> {
+    return runJobOutputHook({
       outDir: ws.out,
       cwd: ws.root,
       tmp: ws.tmp,
       interpreters: this.#deps.interpreters,
       ...(this.#deps.hookFile === undefined ? {} : { hookFile: this.#deps.hookFile }),
     });
+  }
+
+  /**
+   * The JobOutput hook's redacted findings (`rule at path:line`) over an agent's out/ so far, or
+   * undefined when it is clean or the hook could not report. restricted/ is left to #finish, which
+   * stores it before the check.
+   */
+  async #flaggedOutput(ws: StepWorkspace): Promise<string[] | undefined> {
+    const hook = await this.#hook(ws);
+    const items = hook.ok ? [] : hook.items.filter((item) => !item.path.startsWith("restricted/"));
+    return items.length === 0 ? undefined : items.map((item) => item.text);
+  }
+
+  /** restricted/ → encrypted records; the JobOutput hook over out/; the artifact index. */
+  async #finish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<Record<string, unknown>> {
+    const restricted = await this.#storeRestricted(run, ws);
+    const hook = await this.#hook(ws);
     if (!hook.ok) throw new JobFailure(hook.reason ?? "JobOutput hook blocked the output");
     const files = await listFiles(ws.out);
     const entries: ArtifactEntry[] = [];
