@@ -1,28 +1,30 @@
-// Delivery → Overview: every application of the selected project with a compact pipeline
-// strip — each stage's latest status and age plus one or two headline numbers of its results
-// ("52 SLOC · 6 files"), linked to its stage page — and the project's document writes. Active
-// runs refresh on their own.
+// Delivery → Overview: the project's headline figures (stages completed, active runs, success
+// rate, what needs attention), a card per application with its pipeline — each stage's latest
+// status, run time, a bar per recent run and the headline numbers of its results ("52 SLOC · 6
+// files"), linked to its stage page — then the run activity of the last two weeks, the recent
+// runs and the project's document writes. Active runs refresh on their own.
 // URL: /delivery?project=<id>&section=writes. An old deep link with &run=<id> forwards to the
 // run's stage page.
 
-import { ChevronRight } from "lucide-react";
 import { useEffect } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
+import { RunStatusBadge, StatusBadge } from "@/components/status-badges";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import { catalogApi } from "@/lib/api/catalog";
 import { documentsApi, type StageHeadline } from "@/lib/api/documents";
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
-import { formatDateTime, formatRelative } from "@/lib/format";
+import { formatDateTime, formatDuration, formatRelative } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
-import { isActiveStatus, RUN_STATUS, styleOf } from "@/lib/status";
-import { AUDIENCE_SHORT, latestRun, pipelineStages, runBlocker, stageLabel, stagesByAudience } from "@/lib/stages";
+import { isActiveStatus } from "@/lib/status";
+import { latestRun, pipelineStages, runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { DeliveryShell, NoApplications, WithProject } from "./delivery-shell";
 import { DocumentWritesCard } from "./document-writes-card";
+import { ActivityChart, MiniRunBars, NeedsAttention, PipelineProgress, ProjectKpis, RecentRuns } from "./overview-parts";
+import { pipelineHealth } from "./pipeline-health";
 
 export function DeliveryOverviewPage(): React.JSX.Element {
   const [params] = useSearchParams();
@@ -79,13 +81,30 @@ function ProjectOverview({ projectId }: { projectId: string }): React.JSX.Elemen
             <NoApplications project={project} />
           ) : (
             <Loaded loader={stages} rows={3}>
-              {(list) => (
-                <div className="flex flex-col gap-3">
-                  {project.applications.map((application) => (
-                    <ApplicationStrip key={application.id} project={project} application={application} stages={list} runs={runs.data?.filter((run) => run.applicationId === application.id)} />
-                  ))}
-                </div>
-              )}
+              {(list) => {
+                const pipeline = pipelineStages(list);
+                const all = runs.data ?? [];
+                const health = pipelineHealth(project.applications, pipeline, all);
+                return (
+                  <div className="flex flex-col gap-5">
+                    <ProjectKpis applications={project.applications} stages={pipeline} runs={all} />
+                    <div className="flex flex-col gap-3">
+                      {project.applications.map((application) => (
+                        <ApplicationStrip key={application.id} project={project} application={application} stages={list} runs={runs.data?.filter((run) => run.applicationId === application.id)} />
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+                      <div className="xl:col-span-3">
+                        <ActivityChart runs={all} />
+                      </div>
+                      <div className="xl:col-span-2">
+                        <NeedsAttention projectId={project.id} health={health} hasRuns={all.length > 0} />
+                      </div>
+                    </div>
+                    <RecentRuns projectId={project.id} applications={project.applications} runs={all} />
+                  </div>
+                );
+              }}
             </Loaded>
           )}
           <DocumentWritesCard loader={writes} documentRepository={project.documentRepository?.repositoryId} />
@@ -120,6 +139,36 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
       ? undefined
       : [`${catalog.data.counts.understood ?? 0}/${catalog.data.items.filter((item) => item.status !== "retired").length} items understood`];
   const headlineOf = (stage: string): string[] | undefined => (stage === "understand" ? understood : headlines.data?.find((entry) => entry.stage === stage)?.headline);
+
+  const pipeline = pipelineStages(stages);
+  const statusOf = (stage: StageView): string | undefined => (stage.audience === "runtime" && runs !== undefined ? latestRun(runs, stage.id)?.status : undefined);
+  const states = pipeline.map((stage) => ({ label: stageLabel(stage.id), status: statusOf(stage) }));
+  const done = states.filter((state) => state.status === "succeeded").length;
+  const next = runs === undefined ? undefined : pipeline.find((stage) => stage.audience === "runtime" && statusOf(stage) !== "succeeded");
+  const nextRun = next === undefined || runs === undefined ? undefined : latestRun(runs, next.id);
+  const nextLink = next === undefined ? "" : deliveryLink({ projectId: project.id, applicationId: application.id, stage: next.id });
+
+  let guidance: React.ReactNode = null;
+  if (blocked !== undefined) guidance = blocked;
+  else if (runs !== undefined && next === undefined) guidance = "Every stage of the pipeline has succeeded.";
+  else if (next !== undefined && nextRun !== undefined && isActiveStatus(nextRun.status)) {
+    guidance = (
+      <>
+        <span className="font-medium text-text">{stageLabel(next.id)}</span> is {nextRun.status === "queued" ? "queued" : "running"}.
+      </>
+    );
+  } else if (next !== undefined) {
+    guidance = (
+      <>
+        Next step:{" "}
+        <Link to={nextLink} className="font-medium text-accent hover:underline">
+          {nextRun === undefined ? `run ${stageLabel(next.id)}` : `${stageLabel(next.id)} again`}
+        </Link>
+        {nextRun?.status === "failed" ? " — its latest run failed." : nextRun?.status === "cancelled" ? " — its latest run was cancelled." : "."}
+      </>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -132,64 +181,85 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
           <CardDescription>
             {application.id} · {application.disposition}
             {application.pipeline === undefined ? "" : ` · pipeline ${application.pipeline}`}
-            {active === 0 ? "" : ` · ${active} active run${active === 1 ? "" : "s"}`}
-            {blocked === undefined ? "" : ` · ${blocked}`}
           </CardDescription>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {active === 0 ? null : <StatusBadge tone="blue" label={`${active} active run${active === 1 ? "" : "s"}`} />}
+          <span className="text-[12px] text-text-secondary tabular-nums">
+            <span className="font-medium text-text">{done}</span>/{pipeline.length} stages done
+          </span>
+        </div>
       </CardHeader>
-      <div className="mt-3 flex flex-col gap-2">
-        {stagesByAudience(pipelineStages(stages)).map((group) => (
-          <div key={group.audience} className="flex flex-col gap-1 sm:flex-row sm:items-stretch sm:gap-3">
-            <p className="w-20 shrink-0 pt-2 text-[11px] font-medium tracking-wide text-text-muted uppercase">{AUDIENCE_SHORT[group.audience]}</p>
-            <ol className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-              {group.stages.map((stage, index) => (
-                <li key={stage.id} className="flex items-center gap-1">
-                  {index === 0 ? null : <ChevronRight className="size-3 shrink-0 text-text-muted" strokeWidth={1.75} />}
-                  <StageChip
-                    stage={stage}
-                    last={runs === undefined ? undefined : latestRun(runs, stage.id)}
-                    loading={runs === undefined}
-                    headline={headlineOf(stage.id)}
-                    to={deliveryLink({ projectId: project.id, applicationId: application.id, stage: stage.id })}
-                  />
-                </li>
-              ))}
-            </ol>
-          </div>
-        ))}
+      <div className="mt-3 flex flex-col gap-3">
+        <PipelineProgress states={states} />
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-2">
+          {pipeline.map((stage, index) => (
+            <StageTile
+              key={stage.id}
+              index={index + 1}
+              stage={stage}
+              runs={runs === undefined ? undefined : runsOfStage(runs, stage.id)}
+              headline={headlineOf(stage.id)}
+              to={deliveryLink({ projectId: project.id, applicationId: application.id, stage: stage.id })}
+            />
+          ))}
+        </div>
+        {guidance === null ? null : <p className="text-[12px] text-text-secondary">{guidance}</p>}
       </div>
     </Card>
   );
 }
 
-/** One stage in a strip: a status dot, its id, the latest run's status and age, and its headline numbers. */
-function StageChip({ stage, last, loading, headline, to }: { stage: StageView; last: JobRunView | undefined; loading: boolean; headline: string[] | undefined; to: string }): React.JSX.Element {
-  let tone: StatusTone = "muted";
-  let status: string;
-  if (stage.audience === "member") status = "In members' harnesses";
-  else if (stage.audience === "portal") status = "Planned";
-  else if (loading) status = "…";
-  else if (last !== undefined) {
-    const style = styleOf(RUN_STATUS, last.status);
-    tone = style.tone;
-    status = `${style.label} · ${formatRelative(last.createdAt)}`;
-  } else status = stage.runnable ? "Not run yet" : "Not wired yet";
+interface TileProps {
+  index: number;
+  stage: StageView;
+  /** The stage's runs for the application, newest first; undefined while loading. */
+  runs: JobRunView[] | undefined;
+  headline: string[] | undefined;
+  to: string;
+}
 
+/** One stage of an application's pipeline: its latest run, the bars of its recent runs and the headline numbers of its results. */
+function StageTile({ index, stage, runs, headline, to }: TileProps): React.JSX.Element {
+  const last = runs?.[0];
+  const finished = runs?.filter((run) => run.status === "succeeded" || run.status === "failed") ?? [];
+  const rate = finished.length === 0 ? undefined : Math.round((finished.filter((run) => run.status === "succeeded").length / finished.length) * 100);
+  let badge: React.ReactNode = null;
+  if (stage.audience === "member") badge = <StatusBadge tone="muted" label="In members' harnesses" />;
+  else if (stage.audience === "portal") badge = <StatusBadge tone="muted" label="Planned" />;
+  else if (last !== undefined) badge = <RunStatusBadge status={last.status} />;
+  else if (runs !== undefined) badge = <StatusBadge tone="muted" label={stage.runnable ? "Not run yet" : "Not wired yet"} />;
   return (
     <Link
       to={to}
       title={last === undefined ? stage.description : `${stage.description}\nLatest run: ${formatDateTime(last.createdAt)}`}
       className={cn(
-        "flex min-w-[8.5rem] flex-col gap-0.5 rounded-[10px] px-2.5 py-1.5 shadow-border hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
+        "flex min-w-0 flex-col gap-2 rounded-[10px] px-3 py-2.5 shadow-border hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
         stage.audience !== "runtime" && "bg-recessed/50",
       )}
     >
-      <span className="flex items-center gap-1.5 text-[13px] font-medium text-text">
-        <StatusDot tone={tone} className={cn("size-2", last !== undefined && isActiveStatus(last.status) && "animate-pulse")} />
-        {stageLabel(stage.id)}
+      <span className="flex items-center gap-2">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-hover text-[11px] font-medium text-text-secondary">{index}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text">{stageLabel(stage.id)}</span>
+        {badge}
       </span>
-      <span className="truncate text-[11px] text-text-muted">{status}</span>
-      {headline === undefined || headline.length === 0 ? null : <span className="truncate text-[11px] font-medium text-text-secondary tabular-nums">{headline.join(" · ")}</span>}
+      <span className="line-clamp-2 text-[12px] text-text-secondary">{stage.description}</span>
+      {headline === undefined || headline.length === 0 ? null : <span className="truncate text-[13px] font-medium text-text tabular-nums">{headline.join(" · ")}</span>}
+      {runs === undefined || last === undefined ? null : (
+        <span className="flex items-end justify-between gap-3">
+          <MiniRunBars runs={runs} />
+          <span className="min-w-0 text-right text-[11px] leading-4 text-text-muted">
+            <span className="block truncate" title={formatDateTime(last.createdAt)}>
+              {formatRelative(last.createdAt)}
+              {last.startedAt === undefined ? "" : ` · ${isActiveStatus(last.status) ? "running for " : "took "}${formatDuration(last.startedAt, last.finishedAt)}`}
+            </span>
+            <span className="block truncate">
+              {runs.length} run{runs.length === 1 ? "" : "s"}
+              {rate === undefined ? "" : ` · ${rate}% succeeded`}
+            </span>
+          </span>
+        </span>
+      )}
     </Link>
   );
 }
