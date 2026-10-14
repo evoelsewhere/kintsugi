@@ -23,7 +23,7 @@ export function PluginPage(): React.JSX.Element {
   const plugin = useLoader(`plugin:${name}`, () => pluginsApi.get(name));
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Plugins", name]} />
+      <Breadcrumbs items={["Administration", { label: "Plugins", to: "/plugins" }, plugin.data?.title ?? name]} />
       <Loaded loader={plugin}>{(data) => <PluginView key={data.name} plugin={data} />}</Loaded>
     </div>
   );

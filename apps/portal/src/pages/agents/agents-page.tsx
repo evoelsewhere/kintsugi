@@ -93,7 +93,7 @@ export function AgentsPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Plugins", "Agent Builder"]} />
+      <Breadcrumbs items={["Administration", { label: "Plugins", to: "/plugins" }, "Agent Builder"]} />
       <PageHeading
         title="Agents"
         description="Runtime agents run Kintsugi's understanding jobs; member agents are handed to members' harnesses. Built-in agents are read-only: copy one to change it."
