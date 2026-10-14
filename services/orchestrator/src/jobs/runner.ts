@@ -63,7 +63,7 @@ export interface JobDefaults {
 
 export const DEFAULT_JOB_LIMITS: JobDefaults = {
   script: { timeoutSec: 600, maxOutputBytes: 50 * 1024 * 1024 },
-  agent: { timeoutSec: 1800, maxOutputBytes: 50 * 1024 * 1024, maxTurns: 80 },
+  agent: { timeoutSec: 0, maxOutputBytes: 50 * 1024 * 1024 },
   workflow: { maxAgents: 50, concurrency: 4, maxTokens: 0 },
   stage: { maxAgents: 200, concurrency: 4 },
 };
