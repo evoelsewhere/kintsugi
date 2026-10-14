@@ -31,9 +31,40 @@ export interface PluginFile {
   size: number;
 }
 
+/** One thing a command runs, in the order its text names it. */
+export interface PluginFlowStep {
+  kind: "script" | "workflow" | "agent";
+  name: string;
+  path: string;
+  /** Workflow: the agents it starts and the scripts it names. */
+  agents?: string[];
+  scripts?: string[];
+}
+
+/** How one command works: what it reads, what it runs, what it writes and where a person decides. */
+export interface PluginFlow {
+  command: string;
+  path: string;
+  description: string;
+  audience: string;
+  reads: string[];
+  steps: PluginFlowStep[];
+  writes: string[];
+  gates: string[];
+}
+
+/** A command whose output another command reads. */
+export interface PluginLink {
+  from: string;
+  to: string;
+  via: string[];
+}
+
 export interface PluginDetail extends PluginSummary {
   components: PluginComponent[];
   files: PluginFile[];
+  flows: PluginFlow[];
+  pipeline: PluginLink[];
 }
 
 const PLUGINS = "/api/admin/plugins";

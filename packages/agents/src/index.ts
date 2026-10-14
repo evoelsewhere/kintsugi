@@ -31,6 +31,9 @@ export {
   type PluginComponent,
   type PluginComponentKind,
   type PluginFile,
+  type PluginFlow,
+  type PluginFlowStep,
+  type PluginLink,
 } from "./plugins.js";
 export { COMMAND_AUDIENCES, COMMAND_ORDER, loadBuiltinCommands, type BuiltinCommand, type CommandAudience } from "./commands.js";
 export {

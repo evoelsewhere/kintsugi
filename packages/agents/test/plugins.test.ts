@@ -47,3 +47,25 @@ describe("built-in plugins", () => {
     expect(await readBuiltinPluginFile(plugins, "modernize", "commands/modernize-verify.md")).toContain("verify");
   });
 });
+
+describe("plugin flows", () => {
+  it("orders what a command runs by where its text names it and links commands through their artifacts", async () => {
+    const [understand, modernize] = await loadBuiltinPlugins();
+    const flow = (plugin: typeof understand, id: string) => plugin!.flows.find((entry) => entry.command === id)!;
+
+    const assess = flow(understand, "assess");
+    expect(assess.steps.map((step) => step.name)).toEqual(expect.arrayContaining(["inventory", "legacy-analyst", "catalog_from_topology"]));
+    expect(assess.steps.find((step) => step.name === "inventory")).toMatchObject({ kind: "script" });
+    expect(assess.writes).toEqual(expect.arrayContaining(["assessment/<app>/catalog.json"]));
+
+    const understandFlow = flow(understand, "understand");
+    const rules = understandFlow.steps.find((step) => step.name === "extract-rules");
+    expect(rules).toMatchObject({ kind: "workflow", agents: expect.arrayContaining(["business-rules-extractor", "legacy-analyst"]) });
+    expect(understandFlow.steps.find((step) => step.name === "harden-scan")?.agents).toEqual(["security-auditor"]);
+    expect(understandFlow.gates.length).toBeGreaterThan(0);
+
+    expect(understand!.pipeline).toEqual([{ from: "assess", to: "understand", via: expect.arrayContaining(["assessment/<app>/catalog.json"]) }]);
+    expect(modernize!.pipeline.map((link) => `${link.from}>${link.to}`)).not.toContain("preflight>transform");
+    expect(modernize!.flows.map((entry) => entry.command)).toEqual(["preflight", "brief", "transform", "uplift", "reimagine", "verify"]);
+  });
+});
