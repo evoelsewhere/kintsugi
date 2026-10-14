@@ -14,14 +14,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import type { CatalogRule, DataObject, RulesResults } from "@/lib/api/documents";
 import { idOfAnchor } from "@/lib/document-links";
+import { RulesOverview } from "./rules-overview";
 import { ConfidenceMark, CountChip, Field, Kpi, KpiRow, PriorityMark, Section, SubTabs } from "./results-parts";
 
-type Tab = "rules" | "data" | "coverage" | "document";
+type Tab = "overview" | "rules" | "data" | "coverage" | "document";
 
 const needsReview = (rule: CatalogRule): boolean => rule.smeQuestion !== undefined || rule.suspectedDefect !== undefined || (rule.confidence !== undefined && rule.confidence !== "High");
 
 export function RulesResultsView({ results, compare }: { results: RulesResults; compare: boolean }): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>("rules");
+  const [tab, setTab] = useState<Tab>("overview");
   const [open, setOpen] = useState<string | undefined>(undefined);
   // A RULE-xxx anchor into BUSINESS_RULES.md opens the rule's drawer.
   useDocumentLinkHandler((target) => {
@@ -49,6 +50,7 @@ export function RulesResultsView({ results, compare }: { results: RulesResults; 
         value={tab}
         onChange={setTab}
         tabs={[
+          { id: "overview", label: "Overview" },
           { id: "rules", label: "Rules", count: results.rules.filter((rule) => rule.status !== "refuted").length },
           { id: "data", label: "Data objects", count: results.dataObjects.length },
           { id: "coverage", label: "Coverage", count: results.coverageGaps.length },
@@ -56,6 +58,7 @@ export function RulesResultsView({ results, compare }: { results: RulesResults; 
         ]}
       />
 
+      {tab === "overview" ? <RulesOverview results={results} onCoverage={() => setTab("coverage")} /> : null}
       {tab === "rules" ? <RulesTab results={results} open={open} setOpen={setOpen} /> : null}
       {tab === "data" ? <DataObjectsTab objects={results.dataObjects} rules={results.rules} /> : null}
       {tab === "coverage" ? <CoverageTab results={results} /> : null}

@@ -23,9 +23,10 @@ import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { domainColors, formatCount } from "./results-format";
 import { CountChip, Field, Kpi, KpiRow, Section, SubTabs } from "./results-parts";
+import { UnderstandOverview } from "./understand-overview";
 import { moduleFlowchart, unitFlowchart } from "./units-mermaid";
 
-type Tab = "units" | "matrix" | "graph" | AsIsDocument["id"];
+type Tab = "overview" | "units" | "matrix" | "graph" | AsIsDocument["id"];
 
 const WORK_ITEM_TONE: Record<string, StatusTone> = {
   pending: "muted",
@@ -55,7 +56,7 @@ const DOCUMENT_HINT: Record<AsIsDocument["id"], string> = {
 };
 
 export function UnderstandResultsView({ results, compare, projectId }: { results: UnderstandResults; compare: boolean; projectId: string }): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>("units");
+  const [tab, setTab] = useState<Tab>("overview");
   const [detail, setDetail] = useState<string | undefined>(undefined);
   const previous = compare ? results.previous?.counts : undefined;
   const counts = results.counts;
@@ -105,6 +106,7 @@ export function UnderstandResultsView({ results, compare, projectId }: { results
         value={tab}
         onChange={setTab}
         tabs={[
+          { id: "overview", label: "Overview" },
           { id: "units", label: "Units", count: results.units.length },
           { id: "matrix", label: "Traceability", count: counts["leftOut"] === undefined || counts["leftOut"] === 0 ? undefined : counts["leftOut"] },
           { id: "graph", label: "Dependencies" },
@@ -118,6 +120,7 @@ export function UnderstandResultsView({ results, compare, projectId }: { results
       {results.matrix === null && (tab === "units" || tab === "matrix" || tab === "graph") ? (
         <EmptyState title="No traceability.json at this ref" description="merge_traceability.py writes it after the specification jobs; pick another ref above or run understand again." />
       ) : null}
+      {tab === "overview" ? <UnderstandOverview results={results} onOpen={setDetail} onMatrix={() => setTab("matrix")} /> : null}
       {tab === "units" && results.matrix !== null ? <UnitsTab units={results.units} modules={modules} onOpen={setDetail} /> : null}
       {tab === "matrix" && results.matrix !== null ? <MatrixTab results={results} modules={modules} onOpen={setDetail} /> : null}
       {tab === "graph" && results.matrix !== null ? <GraphTab units={results.units} modules={modules} colors={colors} onOpen={setDetail} /> : null}

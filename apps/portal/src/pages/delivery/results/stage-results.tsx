@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { type DocumentRef, documentsApi, type ResultStage, type StageResults } from "@/lib/api/documents";
+import type { JobRunView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { formatDateTime, formatRelative, shortSha } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
@@ -33,6 +34,8 @@ export interface StageResultsProps {
   version: string;
   /** Why the stage cannot be run now, for the empty state; undefined when it can. */
   runBlocked: string | undefined;
+  /** The stage's runs of the application, newest first (the monitoring views read them). */
+  runs?: JobRunView[] | undefined;
 }
 
 const STATUS: Record<DocumentRef["status"], { tone: StatusTone; label: string }> = {
@@ -51,7 +54,7 @@ const NEXT_ACTION: Partial<Record<ResultStage, string>> = {
 const refLabel = (ref: DocumentRef): string =>
   ref.kind === "default" ? ref.label : ref.kind === "run" ? `Run of ${formatDateTime(ref.date)} · ${STATUS[ref.status].label.toLowerCase()}` : ref.label;
 
-export default function StageResults({ project, application, stage, version, runBlocked }: StageResultsProps): React.JSX.Element {
+export default function StageResults({ project, application, stage, version, runBlocked, runs }: StageResultsProps): React.JSX.Element {
   const [params, setParams] = useSearchParams();
   const ref = params.get("ref") ?? undefined;
   const compare = params.get("compare") === "1";
@@ -130,7 +133,7 @@ export default function StageResults({ project, application, stage, version, run
           ) : (
             <>
               <DocumentLinksProvider projectId={project.id} commit={loaded.ref.commit}>
-                <StageView results={loaded} compare={compare} projectId={project.id} />
+                <StageView results={loaded} compare={compare} projectId={project.id} runs={runs} />
               </DocumentLinksProvider>
               <Section title="Output files" description={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}.`}>
                 <OutputFiles files={loaded.files} />
@@ -164,10 +167,10 @@ function RefFacts({ results }: { results: StageResults }): React.JSX.Element {
   );
 }
 
-function StageView({ results, compare, projectId }: { results: StageResults; compare: boolean; projectId: string }): React.JSX.Element {
+function StageView({ results, compare, projectId, runs }: { results: StageResults; compare: boolean; projectId: string; runs: JobRunView[] | undefined }): React.JSX.Element {
   switch (results.stage) {
     case "assess":
-      return <AssessResultsView results={results} compare={compare} />;
+      return <AssessResultsView results={results} compare={compare} projectId={projectId} runs={runs} />;
     case "map":
       return <MapResultsView results={results} compare={compare} />;
     case "extract-rules":

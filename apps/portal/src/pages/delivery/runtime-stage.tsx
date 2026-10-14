@@ -165,6 +165,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
             stage={stage.id}
             version={`${latestSucceeded?.id ?? "none"}/${latestSucceeded?.documentWrite?.status ?? ""}`}
             runBlocked={disabledReason}
+            runs={stageRuns}
           />
         </Suspense>
       ) : null}
