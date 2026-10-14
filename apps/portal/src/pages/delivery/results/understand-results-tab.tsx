@@ -14,12 +14,14 @@ import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
 import { type CatalogView, catalogApi, type UnderstandView } from "@/lib/api/catalog";
 import type { StageResults } from "@/lib/api/documents";
+import type { JobRunView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { shortSha } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
 import { HardenResultsView } from "./harden-results";
 import { MapResultsView } from "./map-results";
 import { OutputFiles, Section } from "./results-parts";
+import { LatestRunNotice, MonitoringTab } from "./run-monitoring";
 import { RulesResultsView } from "./rules-results";
 import { UnderstandResultsView } from "./understand-results";
 
@@ -32,17 +34,22 @@ const VIEWS: Array<{ id: UnderstandView; label: string }> = [
 
 const isView = (value: string | null): value is UnderstandView => VIEWS.some((view) => view.id === value);
 
+type ResultsTab = UnderstandView | "monitoring";
+
 export interface UnderstandResultsTabProps {
   project: ProjectDetail;
   application: ApplicationView;
   catalog: CatalogView | null;
   /** Changes when a run finishes, so the results are read again. */
   version: string;
+  /** The understand runs of the application, newest first (the Monitoring view reads them). */
+  runs?: JobRunView[] | undefined;
 }
 
-export default function UnderstandResultsTab({ project, application, catalog, version }: UnderstandResultsTabProps): React.JSX.Element {
+export default function UnderstandResultsTab({ project, application, catalog, version, runs }: UnderstandResultsTabProps): React.JSX.Element {
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
+  const monitoring = requested === "monitoring";
   const view: UnderstandView = isView(requested) ? requested : "understand";
   const item = params.get("item") ?? undefined;
   const entry = item === undefined ? undefined : catalog?.items.find((candidate) => candidate.id === item);
@@ -69,48 +76,57 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
   ];
   if (item !== undefined && !scopes.some((scope) => scope.value === item)) scopes.push({ value: item, label: item, hint: "" });
 
+  const tabs: Array<{ id: ResultsTab; label: string; count?: number | undefined }> = [...VIEWS, { id: "monitoring", label: "Monitoring", count: runs?.length }];
+
   return (
     <div className="flex flex-col gap-4">
-      <Card className="py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-full sm:w-[340px]">
-            <Select value={item ?? ""} options={scopes} onChange={(value) => update("item", value === "" ? undefined : value)} />
+      <LatestRunNotice runs={runs} />
+      {monitoring ? null : (
+        <Card className="py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="w-full sm:w-[340px]">
+              <Select value={item ?? ""} options={scopes} onChange={(value) => update("item", value === "" ? undefined : value)} />
+            </div>
+            <span className="text-[12px] text-text-muted">
+              {item === undefined ? "Rebuilt from every understood item after each merge." : ref === undefined ? "This item's own files on the default branch." : `This item's files in its open pull request (${entry?.pr?.branch ?? ""}).`}
+            </span>
+            <Button size="icon" variant="ghost" className="ml-auto" aria-label="Reload the results" onClick={() => void results.reload()}>
+              <RefreshCw />
+            </Button>
           </div>
-          <span className="text-[12px] text-text-muted">
-            {item === undefined ? "Rebuilt from every understood item after each merge." : ref === undefined ? "This item's own files on the default branch." : `This item's files in its open pull request (${entry?.pr?.branch ?? ""}).`}
-          </span>
-          <Button size="icon" variant="ghost" className="ml-auto" aria-label="Reload the results" onClick={() => void results.reload()}>
-            <RefreshCw />
-          </Button>
-        </div>
-      </Card>
+        </Card>
+      )}
 
-      <Tabs<UnderstandView> label="understand results" value={view} onChange={(next) => update("view", next)} tabs={VIEWS} />
+      <Tabs<ResultsTab> label="understand results" value={monitoring ? "monitoring" : view} onChange={(next) => update("view", next)} tabs={tabs} />
 
-      <Loaded loader={results} rows={6}>
-        {(loaded) =>
-          loaded.empty ? (
-            <Card>
-              <EmptyState
-                icon={PackageOpen}
-                title={item === undefined ? "No generated views yet" : `No ${VIEWS.find((entry) => entry.id === view)?.label.toLowerCase()} for ${item} yet`}
-                description={
-                  item === undefined
-                    ? "They are rebuilt after an understand pull request is merged (or with Rebuild generated views above)."
-                    : "Run understand on this item; its files appear here while its pull request is open and after it is merged."
-                }
-              />
-            </Card>
-          ) : (
-            <>
-              <ResultsView results={loaded} projectId={project.id} />
-              <Section title="Files" description={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}.`}>
-                <OutputFiles files={loaded.files} />
-              </Section>
-            </>
-          )
-        }
-      </Loaded>
+      {monitoring ? <MonitoringTab projectId={project.id} runs={runs} /> : null}
+
+      {monitoring ? null : (
+        <Loaded loader={results} rows={6}>
+          {(loaded) =>
+            loaded.empty ? (
+              <Card>
+                <EmptyState
+                  icon={PackageOpen}
+                  title={item === undefined ? "No generated views yet" : `No ${VIEWS.find((entry) => entry.id === view)?.label.toLowerCase()} for ${item} yet`}
+                  description={
+                    item === undefined
+                      ? "They are rebuilt after an understand pull request is merged (or with Rebuild generated views above)."
+                      : "Run understand on this item; its files appear here while its pull request is open and after it is merged."
+                  }
+                />
+              </Card>
+            ) : (
+              <>
+                <ResultsView results={loaded} projectId={project.id} />
+                <Section title="Files" description={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}.`}>
+                  <OutputFiles files={loaded.files} />
+                </Section>
+              </>
+            )
+          }
+        </Loaded>
+      )}
     </div>
   );
 }

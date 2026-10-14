@@ -19,10 +19,11 @@ import type { CarryOverItem, Finding, HardenResults, Severity } from "@/lib/api/
 import { idOfAnchor } from "@/lib/document-links";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { HardenOverview } from "./harden-overview";
 import { SEVERITY_RANK, SEVERITY_TONE } from "./results-format";
 import { ConfidenceMark, CountChip, Field, Kpi, KpiRow, MarkdownTableView, Section, SeverityMark, SubTabs } from "./results-parts";
 
-type Tab = "findings" | "carryover" | "patch" | "coverage" | "document";
+type Tab = "overview" | "findings" | "carryover" | "patch" | "coverage" | "document";
 
 type Report = NonNullable<HardenResults["report"]>;
 
@@ -41,7 +42,7 @@ const noFindingsStatement = (report: Report): string =>
 const LEVELS: Severity[] = ["Critical", "High", "Medium", "Low"];
 
 export function HardenResultsView({ results, compare }: { results: HardenResults; compare: boolean }): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>("findings");
+  const [tab, setTab] = useState<Tab>("overview");
   const [open, setOpen] = useState<string | undefined>(undefined);
   const report = results.report;
   const previous = compare ? results.previous?.counts : undefined;
@@ -88,6 +89,7 @@ export function HardenResultsView({ results, compare }: { results: HardenResults
         value={tab}
         onChange={setTab}
         tabs={[
+          { id: "overview", label: "Overview" },
           { id: "findings", label: "Findings", count: report?.findings.length },
           { id: "carryover", label: "Assessment carry-over", count: carryOver.length, hidden: carryOver.length === 0 && (report?.carryOver ?? null) === null },
           { id: "patch", label: "Remediation patch", count: results.patch?.hunks },
@@ -96,6 +98,7 @@ export function HardenResultsView({ results, compare }: { results: HardenResults
         ]}
       />
 
+      {tab === "overview" ? <HardenOverview results={results} onFindings={() => setTab("findings")} onCoverage={() => setTab("coverage")} /> : null}
       {tab === "findings" ? <FindingsTab results={results} open={open} setOpen={setOpen} /> : null}
       {tab === "carryover" && report !== null ? <CarryOverTab report={report} onOpenFinding={openFinding} /> : null}
       {tab === "patch" ? <PatchTab results={results} /> : null}

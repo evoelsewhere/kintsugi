@@ -163,7 +163,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
 
       {tab === "results" ? (
         <Suspense fallback={<Card><SkeletonRows rows={6} /></Card>}>
-          <UnderstandResultsTab project={project} application={application} catalog={catalog.data ?? null} version={version} />
+          <UnderstandResultsTab project={project} application={application} catalog={catalog.data ?? null} version={version} runs={understandRuns} />
         </Suspense>
       ) : null}
     </div>

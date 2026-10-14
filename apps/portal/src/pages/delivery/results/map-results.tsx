@@ -17,14 +17,15 @@ import type { MapNode, MapResults, TopoEdge, TopoFlow } from "@/lib/api/document
 import { cn } from "@/lib/utils";
 import { domainColors, edgeColor, formatCount } from "./results-format";
 import { CountChip, Field, Kpi, KpiRow, Section, SubTabs } from "./results-parts";
+import { MapOverview } from "./map-overview";
 import { topologyFlowchart } from "./topology-mermaid";
 
-type Tab = "graph" | "nodes" | "diagrams" | "flows";
+type Tab = "overview" | "graph" | "nodes" | "diagrams" | "flows";
 
 type Topology = NonNullable<MapResults["topology"]>;
 
 export function MapResultsView({ results, compare }: { results: MapResults; compare: boolean }): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>("graph");
+  const [tab, setTab] = useState<Tab>("overview");
   const [detail, setDetail] = useState<string | undefined>(undefined);
   const topology = results.topology;
   const previous = compare ? results.previous?.counts : undefined;
@@ -45,6 +46,7 @@ export function MapResultsView({ results, compare }: { results: MapResults; comp
         value={tab}
         onChange={setTab}
         tabs={[
+          { id: "overview", label: "Overview" },
           { id: "graph", label: "Dependency graph" },
           { id: "nodes", label: "Nodes", count: topology?.nodes.length },
           { id: "diagrams", label: "Diagrams", count: results.diagrams.length },
@@ -52,9 +54,10 @@ export function MapResultsView({ results, compare }: { results: MapResults; comp
         ]}
       />
 
-      {topology === null && (tab === "graph" || tab === "nodes" || tab === "flows") ? (
+      {topology === null && (tab === "overview" || tab === "graph" || tab === "nodes" || tab === "flows") ? (
         <EmptyState title="No topology.json at this ref" description="The assess and understand stages write topology.json; pick another ref above." />
       ) : null}
+      {tab === "overview" && topology !== null ? <MapOverview topology={topology} onOpen={setDetail} onFlows={() => setTab("flows")} /> : null}
       {tab === "graph" && topology !== null ? <GraphTab topology={topology} /> : null}
       {tab === "nodes" && topology !== null ? <NodesTab topology={topology} onOpen={setDetail} /> : null}
       {tab === "diagrams" ? <DiagramsTab results={results} /> : null}

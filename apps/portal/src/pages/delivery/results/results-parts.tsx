@@ -192,3 +192,42 @@ export function SubTabs<T extends string>({ tabs, value, onChange }: { tabs: Arr
     </div>
   );
 }
+
+/** A label/value line of a signals list (put several in a <dl>). */
+export function Signal({ label, value, note, title }: { label: string; value: string; note?: string | undefined; title?: string | undefined }): React.JSX.Element {
+  return (
+    <div className="flex items-baseline justify-between gap-3 [box-shadow:0_1px_0_rgba(0,0,0,0.05)] pb-2 last:pb-0 last:shadow-none" title={title}>
+      <dt className="shrink-0 text-text-secondary">{label}</dt>
+      <dd className="flex min-w-0 items-baseline justify-end gap-2">
+        <span className="shrink-0 font-medium text-text tabular-nums">{value}</span>
+        {note === undefined ? null : <span className="min-w-0 truncate text-[11.5px] text-text-muted">{note}</span>}
+      </dd>
+    </div>
+  );
+}
+
+export function SignalList({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <dl className="flex flex-col gap-2.5 text-[13px]">{children}</dl>;
+}
+
+/** A small text link that switches to another view of the results. */
+export function MoreLink({ label, onClick }: { label: string; onClick: () => void }): React.JSX.Element {
+  return (
+    <button type="button" onClick={onClick} className="shrink-0 text-[12px] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
+      {label} →
+    </button>
+  );
+}
+
+/** A titled distribution inside a card: a caption line and the chart under it. */
+export function Distribution({ title, count, children }: { title: string; count?: number; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div>
+      <p className="mb-1.5 text-[12px] font-medium text-text">
+        {title}
+        {count === undefined ? null : ` · ${count}`}
+      </p>
+      {children}
+    </div>
+  );
+}
