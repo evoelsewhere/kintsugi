@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { COMPONENT_KINDS, pluginsApi, type PluginSummary } from "@/lib/api/plugins";
 import { useLoader } from "@/lib/use-loader";
+import { PluginsInsights } from "./plugins-insights";
 
 const AUDIENCE_LABEL = { runtime: "Runs in Kintsugi jobs", member: "Runs in members' harnesses" } as const;
 
@@ -25,10 +26,13 @@ export function PluginsPage(): React.JSX.Element {
       />
       <Loaded loader={plugins} rows={4}>
         {(items) => (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {items.map((plugin) => (
-              <PluginCard key={plugin.name} plugin={plugin} />
-            ))}
+          <div className="flex flex-col gap-4">
+            <PluginsInsights plugins={items} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {items.map((plugin) => (
+                <PluginCard key={plugin.name} plugin={plugin} />
+              ))}
+            </div>
           </div>
         )}
       </Loaded>

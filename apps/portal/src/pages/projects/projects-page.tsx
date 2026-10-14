@@ -12,6 +12,7 @@ import { projectsApi, type ProjectView } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { NoRepositories } from "./no-repositories";
 import { ProjectDialog } from "./project-dialogs";
+import { ProjectsInsights } from "./projects-insights";
 
 export function ProjectsPage(): React.JSX.Element {
   const { can } = useAuth();
@@ -46,6 +47,8 @@ export function ProjectsPage(): React.JSX.Element {
     <div className="flex flex-col gap-5">
       <Breadcrumbs items={["Administration", "Projects"]} />
       {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
+
+      <ProjectsInsights projects={projects} />
 
       <Card className="overflow-hidden p-0">
         <CardHeader className="px-4 pt-3 pb-3">

@@ -148,18 +148,18 @@ export function RecentRuns({ projectId, applications, runs }: { projectId: strin
 }
 
 /** One bar per run of a stage, oldest to newest: height is the run time, colour the outcome. */
-export function MiniRunBars({ runs, limit = 12 }: { runs: readonly JobRunView[]; limit?: number }): React.JSX.Element {
+export function MiniRunBars({ runs, limit = 12, height = 28, width = 7 }: { runs: readonly JobRunView[]; limit?: number; height?: number; width?: number }): React.JSX.Element {
   const recent = runs.slice(0, limit).reverse();
   const max = Math.max(1, ...recent.map((run) => durationMs(run) ?? 0));
   return (
-    <div className="flex h-7 items-end gap-[3px]" aria-hidden>
+    <div className="flex items-end gap-[3px]" style={{ height }} aria-hidden>
       {recent.map((run) => {
         const ms = durationMs(run);
         return (
           <span
             key={run.id}
-            className={cn("w-[7px] rounded-t-[2px]", isActiveStatus(run.status) && "animate-pulse")}
-            style={{ height: Math.max(((ms ?? 0) / max) * 28, 5), backgroundColor: STATUS_COLOR[run.status] ?? CHART_COLOR.muted }}
+            className={cn("rounded-t-[2px]", isActiveStatus(run.status) && "animate-pulse")}
+            style={{ width, height: Math.max(((ms ?? 0) / max) * height, 5), backgroundColor: STATUS_COLOR[run.status] ?? CHART_COLOR.muted }}
             title={`${styleOf(RUN_STATUS, run.status).label} · ${formatDateTime(run.createdAt)}${ms === undefined ? "" : ` · ${formatDuration(run.startedAt, run.finishedAt)}`}`}
           />
         );

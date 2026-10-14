@@ -32,6 +32,7 @@ import { type GovernanceTab } from "@/lib/links";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { GatesView } from "./governance-gates";
+import { GovernanceInsights } from "./governance-insights";
 
 const PAGE_SIZE = 25;
 
@@ -68,6 +69,7 @@ export function GovernancePage(): React.JSX.Element {
           )
         }
       />
+      <GovernanceInsights tab={tab} />
       {tab === "gates" ? (
         <GatesView
           status={params.get("status") ?? "pending"}

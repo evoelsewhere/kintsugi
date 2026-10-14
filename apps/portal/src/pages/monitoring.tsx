@@ -28,6 +28,7 @@ import { deliveryLink, type MonitoringTab } from "@/lib/links";
 import { isActiveStatus } from "@/lib/status";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
+import { MonitoringInsights } from "./monitoring-insights";
 
 const TABS: { id: MonitoringTab; label: string }[] = [
   { id: "runs", label: "Job runs" },
@@ -60,6 +61,7 @@ export function MonitoringPage(): React.JSX.Element {
       <Breadcrumbs items={["Monitoring"]} />
       <PageHeading title="Monitoring" description="Live job runs, repository sync, document writes and the worker across all projects. Lists refresh on their own." />
       <Tabs label="Monitoring views" tabs={TABS} value={tab} onChange={(id) => setQuery({ tab: id, status: null })} />
+      <MonitoringInsights tab={tab} />
       {tab === "runs" ? <RunsView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
       {tab === "repositories" ? <RepositoriesView /> : null}
       {tab === "writes" ? <WritesView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}

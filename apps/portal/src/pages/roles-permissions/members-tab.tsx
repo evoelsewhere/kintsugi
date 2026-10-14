@@ -12,6 +12,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
 import { identityApi, type RoleRecord, type UserRecord } from "@/lib/api/identity";
 import { cn } from "@/lib/utils";
+import { MembersInsights } from "./members-insights";
 
 interface FormState {
   id: string | null;
@@ -171,6 +172,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
 
   return (
     <div className="flex flex-col gap-4">
+      <MembersInsights users={users} roles={roles} />
       {/* Toolbar: filters always visible + actions */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1">
