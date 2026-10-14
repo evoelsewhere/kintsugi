@@ -22,6 +22,16 @@ export {
 } from "./format.js";
 export { toAgentDefinition, validateAgent, type AgentContext } from "./definition.js";
 export { BUILTIN_DIR, loadBuiltinCatalog, readPackageDir, type BuiltinCatalog } from "./builtin.js";
+export {
+  loadBuiltinPlugins,
+  PLUGIN_MANIFEST_FILE,
+  readBuiltinPluginFile,
+  type BuiltinPlugin,
+  type PluginAudience,
+  type PluginComponent,
+  type PluginComponentKind,
+  type PluginFile,
+} from "./plugins.js";
 export { COMMAND_AUDIENCES, COMMAND_ORDER, loadBuiltinCommands, type BuiltinCommand, type CommandAudience } from "./commands.js";
 export {
   AgentResolutionError,

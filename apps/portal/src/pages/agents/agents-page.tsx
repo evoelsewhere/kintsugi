@@ -1,6 +1,6 @@
 // Agents — the Agent Builder catalog (Administration → Agents, ADR-0026). Built-in agents ship
 // with the release and are read-only; admins copy them or create, import and version their
-// own. An agent opens on its own page (/agents/:name). Shared skills are listed below.
+// own. An agent opens on its own page (/plugins/builder/:name). Shared skills are listed below.
 // Reading needs a session; changes need agents.manage.
 
 import { Bot, Copy, Download, FileText, Plus, Trash2, Upload } from "lucide-react";
@@ -93,7 +93,7 @@ export function AgentsPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Agents"]} />
+      <Breadcrumbs items={["Administration", "Plugins", "Agent Builder"]} />
       <PageHeading
         title="Agents"
         description="Runtime agents run Kintsugi's understanding jobs; member agents are handed to members' harnesses. Built-in agents are read-only: copy one to change it."
@@ -124,7 +124,7 @@ export function AgentsPage(): React.JSX.Element {
                 <Upload className="size-4" />
                 Import
               </Button>
-              <Button size="small" variant="solid" onClick={() => navigate("/agents/new")}>
+              <Button size="small" variant="solid" onClick={() => navigate("/plugins/builder/new")}>
                 <Plus className="size-4" />
                 New agent
               </Button>
@@ -149,7 +149,7 @@ export function AgentsPage(): React.JSX.Element {
             key={agent.name}
             className="grid grid-cols-1 items-center gap-3 px-4 py-2.5 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] sm:grid-cols-[minmax(0,2.8fr)_0.8fr_0.7fr_1.1fr_0.9fr_auto]"
           >
-            <Link to={`/agents/${encodeURIComponent(agent.name)}`} className="flex min-w-0 items-center gap-3 text-left">
+            <Link to={`/plugins/builder/${encodeURIComponent(agent.name)}`} className="flex min-w-0 items-center gap-3 text-left">
               <Bot className="size-5 shrink-0 text-text-secondary" strokeWidth={1.5} />
               <span className="min-w-0">
                 <span className="flex items-center gap-2">
@@ -221,7 +221,7 @@ export function AgentsPage(): React.JSX.Element {
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <Button size="small" variant="ghost" onClick={() => navigate(`/skills/${encodeURIComponent(skill.name)}`)}>
+                <Button size="small" variant="ghost" onClick={() => navigate(`/plugins/builder/skills/${encodeURIComponent(skill.name)}`)}>
                   View{skill.files.length > 0 ? ` (${skill.files.length + 1} files)` : ""}
                 </Button>
               </div>
@@ -245,7 +245,7 @@ export function AgentsPage(): React.JSX.Element {
         onClose={() => setCopySource(null)}
         onCopied={async (name) => {
           toast.success(`Copied to ${name}`);
-          navigate(`/agents/${encodeURIComponent(name)}`);
+          navigate(`/plugins/builder/${encodeURIComponent(name)}`);
         }}
       />
 

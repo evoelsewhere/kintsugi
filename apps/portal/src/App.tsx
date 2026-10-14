@@ -8,6 +8,8 @@ import { AdminPage } from "./pages/admin";
 import { AgentPage } from "./pages/agents/agent-page";
 import { AgentsPage } from "./pages/agents/agents-page";
 import { SkillPage } from "./pages/agents/skill-page";
+import { PluginPage } from "./pages/plugins/plugin-page";
+import { PluginsPage } from "./pages/plugins/plugins-page";
 import { DeliveryOverviewPage } from "./pages/delivery/delivery-overview-page";
 import { DeliveryStagePage } from "./pages/delivery/delivery-stage-page";
 import { GovernancePage } from "./pages/governance";
@@ -54,9 +56,12 @@ export function App(): React.JSX.Element {
             <Route path="governance" element={<GovernancePage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<ProjectDetailPage />} />
-            <Route path="agents" element={<AgentsPage />} />
-            <Route path="agents/:name" element={<AgentPage />} />
-            <Route path="skills/:name" element={<SkillPage />} />
+            <Route path="plugins" element={<PluginsPage />} />
+            <Route path="plugins/builder" element={<AgentsPage />} />
+            <Route path="plugins/builder/skills/:name" element={<SkillPage />} />
+            <Route path="plugins/builder/:name" element={<AgentPage />} />
+            <Route path="plugins/:name" element={<PluginPage />} />
+            <Route path="agents/*" element={<Navigate to="/plugins/builder" replace />} />
             <Route path="members" element={<MembersPermissionsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
