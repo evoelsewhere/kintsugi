@@ -9,6 +9,20 @@ metadata:
   reads: [assessment/<app>/catalog.json, assessment/<app>/topology.json, assessment/<app>/inventory.json, assessment/<app>/ASSESSMENT.md, units/<app>/]
   writes: [assessment/<app>/items/<module>/<item>/topology.json, assessment/<app>/items/<module>/<item>/rules.json, assessment/<app>/items/<module>/<item>/findings.json, knowledge/as-is/<app>/<module>/<item>.md, knowledge/as-is/<app>/items/<module>/<item>/trace.json, knowledge/as-is/<app>/items/<module>/<item>/meta.json, units/<app>/<module>/<item>.md]
   gates: [a person selects the catalog items to understand (items running or in an open pull request cannot be selected), a person reviews and merges the pull request that carries the item files and the work items]
+  flow:
+    - gate: a person selects the catalog items
+    - script: scope_items
+    - parallel:
+        - workflow: extract-rules
+        - workflow: harden-scan
+    - script: split_rules
+    - script: split_findings
+    - each: selected item
+      do:
+        agent: legacy-analyst
+        as: AS-IS specification
+    - script: finish_items
+    - gate: a person reviews and merges the pull request
 ---
 
 **This stage runs as Kintsugi runtime jobs and script steps**, started by the orchestrator on a **selection of

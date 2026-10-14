@@ -8,6 +8,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BUILTIN_DIR } from "./builtin.js";
+import { type FlowNode, parseFlow } from "./flow.js";
 import { splitFrontmatter } from "./format.js";
 
 export type CommandAudience = "runtime" | "member" | "portal";
@@ -30,6 +31,8 @@ export interface BuiltinCommand {
   writes: string[];
   /** Where a person decides before the stage goes on. */
   gates: string[];
+  /** What the stage runs, in order (`metadata.flow`); absent for commands a member or the portal carries out. */
+  flow?: FlowNode[];
 }
 
 /** Pipeline order of the stages; unknown ids follow alphabetically. */
@@ -77,6 +80,7 @@ function parseCommand(text: string, command: string, problems: string[]): Builti
   const reads = commandList(metadata, "reads", file, problems);
   const writes = commandList(metadata, "writes", file, problems);
   const gates = commandList(metadata, "gates", file, problems);
+  const flow = metadata["flow"] === undefined ? undefined : parseFlow(metadata["flow"], `${file}: metadata.flow`, problems);
   if (problems.length > before) return undefined;
   return {
     id: command.startsWith(PREFIX) ? command.slice(PREFIX.length) : command,
@@ -88,6 +92,7 @@ function parseCommand(text: string, command: string, problems: string[]): Builti
     reads,
     writes,
     gates,
+    ...(flow === undefined ? {} : { flow }),
   };
 }
 

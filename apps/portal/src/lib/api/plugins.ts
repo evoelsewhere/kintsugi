@@ -41,6 +41,15 @@ export interface PluginFlowStep {
   scripts?: string[];
 }
 
+/** What a stage runs, in order, as its command declares it (kept equal to the stage plan by a test). */
+export type FlowNode =
+  | { kind: "script"; name: string; label?: string; generated?: boolean; repair?: string }
+  | { kind: "agent"; name: string; label?: string }
+  | { kind: "workflow"; name: string; label?: string }
+  | { kind: "parallel"; steps: FlowNode[] }
+  | { kind: "each"; label: string; step: FlowNode }
+  | { kind: "gate"; label: string };
+
 /** How one command works: what it reads, what it runs, what it writes and where a person decides. */
 export interface PluginFlow {
   command: string;
@@ -51,6 +60,8 @@ export interface PluginFlow {
   steps: PluginFlowStep[];
   writes: string[];
   gates: string[];
+  /** The declared order of what runs, with groups; absent when the command declares none. */
+  flow?: FlowNode[];
 }
 
 /** A command whose output another command reads. */

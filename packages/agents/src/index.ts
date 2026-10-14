@@ -35,6 +35,7 @@ export {
   type PluginFlowStep,
   type PluginLink,
 } from "./plugins.js";
+export { flowComponents, parseFlow, type FlowNode } from "./flow.js";
 export { COMMAND_AUDIENCES, COMMAND_ORDER, loadBuiltinCommands, type BuiltinCommand, type CommandAudience } from "./commands.js";
 export {
   AgentResolutionError,
