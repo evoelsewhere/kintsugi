@@ -328,6 +328,6 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const id = randomUUID();
     await store.create({ id, projectId: "demo", applicationId: "demo", kind: "stage", name: "assess", sourceRepositoryId: "small", inputs: {} });
     const run = await runner.run(id);
-    expect(run?.failureReason).toMatch(/^Step analysis failed: structure: Agent legacy-analyst did not write assessment\/demo\/analysis\/structure\.md/);
+    expect(run?.failureReason).toMatch(/^Step analysis failed: (structure|debt|security): Agent (legacy-analyst|security-auditor) did not write assessment\/demo\/analysis\//);
   });
 });

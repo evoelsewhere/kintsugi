@@ -251,7 +251,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const id = await assess(store);
     const run = await runner.run(id);
     expect(run?.status).toBe("failed");
-    expect(run?.failureReason).toBe('Step analysis failed: structure: No model is bound to agent "legacy-analyst" (Settings → LLM Providers) (and 2 more)');
+    // The group stops at its first failure, whichever of the three analysis jobs that is.
+    expect(run?.failureReason).toMatch(/^Step analysis failed: (structure|debt|security): No model is bound to agent "(legacy-analyst|security-auditor)" \(Settings → LLM Providers\) \(and 2 more\)$/);
     expect(writes).toHaveLength(0);
   });
 
