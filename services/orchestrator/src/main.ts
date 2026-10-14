@@ -25,6 +25,12 @@ function positive(name: string, fallback: number): number {
   return value;
 }
 
+/** A limit that is off unless set: unset or blank means none. */
+function optionalPositive(name: string): number | undefined {
+  const raw = process.env[name];
+  return raw === undefined || raw.trim() === "" ? undefined : positive(name, 1);
+}
+
 function nonNegative(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
@@ -36,14 +42,16 @@ function nonNegative(name: string, fallback: number): number {
 /** Job limits from the environment, with the defaults of DEFAULT_JOB_LIMITS. */
 function jobDefaults(): JobDefaults {
   const maxOutputBytes = positive("KINTSUGI_JOB_MAX_OUTPUT_BYTES", DEFAULT_JOB_LIMITS.agent.maxOutputBytes);
-  const maxCostUsd = process.env["KINTSUGI_JOB_MAX_COST_USD"] === undefined ? undefined : positive("KINTSUGI_JOB_MAX_COST_USD", 1);
+  // No turn limit by default (and no wall-clock or cost limit either): a job ends when the agent is done; only the idle watchdog stops one that is stalled.
+  const maxTurns = optionalPositive("KINTSUGI_JOB_MAX_TURNS");
+  const maxCostUsd = optionalPositive("KINTSUGI_JOB_MAX_COST_USD");
   return {
     script: { timeoutSec: positive("KINTSUGI_SCRIPT_TIMEOUT", DEFAULT_JOB_LIMITS.script.timeoutSec), maxOutputBytes },
     agent: {
       // 0 = no wall-clock limit (a stalled provider is still caught by the idle watchdog).
       timeoutSec: nonNegative("KINTSUGI_JOB_DEFAULT_TIMEOUT", DEFAULT_JOB_LIMITS.agent.timeoutSec),
       maxOutputBytes,
-      maxTurns: positive("KINTSUGI_JOB_MAX_TURNS", DEFAULT_JOB_LIMITS.agent.maxTurns ?? 80),
+      ...(maxTurns === undefined ? {} : { maxTurns }),
       ...(maxCostUsd === undefined ? {} : { maxCostUsd }),
     },
     workflow: {
