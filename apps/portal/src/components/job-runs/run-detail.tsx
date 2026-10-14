@@ -217,7 +217,7 @@ export function LiveLog({ projectId, runId, onStatus, onStep }: { projectId: str
   return (
     <section className="flex flex-col gap-1">
       <h5 className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-text-muted uppercase">
-        {live ? <StatusDot tone="blue" className="size-2 animate-pulse" /> : null}
+        {live ? <StatusDot tone="blue" className="size-2" /> : null}
         {live ? "Live log" : "Log"}
       </h5>
       {events.length === 0 ? (

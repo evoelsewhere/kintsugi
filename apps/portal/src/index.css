@@ -93,23 +93,6 @@
   --ds-page-width: 1400px;
   --geist-page-margin: 24px;
   --header-height: 64px;
-
-  /* Motion */
-  --ds-motion-timing-swift: cubic-bezier(0.175, 0.885, 0.32, 1.1);
-  --ds-motion-overlay-duration: 0.3s;
-  --ds-motion-popover-duration: 0.2s;
-}
-
-/* Overlay entrance — Modal scales in. */
-@keyframes ds-modal-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 :root.dark {

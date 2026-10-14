@@ -46,7 +46,7 @@ export function Modal({ open, title, description, onClose, children, footer, siz
         tabIndex={-1}
         data-under={buried ? "true" : undefined}
         className={cn(
-          "relative flex w-full flex-col overflow-hidden rounded-xl bg-surface outline-none transition-transform duration-200 data-[under=true]:scale-[0.98]",
+          "relative flex w-full flex-col overflow-hidden rounded-xl bg-surface outline-none data-[under=true]:scale-[0.98]",
           page
             ? "h-[85vh] max-w-5xl"
             : nested
@@ -56,7 +56,6 @@ export function Modal({ open, title, description, onClose, children, footer, siz
         )}
         style={{
           boxShadow: "var(--ds-shadow-modal)",
-          animation: "ds-modal-in var(--ds-motion-overlay-duration) var(--ds-motion-timing-swift)",
         }}
       >
         <div

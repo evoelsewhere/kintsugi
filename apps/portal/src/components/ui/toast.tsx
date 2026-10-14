@@ -68,7 +68,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
               key={item.id}
               role={item.tone === "error" ? "alert" : "status"}
               className="pointer-events-auto flex items-start gap-2.5 rounded-xl bg-surface px-3.5 py-3"
-              style={{ boxShadow: "var(--ds-shadow-menu)", animation: "ds-modal-in var(--ds-motion-popover-duration) var(--ds-motion-timing-swift)" }}
+              style={{ boxShadow: "var(--ds-shadow-menu)" }}
             >
               {item.tone === "success" ? (
                 <CircleCheck className="mt-px size-4 shrink-0 text-[var(--ds-status-green)]" strokeWidth={2} />
