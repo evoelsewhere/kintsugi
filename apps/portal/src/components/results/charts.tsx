@@ -267,3 +267,38 @@ export function Heatmap({ rows, columns, values, color = CHART_COLOR.blue }: { r
     </div>
   );
 }
+
+/** Stacked vertical bars over ordered buckets (e.g. runs per day, split by outcome); a legend follows. */
+export function StackedColumns({ columns, legend, height = 120 }: { columns: Array<{ label: string; title?: string; segments: Segment[] }>; legend: Array<{ label: string; color: string }>; height?: number }): React.JSX.Element {
+  const totals = columns.map((column) => column.segments.reduce((sum, segment) => sum + segment.value, 0));
+  const max = Math.max(1, ...totals);
+  return (
+    <div>
+      <div className="flex items-end gap-1.5" style={{ height: height + 22 }}>
+        {columns.map((column, index) => {
+          const total = totals[index] ?? 0;
+          return (
+            <div key={column.label} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1" title={column.title ?? `${column.label}: ${total}`}>
+              <div className="flex w-full max-w-[28px] flex-col-reverse overflow-hidden rounded-t-[4px]" style={{ height: Math.max((total / max) * height, total > 0 ? 3 : 0) }}>
+                {column.segments
+                  .filter((segment) => segment.value > 0)
+                  .map((segment) => (
+                    <span key={segment.label} style={{ flex: segment.value, backgroundColor: segment.color }} title={`${column.label} · ${segment.label}: ${segment.value}`} />
+                  ))}
+              </div>
+              <span className="w-full truncate text-center text-[10px] text-text-muted">{column.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-text-secondary">
+        {legend.map((entry) => (
+          <li key={entry.label} className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full" style={{ backgroundColor: entry.color }} />
+            {entry.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
