@@ -115,7 +115,7 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
           {selected?.icon}
           <span className="min-w-0 truncate">{selected?.label ?? placeholder}</span>
         </span>
-        <ChevronDown className={cn("size-4 shrink-0 text-text-muted transition-transform duration-150", open && "rotate-180")} strokeWidth={1.75} />
+        <ChevronDown className={cn("size-4 shrink-0 text-text-muted", open && "rotate-180")} strokeWidth={1.75} />
       </button>
 
       {open && placement !== null

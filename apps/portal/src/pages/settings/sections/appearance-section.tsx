@@ -86,7 +86,7 @@ export function AppearanceSection(): React.JSX.Element {
                     setThemePreference(option.id);
                   }}
                   className={cn(
-                    "shadow-border flex min-h-24 flex-col items-start gap-2 rounded-[var(--geist-radius)] p-3 text-left text-text-secondary transition-colors hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
+                    "shadow-border flex min-h-24 flex-col items-start gap-2 rounded-[var(--geist-radius)] p-3 text-left text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
                     selected && "bg-recessed text-text",
                   )}
                   style={selected ? { boxShadow: "var(--ds-shadow-border), 0 0 0 2px var(--ds-focus-color)" } : undefined}

@@ -38,7 +38,7 @@ export function CheckMark({ checked }: { checked: boolean }): React.JSX.Element 
     <span
       aria-hidden="true"
       className={cn(
-        "flex size-4 shrink-0 items-center justify-center rounded-[4px] transition-colors duration-150",
+        "flex size-4 shrink-0 items-center justify-center rounded-[4px]",
         checked ? "bg-text text-background" : "shadow-border bg-transparent text-transparent hover:bg-hover",
       )}
     >

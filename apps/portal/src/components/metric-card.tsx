@@ -17,7 +17,7 @@ export interface MetricCardProps {
 
 export function MetricCard({ title, value, subtitle, tone, to }: MetricCardProps): React.JSX.Element {
   const card = (
-    <Card className={to === undefined ? undefined : "h-full transition-colors hover:bg-hover"}>
+    <Card className={to === undefined ? undefined : "h-full hover:bg-hover"}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <StatusDot tone={tone} />

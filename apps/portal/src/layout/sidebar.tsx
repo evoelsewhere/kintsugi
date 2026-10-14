@@ -105,7 +105,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
   return (
     <aside
       className={cn(
-        "sticky top-0 flex h-screen shrink-0 flex-col gap-4 bg-surface px-3 py-5 transition-[width] duration-200 [box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]",
+        "sticky top-0 flex h-screen shrink-0 flex-col gap-4 bg-surface px-3 py-5 [box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]",
         rail ? "w-16" : "w-72",
       )}
     >
@@ -175,7 +175,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
               const showChildren = !rail && hasChildren && groupExpanded;
               return (
                 <div key={`${section.id}-${item.id}`}>
-                  <div className={cn("flex items-center gap-1 rounded-[10px] transition-colors hover:bg-hover", activeParent && "bg-hover")}>
+                  <div className={cn("flex items-center gap-1 rounded-[10px] hover:bg-hover", activeParent && "bg-hover")}>
                     <div className="min-w-0 flex-1">
                       <SidebarLink
                         item={item}
@@ -192,9 +192,9 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
                         aria-label={`${groupExpanded ? "Collapse" : "Expand"} ${item.label} submenu`}
                         aria-expanded={groupExpanded}
                         aria-controls={`${item.id}-submenu`}
-                        className="flex size-8 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+                        className="flex size-8 shrink-0 items-center justify-center rounded-full text-text-muted hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
                       >
-                        <ChevronDown className={cn("size-4 transition-transform duration-150", groupExpanded && "rotate-180")} strokeWidth={1.75} />
+                        <ChevronDown className={cn("size-4", groupExpanded && "rotate-180")} strokeWidth={1.75} />
                       </button>
                     ) : null}
                   </div>
@@ -215,7 +215,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
                             end
                             className={({ isActive }) =>
                               cn(
-                                "flex min-h-8 items-center gap-2 rounded-[8px] px-3 text-[13px] text-text-secondary transition-colors hover:bg-hover hover:text-text",
+                                "flex min-h-8 items-center gap-2 rounded-[8px] px-3 text-[13px] text-text-secondary hover:bg-hover hover:text-text",
                                 isActive && "bg-hover font-medium text-text",
                               )
                             }
