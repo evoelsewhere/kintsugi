@@ -2,7 +2,7 @@
 // grouped by kind (Overview), and its folder as a file tree beside a read-only code view (Files).
 
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { FileBrowser } from "@/components/file-browser";
@@ -10,10 +10,8 @@ import { Loaded } from "@/components/loaded";
 import { PageHeading } from "@/components/page-heading";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
-import { MermaidDiagram } from "@/components/results/mermaid-diagram";
-import { Chips } from "@/components/ui/tabs";
 import { COMPONENT_KINDS, type PluginDetail, pluginsApi } from "@/lib/api/plugins";
-import { commandDiagram, pipelineDiagram } from "./plugin-diagrams";
+import { CommandBoard, PipelineBoard, WorkflowLegend } from "./workflow-board";
 import { useLoader } from "@/lib/use-loader";
 
 type Tab = "overview" | "files";
@@ -74,49 +72,22 @@ function PluginView({ plugin }: { plugin: PluginDetail }): React.JSX.Element {
 function Overview({ plugin, onOpenFile }: { plugin: PluginDetail; onOpenFile: (path: string) => void }): React.JSX.Element {
   const [command, setCommand] = useState(plugin.flows[0]?.command ?? "");
   const flow = plugin.flows.find((entry) => entry.command === command);
-  const pipeline = useMemo(() => pipelineDiagram(plugin.flows, plugin.pipeline), [plugin]);
-  const detail = useMemo(() => (flow === undefined ? undefined : commandDiagram(flow)), [flow]);
   return (
     <div className="flex flex-col gap-6">
       {plugin.flows.length === 0 ? null : (
         <section aria-label="How the plugin works" className="flex flex-col gap-3">
           <div>
             <h2 className="text-[14px] font-medium text-text">How it works</h2>
-            <p className="text-[12px] text-text-muted">The commands in order, linked where one writes what the next reads. Click a command to see it end to end.</p>
+            <p className="text-[12px] text-text-muted">The commands in order, linked where one writes what the next reads. Pick a command to see it end to end; click a box to open its file.</p>
           </div>
-          <MermaidDiagram
-            title={`${plugin.title} pipeline`}
-            source={pipeline.source}
-            height={260}
-            onNodeClick={(id) => {
-              const target = pipeline.targets.get(id);
-              if (target?.kind === "command") setCommand(target.value);
-            }}
-          />
-          <Chips label="Command" value={command} onChange={setCommand} options={plugin.flows.map((entry) => ({ id: entry.command, label: `/${entry.command}` }))} />
-          {flow === undefined || detail === undefined ? null : (
+          <PipelineBoard flows={plugin.flows} pipeline={plugin.pipeline} selected={command} onSelect={setCommand} />
+          {flow === undefined ? null : (
             <div className="flex flex-col gap-2">
-              <p className="text-[13px] text-text-secondary">{flow.description}</p>
-              <MermaidDiagram
-                title={`/${flow.command} workflow`}
-                source={detail.source}
-                height={420}
-                onNodeClick={(id) => {
-                  const target = detail.targets.get(id);
-                  if (target?.kind === "file") onOpenFile(target.value);
-                }}
-              />
-              <p className="text-[11px] text-text-muted">Solid arrows: the order the command runs things. Dotted: the agents behind a workflow or the command. Click a node to open its file.</p>
-              {flow.gates.length === 0 ? null : (
-                <div>
-                  <h3 className="mb-1 text-[12px] font-medium text-text">Where a person decides</h3>
-                  <ul className="list-disc pl-5 text-[13px] text-text-secondary">
-                    {flow.gates.map((gate) => (
-                      <li key={gate}>{gate}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <p className="text-[13px] text-text-secondary">
+                <span className="font-mono text-text">/{flow.command}</span> — {flow.description}
+              </p>
+              <CommandBoard flow={flow} onOpenFile={onOpenFile} />
+              <WorkflowLegend />
             </div>
           )}
         </section>
