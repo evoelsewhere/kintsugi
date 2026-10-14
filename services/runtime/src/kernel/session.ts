@@ -49,7 +49,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       { compaction: { enabled: true }, retry: { enabled: true, maxRetries: 2 } },
       { projectTrusted: false },
     );
-    const systemPrompt = composeSystemPrompt(spec.agent);
+    const systemPrompt = composeSystemPrompt(spec.agent, spec.workspace);
     const resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir,

@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, type FauxResponseFactory } from "@earendil-works/pi-ai";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describeWorkspace } from "../src/kernel/policy.js";
 import { agent, createWorkspace, fauxRuntime, jobSpec, runJob, type JobRun } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -123,10 +124,11 @@ describe("session lockdown", () => {
   it("uses only the agent's instructions and skills as the system prompt", async () => {
     const probe = capture([]);
     const runtime = await fauxRuntime([probe.steps[0]!, probe.steps[1]!]);
-    const { done, events } = await runJob(runtime, jobSpec(workspace, agent([], { skills: [{ name: "style", content: "Be terse." }] })));
+    const spec = jobSpec(workspace, agent([], { skills: [{ name: "style", content: "Be terse." }] }));
+    const { done, events } = await runJob(runtime, spec);
     expect(done.type).toBe("job.completed");
     const preamble = probe.first()[0]?.sections?.["preamble"];
-    expect(preamble).toBe('You are a test agent.\n\n<skill name="style">\nBe terse.\n</skill>');
+    expect(preamble).toBe(`You are a test agent.\n\n${describeWorkspace(spec.workspace, [])}\n\n<skill name="style">\nBe terse.\n</skill>`);
     const everything = JSON.stringify(probe.first()) + JSON.stringify(events);
     expect(everything).not.toMatch(/MARKER_(AGENTS_MD|SYSTEM_MD|EXTENSION_LOADED)/);
   });
