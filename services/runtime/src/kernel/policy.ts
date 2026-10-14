@@ -3,11 +3,31 @@
 // itself is enforced when the session is created: tools outside it are never registered.
 
 import type { ExtensionAPI, ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import type { AgentDefinition } from "@kintsugi/runtime-sdk";
+import type { AgentDefinition, JobSpec } from "@kintsugi/runtime-sdk";
 
-/** The agent's instructions followed by its skills, each in a named block. */
-export function composeSystemPrompt(agent: AgentDefinition): string {
+/**
+ * Where things are, in the agent's own terms. The read tools resolve a relative path against the
+ * first read-only root while write and edit resolve it against the output directory, and nothing
+ * written can be read back: without this an agent prefixes its output paths with the checkout's
+ * name, then goes looking for what it wrote.
+ */
+export function describeWorkspace(workspace: JobSpec["workspace"], tools: readonly string[]): string {
+  const [checkout, ...others] = workspace.readOnly;
+  const lines = [`Read tools (read, ls, grep, find) are read-only and resolve a relative path against the source checkout (${checkout}).`];
+  if (others.length > 0) lines.push(`Other readable locations, by absolute path: ${others.join(", ")}.`);
+  if (tools.includes("write") || tools.includes("edit")) {
+    lines.push(
+      "write and edit work only in the output directory: give them a path relative to it (for example `assessment/<app>/analysis/report.md`), never an absolute path and never prefixed with the checkout's name or `src/`.",
+      "The output directory is not readable with the read tools: do not read, ls or find what you wrote, and do not rewrite a file to check it. A path the read tools reject as outside the workspace is not a place to write instead.",
+    );
+  }
+  return ["<workspace>", ...lines, "</workspace>"].join("\n");
+}
+
+/** The agent's instructions, the workspace note when given, then its skills, each in a named block. */
+export function composeSystemPrompt(agent: AgentDefinition, workspace?: JobSpec["workspace"]): string {
   const parts = [agent.instructions.trim()];
+  if (workspace !== undefined) parts.push(describeWorkspace(workspace, agent.tools));
   for (const skill of agent.skills ?? []) {
     const supporting =
       skill.supporting === undefined || skill.supporting.paths.length === 0
