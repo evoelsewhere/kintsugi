@@ -1,12 +1,13 @@
-// Built-in plugins (ADR-0035): the modernization content shipped with Kintsugi, grouped into
-// plugins by builtin/plugins.json. A plugin is a folder in the Claude Code plugin format extended with
-// workflows/ and scripts/; phase 1 declares each plugin's members by name and keeps the files where the
-// orchestrator reads them, so a plugin's files are virtual paths relative to builtin/ plus a generated
-// `.claude-plugin/plugin.json`.
+// Built-in plugins (ADR-0035): the modernization content shipped with Kintsugi, one folder per
+// plugin under builtin/plugins/, in the Claude Code plugin format extended with workflows/ and
+// scripts/. A plugin's components are what its folders hold; its manifest is
+// `.claude-plugin/plugin.json` (name, version, description) plus `kintsugi.json` (title, audience,
+// requires). Paths are relative to the plugin's folder.
 
+import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import { BUILTIN_DIR, loadBuiltinCatalog } from "./builtin.js";
+import { BUILTIN_DIR, builtinPluginDirs, loadBuiltinCatalog } from "./builtin.js";
 import { type BuiltinCommand, loadBuiltinCommands } from "./commands.js";
 import { type FlowNode, flowComponents } from "./flow.js";
 
@@ -68,6 +69,8 @@ export interface BuiltinPlugin {
   version: string;
   description: string;
   audience: PluginAudience;
+  /** Plugins whose content this one also relies on (it carries its own copies of the shared parts). */
+  requires: string[];
   /** Shared skills the plugin carries. */
   skills: string[];
   components: PluginComponent[];
@@ -76,24 +79,20 @@ export interface BuiltinPlugin {
   pipeline: PluginLink[];
 }
 
+/** The two manifest files of a plugin folder. */
 interface Manifest {
   name: string;
   title: string;
   version: string;
   description: string;
   audience: PluginAudience;
-  skills: string[];
-  agents: string[];
-  commands: string[];
-  workflows: string[];
-  scripts: string[];
-  hooks: string[];
+  requires: string[];
 }
 
 export const PLUGIN_MANIFEST_DIR = ".claude-plugin";
 export const PLUGIN_MANIFEST_FILE = `${PLUGIN_MANIFEST_DIR}/plugin.json`;
 
-const IGNORED = new Set(["__pycache__", ".pytest_cache", "node_modules", "tests"]);
+const IGNORED = new Set(["__pycache__", ".pytest_cache", "node_modules"]);
 
 async function walk(dir: string, root: string): Promise<PluginFile[]> {
   const files: PluginFile[] = [];
@@ -122,12 +121,28 @@ function scriptDescription(text: string): string {
 
 const read = (dir: string, path: string): Promise<string> => readFile(join(dir, path), "utf8");
 
-async function manifestsOf(dir: string): Promise<Manifest[]> {
-  return (JSON.parse(await read(dir, "plugins.json")) as { plugins: Manifest[] }).plugins;
+/** The names of the files with `extension` directly in `<dir>/<folder>` (without it); [] when the folder is absent. */
+async function stems(dir: string, folder: string, extension: string): Promise<string[]> {
+  const path = join(dir, folder);
+  if (!existsSync(path)) return [];
+  return (await readdir(path, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(extension))
+    .map((entry) => entry.name.slice(0, -extension.length))
+    .sort();
 }
 
-function generatedManifest(manifest: Manifest): string {
-  return `${JSON.stringify({ name: manifest.name, version: manifest.version, description: manifest.description, author: { name: "Kintsugi" }, keywords: ["kintsugi", manifest.audience] }, null, 2)}\n`;
+/** A plugin's manifest: plugin.json (the Claude plugin manifest) and kintsugi.json (what Kintsugi adds). */
+async function manifestOf(dir: string, problems: string[], folder: string): Promise<Manifest | undefined> {
+  try {
+    const base = JSON.parse(await read(dir, PLUGIN_MANIFEST_FILE)) as { name?: string; version?: string; description?: string };
+    const extra = JSON.parse(await read(dir, "kintsugi.json")) as { title?: string; audience?: string; requires?: string[] };
+    if (base.name !== folder) problems.push(`plugin ${folder}: plugin.json names it "${base.name ?? ""}"`);
+    if (extra.audience !== "runtime" && extra.audience !== "member") problems.push(`plugin ${folder}: kintsugi.json audience must be runtime or member`);
+    return { name: folder, title: extra.title ?? folder, version: base.version ?? "0.0.0", description: base.description ?? "", audience: extra.audience === "member" ? "member" : "runtime", requires: extra.requires ?? [] };
+  } catch (error) {
+    problems.push(`plugin ${folder}: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
 }
 
 /** Where in `text` the component is first named (a file name, or the name beside the word "workflow"); -1 when it is not. */
@@ -169,15 +184,15 @@ function pipelineOf(flows: readonly PluginFlow[]): PluginLink[] {
 }
 
 /** The flow of every command of the plugin, from its metadata and the order its text names its parts. */
-async function flowsOf(dir: string, components: readonly PluginComponent[], commands: readonly BuiltinCommand[], manifest: Manifest): Promise<PluginFlow[]> {
+async function flowsOf(dir: string, components: readonly PluginComponent[], commands: readonly BuiltinCommand[]): Promise<PluginFlow[]> {
   const agents = components.filter((entry) => entry.kind === "agent").map((entry) => entry.name);
   const scripts = components.filter((entry) => entry.kind === "script").map((entry) => entry.name);
   const workflows = new Map<string, { agents: string[]; scripts: string[] }>();
   for (const entry of components.filter((component) => component.kind === "workflow")) workflows.set(entry.name, workflowParts(await read(dir, entry.path), agents, scripts));
 
   const flows: PluginFlow[] = [];
-  for (const command of manifest.commands) {
-    const entry = commands.find((candidate) => candidate.command === command)!;
+  for (const entry of commands) {
+    const command = entry.command;
     const text = await read(dir, `commands/${command}.md`);
     const steps: Array<PluginFlowStep & { at: number }> = [];
     for (const name of scripts) {
@@ -208,92 +223,68 @@ async function flowsOf(dir: string, components: readonly PluginComponent[], comm
   return flows;
 }
 
-/** Loads the built-in plugins; throws with every problem when the manifest names something that does not exist. */
+/** Loads the built-in plugins from their folders; throws with every problem found. */
 export async function loadBuiltinPlugins(dir: string = BUILTIN_DIR): Promise<BuiltinPlugin[]> {
-  const [manifests, catalog, commands] = await Promise.all([manifestsOf(dir), loadBuiltinCatalog(dir), loadBuiltinCommands(dir)]);
+  const [catalog, allCommands] = await Promise.all([loadBuiltinCatalog(dir), loadBuiltinCommands(dir)]);
   const problems: string[] = [];
   const plugins: BuiltinPlugin[] = [];
+  const folders = builtinPluginDirs(dir);
 
-  for (const manifest of manifests) {
+  for (const folder of folders) {
+    const manifest = await manifestOf(folder.dir, problems, folder.name);
+    if (manifest === undefined) continue;
+    for (const required of manifest.requires) if (!folders.some((other) => other.name === required)) problems.push(`plugin ${manifest.name}: requires ${required}, which is not installed`);
+
     const components: PluginComponent[] = [];
-    const files = new Map<string, PluginFile>();
-    const add = async (path: string): Promise<boolean> => {
-      try {
-        files.set(path, { path, size: (await stat(join(dir, path))).size });
-        return true;
-      } catch {
-        problems.push(`plugin ${manifest.name}: ${path} does not exist`);
-        return false;
-      }
-    };
+    const agentNames = await stems(folder.dir, "agents", ".md");
+    const scriptNames = (await stems(folder.dir, "scripts", ".py")).filter((name) => !name.startsWith("test_"));
+    const workflowNames = await stems(folder.dir, "workflows", ".js");
+    const commands = allCommands.filter((entry) => entry.plugin === manifest.name);
 
-    for (const name of manifest.agents) {
+    for (const name of agentNames) {
       const agent = catalog.agents.find((entry) => entry.manifest.name === name);
-      if (agent === undefined) problems.push(`plugin ${manifest.name}: unknown agent ${name}`);
-      else if (await add(`agents/${name}.md`)) components.push({ kind: "agent", name, path: `agents/${name}.md`, description: agent.manifest.description, audience: agent.manifest.audience });
+      if (agent !== undefined) components.push({ kind: "agent", name, path: `agents/${name}.md`, description: agent.manifest.description, audience: agent.manifest.audience });
     }
-    for (const command of manifest.commands) {
-      const entry = commands.find((candidate) => candidate.command === command);
-      if (entry === undefined) problems.push(`plugin ${manifest.name}: unknown command ${command}`);
-      else if (await add(`commands/${command}.md`)) components.push({ kind: "command", name: entry.id, path: `commands/${command}.md`, description: entry.description, audience: entry.audience });
-    }
-    for (const name of manifest.skills) {
+    for (const entry of commands) components.push({ kind: "command", name: entry.id, path: `commands/${entry.command}.md`, description: entry.description, audience: entry.audience });
+    const skillsDir = join(folder.dir, "skills");
+    const skillNames = existsSync(skillsDir) ? (await readdir(skillsDir, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : [];
+    for (const name of skillNames) {
       const skill = catalog.skills.find((entry) => entry.name === name);
-      if (skill === undefined) {
-        problems.push(`plugin ${manifest.name}: unknown skill ${name}`);
-        continue;
-      }
-      for (const file of await walk(join(dir, "skills", name), dir)) files.set(file.path, file);
-      components.push({ kind: "skill", name, path: `skills/${name}/SKILL.md`, description: skill.description });
+      if (skill !== undefined) components.push({ kind: "skill", name, path: `skills/${name}/SKILL.md`, description: skill.description });
     }
-    for (const name of manifest.workflows) {
-      const path = `workflows/${name}.js`;
-      if (await add(path)) components.push({ kind: "workflow", name, path, description: workflowDescription(await read(dir, path)) });
-    }
-    for (const name of manifest.scripts) {
-      const path = `scripts/${name}.py`;
-      if (await add(path)) components.push({ kind: "script", name, path, description: scriptDescription(await read(dir, path)) });
-    }
-    for (const hook of manifest.hooks) {
-      for (const file of await walk(join(dir, hook), dir)) {
-        files.set(file.path, file);
-        if (/^hooks\/[^/]+\.py$/.test(file.path)) components.push({ kind: "hook", name: file.path.slice("hooks/".length), path: file.path, description: scriptDescription(await read(dir, file.path)) });
-      }
-    }
+    for (const name of workflowNames) components.push({ kind: "workflow", name, path: `workflows/${name}.js`, description: workflowDescription(await read(folder.dir, `workflows/${name}.js`)) });
+    for (const name of scriptNames) components.push({ kind: "script", name, path: `scripts/${name}.py`, description: scriptDescription(await read(folder.dir, `scripts/${name}.py`)) });
+    for (const name of await stems(folder.dir, "hooks", ".py")) components.push({ kind: "hook", name: `${name}.py`, path: `hooks/${name}.py`, description: scriptDescription(await read(folder.dir, `hooks/${name}.py`)) });
 
-    const flows = await flowsOf(dir, components, commands, manifest);
+    const flows = await flowsOf(folder.dir, components, commands);
+    const known = { script: scriptNames, agent: agentNames, workflow: workflowNames };
     for (const flow of flows) {
       for (const used of flowComponents(flow.flow ?? [])) {
-        if (used.generated === true) continue;
-        const known = { script: manifest.scripts, agent: manifest.agents, workflow: manifest.workflows }[used.kind];
-        if (!known.includes(used.name)) problems.push(`plugin ${manifest.name}: /${flow.command} flow uses ${used.kind} ${used.name}, which the plugin does not carry`);
+        if (used.generated !== true && !known[used.kind].includes(used.name)) problems.push(`plugin ${manifest.name}: /${flow.command} flow uses ${used.kind} ${used.name}, which the plugin does not carry`);
       }
     }
-    files.set(PLUGIN_MANIFEST_FILE, { path: PLUGIN_MANIFEST_FILE, size: Buffer.byteLength(generatedManifest(manifest)) });
     plugins.push({
       name: manifest.name,
       title: manifest.title,
       version: manifest.version,
       description: manifest.description,
       audience: manifest.audience,
-      skills: manifest.skills,
+      requires: manifest.requires,
+      skills: skillNames,
       components,
-      files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)),
+      files: (await walk(folder.dir, folder.dir)).sort((a, b) => a.path.localeCompare(b.path)),
       flows,
       pipeline: pipelineOf(flows),
     });
   }
   if (problems.length > 0) throw new Error(`Invalid built-in plugins:\n- ${problems.join("\n- ")}`);
-  return plugins;
+  // Plugins others rely on come first (understand before modernize), then by name.
+  return plugins.sort((a, b) => a.requires.length - b.requires.length || a.name.localeCompare(b.name));
 }
 
-/** The text of one file of a built-in plugin (the generated manifest included); undefined when the plugin has no such file. */
+/** The text of one file of a built-in plugin; undefined when the plugin has no such file. */
 export async function readBuiltinPluginFile(plugins: readonly BuiltinPlugin[], name: string, path: string, dir: string = BUILTIN_DIR): Promise<string | undefined> {
   const plugin = plugins.find((entry) => entry.name === name);
   if (plugin === undefined || !plugin.files.some((file) => file.path === path)) return undefined;
-  if (path === PLUGIN_MANIFEST_FILE) {
-    const manifest = (await manifestsOf(dir)).find((entry) => entry.name === name);
-    return manifest === undefined ? undefined : generatedManifest(manifest);
-  }
-  return read(dir, path);
+  return read(join(dir, "plugins", name), path);
 }

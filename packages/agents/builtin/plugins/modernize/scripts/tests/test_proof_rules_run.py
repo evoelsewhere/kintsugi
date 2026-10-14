@@ -1,6 +1,6 @@
 """Tests for the "Rules traced" check: a rule is tested only when something that ran and passed backs it, and test-only folders are not judged.
 
-Run:  python -m pytest packages/agents/builtin/scripts/tests/test_proof_rules_run.py
+Run:  python -m pytest packages/agents/builtin/plugins/modernize/scripts/tests/test_proof_rules_run.py
 A test that names a rule is not a test that ran: skipped and pending tests, and files whose class never ran, leave the rule "named, not run".
 """
 import json

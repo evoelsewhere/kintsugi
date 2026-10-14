@@ -16,7 +16,7 @@ export default tseslint.config(
       "**/coverage/**",
       "**/.turbo/**",
       // Workflow modules use orchestrator-injected globals (for example, args and log), not a standalone Node execution context.
-      "packages/agents/builtin/workflows/**",
+      "packages/agents/builtin/plugins/*/workflows/**",
     ],
   },
   js.configs.recommended,

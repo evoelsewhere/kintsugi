@@ -53,7 +53,7 @@ export interface JobRunEvent {
 
 export const isActive = (run: Pick<JobRunView, "status">): boolean => run.status === "queued" || run.status === "running";
 
-/** A stage of the built-in pipeline (packages/agents/builtin/commands), and whether the portal can run it yet. */
+/** A stage of the built-in pipeline (packages/agents/builtin/plugins/<plugin>/commands), and whether the portal can run it yet. */
 export interface StageView {
   id: string;
   command: string;

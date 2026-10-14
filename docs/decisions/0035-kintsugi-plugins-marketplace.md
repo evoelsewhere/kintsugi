@@ -19,12 +19,12 @@ The portal lists "Agents", but what Kintsugi ships is more than agents: commands
 5. **UI.** A plugin page shows a file tree beside a read-only code view; later an editor changes the files of a project plugin and commits them through the document write path. A plugin also has an end-to-end **workflow view**: command → workflow → agents → scripts → outputs → gates, drawn from the plugin's own manifests (command metadata, workflow `meta`), so a reader sees how it works and where to develop it.
 
 ## Phases
-1. *(done)* Navigation and pages: Plugins replaces Agents, a marketplace of plugin cards, a plugin page with components and files. Built-in plugins are declared by `packages/agents/builtin/plugins.json`; the files stay where the orchestrator expects them.
-2. Physical layout: move each built-in plugin into its own folder in the plugin format, add `.claude-plugin/plugin.json`, validate with `claude plugin validate`, and read project plugins from the document repository.
+1. *(done)* Navigation and pages: Plugins replaces Agents, a marketplace of plugin cards, a plugin page with components and files.
+2. *(done for the built-in plugins)* Physical layout: each built-in plugin is its own folder under `packages/agents/builtin/plugins/` with `.claude-plugin/plugin.json` and `kintsugi.json`; the loaders, the orchestrator (scripts, workflows, the JobOutput hook) and the tests read from the plugin folders. A part two plugins share is copied into both and a test keeps the copies identical. Still to do: validate with `claude plugin validate` and read project plugins from the document repository.
 3. Editor: edit and create project plugins in the portal, committed by pull request.
 4. Workflow view per plugin.
 5. Runtime resolution by plugin (an agent is `plugin:agent`), model bindings and versions per plugin.
 
 ## Consequences
 - The old Agent Builder pages remain reachable from the marketplace until phase 3 folds them into the plugin editor.
-- Splitting the built-in content is declarative in phase 1; moving the files is phase 2 and touches the orchestrator's script and workflow paths.
+- Scripts and workflows are found by name across the plugins, so names must be unique across plugins.

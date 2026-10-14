@@ -1,6 +1,6 @@
 """Tests for the comparison script's tolerance and explicit-root CLI.
 
-Run:  python -m pytest packages/agents/builtin/scripts/tests/test_compare_tolerance.py
+Run:  python -m pytest packages/agents/builtin/plugins/modernize/scripts/tests/test_compare_tolerance.py
 """
 import json
 import os

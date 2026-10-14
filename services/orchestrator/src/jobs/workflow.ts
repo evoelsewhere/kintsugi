@@ -1,4 +1,4 @@
-// Workflow executor (ADR-0027): runs a multi-job workflow from packages/agents/builtin/workflows
+// Workflow executor (ADR-0027): runs a multi-job workflow from packages/agents/builtin/plugins/*/workflows
 // (never from a repository). A workflow module is plain JavaScript with `export const meta`
 // and a top-level body that may `await` and `return`; its body runs as an async function
 // with injected globals:
@@ -19,9 +19,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { BUILTIN_DIR } from "@kintsugi/agents";
+import { findBuiltinFile } from "@kintsugi/agents";
 
-export const WORKFLOWS_DIR = join(BUILTIN_DIR, "workflows");
 
 const WORKFLOW_NAME = /^[a-z][a-z0-9-]{0,63}$/;
 
@@ -62,9 +61,11 @@ export interface WorkflowOutcome {
 }
 
 /** Loads a built-in workflow by id (the file name without `.js`). */
-export async function loadWorkflow(name: string, dir: string = WORKFLOWS_DIR): Promise<string> {
+export async function loadWorkflow(name: string, dir?: string): Promise<string> {
   if (!WORKFLOW_NAME.test(name)) throw new Error(`Invalid workflow id "${name}"`);
-  return readFile(join(dir, `${name}.js`), "utf8");
+  const file = dir === undefined ? findBuiltinFile("workflows", `${name}.js`) : join(dir, `${name}.js`);
+  if (file === undefined) throw new Error(`No built-in plugin has a workflow "${name}"`);
+  return readFile(file, "utf8");
 }
 
 /** Turns a workflow module into the body of an async function. */

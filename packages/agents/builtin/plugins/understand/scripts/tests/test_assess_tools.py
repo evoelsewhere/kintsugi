@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))))
-SCRIPTS = os.path.join(ROOT, 'packages', 'agents', 'builtin', 'scripts')
+SCRIPTS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS)
 PYTHON = sys.executable
 

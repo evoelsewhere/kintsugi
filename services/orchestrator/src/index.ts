@@ -27,6 +27,6 @@ export { builtinAgents, installedAgents, pgCustomAgents, type AgentResolver } fr
 export { JOB_OUTPUT_HOOK, runJobOutputHook, type HookOutcome } from "./jobs/hook.js";
 export { STAGES, STAGE_IDS, fill, stageInfo, type StageInfo, type StagePlan, type StagePrerequisite, type StageStep } from "./jobs/stages.js";
 export { StagePlanExecutor, type ExecutorDeps, type StageOutcome } from "./jobs/executor.js";
-export { WORKFLOWS_DIR, loadWorkflow, runWorkflow, workflowBody, type WorkflowBudgets, type WorkflowOutcome } from "./jobs/workflow.js";
+export { loadWorkflow, runWorkflow, workflowBody, type WorkflowBudgets, type WorkflowOutcome } from "./jobs/workflow.js";
 export { DEFAULT_GATE_DECIDER, JobFailure, type GateDecider, type GateDecision, type GateRequest, type ArtifactEntry, type JobKind, type JobRun, type JobStatus, type JobStore, type NewJobRun, type SourceCheckouts, type StepLimits } from "./jobs/model.js";
 export { WORKER_ACTOR, gateState, requestGate, waitForGate, type GateDb, type GateRequest as PersistedGateRequest, type GateState, type WaitOptions } from "./gates.js";

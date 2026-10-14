@@ -13,7 +13,7 @@ describe("built-in plugins", () => {
     ]);
     const understand = plugins[0]!;
     const names = (kind: string): string[] => understand.components.filter((component) => component.kind === kind).map((component) => component.name);
-    expect(names("agent")).toEqual(["legacy-analyst", "business-rules-extractor", "security-auditor"]);
+    expect(names("agent")).toEqual(["business-rules-extractor", "legacy-analyst", "security-auditor"]);
     expect(names("command")).toEqual(["assess", "understand"]);
     expect(names("workflow")).toContain("harden-scan");
     expect(understand.components.find((component) => component.name === "extract-rules")?.description).not.toBe("");
@@ -39,9 +39,23 @@ describe("built-in plugins", () => {
     }
   });
 
-  it("generates plugin.json and reads files only from the plugin", async () => {
+  it("keeps the parts two plugins share identical, and a plugin that needs another says so", async () => {
+    const plugins = await loadBuiltinPlugins();
+    expect(plugins.map((plugin) => [plugin.name, plugin.requires])).toEqual([
+      ["understand", []],
+      ["modernize", ["understand"]],
+    ]);
+    for (const path of ["scripts/mermaid_lint.py", "skills/mermaid-diagrams/SKILL.md", "skills/mermaid-diagrams/references/c4.md"]) {
+      const [first, second] = await Promise.all(plugins.map((plugin) => readBuiltinPluginFile(plugins, plugin.name, path)));
+      expect(first, path).toBeDefined();
+      expect(second, path).toBe(first);
+    }
+  });
+
+  it("reads plugin.json from the plugin folder and reads files only from the plugin", async () => {
     const plugins = await loadBuiltinPlugins();
     expect(JSON.parse((await readBuiltinPluginFile(plugins, "understand", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "understand", version: "1.0.0" });
+    expect(JSON.parse((await readBuiltinPluginFile(plugins, "modernize", "kintsugi.json"))!)).toMatchObject({ audience: "member", requires: ["understand"] });
     expect(await readBuiltinPluginFile(plugins, "understand", "commands/modernize-verify.md")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "understand", "../package.json")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "modernize", "commands/modernize-verify.md")).toContain("verify");
@@ -50,7 +64,9 @@ describe("built-in plugins", () => {
 
 describe("plugin flows", () => {
   it("orders what a command runs by where its text names it and links commands through their artifacts", async () => {
-    const [understand, modernize] = await loadBuiltinPlugins();
+    const plugins = await loadBuiltinPlugins();
+    const understand = plugins.find((plugin) => plugin.name === "understand")!;
+    const modernize = plugins.find((plugin) => plugin.name === "modernize")!;
     const flow = (plugin: typeof understand, id: string) => plugin!.flows.find((entry) => entry.command === id)!;
 
     const assess = flow(understand, "assess");

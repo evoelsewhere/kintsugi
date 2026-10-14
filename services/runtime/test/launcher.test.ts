@@ -97,7 +97,7 @@ describe("script steps", () => {
 
   it("runs the built-in inventory script against a fixture checkout", async () => {
     const ws = workspace("inventory");
-    const script = join(import.meta.dirname, "../../../packages/agents/builtin/scripts/inventory.py");
+    const script = join(import.meta.dirname, "../../../packages/agents/builtin/plugins/understand/scripts/inventory.py");
     const result = await runScript(spec(ws, script, ["demo", "--source", ws.src, "--out", join(ws.out, "assessment", "demo")]));
     expect(result.failure).toBeUndefined();
     const inventory = JSON.parse(readFileSync(join(ws.out, "assessment", "demo", "inventory.json"), "utf8")) as { sourceFileCount: number };
