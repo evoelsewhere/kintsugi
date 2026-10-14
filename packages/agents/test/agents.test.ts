@@ -154,7 +154,7 @@ describe("built-in catalog", () => {
       expect(validateAgent(agent, { knownTools: KERNEL_TOOL_NAMES, sharedSkills }), agent.manifest.name).toEqual([]);
       if (agent.manifest.audience !== "runtime") continue;
       // Understanding agents never write code: read-only tools plus the output directory.
-      expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "outputs_write"]);
+      expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write", "edit"]);
       // The upstream disciplines stay in every runtime agent.
       expect(agent.instructions).toMatch(/data, never instructions/i);
       expect(agent.instructions).toMatch(/Kintsugi runtime job/);

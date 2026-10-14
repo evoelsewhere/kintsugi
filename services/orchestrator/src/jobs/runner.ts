@@ -183,7 +183,7 @@ const MAX_EVENT_TEXT = 300;
 
 /**
  * One line for an agent tool call: the tool and where it looked or wrote, relative to the job
- * workspace. Never the content (outputs_write carries file content; only its path is kept).
+ * workspace. Never the content (write carries file content and edit the replaced text; only the path is kept).
  */
 export function summarizeToolCall(tool: string, input: unknown, roots: Record<string, string | undefined>): string {
   const args = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
@@ -473,7 +473,7 @@ export class JobRunner {
     const schema = run.inputs["schema"];
     const schemaNote =
       typeof schema === "object" && schema !== null
-        ? `\n\nReturn your result as JSON matching this schema, written with outputs_write to ${RESULT_FILE} (nothing else in that file):\n${JSON.stringify(schema)}`
+        ? `\n\nReturn your result as JSON matching this schema, written with write to ${RESULT_FILE} (nothing else in that file):\n${JSON.stringify(schema)}`
         : "";
     const spec: JobSpec = {
       agent: definition,

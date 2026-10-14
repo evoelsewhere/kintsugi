@@ -4,15 +4,15 @@
 // Adding a tool here widens what any agent can do: review its security boundary.
 
 import { glob as fsGlob, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, relative, sep } from "node:path";
 import {
+  createEditToolDefinition,
   createFindToolDefinition,
   createLsToolDefinition,
   createReadToolDefinition,
-  defineTool,
+  createWriteToolDefinition,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
 import { createKernelGrepTool } from "./grep.js";
 import { PathGuard } from "./paths.js";
 import type { KernelToolName } from "./tool-names.js";
@@ -98,32 +98,61 @@ const findTool: ToolFactory = (context) => {
   );
 };
 
-const outputsWriteTool: ToolFactory = (context) => {
+// write and edit are pi's own tools, working in the job's output directory: a relative path is
+// relative to it, and every path (symlinks included) must stay inside it. The read-only roots and
+// the rest of the filesystem are out of reach. Each file written is reported as an output.
+const outputOperations = (context: ToolContext): { guard: PathGuard; save: (path: string, content: string) => Promise<void> } => {
   const guard = new PathGuard([context.outDir]);
-  return erase(
-    defineTool({
-      name: "outputs_write",
-      label: "Write output",
-      description:
-        "Write a file to the job's output directory. `path` is relative to the output directory and must stay inside it; existing files are overwritten.",
-      promptSnippet: "outputs_write — write a file to the job output directory",
-      parameters: Type.Object({
-        path: Type.String({ minLength: 1 }),
-        content: Type.String(),
+  return {
+    guard,
+    save: async (path, content) => {
+      const target = guard.check(path);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, content, "utf8");
+      context.onOutput(relative(guard.check(context.outDir), target).split(sep).join("/"));
+    },
+  };
+};
+
+// pi resolves a relative path against the session's working directory (the first read-only root);
+// the output tools run with the output directory as theirs, so `report/result.md` lands in it.
+const inOutputDir = (tool: ToolDefinition, outDir: string): ToolDefinition => ({
+  ...tool,
+  execute: (toolCallId, params, signal, onUpdate, ctx) => tool.execute(toolCallId, params, signal, onUpdate, Object.create(ctx ?? null, { cwd: { value: outDir } })),
+});
+
+const writeTool: ToolFactory = (context) => {
+  const { guard, save } = outputOperations(context);
+  return inOutputDir(
+    erase(
+      createWriteToolDefinition(context.outDir, {
+        operations: {
+          writeFile: save,
+          mkdir: async (dir) => {
+            await mkdir(guard.check(dir), { recursive: true });
+          },
+        },
       }),
-      execute: async (_toolCallId, params) => {
-        let target: string;
-        try {
-          target = guard.check(`${context.outDir}/${params.path}`);
-        } catch {
-          return { details: undefined, content: [{ type: "text", text: `Refused: "${params.path}" escapes the output directory.` }], isError: true };
-        }
-        await mkdir(dirname(target), { recursive: true });
-        await writeFile(target, params.content, "utf8");
-        context.onOutput(params.path);
-        return { details: undefined, content: [{ type: "text", text: `wrote ${params.path} (${params.content.length} chars)` }] };
-      },
-    }),
+    ),
+    context.outDir,
+  );
+};
+
+const editTool: ToolFactory = (context) => {
+  const { guard, save } = outputOperations(context);
+  return inOutputDir(
+    erase(
+      createEditToolDefinition(context.outDir, {
+        operations: {
+          readFile: (path) => readFile(guard.check(path)),
+          access: async (path) => {
+            await stat(guard.check(path));
+          },
+          writeFile: save,
+        },
+      }),
+    ),
+    context.outDir,
   );
 };
 
@@ -132,7 +161,8 @@ const KERNEL_TOOLS: Record<KernelToolName, ToolFactory> = {
   ls: lsTool,
   grep: grepTool,
   find: findTool,
-  outputs_write: outputsWriteTool,
+  write: writeTool,
+  edit: editTool,
 };
 
 export { KERNEL_TOOL_NAMES } from "./tool-names.js";

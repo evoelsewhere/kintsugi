@@ -49,7 +49,7 @@ const BLANK: AgentDraft = {
   audience: "runtime",
   version: "1.0.0",
   description: "",
-  tools: ["read", "ls", "grep", "find", "outputs_write"],
+  tools: ["read", "ls", "grep", "find", "write", "edit"],
   skills: [],
   instructions: "",
   localSkills: [],
@@ -364,7 +364,7 @@ function AgentForm({ draft, context, readOnly, nameLocked, update }: AgentFormPr
               <Checkbox key={tool} checked={draft.tools.includes(tool)} disabled={readOnly} label={tool} onChange={(on) => update({ tools: toggle(draft.tools, tool, on) })} />
             ))}
           </div>
-          <span className="text-[12px] text-text-muted">Kernel tools only. Read tools are confined to the read-only workspace; outputs_write writes to the job&apos;s output.</span>
+          <span className="text-[12px] text-text-muted">Kernel tools only. Read tools are confined to the read-only workspace; write and edit work in the job&apos;s output directory.</span>
         </div>
       ) : (
         <Field label="Tools" hint="Harness tool names, comma-separated (e.g. Read, Write, Bash).">

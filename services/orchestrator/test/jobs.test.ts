@@ -355,7 +355,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   it("summarizes tool calls by tool and workspace path only", () => {
     const roots = { src: join(dataDir, "jobs", "x", "src"), out: join(dataDir, "jobs", "x", "out") };
     expect(summarizeToolCall("read", { path: join(roots.src, "lib", "a.c") }, roots)).toBe("read src/lib/a.c");
-    expect(summarizeToolCall("outputs_write", { path: "assessment/x.md", content: "secret body" }, roots)).toBe("outputs_write assessment/x.md");
+    expect(summarizeToolCall("write", { path: "assessment/x.md", content: "secret body" }, roots)).toBe("write assessment/x.md");
+    expect(summarizeToolCall("edit", { path: "assessment/x.md", edits: [{ oldText: "secret", newText: "body" }] }, roots)).toBe("edit assessment/x.md");
     expect(summarizeToolCall("grep", { path: roots.src, pattern: "TODO" }, roots)).toBe('grep src "TODO"');
     expect(summarizeToolCall("read", { path: join(tmpdir(), "elsewhere.txt") }, roots)).toBe("read (outside the workspace)");
   });

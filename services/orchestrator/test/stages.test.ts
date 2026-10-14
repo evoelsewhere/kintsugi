@@ -236,7 +236,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const specs = agents.specs.filter((spec) => spec.task.startsWith("Write the AS-IS specification of one catalog item"));
     const main = specs.find((spec) => spec.task.includes("/understand/briefs/billing/main.json"));
     expect(main?.task).toContain("assessment/demo/items/billing/main/rules.json");
-    expect(main?.task).toContain("knowledge/as-is/demo/billing/main.md with outputs_write");
+    expect(main?.task).toContain("knowledge/as-is/demo/billing/main.md with write");
 
     // Only per-item paths are published; briefs, shards and workflow results stay out.
     expect(artifacts).toEqual([

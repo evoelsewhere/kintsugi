@@ -33,7 +33,7 @@ them), {in}/${DIR}/inventory.json the measured inventory, and {in}/${DIR}/graph/
 parsing the code, spot-check about ten edges against the source, and still add what graphs omit (entry points from
 deployment configuration, data stores).
 
-Read the repository, then write ${script} with outputs_write: a Python 3 script using the standard
+Read the repository, then write ${script} with write: a Python 3 script using the standard
 library only. It is run as \`python extract_topology.py <source dir> <output dir>\`: it reads only the source directory,
 uses no network, writes <output dir>/topology.json and prints a summary (at most about 200 lines) headed by
 "Legacy repository {repo} at {commit}". It runs in a sandboxed script environment with a time limit, so keep it simple
@@ -66,7 +66,7 @@ must write <output dir>/topology.json. It failed with:
 
 {error}
 
-Fix the script and write the corrected version to ${script} with outputs_write (standard library
+Fix the script and write the corrected version to ${script} with write (standard library
 only, no network, reads only the source directory). Keep the topology.json schema and every top-level key.
 
 ${CREDENTIALS}

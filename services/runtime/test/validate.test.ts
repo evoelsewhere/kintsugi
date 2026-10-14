@@ -8,7 +8,7 @@ afterAll(() => workspace.remove());
 
 describe("validateJobSpec", () => {
   it("accepts a well-formed job", () => {
-    expect(() => validateJobSpec(jobSpec(workspace, agent(["read", "outputs_write"])))).not.toThrow();
+    expect(() => validateJobSpec(jobSpec(workspace, agent(["read", "write"])))).not.toThrow();
   });
 
   it("rejects tools the kernel does not provide", () => {

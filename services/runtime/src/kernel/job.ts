@@ -101,7 +101,7 @@ export class KernelJob implements JobHandle {
     this.events.push({ type: "tool.call", jobId: this.jobId, callId: `blocked-${this.#blocked}`, tool, input, decision: "blocked", reason });
   }
 
-  /** Called by outputs_write after a file landed in the output directory. */
+  /** Called by write and edit after a file landed in the output directory. */
   output(path: string): void {
     if (!this.#ended) this.events.push({ type: "output", jobId: this.jobId, path });
   }

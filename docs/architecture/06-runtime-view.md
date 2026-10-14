@@ -13,7 +13,7 @@ User ─► API ─ workflow.job_run (queued) + pg-boss `job-run` ─► Worker
    per step (child run):                                        │
      script step ─► python3 -I / node --permission, cleared env, timeout, output cap, tree kill
      agent job   ─► child process (node --permission, cleared env + provider env, timeout, tree kill):
-                    kernel (pi): read under src/in, outputs_write under out ─► LLM provider
+                    kernel (pi): read under src/in, write under out ─► LLM provider
      then: out/restricted/ ─► governance.restricted_record (encrypted) · JobOutput hook over out/ · artifact index
                                                                 │
    stage done ─► document write of out/ (queue `document-write`) ─► commit / PR in the document repo
