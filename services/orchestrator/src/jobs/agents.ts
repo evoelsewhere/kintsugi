@@ -54,7 +54,7 @@ export function pgCustomAgents(pool: Pick<Pool, "query">): CustomAgentStore {
     },
     async skills() {
       try {
-        return (await pool.query<{ name: string; text: string }>("select name, content as text from admin.agent_skill")).rows;
+        return (await pool.query<{ name: string; text: string; files: Record<string, string> }>("select name, content as text, files from admin.agent_skill")).rows;
       } catch (error) {
         if (missingTable(error)) return [];
         throw error;

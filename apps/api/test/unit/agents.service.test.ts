@@ -66,14 +66,14 @@ class MemoryAgents extends AgentRepository {
   async getSkill(name: string) {
     return this.skills.get(name);
   }
-  async createSkill(name: string, content: string, actor: string) {
+  async createSkill(name: string, content: string, files: Record<string, string>, actor: string) {
     if (this.skills.has(name)) return false;
-    this.skills.set(name, { name, content, createdBy: actor, updatedAt: this.#now() });
+    this.skills.set(name, { name, content, files, createdBy: actor, updatedAt: this.#now() });
     return true;
   }
-  async updateSkill(name: string, content: string, actor: string) {
+  async updateSkill(name: string, content: string, files: Record<string, string>, actor: string) {
     if (!this.skills.has(name)) return false;
-    this.skills.set(name, { name, content, updatedBy: actor, updatedAt: this.#now() });
+    this.skills.set(name, { name, content, files, updatedBy: actor, updatedAt: this.#now() });
     return true;
   }
   async removeSkill(name: string) {
@@ -188,6 +188,28 @@ describe("agents service", () => {
     expect(await service.import({ zip: zipFiles(bumped).toString("base64") }, admin)).toMatchObject({ created: false, agent: { version: "2.0.0" } });
     expect(await rejection(service.import({ zip: Buffer.from("garbage").toString("base64") }, admin))).toMatchObject({ type: BadRequestException });
     expect((await service.export("legacy-analyst")).fileName).toMatch(/^legacy-analyst-/);
+  });
+
+  it("keeps the files beside SKILL.md of a custom skill, refuses stray or unsafe ones, and hands them to jobs", async () => {
+    const { service } = setup();
+    const files = { "references/style.md": "# Style", "scripts/lint.py": "print('x')" };
+    const view = await service.createSkill({ name: "house-style", description: "House style.", content: "Write plainly.", files }, admin);
+    expect(view.files).toEqual([
+      { path: "references/style.md", content: "# Style" },
+      { path: "scripts/lint.py", content: "print('x')" },
+    ]);
+    expect(await rejection(service.createSkill({ name: "bad-one", description: "d", content: "c", files: { "notes.md": "x" } }, admin))).toMatchObject({ type: BadRequestException });
+    expect(await rejection(service.createSkill({ name: "bad-two", description: "d", content: "c", files: { "references/../../x": "x" } }, admin))).toMatchObject({ type: BadRequestException });
+    expect(await rejection(service.createSkill({ name: "bad-three", description: "d", content: "c", files: { "/references/x.md": "x" } }, admin))).toMatchObject({ type: BadRequestException });
+    await service.create(draft({ skills: ["house-style"] }), admin);
+    const definition = await service.definition("house-reviewer");
+    expect(definition.skills?.[0]).toMatchObject({ name: "house-style", files });
+    const updated = await service.updateSkill("house-style", { name: "house-style", description: "House style.", content: "Write plainly.", files: { "references/style.md": "# Style 2" } }, admin);
+    expect(updated.files).toEqual([{ path: "references/style.md", content: "# Style 2" }]);
+    // An update without `files` keeps them.
+    const renamed = await service.updateSkill("house-style", { name: "house-style", description: "New summary.", content: "Write plainly." }, admin);
+    expect(renamed.description).toBe("New summary.");
+    expect(renamed.files).toEqual([{ path: "references/style.md", content: "# Style 2" }]);
   });
 
   it("manages shared skills, refuses deleting used ones, and resolves custom agents", async () => {

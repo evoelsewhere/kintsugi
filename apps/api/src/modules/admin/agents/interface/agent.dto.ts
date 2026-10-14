@@ -14,6 +14,11 @@ export const skillDraftSchema = z.object({
   description: z.string().max(1024),
   content: z.string().max(100_000),
   license: shortText.optional(),
+  /** Files beside SKILL.md by relative path; the application layer checks the folders and the total size. */
+  files: z
+    .record(z.string().min(1).max(200), z.string().max(100_000))
+    .refine((files) => Object.keys(files).length <= 50, "At most 50 files")
+    .optional(),
 });
 
 export const agentDraftSchema = z.object({
@@ -54,7 +59,13 @@ export function toDraft(input: AgentDraftInput): AgentDraft {
 }
 
 export function toSkillDraft(input: z.infer<typeof skillDraftSchema>): SkillDraft {
-  return { name: input.name, description: input.description, content: input.content, ...(input.license === undefined ? {} : { license: input.license }) };
+  return {
+    name: input.name,
+    description: input.description,
+    content: input.content,
+    ...(input.license === undefined ? {} : { license: input.license }),
+    ...(input.files === undefined ? {} : { files: input.files }),
+  };
 }
 
 export function toImport(input: ImportAgentInput): AgentImport {

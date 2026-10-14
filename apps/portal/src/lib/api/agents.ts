@@ -13,6 +13,8 @@ export interface SkillPackage {
   description: string;
   content: string;
   license?: string;
+  /** Files beside SKILL.md (references/, scripts/, assets/), by relative path. */
+  files?: Record<string, string>;
 }
 
 export interface AgentManifest {

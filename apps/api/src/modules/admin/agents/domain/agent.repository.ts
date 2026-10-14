@@ -22,8 +22,8 @@ export abstract class AgentRepository {
   abstract listSkills(): Promise<SharedSkillRecord[]>;
   abstract getSkill(name: string): Promise<SharedSkillRecord | undefined>;
   /** False when the name is taken. */
-  abstract createSkill(name: string, content: string, actor: string): Promise<boolean>;
-  abstract updateSkill(name: string, content: string, actor: string): Promise<boolean>;
+  abstract createSkill(name: string, content: string, files: Record<string, string>, actor: string): Promise<boolean>;
+  abstract updateSkill(name: string, content: string, files: Record<string, string>, actor: string): Promise<boolean>;
   abstract removeSkill(name: string): Promise<boolean>;
 }
 
