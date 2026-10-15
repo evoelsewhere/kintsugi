@@ -1,22 +1,23 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { manifestFromProject } from "@kintsugi/domain";
+import { DEFAULT_AUTO_COMMIT_PATHS, manifestFromProject } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { parseKintsugiYaml, renderKintsugiYaml } from "../src/index.js";
 
 const root = resolve(import.meta.dirname, "../../..");
 
 describe("kintsugi.yaml", () => {
-  it("parses the starter template", () => {
+  it("parses the starter template and retains every default auto-commit path", () => {
     const result = parseKintsugiYaml(readFileSync(resolve(root, "templates/document-repo/kintsugi.yaml"), "utf8"));
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) return;
     expect(result.manifest.applications[0]!.repos.map((repo) => repo.role)).toEqual(["legacy", "legacy-data", "target", "target"]);
+    expect(result.manifest.autoCommitPaths).toEqual(DEFAULT_AUTO_COMMIT_PATHS);
   });
 
   it("parses the example in the document repo reference", () => {
-    const reference = readFileSync(resolve(root, "docs/reference/document-repo.md"), "utf8");
-    const example = /## `kintsugi\.yaml`[^\n]*\n[\s\S]*?```yaml\n([\s\S]*?)```/.exec(reference)?.[1];
+    const reference = readFileSync(resolve(root, "docs/reference/document-repo-manifest.md"), "utf8");
+    const example = /```yaml\n([\s\S]*?)```/.exec(reference)?.[1];
     expect(example).toBeDefined();
     const result = parseKintsugiYaml(example!);
     expect(result).toMatchObject({ ok: true });

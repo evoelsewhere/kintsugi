@@ -22,7 +22,7 @@ Targets are starting points; each project sets its own baseline in P0 (gate G0).
 |---|---|---|
 | Coverage, active rate | `HarnessActivity` from the Kintsugi MCP server / CLI | Built-in plugin hooks, harness telemetry (OTel, vendor metrics APIs) |
 | SDLC coverage | Stage runs with `Provenance.origin` ∈ {`human-with-ai`, `runtime-agent`} | — |
-| Time saved, cost reduction | Work item estimates vs. actuals (tracker), runtime cost (`UsageRecord`) | — |
+| Time saved, cost reduction | Unit estimates vs. actuals (tracker), runtime cost (`UsageRecord`) | — |
 | Outcome ratio | Artifact registrations with `aiShare` | `Assisted-by` commit trailers |
 | Defect rate | Defects linked to artifacts through traceability, split by provenance | — |
 

@@ -32,7 +32,7 @@
   | Harness transformer plugins | Installed by admins only |
 
   Agents are installation data (built-in or created by admins, ADR-0026) supplied per job by Kintsugi; projects cannot add agents, tools or MCP servers to the runtime. Kernel path confinement and tool allowlists are the agents' isolation inside the job workspace (ADR-0023, ADR-0029).
-- **Worker commits**: authored by a bot account and carrying job/agent trailers ([document repo](../../reference/document-repo.md#commit-conventions)).
+- **Worker commits**: authored by a bot account and carrying job/agent trailers ([document repo](../../reference/document-repo-commit-conventions.md)).
 
 ## Member harnesses
 

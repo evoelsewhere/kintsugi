@@ -1,6 +1,6 @@
 # Build a project
 
-> **Partly available.** The portal manages projects, applications and their repositories, and renders `kintsugi.yaml` (**Administration → Projects**). Creating or joining the document repo from the portal and committing `kintsugi.yaml` to it are planned (milestones M0–M3); until then, commit the rendered file to the document repo through a pull request.
+> **Partly available.** The portal manages projects, applications and their repositories, and renders `kintsugi.yaml` (**Administration → Projects**). It does not scaffold a document repo from `templates/document-repo/`: that portal capability and committing `kintsugi.yaml` are planned (milestones M0–M3). The template is currently used by `scripts/e2e/start.mjs` for end-to-end seed data. Until portal publishing is available, create or join the document repo and commit the rendered manifest through a pull request.
 
 Kintsugi is a common engine. Before the migration starts, the team sets the project up:
 1. create or join the document repo;

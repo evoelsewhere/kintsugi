@@ -54,7 +54,7 @@ export interface DocumentWriteFile {
 /**
  * Payload of a `document-write` job. The files come inline (`files`) or from a finished
  * runtime job's output directory (`outputOfJob`: <data>/jobs/<job-id>/out). Provenance fields
- * become commit trailers (docs/reference/document-repo.md#commit-conventions).
+ * become commit trailers (docs/reference/document-repo-commit-conventions.md).
  */
 export interface DocumentWriteRequest {
   /** Row id in workflow.document_write; the API creates the row as `queued`. */

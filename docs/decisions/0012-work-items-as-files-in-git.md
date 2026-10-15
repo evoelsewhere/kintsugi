@@ -15,7 +15,7 @@ Git is the source of truth for code, documents and the rulebook (ADR-0007, ADR-0
 - **One file per work item**: `units/<application>/<module>/<unit>.md` in the workspace repo.
   - The YAML frontmatter holds the unit's state: kind, wave, pilot flag, phase, stage, status, assignee, harness, dependencies, source/target paths, links, gate results.
   - The body is a short human-readable summary.
-  - Format: [workspace repository reference](../reference/document-repo.md#unit-files).
+  - Format: [workspace repository reference](../reference/document-repo-unit-files.md).
 - **Postgres keeps an index of the unit files** for the board, queries and metrics. It is rebuilt from Git at any time, and refreshed on every sync of the workspace repo.
 - **Single write path**:
   - Portal actions, CLI / MCP calls (`task start`, `task.update`) and runtime agents change state through the Kintsugi API.

@@ -3,7 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/templates/document-repo/kintsugi.yaml", "$TURBO_ROOT$/docs/reference/document-repo.md"]
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/templates/document-repo/kintsugi.yaml", "$TURBO_ROOT$/docs/reference/document-repo-manifest.md"]
     }
   }
 }

@@ -28,7 +28,7 @@ Migration and modernization at portfolio scale (tens to hundreds of applications
 ## What Kintsugi is not
 
 - Not another coding agent, and not a replacement for members' harnesses. Kintsugi provides context and quality control; members still do the implementation with their own tools.
-- Not a project-management tool replacing Jira. Kintsugi syncs with the tracker and focuses on migration work items and gates.
+- Not a project-management tool replacing Jira. Kintsugi syncs with the tracker and focuses on migration units and gates.
 - Not a generic knowledge base. The KB serves the AS-IS / TO-BE of specific applications.
 
 ## Who it is for

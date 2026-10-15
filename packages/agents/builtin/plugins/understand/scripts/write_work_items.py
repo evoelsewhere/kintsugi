@@ -5,7 +5,7 @@
 
 --traceability is traceability.json (merge_traceability.py). Each unit becomes
 <out>/units/<app>/<module>/<unit>.md, a unit file of the document repository (frontmatter = state,
-docs/reference/document-repo.md#unit-files): id, application, module, kind, title, phase
+docs/reference/document-repo-unit-files.md): id, application, module, kind, title, phase
 `discover-assess`, stage `understand`, status `pending`, complexity from the unit's size, dependsOn
 from the matrix, the legacy source paths, and links to the AS-IS specification and the business
 rules. --existing is the document repository's units/<app>/ folder: a unit that already has a file
