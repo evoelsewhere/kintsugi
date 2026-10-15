@@ -35,7 +35,7 @@ const decode = (text: string): string => {
   }
 };
 
-/** Resolves `href` written in the document at `basePath` (repo-relative, e.g. `knowledge/as-is/web/README.md`). */
+/** Resolves a repo-relative `href` written in the document at `basePath`. */
 export function resolveDocumentLink(href: string, basePath: string): LinkTarget {
   const trimmed = href.trim();
   const scheme = SCHEME.exec(trimmed)?.[1]?.toLowerCase();

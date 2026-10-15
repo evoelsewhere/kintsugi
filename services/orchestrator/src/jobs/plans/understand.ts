@@ -1,5 +1,5 @@
 // The `understand` stage (commands/modernize-understand.md, ADR-0033): runs on a selection of
-// catalog items (inputs.scope, resolved by the API from assessment/<app>/catalog.json). One run is
+// catalog items (inputs.scope, resolved by the API through assessmentCatalogPath). One run is
 // one pull request that touches only the paths of its own items, so concurrent runs never conflict:
 //
 //   scope_items.py      per item: topology fragment (published), brief and rule shard (intermediate)
@@ -17,13 +17,28 @@
 // the skeleton topology), and the security triage and patch review of the former harden stage.
 
 import type { StageContext, StagePlan, StageScope } from "../plan.js";
+import {
+  DOCUMENT_PATH_TOKENS,
+  assessmentBriefPath,
+  assessmentCatalogPath,
+  assessmentDir,
+  assessmentFilePath,
+  assessmentItemFilePath,
+  assessmentTopologyPath,
+  knowledgeAsIsItemFilePath,
+  knowledgeAsIsUnitPath,
+  unitsDir,
+  understandRunDir,
+  understandRunFilePath,
+  understandScopePath,
+} from "@kintsugi/domain";
 import { CREDENTIALS, HEADER, UNTRUSTED, WORKSPACE } from "./common.js";
 
-const DIR = "assessment/{app}";
-const ASIS = "knowledge/as-is/{app}";
+const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
+const DIR = assessmentDir(APP_TOKEN);
 /** Intermediate files of the run: briefs, shards, the workflows' results. */
-const RUN = `${DIR}/understand`;
-const SCOPE = `${RUN}/scope.json`;
+const RUN = understandRunDir(APP_TOKEN);
+const SCOPE = understandScopePath(APP_TOKEN);
 
 const TRACE_SCHEMA = {
   type: "object",
@@ -57,13 +72,13 @@ ${WORKSPACE}
 
 Your brief is {in}/{item} (read-only): the item's id, name, kind and summary from the catalog, its source files, its
 size, its topology leaves and entry points, the items it depends on and that use it, the data stores it reads and
-writes. Also under {in}: the item's topology fragment ${DIR}/items/{key}/topology.json, its business rules
-${DIR}/items/{key}/rules.json (ids RULE-<module>.<item>-NN, each citation checked by a second agent), its security
-findings ${DIR}/items/{key}/findings.json (ids SEC-<module>.<item>-NN), ${DIR}/catalog.json (every item of the
-application) and ${DIR}/ASSESSMENT.md. Read the item's source files and follow its calls only as far as needed to
+writes. Also under {in}: the item's topology fragment ${assessmentItemFilePath(APP_TOKEN, "{key}", "topology.json")}, its business rules
+${assessmentItemFilePath(APP_TOKEN, "{key}", "rules.json")} (ids RULE-<module>.<item>-NN, each citation checked by a second agent), its security
+findings ${assessmentItemFilePath(APP_TOKEN, "{key}", "findings.json")} (ids SEC-<module>.<item>-NN), ${assessmentCatalogPath(APP_TOKEN)} (every item of the
+application) and ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")}. Read the item's source files and follow its calls only as far as needed to
 describe it; the other items have their own specifications.
 
-Write ${ASIS}/{key}.md with write, with exactly these sections, in this order:
+Write ${knowledgeAsIsUnitPath(APP_TOKEN, "{key}")} with write, with exactly these sections, in this order:
 1. Purpose — what the item does for the business, in two to four sentences.
 2. Entry points — how the item is started (routes, transactions, screens, job steps, main programs), file:line each.
 3. Main flows — the main processing paths, step by step; add a Mermaid sequenceDiagram per main flow (autonumber;
@@ -100,7 +115,7 @@ const itemsArg = (ctx: StageContext): string => {
 
 /** The items and files scope_items.py resolved from the catalog. */
 async function resolvedScope(ctx: StageContext): Promise<{ items: string[]; files: string[] }> {
-  const value = (await ctx.readJson(`${RUN.replaceAll("{app}", ctx.app)}/scope.json`)) as { items?: unknown; files?: unknown } | undefined;
+  const value = (await ctx.readJson(understandScopePath(ctx.app))) as { items?: unknown; files?: unknown } | undefined;
   const strings = (list: unknown): string[] => (Array.isArray(list) ? list.filter((entry): entry is string => typeof entry === "string") : []);
   return { items: strings(value?.items), files: strings(value?.files) };
 }
@@ -117,8 +132,8 @@ export function understandMessage(app: string, scope?: StageScope): string {
 export const UNDERSTAND: StagePlan = {
   id: "understand",
   message: understandMessage,
-  documents: ["kintsugi.yaml", `${DIR}/catalog.json`, `${DIR}/inventory.json`, `${DIR}/topology.json`, `${DIR}/ASSESSMENT.md`, "units/{app}/"],
-  requires: [{ path: `${DIR}/catalog.json`, stage: "assess" }],
+  documents: ["kintsugi.yaml", assessmentCatalogPath(APP_TOKEN), `${DIR}/inventory.json`, assessmentTopologyPath(APP_TOKEN), `${DIR}/ASSESSMENT.md`, `${unitsDir(APP_TOKEN)}/`],
+  requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   reviewAll: true,
   steps: [
     {
@@ -137,16 +152,16 @@ export const UNDERSTAND: StagePlan = {
           id: "rules",
           kind: "workflow",
           workflow: "extract-rules",
-          args: async (ctx) => ({ app: ctx.app, modules: (await ctx.readJson(`${RUN.replaceAll("{app}", ctx.app)}/shards.json`)) ?? [] }),
-          resultTo: `${RUN}/rules_result.json`,
+          args: async (ctx) => ({ app: ctx.app, modules: (await ctx.readJson(understandRunFilePath(ctx.app, "shards.json"))) ?? [] }),
+          resultTo: understandRunFilePath(APP_TOKEN, "rules_result.json"),
           intermediate: true,
         },
         {
           id: "security",
           kind: "workflow",
           workflow: "harden-scan",
-          args: async (ctx) => ({ app: ctx.app, files: (await resolvedScope(ctx)).files, ...((await ctx.readText(`assessment/${ctx.app}/topology.json`)) === undefined ? {} : { topology: `assessment/${ctx.app}/topology.json` }) }),
-          resultTo: `${RUN}/scan.json`,
+          args: async (ctx) => ({ app: ctx.app, files: (await resolvedScope(ctx)).files, ...((await ctx.readText(assessmentTopologyPath(ctx.app))) === undefined ? {} : { topology: assessmentTopologyPath(ctx.app) }) }),
+          resultTo: understandRunFilePath(APP_TOKEN, "scan.json"),
           intermediate: true,
         },
       ],
@@ -155,29 +170,29 @@ export const UNDERSTAND: StagePlan = {
       id: "split-rules",
       kind: "script",
       script: "split_rules.py",
-      args: (ctx) => ["{app}", "--rules", `{in}/${RUN}/rules_result.json`, "--catalog", `{in}/${DIR}/catalog.json`, "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--rules", "{in}/" + understandRunFilePath(APP_TOKEN, "rules_result.json"), "--catalog", "{in}/" + assessmentCatalogPath(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}"],
     },
     {
       id: "split-findings",
       kind: "script",
       script: "split_findings.py",
-      args: (ctx) => ["{app}", "--scan", `{in}/${RUN}/scan.json`, "--catalog", `{in}/${DIR}/catalog.json`, "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--scan", "{in}/" + understandRunFilePath(APP_TOKEN, "scan.json"), "--catalog", "{in}/" + assessmentCatalogPath(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}"],
     },
     {
       id: "specifications",
       kind: "forEach",
       concurrency: 6,
       tolerateFailures: true,
-      items: async (ctx) => (await resolvedScope(ctx)).items.map((key) => ({ key, item: `assessment/${ctx.app}/understand/briefs/${key}.json` })),
+      items: async (ctx) => (await resolvedScope(ctx)).items.map((key) => ({ key, item: assessmentBriefPath(ctx.app, key) })),
       step: {
         id: "specify-item",
         kind: "agent",
         agent: "legacy-analyst",
         task: SPEC_TASK,
         schema: TRACE_SCHEMA,
-        resultTo: `${ASIS}/items/{key}/trace.json`,
-        intermediate: [`${ASIS}/items/{key}/trace.json`],
-        expects: [`${ASIS}/{key}.md`],
+        resultTo: knowledgeAsIsItemFilePath(APP_TOKEN, "{key}", "trace.json"),
+        intermediate: [knowledgeAsIsItemFilePath(APP_TOKEN, "{key}", "trace.json")],
+        expects: [knowledgeAsIsUnitPath(APP_TOKEN, "{key}")],
       },
     },
     {
@@ -199,7 +214,7 @@ export const UNDERSTAND: StagePlan = {
         "--repo",
         "{repo}",
         "--existing",
-        "{in}/units/{app}",
+        "{in}/" + unitsDir(APP_TOKEN),
         "--out",
         "{out}",
       ],

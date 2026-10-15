@@ -15,6 +15,7 @@ import {
   type StagePerformer,
 } from "./index.js";
 import { APPLICATION_REPOSITORY_ROLES, type ApplicationRepositoryRole, type ValidationProblem } from "./project.js";
+import { DEFAULT_DOCUMENT_AUTO_COMMIT_PATHS } from "./document-layout.js";
 
 export const MANIFEST_SCHEMA_VERSION = 1;
 
@@ -56,7 +57,7 @@ export interface KintsugiManifest {
 }
 
 /** Paths committed straight to the default branch by kintsugi-bot (ADR-0019). */
-export const DEFAULT_AUTO_COMMIT_PATHS: readonly string[] = ["units/**", "tasks/**", "knowledge/**/generated/**", "assessment/**/generated/**"];
+export const DEFAULT_AUTO_COMMIT_PATHS: readonly string[] = DEFAULT_DOCUMENT_AUTO_COMMIT_PATHS;
 
 /**
  * Whether a repository path (forward slashes, relative) matches a glob of `autoCommitPaths`:

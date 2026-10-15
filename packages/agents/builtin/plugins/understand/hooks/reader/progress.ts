@@ -88,7 +88,7 @@ export type Snapshot = {
   apps: string[]
   /** Which way the runtime jobs and member workflows are working on the app. */
   track: TrackKey
-  /** True once the app has an artifact under `assessment/<app>/`. */
+  /** True once the app has an assessment artifact under the directory returned by `assessmentDir`. */
   hasAssessment: boolean
   stages: Stage[]
   /** The units the estate map draws: the map's modules, or what the legacy tree holds. */

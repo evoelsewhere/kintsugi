@@ -3,7 +3,7 @@ import { bulletsIn, cellText, columnOf, paragraphsIn, sectionMatching, sectionsO
 import { linesOf } from './text.js'
 
 /**
- * `assessment/<app>/SECURITY_FINDINGS.md` (the harden stage) and the Security Findings section of
+ * the generated findings aggregate (path from `generatedFilePath`) and the Security Findings section of
  * `ASSESSMENT.md`, read into findings. The layout varies between runs: findings come from any
  * table with a severity column and an id or title column, or from `### SEC-001 · Title` cards
  * with labelled fields. Never throws.

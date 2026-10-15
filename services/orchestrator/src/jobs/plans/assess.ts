@@ -10,17 +10,30 @@
 // Portfolio mode (workflows/portfolio-assess.js) is not a portal stage yet.
 
 import type { StagePlan } from "../plan.js";
+import {
+  DOCUMENT_PATH_TOKENS,
+  assessmentAnalysisDir,
+  assessmentCatalogDraftDir,
+  assessmentCatalogPath,
+  assessmentDir,
+  assessmentFilePath,
+  assessmentInventoryPath,
+  legacyUnitsIndexPath,
+  topologyExtractorPath,
+  unitsDir,
+} from "@kintsugi/domain";
 import { CREDENTIALS, HEADER, RESTRICTED, UNTRUSTED, WORKSPACE } from "./common.js";
 import { topologySteps } from "./topology.js";
 
-const DIR = "assessment/{app}";
-const ANALYSIS = `${DIR}/analysis`;
+const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
+const DIR = assessmentDir(APP_TOKEN);
+const ANALYSIS = assessmentAnalysisDir(APP_TOKEN);
 /** Intermediate catalog files: the proposal, the curation edits, the curated catalog. */
-const DRAFT = `${DIR}/catalog-draft`;
+const DRAFT = assessmentCatalogDraftDir(APP_TOKEN);
 /** The model-written topology extraction script, kept with the assessment (ADR-0033). */
-const EXTRACT_SCRIPT = `${DIR}/tools/extract_topology.py`;
+const EXTRACT_SCRIPT = topologyExtractorPath(APP_TOKEN);
 
-const INVENTORY_FIRST = `The inventory measured by the script step is at {in}/assessment/{app}/inventory.json: read it first. Its figures
+const INVENTORY_FIRST = `The inventory measured by the script step is at {in}/${assessmentInventoryPath(APP_TOKEN)}: read it first. Its figures
 (lines, files, complexity, index) are the figures of record; do not re-measure them.`;
 
 const STRUCTURE_TASK = `Build the structural map of the legacy repository of {app}.
@@ -144,16 +157,16 @@ const SYNTHESIS_TASK = `Write the assessment of application {app}.
 ${WORKSPACE}
 
 Your inputs, read-only:
-- {in}/assessment/{app}/inventory.json — the figures of record from the inventory script (do not re-measure).
+- {in}/${assessmentInventoryPath(APP_TOKEN)} — the figures of record from the inventory script (do not re-measure).
 - {in}/${ANALYSIS}/structure.md, debt.md and security.md — the three analysis jobs' notes (domains and technology
   fingerprint, technical debt, vulnerabilities and masked credentials). Check what they cite before you repeat it.
-- {in}/assessment/{app}/catalog.json — the item catalog (modules and their items, from the extracted topology); the
+- {in}/${assessmentCatalogPath(APP_TOKEN)} — the item catalog (modules and their items, from the extracted topology); the
   domain table may follow its modules.
-- {in}/assessment/{app}/INTENT.md, if present — what the team wants from the modernization; take it into account.
-- {in}/assessment/{app}/telemetry/, if present — production exports a person attached (APM, batch logs).
+- {in}/${assessmentFilePath(APP_TOKEN, "INTENT.md")}, if present — what the team wants from the modernization; take it into account.
+- {in}/${assessmentFilePath(APP_TOKEN, "telemetry")}/, if present — production exports a person attached (APM, batch logs).
 - {in}/standards/, if present — the project's conventions.
 
-Write assessment/{app}/ASSESSMENT.md with write, a fact-grounded brief a VP of Engineering could take into a
+Write ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")} with write, a fact-grounded brief a VP of Engineering could take into a
 budget meeting, with these sections: Executive Summary (3–4 sentences: what it is, how big, how risky, the headline
 recommendation) · System Inventory (from inventory.json, naming the method that measured it, and the legacy repository
 and commit read) · Architecture at a Glance (the domain table; refer to ARCHITECTURE.mmd) · Production Runtime
@@ -167,7 +180,7 @@ Replace, with a one-paragraph rationale and the stage it routes to: a newer vers
 uplift; a rewrite in another technology piece by piece → transform; a rebuild on a new architecture → reimagine;
 Rehost and Replace change no code, so say so and what the analysis is still good for).
 
-Also write assessment/{app}/ARCHITECTURE.mmd: the domain diagram from the structure notes, one Mermaid \`flowchart TB\`
+Also write ${assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")}: the domain diagram from the structure notes, one Mermaid \`flowchart TB\`
 per the mermaid-diagrams skill (a \`subgraph\` per domain, nodes classed ui, service, batch, store or external, sanitized
 ids and quoted labels, within its size limits), without a Markdown fence.
 
@@ -189,16 +202,16 @@ export const ASSESS: StagePlan = {
     `${DIR}/graph/`,
     // The previous catalog and the understand stage's units keep the item ids (reconcile_catalog.py).
     `${DIR}/catalog.json`,
-    "knowledge/as-is/{app}/units.json",
-    "units/{app}/",
+    legacyUnitsIndexPath(APP_TOKEN),
+    `${unitsDir(APP_TOKEN)}/`,
   ],
   steps: [
     {
       id: "inventory",
       kind: "script",
       script: "inventory.py",
-      args: ["{app}", "--source", "{src}", "--source-repo", "{repo}", "--source-commit", "{commit}", "--out", "{out}/assessment/{app}"],
-      expects: ["assessment/{app}/inventory.json"],
+      args: ["{app}", "--source", "{src}", "--source-repo", "{repo}", "--source-commit", "{commit}", "--out", "{out}/" + DIR],
+      expects: [assessmentInventoryPath(APP_TOKEN)],
     },
     {
       id: "analysis",
@@ -258,9 +271,9 @@ export const ASSESS: StagePlan = {
         "--previous",
         `{in}/${DIR}/catalog.json`,
         "--units-json",
-        "{in}/knowledge/as-is/{app}/units.json",
+        "{in}/" + legacyUnitsIndexPath(APP_TOKEN),
         "--units-dir",
-        "{in}/units/{app}",
+        "{in}/" + unitsDir(APP_TOKEN),
         "--out",
         `{out}/${DIR}/catalog.json`,
       ],
@@ -271,7 +284,7 @@ export const ASSESS: StagePlan = {
       kind: "agent",
       agent: "legacy-analyst",
       task: SYNTHESIS_TASK,
-      expects: ["assessment/{app}/ASSESSMENT.md", "assessment/{app}/ARCHITECTURE.mmd"],
+      expects: [assessmentFilePath(APP_TOKEN, "ASSESSMENT.md"), assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")],
     },
   ],
 };

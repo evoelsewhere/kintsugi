@@ -1,7 +1,7 @@
 import { resolveDots } from './paths.js'
 
 /**
- * `knowledge/as-is/<app>/traceability.json` of the understand stage (merge_traceability.py, ADR-0031):
+ * the generated traceability file returned by `knowledgeAsIsGeneratedFilePath` of understand (merge_traceability.py, ADR-0031):
  * the units with what each one covers (files, rules, findings, dependencies, data stores), the
  * reverse indexes, what no unit covers, the dependency cycles and the "left out" counts.
  *
@@ -15,7 +15,7 @@ export type TraceDataStore = { id: string; access: string[] }
 export type TraceUnit = {
   /** `<app>/<module>/<unit>`. */
   id: string
-  /** `<module>/<unit>`: the unit's key under `knowledge/as-is/<app>/` and `units/<app>/`. */
+  /** The catalog entry key relative to its application; a full unit id also includes the application id. */
   key: string
   module: string
   unit: string

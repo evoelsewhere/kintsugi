@@ -1,12 +1,11 @@
-// Domain of the item catalog (ADR-0033): the catalog `assess` writes to
-// `assessment/<app>/catalog.json`, served with a status per item that is derived — never stored —
-// from the runs of `understand` and the per-item files on the document repo's default branch.
+// Domain of the item catalog (ADR-0033): `assess` writes the catalog through assessmentCatalogPath,
+// with a status per catalog item derived — never stored — from `understand` runs and the default-branch evidence.
 // Pure types and the derivation; reading the files and the runs is the application layer's job.
 
 import type { ItemCatalog, ItemCatalogItem } from "@kintsugi/agents/reader";
 import type { ItemStatus } from "@kintsugi/domain";
 
-/** `knowledge/as-is/<app>/items/<module>/<item>/meta.json`: written by `understand` for each item it specified. */
+/** Per-unit metadata written by `understand` for each specified catalog entry. */
 export interface ItemMeta {
   digest?: string;
   /** Source commit the item was understood at. */

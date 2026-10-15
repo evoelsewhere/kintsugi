@@ -1,7 +1,7 @@
 import { baseName, norm } from './paths.js'
 
 /**
- * `assessment/<app>/topology.json`, read into the few shapes the portal progress panel uses.
+ * the topology file returned by `assessmentTopologyPath`, read into the few shapes the portal progress panel uses.
  *
  * The file is written by an agent, so every field is treated as optional and
  * of unknown shape: anything that does not fit is dropped, never thrown on.

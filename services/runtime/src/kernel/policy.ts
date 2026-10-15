@@ -17,7 +17,7 @@ export function describeWorkspace(workspace: JobSpec["workspace"], tools: readon
   if (others.length > 0) lines.push(`Other readable locations, by absolute path: ${others.join(", ")}.`);
   if (tools.includes("write") || tools.includes("edit")) {
     lines.push(
-      "write and edit work only in the output directory: give them a path relative to it (for example `assessment/<app>/analysis/report.md`), never an absolute path and never prefixed with the checkout's name or `src/`.",
+      "write and edit work only in the output directory: give them a path relative to it (for example, a relative document path from the domain layout), never an absolute path and never prefixed with the checkout's name or `src/`.",
       "The output directory is not readable with the read tools: do not read, ls or find what you wrote, and do not rewrite a file to check it. A path the read tools reject as outside the workspace is not a place to write instead.",
     );
   }

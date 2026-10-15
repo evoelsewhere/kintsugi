@@ -28,9 +28,9 @@ export interface BuiltinCommand {
   agents: string[];
   /** Shared skills the stage relies on (a runtime stage's agents load them; members install them). */
   skills: string[];
-  /** Paths the stage reads (document repo, source; patterns such as `assessment/<app>/ASSESSMENT.md`). */
+  /** Paths the stage reads from the document repo or source, using domain-owned layout patterns. */
   reads: string[];
-  /** Document-repo paths the stage writes (patterns such as `assessment/<app>/ASSESSMENT.md`). */
+  /** Document-repo paths the stage writes, using domain-owned layout patterns. */
   writes: string[];
   /** Where a person decides before the stage goes on. */
   gates: string[];

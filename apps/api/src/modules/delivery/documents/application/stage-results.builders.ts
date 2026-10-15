@@ -1,5 +1,5 @@
-// The results of each stage with a results view, built from the files it wrote under
-// `assessment/<app>/` (understand: `knowledge/as-is/<app>/` and `units/<app>/`) with the parsers of @kintsugi/agents/reader (never parsed again here).
+// The results of each stage with a results view, built from its plan-owned document paths with
+// the parsers of @kintsugi/agents/reader (never parsed again here).
 // Each stage has a full build (the results tab) and a counts build that reads as little as
 // possible (the Delivery overview's headline numbers and the comparison with the previous run).
 
@@ -25,6 +25,7 @@ import {
   type Topology,
   type Traceability,
 } from "@kintsugi/agents/reader";
+import { DOCUMENT_PATH_TOKENS, assessmentDir, knowledgeAsIsDir, unitModuleDir, unitStatePath } from "@kintsugi/domain";
 import { chunk } from "#common/util/async.js";
 import type { AsIsDocument, AssessResults, HardenResults, MapDiagram, MapNode, MapResults, ResultStage, RulesResults, StageFile, UnderstandResults, UnderstandUnit } from "../domain/document.js";
 
@@ -47,8 +48,9 @@ interface Built {
 }
 
 type Full<T> = Omit<T, "stage" | "applicationId" | "ref" | "files" | "empty" | "previous">;
+const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
 
-/** The files each stage writes (in its directory, by default assessment/<app>/), its main document and the files its counts need. */
+/** The files each stage writes (in its domain-layout directory), its main document and the files its counts need. */
 export const STAGE_OUTPUTS: Record<ResultStage, { dir?: string; files: readonly string[]; main?: string; countsFrom: readonly string[] }> = {
   assess: { files: ["inventory.json", "ASSESSMENT.md", "ARCHITECTURE.mmd"], main: "ASSESSMENT.md", countsFrom: ["inventory.json"] },
   map: {
@@ -62,7 +64,7 @@ export const STAGE_OUTPUTS: Record<ResultStage, { dir?: string; files: readonly 
   },
   harden: { files: ["SECURITY_FINDINGS.md", "security_remediation.patch"], main: "SECURITY_FINDINGS.md", countsFrom: ["SECURITY_FINDINGS.md"] },
   understand: {
-    dir: "knowledge/as-is/{app}",
+    dir: knowledgeAsIsDir(APP_TOKEN),
     files: ["traceability.json", "traceability.md", "README.md", "architecture.md", "data-model.md", "integrations.md"],
     main: "README.md",
     countsFrom: ["traceability.json"],
@@ -70,7 +72,7 @@ export const STAGE_OUTPUTS: Record<ResultStage, { dir?: string; files: readonly 
 };
 
 /** The directory a stage writes its outputs to, for one application. */
-export const stageDir = (stage: ResultStage, applicationId: string): string => (STAGE_OUTPUTS[stage].dir ?? "assessment/{app}").replace("{app}", applicationId);
+export const stageDir = (stage: ResultStage, applicationId: string): string => (STAGE_OUTPUTS[stage].dir ?? assessmentDir(APP_TOKEN)).replace(APP_TOKEN, applicationId);
 
 const plural = (count: number, one: string, many = `${one}s`): string => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
 
@@ -326,16 +328,16 @@ type WorkItemRef = NonNullable<UnderstandUnit["workItem"]>;
 /** Work-item files read at once. */
 const WORK_ITEM_READS = 8;
 
-/** The work item of each unit that has one at the ref (`units/<app>/<module>/<unit>.md`), by unit id. */
+/** The unit state file of each unit that has one at the ref, by full unit id. */
 async function workItemsOf(source: StageSource, applicationId: string, units: Traceability["units"]): Promise<Map<string, WorkItemRef>> {
   const found = new Map<string, WorkItemRef>();
   if (!UNIT_SEGMENT.test(applicationId)) return found;
   // Never under restricted/ (the documents API serves nothing there either).
   const modules = [...new Set(units.map((unit) => unit.module))].filter((module) => UNIT_SEGMENT.test(module) && module !== "restricted");
   const listed = new Map<string, number>();
-  for (const files of await Promise.all(modules.map((module) => source.list(`units/${applicationId}/${module}`)))) for (const file of files) listed.set(file.path, file.size);
+  for (const files of await Promise.all(modules.map((module) => source.list(unitModuleDir(applicationId, module))))) for (const file of files) listed.set(file.path, file.size);
   const wanted = units.flatMap((unit) => {
-    const path = `units/${applicationId}/${unit.module}/${unit.unit}.md`;
+    const path = unitStatePath(applicationId, unit.module, unit.unit);
     const size = listed.get(path);
     return UNIT_SEGMENT.test(unit.unit) && size !== undefined ? [{ id: unit.id, path, size }] : [];
   });

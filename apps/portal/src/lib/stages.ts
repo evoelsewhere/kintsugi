@@ -83,7 +83,7 @@ export function agentProblems(stage: StageView, agents: AgentSummary[] | undefin
   });
 }
 
-/** A path pattern of a stage (`assessment/<app>/ASSESSMENT.md`) for one application. */
+/** A stage's document path pattern for one application. */
 export function resolvePath(pattern: string, applicationId: string): string {
   return pattern.replaceAll("<app>", applicationId).replaceAll("$app", applicationId);
 }

@@ -1,7 +1,7 @@
 import { resolveDots } from './paths.js'
 
 /**
- * `assessment/<app>/catalog.json` of the assess stage (ADR-0033): the application's items,
+ * the file returned by `assessmentCatalogPath` of the assess stage (ADR-0033): the application's catalog entries,
  * module → item, written by reconcile_catalog.py from a topology the model-written extraction
  * script produced and an agent's curation edits. Every field is still read as optional and of
  * unknown shape: an item without a valid id is dropped, a duplicate id is dropped, lists that are
