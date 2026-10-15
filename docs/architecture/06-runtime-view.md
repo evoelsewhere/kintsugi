@@ -51,34 +51,31 @@ Every runtime stage the portal can start is a **stage plan**: data in `services/
 
 A plan may also declare `optional` inputs (used when present, the missing ones listed in the summary) and `reviewAll` (every output through the pull request, auto-commit paths included). Any step may have a `when` condition (a skipped step is recorded), `expects` (files it must write; a missing one fails it with "did not write …") and `intermediate` (outputs later steps read but the writer never publishes: analysis notes, node packets, a scan result). The stage summary lists every step with its child run, status, round or item, the gates and the agent jobs started. A stage starts at most `KINTSUGI_STAGE_MAX_AGENTS` agent jobs (workflow jobs included) and runs at most `KINTSUGI_STAGE_CONCURRENCY` group members at a time ([configuration](../reference/configuration.md)).
 
-| Stage | Steps | Writes | Gates defaulted |
+| Plan / use | Steps | Writes | Gate behavior |
 | --- | --- | --- | --- |
-| `assess` | `inventory.py` · in parallel: `legacy-analyst` structure, `legacy-analyst` debt, `security-auditor` scan (intermediate notes) · `legacy-analyst` synthesis | `inventory.json`, `ASSESSMENT.md`, `ARCHITECTURE.mmd`, restricted credential inventory | none |
-| `map` | `legacy-analyst` topology job writes `extract_topology.py` · script step runs it (repaired once on failure) · `legacy-analyst` flows · gate · `node_packets.py` · one `legacy-analyst` description job per packet · `merge_topology.py` · `legacy-analyst` diagrams | `extract_topology.py`, `topology.json`, `topology.summary.txt`, three `.mmd` files | more than 40 nodes: describe the 40 largest |
-| `extract-rules` | `make_shards.py` · gate · workflow `extract-rules` (module mode, or lens mode on a tiny estate) · `render_rules.py` | `extract-rules.modules.json`, `rules_result.json`, `BUSINESS_RULES.md`, `DATA_OBJECTS.md` | more than 12 shards: run all |
-| `harden` | workflow `harden-scan` (intermediate result; five finders reviewing the code by hand, a carry-over of the assessment's security highlights when `ASSESSMENT.md` is merged, refuters and second judges) · `security-auditor` triage and remediation · up to 3 rounds of `security-auditor` review, each followed by a revision while a hunk is not clean | `SECURITY_FINDINGS.md`, `security_remediation.patch`, restricted credential inventory | none (applying the patch stays a member's decision outside Kintsugi) |
-| `understand` | `units_from_topology.py` (intermediate units and briefs) · gate · one `legacy-analyst` specification job per unit (traceability fragment as structured result, intermediate) · `merge_traceability.py` · `legacy-analyst` synthesis · `write_work_items.py` | `knowledge/as-is/<app>/<module>/<unit>.md`, `README.md`, `architecture.md`, `data-model.md`, `integrations.md`, `traceability.md`, `traceability.json`; `units/<app>/<module>/<unit>.md` | which units get a specification: all, within the agent budget |
+| Built-in stage `assess` | Inventory script; parallel analysis jobs; topology extraction; catalog proposal and curation; synthesis | `assessment/<app>/inventory.json`, `topology.json`, `analysis/`, `catalog-draft/`, `catalog.json`, `ASSESSMENT.md`, `ARCHITECTURE.mmd`, and `tools/extract_topology.py` | No separate `map` stage; its topology work is part of `assess` |
+| Built-in stage `understand` | Runs on a selected catalog scope; per-unit topology, rule and finding extraction; AS-IS specification and unit-state proposal | Per-unit files under `assessment/<app>/items/<module>/<unit>/`, briefs under `assessment/<app>/understand/briefs/`, specifications and trace/meta under `knowledge/as-is/<app>/`, and state under `units/<app>/<module>/<unit>.md` | `reviewAll`: selected unit outputs go through one pull request |
+| Internal post-merge plan `rebuild` | Runs `rebuild_aggregates.py` from merged per-unit outputs | `assessment/<app>/generated/{topology.json,rules_result.json,BUSINESS_RULES.md,DATA_OBJECTS.md,SECURITY_FINDINGS.md}` and `knowledge/as-is/<app>/generated/{README.md,traceability.json,traceability.md}` | Aggregate paths are auto-committed after merge |
+| Shared topology helper | `topology.ts` shares topology extraction with the built-in plans | `assessment/<app>/topology.json`; the extraction script is at `assessment/<app>/tools/extract_topology.py` | Helper, not a separate stage id |
 
-Paths are under `assessment/<app>/` except those of `understand` ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)), which requires `ASSESSMENT.md` and `topology.json`, lists the missing optional inputs (`BUSINESS_RULES.md`, `SECURITY_FINDINGS.md`) in its summary (`missingInputs`), and sends all of its outputs, work items included, through one pull request (`reviewAll`). `map` and `extract-rules` require `assessment/<app>/ASSESSMENT.md`: the API refuses to start them (409) until an `assess` run of the application has succeeded, and the worker fails them before any step when the file is not on the document repo's default branch yet (the assess pull request is not merged). `harden` reads the assessment when it exists. The API also refuses a second run of a stage while one is queued or running for the application. Not wired yet: portfolio mode of `assess`, chunked mapping of big estates and the re-ask of rejected node descriptions, a module pattern, split runs and resume for `extract-rules`, and the coverage-gap re-run of `harden`.
+The current built-in assessment plans are `assess` and `understand`; `map`, `extract-rules` and `harden` are not independent plan ids. Their topology, rule-extraction and security-review responsibilities are handled within the current plans ([ADR-0033](../decisions/0033-assess-catalog-understand-selection.md)). `understand` consumes `assessment/<app>/catalog.json` and writes only selected units' paths through `reviewAll`; it does not write the old whole-application files at the root of `assessment/<app>/`. After those per-unit files merge, `rebuild` regenerates the application aggregates listed above. The API derives item status from catalog and run files; it does not store progress separately. See the [document repo layout](../reference/document-repo.md) and [item catalog](../reference/document-repo-item-catalog.md) for current paths and semantics.
 
 With the mock backend (`KINTSUGI_RUNTIME_MODE=mock`) no agent writes anything, so after each mock agent job the worker fills in what the step expects (a generic topology script, stub documents, schema-shaped structured results) and every later step gets valid inputs.
 
 ## 6.2 Project build
 
-1. **Create / join / copy-from.** An admin or architect creates the project in the portal.
-   - The worker scaffolds the document repo from `templates/document-repo/` (or reads an existing `kintsugi.yaml`).
-   - It registers the AS-IS (`legacy`, `legacy-data`) and TO-BE (`target`) repos per application, then commits through a PR. That PR is gate G0.
+1. **Create / join / copy-from.** An admin or architect creates the project and registers its application/repository records in the portal; the portal renders `kintsugi.yaml` but does not scaffold a document repo from `templates/document-repo/` yet. The template is currently used by `scripts/e2e/start.mjs` for end-to-end seed data. Create or join the document repo separately, then commit the rendered manifest through a pull request; that PR is gate G0. Portal scaffolding and publishing remain planned (see [Build a project](../guides/build-project.md)).
 2. **Standards.** The team writes `standards/` and `plugins/` through normal PRs, helped by `knowledge-ingest` dry runs and `to-be-analyst`. Plugins are validated after each merge.
 3. **Pilot.** Pilot units run through task-planner → member → gate-reviewer (→ compare). The team fixes the standards where results were wrong; the architect then approves gate G3.
 
 Guide: [build a project](../guides/build-project.md).
 
-## 6.3 Work item loop (member + harness)
+## 6.3 Unit loop (member + harness)
 
-1. `task-planner` produces the task pack. The worker commits `tasks/<id>.md` and sets the unit file's `stage` / `status` in the document repo.
+1. `task-planner` produces the unit's task pack. The worker commits `tasks/<id>.md` and sets the unit file's `stage` / `status` in the document repo.
 2. The member runs `kintsugi task start <id>` (or MCP `task.next`).
    - Kintsugi claims the unit: it sets `assignee`, `harness` and `status: in-progress` through the API, committed as `kintsugi-bot` with `Kintsugi-Actor`.
-   - The member works with the task pack and the project plugins installed in their harness (built-in `kintsugi` + stack plugins from the project marketplace).
+   - The member works with the task pack and project-authored plugin sources in `plugins/`; generation of the built-in `plugins/kintsugi/`, marketplace files and harness fallback renderings is planned but not implemented.
 3. The member works in Claude Code / Copilot / ChatGPT-Codex:
    - queries the KB through MCP;
    - commits code to the target repo;
@@ -104,7 +101,7 @@ Questions come from the portal chat or from a member's harness (MCP `kb.ask`).
    - When the Git server can reach the installation, provider webhooks trigger the same sync immediately.
 3. **Reacting to changes**:
    - New commits on tracked branches enqueue `knowledge-ingest` (incremental).
-   - Changes under `plugins/` re-validate the plugins and regenerate the marketplace files.
+   - Changes under `plugins/` are revalidated; generation of `plugins/kintsugi/`, marketplace files and harness fallback renderings is planned but not implemented.
    - New or updated PRs enqueue `gate-reviewer`.
    - Servers without a provider adapter get sync and branch polling only.
 
@@ -125,7 +122,7 @@ Worker writer ─ fetch mirror ─ validate files ─┬─ autoCommitPaths ─�
 3. It splits the paths by `autoCommitPaths` from `kintsugi.yaml` on the default branch, and commits each part as `kintsugi-bot` with trailers, in a scratch worktree of the mirror.
 4. Each push is fast-forward only. A rejection means someone pushed first: the writer fetches, rebases and retries; a conflict fails the write.
 5. For the `kintsugi/*` branch it opens a pull request through the server's REST API; servers without one keep the branch.
-6. The outcome is recorded on the write and shown on the project page ([document repository](../reference/document-repo.md#write-path)).
+6. The outcome is recorded on the write and shown on the project page ([document repository](../reference/document-repo-write-path.md)).
 
 ## 6.7 Worker heartbeat
 

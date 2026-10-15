@@ -100,11 +100,11 @@ The built-in plugin bundles this server.
 |---|---|
 | `kb.search` | Semantic search over the project's AS-IS / TO-BE KB |
 | `kb.ask` | Question answered by the `kb-assistant` runtime agent, with citations |
-| `task.next` | Next work item assigned to the caller |
-| `task.get` | Task pack and work item details |
-| `task.update` | Change work item status / notes; validated by the API and committed to the unit file by `kintsugi-bot` (ADR-0012) |
+| `task.next` | Next unit assigned to the caller |
+| `task.get` | Task pack and unit details |
+| `task.update` | Change unit status / notes; validated by the API and committed to the unit file by `kintsugi-bot` (ADR-0012) |
 | `artifact.register` | Register a deliverable already committed to Git: `repo@commit:path`, type, harness, AI share |
-| `gate.status` | Gate status for a work item / PR |
+| `gate.status` | Gate status for a unit / PR |
 | `guideline.get` | Project guidelines and rules |
 
 ## 3. `kintsugi` CLI
@@ -114,20 +114,20 @@ The built-in plugin bundles this server.
 | `kintsugi login` | Store a PAT for an installation |
 | `kintsugi plugins setup [--harness <id>]` | Add the project marketplace and install the plugins with the harness's own commands; run the fallback renderer for harnesses without plugin support |
 | `kintsugi task start <id>` | Claim the unit (assignee, harness, `in-progress`), create a branch in the target repo, and fetch the task pack from the document repo |
-| `kintsugi task status <id> <status>` | Update work item status |
+| `kintsugi task status <id> <status>` | Update unit status |
 | `kintsugi artifact register <path> --type <type>` | Register a committed deliverable |
 | `kintsugi kb ask "<question>"` | Ask the KB |
 | `kintsugi hook <event>` | Entry point for the built-in plugin's hooks (reads the hook JSON on stdin) |
 
 ## 4. Task pack
 
-The `task-planner` runtime agent produces a task pack for each work item and commits it to `tasks/<work-item-id>.md` in the document repo.
+The `task-planner` runtime agent produces a task pack for each unit and commits it to `tasks/<unit-id>.md` in the document repo.
 - Template: `task-pack.template.md`, shipped with the `task-planner` agent.
 - Type: `TaskPack`.
 
 | Field | Description |
 |---|---|
-| `objective` | What the work item must achieve |
+| `objective` | What the unit must achieve |
 | `acceptanceCriteria` | Checklist the gate verifies |
 | `context` | AS-IS excerpts with sources (from the KB) |
 | `relevantPaths` | Files in the source and target repos to start from |
@@ -164,5 +164,5 @@ All sources are normalized into `HarnessActivity`.
 ## 7. Conventions for members
 
 - **Commit trailer**: `Assisted-by: <claude-code | copilot | codex | chatgpt | …>` on AI-assisted commits.
-- **PR description**: reference the work item id and fill in the AI-usage section of the PR template.
+- **PR description**: reference the unit id and fill in the AI-usage section of the PR template.
 - **Plugins**: keep the `kintsugi` plugin enabled. Hooks are assistive; gates stay authoritative.

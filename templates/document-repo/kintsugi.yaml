@@ -1,4 +1,4 @@
-# Project manifest — see docs/reference/document-repo.md
+# Project manifest — see docs/reference/document-repo-manifest.md
 # This file lives at the root of the project's document repo: the one repo that holds
 # everything except code (ADR-0028).
 schemaVersion: 1
@@ -49,11 +49,6 @@ pipelines: []
 #          - {id: implement, performer: {member: [dev]}}
 #          - {id: review, performer: {agent: gate-reviewer}}
 #          - {id: approve, performer: {member: [core-team]}, gate: G4}
-
-autoCommitPaths:
-  - units/**                # work item state, committed by kintsugi-bot (ADR-0012)
-  - tasks/**
-  - knowledge/**/generated/**
 
 policy:
   harnesses: [copilot, claude-code, codex, chatgpt]   # any registered harness id

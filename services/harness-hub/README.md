@@ -5,7 +5,7 @@ Bridge between Kintsugi and the AI harnesses members run on their own machines (
 | Capability | Description |
 |---|---|
 | Kintsugi MCP server | Remote Streamable HTTP on `kintsugi-app`, Personal Access Token auth (OAuth once Entra ID is enabled): `kb.*`, `task.*`, `artifact.register`, `gate.status`, `guideline.get`. Bundled in the built-in `kintsugi` plugin |
-| Plugins & marketplaces | Validates project plugins from the document repo's `plugins/` (Claude Code plugin rules), generates the built-in plugin into `plugins/kintsugi/` from `packages/agents/builtin/member/`, and generates marketplace files in the document repo: Claude Code / Copilot CLI / Codex (ADR-0015) |
+| Plugins & marketplaces | Planned, not implemented: validate project plugins from `plugins/`, generate the built-in `plugins/kintsugi/` from `packages/agents/builtin/member/`, and write the marketplace paths declared in `packages/harness-sdk` for Claude Code / Copilot CLI / Codex (ADR-0015). No current code writes these document-repo files. |
 | Fallback rendering | `AssetRenderer` per harness without plugin support: skills, agents, project context, MCP config |
 | CLI API | Backend for the `kintsugi` CLI (`plugins setup`, `task start`, `artifact register`, `hook <event>`) |
 | Policy distribution | `HarnessPolicy` → managed settings / org policies per harness |

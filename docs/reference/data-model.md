@@ -1,6 +1,6 @@
 # Data model
 
-The core entities, abridged. Postgres holds operational state and rebuildable indexes. Documents, standards and **work item state** live in Git ([Git as the source of truth](../architecture/concepts/git-as-source-of-truth.md), [ADR-0012](../decisions/0012-work-items-as-files-in-git.md)).
+The core entities, abridged. Postgres holds operational state and rebuildable indexes. Documents, standards and **unit state** live in Git ([Git as the source of truth](../architecture/concepts/git-as-source-of-truth.md), [ADR-0012](../decisions/0012-work-items-as-files-in-git.md)).
 
 Entities marked *(index)* are derived from files in the document repo and can be rebuilt from Git.
 
@@ -130,7 +130,7 @@ A worker is **up** when its row was seen less than 45 seconds ago (database cloc
 
 ## Installation settings
 
-`admin.installation_setting` (migration 011): installation-wide settings managed in the portal, `key` → `value` (jsonb) with `updated_by` and `updated_at`. First key: `commit-identity` (`{ name, email }` of kintsugi-bot's commits; Settings → Git, `git.manage`), read by the document repo writer for each write ([commit conventions](document-repo.md#commit-conventions)).
+`admin.installation_setting` (migration 011): installation-wide settings managed in the portal, `key` → `value` (jsonb) with `updated_by` and `updated_at`. First key: `commit-identity` (`{ name, email }` of kintsugi-bot's commits; Settings → Git, `git.manage`), read by the document repo writer for each write ([commit conventions](document-repo-commit-conventions.md)).
 
 ## Agents
 

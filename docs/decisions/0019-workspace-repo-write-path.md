@@ -17,13 +17,13 @@ Everything except source code lives in a per-project workspace repo (ADR-0007): 
 
 - **One dedicated workspace repo per project.** Not a `kintsugi/` folder inside an existing code repo: access, history and review rules differ from code.
 - **Single write path**: state changes and runtime results go through the Kintsugi API → the worker (`services/orchestrator`, Git Sync & Writer) → Git. Nothing else pushes to the workspace repo.
-- **Bot identity**: every automated commit is authored by `kintsugi-bot` and carries trailers (see [workspace repo reference](../reference/document-repo.md#commit-conventions)):
+- **Bot identity**: every automated commit is authored by `kintsugi-bot` and carries trailers (see [workspace repo reference](../reference/document-repo-commit-conventions.md)):
   - job results: `Kintsugi-Job`, `Kintsugi-Agent`, `Kintsugi-Rulebook`;
   - state changes on behalf of a user: `Kintsugi-Actor`, `Kintsugi-Unit`.
 - **Branch strategy**:
   - Runtime job results land on `kintsugi/<agent>/<job-id>` and are proposed as a **pull request** by default.
   - Paths matching `autoCommitPaths` in `kintsugi.yaml` are committed **directly to the default branch** (task packs, unit state, generated documents) — these are high-frequency, low-risk writes where a PR per change would drown reviewers.
-  - **Default `autoCommitPaths`**: `units/**`, `tasks/**`, `knowledge/**/generated/**`. Projects can widen or narrow the list in `kintsugi.yaml`.
+  - **Default `autoCommitPaths` (as amended by ADR-0033)**: `units/**`, `tasks/**`, `knowledge/**/generated/**`, `assessment/**/generated/**`. Projects can widen or narrow the list in `kintsugi.yaml`.
 - **Writer mechanics**: plain git — fetch → rebase → retry on non-fast-forward, one writer per workspace repo at a time (serialized through the job queue). The writer validates `/out` output rules before committing.
 - **Direct human edits** are allowed only through PRs and are validated on sync; invalid changes (e.g. broken unit frontmatter) are flagged and not indexed.
 
@@ -37,7 +37,7 @@ Everything except source code lives in a per-project workspace repo (ADR-0007): 
 
 ## Implementation notes
 
-Settled while building the writer (`services/orchestrator`, `packages/git`); details in the [document repository reference](../reference/document-repo.md#write-path).
+Settled while building the writer (`services/orchestrator`, `packages/git`); details in the [document repository reference](../reference/document-repo-write-path.md).
 
 - **Queue**: `document-write`, pg-boss `singleton` policy keyed by the document repository id: one active write per repository, the rest wait. Producers share the contract in `@kintsugi/orchestrator/queues`.
 - **Commit identity**: name and email of `kintsugi-bot` are an installation setting managed in the portal (Settings → Git → Commit identity, `admin.installation_setting`), read by the writer for each write; defaults `kintsugi-bot` / `kintsugi-bot@kintsugi.invalid`. (First built as the `KINTSUGI_BOT_EMAIL` environment variable, replaced by the portal setting.)

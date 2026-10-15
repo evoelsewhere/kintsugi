@@ -1,4 +1,4 @@
-// kintsugi.yaml as text (ADR-0028, docs/reference/document-repo.md): parse and validate
+// kintsugi.yaml as text (ADR-0028, docs/reference/document-repo-manifest.md): parse and validate
 // it, or render it from a manifest. The model and its rules live in @kintsugi/domain
 // (which stays dependency-free); this package only adds YAML.
 

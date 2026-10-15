@@ -58,7 +58,7 @@ export function writerBranch(request: DocumentWriteRequest): string {
   return `${WRITER_BRANCH_PREFIX}${slug(who)}/${request.jobId ?? request.writeId}`;
 }
 
-/** Provenance trailers (docs/reference/document-repo.md#commit-conventions), as applicable. */
+/** Provenance trailers (docs/reference/document-repo-commit-conventions.md), as applicable. */
 export function writerTrailers(request: DocumentWriteRequest): Trailer[] {
   const trailers: Trailer[] = [];
   if (request.jobId !== undefined) trailers.push({ key: "Kintsugi-Job", value: request.jobId });

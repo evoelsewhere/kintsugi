@@ -62,25 +62,24 @@ P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare
 - **Gate G1**: portfolio decision approved by the steering committee.
 
 #### Reverse engineering the AS-IS system (runtime stages)
-The Kintsugi Runtime performs the reverse engineering of each application in two stages, each delivered as a pull request to the document repo that a person reviews and merges ([ADR-0027](../decisions/0027-builtin-modernization-content.md), [ADR-0031](../decisions/0031-understand-stage-as-is-specification.md), [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md)):
+The current built-in runtime plans perform application assessment in two stages, each delivered as a pull request to the document repo that a person reviews and merges ([ADR-0027](../decisions/0027-builtin-modernization-content.md), [ADR-0031](../decisions/0031-understand-stage-as-is-specification.md), [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md)):
 
 ```
-assess (whole application) ─► item catalog ─► understand (a selection of items, repeatable)
-                                                 map ─► extract-rules ∥ harden ─► specify ─► work items
+assess (whole application) ─► item catalog ─► understand (selected catalog items; repeatable)
 ```
+
+The previous `map`, `extract-rules` and `harden` activities are not independent built-in plan stages now; their topology, rule-extraction and security-review work is performed within `assess` and `understand`.
 
 | Stage | Answers | Main outputs |
 |---|---|---|
-| `assess` | What is there, how big, how risky, and which pieces does it consist of? | `assessment/<app>/inventory.json`, `ASSESSMENT.md`, the skeleton `topology.json`, the **item catalog** `catalog.json` |
-| `understand` | For the items a person selected: how do they connect, which rules do they enforce, which risks do they carry, what does each do end to end? | Per item: topology fragment, rules, findings, the AS-IS specification `knowledge/as-is/<app>/<module>/<item>.md`, trace and meta files, the proposed work item `units/<app>/<module>/<item>.md` |
+| `assess` | What is there, how big, how risky, and which pieces does it consist of? | `assessment/<app>/inventory.json`, `assessment/<app>/topology.json`, `assessment/<app>/analysis/`, `assessment/<app>/catalog-draft/`, `assessment/<app>/catalog.json`, `assessment/<app>/ASSESSMENT.md`, `assessment/<app>/ARCHITECTURE.mmd`, and `assessment/<app>/tools/extract_topology.py` |
+| `understand` | For each selected catalog item (unit): how does it connect, which rules does it enforce, which risks does it carry, and what does it do end to end? | Per unit: `assessment/<app>/items/<module>/<unit>/{topology.json,rules.json,findings.json}`, `assessment/<app>/understand/briefs/`, `knowledge/as-is/<app>/<module>/<unit>.md`, `knowledge/as-is/<app>/items/<module>/<unit>/{meta.json,trace.json}`, and `units/<app>/<module>/<unit>.md` |
 
-**The catalog is the menu.** `assess` groups every source file into items (module → item, from the extracted topology, no code parsing), lets a `legacy-analyst` job curate the grouping, and keeps item ids stable across re-assessments. Every item shows a derived status: `not-analysed`, `running`, `in-pr`, `failed`, `understood` or `stale` (understood, but its files changed since), and `retired` for items that no longer exist.
+**The catalog is the menu.** `assess` groups source files into catalog items from extracted topology (module → item, without code parsing), lets a `legacy-analyst` job curate the grouping, and reconciles ids across re-assessments. A catalog entry id is `<module>/<unit>`; its full unit id is `<app>/<module>/<unit>`. Item status is derived by the API, not stored. See the [item catalog reference](../reference/document-repo-item-catalog.md) for the status values and reconciliation rules.
 
-**`understand` runs on a selection.** A person selects items or whole modules; the run maps them, extracts their rules, reviews their security, writes one specification per item and proposes their work items, all in one pull request. Several selections can be in flight at once: each run writes only its own items' paths, and an item that is running or in an open pull request cannot be selected again until the pull request is merged or abandoned. A failed run can be retried from where it stopped. The whole-application views (topology, rules catalog, security findings, traceability matrix) are rebuilt by a script after each merge and committed under `generated/`; the overview documents (architecture, data model, integrations) are an on-demand run.
+**`understand` runs on a selection.** A person selects catalog items or whole modules; the run maps the selected units, extracts their rules, reviews their security, writes one AS-IS specification per unit and proposes unit state, all in one pull request. Several selections can be in flight at once: each run writes only its selected units' paths, and a unit that is running or in an open pull request cannot be selected again until the pull request is merged or abandoned. A failed run can be retried from where it stopped. After a merge, `rebuild_aggregates.py` regenerates the whole-application files under `assessment/<app>/generated/` and `knowledge/as-is/<app>/generated/`; the exact filenames are in the [document repository layout](../reference/document-repo.md). These aggregates are separate from the unit files in the run's pull request.
 
-Until the scoped `understand` stage is complete, the former stages `map`, `extract-rules` and `harden` remain runnable on the whole application and `understand` works as described in ADR-0031.
-
-`harden` (a step of `understand`) uses the assessment and the map: no scanner runs in a runtime job, so its finders review the code by hand, starting from the map's entry points, and the findings state which files they read and which tools did not run. Every security highlight of `ASSESSMENT.md` ends in it as a confirmed finding or as refuted with the reason, so the two documents never silently disagree.
+The security review is part of `understand`. Runtime jobs do not run a scanner; the reviewer uses the assessment and topology, and the per-unit findings record cited source files and the limits of the review. `SECURITY_FINDINGS.md` is the rebuilt application-wide view of those findings.
 
 ### P2 — Define To-Be
 - **Activities**:
@@ -111,7 +110,7 @@ Until the scoped `understand` stage is complete, the former stages `map`, `extra
   2. `gate-reviewer` (runtime) reviews each PR first.
   3. A human approves.
 - **Outputs**: new source code, detail designs, migration scripts, PRs.
-- **Gate G4** (per work item): green build, static checks, AI code review, human PR approval.
+- **Gate G4** (per unit): green build, static checks, AI code review, human PR approval.
 
 ### P5 — Verify (refine + test)
 - **Activities**:
@@ -177,7 +176,7 @@ The weighted total maps to a priority and candidate dispositions:
 ## 5. Implications for Kintsugi
 
 1. **The pipeline is a configurable template** (per 7R and project type), not hard-coded.
-2. **The unit of work is a work item** (feature / screen / module / DB object) moving through stages. Each work item is a file in the document repo whose frontmatter holds its state (ADR-0012). Each stage is performed by a member (with an AI harness), a runtime agent (preparation / review) or a tool.
+2. **A unit** is a feature, screen, module or data object moving through stages. Each unit has a file in the document repo whose frontmatter holds its state (ADR-0012). Each stage is performed by a member (with an AI harness), a runtime agent (preparation / review) or a tool.
 3. **The knowledge base is first-class.** Runtime agents and members' harnesses both read it, and merged results flow back into it (continuous TO-BE KB enrichment).
 4. **Project knowledge is built, versioned and verified**: standards are written per project in the document repo, changed by PR, and only deliberately copied to other projects.
 5. **AI metrics are measured from day one.**
