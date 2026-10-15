@@ -1,11 +1,8 @@
 /**
- * The current document-repo path layout. Keep path construction here so callers can migrate
- * without independently encoding the layout. Phase C changes these functions to the new paths.
+ * The document-repo path layout (ADR-0038). Keep path construction here so callers can migrate
+ * without independently encoding the layout.
  */
-const ASSESSMENT_ROOT = "assessment";
-const KNOWLEDGE_ROOT = "knowledge";
-const AS_IS_SEGMENT = "as-is";
-const ITEMS_SEGMENT = "items";
+const APPLICATIONS_ROOT = "applications";
 const APP_SEGMENT_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 export const DOCUMENT_PATH_TOKENS = {
@@ -16,16 +13,71 @@ export const DOCUMENT_PATH_TOKENS = {
   run: "{run}",
 } as const;
 
-/** Existing direct-commit defaults; moved here because these patterns are part of the layout. */
+/** Paths committed straight to the default branch by kintsugi-bot (ADR-0019, ADR-0038). */
 export const DEFAULT_DOCUMENT_AUTO_COMMIT_PATHS: readonly string[] = [
-  "units/**",
-  "tasks/**",
-  "knowledge/**/generated/**",
-  "assessment/**/generated/**",
+  "applications/*/units/**/unit.md",
+  "applications/*/units/**/task.md",
+  "applications/*/generated/**",
 ];
 
+export function applicationsDir(): string {
+  return APPLICATIONS_ROOT;
+}
+
+export function applicationDir(app: string): string {
+  return `${applicationsDir()}/${app}`;
+}
+
+export function applicationInputsDir(app: string): string {
+  return `${applicationDir(app)}/inputs`;
+}
+
+export function applicationInputPath(app: string, file: string): string {
+  return `${applicationInputsDir(app)}/${file}`;
+}
+
+export function applicationAssessmentDir(app: string): string {
+  return `${applicationDir(app)}/assessment`;
+}
+
+export function applicationToBeDir(app: string): string {
+  return `${applicationDir(app)}/to-be`;
+}
+
+export function applicationRequirementsPath(app: string): string {
+  return `${applicationToBeDir(app)}/requirements.md`;
+}
+
+export function applicationDesignPath(app: string): string {
+  return `${applicationToBeDir(app)}/design.md`;
+}
+
+export function applicationGatesDir(app: string): string {
+  return `${applicationDir(app)}/gates`;
+}
+
+export function applicationGatePath(app: string, gate: string): string {
+  return `${applicationGatesDir(app)}/${gate}.md`;
+}
+
+export function applicationCutoverDir(app: string): string {
+  return `${applicationDir(app)}/cutover`;
+}
+
+export function applicationCutoverFilePath(app: string, file: string): string {
+  return `${applicationCutoverDir(app)}/${file}`;
+}
+
+export function applicationOperateDir(app: string): string {
+  return `${applicationDir(app)}/operate`;
+}
+
+export function applicationOperateFilePath(app: string, file: string): string {
+  return `${applicationOperateDir(app)}/${file}`;
+}
+
 export function assessmentDir(app: string): string {
-  return `${ASSESSMENT_ROOT}/${app}`;
+  return applicationAssessmentDir(app);
 }
 
 export function assessmentFilePath(app: string, file: string): string {
@@ -60,10 +112,12 @@ export function topologyExtractorPath(app: string): string {
   return `${assessmentToolsDir(app)}/extract_topology.py`;
 }
 
+/** Compatibility name: unit documents now live with their subject, not under assessment. */
 export function assessmentItemsDir(app: string): string {
-  return `${assessmentDir(app)}/${ITEMS_SEGMENT}`;
+  return unitsDir(app);
 }
 
+/** `itemId` is the catalog key `<module>/<unit>`. */
 export function assessmentItemDir(app: string, itemId: string): string {
   return `${assessmentItemsDir(app)}/${itemId}`;
 }
@@ -72,16 +126,18 @@ export function assessmentItemFilePath(app: string, itemId: string, file: string
   return `${assessmentItemDir(app, itemId)}/${file}`;
 }
 
+/** Compatibility name for the per-unit AS-IS document. */
 export function assessmentBriefsDir(app: string): string {
-  return assessmentFilePath(app, "understand/briefs");
+  return unitsDir(app);
 }
 
 export function assessmentBriefPath(app: string, unitKey: string): string {
-  return `${assessmentBriefsDir(app)}/${unitKey}.json`;
+  return `${assessmentBriefsDir(app)}/${unitKey}/as-is.md`;
 }
 
+/** Assessment artifacts produced during understanding are scoped to the application. */
 export function understandRunDir(app: string): string {
-  return assessmentFilePath(app, "understand");
+  return assessmentDir(app);
 }
 
 export function understandRunFilePath(app: string, file: string): string {
@@ -92,62 +148,67 @@ export function understandScopePath(app: string): string {
   return understandRunFilePath(app, "scope.json");
 }
 
-/** Application aggregates written by rebuild_aggregates.py. */
+/** Application aggregates rebuilt from authored unit documents. */
 export function generatedDir(app: string): string {
-  return assessmentFilePath(app, "generated");
+  return `${applicationDir(app)}/generated`;
 }
 
 export function generatedFilePath(app: string, file: string): string {
   return `${generatedDir(app)}/${file}`;
 }
 
+/** Compatibility paths retained for existing callers, now rooted in the subject-based unit tree. */
 export function knowledgeAsIsDir(app: string): string {
-  return `${KNOWLEDGE_ROOT}/${AS_IS_SEGMENT}/${app}`;
+  return unitsDir(app);
 }
 
 export function knowledgeAsIsItemsDir(app: string): string {
-  return `${knowledgeAsIsDir(app)}/${ITEMS_SEGMENT}`;
+  return unitsDir(app);
 }
 
-/** Application id for one of the current per-item evidence paths, if the path belongs to an app. */
-export function appFromItemPath(path: string): string | undefined {
+/** Application id for one of the per-unit evidence paths, if the path belongs to an application. */
+export function appFromUnitPath(path: string): string | undefined {
   const segments = path.split("/");
   const app =
-    segments[0] === ASSESSMENT_ROOT && segments[2] === ITEMS_SEGMENT && segments.length >= 4
+    segments[0] === APPLICATIONS_ROOT && segments[2] === "units" && segments.length >= 5
       ? segments[1]
-      : segments[0] === KNOWLEDGE_ROOT && segments[1] === AS_IS_SEGMENT && segments[3] === ITEMS_SEGMENT && segments.length >= 5
-        ? segments[2]
-        : undefined;
+      : undefined;
   return app !== undefined && APP_SEGMENT_PATTERN.test(app) ? app : undefined;
 }
 
+/** Compatibility alias; catalog items correspond to per-unit directories. */
+export function appFromItemPath(path: string): string | undefined {
+  return appFromUnitPath(path);
+}
+
 export function knowledgeAsIsItemDir(app: string, itemId: string): string {
-  return `${knowledgeAsIsItemsDir(app)}/${itemId}`;
+  return `${unitsDir(app)}/${itemId}`;
 }
 
 export function knowledgeAsIsItemFilePath(app: string, itemId: string, file: string): string {
   return `${knowledgeAsIsItemDir(app, itemId)}/${file}`;
 }
 
+/** Compatibility name for the per-unit AS-IS document. */
 export function knowledgeAsIsUnitPath(app: string, unitId: string): string {
-  return `${knowledgeAsIsDir(app)}/${unitId}.md`;
+  return `${unitsDir(app)}/${unitId}/as-is.md`;
 }
 
 export function knowledgeAsIsGeneratedDir(app: string): string {
-  return `${knowledgeAsIsDir(app)}/generated`;
+  return generatedDir(app);
 }
 
 export function knowledgeAsIsGeneratedFilePath(app: string, file: string): string {
-  return `${knowledgeAsIsGeneratedDir(app)}/${file}`;
+  return generatedFilePath(app, file);
 }
 
 /** Legacy identity index read by assess to preserve ids during catalog reconciliation. */
 export function legacyUnitsIndexPath(app: string): string {
-  return `${knowledgeAsIsDir(app)}/units.json`;
+  return assessmentFilePath(app, "units.json");
 }
 
 export function unitsDir(app: string): string {
-  return `units/${app}`;
+  return `${applicationDir(app)}/units`;
 }
 
 export function unitModuleDir(app: string, module: string): string {
@@ -158,8 +219,68 @@ export function unitDir(app: string, module: string, unit: string): string {
   return `${unitModuleDir(app, module)}/${unit}`;
 }
 
+export function unitFilePath(app: string, module: string, unit: string, file: string): string {
+  return `${unitDir(app, module, unit)}/${file}`;
+}
+
 export function unitStatePath(app: string, module: string, unit: string): string {
-  return `${unitDir(app, module, unit)}.md`;
+  return unitFilePath(app, module, unit, "unit.md");
+}
+
+export function unitAsIsPath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "as-is.md");
+}
+
+export function unitRulesPath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "rules.json");
+}
+
+export function unitRulesReviewPath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "rules-review.json");
+}
+
+export function unitFindingsPath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "findings.json");
+}
+
+export function unitTopologyPath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "topology.json");
+}
+
+export function unitTracePath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "trace.json");
+}
+
+export function unitMetaPath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "meta.json");
+}
+
+export function unitTaskPath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "task.md");
+}
+
+export function unitDesignPath(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "design.md");
+}
+
+export function unitReviewsDir(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "reviews");
+}
+
+export function unitGateReviewPath(app: string, module: string, unit: string, gate = "G4"): string {
+  return `${unitReviewsDir(app, module, unit)}/${gate}.md`;
+}
+
+export function unitVerifyDir(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "verify");
+}
+
+export function unitGoldenDir(app: string, module: string, unit: string): string {
+  return `${unitVerifyDir(app, module, unit)}/golden`;
+}
+
+export function unitRunsDir(app: string, module: string, unit: string): string {
+  return `${unitVerifyDir(app, module, unit)}/runs`;
 }
 
 export function unitId(app: string, module: string, unit: string): string {
@@ -167,30 +288,37 @@ export function unitId(app: string, module: string, unit: string): string {
 }
 
 export function modernizationBriefPath(app: string): string {
-  return assessmentFilePath(app, "MODERNIZATION_BRIEF.md");
+  return applicationInputPath(app, "INTENT.md");
 }
 
-export function transformationNotesPath(app: string, module: string): string {
-  return assessmentFilePath(app, `modules/${module}/TRANSFORMATION_NOTES.md`);
+/** Compatibility alias for the application-level TO-BE design. */
+export function transformationNotesPath(app: string, _module: string): string {
+  return applicationDesignPath(app);
 }
 
+/** Application-level verification aggregate; per-unit evidence is under `verify/`. */
 export function verificationReportPath(app: string, extension: "md" | "json" = "md"): string {
-  return assessmentFilePath(app, `VERIFICATION.${extension}`);
+  return generatedFilePath(app, `VERIFICATION.${extension}`);
 }
 
-/** Current member verification paths use the module slug, without an application prefix. */
+/** Compatibility helpers use tokenized app/unit segments until callers supply full unit ids. */
 export function goldenDir(module: string): string {
-  return `golden/${module}`;
+  return unitGoldenDir(DOCUMENT_PATH_TOKENS.app, module, DOCUMENT_PATH_TOKENS.unit);
 }
 
 export function runsDir(module: string, runId: string): string {
-  return `runs/${module}/${runId}`;
+  return `${unitRunsDir(DOCUMENT_PATH_TOKENS.app, module, DOCUMENT_PATH_TOKENS.unit)}/${runId}`;
+}
+
+function unitKeyPath(unitKey: string, file: string): string {
+  const [module = DOCUMENT_PATH_TOKENS.module, unit = DOCUMENT_PATH_TOKENS.unit] = unitKey.split("/");
+  return unitFilePath(DOCUMENT_PATH_TOKENS.app, module, unit, file);
 }
 
 export function taskPackPath(unitKey: string): string {
-  return `tasks/${unitKey}.md`;
+  return unitKeyPath(unitKey, "task.md");
 }
 
 export function reviewsDir(unitKey: string): string {
-  return `reviews/${unitKey}`;
+  return unitKeyPath(unitKey, "reviews");
 }

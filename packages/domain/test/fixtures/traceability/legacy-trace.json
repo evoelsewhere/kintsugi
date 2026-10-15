@@ -1,0 +1,10 @@
+{
+  "entryPoints": ["INVOICE-ENTRY"],
+  "rulesApplied": ["RULE-invoice-amount-001"],
+  "findings": ["FND-invoice-tax"],
+  "dependencies": [],
+  "dataObjects": ["INVOICE-RECORD"],
+  "externalSystems": [],
+  "files": ["src/INVOICE.cbl"],
+  "openQuestions": 1
+}

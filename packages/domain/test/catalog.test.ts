@@ -11,7 +11,7 @@ describe("item catalog vocabulary", () => {
 
   it("names the work item and the document-repo paths of an item", () => {
     expect(workItemIdOf("billing", "invoicing/invoice-entry")).toBe("billing/invoicing/invoice-entry");
-    expect(catalogPath("billing")).toBe("assessment/billing/catalog.json");
-    expect(itemMetaPath("billing", "invoicing/invoice-entry")).toBe("knowledge/as-is/billing/items/invoicing/invoice-entry/meta.json");
+    expect(catalogPath("billing")).toBe("applications/billing/assessment/catalog.json");
+    expect(itemMetaPath("billing", "invoicing/invoice-entry")).toBe("applications/billing/units/invoicing/invoice-entry/meta.json");
   });
 });

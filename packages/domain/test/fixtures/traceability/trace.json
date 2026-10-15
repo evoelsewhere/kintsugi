@@ -1,0 +1,15 @@
+{
+  "entryPoints": ["INVOICE-ENTRY"],
+  "rulesApplied": ["RULE-invoice-amount-001"],
+  "findings": ["FND-invoice-tax"],
+  "dependencies": [
+    { "target": "billing/tax/calculate", "kind": "call", "direction": "outbound" }
+  ],
+  "dataObjects": ["INVOICE-RECORD"],
+  "externalSystems": ["TAX-SERVICE"],
+  "files": ["src/INVOICE.cbl"],
+  "openQuestions": 0,
+  "requirements": ["REQ-INV-001"],
+  "pullRequests": ["#42"],
+  "tests": ["tests/invoice_gross_amount.test.ts"]
+}

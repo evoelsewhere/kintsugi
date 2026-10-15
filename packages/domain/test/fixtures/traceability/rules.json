@@ -1,0 +1,10 @@
+{
+  "rules": [
+    {
+      "id": "RULE-invoice-amount-001",
+      "name": "Invoice amount includes tax",
+      "source": "src/INVOICE.cbl:200-212",
+      "citations": ["src/INVOICE.cbl:200-212"]
+    }
+  ]
+}

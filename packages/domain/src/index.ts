@@ -274,6 +274,7 @@ export interface CompareReport {
 export * from "./project.js";
 export * from "./manifest.js";
 
-// The item catalog of an application (ADR-0033).
+// Application and per-unit document-repo paths (ADR-0038), with catalog vocabulary (ADR-0033).
 export * from "./document-layout.js";
 export * from "./catalog.js";
+export * from "./traceability.js";
