@@ -1,11 +1,20 @@
-// Application layer: the results of a stage for one application, read from the files it wrote
-// to the document repo (assessment/<app>/; understand: knowledge/as-is/<app>/ and units/<app>/) at a ref and built with the reader parsers. The
+// Application layer: stage results for one application, read from the paths provided by the domain
+// document-layout module at a ref and built with the reader parsers. The
 // default ref is the output of the stage's latest successful run (its branch tip, open or
 // merged), else the default branch. Also the headline numbers of every stage for the overview.
 
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { parseItemCatalog } from "@kintsugi/agents/reader";
-import { CATALOG_ITEM_ID_PATTERN, catalogPath } from "@kintsugi/domain";
+import {
+  CATALOG_ITEM_ID_PATTERN,
+  assessmentItemDir,
+  catalogPath,
+  generatedDir,
+  knowledgeAsIsDir,
+  knowledgeAsIsGeneratedDir,
+  knowledgeAsIsItemFilePath,
+  knowledgeAsIsUnitPath,
+} from "@kintsugi/domain";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { type DocumentRef, MAX_DOCUMENT_BYTES, RESULT_STAGES, type ResultStage, type StageFile, type StageHeadline, type StageResults } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
@@ -113,9 +122,9 @@ export class StageResultsService {
     const overrides = new Map<string, string | null>();
     let dir: string;
     if (item === undefined) {
-      dir = view === "understand" ? `knowledge/as-is/${applicationId}/generated` : `assessment/${applicationId}/generated`;
+      dir = view === "understand" ? knowledgeAsIsGeneratedDir(applicationId) : generatedDir(applicationId);
     } else {
-      dir = `assessment/${applicationId}/items/${item}`;
+      dir = assessmentItemDir(applicationId, item);
       const readAt = (path: string): Promise<string | undefined> => this.documents.readText(context, selected.commit, path);
       if (view === "extract-rules") overrides.set("rules_result.json", itemRulesResult((await readAt(`${dir}/rules.json`)) ?? null));
       if (view === "harden") overrides.set("SECURITY_FINDINGS.md", itemFindingsMarkdown(item, (await readAt(`${dir}/findings.json`)) ?? null));
@@ -123,13 +132,13 @@ export class StageResultsService {
         const catalogText = await readAt(catalogPath(applicationId));
         const entry = catalogText === undefined ? undefined : parseItemCatalog(catalogText)?.items.find((candidate) => candidate.id === item);
         if (entry === undefined) throw new NotFoundException(`${item} is not in the catalog of ${applicationId} at ${selected.ref}`);
-        const trace = await readAt(`knowledge/as-is/${applicationId}/items/${item}/trace.json`);
-        const specified = (await readAt(`knowledge/as-is/${applicationId}/${item}.md`)) !== undefined;
+        const trace = await readAt(knowledgeAsIsItemFilePath(applicationId, item, "trace.json"));
+        const specified = (await readAt(knowledgeAsIsUnitPath(applicationId, item))) !== undefined;
         overrides.set("traceability.json", trace === undefined && !specified ? null : itemTraceability(applicationId, entry, trace ?? null, specified));
       }
     }
     const source = await this.sourceAt(context, dir, STAGE_OUTPUTS[view].files, selected.commit, overrides);
-    const appDir = view === "understand" ? `knowledge/as-is/${applicationId}` : dir;
+    const appDir = view === "understand" ? knowledgeAsIsDir(applicationId) : dir;
     const empty = !(await Promise.all(STAGE_OUTPUTS[view].countsFrom.map((name) => source.read(name)))).some((text) => text !== null);
     const common = { applicationId, ref: selected, files: source.files, empty, scope: item === undefined ? {} : { item } };
     switch (view) {

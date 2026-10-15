@@ -4,6 +4,7 @@
 // catalog item → a one-row traceability.json. Pure functions; unreadable input gives null.
 
 import type { ItemCatalogItem } from "@kintsugi/agents/reader";
+import { knowledgeAsIsUnitPath } from "@kintsugi/domain";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -73,7 +74,7 @@ export function itemTraceability(app: string, item: ItemCatalogItem, traceText: 
     kind: item.kind,
     loc: item.loc,
     entryPoint: item.entryPoints.length > 0,
-    spec: specified ? `knowledge/as-is/${app}/${item.id}.md` : null,
+    spec: specified ? knowledgeAsIsUnitPath(app, item.id) : null,
     files: item.files,
     dependsOn: deps.filter((dep) => dep["direction"] !== "inbound" && String(dep["target"]).includes("/")).map((dep) => `${app}/${String(dep["target"])}`),
     usedBy: deps.filter((dep) => dep["direction"] === "inbound" && String(dep["target"]).includes("/")).map((dep) => `${app}/${String(dep["target"])}`),

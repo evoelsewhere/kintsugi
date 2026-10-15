@@ -1,21 +1,19 @@
 // The trigger of the aggregate rebuild (ADR-0033): when the Git sync sees a new default-branch tip
-// of a project's document repository, the applications whose per-item files changed
-// (assessment/<app>/items/**, knowledge/as-is/<app>/items/**) get a `rebuild` stage run, unless one
-// is already queued (a running one may have read the older tip). The rebuild regenerates the whole-application views under
-// generated/ and the writer auto-commits them.
+// of a project's document repository, the applications whose per-item files changed (identified by
+// the domain layout module) get a `rebuild` stage run, unless one is already queued. The rebuild
+// regenerates the whole-application views and the writer auto-commits them.
 
 import { randomUUID } from "node:crypto";
+import { appFromItemPath } from "@kintsugi/domain";
 import { runGit } from "@kintsugi/git";
 import type { Pool } from "pg";
-
-const ITEM_PATH = /^(?:assessment|knowledge\/as-is)\/([a-z0-9][a-z0-9-]{0,62})\/items\//;
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 
 /** The applications whose per-item files are among `paths`, sorted. */
 export function appsTouched(paths: readonly string[]): string[] {
   const apps = new Set<string>();
   for (const path of paths) {
-    const app = ITEM_PATH.exec(path)?.[1];
+    const app = appFromItemPath(path);
     if (app !== undefined) apps.add(app);
   }
   return [...apps].sort();

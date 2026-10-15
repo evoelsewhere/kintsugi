@@ -1,5 +1,5 @@
 // Typed access to the item catalog of an application (ADR-0033). Mirrors apps/api →
-// modules/delivery/catalog: `assessment/<app>/catalog.json` with a status per item derived from
+// modules/delivery/catalog: the catalog path from the domain layout module with status derived from
 // the understand runs and the understood items on the default branch.
 
 import { apiGet, apiSend } from "../api";

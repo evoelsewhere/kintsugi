@@ -2,7 +2,7 @@ import { baseName } from './paths.js'
 import { linesOf } from './text.js'
 
 /**
- * `assessment/<app>/BUSINESS_RULES.md`, read into rule cards.
+ * the business-rule aggregate returned by `generatedFilePath`, read into rule cards.
  *
  * The file is written by an agent, and the agent's layout varies between models and
  * runs. Three shapes are read: a card per rule under a `### <ID> · <title>` heading with

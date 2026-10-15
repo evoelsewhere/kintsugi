@@ -20,7 +20,7 @@ export class CatalogController {
 
   @Get("catalog")
   @ApiOperation({
-    summary: "The item catalog of an application (assessment/<app>/catalog.json) with a derived status per item",
+    summary: "The application's item catalog with a status derived per catalog item",
     description: "Status by precedence: running > in-pr > failed > stale > understood > not-analysed; retired beside them. Default ref: the default branch.",
   })
   @ApiOkResponse({ description: "The catalog (modules, unassigned files, ambiguities), its items with status, last run, pull request and understood state, and counts per status." })

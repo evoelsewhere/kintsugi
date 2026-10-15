@@ -182,7 +182,7 @@ export interface StagePlan {
    */
   optional?: readonly StagePrerequisite[];
   /**
-   * Every output goes through the pull request, auto-commit paths (`units/**`) included: for
+   * Every output goes through the pull request, even when its path is in the auto-commit allowlist: for
    * proposals a person reviews as a whole before they become state (default: the writer splits).
    */
   reviewAll?: boolean;

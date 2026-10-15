@@ -1,5 +1,5 @@
 /**
- * `assessment/<app>/inventory.json`, written by the assess stage's inventory script: the figures
+ * the file returned by `assessmentInventoryPath`, written by the assess stage's inventory script: the figures
  * of record (files, lines, SLOC, complexity) per language and per file. Every field is treated
  * as optional; anything that does not fit is dropped, never thrown on.
  */

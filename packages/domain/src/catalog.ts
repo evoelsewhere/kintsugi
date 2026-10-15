@@ -1,6 +1,8 @@
-// The item catalog of an application (ADR-0033): `assessment/<app>/catalog.json`, written by the
-// assess stage (scripts catalog_from_topology.py → apply_catalog_edits.py → reconcile_catalog.py).
-// Module → item; items are the units of work: the work item id is `<app>/<module>/<item>`.
+import { assessmentCatalogPath, knowledgeAsIsItemFilePath } from "./document-layout.js";
+
+// The item catalog of an application (ADR-0033), written by the assess stage
+// (scripts catalog_from_topology.py → apply_catalog_edits.py → reconcile_catalog.py).
+// Module → item; a catalog item represents a unit whose full id is `<app>/<module>/<unit>`.
 // Item status is derived (API), never stored in the catalog.
 
 /** One kebab-case path segment: a module id, the item part of an item id, an application id. */
@@ -82,5 +84,5 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number];
 export const workItemIdOf = (app: string, itemId: string): string => `${app}/${itemId}`;
 
 /** Document-repo paths of the catalog and of an item's per-item files. */
-export const catalogPath = (app: string): string => `assessment/${app}/catalog.json`;
-export const itemMetaPath = (app: string, itemId: string): string => `knowledge/as-is/${app}/items/${itemId}/meta.json`;
+export const catalogPath = (app: string): string => assessmentCatalogPath(app);
+export const itemMetaPath = (app: string, itemId: string): string => knowledgeAsIsItemFilePath(app, itemId, "meta.json");

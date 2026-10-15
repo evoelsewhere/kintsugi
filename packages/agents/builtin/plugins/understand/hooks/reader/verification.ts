@@ -2,7 +2,7 @@ import { plain } from './text.js'
 import type { TrackKey } from './tracks.js'
 
 /**
- * `assessment/<app>/VERIFICATION.json`, written by the proof pack (`scripts/proof_pack.py`, run by the verify
+ * the JSON report returned by `verificationReportPath`, written by the proof pack (`scripts/proof_pack.py`, run by the verify
  * command): one verdict per built module, computed by a script from the evidence files. The portal reader exposes the verdicts
  * as they are and never computes one.
  *

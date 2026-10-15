@@ -63,7 +63,7 @@ export interface StageView {
   agents: string[];
   /** Paths the stage reads (document repo, source). */
   reads?: string[];
-  /** Document-repo paths the stage writes (patterns such as `assessment/<app>/ASSESSMENT.md`). */
+  /** Document-repo paths the stage writes, using domain-owned layout patterns. */
   writes: string[];
   /** Where a person decides before the stage goes on (from the command definition). */
   gates: string[];

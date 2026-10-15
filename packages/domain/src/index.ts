@@ -68,7 +68,7 @@ export type WorkItemStatus =
   | "skipped";
 
 /**
- * Frontmatter of `units/<application>/<module>/<unit>.md` in the document repo (ADR-0012, ADR-0028).
+ * Frontmatter of the unit-state path returned by `unitStatePath` in the document repo (ADR-0012, ADR-0028).
  * This file is the source of truth; Postgres only indexes it.
  */
 export interface WorkItemFile {
@@ -275,4 +275,5 @@ export * from "./project.js";
 export * from "./manifest.js";
 
 // The item catalog of an application (ADR-0033).
+export * from "./document-layout.js";
 export * from "./catalog.js";

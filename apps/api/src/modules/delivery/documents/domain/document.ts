@@ -204,7 +204,7 @@ export interface UnderstandUnit extends TraceUnit {
   workItem?: { path: string; status: string; complexity?: string; statusFrom?: "default-branch" | "ref" };
 }
 
-/** A synthesis document of the understand stage (knowledge/as-is/<app>/). */
+/** A synthesis document of the understand stage (under the path returned by knowledgeAsIsDir). */
 export interface AsIsDocument {
   id: "readme" | "architecture" | "data-model" | "integrations";
   title: string;

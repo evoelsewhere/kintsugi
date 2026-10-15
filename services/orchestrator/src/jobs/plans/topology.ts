@@ -7,9 +7,11 @@
 // exportable Mermaid diagrams that the former `map` stage wrote, and chunked mapping of big estates.
 
 import type { AgentStep, ScriptStep } from "../plan.js";
+import { DOCUMENT_PATH_TOKENS, assessmentDir, assessmentTopologyPath } from "@kintsugi/domain";
 import { CREDENTIALS, UNTRUSTED, WORKSPACE } from "./common.js";
 
-const DIR = "assessment/{app}";
+const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
+const DIR = assessmentDir(APP_TOKEN);
 
 const SCHEMA = `{
   "system": "<display name>",
@@ -80,7 +82,7 @@ ${UNTRUSTED}`;
 
 /**
  * The topology extraction as two steps: a legacy-analyst job writes the extraction script at `script`
- * (a document-repo path), a script step runs it into `assessment/{app}/topology.json`, and when it
+ * (a document-repo path), a script step runs it to the path returned by `assessmentTopologyPath`, and when it
  * fails the job gets the error once to fix it. `domains` tells the job where the domains found so far
  * are. Used by `assess` (ADR-0033).
  */
@@ -92,8 +94,8 @@ export function topologySteps(script: string, domains: string): [AgentStep, Scri
       kind: "script",
       script,
       fromInputs: true,
-      args: ["{src}", `{out}/${DIR}`],
-      expects: [`${DIR}/topology.json`],
+      args: ["{src}", "{out}/" + DIR],
+      expects: [assessmentTopologyPath(APP_TOKEN)],
       repair: { id: "topology-fix", kind: "agent", agent: "legacy-analyst", task: repairTask(script), expects: [script] },
     },
   ];

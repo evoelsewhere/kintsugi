@@ -1,12 +1,12 @@
 // Application layer: the item catalog of an application (ADR-0033) with a derived status per
 // item. The catalog is read at a ref (default: the default branch); the understood state
-// (`knowledge/as-is/<app>/items/<module>/<item>/meta.json`) always at the default branch; the
+// (`knowledgeAsIsItemFilePath`) always at the default branch; the
 // running, in-pr and failed states from the application's understand runs and the refs logic of
 // the documents module (a run's branch is open until it is reachable from the default branch).
 
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { type ItemCatalog, parseItemCatalog } from "@kintsugi/agents/reader";
-import { type ItemStatus, catalogPath } from "@kintsugi/domain";
+import { type ItemStatus, catalogPath, knowledgeAsIsItemsDir } from "@kintsugi/domain";
 import { type DocumentContext, DocumentsService } from "#modules/delivery/documents/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { type CatalogItemView, type CatalogView, type ItemMeta, type UnderstandRunFacts, deriveItemStatus } from "../domain/catalog.js";
@@ -99,7 +99,7 @@ export class CatalogService {
   /** meta.json of every item understood on the default branch, by item id. */
   private async metas(context: DocumentContext, applicationId: string, catalog: ItemCatalog): Promise<Map<string, ItemMeta>> {
     const commit = (await this.documents.resolve(context, undefined)).commit;
-    const base = `knowledge/as-is/${applicationId}/items`;
+    const base = knowledgeAsIsItemsDir(applicationId);
     const metas = new Map<string, ItemMeta>();
     const modules = new Set(catalog.items.map((item) => item.id.split("/")[0]!));
     await Promise.all(

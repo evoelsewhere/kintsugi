@@ -1,7 +1,7 @@
 import { linesOf } from './text.js'
 
 /**
- * `assessment/<app>/MODERNIZATION_BRIEF.md`, read without a model: the
+ * the file returned by `modernizationBriefPath`, read without a model: the
  * target stack, the phases, which modules each phase names, the exit
  * criteria boxes, and the approval block.
  *
