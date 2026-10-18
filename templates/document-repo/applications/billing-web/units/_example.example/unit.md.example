@@ -16,15 +16,15 @@ dependsOn: [billing-web/common/invoice-dto]
 source:
   - {repo: org/billing-web-legacy, paths: [Invoices/Search.aspx, Invoices/Search.aspx.cs]}
 target:
-  - {repo: Billing/_git/billing-web, paths: [src/Invoices/Search/]}
+  - {repo: org/billing-web-ui, paths: [src/Invoices/Search/]}
 links:
-  taskPack: tasks/billing-web/invoices/invoice-search.md
-  asIs: knowledge/as-is/billing-web/invoices/invoice-search.md
+  taskPack: applications/billing-web/units/invoices/invoice-search/task.md
+  asIs: applications/billing-web/units/invoices/invoice-search/as-is.md
   mappings: [standards/mappings/invoice-grid.md, standards/mappings/search-list-screen.md]
-  businessRules: [BR-INV-0012]
+  businessRules: [RULE-invoice-amount-001]
   pullRequests: []
 gates:
-  G4: {status: pending}
+  G4: {status: pending, review: reviews/G4.md}
 ---
 
 Search invoices by customer, date range and status; results grid with paging and export.

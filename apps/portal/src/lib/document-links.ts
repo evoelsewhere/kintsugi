@@ -2,6 +2,8 @@
 // document's path in the document repo; a link that leaves the repo, points under restricted/
 // or .git, or uses a non-web scheme is never followed.
 
+import { applicationsDir, assessmentFilePath, generatedFilePath } from "@kintsugi/domain";
+
 export type LinkTarget =
   /** A web page: opens in a new tab. */
   | { kind: "external"; href: string }
@@ -58,15 +60,31 @@ export function resolveDocumentLink(href: string, basePath: string): LinkTarget 
   return { kind: "document", path: resolved.join("/"), ...(anchor !== "" && { anchor }) };
 }
 
+/** The application whose folder a document-repo path is in, from the domain-owned root. */
+function applicationIdOf(path: string): string | undefined {
+  const [root, app, ...rest] = path.split("/");
+  return root === applicationsDir() && app !== undefined && rest.length >= 2 ? app : undefined;
+}
+
+/** Stage main documents, built through the domain path helpers (ADR-0038). */
+const MAIN_DOCUMENT_STAGES: ReadonlyArray<readonly [(app: string) => string, string]> = [
+  [(app) => assessmentFilePath(app, "ASSESSMENT.md"), "assess"],
+  [(app) => assessmentFilePath(app, "SECURITY_FINDINGS.md"), "harden"],
+  [(app) => assessmentFilePath(app, "BUSINESS_RULES.md"), "extract-rules"],
+  [(app) => generatedFilePath(app, "README.md"), "understand"],
+  [(app) => generatedFilePath(app, "architecture.md"), "understand"],
+  [(app) => generatedFilePath(app, "data-model.md"), "understand"],
+  [(app) => generatedFilePath(app, "integrations.md"), "understand"],
+];
+
 /** The stage whose main document `path` is, for an "open in results" link. */
 export function stageOfDocument(path: string): { stage: string; app: string } | undefined {
-  const main = /^assessment\/([^/]+)\/(ASSESSMENT|SECURITY_FINDINGS|BUSINESS_RULES)\.md$/.exec(path);
-  if (main !== null) {
-    const stage = main[2] === "ASSESSMENT" ? "assess" : main[2] === "SECURITY_FINDINGS" ? "harden" : "extract-rules";
-    return { stage, app: main[1] ?? "" };
+  const app = applicationIdOf(path);
+  if (app === undefined) return undefined;
+  for (const [document, stage] of MAIN_DOCUMENT_STAGES) {
+    if (document(app) === path) return { stage, app };
   }
-  const asIs = /^knowledge\/as-is\/([^/]+)\/(README|architecture|data-model|integrations)\.md$/.exec(path);
-  return asIs === null ? undefined : { stage: "understand", app: asIs[1] ?? "" };
+  return undefined;
 }
 
 /** The id among `ids` an anchor names (`#sec-001`, `#sec-001--sql-injection`): the longest id the anchor starts with. */

@@ -1,0 +1,12 @@
+{
+  "RULE-invoice-amount-001": {
+    "verdict": "confirmed",
+    "approver": "dana",
+    "date": "2026-10-15"
+  },
+  "RULE-invoice-search-002": {
+    "verdict": "clarify",
+    "approver": "dana",
+    "date": "2026-10-15"
+  }
+}

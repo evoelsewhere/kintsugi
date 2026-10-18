@@ -22,12 +22,14 @@
 | **Scorecard** | Weighted assessment of an application across business, technical, feasibility, cost and risk criteria |
 | **Legacy repo** | A legacy code repo; always read-only for the runtime |
 | **Agent plugin** | A package in the Claude Code plugin format (`.claude-plugin/plugin.json` + skills, agents, commands, hooks, MCP) installed into member harnesses; the built-in one is `kintsugi` |
+| **Catalog item** | One entry of an application's assessment catalog (`<module>/<item>`); once selected it becomes a unit. Use **item** only for catalog entries |
 | **Hook** | A plugin component that runs on harness lifecycle events (session start, before / after tool use, stop), e.g. the write guard and activity reporting |
 | **Marketplace** | A generated `marketplace.json` listing published plugins for a harness; document-repo marketplace generation is planned and the output is never hand-edited |
 | **Skill** | An Agent Skills folder (`SKILL.md`) inside a plugin, namespaced `<plugin>:<skill>` |
 | **Target base** | The target repo as scaffolded by the solution architect (framework, layering, conventions, CI) before units are converted into it |
 | **Task pack** | Context for one unit (spec, AS-IS excerpts from the KB, rules, acceptance criteria, suggested skills) for a member's harness |
-| **Unit file** | `units/<app>/<module>/<unit>.md` in the document repo; its frontmatter is the unit's state (ADR-0012) |
+| **Unit** | The thing being migrated, identified by the full `<app>/<module>/<unit>`; its evidence lives in `applications/<app>/units/<module>/<unit>/` (ADR-0038) |
+| **Unit file** | `applications/<app>/units/<module>/<unit>/unit.md` in the document repo; its frontmatter is the unit's state (ADR-0012, ADR-0038) |
 | **Wave** | A group of applications or units migrated together, by pattern |
 | **Work item** | Legacy API/domain term corresponding to a unit. Use **unit** in documentation; existing API/CLI names are unchanged. |
 | **Document repo** | The project's single Git repo for everything except code; see the [layout reference](document-repo.md) for current paths and planned homes |

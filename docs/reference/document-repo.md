@@ -1,73 +1,71 @@
 # Document repository layout
 
-> Status: this page describes paths written or consumed by the current implementation. The subject-oriented layout change has not been applied yet.
+> Status: this page describes the ADR-0038 target layout. Paths are written by Kintsugi code, by people through pull requests, or are marked planned with the phase that will fill them.
 
-Each project has exactly one document repo. It holds everything except code ([ADR-0007](../decisions/0007-git-as-source-of-truth.md)). The portal does not scaffold this repo from the starter template today; see [Build a project](../guides/build-project.md).
+Each project has exactly one document repo. It holds everything except code ([ADR-0007](../decisions/0007-git-as-source-of-truth.md)). The layout groups content by subject (program, portfolio, architecture, application, unit) and by SDLC phase ([ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md)). The portal does not scaffold this repo from the starter template today; see [Build a project](../guides/build-project.md).
 
-This page answers where current artifacts live. For focused contracts, see the [manifest](document-repo-manifest.md), [item catalog](document-repo-item-catalog.md), [write path](document-repo-write-path.md), [read path and stage results](document-repo-read-path.md), [commit conventions](document-repo-commit-conventions.md), and [unit file format](document-repo-unit-files.md).
+This page answers where artifacts live. For focused contracts, see the [manifest](document-repo-manifest.md), [item catalog](document-repo-item-catalog.md), [write path](document-repo-write-path.md), [read path and stage results](document-repo-read-path.md), [commit conventions](document-repo-commit-conventions.md), and [unit file format](document-repo-unit-files.md).
 
-## One placement rule in the current implementation
+## Vocabulary
 
-- Project-wide configuration and authored content live at the repo root: `kintsugi.yaml`, `standards/`, and project member plugins in `plugins/`.
-- Application assessment inputs and `assess` outputs live under `assessment/<app>/`.
-- `understand` evidence for a selected unit is written under `assessment/<app>/items/<module>/<unit>/` and `knowledge/as-is/<app>/`; the unit's indexed state file is `units/<app>/<module>/<unit>.md`.
-- Application aggregates rebuilt by `rebuild_aggregates.py` live under the two `generated/` directories shown below.
+A **unit** is the thing being migrated. Its id is always the full `<app>/<module>/<unit>`; `<unit>` in a path is only the last segment, not the full id. An **item** is only an entry in an application's assessment catalog (`<module>/<item>`); once selected for migration, a catalog item becomes a unit. Use "unit" for the thing and "item" only for a catalog entry. The API still exposes legacy `WorkItem`/`work-items` names.
 
-This documents current code paths, not the proposed subject-based target. The template and plans do not yet provide homes for the P0 charter and policies, the P1 cross-application portfolio, P2 TO-BE requirements/design, P6 cutover, P7 operation or uniform gate records. Current unit gate state remains in unit frontmatter. Those target homes and the shared gate-record format are not scaffolded by current plans.
-
-## Current paths
+## The layout
 
 ```text
-kintsugi.yaml
-standards/
-  conventions/
-  mappings/
-  review-rules.md
-plugins/<project-plugin>/
-assessment/<app>/
-  INTENT.md                         # optional human-provided assessment input
-  graph/                            # optional human-provided graph input
-  telemetry/                        # optional human-provided telemetry input
-  analysis/                         # assess analysis outputs
-  catalog-draft/                    # assess catalog proposal
-  inventory.json                    # assess script output
-  topology.json                     # topology extraction output
-  catalog.json                      # curated item catalog
-  ASSESSMENT.md                     # assess synthesis
-  ARCHITECTURE.mmd                  # assess synthesis
-  tools/extract_topology.py         # generated extraction script used by assess
-  understand/briefs/                # per-unit understand briefs
-  items/<module>/<unit>/            # per-unit topology.json, rules.json, findings.json
-  generated/                         # rebuilt application aggregates:
-    topology.json
-    rules_result.json
-    BUSINESS_RULES.md
-    DATA_OBJECTS.md
-    SECURITY_FINDINGS.md
-knowledge/as-is/<app>/
-  <module>/<unit>.md                 # per-unit AS-IS specification
-  items/<module>/<unit>/             # per-unit meta.json and trace.json
-  generated/                         # rebuilt application indexes and views:
-    README.md
-    traceability.json
-    traceability.md
-units/<app>/<module>/<unit>.md       # unit state, indexed by the API
+kintsugi.yaml                  project manifest (written by the portal's publish, arrives as a pull request)
+program/                       P0: charter.md, raci.md, ai-strategy.md, kpi-baseline.md, ai-usage-policy.md
+portfolio/                     P1: scorecard.md, dispositions.md, wave-plan.md
+architecture/                  P2: blueprint.md, coexistence.md, data-migration.md, poc-plan.md, adr/
+standards/                     P2-P3: conventions/, mappings/, review-rules.md
+plugins/                       P3: project-authored plugins only
+gates/                         project-level gate records: G0.md, G3.md
+applications/<app>/
+  inputs/                      INTENT.md, graph/, telemetry/ attached by people
+  assessment/                  P1 assess and understand outputs
+  to-be/                       P2: requirements.md, design.md
+  gates/                       G1.md, G2.md, G5.md, G6.md
+  units/<module>/<unit>/       P1-P5: one directory per unit (see the unit file page)
+  cutover/                     P6: plan.md, runbook.md, rollback.md, go-no-go.md
+  operate/                     P7: hypercare-report.md, handover.md
+  generated/                   rebuilt application aggregates
 ```
 
-### Member modernization and verification paths
+## Who writes what
 
-The current member plugin commands also use `assessment/<app>/MODERNIZATION_BRIEF.md`, `assessment/<app>/modules/<module>/TRANSFORMATION_NOTES.md`, and `assessment/<app>/VERIFICATION.md` / `VERIFICATION.json`. Baseline inputs and captured legacy outputs live under `golden/<module>/`; per-run reports live under `runs/<module>/<run-id>/`. These are member-plugin paths, separate from the `assess`/`understand` plan outputs above.
+- **Written by code**: the `assess` job writes `applications/<app>/assessment/` (catalog, synthesis, topology and its views, extraction results) and the `understand` job writes the per-unit evidence under `applications/<app>/units/<module>/<unit>/` (`as-is.md`, `topology.json`, `rules.json`, `findings.json`, `trace.json`, `meta.json`). After a merge, `rebuild_aggregates.py` rebuilds the application aggregates under `applications/<app>/generated/` (`topology.json`, `rules_result.json`, `BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.json`, `traceability.md`, `README.md`) and commits them to the default branch; the application overview documents (`architecture.md`, `data-model.md`, `integrations.md`) are written by an on-demand Overview run.
+- **Written by people, through pull requests**: `program/`, `portfolio/`, `architecture/`, `standards/`, `plugins/`, `applications/<app>/inputs/`, `applications/<app>/cutover/`, `applications/<app>/operate/`, all gate records, and the human rule verdicts in `rules-review.json`.
+- **Planned**: `applications/<app>/to-be/requirements.md` and `design.md` (P2 target specification; no writer is implemented yet), the per-unit `reviews/G4.md` records and the `unit.md` gate references (P4), and the per-unit `verify/` evidence (P5).
 
-In these current verification paths, `<module>` is the module slug and does not include `<app>`; it is not the full unit id `<app>/<module>/<unit>`. The member workflow documents specify `tasks/<id>.md` for task-planner output and `reviews/<id>/` for gate-reviewer records. These are not outputs of the built-in `assess`/`understand` plans, have no `<app>` directory component, and do not define whether `<id>` is a short slug or a full unit id. `deliverables/<phase>` has no writer in the current code and is not a supported path. The proposed Phase C layout moves unit-specific task, review and verification content under `applications/<app>/units/<module>/<unit>/`.
+## Gate records
 
-The exact files emitted by the assess and understand plans are described in the [item catalog page](document-repo-item-catalog.md). Aggregates are rebuilt from merged per-unit files; see [commit conventions](document-repo-commit-conventions.md) for the current auto-commit paths.
+A gate record is a Markdown file whose body records:
 
-In path examples, `<module>/<unit>` is the catalog item id. The full unit id is `<app>/<module>/<unit>`; `<unit>` is only the last path segment, not the full id. The API still exposes legacy `WorkItem`/`work-items` names; this reference uses **unit** for the concept and **item** only for a catalog entry.
+```text
+- Decision:            approved / rejected / pending
+- Approvers:           names and roles
+- Evidence:            paths in this repository supporting the decision
+- Date:                YYYY-MM-DD
+```
+
+Project-level records live in `gates/` (G0 bootstrap, G3 pilot exit and factory readiness); application records live in `applications/<app>/gates/` (G1 portfolio decision, G2 target architecture, G5 test exit and UAT, G6 go / no-go). A unit's G4 record lives under the unit's `reviews/` and its `unit.md` frontmatter points to it. Gate records arrive through pull requests and are never auto-committed. The format is scaffolded as placeholders only; there is no gate-record automation.
+
+## Auto-commit
+
+Straight-to-default-branch commits are limited to the default auto-commit paths:
+
+```text
+applications/*/units/**/unit.md
+applications/*/units/**/task.md
+applications/*/generated/**
+```
+
+`kintsugi.yaml` can replace the list with its `autoCommitPaths` key. Everything else arrives as a pull request from a `kintsugi/<user>/<write-id>` branch ([commit conventions](document-repo-commit-conventions.md)).
 
 ## Generated and authored content
 
-- Files under `assessment/<app>/generated/` and `knowledge/as-is/<app>/generated/` are aggregates written by `rebuild_aggregates.py`, not hand-authored sources.
-- `assessment/<app>/tools/extract_topology.py` is also generated, but it is a stage tool rather than an aggregate. The word `generated` in that filename does not make it an aggregate directory.
+- Files under `applications/<app>/generated/` are aggregates rebuilt from the merged unit files, never hand-authored sources.
+- `applications/<app>/assessment/understand/` holds run scratch (scope, shards, scan results); it is working area, not evidence.
 - The template's `plugins/` contains project-authored member plugin sources only.
 - The built-in copy `plugins/kintsugi/` and harness fallback renderings are planned outputs; the built-in plugin generator is not implemented yet.
 - `packages/harness-sdk` declares three planned marketplace output paths: `.claude-plugin/marketplace.json`, `.github/plugin/marketplace.json`, and `.agents/plugins/marketplace.json`. No current code writes these files; they are generated outputs, not authored sources or template content.
@@ -80,4 +78,4 @@ The document repo is a Git repository registered with role `document`; applicati
 
 - [Delivery pipeline](../methodology/delivery-pipeline.md) explains P0–P7 and gates G0–G6.
 - [Build a project](../guides/build-project.md) describes the currently available setup flow and the planned portal scaffold behavior.
-- [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md) defines the `assess` item catalog and selected-unit `understand` stages.
+- [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md) defines the `assess` item catalog and selected-unit `understand` stages; its layout statements are superseded by [ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md).

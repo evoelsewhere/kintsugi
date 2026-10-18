@@ -16,25 +16,25 @@ document:
 unitKinds: [module]         # TODO e.g. [screen, api, batch-job, db-object]
 
 applications:
-  - id: my-app              # TODO: one entry per application in scope (kebab-case)
-    name: My application    # optional display name
+  - id: billing-web         # one entry per application in scope (kebab-case)
+    name: Billing web       # optional display name
     disposition: refactor   # 7R: retire | retain | rehost | replatform | refactor | rearchitect | rebuild | repurchase
     pipeline: refactor      # a built-in pipeline id, or the id of a pipeline declared under `pipelines:` below
     repos:
       # AS-IS: read-only for Kintsugi.
       - server: my-git-server
-        path: org/my-app-legacy
+        path: org/billing-web-legacy
         role: legacy                  # legacy code (many allowed)
       - server: my-git-server
-        path: org/my-app-db
+        path: org/billing-db
         role: legacy-data             # legacy data: schemas, dumps, reference data (many allowed)
       # TO-BE: only members write; the runtime never writes.
       - server: my-git-server
-        path: org/my-app-web
+        path: org/billing-web-ui
         role: target
         component: web                # component name from the TO-BE architecture (one target repo per component)
       - server: my-git-server
-        path: org/my-app-api
+        path: org/billing-api
         role: target
         component: api
 
