@@ -126,18 +126,19 @@ export function assessmentItemFilePath(app: string, itemId: string, file: string
   return `${assessmentItemDir(app, itemId)}/${file}`;
 }
 
-/** Compatibility name for the per-unit AS-IS document. */
+/** Understand-run briefs stay in the application's assessment working area (ADR-0038). */
 export function assessmentBriefsDir(app: string): string {
-  return unitsDir(app);
+  return `${assessmentDir(app)}/understand/briefs`;
 }
 
+/** Per-unit brief JSON written by scope_items.py; `unitKey` is `<module>/<unit>`. */
 export function assessmentBriefPath(app: string, unitKey: string): string {
-  return `${assessmentBriefsDir(app)}/${unitKey}/as-is.md`;
+  return `${assessmentBriefsDir(app)}/${unitKey}.json`;
 }
 
-/** Assessment artifacts produced during understanding are scoped to the application. */
+/** Understand-run scratch (scope, shards, scan, rules result) stays out of the assess outputs. */
 export function understandRunDir(app: string): string {
-  return assessmentDir(app);
+  return `${assessmentDir(app)}/understand`;
 }
 
 export function understandRunFilePath(app: string, file: string): string {
@@ -157,9 +158,9 @@ export function generatedFilePath(app: string, file: string): string {
   return `${generatedDir(app)}/${file}`;
 }
 
-/** Compatibility paths retained for existing callers, now rooted in the subject-based unit tree. */
+/** Understand's application-level documents are aggregates of the application's generated area. */
 export function knowledgeAsIsDir(app: string): string {
-  return unitsDir(app);
+  return generatedDir(app);
 }
 
 export function knowledgeAsIsItemsDir(app: string): string {

@@ -16,6 +16,7 @@ import {
   assessmentItemFilePath,
   generatedDir,
   goldenDir,
+  knowledgeAsIsDir,
   knowledgeAsIsGeneratedFilePath,
   knowledgeAsIsItemFilePath,
   knowledgeAsIsUnitPath,
@@ -25,6 +26,8 @@ import {
   runsDir,
   taskPackPath,
   topologyExtractorPath,
+  understandRunDir,
+  understandScopePath,
   unitAsIsPath,
   unitDesignPath,
   unitDir,
@@ -52,8 +55,14 @@ describe("ADR-0038 document-repo layout", () => {
     expect(assessmentCatalogPath(DOCUMENT_PATH_TOKENS.app)).toBe("applications/{app}/assessment/catalog.json");
     expect(topologyExtractorPath(DOCUMENT_PATH_TOKENS.app)).toBe("applications/{app}/assessment/tools/extract_topology.py");
     expect(assessmentBriefPath(DOCUMENT_PATH_TOKENS.app, "payroll/run-period")).toBe(
-      "applications/{app}/units/payroll/run-period/as-is.md",
+      "applications/{app}/assessment/understand/briefs/payroll/run-period.json",
     );
+    expect(assessmentBriefPath("billing", "payroll/run-period")).not.toBe(
+      "applications/billing/units/payroll/run-period/as-is.md",
+    );
+    expect(understandRunDir(DOCUMENT_PATH_TOKENS.app)).toBe("applications/{app}/assessment/understand");
+    expect(understandScopePath("billing")).toBe("applications/billing/assessment/understand/scope.json");
+    expect(knowledgeAsIsDir("billing")).toBe("applications/billing/generated");
   });
 
   it("extracts application ids from per-unit paths", () => {
