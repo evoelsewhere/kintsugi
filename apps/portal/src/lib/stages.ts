@@ -5,6 +5,7 @@
 import type { AgentSummary } from "@/lib/api/agents";
 import type { JobRunView, StageView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
+import { DOCUMENT_PATH_TOKENS } from "@kintsugi/domain";
 
 export type StageAudience = StageView["audience"];
 
@@ -85,20 +86,30 @@ export function agentProblems(stage: StageView, agents: AgentSummary[] | undefin
 
 /** A stage's document path pattern for one application. */
 export function resolvePath(pattern: string, applicationId: string): string {
-  return pattern.replaceAll("<app>", applicationId).replaceAll("$app", applicationId);
+  return pattern.replaceAll(DOCUMENT_PATH_TOKENS.app, applicationId);
 }
 
 const escapeRegExp = (text: string): string => text.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
 
+const TOKEN_MARK = "\u0000";
+const TOKENS = Object.values(DOCUMENT_PATH_TOKENS);
+
+/** Masks the domain path tokens so escaping and matching can treat each as one placeholder. */
+function maskTokens(text: string): string {
+  let masked = text;
+  for (const token of TOKENS) masked = masked.replaceAll(token, TOKEN_MARK);
+  return masked;
+}
+
 /**
- * Whether a document-repo path matches a stage path pattern for one application: `<…>` and
- * `*` stand for one path segment, a trailing `/` for everything below a directory.
+ * Whether a document-repo path matches a stage path pattern for one application: a domain path
+ * token and `*` stand for one path segment, a trailing `/` for everything below a directory.
  */
 export function matchesPattern(pattern: string, applicationId: string, path: string): boolean {
   const resolved = resolvePath(pattern, applicationId);
   const directory = resolved.endsWith("/");
-  const source = escapeRegExp(directory ? resolved.slice(0, -1) : resolved)
-    .replace(/<[^>]+>/g, "[^/]+")
+  const source = escapeRegExp(maskTokens(directory ? resolved.slice(0, -1) : resolved))
+    .replaceAll(TOKEN_MARK, "[^/]+")
     .replace(/\*/g, "[^/]*");
   return new RegExp(`^${source}${directory ? "/.+" : ""}$`).test(path);
 }
@@ -107,5 +118,5 @@ export function matchesPattern(pattern: string, applicationId: string, path: str
 export function fileName(pattern: string): string | undefined {
   if (pattern.endsWith("/")) return undefined;
   const name = pattern.slice(pattern.lastIndexOf("/") + 1);
-  return name === "" || name.includes("<") || name.includes("*") ? undefined : name;
+  return name === "" || name.includes("*") || maskTokens(name).includes(TOKEN_MARK) ? undefined : name;
 }

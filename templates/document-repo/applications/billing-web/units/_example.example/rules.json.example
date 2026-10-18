@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "id": "RULE-invoice-amount-001",
+      "name": "Invoice amount includes tax",
+      "source": "src/INVOICE.cbl:200-212",
+      "citations": ["src/INVOICE.cbl:200-212"]
+    },
+    {
+      "id": "RULE-invoice-search-002",
+      "name": "Invoice search matches customer, date range and status",
+      "source": "src/INVOICE.cbl:340-388",
+      "citations": ["src/INVOICE.cbl:340-388", "Invoices/Search.aspx.cs:22-57"]
+    }
+  ]
+}

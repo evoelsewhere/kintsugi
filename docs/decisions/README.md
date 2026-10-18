@@ -124,7 +124,7 @@ This page has two parts:
 | Question | Proposal |
 |---|---|
 | Dedicated document repo, or a `kintsugi/` folder in an existing repo? | A dedicated repo (access and history separate from code) |
-| Do runtime results reach Git through PRs or direct commits? | PRs by default; direct commits for auto-commit paths. Current defaults: `units/**`, `tasks/**`, `knowledge/**/generated/**`, `assessment/**/generated/**` |
+| Do runtime results reach Git through PRs or direct commits? | PRs by default; direct commits for auto-commit paths. Current defaults: `applications/*/units/**/unit.md`, `applications/*/units/**/task.md`, `applications/*/generated/**` (ADR-0038) |
 | Who authors Kintsugi's commits? | `kintsugi-bot` + trailers `Kintsugi-Job`, `Kintsugi-Agent` |
 
 ### D32 — Docker API

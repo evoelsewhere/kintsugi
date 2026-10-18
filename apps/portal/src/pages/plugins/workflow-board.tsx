@@ -6,6 +6,7 @@
 import { useMemo } from "react";
 import type { FlowNode, PluginFlow, PluginLink } from "@/lib/api/plugins";
 import { cn } from "@/lib/utils";
+import { applicationDir, assessmentDir, DOCUMENT_PATH_TOKENS } from "@kintsugi/domain";
 
 /** What a box is. The colors are tinted over the page, so they read on a light and a dark theme. */
 const KIND = {
@@ -73,7 +74,12 @@ function ArrowRight({ label }: { label?: string }): React.JSX.Element {
   );
 }
 
-const short = (path: string): string => path.replace("assessment/", "").replace("<app>/", "");
+/** A document-repo path without the application root or the assessment folder prefix. */
+const short = (path: string): string => {
+  const assessment = `${assessmentDir(DOCUMENT_PATH_TOKENS.app)}/`;
+  const application = `${applicationDir(DOCUMENT_PATH_TOKENS.app)}/`;
+  return path.startsWith(assessment) ? path.slice(assessment.length) : path.startsWith(application) ? path.slice(application.length) : path;
+};
 
 /** What the colors mean. */
 export function WorkflowLegend(): React.JSX.Element {

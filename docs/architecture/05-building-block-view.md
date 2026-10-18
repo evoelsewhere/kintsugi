@@ -39,7 +39,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | B1 Portfolio & Assessment | P1 | Inventory and unit files (proposed by `assessment`, confirmed by people), unit dependencies (`dependsOn`), weighted scorecard, 7R recommendation, wave planning. `assessment` and `wave-planner` draft; the architect approves |
 | B2 Architecture Studio | P2 | AS-IS vs TO-BE architecture, ADRs, gap list, co-existence strategy, POC plan, cost-benefit, ARB review. Supported by `to-be-analyst` |
 | B3 Factory Setup | P3 | Base source, IaC, CI/CD; select or author agent plugins and task-pack templates; configure `gate-reviewer` rules; pilot on 1–2 features |
-| B4 Migration Workbench | P4 | Board of work items (index of `units/**`) × stages; `task-planner` produces task packs; assignment / claiming; PR tracking; `gate-reviewer` review; design ↔ code sync |
+| B4 Migration Workbench | P4 | Board of units (index of `applications/*/units/**`) × stages; `task-planner` produces task packs; assignment / claiming; PR tracking; `gate-reviewer` review; design ↔ code sync |
 | B5 Verification | P5 | Test generation, compare tests, coverage, non-functional tests, rehearsal, UAT tracking |
 | B6 Cutover | P6 | Readiness checklist, runbook, go / no-go, decommissioning |
 | B7 Hypercare & Operate | P7 | Incidents, user manual / training generation, end-user chatbot, KB handover |

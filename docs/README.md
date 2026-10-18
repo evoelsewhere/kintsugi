@@ -49,13 +49,13 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
 - [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
 - [Data model](reference/data-model.md)
-- [Document repository layout](reference/document-repo.md): current paths and placement rule
+- [Document repository layout](reference/document-repo.md): the ADR-0038 subject and phase layout, gate records and auto-commit
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`
-- [Item catalog](reference/document-repo-item-catalog.md): assess, catalog IDs, and understand outputs
+- [Item catalog](reference/document-repo-item-catalog.md): catalog items, stable IDs, and the units they become
 - [Document write path](reference/document-repo-write-path.md): job outputs, branches and pull requests
 - [Document reads and stage results](reference/document-repo-read-path.md): file APIs and result views
 - [Commit conventions](reference/document-repo-commit-conventions.md): identity, trailers and auto-commit defaults
-- [Unit files](reference/document-repo-unit-files.md): unit state and frontmatter
+- [Unit files](reference/document-repo-unit-files.md): the unit directory, unit state, rule verdicts and traceability
 - [Configuration](reference/configuration.md): installation environment variables
 
 **Guides**

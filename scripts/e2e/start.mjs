@@ -61,12 +61,13 @@ async function seed(name, dir) {
     });
   for (const file of walk(dir)) {
     const path = relative(dir, file).replaceAll("\\", "/");
-    if (path.endsWith(".example.md") && name === "billing-docs") continue;
+    // Format samples stay in the template; only the skeleton is seeded (ADR-0038).
+    if (path.includes(".example") && name === "billing-docs") continue;
     await git.commit(name, path, readFileSync(file, "utf8"), "main");
   }
 }
 await seed("billing-legacy", join(import.meta.dirname, "fixtures/billing-legacy"));
-await seed("billing-docs", join(root, "templates/document-repo"));
+await seed("billing-docs", join(root, "templates/document-repo")); // the ADR-0038 document-repo skeleton
 
 // 3. API, worker and portal.
 const password = randomBytes(12).toString("base64url");
