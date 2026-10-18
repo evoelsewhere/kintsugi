@@ -1,6 +1,19 @@
 import { describe, expect, test } from 'vitest'
 
-import { assessmentPath, goldenPath, runPath, SOURCE_REPOSITORY_ACCESS, sourcePath, targetPath } from '../hooks/reader/layout.js'
+import {
+  assessmentPath,
+  generatedPath,
+  goldenPath,
+  modulePath,
+  rulesReviewPath,
+  runPath,
+  SOURCE_REPOSITORY_ACCESS,
+  sourcePath,
+  targetPath,
+  toBePath,
+  unitPath,
+} from '../hooks/reader/layout.js'
+import { mergeLedgers, parseLedger } from '../hooks/reader/ledger.js'
 import { appsOf, readSnapshot } from '../hooks/reader/progress.js'
 import type { ReaderFs } from '../hooks/reader/fs.js'
 
@@ -72,66 +85,118 @@ const topology = {
   flows: [],
 }
 
-describe('Kintsugi built-in progress reader', () => {
-  test('lists only safe app directories under the assessment root', async () => {
-    const fs = new MemoryReaderFs()
-    fs.addFile('assessment/sample-app/REPORT.md', 'Assessment')
-    fs.addFile('assessment/other_app/REPORT.md', 'Assessment')
-    fs.addFile('assessment/../outside/REPORT.md', 'Not a valid app')
+const readOptions = {
+  app: 'sample-app',
+  actionPrefix: 'modernize-',
+  nowMs: 100,
+  track: 'transform',
+} as const
 
+describe('Kintsugi built-in progress reader', () => {
+  test('lists only safe app directories under the applications root', async () => {
+    const fs = new MemoryReaderFs()
+    fs.addFile('applications/sample-app/assessment/REPORT.md', 'Assessment')
+    fs.addFile('applications/other_app/assessment/REPORT.md', 'Assessment')
+    fs.addFile('applications/../outside/REPORT.md', 'Not a valid app')
     await expect(appsOf(fs)).resolves.toEqual(['other_app', 'sample-app'])
   })
 
-  test('reads assessment artifacts and the separate source/target namespaces', async () => {
+  test('reads each stage file from its ADR-0038 home', async () => {
     const fs = new MemoryReaderFs()
-    fs.addFile('assessment/sample-app/topology.json', JSON.stringify(topology), 10)
-    fs.addFile('assessment/sample-app/MODERNIZATION_BRIEF.md', '# Brief\n', 10)
-    fs.addFile('source/sample-app/Main.java', 'class Main {}\n', 5)
-    fs.addFile('target/sample-app/Main.java', 'class Main { int value; }\n', 20)
-
-    const snapshot = await readSnapshot(fs, new Map(), {
-      app: 'sample-app',
-      actionPrefix: 'modernize-',
-      nowMs: 100,
-      track: 'transform',
-    })
-
-    expect(snapshot?.app).toBe('sample-app')
-    expect(snapshot?.apps).toEqual(['sample-app'])
-    expect(snapshot?.hasAssessment).toBe(true)
+    fs.addFile('applications/sample-app/assessment/topology.json', JSON.stringify(topology), 42)
+    fs.addFile(
+      'applications/sample-app/to-be/modernization-brief.md',
+      '# Sample app → Java/Spring\n\nApproved by: Dana\nDate: 2026-10-15\n',
+      10,
+    )
+    const snapshot = await readSnapshot(fs, new Map(), readOptions)
+    expect(fs.reads).toContain('applications/sample-app/assessment/topology.json')
+    expect(fs.reads).toContain('applications/sample-app/to-be/modernization-brief.md')
     expect(snapshot?.topology?.modules.map(module => module.id)).toContain('unit-one')
-    expect(fs.reads).toContain('assessment/sample-app/topology.json')
+    expect(snapshot?.brief?.approval.isSigned).toBe(true)
+    expect(snapshot?.hasAssessment).toBe(true)
+    expect(snapshot?.apps).toContain('sample-app')
     expect(fs.paths).toContain('target/sample-app')
   })
 
-  test('falls back to the read-only source tree when no topology has been published', async () => {
+  test('keeps the brief readable when the assessment is missing', async () => {
     const fs = new MemoryReaderFs()
-    fs.addFile('assessment/sample-app/MODERNIZATION_BRIEF.md', '# Brief\n', 10)
-    fs.addFile('source/sample-app/Main.java', 'class Main {}\n', 5)
-
-    await readSnapshot(fs, new Map(), {
-      app: 'sample-app',
-      actionPrefix: 'modernize-',
-      nowMs: 100,
-      track: 'transform',
-    })
-
+    fs.addFile(
+      'applications/sample-app/to-be/modernization-brief.md',
+      '# Sample app → Java/Spring\n\nApproved by: Dana\nDate: 2026-10-15\n',
+    )
+    const snapshot = await readSnapshot(fs, new Map(), readOptions)
+    expect(snapshot).not.toBeNull()
+    expect(snapshot?.brief?.approval.isSigned).toBe(true)
+    expect(snapshot?.hasAssessment).toBe(false)
     expect(fs.paths).toContain('source/sample-app')
   })
 
-  test('centralizes assessment, source, target, golden and run locations', () => {
-    expect(assessmentPath('sample-app')).toBe('assessment/sample-app')
+  test('merges every unit rule review into one ledger with the new verdict words', async () => {
+    const fs = new MemoryReaderFs()
+    fs.addFile(
+      'applications/sample-app/units/tax/calc/rules-review.json',
+      JSON.stringify({
+        'RULE-1': { verdict: 'confirmed', approver: 'dana', date: '2026-10-15' },
+        'RULE-2': { verdict: 'refuted', approver: 'lee', date: '2026-10-16' },
+      }),
+      5,
+    )
+    fs.addFile(
+      'applications/sample-app/units/tax/round/rules-review.json',
+      JSON.stringify({ 'RULE-1': { verdict: 'clarify', approver: 'kim', date: '2026-10-17' } }),
+      6,
+    )
+    fs.addFile(
+      'applications/sample-app/units/legacy/one/rules-review.json',
+      JSON.stringify({
+        reviews: {
+          'RULE-3': { verdict: 'wrong', at: '2026-10-01', title: 'old', note: 'kept' },
+          'RULE-4': { verdict: 'discuss', at: '2026-10-02' },
+        },
+      }),
+      7,
+    )
+    const snapshot = await readSnapshot(fs, new Map(), readOptions)
+    expect(snapshot?.reviews).toEqual({
+      'RULE-1': { verdict: 'clarify', at: '2026-10-17', title: 'kim' },
+      'RULE-2': { verdict: 'refuted', at: '2026-10-16', title: 'lee' },
+      'RULE-3': { verdict: 'refuted', at: '2026-10-01', title: 'old', note: 'kept' },
+      'RULE-4': { verdict: 'clarify', at: '2026-10-02' },
+    })
+  })
+
+  test('drops verdicts it cannot read without trusting the file', () => {
+    expect(parseLedger(null)).toEqual({})
+    expect(parseLedger('not json')).toEqual({})
+    expect(parseLedger(JSON.stringify({ 'RULE-1': { verdict: 'maybe', approver: 'dana', date: '2026-10-15' } }))).toEqual({})
+    expect(parseLedger(JSON.stringify({ 'RULE-1': { verdict: 'confirmed', approver: 'dana', date: 'yesterday' } }))).toEqual({
+      'RULE-1': { verdict: 'confirmed', at: '', title: 'dana' },
+    })
+    expect(mergeLedgers([{ 'RULE-1': { verdict: 'confirmed', at: '2026-10-15' } }, {}])).toEqual({
+      'RULE-1': { verdict: 'confirmed', at: '2026-10-15' },
+    })
+  })
+
+  test('centralizes the document-repository and workspace locations', () => {
+    expect(assessmentPath('sample-app')).toBe('applications/sample-app/assessment')
+    expect(generatedPath('sample-app')).toBe('applications/sample-app/generated')
+    expect(toBePath('sample-app')).toBe('applications/sample-app/to-be')
+    expect(modulePath('sample-app', 'tax')).toBe('applications/sample-app/units/tax')
+    expect(unitPath('sample-app', 'tax', 'calc')).toBe('applications/sample-app/units/tax/calc')
+    expect(rulesReviewPath('sample-app', 'tax', 'calc')).toBe('applications/sample-app/units/tax/calc/rules-review.json')
+    expect(goldenPath('sample-app', 'tax', 'calc')).toBe('applications/sample-app/units/tax/calc/verify/golden')
+    expect(runPath('sample-app', 'tax', 'calc', 'run-123')).toBe('applications/sample-app/units/tax/calc/verify/runs/run-123')
     expect(sourcePath('sample-app')).toBe('source/sample-app')
     expect(targetPath('sample-app')).toBe('target/sample-app')
     expect(targetPath('sample-app', 'uplift')).toBe('target/sample-app-uplift')
-    expect(goldenPath('unit-one')).toBe('golden/unit-one')
-    expect(runPath('unit-one', 'run-123')).toBe('runs/unit-one/run-123')
     expect(SOURCE_REPOSITORY_ACCESS).toBe('read-only')
   })
 
-  test('rejects path traversal in app, unit and run identifiers', () => {
+  test('rejects path traversal in app, module, unit and run identifiers', () => {
     expect(() => assessmentPath('../outside')).toThrow(/safe path segment/)
-    expect(() => goldenPath('../outside')).toThrow(/safe path segment/)
-    expect(() => runPath('unit-one', '..\\outside')).toThrow(/safe path segment/)
+    expect(() => modulePath('sample-app', '../outside')).toThrow(/safe path segment/)
+    expect(() => goldenPath('sample-app', 'tax', '..\\outside')).toThrow(/safe path segment/)
+    expect(() => runPath('sample-app', 'tax', 'calc', '..\\outside')).toThrow(/safe path segment/)
   })
 })

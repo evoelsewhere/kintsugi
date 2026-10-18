@@ -55,7 +55,7 @@ at the gate names that exact target (say which calls, and which of them write). 
 or session cookie in a recorded response is a secret: replace it with a fixed fake value before
 anything is saved, and never print it.
 
-**The brief is binding.** If `MODERNIZATION_BRIEF.md` exists, find the phase whose `Command:` is this
+**The brief is binding.** If the modernization brief (`applications/$app/to-be/modernization-brief.md`) exists, find the phase whose `Command:` is this
 one and whose `Modules:` include `$module`, and treat its scope, entry criteria, exit criteria and any
 edits people made as binding. An unmet entry criterion is the next step: meet it, never re-plan
 around it. If no phase covers `$module`, stop and ask which phase this is.

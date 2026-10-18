@@ -254,7 +254,7 @@ def test_missing_cli_argument_has_machine_readable_usage_error() -> None:
 
 def test_mermaid_problems_are_redacted_warnings_that_do_not_block(tmp_path: Path) -> None:
     marker = "TEST_ONLY_DIAGRAM_MARKER"
-    app = tmp_path / "assessment" / "sample-app"
+    app = tmp_path / "applications" / "sample-app" / "assessment"
     app.mkdir(parents=True)
     (app / "ARCHITECTURE.mmd").write_text(
         f'flowchart TB\n    svc_a["A"] --> end\n    svc_b[{marker}]\n', encoding="utf-8"
@@ -278,9 +278,9 @@ def test_mermaid_problems_are_redacted_warnings_that_do_not_block(tmp_path: Path
     assert result.returncode == 0
     assert data["findings"] == []
     assert data["warnings"] == [
-        {"category": "diagram", "line": 2, "path": "assessment/sample-app/ARCHITECTURE.mmd", "redacted": True, "rule": "reserved-id"},
-        {"category": "diagram", "line": 3, "path": "assessment/sample-app/ARCHITECTURE.mmd", "redacted": True, "rule": "unquoted-label"},
-        {"category": "diagram", "line": 5, "path": "assessment/sample-app/notes.md", "redacted": True, "rule": "unescaped-semicolon"},
+        {"category": "diagram", "line": 2, "path": "applications/sample-app/assessment/ARCHITECTURE.mmd", "redacted": True, "rule": "reserved-id"},
+        {"category": "diagram", "line": 3, "path": "applications/sample-app/assessment/ARCHITECTURE.mmd", "redacted": True, "rule": "unquoted-label"},
+        {"category": "diagram", "line": 5, "path": "applications/sample-app/assessment/notes.md", "redacted": True, "rule": "unescaped-semicolon"},
     ]
     assert marker not in result.stdout + result.stderr
 

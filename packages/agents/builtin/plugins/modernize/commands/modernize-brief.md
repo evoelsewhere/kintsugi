@@ -51,7 +51,7 @@ can wait. If a required file is missing, say so and stop: they come from the `as
   document repository. Say so, ask for that job in the portal, and **stop until the catalog is merged**:
   never write the brief before the catalog exists. Do not guess at deltas.
 
-**Staleness.** If an input is newer than an existing `MODERNIZATION_BRIEF.md`, regenerating is
+**Staleness.** If an input is newer than an existing `applications/$app/to-be/modernization-brief.md`, regenerating is
 justified. If the brief is newer than every input and the user re-ran this anyway, ask what
 changed. Note the input timestamps in the brief's header (each input's last commit in the document repository),
 and the legacy repository commit the discovery artifacts read.
