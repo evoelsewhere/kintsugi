@@ -3,7 +3,7 @@
 
     python3 catalog_from_topology.py <app> --assessment DIR --out FILE [--manifest FILE] [--max-items N]
 
---assessment is the assessment/<app>/ folder with topology.json (the skeleton the assess stage's
+--assessment is the applications/<app>/assessment/ folder with topology.json (the skeleton the assess stage's
 extraction script wrote) and inventory.json (its inventory step). --manifest is kintsugi.yaml, read
 for `unitKinds` only. --out is the catalog file written.
 
@@ -116,7 +116,7 @@ def build(app, topology, inventory, source, kinds, max_items):
 def main(argv):
     ap = argparse.ArgumentParser(description='Propose the item catalog of an application from topology.json.')
     ap.add_argument('app', help='the application id from kintsugi.yaml')
-    ap.add_argument('--assessment', required=True, help='the assessment/<app>/ folder (topology.json, inventory.json)')
+    ap.add_argument('--assessment', required=True, help='the applications/<app>/assessment/ folder (topology.json, inventory.json)')
     ap.add_argument('--out', required=True, help='the catalog file to write')
     ap.add_argument('--manifest', help='kintsugi.yaml (its unitKinds name the item kinds)')
     ap.add_argument('--max-items', type=int, default=DEFAULT_MAX_ITEMS, help='at most this many items')

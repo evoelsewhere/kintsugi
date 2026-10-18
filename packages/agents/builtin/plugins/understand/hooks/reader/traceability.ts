@@ -35,6 +35,12 @@ export type TraceUnit = {
   findings: string[]
   dataObjects: string[]
   entryPoints: string[]
+  /** Requirement ids the unit's specification recorded. */
+  requirements: string[]
+  /** Pull request references (ids or URLs) that carry the unit's changes. */
+  pullRequests: string[]
+  /** Test references that pin the unit's behaviour. */
+  tests: string[]
   openQuestions: number
 }
 
@@ -49,6 +55,12 @@ export type Traceability = {
   findings: Record<string, string[]>
   /** Source file → unit ids. */
   files: Record<string, string[]>
+  /** Requirement id → unit ids. */
+  requirements: Record<string, string[]>
+  /** Pull request reference → unit ids. */
+  pullRequests: Record<string, string[]>
+  /** Test reference → unit ids. */
+  tests: Record<string, string[]>
   /** Data store id → unit ids. */
   dataStores: Record<string, string[]>
   unmappedRules: string[]
@@ -120,6 +132,9 @@ function unitOf(raw: unknown): TraceUnit | undefined {
     findings: strings(raw.findings),
     dataObjects: strings(raw.dataObjects),
     entryPoints: strings(raw.entryPoints),
+    requirements: strings(raw.requirements),
+    pullRequests: strings(raw.pullRequests),
+    tests: strings(raw.tests),
     openQuestions: count(raw.openQuestions),
   }
 }
@@ -152,6 +167,9 @@ export function parseTraceability(text: string): Traceability | null {
     rules: index(raw.rules),
     findings: index(raw.findings),
     files: index(raw.files),
+    requirements: index(raw.requirements),
+    pullRequests: index(raw.pullRequests),
+    tests: index(raw.tests),
     dataStores: index(raw.dataStores),
     unmappedRules: strings(raw.unmappedRules, MAX_INDEX),
     unmappedFindings: strings(raw.unmappedFindings, MAX_INDEX),

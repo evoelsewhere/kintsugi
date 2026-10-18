@@ -4,7 +4,7 @@
     python3 make_shards.py <app> [module-pattern] --source DIR --out DIR [--assessment DIR] [--all]
 
 --source is the checkout of the application's source repository (read-only: nothing is written there).
-With topology.json in --assessment (the document repository's assessment/<app>/ folder, written by the
+With topology.json in --assessment (the document repository's applications/<app>/assessment/ folder, written by the
 map stage), one shard per map module (small modules of a domain merged); without it, one shard per
 directory of source files. The list is written to <out>/extract-rules.modules.json as
 [{"name", "domain", "files": [relative to the source dir], "loc"}], the form the
@@ -287,7 +287,7 @@ def main(argv):
     ap.add_argument('app', help='the application id from kintsugi.yaml (a label only)')
     ap.add_argument('pattern', nargs='?', default='', help='only the modules or files that match this glob or plain name')
     ap.add_argument('--source', required=True, help="the checkout of the application's source repository (read-only)")
-    ap.add_argument('--assessment', help='the assessment/<app>/ folder of the document repository (topology.json is read from it)')
+    ap.add_argument('--assessment', help='the applications/<app>/assessment/ folder of the document repository (topology.json is read from it)')
     ap.add_argument('--out', required=True, help='the folder extract-rules.modules.json is written to')
     ap.add_argument('--all', action='store_true', help='keep test folders too')
     args = ap.parse_args(argv[1:])

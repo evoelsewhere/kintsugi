@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Two checks that only an uplift needs, for the proof pack (proof_pack.py imports this; it also runs on its own).
 
-    python3 uplift_checks.py <app> --source <checkout> --assessment <assessment/app> \\
+    python3 uplift_checks.py <app> --source <checkout> --assessment <applications/app/assessment> \\
         --target <checkout> --out <folder> [--catalog <DELTA_CATALOG.md>]
 
 An uplift keeps the code and the tests and changes the version underneath. A green test run then proves less than it seems to in two ways:
@@ -320,7 +320,7 @@ def main(argv=None):
                                  formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
     ap.add_argument("app", help="application label used in the result")
     ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only legacy source checkout")
-    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="applications/<app>/assessment/ evidence directory (with the application rule and review files)")
     ap.add_argument("--target", required=True, metavar="CHECKOUT", help="uplifted target checkout")
     ap.add_argument("--out", required=True, metavar="DIR", help="folder for UPLIFT_CHECKS.json")
     ap.add_argument("--catalog", metavar="FILE", help="DELTA_CATALOG.md inside the assessment directory (default: DELTA_CATALOG.md)")

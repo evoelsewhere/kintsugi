@@ -1,7 +1,7 @@
 """Shared helpers of the item catalog scripts (ADR-0033): catalog_from_topology.py,
 apply_catalog_edits.py and reconcile_catalog.py. Not a script on its own.
 
-The catalog (`assessment/<app>/catalog.json`) lists an application's items, module -> item:
+The catalog (`applications/<app>/assessment/catalog.json`) lists an application's items, module -> item:
 
     {"schemaVersion": 1, "app": "...", "generatedBy": "...", "source": {"repo": "...", "commit": "..."},
      "modules": [{"id", "name", "summary"}],
@@ -268,9 +268,115 @@ def owner_of(items):
 
 
 def namespaced(prefix, item_id, number):
-    """An item-namespaced id: RULE-invoicing.invoice-entry-03 (ADR-0033 §5)."""
+    """An item-namespaced id: SEC-invoicing.invoice-entry-03 (ADR-0033 §5)."""
     return f'{prefix}-{item_id.replace("/", ".")}-{number:02d}'
 
 
-ITEM_RULE_ID = re.compile(rf'^RULE-{SEGMENT}\.{SEGMENT}-\d{{2,}}$')
+CITATION_RE = re.compile(r'^(?P<path>.*):(?P<start>\d+)(?:-(?P<end>\d+))?$')
+HASH_HEX = 8
+DISC_MAX = 31
+
+
+def canonical_citation(source):
+    """The canonical form of a rule's `path:start-end` citation: POSIX separators, no leading `./`
+    or trailing `/`, and the line range as `start-end` (`end` defaults to `start`, a reversed range
+    is flipped). A citation without a line range canonicalizes to `path:0-0`; an empty or missing
+    source canonicalizes to '' so a rerun with the same source keeps the id."""
+    text = source.strip().strip('`"\'').strip() if isinstance(source, str) else ''
+    text = text.replace('\\', '/')
+    match = CITATION_RE.match(text)
+    if match:
+        path, start, end = match.group('path'), int(match.group('start')), int(match.group('end') or match.group('start'))
+    else:
+        path, start, end = text, 0, 0
+    path = re.sub(r'/+', '/', path)
+    while path.startswith('./'):
+        path = path[2:]
+    path = path.rstrip('/')
+    if not path:
+        return ''
+    if start > end:
+        start, end = end, start
+    return f'{path}:{start}-{end}'
+
+
+def rule_body(rule):
+    """The rule without its id, canonically serialized (for duplicate and discriminator checks)."""
+    return json.dumps({key: value for key, value in rule.items() if key != 'id'}, sort_keys=True, ensure_ascii=False)
+
+
+def stable_rule_id(item_id, rule, discriminator=''):
+    """A citation-derived rule id (ADR-0038): RULE-invoicing.invoice-entry-1a2b3c4d. The suffix
+    hashes the unit key and the canonical citation of the rule's source, so a rerun with the same
+    unit and citation keeps the id. `discriminator` (the normalized rule name) only separates two
+    distinct rules sharing one exact citation; array order never takes part in an id."""
+    suffix = hashlib.sha256(f'{item_id}\n{canonical_citation(rule.get("source"))}'.encode('utf-8')).hexdigest()[:HASH_HEX]
+    if discriminator:
+        suffix = f'{suffix}-{discriminator}'
+    return f'RULE-{item_id.replace("/", ".")}-{suffix}'
+
+
+def assign_rule_ids(item_id, rules):
+    """`rules` in their given order, each with a stable `id`; an exact duplicate rule collapses to
+    one entry. Two distinct rules on one exact citation are told apart by a discriminator from the
+    normalized rule name; if the name also collides, the discriminator gets a short hash of the
+    rule body instead of relying on order."""
+    bodies_per_citation = {}
+    for rule in rules:
+        bodies_per_citation.setdefault(canonical_citation(rule.get('source')), set()).add(rule_body(rule))
+    disc_counts = {}
+    for rule in rules:
+        citation = canonical_citation(rule.get('source'))
+        if len(bodies_per_citation[citation]) > 1:
+            disc = slug(clean_text(rule.get('name'), MAX_NAME), 'rule')[:DISC_MAX].strip('-') or 'rule'
+            disc_counts.setdefault((citation, disc), set()).add(rule_body(rule))
+    out, seen = [], set()
+    for rule in rules:
+        body = rule_body(rule)
+        if body in seen:
+            continue
+        seen.add(body)
+        citation = canonical_citation(rule.get('source'))
+        disc = ''
+        if len(bodies_per_citation[citation]) > 1:
+            disc = slug(clean_text(rule.get('name'), MAX_NAME), 'rule')[:DISC_MAX].strip('-') or 'rule'
+            if len(disc_counts[(citation, disc)]) > 1:
+                disc = f'{disc[:DISC_MAX - 5].strip("-")}-{hashlib.sha256(body.encode("utf-8")).hexdigest()[:4]}'
+        out.append({**rule, 'id': stable_rule_id(item_id, rule, disc)})
+    return out
+
+
+RULE_REVIEW_VERDICTS = ('confirmed', 'refuted', 'clarify')
+
+
+def load_rules_review(path):
+    """One unit's human rule verdicts: {rule id: {'verdict', 'approver', 'date'}} (ADR-0038).
+    The file is human-owned and authored through a pull request; no script of this plugin writes it."""
+    data = read_json(path, 'rules-review.json')
+    if not isinstance(data, dict):
+        raise DataError('rules-review.json must be an object of rule id -> review')
+    reviews = {}
+    for rule_id, review in data.items():
+        if not isinstance(rule_id, str) or not rule_id or not isinstance(review, dict):
+            raise DataError('rules-review.json must be an object of rule id -> review')
+        verdict, approver, date = review.get('verdict'), review.get('approver'), review.get('date')
+        if not isinstance(verdict, str) or verdict not in RULE_REVIEW_VERDICTS:
+            raise DataError(f'rules-review.json: {rule_id} has no verdict of {"|".join(RULE_REVIEW_VERDICTS)}')
+        if not isinstance(approver, str) or not isinstance(date, str):
+            raise DataError(f'rules-review.json: {rule_id} has no approver and date')
+        reviews[rule_id] = {'verdict': verdict, 'approver': approver, 'date': date}
+    return reviews
+
+
+def orphan_review_ids(reviews, rule_ids):
+    """Verdicts whose rule id is not among `rule_ids`: reported as orphaned, never silently applied."""
+    known = set(rule_ids)
+    return sorted(rule_id for rule_id in reviews if rule_id not in known)
+
+
+# Item-namespaced rule ids: legacy sequential suffixes and the citation-derived ones (ADR-0038),
+# plus the `RULE-NNN` estate-wide ids and the `RULE-<segment>-NNN` legacy namespaced form.
+ITEM_RULE_ID = re.compile(
+    rf'^RULE-(?:[0-9]{{2,}}|{SEGMENT}(?:\.{SEGMENT})?-(?:[0-9]{{2,}}|[0-9a-f]{{{HASH_HEX}}}(?:-[a-z0-9][a-z0-9-]{{0,{DISC_MAX}}})?))$'
+)
 ITEM_FINDING_ID = re.compile(rf'^SEC-{SEGMENT}\.{SEGMENT}-\d{{2,}}$')

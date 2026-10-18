@@ -4,9 +4,10 @@
     python3 render_rules.py <app> --out DIR [--assessment DIR] [--result FILE]
 
 Reads rules_result.json (the object the workflow returned, saved by the orchestrator: --result,
-else <assessment>/rules_result.json, where --assessment is the document repository's
-assessment/<app>/ folder) and writes BUSINESS_RULES.md and DATA_OBJECTS.md to --out (the step's
-output folder; a member may give the assessment folder itself). Rules are
+else <assessment>/rules_result.json, where --assessment is the folder holding it: the document
+repository's applications/<app>/assessment/understand/ folder) and writes BUSINESS_RULES.md and
+DATA_OBJECTS.md to --out (the step's
+output folder; a member may give the application's generated/ folder itself). Rules are
 numbered RULE-001, RULE-002, ... in the order they appear (by category, then priority) and the heading is always
 `### RULE-NNN: <name>`, the pattern later stages and the portal look for. Every value comes
 from analysis of untrusted code, so it is written as plain text on one line where it is
@@ -166,7 +167,7 @@ def write_text(root, name, text):
 def main(argv):
     ap = argparse.ArgumentParser(description="Render the extract-rules workflow's result into BUSINESS_RULES.md and DATA_OBJECTS.md.")
     ap.add_argument('app', help='the application id from kintsugi.yaml (used in the headings)')
-    ap.add_argument('--assessment', required=True, help='the assessment/<app>/ folder of the document repository (rules_result.json is read from it)')
+    ap.add_argument('--assessment', required=True, help='the applications/<app>/assessment/understand/ folder of the document repository (rules_result.json is read from it)')
     ap.add_argument('--out', required=True, help='the folder BUSINESS_RULES.md and DATA_OBJECTS.md are written to')
     args = ap.parse_args(argv[1:])
     if not args.assessment.strip() or not args.out.strip():

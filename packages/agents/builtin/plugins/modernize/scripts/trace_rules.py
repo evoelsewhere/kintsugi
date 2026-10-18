@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Trace every business rule to the code and the tests that name it, and to the tests that ran.
 
-    python3 trace_rules.py <app> --source <checkout> --assessment <assessment/app> \\
+    python3 trace_rules.py <app> --source <checkout> --assessment <applications/app/assessment> \\
         --target <checkout> --out <folder> [--module NAME] [--runs <run-folder> ...]
 
-Reads assessment/<app>/BUSINESS_RULES.md (rule cards: "### RULE-NNN: name" with **Priority:**,
+Reads applications/<app>/generated/BUSINESS_RULES.md (rule cards: "### RULE-NNN: name" with **Priority:**,
 **Confidence:** and **Source:** lines), then scans the read-only target checkout (never build output:
 target/, build/, dist/, node_modules/, bin/, obj/, __pycache__/, or any folder starting with a dot) for
 mentions of each rule id, and sorts every file into "test" or "main" code. One row per rule.
@@ -47,6 +47,9 @@ import os
 import re
 import sys
 from typing import Any
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths  # noqa: E402
 
 SKIP_DIRS = {"target", "build", "dist", "node_modules", "bin", "obj", "__pycache__", "venv"}
 DOC_EXT = {".md", ".markdown", ".rst", ".txt", ".adoc"}
@@ -362,7 +365,6 @@ def blank():
 def trace(workspace, system, ran: dict[str, dict[str, Any]] | None = None, assessment_dir=None, target_dir=None, module_name=None):
     """-> the trace. Raises OSError when BUSINESS_RULES.md cannot be read.
     ran: {module folder (as "path" in the modules list): run_evidence(...)}: what ran, per module. Without it no rule is "tested"."""
-    assessment_was_explicit = assessment_dir is not None
     assessment_dir = assessment_dir or os.path.join(workspace, "analysis", system)
     rules_path = os.path.join(assessment_dir, "BUSINESS_RULES.md")
     if os.path.islink(rules_path):
@@ -449,7 +451,7 @@ def trace(workspace, system, ran: dict[str, dict[str, Any]] | None = None, asses
         notes.append("%d symbolic link(s) were not followed." % scan["linksSkipped"])
     if not modules:
         notes.append("No built code was found in the target checkout." if target_dir else "No built code was found under modernized/%s, %s-uplifted or %s-reimagined." % (system, system, system))
-    rules_file = "assessment/%s/BUSINESS_RULES.md" % system if assessment_was_explicit else "analysis/%s/BUSINESS_RULES.md" % system
+    rules_file = paths.generated_file_path(system, "BUSINESS_RULES.md")
     return {"system": clean(system, 100), "rulesFile": rules_file, "modules": modules, "rules": out,
             "totals": totals(out), "p0NoTests": [r["id"] for r in out if r["priority"] == "P0" and r["status"] != "tested"],
             "scan": scan, "notes": notes}
@@ -551,7 +553,7 @@ def main(argv=None):
                                  formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
     ap.add_argument("app", help="application label used in the trace")
     ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only source checkout")
-    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="applications/<app>/assessment/ evidence directory (with the application rule and review files)")
     ap.add_argument("--target", required=True, metavar="CHECKOUT", help="target checkout to scan")
     ap.add_argument("--out", required=True, metavar="DIR", help="folder for RULE_TRACE.json")
     ap.add_argument("--runs", action="append", default=[], metavar="DIR", help="test-result file or folder from a run of the target (repeatable)")

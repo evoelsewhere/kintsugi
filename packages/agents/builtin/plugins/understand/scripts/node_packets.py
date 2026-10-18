@@ -336,7 +336,7 @@ def main(argv=None):
     parser.add_argument('--source-commit', type=valid_commit, help='pinned source commit (40-64 hexadecimal characters)')
     parser.add_argument('--source-repo', help='source repository identity label')
     parser.add_argument('--source', required=True, help='read-only source checkout')
-    parser.add_argument('--assessment', required=True, help='assessment/<app>/ containing topology.json')
+    parser.add_argument('--assessment', required=True, help='applications/<app>/assessment/ containing topology.json')
     parser.add_argument('--out', required=True, help='folder where node-packets/ is written')
     parser.add_argument('--limit', type=int, default=40, help='maximum nodes to packetize, ordered by LOC then id (default: 40; zero selects none)')
     args = parser.parse_args(argv[1:] if argv is not None else None)

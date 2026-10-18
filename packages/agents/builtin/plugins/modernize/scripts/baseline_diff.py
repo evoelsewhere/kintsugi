@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Compare a fresh test run with the baseline recorded before a same-stack uplift.
 
-    python3 baseline_diff.py <app> --source <checkout> --assessment <assessment/app> \\
+    python3 baseline_diff.py <app> --source <checkout> --assessment <applications/app/assessment> \\
         --target <checkout> --out <folder> [--runs <runs/unit/run-id>] [--junit FILE] [--trx FILE]
 
-BASELINE.md (assessment/<app>/BASELINE.md) records how the tests behaved on the OLD version. This
+BASELINE.md (applications/<app>/assessment/BASELINE.md) records how the tests behaved on the OLD version. This
 script reads it and the fresh results, and reports what changed. Nothing is judged by a model.
 
 Baseline, any of these (the most detailed one found is used):
@@ -15,7 +15,7 @@ Baseline, any of these (the most detailed one found is used):
   a line                target-only: <why the old version could not run here>   (nothing to compare)
 
 Measured or typed: a baseline typed by hand proves nothing about the old version. The old version's own evidence is looked for in
-assessment/<app>/baseline/ and at the paths on a "Recorded:" or "Machine-readable:" line of BASELINE.md inside assessment/<app>/ (JUnit or .trx XML, a per-test JSON map of test ids to
+applications/<app>/assessment/baseline/ and at the paths on a "Recorded:" or "Machine-readable:" line of BASELINE.md inside applications/<app>/assessment/ (JUnit or .trx XML, a per-test JSON map of test ids to
 outcomes, or a raw runner log with a known summary line; a file that only holds counts is ignored, and sources that disagree are a conflict). When it exists, it is what the fresh results are compared with,
 and the typed table must agree with it; when it does not, the report says "typed table only".
 
@@ -458,10 +458,10 @@ RECORDED = re.compile(r"^[ \t>*-]*\**[ \t]*(?:recorded|machine-readable)\b[^:\n]
 
 
 def evidence_paths(baseline_path, text):
-    """Where the old version's measured results are kept: the folder assessment/<app>/baseline/, and the paths on a line of BASELINE.md
+    """Where the old version's measured results are kept: the folder applications/<app>/assessment/baseline/, and the paths on a line of BASELINE.md
     that starts with "Recorded:" or "Machine-readable:" (a folder, or a file ending in .xml .trx .json .txt .log .out). Paths mentioned
     anywhere else in the file are prose, not evidence. A path with a `..`, a link anywhere below the assessment folder, or a place outside
-    assessment/<app>/ is never used. -> the existing paths, at most 50."""
+    applications/<app>/assessment/ is never used. -> the existing paths, at most 50."""
     adir = os.path.dirname(os.path.abspath(baseline_path))
     system, real_adir, found, seen = os.path.basename(adir), os.path.realpath(adir), [], set()
 
@@ -729,7 +729,7 @@ def render(rep, limit=10):
         elif a["disagree"]:
             lines.append("  but the typed table disagrees with it on %d test(s): %s" % (a["disagree"], "; ".join(a["examples"][:3])))
     elif a and a["kind"] == "typed":
-        lines.append("baseline evidence: typed table only. No result file, per-test results file or raw log that this script can read was found in assessment/<app>/baseline/ or on a Recorded: or Machine-readable: line of BASELINE.md.%s" % (
+        lines.append("baseline evidence: typed table only. No result file, per-test results file or raw log that this script can read was found in applications/<app>/assessment/baseline/ or on a Recorded: or Machine-readable: line of BASELINE.md.%s" % (
             " Ignored (counts only): " + ", ".join(a["ignored"][:3]) if a["ignored"] else ""))
 
     def block(title, key, fmt=lambda x: clean(x, 160)):
@@ -792,12 +792,12 @@ def main(argv=None):
                                  formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
     ap.add_argument("app", help="application label used in the report")
     ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only source checkout")
-    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="applications/<app>/assessment/ evidence directory (with the application rule and review files)")
     ap.add_argument("--target", required=True, metavar="CHECKOUT", help="uplifted target checkout")
     ap.add_argument("--out", required=True, metavar="DIR", help="folder for BASELINE_DIFF.json")
     ap.add_argument("--baseline", metavar="FILE", help="baseline document (default: BASELINE.md in --assessment)")
     ap.add_argument("--baseline-evidence", action="append", default=[], metavar="PATH", help="saved old-run evidence file or folder")
-    ap.add_argument("--runs", action="append", default=[], metavar="DIR", help="runs/<unit>/<run-id> directory containing current results (repeatable)")
+    ap.add_argument("--runs", action="append", default=[], metavar="DIR", help="applications/<app>/units/<module>/<unit>/verify/runs/<run-id> directory containing current results (repeatable)")
     ap.add_argument("--junit", action="append", default=[], metavar="FILE", help="fresh JUnit result file")
     ap.add_argument("--trx", action="append", default=[], metavar="FILE", help="fresh TRX result file")
     ap.add_argument("--json", action="store_true", help="print the full report as JSON")

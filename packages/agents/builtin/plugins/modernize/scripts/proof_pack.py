@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Independent proof pack: one plain verdict per built module, computed from the evidence files.
 
-    python3 proof_pack.py <app> [module] --source <checkout> --assessment <assessment/app> \\
+    python3 proof_pack.py <app> [module] --source <checkout> --assessment <applications/app/assessment> \\
         --target <checkout> --out <folder> [--runs <runs/unit/run-id>] [--uplift]
 
 Writes VERIFICATION.md (for people) and VERIFICATION.json under --out. The
@@ -42,7 +42,7 @@ Open questions, unticked criteria and the sign-off are for a person: they never 
 A built folder that holds only test code and the files that build it (a parity harness, for one) is not a
 module: it is listed as "Test tooling (not judged)", under "toolingOnly" in the JSON, and not counted.
 
-Evidence read from assessment/<app>/, the source checkout, and the target checkout: equivalence/test-runs.json,
+Evidence read from applications/<app>/assessment/, the source checkout, and the target checkout: equivalence/test-runs.json,
 equivalence/[<module>/]cases.json and fresh-cases.json (judged again here, not read from EQUIVALENCE.json),
 BASELINE.md, BUSINESS_RULES.md, MODERNIZATION_BRIEF.md, and the notes files. Everything read is untrusted
 text: it is never run, links outside the supplied roots are refused, and sizes are capped. Exit 0 when every verdict is
@@ -84,7 +84,7 @@ RULES_TEXT = (
     "5. Canary: a deliberate one-line break whose own result file or saved runner log shows failing tests. A line in the notes is a claim.",
     "6. Source untouched: Git reports a clean source checkout with HEAD equal to `sourceCommit` in inventory.json; missing evidence or Git is UNKNOWN.",
     "7. Baseline measured (uplift): the old version's numbers in BASELINE.md come from per-test result files, a per-test results file or a raw runner log that this script parsed "
-    "(in assessment/<app>/baseline/, or on a Recorded: or Machine-readable: line of BASELINE.md), and the typed table agrees with them. A table typed by hand, or sources that disagree, cannot reach PROVEN.",
+    "(in applications/<app>/assessment/baseline/, or on a Recorded: or Machine-readable: line of BASELINE.md), and the typed table agrees with them. A table typed by hand, or sources that disagree, cannot reach PROVEN.",
     "8. Tests kept (uplift): no test file of the untouched legacy tree is missing from the working copy, no more than 25% of them changed, and the legacy tree has test files to compare against "
     "(walked by file, no process is run). The list is for a person to review; weakened assertions cannot be detected, only that files changed.",
     "9. Deltas covered (uplift): every Behavioral-silent delta in DELTA_CATALOG.md has its site's file named, as a whole word, by some test file of the working copy. A name is not proof that the test exercises the change.",
@@ -274,7 +274,7 @@ NO_VCS_RESULT = "NO_VCS"
 
 
 def reference_time(adir):
-    """The assessment start time: PREFLIGHT.md, or the oldest file in assessment/<app>/."""
+    """The assessment start time: PREFLIGHT.md, or the oldest file in applications/<app>/assessment/."""
     def mtime(path):
         try:
             st = os.lstat(path)
@@ -630,7 +630,7 @@ def check_baseline_measured(info, evidence):
     if info["kind"] in ("typed", "none"):
         ignored = " Files that only hold counts were ignored: %s." % ", ".join(info["ignored"][:3]) if info["ignored"] else ""
         return row("baseline", "gap", "BASELINE.md is a table typed by hand: no per-test result file, per-test results file or raw runner log that this script can read backs it, so nothing shows the old "
-                                      "version really produced those numbers. Save the old version's results in assessment/<app>/baseline/ (or name them on a Recorded: line of BASELINE.md) "
+                                      "version really produced those numbers. Save the old version's results in applications/<app>/assessment/baseline/ (or name them on a Recorded: line of BASELINE.md) "
                                       "and run this again.%s" % ignored)
     names = ", ".join("%s%s" % (x["kind"], " " + x["name"] if x.get("name") else "") for x in info["sources"][:3])
     if info["conflict"]:
@@ -1057,10 +1057,10 @@ def main(argv=None):
     ap.add_argument("app", help="application label for the verification evidence")
     ap.add_argument("module", nargs="?", help="module or unit label; all modules are still judged from their current evidence")
     ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only source checkout")
-    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="applications/<app>/assessment/ evidence directory (with the application rule and review files)")
     ap.add_argument("--target", required=True, metavar="CHECKOUT", help="target checkout to verify")
     ap.add_argument("--out", required=True, metavar="DIR", help="folder for VERIFICATION.md and VERIFICATION.json")
-    ap.add_argument("--runs", metavar="DIR", help="runs/<unit>/<run-id> result directory")
+    ap.add_argument("--runs", metavar="DIR", help="applications/<app>/units/<module>/<unit>/verify/runs/<run-id> result directory")
     ap.add_argument("--uplift", action="store_true", help="include the three same-stack uplift checks")
     args = ap.parse_args(argv)
     for name in (args.app, args.module or "x"):

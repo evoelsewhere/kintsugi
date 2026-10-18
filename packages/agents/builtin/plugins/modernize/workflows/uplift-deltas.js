@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Same-stack uplift delta catalog: one finder per delta category (intersecting known version breaking-changes with this code), each verified against the cited source',
   whenToUse:
-    'Kintsugi member workflow for same-stack uplift delta analysis: the member session drives it, and its finder and referee steps run as Kintsugi runtime jobs (read-only kernel tools, no shell). Requires args {app, source, target, sourceDir, targetDir, workspaceDir?, projectPattern?}. sourceDir is the pinned source checkout (read-only); targetDir is the target checkout (read-only in this workflow); workspaceDir is the document repository checkout containing assessment/<app> (defaults to the current document-repo root). Returns structured delta cards; the calling session writes assessment/<app>/DELTA_CATALOG.md and may add the report of a migration tool it ran itself. Neither source nor target is modified.',
+    'Kintsugi member workflow for same-stack uplift delta analysis: the member session drives it, and its finder and referee steps run as Kintsugi runtime jobs (read-only kernel tools, no shell). Requires args {app, source, target, sourceDir, targetDir, workspaceDir?, projectPattern?}. sourceDir is the pinned source checkout (read-only); targetDir is the target checkout (read-only in this workflow); workspaceDir is the document repository checkout containing applications/<app>/assessment (defaults to the current document-repo root). Returns structured delta cards; the calling session writes applications/<app>/assessment/DELTA_CATALOG.md and may add the report of a migration tool it ran itself. Neither source nor target is modified.',
   phases: [
     { title: 'Find', detail: 'one finder per delta category (Kintsugi runtime job) + tool coverage' },
     { title: 'Verify', detail: 'one referee per delta — does this code really hit it?' },
@@ -40,7 +40,7 @@ const safeDir = (v, k) => {
 const sourceDir = safeDir(ARGS.sourceDir, 'sourceDir')
 const targetDir = safeDir(ARGS.targetDir, 'targetDir')
 const workspaceDir = safeDir(ARGS.workspaceDir || '.', 'workspaceDir')
-const assessmentDir = `${workspaceDir === '.' ? '' : `${workspaceDir}/`}assessment/${app}`
+const assessmentDir = `${workspaceDir === '.' ? '' : `${workspaceDir}/`}applications/${app}/assessment`
 {
   const source = sourceDir.toLowerCase()
   const target = targetDir.toLowerCase()
@@ -243,7 +243,7 @@ return {
   // The decision signal: total touched sites (weighted toward judgment sites) vs
   // the codebase. The orchestrating command compares totalTouchedSites to the
   // application's file/LOC count (the command has that from assess, in
-  // assessment/<app>/inventory.json; the workflow has no fs access) — if most of
+  // applications/<app>/assessment/inventory.json; the workflow has no fs access) — if most of
   // the code is forced to change, it's a rewrite, not an uplift, and the command
   // recommends /kintsugi:modernize-transform. judgment-share is
   // a SECONDARY "how much human effort", not the gate.

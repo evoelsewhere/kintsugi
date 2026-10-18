@@ -21,7 +21,7 @@ someone thinks it should do) so that a rewrite can be proven equivalent.
 - **Concrete over abstract.** Every test has literal input values and literal
   expected outputs. No "should calculate correctly" — instead "given balance
   1250.00 and APR 18.5%, returns 19.27".
-- **Name the rule each test pins.** When `assessment/<app>/BUSINESS_RULES.md`
+- **Name the rule each test pins.** When `applications/<app>/assessment/BUSINESS_RULES.md`
   exists, each test or golden case names the `RULE-NNN` id(s) it pins, in its
   display name, in its method name where a hyphen is not allowed
   (`rule017_emptyInput`), or in a one-line comment. `modernize-verify` finds
@@ -48,9 +48,10 @@ someone thinks it should do) so that a rewrite can be proven equivalent.
 
 ## Human verdicts on rules
 
-If `assessment/<app>/RULE_REVIEWS.json` exists, honor it: a rule a person marked `wrong` is not
+Each unit's `applications/<app>/units/<module>/<unit>/rules-review.json` (human-owned, authored through a pull
+request; the `RULE_REVIEWS.json`/`.md` files are retired) is the verdicts to honor: a rule a person marked `refuted` is not
 an oracle (write the test from the reviewer's note, or ask what is right), and a P0 rule marked
-`discuss` is not settled: raise it instead of guessing.
+`clarify` is not settled: raise it instead of guessing.
 
 ## Secret handling (mandatory)
 

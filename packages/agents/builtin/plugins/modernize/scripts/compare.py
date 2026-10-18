@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Deterministic judge of "does the new system give the same output as the legacy one".
 
-    python3 compare.py <app> --source <checkout> --assessment <assessment/app> --target <checkout> \\
+    python3 compare.py <app> --source <checkout> --assessment <applications/app/assessment> --target <checkout> \\
         --cases <cases.json> --golden <golden/unit> --runs <scratch folder> --out <runs/unit/run-id>
 
 The verdict comes from comparing bytes, never from a model's opinion. Evidence roots are explicit; the
 source is read-only and only EQUIVALENCE.json is written under --out:
 
-    golden/<unit>/cases.json, golden/<unit>/cases/<id>/   development cases: inputs and legacy outputs
-    golden/<unit>/fresh-cases.json, golden/<unit>/fresh/<id>/   fresh inputs a verification invented
-    runs/<unit>/<run-id>/EQUIVALENCE.json                 the report of one run (--out; <run-id> is
+    applications/<app>/units/<module>/<unit>/verify/golden/cases.json, applications/<app>/units/<module>/<unit>/verify/golden/cases/<id>/   development cases: inputs and legacy outputs
+    applications/<app>/units/<module>/<unit>/verify/golden/fresh-cases.json, applications/<app>/units/<module>/<unit>/verify/golden/fresh/<id>/   fresh inputs a verification invented
+    applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/EQUIVALENCE.json                 the report of one run (--out; <run-id> is
                                                           <YYYYMMDD-HHMM>-<short target commit>)
     --runs                                                the new side's actual outputs for this run, in a
                                                           scratch folder outside the source and target checkouts;
@@ -490,11 +490,11 @@ def main(argv=None):
                                  formatter_class=lambda prog: argparse.HelpFormatter(prog, width=140))
     ap.add_argument("app", help="application label stored in the equivalence evidence")
     ap.add_argument("--source", required=True, metavar="CHECKOUT", help="read-only source checkout")
-    ap.add_argument("--assessment", required=True, metavar="DIR", help="assessment/<app> evidence directory")
+    ap.add_argument("--assessment", required=True, metavar="DIR", help="applications/<app>/assessment/ evidence directory (with the application rule and review files)")
     ap.add_argument("--target", required=True, metavar="CHECKOUT", help="target checkout")
     ap.add_argument("--out", required=True, metavar="DIR", help="folder for EQUIVALENCE.json")
     ap.add_argument("--cases", required=True, metavar="FILE", help="cases.json evidence file")
-    ap.add_argument("--golden", metavar="DIR", help="golden/<unit> root for legacy case files (default: cases file folder)")
+    ap.add_argument("--golden", metavar="DIR", help="applications/<app>/units/<module>/<unit>/verify/golden root for legacy case files (default: cases file folder)")
     ap.add_argument("--runs", required=True, metavar="DIR", help="scratch folder holding the new side's outputs for this run (never committed)")
     ap.add_argument("--quiet", action="store_true", help="write EQUIVALENCE.json without printing the report")
     ap.add_argument("--json", action="store_true", help="print the full report as JSON")

@@ -4,16 +4,19 @@
     python3 split_rules.py <app> --rules FILE --catalog FILE --items ID,ID,... --out DIR
 
 --rules is the rules_result.json the extract-rules workflow returned for the run's shards;
---catalog assessment/<app>/catalog.json; --items the run's items. --out is the document-repository
+--catalog the application's catalog.json; --items the run's items. --out is the document-repository
 root. Each confirmed rule goes to the item that owns the file of its primary citation (the first
 path:line of `source`); a rule whose file no selected item owns is left out and counted. Writes
-assessment/<app>/items/<module>/<item>/rules.json per item:
+applications/<app>/units/<module>/<unit>/rules.json per item:
 
-    {"app", "item", "generatedBy", "rules": [{"id": "RULE-<module>.<item>-NN", ...card}], "dataObjects": [...]}
+    {"app", "item", "generatedBy", "rules": [{"id": "RULE-<module>.<unit>-<hash>", ...card}], "dataObjects": [...]}
 
-Ids are numbered inside the item by (category, name), so they never collide across runs and a rerun
-renumbers only the item it rewrites. A data object goes to the item owning its `source` file, when it
-has one. Standard library only.
+Rule ids are citation-derived and stable (ADR-0038): the suffix hashes the item key and the
+canonical `path:start-end` of the rule's source, so a rerun keeps every unchanged rule's id and a
+changed or missing citation yields a new id. The item's human rule verdicts live in the sibling
+rules-review.json, which is human-owned and never touched here; verdicts whose rule id is no longer
+in the extraction are reported as orphaned. A data object goes to the item owning its `source`
+file, when it has one. Standard library only.
 """
 import argparse
 import os
@@ -22,6 +25,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import paths  # noqa: E402
 import render_rules as rr  # noqa: E402
 
 
@@ -47,11 +51,11 @@ def split(app, result, chosen):
     outputs = {}
     for item_id, found in per_item.items():
         rules = sorted(found['rules'], key=lambda r: (rr.CATEGORIES.index(r['category']) if r.get('category') in rr.CATEGORIES else 9, str(r.get('name')), str(r.get('source'))))
-        outputs[f'assessment/{app}/items/{item_id}/rules.json'] = {
+        outputs[paths.unit_rules_path(app, *item_id.split('/'))] = {
             'app': app,
             'item': item_id,
             'generatedBy': 'split_rules.py',
-            'rules': [{**rule, 'id': cc.namespaced('RULE', item_id, number)} for number, rule in enumerate(rules, start=1)],
+            'rules': cc.assign_rule_ids(item_id, rules),
             'dataObjects': found['dataObjects'],
         }
     return outputs, unplaced
@@ -76,11 +80,23 @@ def main(argv):
         root = os.path.abspath(args.out)
         for path, value in outputs.items():
             cc.write_json(os.path.join(root, *path.split('/')), value)
+        reviewed, orphaned = 0, 0
+        for path, value in sorted(outputs.items()):
+            review_path = os.path.join(root, *paths.unit_rules_review_path(args.app, *value['item'].split('/')).split('/'))
+            if not os.path.isfile(review_path):
+                continue
+            reviewed += 1
+            ids = cc.orphan_review_ids(cc.load_rules_review(review_path), [rule['id'] for rule in value['rules']])
+            if ids:
+                orphaned += len(ids)
+                print(f'- orphaned rule verdict(s) in {value["item"]} rules-review.json (kept, not applied): {", ".join(ids)}')
     except (cc.DataError, rr.DataError, OSError, RecursionError) as error:
         print(f'split_rules.py: {error}', file=sys.stderr)
         return 1
     total = sum(len(value['rules']) for value in outputs.values())
     print(f'{total} rule(s) split over {len(outputs)} item(s); {unplaced} left out (cited file in no selected item)')
+    if reviewed:
+        print(f'{reviewed} rules-review.json kept unchanged; {orphaned} orphaned rule verdict(s) reported')
     return 0
 
 

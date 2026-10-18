@@ -4,19 +4,24 @@
     python3 write_work_items.py <app> --traceability FILE --out DIR [--existing DIR] [--repo ID]
 
 --traceability is traceability.json (merge_traceability.py). Each unit becomes
-<out>/units/<app>/<module>/<unit>.md, a unit file of the document repository (frontmatter = state,
-docs/reference/document-repo-unit-files.md): id, application, module, kind, title, phase
-`discover-assess`, stage `understand`, status `pending`, complexity from the unit's size, dependsOn
-from the matrix, the legacy source paths, and links to the AS-IS specification and the business
-rules. --existing is the document repository's units/<app>/ folder: a unit that already has a file
-there is skipped, so a person's progress on it is never overwritten. Values are written as JSON
-scalars and lists, which YAML reads unchanged. Standard library only.
+<out>/applications/<app>/units/<module>/<unit>/unit.md, a unit file of the document repository
+(frontmatter = state, docs/reference/document-repo-unit-files.md): id, application, module, kind,
+title, phase `discover-assess`, stage `understand`, status `pending`, complexity from the unit's
+size, dependsOn from the matrix, the legacy source paths, and links to the AS-IS specification and
+the business rules. --existing is the document repository's applications/<app>/units/ folder: a
+unit that already has a unit.md there is skipped, so a person's progress on it is never
+overwritten. Values are written as JSON scalars and lists, which YAML reads unchanged. Standard
+library only.
 """
 import argparse
 import json
 import os
 import re
 import sys
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths  # noqa: E402
 
 MAX_JSON_BYTES = 8_000_000
 SEGMENT = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
@@ -69,7 +74,7 @@ def body(app, unit):
     else:
         text.append('No AS-IS specification was written for this unit in this run.')
     if unit['findings']:
-        text.append(f'Security findings: {", ".join(unit["findings"])} (assessment/{app}/SECURITY_FINDINGS.md).')
+        text.append(f'Security findings: {", ".join(unit["findings"])} ({paths.generated_file_path(app, "SECURITY_FINDINGS.md")}).')
     if unit['entryPoint']:
         text.append('This unit holds an entry point of the application.')
     return ' '.join(text)
@@ -80,7 +85,7 @@ def main(argv):
     ap.add_argument('app')
     ap.add_argument('--traceability', required=True)
     ap.add_argument('--out', required=True, help='the document-repository root the units/ folder is written under')
-    ap.add_argument('--existing', help="the document repository's units/<app>/ folder")
+    ap.add_argument('--existing', help="the document repository's applications/<app>/units/ folder")
     ap.add_argument('--repo', default='legacy', help='the legacy repository id the source paths belong to')
     args = ap.parse_args(argv[1:])
     app = args.app
@@ -96,17 +101,17 @@ def main(argv):
         units = matrix.get('units') if isinstance(matrix, dict) else None
         if not isinstance(units, list) or not units:
             raise DataError('traceability.json lists no units')
-        root = os.path.join(os.path.abspath(args.out), 'units', app)
+        root = os.path.abspath(args.out)
         for unit in units:
             module, name = unit.get('module'), unit.get('unit')
             if not (isinstance(module, str) and SEGMENT.match(module) and isinstance(name, str) and SEGMENT.match(name)):
                 raise DataError(f'unit {unit.get("id")!r} has an unsafe module or unit name')
             if unit.get('id') != f'{app}/{module}/{name}':
                 raise DataError(f'unit {unit.get("id")!r} does not match its module and name')
-            if args.existing and os.path.exists(os.path.join(args.existing, module, f'{name}.md')):
+            if args.existing and os.path.exists(os.path.join(args.existing, module, name, 'unit.md')):
                 skipped.append(unit['id'])
                 continue
-            target = os.path.join(root, module, f'{name}.md')
+            target = os.path.join(root, *paths.unit_state_path(app, module, name).split('/'))
             os.makedirs(os.path.dirname(target), exist_ok=True)
             if os.path.islink(target):
                 raise DataError(f'refusing to write through a symbolic link: {target}')
@@ -116,7 +121,7 @@ def main(argv):
     except (DataError, OSError, ValueError, KeyError, TypeError) as error:
         print(f'write_work_items.py: {error}', file=sys.stderr)
         return 1
-    print(f'{written} work item(s) written under units/{app}/, {len(skipped)} already present and left unchanged')
+    print(f'{written} work item(s) written under {paths.units_dir(app)}/, {len(skipped)} already present and left unchanged')
     for unit in skipped[:50]:
         print(f'- kept: {unit}')
     return 0

@@ -16,7 +16,7 @@ proven recipe to your unit — not to invent an approach.
 
 ## Read these first, in this order, before editing anything
 
-1. `assessment/<app>/PLAYBOOK.md` — the recipe proven by the pilot: the
+1. `applications/<app>/assessment/PLAYBOOK.md` — the recipe proven by the pilot: the
    ordered edits, every error it hit and what resolved it, the environment
    facts that had to be *discovered* (which toolchain version is really in
    use, how dependency binaries actually resolve, which shared config file
@@ -32,7 +32,7 @@ proven recipe to your unit — not to invent an approach.
    correct. Report that the pilot has not been done and do not edit a file.
    This rule holds no matter how you were invoked — from a task pack, by a
    batch of units, or directly.
-2. `assessment/<app>/DELTA_CATALOG.md` — the version deltas this codebase
+2. `applications/<app>/assessment/DELTA_CATALOG.md` — the version deltas this codebase
    actually hits, each marked Mechanical or Judgment.
 
 ## What you produce

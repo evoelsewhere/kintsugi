@@ -3,7 +3,7 @@
 
     python3 units_from_topology.py <app> --assessment DIR --out DIR [--manifest FILE] [--max-units N]
 
---assessment is the document repository's assessment/<app>/ folder: topology.json (written by the map
+--assessment is the document repository's applications/<app>/assessment/ folder: topology.json (written by the map
 stage) is required; inventory.json (assess), BUSINESS_RULES.md (extract-rules) and SECURITY_FINDINGS.md
 (harden) are used when present. --manifest is kintsugi.yaml, read for `unitKinds` only. --out is the
 folder units.json and the per-unit briefs (briefs/<module>/<unit>.json) are written to.
@@ -368,7 +368,7 @@ def write_json(path, value):
 def main(argv):
     ap = argparse.ArgumentParser(description='Propose the units of an application from topology.json.')
     ap.add_argument('app', help='the application id from kintsugi.yaml')
-    ap.add_argument('--assessment', required=True, help='the assessment/<app>/ folder (topology.json and optional inputs)')
+    ap.add_argument('--assessment', required=True, help='the applications/<app>/assessment/ folder (topology.json and optional inputs)')
     ap.add_argument('--out', required=True, help='the folder units.json and briefs/ are written to')
     ap.add_argument('--manifest', help='kintsugi.yaml (its unitKinds name the unit kinds)')
     ap.add_argument('--max-units', type=int, default=DEFAULT_MAX_UNITS, help='at most this many units')

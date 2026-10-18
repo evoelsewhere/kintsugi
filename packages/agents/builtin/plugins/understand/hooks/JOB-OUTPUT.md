@@ -38,7 +38,7 @@ The report has this shape (values shown are examples, not scan output):
     {
       "category": "credential",
       "rule": "credential_assignment",
-      "path": "assessment/sample-app/settings.txt",
+      "path": "applications/sample-app/assessment/settings.txt",
       "line": 4,
       "redacted": true
     }
@@ -47,7 +47,7 @@ The report has this shape (values shown are examples, not scan output):
     {
       "category": "diagram",
       "rule": "reserved-id",
-      "path": "assessment/sample-app/ARCHITECTURE.mmd",
+      "path": "applications/sample-app/assessment/ARCHITECTURE.mmd",
       "line": 7,
       "redacted": true
     }

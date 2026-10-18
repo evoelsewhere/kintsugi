@@ -209,6 +209,9 @@ class MergeAndWorkItemTests(unittest.TestCase):
             ],
             'dataObjects': ['Invoice record'],
             'externalSystems': ['Printing service'],
+            'requirements': ['REQ-INV-01'],
+            'pullRequests': ['PR-123'],
+            'tests': ['tests/invoice.test'],
             'files': ['src/billing/INVOICE.cpy', '/etc/passwd'],
             'openQuestions': 2,
         })
@@ -228,24 +231,30 @@ class MergeAndWorkItemTests(unittest.TestCase):
             matrix = load(os.path.join(ws, 'out/traceability.json'))
             by_id = {unit['id']: unit for unit in matrix['units']}
             invoice = by_id['billing/billing/invoice']
-            self.assertEqual(invoice['spec'], 'knowledge/as-is/billing/billing/invoice.md')
+            self.assertEqual(invoice['spec'], 'applications/billing/units/billing/invoice/as-is.md')
             self.assertEqual(invoice['rules'], ['RULE-001'])
             self.assertEqual(invoice['findings'], ['SEC-002'])
             self.assertEqual(invoice['dependsOn'], ['billing/billing/rates', 'billing/billing/util', 'billing/customers/custupd'])
             self.assertEqual(invoice['externalSystems'], ['PAYMENT-GATEWAY', 'Printing service'])
             self.assertEqual(invoice['dataStores'], [{'id': 'ds:CUSTOMERS', 'access': ['read']}, {'id': 'ds:INVOICES', 'access': ['read', 'write']}])
+            self.assertEqual(invoice['requirements'], ['REQ-INV-01'])
+            self.assertEqual(invoice['pullRequests'], ['PR-123'])
+            self.assertEqual(invoice['tests'], ['tests/invoice.test'])
             self.assertEqual(invoice['files'], ['src/billing/INVOICE.cbl', 'src/billing/INVOICE.cpy'])
             self.assertEqual(invoice['openQuestions'], 2)
             # An inbound dependency adds the edge to the other unit.
             self.assertIn('billing/customers/custupd', by_id['billing/billing/rates']['dependsOn'])
             self.assertIsNone(by_id['billing/billing/util']['spec'])
             self.assertEqual(matrix['rules']['RULE-001'], ['billing/billing/invoice', 'billing/billing/rates'])
+            self.assertEqual(matrix['requirements'], {'REQ-INV-01': ['billing/billing/invoice']})
+            self.assertEqual(matrix['pullRequests'], {'PR-123': ['billing/billing/invoice']})
+            self.assertEqual(matrix['tests'], {'tests/invoice.test': ['billing/billing/invoice']})
             self.assertEqual(matrix['unmappedRules'], ['RULE-003'])
             self.assertEqual(matrix['cycles'], [['billing/billing/invoice', 'billing/billing/rates']])
             self.assertEqual(matrix['notes'], {'invalid rule ids': 1, 'unknown rule ids': 1, 'unresolved dependencies': 1, 'invalid paths': 1})
             text = read(os.path.join(ws, 'out/traceability.md'))
             self.assertTrue(text.startswith('Legacy repository billing-legacy at abc123\n'))
-            self.assertIn('| billing/invoice | module | [billing/invoice](billing/invoice.md) |', text)
+            self.assertIn('| billing/invoice | module | [billing/invoice](../units/billing/invoice/as-is.md) |', text)
             self.assertIn('## Dependency cycles', text)
             # Deterministic: the same inputs give the same bytes.
             first = read(os.path.join(ws, 'out/traceability.json'), 'rb')
@@ -269,21 +278,21 @@ class MergeAndWorkItemTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as ws:
             self.prepare(ws)
             self.assertEqual(self.merge(ws).returncode, 0)
-            write(ws, 'existing/billing/rates.md', '---\nstatus: in-progress\n---\n')
+            write(ws, 'existing/billing/rates/unit.md', '---\nstatus: in-progress\n---\n')
             done = run('write_work_items.py', 'billing', '--traceability', os.path.join(ws, 'out/traceability.json'), '--out', os.path.join(ws, 'docs'),
                        '--existing', os.path.join(ws, 'existing'), '--repo', 'billing-legacy')
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertIn('6 work item(s) written', done.stdout)
             self.assertIn('kept: billing/billing/rates', done.stdout)
-            self.assertFalse(os.path.exists(os.path.join(ws, 'docs/units/billing/billing/rates.md')))
-            text = read(os.path.join(ws, 'docs/units/billing/billing/invoice.md'))
+            self.assertFalse(os.path.exists(os.path.join(ws, 'docs/applications/billing/units/billing/rates/unit.md')))
+            text = read(os.path.join(ws, 'docs/applications/billing/units/billing/invoice/unit.md'))
             self.assertTrue(text.startswith('---\nid: "billing/billing/invoice"\napplication: "billing"\nmodule: "billing"\nkind: "module"\n'))
             self.assertIn('phase: discover-assess\nstage: understand\nstatus: pending\ncomplexity: medium\n', text)
             self.assertIn('dependsOn: ["billing/billing/rates", "billing/billing/util", "billing/customers/custupd"]', text)
             self.assertIn('  - {repo: "billing-legacy", paths: ["src/billing/INVOICE.cbl", "src/billing/INVOICE.cpy"]}', text)
-            self.assertIn('  asIs: "knowledge/as-is/billing/billing/invoice.md"\n  businessRules: ["RULE-001"]\n---\n', text)
+            self.assertIn('  asIs: "applications/billing/units/billing/invoice/as-is.md"\n  businessRules: ["RULE-001"]\n---\n', text)
             self.assertIn('Security findings: SEC-002', text)
-            util = read(os.path.join(ws, 'docs/units/billing/billing/util.md'))
+            util = read(os.path.join(ws, 'docs/applications/billing/units/billing/util/unit.md'))
             self.assertNotIn('asIs:', util)
             self.assertIn('No AS-IS specification was written', util)
 

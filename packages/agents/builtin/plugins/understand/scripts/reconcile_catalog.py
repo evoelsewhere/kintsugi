@@ -6,8 +6,9 @@
 
 --catalog is this run's curated catalog; --inventory its inventory.json; --previous the catalog.json
 on the document repository's default branch. Without a previous catalog, the old items are seeded
-from the understand stage's units (ADR-0031): --units-json (knowledge/as-is/<app>/units.json) and
---units-dir (the units/<app>/ work-item files), so existing unit ids are kept. Missing inputs are
+from the understand stage's units (ADR-0031): --units-json (applications/<app>/assessment/units.json)
+and --units-dir (the applications/<app>/units/ work-item files), so existing unit ids are kept.
+Missing inputs are
 skipped. --out is the reconciled catalog.
 
 Deterministic rules:
@@ -279,8 +280,8 @@ def main(argv):
     ap.add_argument('--inventory', required=True, help='inventory.json of this run')
     ap.add_argument('--out', required=True, help='the reconciled catalog to write')
     ap.add_argument('--previous', help='catalog.json on the default branch (optional)')
-    ap.add_argument('--units-json', help='knowledge/as-is/<app>/units.json, seeds the first reconcile (optional)')
-    ap.add_argument('--units-dir', help='units/<app>/, seeds the first reconcile (optional)')
+    ap.add_argument('--units-json', help='applications/<app>/assessment/units.json, seeds the first reconcile (optional)')
+    ap.add_argument('--units-dir', help='applications/<app>/units/, seeds the first reconcile (optional)')
     args = ap.parse_args(argv[1:])
     try:
         inventory, _ = cc.load_inventory(args.inventory)
