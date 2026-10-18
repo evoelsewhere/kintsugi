@@ -289,12 +289,12 @@ export function unitId(app: string, module: string, unit: string): string {
 }
 
 export function modernizationBriefPath(app: string): string {
-  return applicationInputPath(app, "INTENT.md");
+  return `${applicationToBeDir(app)}/modernization-brief.md`;
 }
 
-/** Compatibility alias for the application-level TO-BE design. */
-export function transformationNotesPath(app: string, _module: string): string {
-  return applicationDesignPath(app);
+/** Module-scoped authored notes live beside the module's units. */
+export function transformationNotesPath(app: string, module: string): string {
+  return `${unitModuleDir(app, module)}/TRANSFORMATION_NOTES.md`;
 }
 
 /** Application-level verification aggregate; per-unit evidence is under `verify/`. */
