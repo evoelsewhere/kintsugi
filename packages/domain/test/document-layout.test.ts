@@ -26,6 +26,7 @@ import {
   runsDir,
   taskPackPath,
   topologyExtractorPath,
+  transformationNotesPath,
   understandRunDir,
   understandScopePath,
   unitAsIsPath,
@@ -119,7 +120,8 @@ describe("ADR-0038 document-repo layout", () => {
       "applications/billing/generated/traceability.json",
     );
     expect(legacyUnitsIndexPath("billing")).toBe("applications/billing/assessment/units.json");
-    expect(modernizationBriefPath("billing")).toBe("applications/billing/inputs/INTENT.md");
+    expect(modernizationBriefPath("billing")).toBe("applications/billing/to-be/modernization-brief.md");
+    expect(transformationNotesPath("billing", "payroll")).toBe("applications/billing/units/payroll/TRANSFORMATION_NOTES.md");
     expect(verificationReportPath("billing")).toBe("applications/billing/generated/VERIFICATION.md");
     expect(verificationReportPath("billing", "json")).toBe("applications/billing/generated/VERIFICATION.json");
     expect(goldenDir("payroll")).toBe("applications/{app}/units/payroll/{unit}/verify/golden");

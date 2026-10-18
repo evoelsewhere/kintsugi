@@ -4,7 +4,7 @@
 //
 //   scope_items.py      per item: topology fragment (published), brief and rule shard (intermediate)
 //   parallel            extract-rules workflow over the items' shards ∥ harden-scan over their files
-//   split_rules.py      per item rules.json, ids RULE-<module>.<item>-NN
+//   split_rules.py      per unit rules.json, stable citation-derived ids RULE-<module>.<unit>-<hash>
 //   split_findings.py   per item findings.json, ids SEC-<module>.<item>-NN
 //   forEach item        a legacy-analyst job writes the AS-IS specification and returns its trace
 //   finish_items.py     per item: checked trace.json, meta.json (understood) and the work item
@@ -44,7 +44,7 @@ const TRACE_SCHEMA = {
   required: ["entryPoints", "rulesApplied", "findings", "dependencies", "dataObjects", "externalSystems", "files", "openQuestions"],
   properties: {
     entryPoints: { type: "array", items: { type: "string", description: "An entry point of the item as file:line (route, transaction, main, job step)" } },
-    rulesApplied: { type: "array", items: { type: "string", description: "A RULE-<module>.<item>-NN id of the item's rules.json the code applies" } },
+    rulesApplied: { type: "array", items: { type: "string", description: "A stable RULE-<module>.<unit>-<hash> id of the unit's rules.json the code applies" } },
     findings: { type: "array", items: { type: "string", description: "A SEC-<module>.<item>-NN id of the item's findings.json" } },
     dependencies: {
       type: "array",
@@ -72,7 +72,7 @@ ${WORKSPACE}
 Your brief is {in}/{item} (read-only): the item's id, name, kind and summary from the catalog, its source files, its
 size, its topology leaves and entry points, the items it depends on and that use it, the data stores it reads and
 writes. Also under {in}: the item's topology fragment ${assessmentItemFilePath(APP_TOKEN, "{key}", "topology.json")}, its business rules
-${assessmentItemFilePath(APP_TOKEN, "{key}", "rules.json")} (ids RULE-<module>.<item>-NN, each citation checked by a second agent), its security
+${assessmentItemFilePath(APP_TOKEN, "{key}", "rules.json")} (ids RULE-<module>.<unit>-<hash>, derived from the canonical citation and stable across reruns, each citation checked by a second agent), its security
 findings ${assessmentItemFilePath(APP_TOKEN, "{key}", "findings.json")} (ids SEC-<module>.<item>-NN), ${assessmentCatalogPath(APP_TOKEN)} (every item of the
 application) and ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")}. Read the item's source files and follow its calls only as far as needed to
 describe it; the other items have their own specifications.
