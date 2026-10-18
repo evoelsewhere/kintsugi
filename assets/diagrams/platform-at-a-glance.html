@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Platform at a glance</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #24262a;
+      --color-ink:     #eceae6;
+      --color-muted:   #a8b3c4;
+      --color-accent:  #45c9ab;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Layer stack · Kintsugi</p>
+    <h1>Platform at a glance</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="platform-title platform-desc">
+        <title id="platform-title">Kintsugi platform layers</title>
+        <desc id="platform-desc">Four abstraction layers stacked from experience down to data: the portal and member harnesses sit on four delivery pillars, which sit on the core platform — the focal pay-rent layer — which sits on Postgres and Git.</desc>
+        <defs>
+          <marker id="arrow-up" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a8b3c4"/></marker>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.8" fill="rgba(236,234,230,0.10)"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#24262a"/>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+        <!-- Direction indicator -->
+        <text x="52" y="52" font-family="'Geist Mono', monospace" font-size="8" font-weight="500" letter-spacing="0.18em" fill="#a8b3c4" text-anchor="middle">ABSTRACTION</text>
+        <line x1="52" y1="316" x2="52" y2="72" stroke="#a8b3c4" stroke-width="1.2" marker-end="url(#arrow-up)"/>
+
+        <!-- Layer stack -->
+        <rect x="100" y="64" width="860" height="64" fill="#24262a"/>
+        <rect x="100" y="128" width="860" height="64" fill="#2c2f34"/>
+        <rect x="100" y="192" width="860" height="64" fill="rgba(69,201,171,0.12)" stroke="#45c9ab" stroke-width="1.2"/>
+        <rect x="100" y="256" width="860" height="64" fill="#2c2f34"/>
+        <g stroke="rgba(236,234,230,0.12)" stroke-width="1">
+          <line x1="100" y1="128" x2="960" y2="128"/>
+          <line x1="100" y1="256" x2="960" y2="256"/>
+        </g>
+        <rect x="100" y="64" width="860" height="256" fill="none" stroke="#a8b3c4" stroke-width="1"/>
+
+        <!-- Row content -->
+        <g font-family="'Geist Mono', monospace" font-size="8" font-weight="500" letter-spacing="0.18em" fill="#a8b3c4">
+          <text x="124" y="100">L1</text>
+          <text x="124" y="164">L2</text>
+          <text x="124" y="228" fill="#45c9ab">L3</text>
+          <text x="124" y="292">L4</text>
+        </g>
+        <g font-family="'Geist', sans-serif" font-size="15" font-weight="600" fill="#eceae6">
+          <text x="170" y="101">Experience</text>
+          <text x="170" y="165">Delivery pillars</text>
+          <text x="170" y="229" fill="#45c9ab">Core platform</text>
+          <text x="170" y="293">Data &amp; truth</text>
+        </g>
+        <g font-family="'Geist Mono', monospace" font-size="9" fill="#a8b3c4" text-anchor="end">
+          <text x="936" y="100">Portal (web) · member harnesses (MCP + CLI)</text>
+          <text x="936" y="164">Admin · Delivery · Monitoring · Governance</text>
+          <text x="936" y="228">Orchestrator · Knowledge Hub · Standards · Runtime · Harness Hub · Git Sync</text>
+          <text x="936" y="292">Postgres + pgvector · Git (code + document repos)</text>
+        </g>
+
+        <!-- Legend -->
+        <g font-family="'Geist Mono', monospace" font-size="8" letter-spacing="0.06em" fill="#eceae6">
+          <rect x="104" y="358" width="10" height="10" rx="2" fill="rgba(69,201,171,0.12)" stroke="#45c9ab" stroke-width="1.2"/>
+          <text x="124" y="367">focal · pay-rent layer</text>
+          <rect x="304" y="358" width="10" height="10" rx="2" fill="none" stroke="rgba(236,234,230,0.12)" stroke-width="1"/>
+          <text x="324" y="367">hairline = layer divider</text>
+          <text x="564" y="367" font-family="'Geist Mono', monospace" font-size="8" fill="#a8b3c4">strokes carry the type · fills are paper and paper-2</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>
