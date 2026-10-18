@@ -4,6 +4,7 @@
 // never `restricted/` (restricted records are not committed, ADR-0029) or `.git`. Pure types.
 
 import type { CatalogRule, DataObject, Finding, Inventory, SecurityReport, Table, TopoEdge, TopoFlow, TraceUnit } from "@kintsugi/agents/reader";
+import type { RuleId, RulesReviewRecord } from "@kintsugi/domain";
 
 /** The mirror of a project's document repository (ADR-0025). */
 export interface DocumentRepo {
@@ -202,6 +203,10 @@ export interface UnderstandUnit extends TraceUnit {
    * the run's pull request, `statusFrom: "ref"`). At the default branch it is the item's own status.
    */
   workItem?: { path: string; status: string; complexity?: string; statusFrom?: "default-branch" | "ref" };
+  /** The unit's trace links (trace.json): what it derives from and what evidences it. */
+  trace?: { requirements: string[]; pullRequests: string[]; tests: string[] };
+  /** The verdicts of rules-review.json, and the verdict ids whose rule left rules.json. */
+  rulesReview?: { verdicts: RulesReviewRecord; orphaned: RuleId[] };
 }
 
 /** A synthesis document of the understand stage (under the path returned by knowledgeAsIsDir). */

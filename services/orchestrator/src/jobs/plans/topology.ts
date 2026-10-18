@@ -7,7 +7,7 @@
 // exportable Mermaid diagrams that the former `map` stage wrote, and chunked mapping of big estates.
 
 import type { AgentStep, ScriptStep } from "../plan.js";
-import { DOCUMENT_PATH_TOKENS, assessmentDir, assessmentTopologyPath } from "@kintsugi/domain";
+import { DOCUMENT_PATH_TOKENS, assessmentDir, assessmentFilePath, assessmentInventoryPath, assessmentTopologyPath } from "@kintsugi/domain";
 import { CREDENTIALS, UNTRUSTED, WORKSPACE } from "./common.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
@@ -30,7 +30,7 @@ const topologyTask = (script: string, domains: string): string => `Write the top
 ${WORKSPACE}
 
 If present, ${domains} (group modules under
-them), {in}/${DIR}/inventory.json the measured inventory, and {in}/${DIR}/graph/ a dependency export a person attached
+them), {in}/${assessmentInventoryPath(APP_TOKEN)} the measured inventory, and {in}/${assessmentFilePath(APP_TOKEN, "graph")}/ a dependency export a person attached
 (a compiler index, jdeps, a call graph in JSON, CSV, DOT or GraphML): if one exists, map its nodes and edges instead of
 parsing the code, spot-check about ten edges against the source, and still add what graphs omit (entry points from
 deployment configuration, data stores).

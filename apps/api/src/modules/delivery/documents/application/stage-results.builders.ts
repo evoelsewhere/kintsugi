@@ -25,8 +25,9 @@ import {
   type Topology,
   type Traceability,
 } from "@kintsugi/agents/reader";
-import { DOCUMENT_PATH_TOKENS, assessmentDir, knowledgeAsIsDir, unitModuleDir, unitStatePath } from "@kintsugi/domain";
+import { DOCUMENT_PATH_TOKENS, assessmentDir, knowledgeAsIsDir, unitDir, unitRulesPath, unitRulesReviewPath, unitStatePath, unitTracePath } from "@kintsugi/domain";
 import { chunk } from "#common/util/async.js";
+import { itemUnitFacts } from "./item-results.js";
 import type { AsIsDocument, AssessResults, HardenResults, MapDiagram, MapNode, MapResults, ResultStage, RulesResults, StageFile, UnderstandResults, UnderstandUnit } from "../domain/document.js";
 
 /** The stage's output directory at one commit: what is there, and a reader for a file in it. */
@@ -333,20 +334,35 @@ async function workItemsOf(source: StageSource, applicationId: string, units: Tr
   const found = new Map<string, WorkItemRef>();
   if (!UNIT_SEGMENT.test(applicationId)) return found;
   // Never under restricted/ (the documents API serves nothing there either).
-  const modules = [...new Set(units.map((unit) => unit.module))].filter((module) => UNIT_SEGMENT.test(module) && module !== "restricted");
-  const listed = new Map<string, number>();
-  for (const files of await Promise.all(modules.map((module) => source.list(unitModuleDir(applicationId, module))))) for (const file of files) listed.set(file.path, file.size);
-  const wanted = units.flatMap((unit) => {
-    const path = unitStatePath(applicationId, unit.module, unit.unit);
-    const size = listed.get(path);
-    return UNIT_SEGMENT.test(unit.unit) && size !== undefined ? [{ id: unit.id, path, size }] : [];
-  });
+  const wanted = units.filter((unit) => UNIT_SEGMENT.test(unit.module) && unit.module !== "restricted" && UNIT_SEGMENT.test(unit.unit));
   for (const batch of chunk(wanted, WORK_ITEM_READS)) {
     await Promise.all(
-      batch.map(async ({ id, path, size }) => {
+      batch.map(async (unit) => {
+        const path = unitStatePath(applicationId, unit.module, unit.unit);
+        const size = (await source.list(unitDir(applicationId, unit.module, unit.unit))).find((file) => file.path === path)?.size;
+        if (size === undefined) return;
         const text = await source.readPath(path, size);
         const item = text === null ? null : parseWorkItem(text);
-        found.set(id, { path, status: item?.status ?? "unknown", ...(item?.complexity === undefined ? {} : { complexity: item.complexity }) });
+        found.set(unit.id, { path, status: item?.status ?? "unknown", ...(item?.complexity === undefined ? {} : { complexity: item.complexity }) });
+      }),
+    );
+  }
+  return found;
+}
+
+/** The trace links (trace.json) and rule verdicts (rules.json + rules-review.json) of each unit, by full unit id. */
+async function unitFactsOf(source: StageSource, applicationId: string, units: Traceability["units"]): Promise<Map<string, Pick<UnderstandUnit, "trace" | "rulesReview">>> {
+  const found = new Map<string, Pick<UnderstandUnit, "trace" | "rulesReview">>();
+  for (const batch of chunk(units, WORK_ITEM_READS)) {
+    await Promise.all(
+      batch.map(async (unit) => {
+        const [trace, rules, review] = await Promise.all([
+          source.readPath(unitTracePath(applicationId, unit.module, unit.unit)),
+          source.readPath(unitRulesPath(applicationId, unit.module, unit.unit)),
+          source.readPath(unitRulesReviewPath(applicationId, unit.module, unit.unit)),
+        ]);
+        const facts = itemUnitFacts(trace, rules, review);
+        if (facts.trace !== undefined || facts.rulesReview !== undefined) found.set(unit.id, facts);
       }),
     );
   }
@@ -395,6 +411,7 @@ export async function understandResults(
   const [traceText, ...texts] = await Promise.all([source.read("traceability.json"), ...AS_IS_DOCUMENTS.map((document) => source.read(document.file))]);
   const matrix = traceText === null ? null : parseTraceability(traceText);
   const workItems = matrix === null ? new Map<string, WorkItemRef>() : await currentWorkItems(source, statusSource, applicationId, matrix.units);
+  const facts = matrix === null ? new Map<string, Pick<UnderstandUnit, "trace" | "rulesReview">>() : await unitFactsOf(source, applicationId, matrix.units);
   const documents: AsIsDocument[] = AS_IS_DOCUMENTS.flatMap(({ file, ...document }, index) => {
     const markdown = texts[index];
     return markdown === null || markdown === undefined ? [] : [{ ...document, path: `${appDir}/${file}`, markdown }];
@@ -403,7 +420,7 @@ export async function understandResults(
   return {
     units: (matrix?.units ?? []).map((unit) => {
       const workItem = workItems.get(unit.id);
-      return workItem === undefined ? unit : { ...unit, workItem };
+      return { ...unit, ...(workItem === undefined ? {} : { workItem }), ...(facts.get(unit.id) ?? {}) };
     }),
     matrix:
       matrix === null

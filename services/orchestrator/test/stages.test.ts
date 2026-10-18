@@ -54,15 +54,15 @@ const SMALL_TOPOLOGY = {
 /** assess, map and extract-rules merged (harden has not run); one unit already has a work item a person moved on. */
 const MAPPED = {
   "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n",
-  "assessment/demo/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
-  "assessment/demo/topology.json": JSON.stringify(SMALL_TOPOLOGY),
-  "assessment/demo/BUSINESS_RULES.md": "# Business rules\n\n### RULE-001: Double large amounts\n**Source:** `src/rates.c:1`\n",
-  "units/demo/billing/main.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
+  "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
+  "applications/demo/assessment/topology.json": JSON.stringify(SMALL_TOPOLOGY),
+  "applications/demo/generated/BUSINESS_RULES.md": "# Business rules\n\n### RULE-001: Double large amounts\n**Source:** `src/rates.c:1`\n",
+  "applications/demo/units/billing/main/unit.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
 };
 /** assess ran before: its catalog holds the source folder under another id, and an item whose file is gone. */
 const CATALOGED = {
   "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n",
-  "assessment/demo/catalog.json": JSON.stringify({
+  "applications/demo/assessment/catalog.json": JSON.stringify({
     schemaVersion: 1,
     app: "demo",
     modules: [{ id: "core", name: "Core", summary: "" }],
@@ -93,9 +93,9 @@ const item = (id: string, files: string[], leaves: string[]): Record<string, unk
 /** assess merged its catalog and skeleton topology; one item already has a work item a person moved on. */
 const CATALOGED_SMALL = {
   "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n",
-  "assessment/demo/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
-  "assessment/demo/topology.json": JSON.stringify(SMALL_TOPOLOGY),
-  "assessment/demo/catalog.json": JSON.stringify({
+  "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
+  "applications/demo/assessment/topology.json": JSON.stringify(SMALL_TOPOLOGY),
+  "applications/demo/assessment/catalog.json": JSON.stringify({
     schemaVersion: 1,
     app: "demo",
     modules: [
@@ -106,11 +106,11 @@ const CATALOGED_SMALL = {
     unassigned: ["package.json"],
     ambiguities: [],
   }),
-  "units/demo/billing/main.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
+  "applications/demo/units/billing/main/unit.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
 };
 const ASSESSED = {
   "kintsugi.yaml": "version: 1\nproject: { id: demo }\n",
-  "assessment/demo/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
+  "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
   "standards/naming.md": "# Naming\n",
 };
 
@@ -129,9 +129,9 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     repos["cataloged-small-docs"] = fixtureRepository(CATALOGED_SMALL);
     repos["understood-docs"] = fixtureRepository({
       ...CATALOGED_SMALL,
-      "assessment/demo/items/rates/rates/rules.json": JSON.stringify({ rules: [{ id: "RULE-rates.rates-01", name: "Double large amounts", category: "Calculation", priority: "P0", source: "src/rates.c:1", confidence: "High" }] }),
-      "knowledge/as-is/demo/items/rates/rates/meta.json": JSON.stringify({ digest: "sha256:rates", commit: "a".repeat(40) }),
-      "knowledge/as-is/demo/items/rates/rates/trace.json": JSON.stringify({ rulesApplied: ["RULE-rates.rates-01"], findings: [], dependencies: [] }),
+      "applications/demo/units/rates/rates/rules.json": JSON.stringify({ rules: [{ id: "RULE-rates.rates-01", name: "Double large amounts", category: "Calculation", priority: "P0", source: "src/rates.c:1", confidence: "High" }] }),
+      "applications/demo/units/rates/rates/meta.json": JSON.stringify({ digest: "sha256:rates", commit: "a".repeat(40) }),
+      "applications/demo/units/rates/rates/trace.json": JSON.stringify({ rulesApplied: ["RULE-rates.rates-01"], findings: [], dependencies: [] }),
     });
     dataDir = mkdtempSync(join(tmpdir(), "kintsugi-stages-data-"));
     storage = new CheckoutStorage(dataDir);
@@ -162,7 +162,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const id = randomUUID();
     await store.create({ id, projectId: "demo", applicationId: "demo", kind: "stage", name: stage, sourceRepositoryId: options.legacy, actor: "alice", ...(options.inputs === undefined ? {} : { inputs: options.inputs }) });
     const run = await runner.run(id);
-    const out = join(storage.job(id).out, "assessment", "demo");
+    const out = join(storage.job(id).out, "applications", "demo", "assessment");
     const summary = run?.outputSummary as
       | { steps: Array<{ id: string; status: string; key?: string; round?: number }>; gates: Array<{ id: string; choice: string; defaulted: boolean }>; agents: number; missingInputs?: unknown }
       | undefined;
@@ -173,8 +173,8 @@ describe("stage plans (mock agent, fixture repositories)", () => {
   it("knows which stages are runnable and what they need first", () => {
     expect(stageInfo("demo")).toEqual([
       { id: "assess", requires: [] },
-      { id: "understand", requires: [{ stage: "assess", path: "assessment/demo/catalog.json" }] },
-      { id: "rebuild", requires: [{ stage: "assess", path: "assessment/demo/catalog.json" }] },
+      { id: "understand", requires: [{ stage: "assess", path: "applications/demo/assessment/catalog.json" }] },
+      { id: "rebuild", requires: [{ stage: "assess", path: "applications/demo/assessment/catalog.json" }] },
     ]);
   });
 
@@ -195,7 +195,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       "synthesis",
     ]);
     expect(artifacts).toEqual(
-      expect.arrayContaining(["assessment/demo/catalog.json", "assessment/demo/topology.json", "assessment/demo/tools/extract_topology.py"]),
+      expect.arrayContaining(["applications/demo/assessment/catalog.json", "applications/demo/assessment/topology.json", "applications/demo/assessment/tools/extract_topology.py"]),
     );
     expect(artifacts.some((path) => path.includes("catalog-draft"))).toBe(false);
     const catalog = JSON.parse(readFileSync(join(out, "catalog.json"), "utf8")) as {
@@ -235,35 +235,35 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     // Each spec job got its brief and its item's rule and finding files.
     const specs = agents.specs.filter((spec) => spec.task.startsWith("Write the AS-IS specification of one catalog item"));
     const main = specs.find((spec) => spec.task.includes("/understand/briefs/billing/main.json"));
-    expect(main?.task).toContain("assessment/demo/items/billing/main/rules.json");
-    expect(main?.task).toContain("knowledge/as-is/demo/billing/main.md with write");
+    expect(main?.task).toContain("applications/demo/units/billing/main/rules.json");
+    expect(main?.task).toContain("applications/demo/units/billing/main/as-is.md with write");
 
-    // Only per-item paths are published; briefs, shards and workflow results stay out.
+    // Only per-unit paths are published; briefs, shards and workflow results stay out.
     expect(artifacts).toEqual([
-      "assessment/demo/items/billing/main/findings.json",
-      "assessment/demo/items/billing/main/rules.json",
-      "assessment/demo/items/billing/main/topology.json",
-      "assessment/demo/items/rates/rates/findings.json",
-      "assessment/demo/items/rates/rates/rules.json",
-      "assessment/demo/items/rates/rates/topology.json",
-      "knowledge/as-is/demo/billing/main.md",
-      "knowledge/as-is/demo/items/billing/main/meta.json",
-      "knowledge/as-is/demo/items/billing/main/trace.json",
-      "knowledge/as-is/demo/items/rates/rates/meta.json",
-      "knowledge/as-is/demo/items/rates/rates/trace.json",
-      "knowledge/as-is/demo/rates/rates.md",
-      "units/demo/rates/rates.md",
+      "applications/demo/units/billing/main/as-is.md",
+      "applications/demo/units/billing/main/findings.json",
+      "applications/demo/units/billing/main/meta.json",
+      "applications/demo/units/billing/main/rules.json",
+      "applications/demo/units/billing/main/topology.json",
+      "applications/demo/units/billing/main/trace.json",
+      "applications/demo/units/rates/rates/as-is.md",
+      "applications/demo/units/rates/rates/findings.json",
+      "applications/demo/units/rates/rates/meta.json",
+      "applications/demo/units/rates/rates/rules.json",
+      "applications/demo/units/rates/rates/topology.json",
+      "applications/demo/units/rates/rates/trace.json",
+      "applications/demo/units/rates/rates/unit.md",
     ]);
-    const root = join(out, "..", "..");
-    const fragment = JSON.parse(readFileSync(join(out, "items", "billing", "main", "topology.json"), "utf8")) as { edges: unknown[]; entryPoints: string[] };
+    const root = join(out, "..", "..", "..");
+    const fragment = JSON.parse(readFileSync(join(root, "applications", "demo", "units", "billing", "main", "topology.json"), "utf8")) as { edges: unknown[]; entryPoints: string[] };
     expect(fragment.edges).toEqual([{ source: "MAIN", target: "RATES", kind: "call", targetItem: "rates/rates" }]);
     expect(fragment.entryPoints).toEqual(["MAIN"]);
-    const meta = JSON.parse(readFileSync(join(root, "knowledge", "as-is", "demo", "items", "rates", "rates", "meta.json"), "utf8")) as Record<string, unknown>;
-    expect(meta).toMatchObject({ item: "rates/rates", digest: "sha256:rates", runId: id, specification: "knowledge/as-is/demo/rates/rates.md" });
+    const meta = JSON.parse(readFileSync(join(root, "applications", "demo", "units", "rates", "rates", "meta.json"), "utf8")) as Record<string, unknown>;
+    expect(meta).toMatchObject({ item: "rates/rates", digest: "sha256:rates", runId: id, specification: "applications/demo/units/rates/rates/as-is.md" });
     expect(meta["commit"]).toMatch(/^[0-9a-f]{40}$/);
     // The work item a person already has is left alone.
-    expect(existsSync(join(root, "units", "demo", "billing", "main.md"))).toBe(false);
-    expect(readFileSync(join(root, "units", "demo", "rates", "rates.md"), "utf8")).toContain('id: "demo/rates/rates"');
+    expect(existsSync(join(root, "applications", "demo", "units", "billing", "main", "unit.md"))).toBe(false);
+    expect(readFileSync(join(root, "applications", "demo", "units", "rates", "rates", "unit.md"), "utf8")).toContain('id: "demo/rates/rates"');
 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({ outputOfJob: id, message: "Understand demo: main, rates", reviewAll: true });
@@ -283,7 +283,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const { run, store, id, writes } = await runStage("understand", { legacy: "small", inputs: { scope: { items: ["billing/main"], files: [] } } });
     expect(run?.status).toBe("failed");
     expect(run?.failureReason).toBe(
-      "assessment/demo/catalog.json is not on the default branch of the document repository: run the assess stage first and merge its pull request, then run understand again",
+      "applications/demo/assessment/catalog.json is not on the default branch of the document repository: run the assess stage first and merge its pull request, then run understand again",
     );
     expect(store.children(id)).toHaveLength(0);
     expect(writes).toHaveLength(0);
@@ -294,14 +294,14 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
     expect(artifacts).toEqual([
-      "assessment/demo/generated/BUSINESS_RULES.md",
-      "assessment/demo/generated/DATA_OBJECTS.md",
-      "assessment/demo/generated/SECURITY_FINDINGS.md",
-      "assessment/demo/generated/rules_result.json",
-      "assessment/demo/generated/topology.json",
-      "knowledge/as-is/demo/generated/README.md",
-      "knowledge/as-is/demo/generated/traceability.json",
-      "knowledge/as-is/demo/generated/traceability.md",
+      "applications/demo/generated/BUSINESS_RULES.md",
+      "applications/demo/generated/DATA_OBJECTS.md",
+      "applications/demo/generated/README.md",
+      "applications/demo/generated/SECURITY_FINDINGS.md",
+      "applications/demo/generated/rules_result.json",
+      "applications/demo/generated/topology.json",
+      "applications/demo/generated/traceability.json",
+      "applications/demo/generated/traceability.md",
     ]);
     // Every output is under the default autoCommitPaths: the writer commits it without a pull request.
     expect(artifacts.every((path) => isAutoCommitPath(path, DEFAULT_AUTO_COMMIT_PATHS))).toBe(true);
@@ -309,7 +309,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
   }, 120_000);
 
   it("finds the applications whose items a default-branch move touched", () => {
-    expect(appsTouched(["assessment/web/items/a/b/rules.json", "knowledge/as-is/shop/items/x/y/meta.json", "assessment/web/generated/topology.json", "units/web/a/b.md", "assessment/Bad/items/a"])).toEqual(["shop", "web"]);
+    expect(appsTouched(["applications/web/units/a/b/rules.json", "applications/shop/units/x/y/meta.json", "applications/web/generated/topology.json", "applications/web/units/a/b/unit.md", "applications/Bad/units/a/b/c.md"])).toEqual(["shop", "web"]);
   });
 
   it("fails an agent step that did not write what the plan expects (no mock outputs)", async () => {
@@ -328,6 +328,6 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const id = randomUUID();
     await store.create({ id, projectId: "demo", applicationId: "demo", kind: "stage", name: "assess", sourceRepositoryId: "small", inputs: {} });
     const run = await runner.run(id);
-    expect(run?.failureReason).toMatch(/^Step analysis failed: (structure|debt|security): Agent (legacy-analyst|security-auditor) did not write assessment\/demo\/analysis\//);
+    expect(run?.failureReason).toMatch(/^Step analysis failed: (structure|debt|security): Agent (legacy-analyst|security-auditor) did not write applications\/demo\/assessment\/analysis\//);
   });
 });

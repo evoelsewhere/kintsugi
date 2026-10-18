@@ -32,15 +32,15 @@ afterEach(() => {
 describe("JobOutput hook", () => {
   it("passes output with diagram problems and reports them as redacted warnings", async () => {
     const ws = workspace({
-      "assessment/demo/ARCHITECTURE.mmd": 'flowchart TB\n    svc_a["A"] --> end\n',
-      "assessment/demo/call-graph.mmd": 'flowchart TD\n    svc_a["A"] --> svc_b["B"]\n',
+      "applications/demo/assessment/ARCHITECTURE.mmd": 'flowchart TB\n    svc_a["A"] --> end\n',
+      "applications/demo/assessment/call-graph.mmd": 'flowchart TD\n    svc_a["A"] --> svc_b["B"]\n',
     });
     const outcome = await run(ws);
-    expect(outcome).toMatchObject({ ok: true, findings: 0, warnings: { count: 1, first: ["reserved-id at assessment/demo/ARCHITECTURE.mmd:2"] } });
+    expect(outcome).toMatchObject({ ok: true, findings: 0, warnings: { count: 1, first: ["reserved-id at applications/demo/assessment/ARCHITECTURE.mmd:2"] } });
   });
 
   it("still blocks credentials, whatever the diagrams say", async () => {
-    const ws = workspace({ "assessment/demo/ARCHITECTURE.mmd": 'flowchart TB\n    svc_a["password=TEST_ONLY_NOT_A_SECRET_42"]\n' });
+    const ws = workspace({ "applications/demo/assessment/ARCHITECTURE.mmd": 'flowchart TB\n    svc_a["password=TEST_ONLY_NOT_A_SECRET_42"]\n' });
     const outcome = await run(ws);
     expect(outcome.ok).toBe(false);
     expect(outcome.reason).toMatch(/credential-shaped values found/);

@@ -45,7 +45,7 @@ All 5 finder classes returned and every finding was judged.
 
 describe("hardenResults", () => {
   it("passes confidence, review coverage, the carry-over and the tools not run through", async () => {
-    const results = await hardenResults(sourceOf({ "SECURITY_FINDINGS.md": CURRENT }), "assessment/billing");
+    const results = await hardenResults(sourceOf({ "SECURITY_FINDINGS.md": CURRENT }), "applications/billing/generated");
     expect(results.report?.findings[0]).toMatchObject({ id: "SEC-001", confidence: "Low" });
     expect(results.report?.reviewCoverage).toMatch(/^manual review of 6 files/);
     expect(results.report?.carryOverItems).toEqual([
@@ -58,7 +58,7 @@ describe("hardenResults", () => {
   it("reads an older document without the new fields", async () => {
     const results = await hardenResults(
       sourceOf({ "SECURITY_FINDINGS.md": "# F\n\n## Findings\n\n| ID | Severity | Title |\n|---|---|---|\n| SEC-001 | High | SQL injection |\n" }),
-      "assessment/billing",
+      "applications/billing/generated",
     );
     expect(results.report?.findings[0]).toMatchObject({ id: "SEC-001", severity: "High" });
     expect(results.report?.findings[0]?.confidence).toBeUndefined();
