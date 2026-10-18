@@ -4,16 +4,16 @@
 // regenerates the whole-application views and the writer auto-commits them.
 
 import { randomUUID } from "node:crypto";
-import { appFromItemPath } from "@kintsugi/domain";
+import { appFromUnitPath } from "@kintsugi/domain";
 import { runGit } from "@kintsugi/git";
 import type { Pool } from "pg";
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 
-/** The applications whose per-item files are among `paths`, sorted. */
+/** The applications whose per-unit files are among `paths`, sorted. */
 export function appsTouched(paths: readonly string[]): string[] {
   const apps = new Set<string>();
   for (const path of paths) {
-    const app = appFromItemPath(path);
+    const app = appFromUnitPath(path);
     if (app !== undefined) apps.add(app);
   }
   return [...apps].sort();

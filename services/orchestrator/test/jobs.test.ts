@@ -26,7 +26,7 @@ const LEGACY_FILES = {
 };
 const DOCUMENT_FILES = {
   "kintsugi.yaml": "version: 1\nproject: { id: demo }\n",
-  "assessment/demo/INTENT.md": "Move to a supported platform.\n",
+  "applications/demo/assessment/INTENT.md": "Move to a supported platform.\n",
 };
 
 describe("job runs in job workspaces (mock agent, fixture repositories)", () => {
@@ -80,11 +80,11 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const seen: { inventory?: { sourceFileCount: number }; intent?: string; structure?: string; srcWritable?: boolean } = {};
     const { store, runner, writes, agents } = setup({
       "legacy-analyst": (spec: JobSpec): Record<string, string> => {
-        if (!synthesis(spec)) return spec.task.startsWith("Build the structural map") ? { "assessment/demo/analysis/structure.md": "# Structure\n\n| domain | files |\n" } : {};
+        if (!synthesis(spec)) return spec.task.startsWith("Build the structural map") ? { "applications/demo/assessment/analysis/structure.md": "# Structure\n\n| domain | files |\n" } : {};
         const [src, inputs] = spec.workspace.readOnly as [string, string];
-        seen.structure = readFileSync(join(inputs, "assessment", "demo", "analysis", "structure.md"), "utf8");
-        seen.inventory = JSON.parse(readFileSync(join(inputs, "assessment", "demo", "inventory.json"), "utf8")) as { sourceFileCount: number };
-        seen.intent = readFileSync(join(inputs, "assessment", "demo", "INTENT.md"), "utf8");
+        seen.structure = readFileSync(join(inputs, "applications", "demo", "assessment", "analysis", "structure.md"), "utf8");
+        seen.inventory = JSON.parse(readFileSync(join(inputs, "applications", "demo", "assessment", "inventory.json"), "utf8")) as { sourceFileCount: number };
+        seen.intent = readFileSync(join(inputs, "applications", "demo", "assessment", "INTENT.md"), "utf8");
         try {
           writeFileSync(join(src, "src", "main.c"), "tampered");
           seen.srcWritable = true;
@@ -92,7 +92,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
           seen.srcWritable = false;
         }
         return {
-          "assessment/demo/ASSESSMENT.md": `# Assessment (draft)\n\n${seen.inventory.sourceFileCount} source files.\n`,
+          "applications/demo/assessment/ASSESSMENT.md": `# Assessment (draft)\n\n${seen.inventory.sourceFileCount} source files.\n`,
           "restricted/SECRETS.local.md": "| preview | location |\n|---|---|\n| hu** | src/main.c:2 |\n",
         };
       },
@@ -131,17 +131,17 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     if (process.platform === "win32" || process.getuid?.() !== 0) expect(seen.srcWritable).toBe(false);
     const spec = agents.specs.find(synthesis)!;
     expect(spec.model).toEqual({ provider: "mock", id: "mock" });
-    expect(spec.task).toContain("assessment/demo/ASSESSMENT.md");
+    expect(spec.task).toContain("applications/demo/assessment/ASSESSMENT.md");
     expect(spec.task).not.toMatch(/\{(app|repo|commit|in)\}/);
 
     // out/ holds what goes to Git (not the intermediate notes); restricted/ went to the restricted record only.
     const out = storage.job(id).out;
-    expect(existsSync(join(out, "assessment", "demo", "inventory.json"))).toBe(true);
-    expect(readFileSync(join(out, "assessment", "demo", "ASSESSMENT.md"), "utf8")).toContain("3 source files");
-    expect(existsSync(join(out, "assessment", "demo", "analysis"))).toBe(false);
-    expect(existsSync(join(out, "assessment", "demo", "catalog-draft"))).toBe(false);
+    expect(existsSync(join(out, "applications", "demo", "assessment", "inventory.json"))).toBe(true);
+    expect(readFileSync(join(out, "applications", "demo", "assessment", "ASSESSMENT.md"), "utf8")).toContain("3 source files");
+    expect(existsSync(join(out, "applications", "demo", "assessment", "analysis"))).toBe(false);
+    expect(existsSync(join(out, "applications", "demo", "assessment", "catalog-draft"))).toBe(false);
     // The item catalog: every inventory file in one item or unassigned (mock topology: one module per top folder).
-    const catalog = JSON.parse(readFileSync(join(out, "assessment", "demo", "catalog.json"), "utf8")) as {
+    const catalog = JSON.parse(readFileSync(join(out, "applications", "demo", "assessment", "catalog.json"), "utf8")) as {
       generatedBy: string;
       items: Array<{ id: string; files: string[]; status: string; digest: string }>;
       unassigned: string[];
@@ -161,12 +161,12 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     // Artifact index with provenance per producer.
     const artifacts = store.artifacts.get(id) ?? [];
     expect(artifacts.map((entry) => entry.path).sort()).toEqual([
-      "assessment/demo/ARCHITECTURE.mmd",
-      "assessment/demo/ASSESSMENT.md",
-      "assessment/demo/catalog.json",
-      "assessment/demo/inventory.json",
-      "assessment/demo/tools/extract_topology.py",
-      "assessment/demo/topology.json",
+      "applications/demo/assessment/ARCHITECTURE.mmd",
+      "applications/demo/assessment/ASSESSMENT.md",
+      "applications/demo/assessment/catalog.json",
+      "applications/demo/assessment/inventory.json",
+      "applications/demo/assessment/tools/extract_topology.py",
+      "applications/demo/assessment/topology.json",
     ]);
     expect(artifacts.find((entry) => entry.path.endsWith("inventory.json"))?.provenance).toMatchObject({ origin: "tool" });
     expect(artifacts.find((entry) => entry.path.endsWith("ASSESSMENT.md"))?.provenance).toMatchObject({ origin: "runtime-agent", runtimeAgent: "legacy-analyst", model: "mock/mock" });
@@ -187,12 +187,12 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
 
   it("fails the stage when the JobOutput hook finds a credential, with a redacted reason and no write", async () => {
     const { store, runner, writes } = setup({
-      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
     });
     const id = await assess(store);
     const run = await runner.run(id);
     expect(run?.status).toBe("failed");
-    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: credential-shaped values found — .* at assessment\/demo\/ASSESSMENT\.md:1/);
+    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: credential-shaped values found — .* at applications\/demo\/assessment\/ASSESSMENT\.md:1/);
     expect(run?.failureReason).not.toContain("hunter2");
     expect(writes).toHaveLength(0);
     expect(store.children(id).map((child) => child.status)).toEqual([...Array<string>(10).fill("succeeded"), "failed"]);
@@ -203,7 +203,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       "legacy-analyst": (spec): Record<string, string> => {
         if (!synthesis(spec)) return {};
         const fixing = spec.task.includes("The output checks rejected the files you wrote");
-        return { "assessment/demo/ASSESSMENT.md": fixing ? "# Assessment\npassword in config.properties:3 (pa****)\n" : "Config: password = hunter2hunter2\n" };
+        return { "applications/demo/assessment/ASSESSMENT.md": fixing ? "# Assessment\npassword in config.properties:3 (pa****)\n" : "Config: password = hunter2hunter2\n" };
       },
     });
     const id = await assess(store);
@@ -212,13 +212,13 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(1);
     const attempts = agents.specs.filter(synthesis);
     expect(attempts).toHaveLength(2);
-    expect(attempts[1]?.task).toMatch(/- credential_assignment at assessment\/demo\/ASSESSMENT\.md:1\n/);
+    expect(attempts[1]?.task).toMatch(/- credential_assignment at applications\/demo\/assessment\/ASSESSMENT\.md:1\n/);
     expect(attempts[1]?.task).not.toContain("hunter2");
   });
 
   it("fails after the one retry when the agent keeps the credential in its files", async () => {
     const { store, runner, writes, agents } = setup({
-      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
     });
     const id = await assess(store);
     const run = await runner.run(id);
@@ -230,7 +230,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   it("resumes a failed stage: keeps work/, skips the agent jobs that succeeded, reruns the scripts and the failed step", async () => {
     let fail = true;
     const { store, runner, writes } = setup({
-      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": fail ? "Config: password = hunter2hunter2\n" : "# Assessment\n" } : {}),
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": fail ? "Config: password = hunter2hunter2\n" : "# Assessment\n" } : {}),
     });
     const first = await assess(store);
     expect((await runner.run(first))?.status).toBe("failed");
@@ -239,7 +239,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const steps = (failed?.outputSummary?.["steps"] ?? []) as Array<{ id: string; status: string }>;
     expect(steps.map((step) => [step.id, step.status]).at(-1)).toEqual(["synthesis", "failed"]);
     expect(failed?.outputSummary?.["documentsCommit"]).toMatch(/^[0-9a-f]{40}$/);
-    expect(existsSync(join(storage.job(first).root, "work", "assessment", "demo", "analysis"))).toBe(true);
+    expect(existsSync(join(storage.job(first).root, "work", "applications", "demo", "assessment", "analysis"))).toBe(true);
 
     fail = false;
     const second = randomUUID();
@@ -260,8 +260,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(summary.resumeOf).toBe(first);
     expect(summary.steps.filter((step) => step.reused === true).map((step) => step.id).sort()).toEqual(["catalog-curate", "debt", "security", "structure", "topology"]);
     const out = storage.job(second).out;
-    expect(existsSync(join(out, "assessment", "demo", "tools", "extract_topology.py"))).toBe(true);
-    expect(readFileSync(join(out, "assessment", "demo", "ASSESSMENT.md"), "utf8")).toBe("# Assessment\n");
+    expect(existsSync(join(out, "applications", "demo", "assessment", "tools", "extract_topology.py"))).toBe(true);
+    expect(readFileSync(join(out, "applications", "demo", "assessment", "ASSESSMENT.md"), "utf8")).toBe("# Assessment\n");
     expect(writes).toHaveLength(1);
   }, 120_000);
 
@@ -298,7 +298,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   it("runs a model-written script from the inputs the same way as a built-in one", async () => {
     const { store, writes } = setup({});
     // A previous job's output, published to the document repo, becomes this step's input.
-    const scriptRepo = fixtureRepository({ "assessment/demo/extract_topology.py": "import json, os, sys\nos.makedirs(sys.argv[1], exist_ok=True)\njson.dump({'ok': True}, open(os.path.join(sys.argv[1], 'nodes.json'), 'w'))\n" });
+    const scriptRepo = fixtureRepository({ "applications/demo/assessment/extract_topology.py": "import json, os, sys\nos.makedirs(sys.argv[1], exist_ok=True)\njson.dump({'ok': True}, open(os.path.join(sys.argv[1], 'nodes.json'), 'w'))\n" });
     try {
       const runnerWithDocs = new JobRunner({
         store,
@@ -320,7 +320,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
         kind: "script",
         name: "extract_topology.py",
         sourceRepositoryId: "legacy",
-        inputs: { documents: ["assessment/{app}/extract_topology.py"], scriptFromInputs: "assessment/demo/extract_topology.py", args: ["{out}/assessment/{app}/scratch"] },
+        inputs: { documents: ["applications/{app}/assessment/extract_topology.py"], scriptFromInputs: "applications/demo/assessment/extract_topology.py", args: ["{out}/applications/{app}/assessment/scratch"] },
       });
       const run = await runnerWithDocs.run(id);
       expect(run?.failureReason).toBeUndefined();
@@ -359,7 +359,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   });
 
   it("records the run's live events: status, steps and agent tool calls, without file content", async () => {
-    const { store, runner } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "assessment/demo/ASSESSMENT.md": "# Draft with private detail\n" } : {}) });
+    const { store, runner } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": "# Draft with private detail\n" } : {}) });
     const id = await assess(store);
     await runner.run(id);
     const events = store.events.filter((event) => event.runId === id);

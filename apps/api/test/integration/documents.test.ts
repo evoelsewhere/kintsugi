@@ -83,7 +83,7 @@ const TRACEABILITY = JSON.stringify({
       kind: "module",
       loc: 25,
       entryPoint: true,
-      spec: "knowledge/as-is/web/core/a.md",
+      spec: "applications/web/units/core/a/as-is.md",
       files: ["src/A.java"],
       dependsOn: ["web/core/b"],
       usedBy: [],
@@ -121,19 +121,19 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
     // assess merged on main; map proposed on a kintsugi/* branch.
-    await remote.commit("docs", "assessment/web/inventory.json", INVENTORY);
-    await remote.commit("docs", "assessment/web/ASSESSMENT.md", ASSESSMENT);
-    await remote.commit("docs", "assessment/web/ARCHITECTURE.mmd", "graph TD\n  A --> B\n");
+    await remote.commit("docs", "applications/web/assessment/inventory.json", INVENTORY);
+    await remote.commit("docs", "applications/web/assessment/ASSESSMENT.md", ASSESSMENT);
+    await remote.commit("docs", "applications/web/assessment/ARCHITECTURE.mmd", "graph TD\n  A --> B\n");
     await remote.commit("docs", "standards/README.md", "# Standards\n");
-    await remote.commit("docs", "assessment/web/topology.json", TOPOLOGY, "kintsugi/legacy-analyst/run-map");
-    await remote.commit("docs", "assessment/web/call-graph.mmd", "graph TD\n  a --> b\n", "kintsugi/legacy-analyst/run-map");
+    await remote.commit("docs", "applications/web/assessment/topology.json", TOPOLOGY, "kintsugi/legacy-analyst/run-map");
+    await remote.commit("docs", "applications/web/assessment/call-graph.mmd", "graph TD\n  a --> b\n", "kintsugi/legacy-analyst/run-map");
     mapBranchTip = remote.git("docs", "rev-parse", "kintsugi/legacy-analyst/run-map").trim();
     // understand proposed on its own branch: specifications, synthesis and work items in one pull request.
     const understand = "kintsugi/legacy-analyst/run-understand";
-    await remote.commit("docs", "knowledge/as-is/web/traceability.json", TRACEABILITY, understand);
-    await remote.commit("docs", "knowledge/as-is/web/README.md", "# Web AS-IS\n", understand);
-    await remote.commit("docs", "knowledge/as-is/web/architecture.md", "# Architecture\n\n```mermaid\nflowchart LR\n  core --> data\n```\n", understand);
-    await remote.commit("docs", "units/web/core/a.md", '---\nid: "web/core/a"\nstatus: pending\ncomplexity: low\n---\n\nA.\n', understand);
+    await remote.commit("docs", "applications/web/generated/traceability.json", TRACEABILITY, understand);
+    await remote.commit("docs", "applications/web/generated/README.md", "# Web AS-IS\n", understand);
+    await remote.commit("docs", "applications/web/generated/architecture.md", "# Architecture\n\n```mermaid\nflowchart LR\n  core --> data\n```\n", understand);
+    await remote.commit("docs", "applications/web/units/core/a/unit.md", '---\nid: "web/core/a"\nstatus: pending\ncomplexity: low\n---\n\nA.\n', understand);
     await cloneMirror(`${remote.baseUrl}/docs.git`, new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
     app = await startTestApp();
@@ -158,7 +158,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     await app.db.query(
       `insert into workflow.job_run (id, project_id, application_id, kind, name, status, document_write_id, output_summary, finished_at, created_at) values
         ('run-understand', 'shop', 'web', 'stage', 'understand', 'succeeded', 'w-understand', $1, now() - interval '10 minutes', now() - interval '20 minutes')`,
-      [JSON.stringify({ stage: "understand", missingInputs: [{ path: "assessment/web/SECURITY_FINDINGS.md", stage: "harden" }] })],
+      [JSON.stringify({ stage: "understand", missingInputs: [{ path: "applications/web/generated/SECURITY_FINDINGS.md", stage: "harden" }] })],
     );
   }, 180_000); // many fixture commits, each a few git processes: slow when the suites run in parallel
   afterAll(async () => {
@@ -191,17 +191,17 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
   it("lists a directory and reads a file at a ref, parsing JSON", async () => {
     const root = await admin.get<{ commit: string; entries: Array<{ path: string; kind: string }> }>("/projects/shop/documents/tree");
     expect(root.body.data?.entries.map((entry) => [entry.path, entry.kind])).toEqual([
-      ["assessment", "dir"],
+      ["applications", "dir"],
       ["standards", "dir"],
       ["README.md", "file"],
     ]);
-    const onBranch = await admin.get<{ entries: Array<{ name: string; size?: number }> }>(`/projects/shop/documents/tree?path=assessment/web&ref=refs/heads/kintsugi/legacy-analyst/run-map`);
+    const onBranch = await admin.get<{ entries: Array<{ name: string; size?: number }> }>(`/projects/shop/documents/tree?path=applications/web/assessment&ref=refs/heads/kintsugi/legacy-analyst/run-map`);
     expect(onBranch.body.data?.entries.map((entry) => entry.name)).toEqual(["ARCHITECTURE.mmd", "ASSESSMENT.md", "call-graph.mmd", "inventory.json", "topology.json"]);
 
-    const file = await admin.get<{ format: string; json: { sloc: number }; size: number; commit: string }>("/projects/shop/documents/file?path=assessment/web/inventory.json");
+    const file = await admin.get<{ format: string; json: { sloc: number }; size: number; commit: string }>("/projects/shop/documents/file?path=applications/web/assessment/inventory.json");
     expect(file.status).toBe(200);
     expect(file.body.data).toMatchObject({ format: "json", json: { sloc: 40 }, size: INVENTORY.length });
-    const byCommit = await admin.get<{ content: string }>(`/projects/shop/documents/file?path=assessment/web/topology.json&ref=${mapBranchTip}`);
+    const byCommit = await admin.get<{ content: string }>(`/projects/shop/documents/file?path=applications/web/assessment/topology.json&ref=${mapBranchTip}`);
     expect(byCommit.body.data?.content).toBe(TOPOLOGY);
   });
 
@@ -210,9 +210,9 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
       expect((await admin.get(`/projects/shop/documents/file?path=${encodeURIComponent(path)}`)).status, path).toBe(400);
     }
     expect((await admin.get("/projects/shop/documents/file?path=restricted/SECRETS.local.md")).status).toBe(403);
-    expect((await admin.get("/projects/shop/documents/tree?path=assessment/web/restricted")).status).toBe(403);
-    expect((await admin.get("/projects/shop/documents/file?path=assessment/web/missing.md")).status).toBe(404);
-    expect((await admin.get("/projects/shop/documents/file?path=assessment")).status).toBe(400);
+    expect((await admin.get("/projects/shop/documents/tree?path=applications/web/assessment/restricted")).status).toBe(403);
+    expect((await admin.get("/projects/shop/documents/file?path=applications/web/assessment/missing.md")).status).toBe(404);
+    expect((await admin.get("/projects/shop/documents/file?path=applications")).status).toBe(400);
     expect((await admin.get("/projects/shop/documents/tree?path=README.md")).status).toBe(404);
     expect((await admin.get("/projects/shop/documents/file?path=README.md&ref=main")).status).toBe(400);
     expect((await admin.get("/projects/shop/documents/file?path=README.md&ref=refs/heads/../x")).status).toBe(400);
@@ -235,7 +235,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     expect(data.highlights).toMatchObject({ summary: "A small Java service.", recommendation: "Rebuild on the target architecture.", security: [{ id: "SEC-001", severity: "Medium", cwe: "CWE-862" }] });
     expect(data.counts).toMatchObject({ files: 2, sloc: 40, debtItems: 1, securityFindings: 1 });
     expect(data.headline).toEqual(["40 SLOC", "2 files"]);
-    expect(data.document.path).toBe("assessment/web/ASSESSMENT.md");
+    expect(data.document.path).toBe("applications/web/assessment/ASSESSMENT.md");
   });
 
   it("builds the map results from the latest successful run's open branch", async () => {
@@ -296,20 +296,20 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     expect(data.ref).toMatchObject({ kind: "run", status: "open", runId: "run-understand", branch: "kintsugi/legacy-analyst/run-understand" });
     expect(data.empty).toBe(false);
     expect(data.units.map((unit) => [unit["id"], unit["key"], unit["spec"], unit["workItem"] ?? null])).toEqual([
-      ["web/core/a", "core/a", "knowledge/as-is/web/core/a.md", { path: "units/web/core/a.md", status: "proposed", complexity: "low", statusFrom: "ref" }],
+      ["web/core/a", "core/a", "applications/web/units/core/a/as-is.md", { path: "applications/web/units/core/a/unit.md", status: "proposed", complexity: "low", statusFrom: "ref" }],
       ["web/core/b", "core/b", null, null],
     ]);
-    expect(data.matrix).toMatchObject({ path: "knowledge/as-is/web/traceability.json", rulesCovered: ["RULE-001"], unmappedRules: ["RULE-002"], dataStores: ["ds:ACCOUNT"], notes: { "unknown rule ids": 1 } });
+    expect(data.matrix).toMatchObject({ path: "applications/web/generated/traceability.json", rulesCovered: ["RULE-001"], unmappedRules: ["RULE-002"], dataStores: ["ds:ACCOUNT"], notes: { "unknown rule ids": 1 } });
     expect(data.documents.map((document) => [document.id, document.path])).toEqual([
-      ["readme", "knowledge/as-is/web/README.md"],
-      ["architecture", "knowledge/as-is/web/architecture.md"],
+      ["readme", "applications/web/generated/README.md"],
+      ["architecture", "applications/web/generated/architecture.md"],
     ]);
     expect(data.documents[1]?.markdown).toContain("```mermaid");
-    expect(data.document.path).toBe("knowledge/as-is/web/README.md");
-    expect(data.missingInputs).toEqual([{ path: "assessment/web/SECURITY_FINDINGS.md", stage: "harden" }]);
+    expect(data.document.path).toBe("applications/web/generated/README.md");
+    expect(data.missingInputs).toEqual([{ path: "applications/web/generated/SECURITY_FINDINGS.md", stage: "harden" }]);
     expect(data.counts).toMatchObject({ units: 2, modules: 1, specified: 1, notWritten: 1, rulesCovered: 1, rulesUncovered: 1, files: 2, workItems: 1, leftOut: 1, openQuestions: 1 });
     expect(data.headline).toEqual(["2 units", "1 module"]);
-    expect(data.files.map((file) => file.path)).toEqual(["knowledge/as-is/web/traceability.json", "knowledge/as-is/web/README.md", "knowledge/as-is/web/architecture.md"]);
+    expect(data.files.map((file) => file.path)).toEqual(["applications/web/generated/traceability.json", "applications/web/generated/README.md", "applications/web/generated/architecture.md"]);
 
     // Not merged yet: the default branch has no understand output.
     const onMain = await admin.get<{ empty: boolean; units: unknown[]; matrix: null; documents: unknown[] }>("/projects/shop/applications/web/stages/understand/results?ref=refs/heads/main");
@@ -317,14 +317,14 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
   });
 
   it("reads work-item status from the default branch once the item is merged there", async () => {
-    await remote.commit("docs", "units/web/core/a.md", '---\nid: "web/core/a"\nstatus: in-progress\ncomplexity: low\n---\n\nA.\n');
+    await remote.commit("docs", "applications/web/units/core/a/unit.md", '---\nid: "web/core/a"\nstatus: in-progress\ncomplexity: low\n---\n\nA.\n');
     await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
     const results = await admin.get<{ units: Array<{ id: string; workItem?: unknown }> }>("/projects/shop/applications/web/stages/understand/results");
-    expect(results.body.data?.units[0]?.workItem).toEqual({ path: "units/web/core/a.md", status: "in-progress", complexity: "low", statusFrom: "default-branch" });
+    expect(results.body.data?.units[0]?.workItem).toEqual({ path: "applications/web/units/core/a/unit.md", status: "in-progress", complexity: "low", statusFrom: "default-branch" });
   });
 
   it("follows the mirror: a newer commit on the run's branch shows after a fetch", async () => {
-    await remote.commit("docs", "assessment/web/critical-path.mmd", "flowchart TD\n  x --> y\n", "kintsugi/legacy-analyst/run-map");
+    await remote.commit("docs", "applications/web/assessment/critical-path.mmd", "flowchart TD\n  x --> y\n", "kintsugi/legacy-analyst/run-map");
     await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
     const results = await admin.get<{ diagrams: Array<{ id: string }> }>("/projects/shop/applications/web/stages/map/results");
     expect(results.body.data?.diagrams.map((diagram) => diagram.id)).toEqual(["call-graph", "critical-path"]);

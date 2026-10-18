@@ -21,8 +21,8 @@ import {
   DOCUMENT_PATH_TOKENS,
   assessmentBriefPath,
   assessmentCatalogPath,
-  assessmentDir,
   assessmentFilePath,
+  assessmentInventoryPath,
   assessmentItemFilePath,
   assessmentTopologyPath,
   knowledgeAsIsItemFilePath,
@@ -35,7 +35,6 @@ import {
 import { CREDENTIALS, HEADER, UNTRUSTED, WORKSPACE } from "./common.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
-const DIR = assessmentDir(APP_TOKEN);
 /** Intermediate files of the run: briefs, shards, the workflows' results. */
 const RUN = understandRunDir(APP_TOKEN);
 const SCOPE = understandScopePath(APP_TOKEN);
@@ -132,7 +131,7 @@ export function understandMessage(app: string, scope?: StageScope): string {
 export const UNDERSTAND: StagePlan = {
   id: "understand",
   message: understandMessage,
-  documents: ["kintsugi.yaml", assessmentCatalogPath(APP_TOKEN), `${DIR}/inventory.json`, assessmentTopologyPath(APP_TOKEN), `${DIR}/ASSESSMENT.md`, `${unitsDir(APP_TOKEN)}/`],
+  documents: ["kintsugi.yaml", assessmentCatalogPath(APP_TOKEN), assessmentInventoryPath(APP_TOKEN), assessmentTopologyPath(APP_TOKEN), assessmentFilePath(APP_TOKEN, "ASSESSMENT.md"), `${unitsDir(APP_TOKEN)}/`],
   requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   reviewAll: true,
   steps: [
@@ -140,7 +139,7 @@ export const UNDERSTAND: StagePlan = {
       id: "scope",
       kind: "script",
       script: "scope_items.py",
-      args: (ctx) => ["{app}", "--catalog", `{in}/${DIR}/catalog.json`, "--topology", `{in}/${DIR}/topology.json`, "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--catalog", `{in}/${assessmentCatalogPath(APP_TOKEN)}`, "--topology", `{in}/${assessmentTopologyPath(APP_TOKEN)}`, "--items", itemsArg(ctx), "--out", "{out}"],
       intermediate: [`${RUN}/`],
       expects: [SCOPE],
     },
@@ -202,7 +201,7 @@ export const UNDERSTAND: StagePlan = {
       args: (ctx) => [
         "{app}",
         "--catalog",
-        `{in}/${DIR}/catalog.json`,
+        `{in}/${assessmentCatalogPath(APP_TOKEN)}`,
         "--items",
         itemsArg(ctx),
         "--inputs",

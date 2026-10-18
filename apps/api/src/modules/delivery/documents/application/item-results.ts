@@ -4,7 +4,7 @@
 // catalog item → a one-row traceability.json. Pure functions; unreadable input gives null.
 
 import type { ItemCatalogItem } from "@kintsugi/agents/reader";
-import { knowledgeAsIsUnitPath } from "@kintsugi/domain";
+import { findOrphanRuleReviewIds, parseRulesFile, parseRulesReview, parseUnitTrace, unitAsIsPath, type RuleId, type RulesReviewRecord } from "@kintsugi/domain";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -58,6 +58,7 @@ export function itemTraceability(app: string, item: ItemCatalogItem, traceText: 
   const trace = parse(traceText) ?? {};
   const deps = (Array.isArray(trace["dependencies"]) ? trace["dependencies"] : []).filter(isRecord).filter((dep) => typeof dep["target"] === "string");
   const [module = "", unit = ""] = item.id.split("/");
+  const parsedTrace = parseUnitTrace(parse(traceText));
   const stores = new Map<string, Set<string>>();
   for (const dep of deps) {
     const target = String(dep["target"]);
@@ -74,7 +75,7 @@ export function itemTraceability(app: string, item: ItemCatalogItem, traceText: 
     kind: item.kind,
     loc: item.loc,
     entryPoint: item.entryPoints.length > 0,
-    spec: specified ? knowledgeAsIsUnitPath(app, item.id) : null,
+    spec: specified ? unitAsIsPath(app, module, unit) : null,
     files: item.files,
     dependsOn: deps.filter((dep) => dep["direction"] !== "inbound" && String(dep["target"]).includes("/")).map((dep) => `${app}/${String(dep["target"])}`),
     usedBy: deps.filter((dep) => dep["direction"] === "inbound" && String(dep["target"]).includes("/")).map((dep) => `${app}/${String(dep["target"])}`),
@@ -85,6 +86,9 @@ export function itemTraceability(app: string, item: ItemCatalogItem, traceText: 
     dataObjects: strings(trace["dataObjects"]),
     entryPoints: strings(trace["entryPoints"]),
     openQuestions: typeof trace["openQuestions"] === "number" ? trace["openQuestions"] : 0,
+    requirements: parsedTrace?.requirements ?? [],
+    pullRequests: parsedTrace?.pullRequests ?? [],
+    tests: parsedTrace?.tests ?? [],
   };
   return JSON.stringify({
     app,
@@ -99,4 +103,20 @@ export function itemTraceability(app: string, item: ItemCatalogItem, traceText: 
     cycles: [],
     notes: {},
   });
+}
+
+/** trace.json + rules.json + rules-review.json of a unit as its trace links and its human rule verdicts. */
+export function itemUnitFacts(
+  traceText: string | null,
+  rulesText: string | null,
+  reviewText: string | null,
+): { trace?: { requirements: string[]; pullRequests: string[]; tests: string[] }; rulesReview?: { verdicts: RulesReviewRecord; orphaned: RuleId[] } } {
+  const trace = traceText === null ? undefined : parseUnitTrace(parse(traceText));
+  const verdicts = reviewText === null ? undefined : parseRulesReview(parse(reviewText));
+  return {
+    ...(trace === undefined ? {} : { trace: { requirements: trace.requirements, pullRequests: trace.pullRequests, tests: trace.tests } }),
+    ...(verdicts === undefined
+      ? {}
+      : { rulesReview: { verdicts, orphaned: findOrphanRuleReviewIds(parseRulesFile(parse(rulesText))?.rules ?? [], verdicts) } }),
+  };
 }

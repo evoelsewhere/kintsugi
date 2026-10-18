@@ -18,6 +18,7 @@ import {
   assessmentDir,
   assessmentFilePath,
   assessmentInventoryPath,
+  assessmentTopologyPath,
   legacyUnitsIndexPath,
   topologyExtractorPath,
   unitsDir,
@@ -130,10 +131,10 @@ ${WORKSPACE}
 
 The catalog lists what the application consists of, as items a person later selects for analysis: two levels, module
 -> item; functions inside an item are its parts. {in}/${DRAFT}/proposed.json is the catalog a script derived from the
-extracted topology ({in}/${DIR}/topology.json) without reading code: a module per domain, an item per topology leaf,
-small leaves of one directory grouped. {in}/${DIR}/inventory.json lists every file, {in}/${ANALYSIS}/structure.md
+extracted topology ({in}/${assessmentTopologyPath(APP_TOKEN)}) without reading code: a module per domain, an item per topology leaf,
+small leaves of one directory grouped. {in}/${assessmentInventoryPath(APP_TOKEN)} lists every file, {in}/${ANALYSIS}/structure.md
 holds the structure job's domains and {in}/kintsugi.yaml names the allowed item kinds (unitKinds). If present,
-{in}/${DIR}/catalog.json is the previous catalog (on the default branch, reviewed by a person): where a proposed item
+{in}/${assessmentCatalogPath(APP_TOKEN)} is the previous catalog (on the default branch, reviewed by a person): where a proposed item
 covers mostly the same files as a previous one, keep its name, kind and summary. Ids are kept by a later script; do not
 try to keep them yourself.
 
@@ -197,11 +198,11 @@ export const ASSESS: StagePlan = {
   documents: [
     "kintsugi.yaml",
     "standards/",
-    `${DIR}/INTENT.md`,
-    `${DIR}/telemetry/`,
-    `${DIR}/graph/`,
+    assessmentFilePath(APP_TOKEN, "INTENT.md"),
+    `${assessmentFilePath(APP_TOKEN, "telemetry")}/`,
+    `${assessmentFilePath(APP_TOKEN, "graph")}/`,
     // The previous catalog and the understand stage's units keep the item ids (reconcile_catalog.py).
-    `${DIR}/catalog.json`,
+    assessmentCatalogPath(APP_TOKEN),
     legacyUnitsIndexPath(APP_TOKEN),
     `${unitsDir(APP_TOKEN)}/`,
   ],
@@ -250,7 +251,7 @@ export const ASSESS: StagePlan = {
         "--edits",
         `{in}/${DRAFT}/edits.json`,
         "--inventory",
-        `{in}/${DIR}/inventory.json`,
+        `{in}/${assessmentInventoryPath(APP_TOKEN)}`,
         "--manifest",
         "{in}/kintsugi.yaml",
         "--out",
@@ -267,17 +268,17 @@ export const ASSESS: StagePlan = {
         "--catalog",
         `{in}/${DRAFT}/curated.json`,
         "--inventory",
-        `{in}/${DIR}/inventory.json`,
+        `{in}/${assessmentInventoryPath(APP_TOKEN)}`,
         "--previous",
-        `{in}/${DIR}/catalog.json`,
+        `{in}/${assessmentCatalogPath(APP_TOKEN)}`,
         "--units-json",
         "{in}/" + legacyUnitsIndexPath(APP_TOKEN),
         "--units-dir",
         "{in}/" + unitsDir(APP_TOKEN),
         "--out",
-        `{out}/${DIR}/catalog.json`,
+        `{out}/${assessmentCatalogPath(APP_TOKEN)}`,
       ],
-      expects: [`${DIR}/catalog.json`],
+      expects: [assessmentCatalogPath(APP_TOKEN)],
     },
     {
       id: "synthesis",
