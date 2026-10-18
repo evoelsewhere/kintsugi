@@ -13,6 +13,7 @@ import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { understandMessage } from "../src/jobs/plans/understand.js";
+import { REBUILD } from "../src/jobs/plans/rebuild.js";
 import { appsTouched } from "../src/aggregates.js";
 import { DEFAULT_AUTO_COMMIT_PATHS, isAutoCommitPath } from "@kintsugi/domain";
 import { JobRunner } from "../src/jobs/runner.js";
@@ -305,7 +306,9 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     ]);
     // Every output is under the default autoCommitPaths: the writer commits it without a pull request.
     expect(artifacts.every((path) => isAutoCommitPath(path, DEFAULT_AUTO_COMMIT_PATHS))).toBe(true);
-    expect(writes[0]).toMatchObject({ message: "Rebuild the generated views of demo from its understood items" });
+    expect(writes[0]).toMatchObject({ message: "Rebuild the generated views of demo from its understood units" });
+    // The rebuild must stage the per-unit evidence tree, or the aggregates come out empty.
+    expect(REBUILD.documents).toContain("applications/{app}/units/");
   }, 120_000);
 
   it("finds the applications whose items a default-branch move touched", () => {
