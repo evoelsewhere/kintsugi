@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+from typing import Any
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -159,9 +160,9 @@ def merge(app, units_doc, trace_dir, specs_dir, assessment, source=None):
         by_ref[unit['key']] = unit['id']
     notes = {'invalid rule ids': 0, 'unknown rule ids': 0, 'invalid finding ids': 0, 'unknown finding ids': 0,
              'unresolved dependencies': 0, 'invalid paths': 0, 'files not in the source': 0, 'missing fragments': 0, 'invalid fragments': 0}
-    merged = {}
+    merged: dict[str, Any] = {}
     for unit in units:
-        entry = {
+        entry: dict[str, Any] = {
             'id': unit['id'],
             'module': unit.get('module'),
             'unit': unit.get('unit'),
@@ -260,7 +261,7 @@ def merge(app, units_doc, trace_dir, specs_dir, assessment, source=None):
     for entry in merged.values():
         for dep in entry['dependsOn']:
             used_by[dep].add(entry['id'])
-    result_units = []
+    result_units: list[dict[str, Any]] = []
     for uid in sorted(merged):
         entry = merged[uid]
         result_units.append({

@@ -182,11 +182,13 @@ def unit_file_path(app, module, unit, file):
 
 
 def unit_key_dir(app, unit_key):
-    return unit_dir(app, *split_unit_key(unit_key))
+    module, unit = split_unit_key(unit_key)
+    return unit_dir(app, module, unit)
 
 
 def unit_key_path(app, unit_key, file):
-    return unit_file_path(app, *split_unit_key(unit_key), file)
+    module, unit = split_unit_key(unit_key)
+    return unit_file_path(app, module, unit, file)
 
 
 def unit_state_path(app, module, unit):
