@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import time
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -81,7 +82,15 @@ def write_json(path, value):
     with open(temporary, 'w', encoding='utf-8', newline='\n') as handle:
         json.dump(value, handle, indent=1, ensure_ascii=False)
         handle.write('\n')
-    os.replace(temporary, path)
+    # Windows transiently denies the replace while a scanner holds the new file: retry briefly.
+    for attempt in range(20):
+        try:
+            os.replace(temporary, path)
+            return
+        except OSError:
+            if attempt == 19:
+                raise
+            time.sleep(0.05)
 
 
 
