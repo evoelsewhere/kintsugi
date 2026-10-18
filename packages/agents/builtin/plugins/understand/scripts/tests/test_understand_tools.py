@@ -21,7 +21,10 @@ def write(root, rel, text):
 
 
 def read(path, mode='r'):
-    with open(path, mode, **({} if 'b' in mode else {'encoding': 'utf-8'})) as handle:
+    if 'b' in mode:
+        with open(path, mode) as handle:
+            return handle.read()
+    with open(path, mode, encoding='utf-8') as handle:
         return handle.read()
 
 
