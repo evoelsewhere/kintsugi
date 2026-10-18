@@ -449,7 +449,7 @@ def main(argv=None):
     parser.add_argument('--source-commit', type=valid_commit, help='pinned source commit (40-64 hexadecimal characters)')
     parser.add_argument('--source-repo', help='source repository identity label')
     parser.add_argument('--source', required=True, help='read-only source checkout used to identify the source commit')
-    parser.add_argument('--assessment', required=True, help='assessment/<app>/ containing topology inputs')
+    parser.add_argument('--assessment', required=True, help='applications/<app>/assessment/ containing topology inputs')
     parser.add_argument('--out', required=True, help='folder where topology.json and topology.summary.txt are written')
     args = parser.parse_args(argv[1:] if argv is not None else None)
     if not args.source.strip() or not args.assessment.strip() or not args.out.strip():

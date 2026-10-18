@@ -1582,7 +1582,7 @@ class ProofUplift(unittest.TestCase):
         self.assertEqual((m["verdict"], self.states()["baseline"], self.states()["same"]), ("PARTLY PROVEN", "gap", "pass"))
         detail = next(c["detail"] for c in m["checks"] if c["id"] == "baseline")
         self.assertIn("typed by hand", detail)
-        self.assertIn("assessment/<app>/baseline/", detail)
+        self.assertIn("applications/<app>/assessment/baseline/", detail)
         self.assertIn("Recorded:", detail)
         self.assertIn("### Baseline evidence", pp.render_md(pp.overall(pp.build("s", self.root, now="x"))))
 

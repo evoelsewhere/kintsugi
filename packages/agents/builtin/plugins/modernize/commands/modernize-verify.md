@@ -6,8 +6,8 @@ metadata:
   audience: member
   upstream: commands/modernize-verify.md
   agents: []
-  reads: [assessment/<app>/MODERNIZATION_BRIEF.md, assessment/<app>/INTENT.md, assessment/<app>/PREFLIGHT.md, assessment/<app>/BUSINESS_RULES.md, assessment/<app>/DELTA_CATALOG.md, assessment/<app>/BASELINE.md, assessment/<app>/baseline/, assessment/<app>/UPLIFT_NOTES.md, assessment/<app>/modules/<module>/TRANSFORMATION_NOTES.md, golden/<module>/cases.json, golden/<module>/fresh-cases.json]
-  writes: [golden/<module>/fresh/, golden/<module>/fresh-cases.json, runs/<module>/<run-id>/, assessment/<app>/VERIFICATION.md, assessment/<app>/VERIFICATION.json]
+  reads: [applications/<app>/to-be/modernization-brief.md, applications/<app>/inputs/INTENT.md, applications/<app>/assessment/PREFLIGHT.md, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/assessment/DELTA_CATALOG.md, applications/<app>/assessment/BASELINE.md, applications/<app>/assessment/baseline/, applications/<app>/units/<module>/UPLIFT_NOTES.md, applications/<app>/units/<module>/TRANSFORMATION_NOTES.md, applications/<app>/units/<module>/<unit>/verify/golden/cases.json, applications/<app>/units/<module>/<unit>/verify/golden/fresh-cases.json]
+  writes: [applications/<app>/units/<module>/<unit>/verify/golden/fresh/, applications/<app>/units/<module>/<unit>/verify/golden/fresh-cases.json, applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/, applications/<app>/generated/VERIFICATION.md, applications/<app>/generated/VERIFICATION.json]
   gates: ["approval of each difference (fresh-input, case or baseline)", "sign-off of the verification by a named person"]
 ---
 
@@ -22,26 +22,26 @@ result to improve a verdict, and never tick or approve anything a person owns. R
 refuse writes to it) and your checkout of the **target repository** of `$app` (the branch being verified) beside it.
 
 This command runs in your own harness through Kintsugi's member plugin. Say in one line which source commit you compare
-against (the one the assessment recorded for `$app`, named in `assessment/$app/PREFLIGHT.md` and in the portal; check out
+against (the one the assessment recorded for `$app`, named in `applications/$app/assessment/PREFLIGHT.md` and in the portal; check out
 exactly that commit) and which target branch and commit you verify. Everything this command writes goes to
-`assessment/$app/` on your own branch of the document repository and reaches the project through a pull request. Run any
+`applications/$app/assessment/` on your own branch of the document repository and reaches the project through a pull request. Run any
 subagent in the foreground and wait for its result: never end your turn while one is still running. Stop any server or other
 process you started before you finish, and say you did. Before running any suite or the legacy code, read its configuration
 for the databases and services it connects to: if any is not a local or throwaway instance, stop and ask which environment to use.
 
 ## 1 — What was built
 
-**Rewrite:** each module folder in the target repository that has notes in `assessment/$app/modules/<module>/`.
+**Rewrite:** each module folder in the target repository that has notes in `applications/$app/assessment/modules/<module>/`.
 **Same-stack uplift:** the working copy, your uplift branch of the target repository (its units are named in the Code and
 Command lines of `BASELINE.md`). **Reimagine:** each service folder in the target repository named in
-`assessment/$app/REIMAGINED_ARCHITECTURE.md`. Name them. With a `$module` (for an uplift, a unit)
+`applications/$app/units/$module/REIMAGINED_ARCHITECTURE.md`. Name them. With a `$module` (for an uplift, a unit)
 re-run only that one; the pack still judges every built module from its current evidence, never from an earlier run.
 A folder that holds only test code and the files that build it (a parity harness, say) is test tooling: the pack lists it as not judged and leaves it out of the verdict.
 If nothing is built, say so and stop: the next step is the brief's Phase 1 command.
 
 ## 2 — Which rules do the tests name?
 
-Rewrite and reimagine: `python3 scripts/trace_rules.py $app --source <source clone> --assessment assessment/$app --target <target checkout> --out runs/<module>/<run-id> --module <module>` (after step 3 add `--runs <the module's result folder>`;
+Rewrite and reimagine: `python3 scripts/trace_rules.py $app --source <source clone> --assessment applications/$app/assessment --target <target checkout> --out applications/<app>/units/<module>/<unit>/verify/runs/<run-id> --module <module>` (after step 3 add `--runs <the module's result folder>`;
 before it nothing has run, so a named rule reads "named, not run"). A rule counts as tested only when a test that ran and passed backs it: the id
 (`RULE-017`, or `rule017`) is in the name of a passing test or of its class, or a test file names it on a line not marked skipped or pending and
 that file's class passed. A rule only a skipped, pending or failing test names is "named, not run", and one only the notes name is "claimed":
@@ -50,8 +50,8 @@ neither is tested. The pack repeats this: read it to know the gaps, and do not f
 ## 3 — Run the tests again from clean, and run your own canary
 
 Equivalence data follows the document repository's layout: development cases (inputs and the legacy outputs)
-live in `golden/<module>/cases/<id>/`, listed in `golden/<module>/cases.json`; each comparison run writes its small
-reports to `runs/<module>/<run-id>/` (`<run-id>` is `<YYYYMMDD-HHMM>-<short target commit>`). The new side's raw
+live in `applications/<app>/units/<module>/<unit>/verify/golden/cases/<id>/`, listed in `applications/<app>/units/<module>/<unit>/verify/golden/cases.json`; each comparison run writes its small
+reports to `applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/` (`<run-id>` is `<YYYYMMDD-HHMM>-<short target commit>`). The new side's raw
 outputs are never committed: keep them in a scratch folder outside the three checkouts. Start one run folder per module now and write every report of this verification into it.
 
 For each module (uplift: the units the baseline covers) delete its build output and runner caches first (`target/`, `build/`,
@@ -59,7 +59,7 @@ For each module (uplift: the units the baseline covers) delete its build output 
 the **full** suite (uplift: the command `BASELINE.md` records; Maven also `-Dmaven.test.failure.ignore=true`). Keep the runner's
 JUnit-style XML where it can write it (Maven writes `target/surefire-reports`; `pytest --junitxml=<file>`;
 `dotnet test --logger "junit;LogFilePath=<file>"` or `trx`; `jest-junit`; `gotestsum --junitfile <file>`) and the raw output
-either way: `<test command> 2>&1 | tee runs/<module>/<run-id>/<suite>.test-output.txt`. The pack reads the XML, else the summary
+either way: `<test command> 2>&1 | tee applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/<suite>.test-output.txt`. The pack reads the XML, else the summary
 lines of Maven and Gradle, cargo, pytest, unittest, go test, dotnet test, jest, vitest, ctest and phpunit. Only the XML lists each test, so only it can
 show that a rule's test ran; a log gives counts. A failure caused by this
 machine (a missing tool, a sandbox limit) is still a failure: say why in the suite `note`. If the toolchain will not run here, record the
@@ -67,17 +67,17 @@ suite with `"executed": 0` and a `note`: nothing executed is NOT PROVEN, not a p
 
 **Canary.** Copy the module (with what it builds from, such as a parent POM) to a scratch folder outside all three checkouts.
 Break one line that matters (a rounding mode, a threshold by one, a comparison), run the tests that cover it (at least their class or
-file) and keep that run's XML or raw log in `runs/<module>/<run-id>/canary/`. The pack compares its failures with the
+file) and keep that run's XML or raw log in `applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/canary/`. The pack compares its failures with the
 clean run's. A `Canary:` line in the notes is a claim; the pack does not count it.
 
-**Uplift:** also run `python3 scripts/baseline_diff.py $app --source <source clone> --assessment assessment/$app --target <target checkout> --out runs/<module>/<run-id> --runs runs/<module>/<run-id>` (it reads `assessment/$app/BASELINE.md`; `--junit` or `--trx` names a single fresh result file instead).
+**Uplift:** also run `python3 scripts/baseline_diff.py $app --source <source clone> --assessment applications/$app/assessment --target <target checkout> --out applications/<app>/units/<module>/<unit>/verify/runs/<run-id> --runs applications/<app>/units/<module>/<unit>/verify/runs/<run-id>` (it reads `applications/$app/assessment/BASELINE.md`; `--junit` or `--trx` names a single fresh result file instead).
 A test that pins the old version's behavior and fails on the new one is a difference, not a test bug, and tests the pilot added after
 the baseline show as new failures (say so in the suite `note`). A person decides each, at a gate in the portal: fix the code, update the
 test, or approve it in a table headed "Approved differences", `| Test | Reason |`, in `BASELINE.md`. You never edit or approve.
 
 **Uplift: three more checks the pack makes by itself.** (1) *The baseline must be measured.* `BASELINE.md`'s numbers count only when a
 per-test result file (JUnit or `.trx` XML), a per-test JSON map (`{"<test id>": "PASS"}`) or a raw runner log with a summary line backs
-them, kept in `assessment/$app/baseline/` or named on a line of `BASELINE.md` that starts with `Recorded:` or `Machine-readable:`. A
+them, kept in `applications/$app/assessment/baseline/` or named on a line of `BASELINE.md` that starts with `Recorded:` or `Machine-readable:`. A
 table typed by hand, or a file of bare counts, is only PARTLY PROVEN. If the old version's results were never saved, run its suite again
 from a scratch copy of the source clone at the recorded commit and keep them now; never write them in by hand. (2) *Tests kept.* The pack
 walks the test files of the source clone and of the working copy and lists what was removed, added or changed: a removed file, or more
@@ -90,9 +90,9 @@ the pack lists it (add a characterization test at that site).
 Read any development generator or runner before you run it (some delete their own inputs or outputs). The inputs, the legacy outputs
 and `cases.json` are the development cases: never touch them.
 
-1. For each module with `golden/<module>/cases.json`, re-run the new side (its `new.command` names the script when one was
-   recorded) into a fresh scratch folder, then run `scripts/compare.py` on `golden/<module>/cases.json` with that folder as the
-   new side, writing `runs/<module>/<run-id>/EQUIVALENCE.json` (`compare.py --help` gives the exact arguments). The pack judges
+1. For each module with `applications/<app>/units/<module>/<unit>/verify/golden/cases.json`, re-run the new side (its `new.command` names the script when one was
+   recorded) into a fresh scratch folder, then run `scripts/compare.py` on `applications/<app>/units/<module>/<unit>/verify/golden/cases.json` with that folder as the
+   new side, writing `applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/EQUIVALENCE.json` (`compare.py --help` gives the exact arguments). The pack judges
    the cases files itself, so the report only feeds the portal.
 2. **Fresh-input check.** Invent inputs that development did not use, so that **at least 10 remain** after the ones the legacy
    refuses are left out. Rewrite: read `cases.json`, `BUSINESS_RULES.md` and the notes' deliberate deviations (an input that hits one
@@ -101,21 +101,21 @@ and `cases.json` are the development cases: never touch them.
    mention and add boundaries (zero, one either side of a threshold, the largest size), empty and huge values, unusual order.
    **Malformed records** (a field that breaks the input's own format: blanks or letters in a numeric field, a stray tab, a wrong
    length, a blank line) have no end: every round can invent new ones and the old system tolerates each in its own odd way. Read
-   `assessment/$app/INTENT.md` ("What must stay true"). Try malformed records only when it says behavior must match exactly,
+   `applications/$app/inputs/INTENT.md` ("What must stay true"). Try malformed records only when it says behavior must match exactly,
    quirks included, or when there is no `INTENT.md`; otherwise keep the fresh inputs to records that are valid for the input's format,
    and add one line to `leftOut` saying malformed records were not tried and why, so a person sees where the check stops.
 3. Run the legacy and the new code on each (uplift: the old and the new runtime, same driver and flags, never while the suite runs,
    the old side built from a scratch copy of the source clone, never inside it). If a runner only loops over the development cases,
    call its single-case script or copy it into your scratch folder. Save each fresh input and the legacy's real outputs
-   (records, reports, responses, not just a status line) under `golden/<module>/fresh/<id>/`, the new side's outputs in your
-   scratch folder, and list them in `golden/<module>/fresh-cases.json` (legacy paths relative to `golden/<module>/`, new paths
+   (records, reports, responses, not just a status line) under `applications/<app>/units/<module>/<unit>/verify/golden/fresh/<id>/`, the new side's outputs in your
+   scratch folder, and list them in `applications/<app>/units/<module>/<unit>/verify/golden/fresh-cases.json` (legacy paths relative to `applications/<app>/units/<module>/<unit>/verify/golden/`, new paths
    relative to the scratch folder; schema at the top of `compare.py`; `input` groups the outputs of one run and only the pack
    reads it):
    `{"cases": [{"id": "F01-out", "input": "F01", "title": "…", "legacy": "fresh/F01/out.txt", "new": "F01/out.txt", "mask": [...]}]}`.
    An input counts through a non-empty output that differs from every development output (status lines such as COMPLETED repeat by
    nature and do not count). Then run
-   `scripts/compare.py` on `golden/<module>/fresh-cases.json` with the scratch folder as the new side, writing
-   `runs/<module>/<run-id>/FRESH_EQUIVALENCE.json`.
+   `scripts/compare.py` on `applications/<app>/units/<module>/<unit>/verify/golden/fresh-cases.json` with the scratch folder as the new side, writing
+   `applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/FRESH_EQUIVALENCE.json`.
 4. Mask only what legitimately varies (one regex beats a list of byte ranges) and say why; text a runtime generates (an exception
    message) is not product output: print only its class or mask it. Any other difference is a finding: report it, never hand-edit an
    output. If a side legitimately writes no file, save an empty one so a person can approve the difference. If the legacy refuses an
@@ -127,7 +127,7 @@ and `cases.json` are the development cases: never touch them.
 
 The pack checks by itself that the source clone is untouched (its files against the commit the assessment recorded) and lists the
 brief's unticked §7 questions and exit criteria; a person decides those, so never tick one. Write
-`runs/<module>/<run-id>/test-runs.json` once per module, from what you did in steps 3 and 4 (paths and words only):
+`applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/test-runs.json` once per module, from what you did in steps 3 and 4 (paths and words only):
 
 ```json
 { "date": "YYYY-MM-DD",
@@ -135,23 +135,23 @@ brief's unticked §7 questions and exit criteria; a person decides those, so nev
   "leftOut": [ "F17: the legacy loader refused it (duplicate keys)" ],
   "suites": [ { "module": "<module>", "name": "unit tests", "command": "<the exact command>",
                 "junit": ["<the result folder in the target checkout: <module>/target/surefire-reports, or for an uplift <unit>/target/surefire-reports>"],
-                "log": ["runs/<module>/<run-id>/unit.test-output.txt"], "skippedReason": "", "note": "" } ],
+                "log": ["applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/unit.test-output.txt"], "skippedReason": "", "note": "" } ],
   "canaries": [ { "module": "<module>", "change": "<what you broke>",
-                 "junit": ["runs/<module>/<run-id>/canary"], "log": [] } ] }
+                 "junit": ["applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/canary"], "log": [] } ] }
 ```
 
 `module` is the module or service folder name in the target repository (an uplift's suites and canaries may name a unit). Give `junit`
 or `log` for every suite and canary: a file the pack cannot parse is no evidence. `legacy.ran` is `false`, with `why`, when the legacy
 cannot run here. `note` is for anything a reader needs, cause first, under 250 characters. Then run
-`python3 scripts/proof_pack.py $app $module --source <source clone> --assessment assessment/$app --target <target checkout> --out assessment/$app --runs runs/<module>/<run-id>` (add `--uplift` for an uplift; no `$module`
-for all). It writes `assessment/$app/VERIFICATION.md` and `VERIFICATION.json`; exit 1 only means "not PROVEN". Show the user the
+`python3 scripts/proof_pack.py $app $module --source <source clone> --assessment applications/$app/assessment --target <target checkout> --out applications/$app/assessment --runs applications/<app>/units/<module>/<unit>/verify/runs/<run-id>` (add `--uplift` for an uplift; no `$module`
+for all). It writes `applications/$app/generated/VERIFICATION.md` and `VERIFICATION.json`; exit 1 only means "not PROVEN". Show the user the
 verdict per module, the reasons word for word, for a rewrite the P0 rule table, any folder listed as test tooling (not judged),
 **what this does not prove**, and the blank sign-off block. Do not soften a reason or change a verdict; if you think
 a rule is wrong, say so and leave the file as it is.
 
 ## Finish
 
-Open (or update) the document repo pull request with everything this command wrote under `assessment/$app/`, `golden/`
+Open (or update) the document repo pull request with everything this command wrote under `applications/$app/assessment/`, `golden/`
 and `runs/` (never the scratch folder); the portal shows the
 verification once it is merged. Then name the next step. **PARTLY PROVEN or NOT PROVEN:** turn each reason, in order, into a
 command. A failure caused by this machine: run the suite where the tool works (a terminal outside the sandbox, or CI), then run this
@@ -162,4 +162,4 @@ test or difference: `/kintsugi:modernize-transform $app <module>`, or for an upl
 (also for a baseline typed by hand, which is measured again in its Step 4, and for a silent delta no test names, which gets a
 characterization test there). Removed or changed test files are a person's review, never yours to undo.
 **PROVEN:** it is evidence, not approval. Tell the user to request the **verification sign-off** gate in the portal: a named person
-signs it there (the sign-off block in `assessment/$app/VERIFICATION.md` records it); then the brief's next module, or the `understand` stage on the next items.
+signs it there (the sign-off block in `applications/$app/generated/VERIFICATION.md` records it); then the brief's next module, or the `understand` stage on the next items.

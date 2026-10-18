@@ -6,18 +6,19 @@ checked traceability fragment, meta.json (what marks the item understood) and it
         --commit SHA [--run ID] [--repo ID] [--existing DIR]
 
 --inputs is the run's inputs root (document-repository layout): the specifications
-knowledge/as-is/<app>/<module>/<item>.md, the fragments the specification jobs returned
-(knowledge/as-is/<app>/items/<module>/<item>/trace.json) and the item's rules.json and
-findings.json under assessment/<app>/items/. --commit is the source commit, --run the run id,
---existing the document repository's units/<app>/ folder (a work item already there is left as
-it is, so a person's progress is never overwritten). Writes under --out:
+applications/<app>/units/<module>/<unit>/as-is.md, the fragments the specification jobs returned
+(applications/<app>/units/<module>/<unit>/trace.json) and the item's rules.json and
+findings.json in the same unit folder. --commit is the source commit, --run the run id,
+--existing the document repository's applications/<app>/units/ folder (a work item already there
+is left as it is, so a person's progress is never overwritten). Writes under --out:
 
-- knowledge/as-is/<app>/items/<module>/<item>/trace.json — the fragment with only the rule and
-  finding ids of that item and dependencies that name a catalog item, a data store or a system;
-- knowledge/as-is/<app>/items/<module>/<item>/meta.json — {item, digest, commit, runId, ...}:
+- applications/<app>/units/<module>/<unit>/trace.json — the fragment with only the rule and
+  finding ids of that item and dependencies that name a catalog item, a data store or a system,
+  carrying the requirements, pull requests and tests the specification recorded;
+- applications/<app>/units/<module>/<unit>/meta.json — {item, digest, commit, runId, ...}:
   the item is `understood` once this file is on the default branch, `stale` when the catalog's
   digest moves away from it;
-- units/<app>/<module>/<item>.md — the work item.
+- applications/<app>/units/<module>/<unit>/unit.md — the work item.
 
 An item without its specification gets none of these (it shows as failed or not analysed).
 Standard library only.
@@ -30,6 +31,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import paths  # noqa: E402
 import write_work_items as wwi  # noqa: E402
 
 COMMIT = re.compile(r'^[0-9a-f]{40}([0-9a-f]{24})?$')
@@ -49,15 +51,14 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
     outputs, texts, done, missing = {}, {}, [], []
     for item in chosen:
         item_id = item['id']
-        spec = f'knowledge/as-is/{app}/{item_id}.md'
+        spec = paths.knowledge_as_is_unit_path(app, item_id)
         if not os.path.isfile(os.path.join(inputs, *spec.split('/'))):
             missing.append(item_id)
             continue
-        base = f'knowledge/as-is/{app}/items/{item_id}'
-        raw = cc.read_optional_json(os.path.join(inputs, *base.split('/'), 'trace.json'))
+        raw = cc.read_optional_json(os.path.join(inputs, *paths.unit_trace_path(app, *item_id.split('/')).split('/')))
         trace = raw if isinstance(raw, dict) else {}
-        rules = set(ids_of(cc.read_optional_json(os.path.join(inputs, 'assessment', app, 'items', *item_id.split('/'), 'rules.json')), 'rules'))
-        findings = set(ids_of(cc.read_optional_json(os.path.join(inputs, 'assessment', app, 'items', *item_id.split('/'), 'findings.json')), 'findings'))
+        rules = set(ids_of(cc.read_optional_json(os.path.join(inputs, *paths.unit_rules_path(app, *item_id.split('/')).split('/'))), 'rules'))
+        findings = set(ids_of(cc.read_optional_json(os.path.join(inputs, *paths.unit_findings_path(app, *item_id.split('/')).split('/'))), 'findings'))
         dependencies = []
         for dep in trace.get('dependencies') or []:
             if not isinstance(dep, dict) or not isinstance(dep.get('target'), str):
@@ -74,11 +75,14 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
             'dependencies': dependencies,
             'dataObjects': strings(trace.get('dataObjects')),
             'externalSystems': strings(trace.get('externalSystems')),
+            'requirements': strings(trace.get('requirements')),
+            'pullRequests': strings(trace.get('pullRequests')),
+            'tests': strings(trace.get('tests')),
             'files': sorted({rel for rel in (cc.norm_path(value) for value in strings(trace.get('files'))) if rel}),
             'openQuestions': trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) and not isinstance(trace.get('openQuestions'), bool) else 0,
         }
-        outputs[f'{base}/trace.json'] = checked
-        outputs[f'{base}/meta.json'] = {
+        outputs[paths.unit_trace_path(app, *item_id.split('/'))] = checked
+        outputs[paths.unit_meta_path(app, *item_id.split('/'))] = {
             'app': app,
             'item': item_id,
             'generatedBy': 'finish_items.py',
@@ -90,7 +94,7 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
             'findings': len(checked['findings']),
         }
         module, name = item_id.split('/', 1)
-        if not (existing and os.path.exists(os.path.join(existing, module, f'{name}.md'))):
+        if not (existing and os.path.exists(os.path.join(existing, module, name, 'unit.md'))):
             unit = {
                 'id': f'{app}/{item_id}',
                 'module': module,
@@ -104,7 +108,7 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
                 'findings': checked['findings'],
                 'entryPoint': bool(item.get('entryPoints')),
             }
-            texts[f'units/{app}/{item_id}.md'] = '\n'.join(wwi.frontmatter(app, unit, repo)) + '\n\n' + wwi.body(app, unit) + '\n'
+            texts[paths.unit_key_path(app, item_id, 'unit.md')] = '\n'.join(wwi.frontmatter(app, unit, repo)) + '\n\n' + wwi.body(app, unit) + '\n'
         done.append(item_id)
     return outputs, texts, done, missing
 

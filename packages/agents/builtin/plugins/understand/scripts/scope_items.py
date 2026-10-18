@@ -4,17 +4,20 @@ brief and its rule-extraction shard.
 
     python3 scope_items.py <app> --catalog FILE --items ID,ID,... --out DIR [--topology FILE]
 
---catalog is assessment/<app>/catalog.json; --items the selected item ids (active items only);
---topology the skeleton topology.json the assess stage published (optional: without it the
-fragments hold no leaves or edges). --out is the document-repository root the files are written under:
+--catalog is applications/<app>/assessment/catalog.json; --items the selected item ids (active
+items only); --topology the skeleton topology.json the assess stage published (optional: without it
+the fragments hold no leaves or edges). --out is the document-repository root the files are written
+under:
 
-- assessment/<app>/items/<module>/<item>/topology.json — the item's leaves and their outbound edges,
-  each edge target resolved to the catalog item that owns it (`targetItem`) or kept as a data store.
-- assessment/<app>/understand/briefs/<module>/<item>.json — what the specification job of the item
-  starts from: name, kind, files, size, entry points, the items it depends on and that use it, the
-  data stores it reads and writes, and where its rules and findings will be.
-- assessment/<app>/understand/shards.json — one extract-rules shard per item ({name, domain, files, loc}).
-- assessment/<app>/understand/scope.json — the items and their files.
+- applications/<app>/units/<module>/<unit>/topology.json — the item's leaves and their outbound
+  edges, each edge target resolved to the catalog item that owns it (`targetItem`) or kept as a data
+  store.
+- applications/<app>/assessment/understand/briefs/<module>/<unit>.json — what the specification job
+  of the item starts from: name, kind, files, size, entry points, the items it depends on and that
+  use it, the data stores it reads and writes, and where its rules and findings will be.
+- applications/<app>/assessment/understand/shards.json — one extract-rules shard per item
+  ({name, domain, files, loc}).
+- applications/<app>/assessment/understand/scope.json — the items and their files.
 
 No code is read. Standard library only.
 """
@@ -25,6 +28,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import paths  # noqa: E402
 import units_from_topology as uft  # noqa: E402
 
 MAX_EDGES = 2000
@@ -80,7 +84,7 @@ def build(app, items_by_id, chosen, topology):
             'observations': [],
             'flows': [],
         }
-        base = f'assessment/{app}/items/{item["id"]}'
+        base = paths.unit_key_dir(app, item['id'])
         brief = {
             'app': app,
             'id': f'{app}/{item["id"]}',
@@ -101,11 +105,11 @@ def build(app, items_by_id, chosen, topology):
             'findings': f'{base}/findings.json',
         }
         outputs[f'{base}/topology.json'] = fragment
-        outputs[f'assessment/{app}/understand/briefs/{item["id"]}.json'] = brief
+        outputs[paths.assessment_brief_path(app, item['id'])] = brief
         shards.append({'name': item['id'].replace('/', '.'), 'domain': item['id'].split('/')[0], 'files': item['files'], 'loc': brief['loc']})
         files.update(item['files'])
-    outputs[f'assessment/{app}/understand/shards.json'] = shards
-    outputs[f'assessment/{app}/understand/scope.json'] = {'app': app, 'items': [item['id'] for item in chosen], 'files': sorted(files)}
+    outputs[paths.understand_shards_path(app)] = shards
+    outputs[paths.understand_scope_path(app)] = {'app': app, 'items': [item['id'] for item in chosen], 'files': sorted(files)}
     return outputs
 
 

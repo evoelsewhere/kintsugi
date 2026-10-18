@@ -17,7 +17,7 @@ const MATRIX = {
       kind: 'program',
       loc: 420,
       entryPoint: true,
-      spec: 'knowledge/as-is/billing/core/invoice.md',
+      spec: 'applications/billing/units/core/invoice/as-is.md',
       files: ['src/INVOICE.cbl', '../etc/passwd', 'src/./FEES.cpy'],
       dependsOn: ['billing/data/ledger'],
       usedBy: [],
@@ -27,6 +27,9 @@ const MATRIX = {
       findings: [],
       dataObjects: ['INVOICE-REC'],
       entryPoints: ['src/INVOICE.cbl:12'],
+      requirements: ['REQ-INV-01'],
+      pullRequests: ['PR-123'],
+      tests: ['tests/invoice.test'],
       openQuestions: 2,
     },
     { id: 'billing/data/ledger', module: 'data', unit: 'ledger', title: 'Ledger', kind: 'program', loc: 80, entryPoint: false, spec: null, files: 'not a list', dependsOn: [], usedBy: ['billing/core/invoice'] },
@@ -36,6 +39,9 @@ const MATRIX = {
   rules: { 'RULE-001': ['billing/core/invoice'], 'RULE-002': ['billing/core/invoice'] },
   findings: {},
   files: { 'src/INVOICE.cbl': ['billing/core/invoice'] },
+  requirements: { 'REQ-INV-01': ['billing/core/invoice'] },
+  pullRequests: { 'PR-123': ['billing/core/invoice'] },
+  tests: { 'tests/invoice.test': ['billing/core/invoice'] },
   dataStores: { 'ds:ACCOUNT': ['billing/core/invoice'] },
   unmappedRules: ['RULE-003'],
   unmappedFindings: [],
@@ -49,15 +55,18 @@ describe('traceability', () => {
     expect(matrix).not.toBeNull()
     expect(matrix?.inputs).toEqual({ businessRules: true, securityFindings: false })
     expect(matrix?.units.map(unit => [unit.id, unit.key, unit.spec, unit.entryPoint, unit.loc])).toEqual([
-      ['billing/core/invoice', 'core/invoice', 'knowledge/as-is/billing/core/invoice.md', true, 420],
+      ['billing/core/invoice', 'core/invoice', 'applications/billing/units/core/invoice/as-is.md', true, 420],
       ['billing/data/ledger', 'data/ledger', null, false, 80],
     ])
     const [invoice, ledger] = matrix?.units ?? []
     expect(invoice?.files).toEqual(['src/INVOICE.cbl', 'src/FEES.cpy'])
     expect(invoice?.dataStores).toEqual([{ id: 'ds:ACCOUNT', access: ['read', 'write'] }])
-    expect(invoice).toMatchObject({ rules: ['RULE-001', 'RULE-002'], externalSystems: ['Bank gateway'], openQuestions: 2 })
-    expect(ledger).toMatchObject({ files: [], usedBy: ['billing/core/invoice'], rules: [], openQuestions: 0 })
+    expect(invoice).toMatchObject({ rules: ['RULE-001', 'RULE-002'], externalSystems: ['Bank gateway'], requirements: ['REQ-INV-01'], pullRequests: ['PR-123'], tests: ['tests/invoice.test'], openQuestions: 2 })
+    expect(ledger).toMatchObject({ files: [], usedBy: ['billing/core/invoice'], rules: [], requirements: [], pullRequests: [], tests: [], openQuestions: 0 })
     expect(matrix?.rules['RULE-001']).toEqual(['billing/core/invoice'])
+    expect(matrix?.requirements).toEqual({ 'REQ-INV-01': ['billing/core/invoice'] })
+    expect(matrix?.pullRequests).toEqual({ 'PR-123': ['billing/core/invoice'] })
+    expect(matrix?.tests).toEqual({ 'tests/invoice.test': ['billing/core/invoice'] })
     expect(matrix?.unmappedRules).toEqual(['RULE-003'])
     expect(matrix?.cycles).toEqual([['billing/core/invoice', 'billing/data/ledger']])
     expect(matrix?.notes).toEqual({ 'unknown rule ids': 2, 'files not in the source': 1 })
@@ -87,7 +96,7 @@ dependsOn: ["billing/data/ledger"]
 source:
   - {repo: "legacy", paths: ["src/INVOICE.cbl"]}
 links:
-  asIs: "knowledge/as-is/billing/core/invoice.md"
+  asIs: "applications/billing/units/core/invoice/as-is.md"
   businessRules: ["RULE-001", "RULE-002"]
 ---
 
@@ -106,7 +115,7 @@ describe('unit files', () => {
       stage: 'understand',
       complexity: 'low',
       dependsOn: ['billing/data/ledger'],
-      links: { asIs: 'knowledge/as-is/billing/core/invoice.md', businessRules: ['RULE-001', 'RULE-002'] },
+      links: { asIs: 'applications/billing/units/core/invoice/as-is.md', businessRules: ['RULE-001', 'RULE-002'] },
     })
   })
 

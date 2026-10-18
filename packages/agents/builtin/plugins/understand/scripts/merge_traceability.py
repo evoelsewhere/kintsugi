@@ -5,11 +5,12 @@
         [--assessment DIR] [--source DIR] [--source-repo ID] [--source-commit SHA]
 
 --units is units.json (units_from_topology.py); --trace the folder of the fragments the
-specification jobs returned (<module>/<unit>.json, one per unit); --specs the knowledge/as-is/<app>/
-folder holding the specifications (<module>/<unit>.md); --assessment the assessment/<app>/ folder
-(BUSINESS_RULES.md and SECURITY_FINDINGS.md name the valid RULE and SEC ids when present); --source
+specification jobs returned (<module>/<unit>.json, one per unit); --specs the folder holding the
+specifications (<module>/<unit>.md) that land at applications/<app>/units/<module>/<unit>/as-is.md;
+--assessment the folder holding the application's BUSINESS_RULES.md and SECURITY_FINDINGS.md
+(applications/<app>/generated/) when they name the valid RULE and SEC ids; --source
 the read-only source checkout (a cited file that does not exist there is left out).
-Writes traceability.json and traceability.md to --out.
+Writes traceability.json and traceability.md to --out (the application's generated/ folder).
 
 What the map says (units, files, dependencies between units, data-store access, candidate rules and
 findings by file) is the base; a fragment adds what its job confirmed in the code. Every value is
@@ -24,13 +25,19 @@ import os
 import re
 import sys
 
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths  # noqa: E402
+
 MAX_JSON_BYTES = 8_000_000
 MAX_TEXT_BYTES = 5_000_000
 MAX_LIST = 200
-# RULE-NNN, or item-namespaced RULE-<module>.<item>-NN (ADR-0033); the same for SEC.
-RULE_ID = re.compile(r'^RULE-(\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,})$')
+# RULE-NNN estate ids, the legacy RULE-<module>.<unit>-NN item ids and the citation-derived
+# RULE-<module>.<unit>-<hash> ones (ADR-0038); the same shapes for SEC.
+RULE_SRC = r'RULE-(?:\d{2,}|[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})?-(?:\d{2,}|[0-9a-f]{8}(?:-[a-z0-9][a-z0-9-]{0,31})?))'
+RULE_ID = re.compile(rf'^{RULE_SRC}$')
 FINDING_ID = re.compile(r'^SEC-(\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,})$')
-RULE_HEADING = re.compile(r'^### (RULE-(?:\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,})): ')
+RULE_HEADING = re.compile(rf'^### ({RULE_SRC}): ')
 FINDING_ANY = re.compile(r'\bSEC-(?:\d{3}|[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9-]{0,62}-\d{2,})\b')
 
 
@@ -171,11 +178,14 @@ def merge(app, units_doc, trace_dir, specs_dir, assessment, source=None):
             'findings': set(strings(unit.get('findings'))),
             'dataObjects': set(),
             'entryPoints': set(),
+            'requirements': set(),
+            'pullRequests': set(),
+            'tests': set(),
             'openQuestions': 0,
         }
         spec = os.path.join(specs_dir, *unit['key'].split('/')) + '.md'
         if os.path.isfile(spec) and not os.path.islink(spec):
-            entry['spec'] = f'knowledge/as-is/{app}/{unit["key"]}.md'
+            entry['spec'] = paths.knowledge_as_is_unit_path(app, unit['key'])
         fragment_path = os.path.join(trace_dir, *unit['key'].split('/')) + '.json'
         fragment = None
         if os.path.isfile(fragment_path):
@@ -202,6 +212,9 @@ def merge(app, units_doc, trace_dir, specs_dir, assessment, source=None):
             entry['dataObjects'].update(one_line(value, 80) for value in strings(fragment.get('dataObjects')))
             entry['externalSystems'].update(one_line(value, 80) for value in strings(fragment.get('externalSystems')))
             entry['entryPoints'].update(one_line(value, 160) for value in strings(fragment.get('entryPoints')))
+            entry['requirements'].update(strings(fragment.get('requirements')))
+            entry['pullRequests'].update(strings(fragment.get('pullRequests')))
+            entry['tests'].update(strings(fragment.get('tests')))
             questions = fragment.get('openQuestions')
             entry['openQuestions'] = questions if isinstance(questions, int) and not isinstance(questions, bool) and questions >= 0 else 0
             for dep in fragment.get('dependencies', []) if isinstance(fragment.get('dependencies'), list) else []:
@@ -268,6 +281,9 @@ def merge(app, units_doc, trace_dir, specs_dir, assessment, source=None):
             'findings': sorted(entry['findings']),
             'dataObjects': sorted(entry['dataObjects']),
             'entryPoints': sorted(entry['entryPoints']),
+            'requirements': sorted(entry['requirements']),
+            'pullRequests': sorted(entry['pullRequests']),
+            'tests': sorted(entry['tests']),
             'openQuestions': entry['openQuestions'],
         })
 
@@ -288,6 +304,9 @@ def merge(app, units_doc, trace_dir, specs_dir, assessment, source=None):
         'rules': rules,
         'findings': findings,
         'files': index('files'),
+        'requirements': index('requirements'),
+        'pullRequests': index('pullRequests'),
+        'tests': index('tests'),
         'dataStores': {sid: sorted(u['id'] for u in result_units if any(s['id'] == sid for s in u['dataStores'])) for sid in sorted(stores)},
         'unmappedRules': sorted((rules_known or set()) - set(rules)),
         'unmappedFindings': sorted((findings_known or set()) - set(findings)),
@@ -324,7 +343,7 @@ def render(matrix, repo, commit):
            '| Unit | Kind | Specification | Files | Depends on | Data stores | Rules | Findings |',
            '|---|---|---|---|---|---|---|---|']
     for unit in units:
-        spec = f'[{short(unit["id"])}]({short(unit["id"])}.md)' if unit['spec'] else 'not written'
+        spec = f'[{short(unit["id"])}]({os.path.relpath(unit["spec"], paths.generated_dir(app)).replace(os.sep, "/")})' if unit['spec'] else 'not written'
         stores = ids(f'{s["id"]} ({"/".join(s["access"])})' for s in unit['dataStores'])
         out.append(f'| {cell(short(unit["id"]))} | {cell(unit["kind"])} | {spec} | {len(unit["files"])} | {cell(ids(map(short, unit["dependsOn"])))} | '
                    f'{cell(stores)} | {cell(ids(unit["rules"]))} | {cell(ids(unit["findings"]))} |')

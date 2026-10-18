@@ -6,8 +6,8 @@ metadata:
   audience: member
   upstream: commands/modernize-preflight.md
   agents: []
-  reads: [kintsugi.yaml, assessment/<app>/INTENT.md, assessment/<app>/PREFLIGHT.md]
-  writes: [assessment/<app>/PREFLIGHT.md]
+  reads: [kintsugi.yaml, applications/<app>/inputs/INTENT.md, applications/<app>/assessment/PREFLIGHT.md]
+  writes: [applications/<app>/assessment/PREFLIGHT.md]
   gates: [a person who knows the system answers the five Check 0 questions in the portal]
 ---
 
@@ -19,7 +19,7 @@ isn't in the tree.
 
 This command runs in the member's harness through Kintsugi's member plugin. The five Check 0 questions are not
 asked here: the portal asks them as a task for a person who knows the system, and the worker writes the answers to
-`assessment/$app/PREFLIGHT.md`. This command does the checks that need a shell and a build toolchain, and the
+`applications/$app/assessment/PREFLIGHT.md`. This command does the checks that need a shell and a build toolchain, and the
 source-completeness and scope-boundary checks.
 
 Run every check even when an early one fails — the point is one complete
@@ -35,7 +35,7 @@ repository. Nothing is ever copied, linked or cloned by this command.
 - Locate the local clone of the legacy repository (from the task pack, or ask the member where it is). If it is
   missing, say how to clone it and stop the checks that need it, but still run the rest.
 - Say in one line which repository and which commit you checked (`git -C <clone> rev-parse HEAD`), and whether it
-  matches the commit recorded in `assessment/$app/INTENT.md`. A mismatch is a finding, not a reason to check out
+  matches the commit recorded in `applications/$app/inputs/INTENT.md`. A mismatch is a finding, not a reason to check out
   another commit yourself.
 - If `$target_stack` starts with `--`, it is a flag, not a stack.
 
@@ -49,7 +49,7 @@ and accepts "don't know" for any of them.
 
 **The portal asks them as a task, never in chat text.** Each question has its own options, one of them "Don't
 know", and the person can type an answer instead. Do not ask them in this session and do not answer them yourself.
-Read the **Answers** section of `assessment/$app/PREFLIGHT.md`; if the task is still open, run the other checks —
+Read the **Answers** section of `applications/$app/assessment/PREFLIGHT.md`; if the task is still open, run the other checks —
 none of them needs the answers — and say the task is pending.
 
 1. **Scope** — Is this code the complete system, or one slice of a larger
@@ -128,7 +128,7 @@ flag, a dependency the standard feed cannot resolve). Level 2 being *impossible*
 (no build system, a mainframe stack with no local runtime) is a fact, not a
 failure: equivalence then falls back to recorded traces.
 
-If `$target_stack` was given (else take the target from `assessment/$app/INTENT.md`), prove it with a throwaway project, not a version
+If `$target_stack` was given (else take the target from `applications/$app/inputs/INTENT.md`), prove it with a throwaway project, not a version
 string: in a scratch directory outside the source clone and the target repository (`mktemp -d`), create the
 smallest project the stack allows, restore, build, run one passing test with its
 real package manager and test framework, then delete it. A target that cannot
@@ -214,7 +214,7 @@ or a sandbox that blocks shell writes.
 
 ## Report
 
-Write `assessment/$app/PREFLIGHT.md` in your checkout of the document repository, on your own branch, and open a
+Write `applications/$app/assessment/PREFLIGHT.md` in your checkout of the document repository, on your own branch, and open a
 pull request to the document repository (commit with an `Assisted-by: <harness>` trailer). Never push to its
 default branch: Kintsugi indexes the file when the pull request merges. **Lead with the Answers section, exactly as
 the portal recorded it, and the Check 6 finding** — downstream stages (`brief` above all) read those two. Record

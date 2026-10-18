@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Phase E of /kintsugi:modernize-reimagine: scaffold every approved service in parallel — no cap; the runtime queues agents against its concurrency limit',
   whenToUse:
-    'Invoked by /kintsugi:modernize-reimagine (Kintsugi member plugin) AFTER the architecture approval gate is approved in the portal (HITL checkpoint #2). Requires args {app, services: [{name, responsibilities}], sourceDir, targetDir, workspaceDir?} — sourceDir is the read-only local clone of the source repository (never written), targetDir the working copy of the target repository on the branch of the member, workspaceDir the document repository checkout holding assessment/<app>/ (default: the session working directory). Scaffolding agents write only under <targetDir>/<service>/ — disjoint directories, so no worktree isolation is needed.',
+    'Invoked by /kintsugi:modernize-reimagine (Kintsugi member plugin) AFTER the architecture approval gate is approved in the portal (HITL checkpoint #2). Requires args {app, services: [{name, responsibilities}], sourceDir, targetDir, workspaceDir?} — sourceDir is the read-only local clone of the source repository (never written), targetDir the working copy of the target repository on the branch of the member, workspaceDir the document repository checkout holding applications/<app>/assessment/ (default: the session working directory). Scaffolding agents write only under <targetDir>/<service>/ — disjoint directories, so no worktree isolation is needed.',
   phases: [{ title: 'Scaffold', detail: 'one agent per approved service' }],
 }
 
@@ -31,7 +31,7 @@ if (!SAFE_NAME.test(app)) {
 // prompt-breakout and shell-expansion characters. sourceDir is the read-only
 // clone of the source repository (the member hooks of Kintsugi refuse writes to
 // it); targetDir is the working copy of the target repository, the only place
-// code is written; workspaceDir holds assessment/<app>/.
+// code is written; workspaceDir holds applications/<app>/assessment/.
 const safeDir = (v, k) => {
   if (typeof v !== 'string' || !v.trim() || v.length > 400 || v !== v.trim() || /[\x00-\x1f\x7f`"'$]/.test(v) || v.startsWith('-')) {
     throw new Error(`Unsafe ${k} ${JSON.stringify(v)} — must be a plain path to a local checkout, with no quote, backtick, dollar sign or control character`)
@@ -49,7 +49,7 @@ const workspaceDir = ARGS.workspaceDir == null || ARGS.workspaceDir === '' ? '' 
     throw new Error(`targetDir ${JSON.stringify(targetDir)} overlaps sourceDir ${JSON.stringify(sourceDir)} — the source clone is read-only; scaffold into a separate working copy of the target repository`)
   }
 }
-const assessmentDir = `${workspaceDir ? `${workspaceDir}/` : ''}assessment/${app}`
+const assessmentDir = `${workspaceDir ? `${workspaceDir}/` : ''}applications/${app}/assessment`
 const workspaceNote = workspaceDir ? `the document repository checkout at ${workspaceDir}` : 'the document repository checkout (the session working directory)'
 for (const svc of services) {
   if (!svc || !SAFE_NAME.test(svc.name || '')) {

@@ -7,8 +7,8 @@ metadata:
   upstream: commands/modernize-assess.md
   agents: [legacy-analyst, security-auditor]
   skills: [mermaid-diagrams]
-  reads: [standards/, kintsugi.yaml, assessment/<app>/INTENT.md, assessment/<app>/telemetry/, assessment/<app>/graph/, assessment/<app>/catalog.json, knowledge/as-is/<app>/units.json, units/<app>/]
-  writes: [assessment/<app>/inventory.json, assessment/<app>/tools/extract_topology.py, assessment/<app>/topology.json, assessment/<app>/catalog.json, assessment/<app>/ASSESSMENT.md, assessment/<app>/ARCHITECTURE.mmd, assessment/portfolio.md, assessment/portfolio.json]
+  reads: [standards/, kintsugi.yaml, applications/<app>/inputs/INTENT.md, applications/<app>/inputs/telemetry/, applications/<app>/inputs/graph/, applications/<app>/assessment/catalog.json, applications/<app>/assessment/units.json, applications/<app>/units/]
+  writes: [applications/<app>/assessment/inventory.json, applications/<app>/assessment/tools/extract_topology.py, applications/<app>/assessment/topology.json, applications/<app>/assessment/catalog.json, applications/<app>/assessment/ASSESSMENT.md, applications/<app>/assessment/ARCHITECTURE.mmd, portfolio/portfolio.md, portfolio/portfolio.json]
   flow:
     - script: inventory
     - parallel:
@@ -35,13 +35,13 @@ metadata:
 **This stage runs as Kintsugi runtime jobs**, started by the orchestrator. Single-application mode: a script step
 `scripts/inventory.py` (size, complexity, per-file hashes and the relative index), three parallel jobs (a
 **legacy-analyst** structure job, a **legacy-analyst** debt job, a **security-auditor** scan job), the topology
-extraction (a **legacy-analyst** job writes `assessment/$app/tools/extract_topology.py`, a script step runs it),
+extraction (a **legacy-analyst** job writes `applications/$app/assessment/tools/extract_topology.py`, a script step runs it),
 the **item catalog** (`scripts/catalog_from_topology.py`, a **legacy-analyst** curation job,
 `scripts/apply_catalog_edits.py`, `scripts/reconcile_catalog.py`), then a **legacy-analyst** synthesis job that
-writes `assessment/$app/ASSESSMENT.md` and `assessment/$app/ARCHITECTURE.mmd`. Portfolio
+writes `applications/$app/assessment/ASSESSMENT.md` and `applications/$app/assessment/ARCHITECTURE.mmd`. Portfolio
 mode: per application, the `scripts/inventory.py` script step and one **legacy-analyst** survey job (workflow
-`workflows/portfolio-assess.js`), then a synthesis job that writes `assessment/portfolio.md` and
-`assessment/portfolio.json`. Every job reads the application's legacy repository read-only at a fixed commit
+`workflows/portfolio-assess.js`), then a synthesis job that writes `portfolio/portfolio.md` and
+`portfolio/portfolio.json`. Every job reads the application's legacy repository read-only at a fixed commit
 and writes only through `write`; the worker commits the outputs to the document repository as
 `kintsugi-bot`, and the portal shows them.
 
@@ -84,10 +84,10 @@ person-months, a date or a duration.
 
 A **legacy-analyst** synthesis job writes, from the workflow's returned rows:
 
-- `assessment/portfolio.json`: the rows as returned (one object per application, plus `unmeasured` and
+- `portfolio/portfolio.json`: the rows as returned (one object per application, plus `unmeasured` and
   `complexityIndexFormula`), the legacy repository and commit each row was measured at, and the date. The
   portal's portfolio view reads this file.
-- `assessment/portfolio.md`: one row per application, columns **Application · Lang · KSLOC · Files ·
+- `portfolio/portfolio.md`: one row per application, columns **Application · Lang · KSLOC · Files ·
   Complexity per KSLOC · Most complex file · Dep Freshness · Doc Coverage % · Complexity index · Risk**, the
   unmeasured applications marked as such, and a 2–3 sentence recommendation of which application goes first and
   why.
@@ -103,7 +103,7 @@ budget meeting.
 
 ## Step 1 — Inventory
 
-Script step `scripts/inventory.py $app --source <source checkout> --source-repo <the application's repository> --source-commit <the commit the job read> --out assessment/$app` writes `assessment/$app/inventory.json`: SLOC and
+Script step `scripts/inventory.py $app --source <source checkout> --source-repo <the application's repository> --source-commit <the commit the job read> --out applications/$app/assessment` writes `applications/$app/assessment/inventory.json`: SLOC and
 file count per language, the per-file complexity (decision keywords counted the same way for every
 application: `IF`/`EVALUATE`/`PERFORM` for COBOL, `if`/`for`/`while`/`case`/`catch` for C-family, and the
 language's equivalents elsewhere), the 25 most complex files, and the index `2.94 × KSLOC^1.10`. Use the index
@@ -145,11 +145,11 @@ The orchestrator waits for all three and hands their outputs to the next steps.
 The catalog (ADR-0033) is the menu a person later picks from: the `understand` stage runs on a selection of its
 items. It is built without parsers, from a topology the model-written extraction script produces:
 
-1. **legacy-analyst** writes `assessment/$app/tools/extract_topology.py`, a standard-library script that reads only
+1. **legacy-analyst** writes `applications/$app/assessment/tools/extract_topology.py`, a standard-library script that reads only
    the source checkout and writes `topology.json` (modules, data stores, edges, entry points; the schema of the
    `understand` stage), starting from the structure job's domains and any dependency export under
-   `assessment/$app/graph/`. A script step runs it in the standard script environment; when it fails, the job
-   gets the error once to fix it. The skeleton `assessment/$app/topology.json` (no descriptions) is committed
+   `applications/$app/assessment/graph/`. A script step runs it in the standard script environment; when it fails, the job
+   gets the error once to fix it. The skeleton `applications/$app/assessment/topology.json` (no descriptions) is committed
    with the script.
 2. Script step `scripts/catalog_from_topology.py` proposes the catalog: a module per domain, an item per topology
    leaf (data stores never are; small leaves of one directory grouped), every file of `inventory.json` in exactly
@@ -161,12 +161,12 @@ items. It is built without parsers, from a topology the model-written extraction
    overlaps an old one by half of their files (Jaccard) keeps its id, a renamed item keeps its old names as
    aliases, a split keeps the id on its largest piece, and an old item that matches nothing stays as `retired`.
    Without a previous catalog it keeps the ids of the units the `understand` stage proposed earlier
-   (`knowledge/as-is/$app/units.json`, `units/$app/`). It writes `assessment/$app/catalog.json`.
+   (`applications/$app/assessment/units.json`, `applications/$app/units/`). It writes `applications/$app/assessment/catalog.json`.
 
 ## Step 4 — Production runtime overlay (optional)
 
 Runtime jobs have no network and no MCP servers, so telemetry reaches this stage only as exports a person
-supplied (APM exports, batch logs) in the document repository under `assessment/$app/telemetry/`, attached
+supplied (APM exports, batch logs) in the document repository under `applications/$app/assessment/telemetry/`, attached
 through the portal. If they exist, the synthesis job gathers p50/p95/p99 for the key jobs or routes, tags each
 domain with its wall-clock cost and p99/p50 variance, and calls out the highest-variance domain as
 the operational risk. Include a small Runtime Profile table. If none exists, say
@@ -196,7 +196,7 @@ credential values never appear in it. If credentials were found:
    finding (Technical Debt quotes hardcoded config too). Security Findings
    points to "Credential inventory in the restricted portal record (not committed; not for sharing)".
 
-Write `assessment/$app/ASSESSMENT.md` with: **Executive Summary** (3–4 sentences:
+Write `applications/$app/assessment/ASSESSMENT.md` with: **Executive Summary** (3–4 sentences:
 what it is, how big, how risky, the headline recommendation) · **System
 Inventory** (from `inventory.json`, saying which method measured it, and the legacy repository and commit
 read) · **Architecture at a Glance** (domain table, refer to the diagram) ·
@@ -214,13 +214,13 @@ and say what the analysis is still good for. For Rehost, `map`, `harden` and the
 build check show what the move must carry along; for Replace, `extract-rules` turns
 what the application does into the acceptance criteria a replacement is judged against.
 
-Also write `assessment/$app/ARCHITECTURE.mmd`, the domain diagram from the
+Also write `applications/$app/assessment/ARCHITECTURE.mmd`, the domain diagram from the
 structure job: one `flowchart TB` per the `mermaid-diagrams` skill, without a
 Markdown fence, within its size limits (collapse or split with an index diagram
 when the estate is bigger).
 
 ## Step 7 — Finish
 
-The worker commits the outputs; the portal shows the assessment (`assessment/$app/ASSESSMENT.md`) and the item
+The worker commits the outputs; the portal shows the assessment (`applications/$app/assessment/ASSESSMENT.md`) and the item
 catalog on the application's page. The next step is understanding: a person selects items or modules of the
 catalog and runs `understand` on them.

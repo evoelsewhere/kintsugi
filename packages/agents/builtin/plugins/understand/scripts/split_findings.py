@@ -4,10 +4,10 @@
     python3 split_findings.py <app> --scan FILE --catalog FILE --items ID,ID,... --out DIR
 
 --scan is the object the harden-scan workflow returned for the run's files (findings, coverage,
-toolsNotRun, ...); --catalog assessment/<app>/catalog.json; --items the run's items. --out is the
-document-repository root. Each finding goes to the item that owns the file of its `source`
-(file:line); a finding outside the selected items is left out and counted. Writes
-assessment/<app>/items/<module>/<item>/findings.json per item:
+toolsNotRun, ...); --catalog applications/<app>/assessment/catalog.json; --items the run's items.
+--out is the document-repository root. Each finding goes to the item that owns the file of its
+`source` (file:line); a finding outside the selected items is left out and counted. Writes
+applications/<app>/units/<module>/<unit>/findings.json per item:
 
     {"app", "item", "generatedBy", "findings": [{"id": "SEC-<module>.<item>-NN", ...}], "filesReviewed", "toolsNotRun", "deadFinders"}
 
@@ -21,6 +21,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import paths  # noqa: E402
 
 SEVERITY = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3}
 KEPT = ('cwe', 'severity', 'confidence', 'source', 'title', 'exploitScenario', 'recommendedFix', 'maskedEvidence', 'isCredential', 'class')
@@ -47,7 +48,7 @@ def split(app, scan, chosen):
     outputs = {}
     for item in chosen:
         ordered = sorted(per_item[item['id']], key=lambda f: (SEVERITY.get(f.get('severity'), 4), str(f.get('source')), str(f.get('cwe'))))[:MAX_FINDINGS]
-        outputs[f'assessment/{app}/items/{item["id"]}/findings.json'] = {
+        outputs[paths.unit_findings_path(app, *item['id'].split('/'))] = {
             'app': app,
             'item': item['id'],
             'generatedBy': 'split_findings.py',

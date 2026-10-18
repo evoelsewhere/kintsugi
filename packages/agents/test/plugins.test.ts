@@ -45,7 +45,7 @@ describe("built-in plugins", () => {
       ["understand", []],
       ["modernize", ["understand"]],
     ]);
-    for (const path of ["scripts/mermaid_lint.py", "skills/mermaid-diagrams/SKILL.md", "skills/mermaid-diagrams/references/c4.md"]) {
+    for (const path of ["scripts/paths.py", "scripts/mermaid_lint.py", "skills/mermaid-diagrams/SKILL.md", "skills/mermaid-diagrams/references/c4.md"]) {
       const [first, second] = await Promise.all(plugins.map((plugin) => readBuiltinPluginFile(plugins, plugin.name, path)));
       expect(first, path).toBeDefined();
       expect(second, path).toBe(first);
@@ -72,7 +72,7 @@ describe("plugin flows", () => {
     const assess = flow(understand, "assess");
     expect(assess.steps.map((step) => step.name)).toEqual(expect.arrayContaining(["inventory", "legacy-analyst", "catalog_from_topology"]));
     expect(assess.steps.find((step) => step.name === "inventory")).toMatchObject({ kind: "script" });
-    expect(assess.writes).toEqual(expect.arrayContaining(["assessment/<app>/catalog.json"]));
+    expect(assess.writes).toEqual(expect.arrayContaining(["applications/<app>/assessment/catalog.json"]));
 
     const understandFlow = flow(understand, "understand");
     const rules = understandFlow.steps.find((step) => step.name === "extract-rules");
@@ -80,7 +80,7 @@ describe("plugin flows", () => {
     expect(understandFlow.steps.find((step) => step.name === "harden-scan")?.agents).toEqual(["security-auditor"]);
     expect(understandFlow.gates.length).toBeGreaterThan(0);
 
-    expect(understand!.pipeline).toEqual([{ from: "assess", to: "understand", via: expect.arrayContaining(["assessment/<app>/catalog.json"]) }]);
+    expect(understand!.pipeline).toEqual([{ from: "assess", to: "understand", via: expect.arrayContaining(["applications/<app>/assessment/catalog.json"]) }]);
     expect(modernize!.pipeline.map((link) => `${link.from}>${link.to}`)).not.toContain("preflight>transform");
     expect(modernize!.flows.map((entry) => entry.command)).toEqual(["preflight", "brief", "transform", "uplift", "reimagine", "verify"]);
   });
