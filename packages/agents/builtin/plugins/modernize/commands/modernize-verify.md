@@ -143,7 +143,7 @@ brief's unticked §7 questions and exit criteria; a person decides those, so nev
 `module` is the module or service folder name in the target repository (an uplift's suites and canaries may name a unit). Give `junit`
 or `log` for every suite and canary: a file the pack cannot parse is no evidence. `legacy.ran` is `false`, with `why`, when the legacy
 cannot run here. `note` is for anything a reader needs, cause first, under 250 characters. Then run
-`python3 scripts/proof_pack.py $app $module --source <source clone> --assessment applications/$app/assessment --target <target checkout> --out applications/$app/assessment --runs applications/<app>/units/<module>/<unit>/verify/runs/<run-id>` (add `--uplift` for an uplift; no `$module`
+`python3 scripts/proof_pack.py $app $module --source <source clone> --assessment applications/$app/assessment --target <target checkout> --out applications/$app/generated --runs applications/<app>/units/<module>/<unit>/verify/runs/<run-id>` (add `--uplift` for an uplift; no `$module`
 for all). It writes `applications/$app/generated/VERIFICATION.md` and `VERIFICATION.json`; exit 1 only means "not PROVEN". Show the user the
 verdict per module, the reasons word for word, for a rewrite the P0 rule table, any folder listed as test tooling (not judged),
 **what this does not prove**, and the blank sign-off block. Do not soften a reason or change a verdict; if you think

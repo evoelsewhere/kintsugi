@@ -42,9 +42,9 @@ Open questions, unticked criteria and the sign-off are for a person: they never 
 A built folder that holds only test code and the files that build it (a parity harness, for one) is not a
 module: it is listed as "Test tooling (not judged)", under "toolingOnly" in the JSON, and not counted.
 
-Evidence read from applications/<app>/assessment/, the source checkout, and the target checkout: equivalence/test-runs.json,
-equivalence/[<module>/]cases.json and fresh-cases.json (judged again here, not read from EQUIVALENCE.json),
-BASELINE.md, BUSINESS_RULES.md, MODERNIZATION_BRIEF.md, and the notes files. Everything read is untrusted
+Evidence read from applications/<app>/assessment/ and the unit verify/runs folder (its test-runs.json, with the legacy
+assessment equivalence/test-runs.json as fallback), the source checkout, and the target checkout: cases.json and fresh-cases.json
+(judged again here, not read from EQUIVALENCE.json), BASELINE.md, BUSINESS_RULES.md, the modernization brief under to-be/, and the notes files. Everything read is untrusted
 text: it is never run, links outside the supplied roots are refused, and sizes are capped. Exit 0 when every verdict is
 PROVEN, 1 when not, 2 for input that cannot be used.
 """
@@ -143,9 +143,17 @@ def inside(workspace, rel):
 
 
 # ---------------------------------------------------------------- test-runs.json
-def load_test_runs(adir):
-    """-> the validated content of equivalence/test-runs.json (everything defaulted when it is absent or malformed)."""
-    obj, problem = read_json(os.path.join(adir, "equivalence", "test-runs.json"))
+def load_test_runs(adir, runs_dir=None):
+    """-> the validated content of test-runs.json (everything defaulted when it is absent or malformed).
+
+    The ADR-0038 home is the unit's verify/runs directory (`runs_dir`); the legacy assessment
+    `equivalence/test-runs.json` is read when the new home has no file."""
+    candidates = ([os.path.join(runs_dir, "test-runs.json")] if runs_dir else []) + [os.path.join(adir, "equivalence", "test-runs.json")]
+    obj, problem = None, None
+    for path in candidates:
+        obj, problem = read_json(path)
+        if obj is not None or problem:
+            break
     out = {"present": isinstance(obj, dict), "problems": [problem] if problem else [], "date": "", "legacy": {"ran": None, "how": "", "why": ""}, "suites": [], "canaries": [], "leftOut": []}
     if not isinstance(obj, dict):
         if obj is not None:
@@ -910,8 +918,9 @@ def build(system, workspace, module=None, now=None, assessment_dir=None, target_
         if not any(m["track"] == "uplift" and os.path.isdir(os.path.join(m["path"], module)) and not os.path.islink(os.path.join(m["path"], module)) for m in everything):
             raise InputError("nothing is built in the target checkout for %s module %s (built: %s)" % (system, module, ", ".join(clean(m["name"], 40) for m in everything[:10])))
         unit = module
-    runs = load_test_runs(adir)
-    brief = read_text(os.path.join(adir, "MODERNIZATION_BRIEF.md"))
+    runs = load_test_runs(adir, runs_dir)
+    # The brief lives with the application's TO-BE documents (ADR-0038); the legacy copy sits in the assessment folder.
+    brief = read_text(os.path.join(os.path.dirname(adir), "to-be", "modernization-brief.md")) or read_text(os.path.join(adir, "MODERNIZATION_BRIEF.md"))
     ctx = {"workspace": runs_dir or workspace, "adir": adir, "system": system, "runs": runs, "subjects": everything, "unit": unit, "trace": None, "trace_problem": "", "now": now, "parsed": {}, "ran": {},
            "source": git_source_check(source_dir, adir) if source_dir else source_check(workspace, system, adir), "source_git": bool(source_dir), "brief": lambda mod, track: brief_items(brief, mod, track)}
     ctx["ran"] = {s["rel"]: module_run(ctx, s) for s in everything if s["track"] != "uplift"}       # what ran, per module: a rule is traced against it
@@ -922,7 +931,7 @@ def build(system, workspace, module=None, now=None, assessment_dir=None, target_
     # a folder of only test code and the files that build it (a parity harness) is not a module: listed, not judged, not counted
     tooling = [s for s in everything if s["track"] != "uplift" and trace_rules.tooling_only(s["path"])]
     mods = [evaluate(s, ctx) for s in sorted(everything, key=lambda s: s["name"].lower()) if s not in tooling]
-    problems = [clean(p, 300) for p in runs["problems"]] + ([] if runs["present"] else ["equivalence/test-runs.json was not found, so no test run is recorded and no module can be proven."])
+    problems = [clean(p, 300) for p in runs["problems"]] + ([] if runs["present"] else ["test-runs.json was not found under the unit's verify/runs folder or the legacy equivalence/ folder, so no test run is recorded and no module can be proven."])
     if tooling and not mods:
         problems.append("Every built folder holds only test code and the files that build it, so there is no module to judge.")
     return {"v": 1, "system": clean(system, 100), "generated": now, "asked": clean(module or "", 100), "rules": list(RULES_TEXT), "legacy": dict(ctx["source"], ran=runs["legacy"]["ran"]),
@@ -1032,7 +1041,7 @@ def render_md(pack):
         out += ["", "### Waiting for a person", "", "Claude never ticks these. A person decides them.", ""]
         out += ["- [ ] %s [%s]" % (cell(i["text"]), i["where"]) for i in br["items"]] + ["- [ ] " + cell(n) for n in m["needsPerson"]]
         if not br["items"] and not m["needsPerson"]:
-            out.append("- The brief lists no unticked criterion for this module." if br["found"] else "- No MODERNIZATION_BRIEF.md was found, so no criterion could be listed.")
+            out.append("- The brief lists no unticked criterion for this module." if br["found"] else "- No modernization brief was found, so no criterion could be listed.")
         if br["count"] > len(br["items"]):
             out.append("- ... and %d more in the brief." % (br["count"] - len(br["items"])))
         out += ["", "### What this does not prove", ""] + ["- " + cell(n) for n in m["notProven"]]

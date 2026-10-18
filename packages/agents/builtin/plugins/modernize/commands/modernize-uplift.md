@@ -223,7 +223,7 @@ Then **stop**: push the pilot to your target branch, open (or update) the docume
 the playbook, and tell the user to request the **pilot approval** gate in the portal, showing the pilot's diff, what it
 added to the catalog and the playbook. **No fan-out before that gate is approved.** If the pilot changed the picture (a
 missed prerequisite, a phase in the wrong order), that is a finding about the **brief**: say so, propose the change to
-`MODERNIZATION_BRIEF.md` in the document repo pull request, and let the gate reviewer decide.
+the modernization brief (`applications/$app/to-be/modernization-brief.md`) in the document repo pull request, and let the gate reviewer decide.
 
 ### 5b — Fan out in dependency-aware, escalating batches
 

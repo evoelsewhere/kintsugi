@@ -1,5 +1,5 @@
 import { join } from './paths.js'
-import { assessmentPath, DEFAULT_WORKSPACE_LAYOUT, sourcePath, targetPath } from './layout.js'
+import { assessmentPath, DEFAULT_WORKSPACE_LAYOUT, generatedPath, isPathSegment, modulePath, rulesReviewPath, sourcePath, targetPath, toBePath, unitsPath, type WorkspaceLayout } from './layout.js'
 import { isAppName, isToken, plain } from './text.js'
 import { parseBrief, type Brief, type Phase } from './brief.js'
 import { discoverEstate, sourceSizes } from './discover.js'
@@ -10,7 +10,7 @@ import { needsReview, parseRules, type RuleSet } from './rules.js'
 import { pickTrack, TRACK_LABELS, type TrackKey } from './tracks.js'
 import { parseTopology, type Topology } from './topology.js'
 import { parseVerification, proofOfModule, type ProofState, type Verification } from './verification.js'
-import { parseLedger } from './ledger.js'
+import { mergeLedgers, parseLedger } from './ledger.js'
 import {
   baselineRowOf,
   changedUnitsOf,
@@ -56,7 +56,7 @@ export type Stage = {
   detail?: string
 }
 
-export type ReviewVerdict = 'confirmed' | 'wrong' | 'discuss'
+export type ReviewVerdict = 'confirmed' | 'refuted' | 'clarify'
 
 export type ReviewLedger = Record<
   string,
@@ -88,7 +88,7 @@ export type Snapshot = {
   apps: string[]
   /** Which way the runtime jobs and member workflows are working on the app. */
   track: TrackKey
-  /** True once the app has an assessment artifact under the directory returned by `assessmentDir`. */
+  /** True once the app has an assessment artifact under the directory returned by `assessmentPath`. */
   hasAssessment: boolean
   stages: Stage[]
   /** The units the estate map draws: the map's modules, or what the legacy tree holds. */
@@ -145,7 +145,7 @@ const STAGE_FILES = {
   assess: 'ASSESSMENT.md',
   map: 'topology.json',
   rules: 'BUSINESS_RULES.md',
-  brief: 'MODERNIZATION_BRIEF.md',
+  brief: 'modernization-brief.md',
   transform: 'TRANSFORMATION_NOTES.md',
   harden: 'SECURITY_FINDINGS.md',
   verify: 'VERIFICATION.json',
@@ -154,9 +154,8 @@ const STAGE_FILES = {
   pilot: 'PLAYBOOK.md',
   spec: 'AI_NATIVE_SPEC.md',
   design: 'REIMAGINED_ARCHITECTURE.md',
+  upliftNotes: 'UPLIFT_NOTES.md',
 } as const
-
-export const REVIEWS_FILE = 'RULE_REVIEWS.json'
 
 /** Parsed files kept by path and mtime, so an unchanged file is parsed once. */
 export type ReaderCache = Map<string, { mtimeMs: number; value: unknown }>
@@ -195,8 +194,51 @@ async function cached<T>(
 }
 
 /** The apps with committed assessment artifacts in the document repository. */
-export async function appsOf(fs: ReaderFs, assessmentDir = 'assessment'): Promise<string[]> {
-  return (await dirNamesOf(fs, assessmentDir)).filter(isAppName).sort()
+export async function appsOf(fs: ReaderFs, applicationsDir = DEFAULT_WORKSPACE_LAYOUT.applicationsDir): Promise<string[]> {
+  return (await dirNamesOf(fs, applicationsDir)).filter(isAppName).sort()
+}
+
+/** Newest of the module-scoped authored documents `file` across the app's module folders; null when no module published one. */
+const moduleDocAt = async (fs: ReaderFs, app: string, file: string, layout: WorkspaceLayout): Promise<number | null> => {
+  let newest: number | null = null
+
+  for (const module of await dirNamesOf(fs, unitsPath(app, layout))) {
+    if (!isPathSegment(module)) {
+      continue
+    }
+
+    const at = await mtimeOrNull(fs, join(modulePath(app, module, layout), file))
+
+    if (at !== null && (newest === null || at > newest)) {
+      newest = at
+    }
+  }
+
+  return newest
+}
+
+/**
+ * The rule verdicts humans left in the app's unit folders (`units/<module>/<unit>/rules-review.json`), merged into the one
+ * ledger the panel counts. The units are walked in sorted order, and a rule several units reviewed keeps the newest verdict.
+ */
+const readReviewLedger = async (fs: ReaderFs, app: string, layout: WorkspaceLayout): Promise<ReviewLedger> => {
+  const ledgers: ReviewLedger[] = []
+
+  for (const module of await dirNamesOf(fs, unitsPath(app, layout))) {
+    if (!isPathSegment(module)) {
+      continue
+    }
+
+    for (const unit of await dirNamesOf(fs, modulePath(app, module, layout))) {
+      if (!isPathSegment(unit)) {
+        continue
+      }
+
+      ledgers.push(parseLedger(await readOrNull(fs, rulesReviewPath(app, module, unit, layout))))
+    }
+  }
+
+  return mergeLedgers(ledgers)
 }
 
 const slugOf = (target: string) =>
@@ -415,7 +457,7 @@ export type ReadOptions = {
   actionPrefix: string
   nowMs: number
   /** Repository namespaces routed by the caller; source is always read-only. */
-  assessmentDir?: string
+  applicationsDir?: string
   sourceDir?: string
   targetDir?: string
   /** Which track to follow; `auto` when absent: whichever track's artifacts are newest. */
@@ -490,8 +532,8 @@ export async function readSnapshot(
   cache: ReaderCache,
   options: ReadOptions,
 ): Promise<Snapshot | null> {
-  const assessmentDir = options.assessmentDir ?? 'assessment'
-  const apps = await appsOf(fs, assessmentDir)
+  const applicationsDir = options.applicationsDir ?? DEFAULT_WORKSPACE_LAYOUT.applicationsDir
+  const apps = await appsOf(fs, applicationsDir)
 
   const app = options.app !== undefined && apps.includes(options.app) ? options.app : apps[0]
 
@@ -501,35 +543,37 @@ export async function readSnapshot(
 
   const layout = {
     ...DEFAULT_WORKSPACE_LAYOUT,
-    assessmentDir,
+    applicationsDir,
     sourceDir: options.sourceDir ?? DEFAULT_WORKSPACE_LAYOUT.sourceDir,
     targetDir: options.targetDir ?? DEFAULT_WORKSPACE_LAYOUT.targetDir,
   }
   const dir = assessmentPath(app, layout)
+  const generated = generatedPath(app, layout)
+  const toBe = toBePath(app, layout)
   const sourceRoot = sourcePath(app, layout)
   const transformRoot = targetPath(app, 'transform', layout)
   const upliftRoot = targetPath(app, 'uplift', layout)
   const reimagineRoot = targetPath(app, 'reimagine', layout)
   const observed = options.observed ?? new Map<string, TestTotals>()
 
-  const [topo, rules, catalog, baseline, verificationRead, reviewsRaw, findingsHead, marks] = await Promise.all([
+  const [topo, rules, catalog, baseline, verificationRead, reviews, findingsHead, marks] = await Promise.all([
     cached(fs, cache, join(dir, STAGE_FILES.map), parseTopology),
-    cached(fs, cache, join(dir, STAGE_FILES.rules), parseRules),
+    cached(fs, cache, join(generated, STAGE_FILES.rules), parseRules),
     cached(fs, cache, join(dir, STAGE_FILES.deltas), parseCatalog),
     cached(fs, cache, join(dir, STAGE_FILES.baseline), parseBaseline),
-    cached(fs, cache, join(dir, STAGE_FILES.verify), parseVerification),
-    readOrNull(fs, join(dir, REVIEWS_FILE)),
-    readOrNull(fs, join(dir, STAGE_FILES.harden)),
+    cached(fs, cache, join(generated, STAGE_FILES.verify), parseVerification),
+    readReviewLedger(fs, app, layout),
+    readOrNull(fs, join(generated, STAGE_FILES.harden)),
     Promise.all(
       [
         mtimeOrNull(fs, dir),
         mtimeOrNull(fs, join(dir, STAGE_FILES.preflight)),
         mtimeOrNull(fs, join(dir, STAGE_FILES.assess)),
-        mtimeOrNull(fs, join(dir, STAGE_FILES.pilot)),
-        mtimeOrNull(fs, join(upliftRoot, 'UPLIFT_NOTES.md')),
+        moduleDocAt(fs, app, STAGE_FILES.pilot, layout),
+        moduleDocAt(fs, app, STAGE_FILES.upliftNotes, layout),
         mtimeOrNull(fs, upliftRoot),
-        mtimeOrNull(fs, join(dir, STAGE_FILES.spec)),
-        mtimeOrNull(fs, join(dir, STAGE_FILES.design)),
+        moduleDocAt(fs, app, STAGE_FILES.spec, layout),
+        moduleDocAt(fs, app, STAGE_FILES.design, layout),
         mtimeOrNull(fs, reimagineRoot),
         mtimeOrNull(fs, transformRoot),
       ],
@@ -541,7 +585,7 @@ export async function readSnapshot(
   const topology = topo.value
   const moduleIds = topology?.modules.map(node => node.id) ?? []
 
-  const brief = await cached(fs, cache, join(dir, STAGE_FILES.brief), text =>
+  const brief = await cached(fs, cache, join(toBe, STAGE_FILES.brief), text =>
     parseBrief(text, moduleIds),
   )
 
@@ -552,15 +596,13 @@ export async function readSnapshot(
     brief.value.phases.length > 0 &&
     brief.value.phases.every(phase => phase.modules.length === 0)
   ) {
-    const text = await readOrNull(fs, join(dir, STAGE_FILES.brief))
+    const text = await readOrNull(fs, join(toBe, STAGE_FILES.brief))
 
     if (text !== null) {
       brief.value = parseBrief(text, moduleIds)
-      cache.set(join(dir, STAGE_FILES.brief), { mtimeMs: brief.mtimeMs ?? 0, value: brief.value })
+      cache.set(join(toBe, STAGE_FILES.brief), { mtimeMs: brief.mtimeMs ?? 0, value: brief.value })
     }
   }
-
-  const reviews = parseLedger(reviewsRaw)
 
   const isScan = findingsHead !== null && /generated-by:\s*modernize-harden/.test(findingsHead.split('\n')[0] ?? '')
 
@@ -887,17 +929,17 @@ export async function readSnapshot(
       rule => rule.priority === 'P0' && needsReview(rule) && reviews[rule.id] === undefined,
     ).length
 
-    const wrong = Object.values(reviews).filter(entry => entry.verdict === 'wrong').length
+    const refuted = Object.values(reviews).filter(entry => entry.verdict === 'refuted').length
 
-    // A P0 rule a reviewer sent to discussion stops the build commands until it is settled.
-    const discussing = rules.value.rules.filter(rule => rule.priority === 'P0' && reviews[rule.id]?.verdict === 'discuss').length
+    // A P0 rule a reviewer marked `clarify` stops the build commands until it is settled.
+    const clarifying = rules.value.rules.filter(rule => rule.priority === 'P0' && reviews[rule.id]?.verdict === 'clarify').length
 
-    if (discussing > 0) {
-      attention.push(`${discussing} high-priority rule${discussing === 1 ? '' : 's'} under discussion: the build waits`)
+    if (clarifying > 0) {
+      attention.push(`${clarifying} high-priority rule${clarifying === 1 ? '' : 's'} awaiting clarification: the build waits`)
     }
 
-    if (wrong > 0) {
-      attention.push(`${wrong} rule${wrong === 1 ? '' : 's'} marked wrong by a reviewer: no test is built on ${wrong === 1 ? 'it' : 'them'}`)
+    if (refuted > 0) {
+      attention.push(`${refuted} rule${refuted === 1 ? '' : 's'} refuted by a reviewer: no test is built on ${refuted === 1 ? 'it' : 'them'}`)
     }
 
     if (pending > 0) {
