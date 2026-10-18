@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Two agent worlds</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #24262a;
+      --color-ink:     #eceae6;
+      --color-muted:   #a8b3c4;
+      --color-accent:  #45c9ab;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Kintsugi</p>
+    <h1>Two agent worlds, one Git spine</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="two-worlds-title two-worlds-desc">
+        <title id="two-worlds-title">Kintsugi's two agent worlds</title>
+        <desc id="two-worlds-desc">Kintsugi runs its own stage jobs and runtime server-side in sandboxes while members implement in their own harnesses; both sides exchange work through Git, and a person starts stages and decides gates.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a8b3c4"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#45c9ab"/></marker>
+          <marker id="arrow-up" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a8b3c4"/></marker>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.8" fill="rgba(236,234,230,0.10)"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#24262a"/>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+        <!-- Trust-boundary bands -->
+        <rect x="60" y="100" width="560" height="330" rx="8" fill="none" stroke="rgba(185,188,191,0.25)" stroke-width="1" stroke-dasharray="4 3"/>
+        <rect x="64" y="92" width="152" height="14" fill="#24262a"/>
+        <text x="76" y="103" font-family="'Geist Mono', monospace" font-size="8" font-weight="500" letter-spacing="0.18em" fill="#a8b3c4">KINTSUGI SERVER-SIDE</text>
+        <rect x="660" y="100" width="560" height="330" rx="8" fill="none" stroke="rgba(185,188,191,0.25)" stroke-width="1" stroke-dasharray="4 3"/>
+        <rect x="664" y="92" width="132" height="14" fill="#24262a"/>
+        <text x="676" y="103" font-family="'Geist Mono', monospace" font-size="8" font-weight="500" letter-spacing="0.18em" fill="#a8b3c4">MEMBER MACHINES</text>
+
+        <!-- Person marker -->
+        <g>
+          <circle cx="640" cy="40" r="7" fill="none" stroke="#b3a8cf" stroke-width="1.2"/>
+          <path d="M 628,58 Q 640,46 652,58" fill="none" stroke="#b3a8cf" stroke-width="1.2"/>
+          <text x="666" y="48" font-family="'Geist Mono', monospace" font-size="8" font-weight="500" letter-spacing="0.18em" fill="#b3a8cf">PERSON · STARTS STAGES, DECIDES GATES</text>
+        </g>
+
+        <!-- Arrows -->
+        <g fill="none" stroke="#a8b3c4" stroke-width="1.2">
+          <path d="M 622,48 H 323 Q 315,48 315,56 V 160" marker-end="url(#arrow)"/>
+          <line x1="315" y1="224" x2="315" y2="310" marker-end="url(#arrow)"/>
+          <path d="M 420,342 H 512 Q 520,342 520,350 V 554 Q 520,562 528,562 H 535" marker-end="url(#arrow)"/>
+          <path d="M 745,562 H 1032 Q 1040,562 1040,554 V 200 Q 1040,192 1032,192 H 1015" marker-end="url(#arrow)"/>
+          <line x1="910" y1="224" x2="910" y2="310" marker-end="url(#arrow)"/>
+          <path d="M 805,342 H 708 Q 700,342 700,350 V 530" marker-end="url(#arrow)"/>
+          <line x1="640" y1="530" x2="640" y2="62" marker-end="url(#arrow)"/>
+        </g>
+        <g font-family="'Geist Mono', monospace" font-size="8" letter-spacing="0.06em" fill="#eceae6" text-anchor="middle">
+          <rect x="281" y="72" width="68" height="12" fill="#24262a"/><text x="315" y="81">starts stage</text>
+          <rect x="486" y="404" width="68" height="12" fill="#24262a"/><text x="520" y="413">outputs as PR</text>
+          <rect x="1002" y="380" width="76" height="12" fill="#24262a"/><text x="1040" y="389">context · MCP</text>
+          <rect x="662" y="440" width="76" height="12" fill="#24262a"/><text x="700" y="449">pull requests</text>
+          <rect x="602" y="78" width="76" height="12" fill="#24262a"/><text x="640" y="87">gates · metrics</text>
+        </g>
+
+        <!-- Nodes -->
+        <g font-family="'Geist', sans-serif">
+          <!-- Stage jobs (focal, command) -->
+          <rect x="210" y="160" width="210" height="64" rx="6" fill="rgba(69,201,171,0.12)" stroke="#45c9ab" stroke-width="1.2"/>
+          <rect x="214" y="164" width="24" height="10" rx="2" fill="#45c9ab"/><text x="226" y="171.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">CMD</text>
+          <rect x="424" y="187" width="26" height="10" rx="2" fill="#45c9ab"/><text x="437" y="194.5" font-family="'Geist Mono', monospace" font-size="5.5" fill="#24262a" text-anchor="middle">FOCAL</text>
+          <text x="315" y="188" font-size="12" font-weight="600" fill="#eceae6" text-anchor="middle">Stage jobs</text>
+          <text x="315" y="203" font-family="'Geist Mono', monospace" font-size="9" fill="#a8b3c4" text-anchor="middle">assess · understand · planning</text>
+          <!-- Kintsugi Runtime (script) -->
+          <rect x="210" y="310" width="210" height="64" rx="6" fill="rgba(168,179,196,0.12)" stroke="#a8b3c4" stroke-width="1"/>
+          <rect x="214" y="314" width="24" height="10" rx="2" fill="#a8b3c4"/><text x="226" y="321.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">SCR</text>
+          <text x="315" y="338" font-size="12" font-weight="600" fill="#eceae6" text-anchor="middle">Kintsugi Runtime</text>
+          <text x="315" y="353" font-family="'Geist Mono', monospace" font-size="9" fill="#a8b3c4" text-anchor="middle">pi kernel · sandboxed</text>
+          <!-- Member harness (agent) -->
+          <rect x="805" y="160" width="210" height="64" rx="6" fill="rgba(216,135,172,0.12)" stroke="#d887ac" stroke-width="1"/>
+          <rect x="809" y="164" width="24" height="10" rx="2" fill="#d887ac"/><text x="821" y="171.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">AGT</text>
+          <text x="910" y="188" font-size="12" font-weight="600" fill="#eceae6" text-anchor="middle">Member harness</text>
+          <text x="910" y="203" font-family="'Geist Mono', monospace" font-size="9" fill="#a8b3c4" text-anchor="middle">Claude Code · Copilot · Codex</text>
+          <!-- Implementation (script) -->
+          <rect x="805" y="310" width="210" height="64" rx="6" fill="rgba(168,179,196,0.12)" stroke="#a8b3c4" stroke-width="1"/>
+          <rect x="809" y="314" width="24" height="10" rx="2" fill="#a8b3c4"/><text x="821" y="321.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">SCR</text>
+          <text x="910" y="338" font-size="12" font-weight="600" fill="#eceae6" text-anchor="middle">Implementation</text>
+          <text x="910" y="353" font-family="'Geist Mono', monospace" font-size="9" fill="#a8b3c4" text-anchor="middle">code · tests · PRs</text>
+          <!-- Git (reads/writes) -->
+          <rect x="535" y="530" width="210" height="64" rx="6" fill="rgba(236,234,230,0.08)" stroke="#eceae6" stroke-width="1"/>
+          <rect x="539" y="534" width="24" height="10" rx="2" fill="#eceae6"/><text x="551" y="541.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">GIT</text>
+          <text x="640" y="558" font-size="12" font-weight="600" fill="#eceae6" text-anchor="middle">Git</text>
+          <text x="640" y="573" font-family="'Geist Mono', monospace" font-size="9" fill="#a8b3c4" text-anchor="middle">document repo · project repos</text>
+        </g>
+
+        <!-- Legend -->
+        <g font-family="'Geist Mono', monospace" font-size="8" letter-spacing="0.06em" fill="#eceae6">
+          <circle cx="46" cy="666" r="5" fill="none" stroke="#b3a8cf" stroke-width="1.2"/>
+          <text x="62" y="669">person</text>
+          <rect x="206" y="661" width="10" height="10" rx="2" fill="rgba(69,201,171,0.12)" stroke="#45c9ab" stroke-width="1.2"/>
+          <text x="226" y="669">command · focal</text>
+          <rect x="366" y="661" width="10" height="10" rx="2" fill="rgba(216,135,172,0.12)" stroke="#d887ac" stroke-width="1"/>
+          <text x="386" y="669">agent · reasoning</text>
+          <rect x="526" y="661" width="10" height="10" rx="2" fill="rgba(168,179,196,0.12)" stroke="#a8b3c4" stroke-width="1"/>
+          <text x="546" y="669">script · tool</text>
+          <rect x="686" y="661" width="10" height="10" rx="2" fill="rgba(236,234,230,0.08)" stroke="#eceae6" stroke-width="1"/>
+          <text x="706" y="669">reads · writes</text>
+          <rect x="846" y="661" width="10" height="10" rx="2" fill="none" stroke="rgba(185,188,191,0.25)" stroke-width="1" stroke-dasharray="2 2"/>
+          <text x="866" y="669">dashed = trust boundary</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

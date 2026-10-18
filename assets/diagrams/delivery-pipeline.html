@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delivery pipeline</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #24262a;
+      --color-ink:     #eceae6;
+      --color-muted:   #a8b3c4;
+      --color-accent:  #45c9ab;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Process · Kintsugi</p>
+    <h1>Delivery pipeline — every phase closed by a gate</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1064 276" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="delivery-pipeline-title delivery-pipeline-desc">
+        <title id="delivery-pipeline-title">Kintsugi delivery pipeline</title>
+        <desc id="delivery-pipeline-desc">Eight delivery phases P0 to P7 run on the Kintsugi platform lane, each closed by a person-decided gate G0 to G6 before the next phase starts.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a8b3c4"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#45c9ab"/></marker>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.8" fill="rgba(236,234,230,0.10)"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#24262a"/>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+        <!-- Step headers -->
+        <g font-family="'Geist Mono', monospace" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#eceae6" text-anchor="middle">
+          <rect x="188" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="198" y="14.5">P0</text><text x="198" y="32">MOBILIZE</text>
+          <rect x="300" y="2" width="20" height="18" rx="4" fill="rgba(69,201,171,0.12)"/><text x="310" y="14.5" fill="#45c9ab">P1</text><text x="310" y="32" fill="#45c9ab">DISCOVER</text>
+          <rect x="412" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="422" y="14.5">P2</text><text x="422" y="32">TO-BE</text>
+          <rect x="524" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="534" y="14.5">P3</text><text x="534" y="32">FACTORY</text>
+          <rect x="636" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="646" y="14.5">P4</text><text x="646" y="32">MIGRATE</text>
+          <rect x="748" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="758" y="14.5">P5</text><text x="758" y="32">VERIFY</text>
+          <rect x="860" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="870" y="14.5">P6</text><text x="870" y="32">CUTOVER</text>
+          <rect x="972" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="982" y="14.5">P7</text><text x="982" y="32">HYPERCARE</text>
+        </g>
+
+        <!-- Lanes -->
+        <rect x="0" y="36" width="1064" height="160" fill="#2c2f34"/>
+        <line x1="0" y1="36" x2="1064" y2="36" stroke="rgba(236,234,230,0.12)" stroke-width="1"/>
+        <line x1="0" y1="116" x2="1064" y2="116" stroke="rgba(236,234,230,0.12)" stroke-width="1"/>
+        <line x1="0" y1="196" x2="1064" y2="196" stroke="rgba(236,234,230,0.12)" stroke-width="1"/>
+        <g font-family="'Geist Mono', monospace" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#eceae6" text-anchor="middle">
+          <circle cx="18" cy="72" r="3" fill="none" stroke="#a8b3c4" stroke-width="1"/><text x="76" y="74">KINTSUGI PLATFORM</text>
+          <circle cx="18" cy="152" r="3" fill="none" stroke="#b3a8cf" stroke-width="1"/><text x="76" y="154">PERSON</text>
+        </g>
+
+        <!-- Arrows: phase to its gate (down), gate to next phase (up-right) -->
+        <g fill="none" stroke="#a8b3c4" stroke-width="1.2" marker-end="url(#arrow)">
+          <line x1="198" y1="108" x2="198" y2="124"/>
+          <line x1="310" y1="108" x2="310" y2="124"/>
+          <line x1="422" y1="108" x2="422" y2="124"/>
+          <line x1="534" y1="108" x2="534" y2="124"/>
+          <line x1="646" y1="108" x2="646" y2="124"/>
+          <line x1="758" y1="108" x2="758" y2="124"/>
+          <line x1="870" y1="108" x2="870" y2="124"/>
+          <path d="M 248,156 H 302 Q 310,156 310,148 V 108"/>
+          <path d="M 360,156 H 414 Q 422,156 422,148 V 108"/>
+          <path d="M 472,156 H 526 Q 534,156 534,148 V 108"/>
+          <path d="M 584,156 H 638 Q 646,156 646,148 V 108"/>
+          <path d="M 696,156 H 750 Q 758,156 758,148 V 108"/>
+          <path d="M 808,156 H 862 Q 870,156 870,148 V 108"/>
+          <path d="M 920,156 H 974 Q 982,156 982,148 V 108"/>
+        </g>
+
+        <!-- KNT lane nodes -->
+        <g font-family="'Geist', sans-serif">
+          <g><rect x="148" y="44" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
+            <rect x="152" y="48" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="159" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">KNT</text>
+            <text x="198" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Mobilize</text>
+            <text x="198" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">charter → project</text>
+            <text x="198" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">portal</text></g>
+          <g><rect x="260" y="44" width="100" height="64" rx="6" fill="rgba(69,201,171,0.12)" stroke="#45c9ab" stroke-width="1.2"/>
+            <rect x="264" y="48" width="14" height="10" rx="2" fill="#45c9ab"/><text x="271" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">KNT</text>
+            <rect x="326" y="48" width="26" height="10" rx="2" fill="#45c9ab"/><text x="339" y="55.5" font-family="'Geist Mono', monospace" font-size="5.5" fill="#24262a" text-anchor="middle">FOCAL</text>
+            <text x="310" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Discover &amp; Assess</text>
+            <text x="310" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">repos → assessment</text>
+            <text x="310" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">runtime jobs</text></g>
+          <g><rect x="372" y="44" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
+            <rect x="376" y="48" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="383" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">KNT</text>
+            <text x="422" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Define To-Be</text>
+            <text x="422" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">assessment → ARB</text>
+            <text x="422" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">runtime jobs</text></g>
+          <g><rect x="484" y="44" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
+            <rect x="488" y="48" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="495" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">KNT</text>
+            <text x="534" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Prepare Factory</text>
+            <text x="534" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">standards → factory</text>
+            <text x="534" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">harness hub</text></g>
+          <g><rect x="596" y="44" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
+            <rect x="600" y="48" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="607" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">KNT</text>
+            <text x="646" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Migrate</text>
+            <text x="646" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">units → pull requests</text>
+            <text x="646" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">member harnesses</text></g>
+          <g><rect x="708" y="44" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
+            <rect x="712" y="48" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="719" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">KNT</text>
+            <text x="758" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Verify</text>
+            <text x="758" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">PRs → evidence</text>
+            <text x="758" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">runtime jobs</text></g>
+          <g><rect x="820" y="44" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
+            <rect x="824" y="48" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="831" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">KNT</text>
+            <text x="870" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Cutover</text>
+            <text x="870" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">evidence → live</text>
+            <text x="870" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">cutover runbook</text></g>
+          <g><rect x="932" y="44" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
+            <rect x="936" y="48" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="943" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">KNT</text>
+            <text x="982" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Hypercare</text>
+            <text x="982" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">live → metrics</text>
+            <text x="982" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">monitoring</text></g>
+        </g>
+
+        <!-- PRN lane nodes: the gates -->
+        <g font-family="'Geist', sans-serif">
+          <g><rect x="148" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#b3a8cf" stroke-width="1"/>
+            <rect x="152" y="128" width="14" height="10" rx="2" fill="#b3a8cf"/><text x="159" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">PRN</text>
+            <text x="198" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Gate G0</text>
+            <text x="198" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">policy · repos</text>
+            <text x="198" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">person decides</text></g>
+          <g><rect x="260" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#b3a8cf" stroke-width="1"/>
+            <rect x="264" y="128" width="14" height="10" rx="2" fill="#b3a8cf"/><text x="271" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">PRN</text>
+            <text x="310" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Gate G1</text>
+            <text x="310" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">portfolio call</text>
+            <text x="310" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">person decides</text></g>
+          <g><rect x="372" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#b3a8cf" stroke-width="1"/>
+            <rect x="376" y="128" width="14" height="10" rx="2" fill="#b3a8cf"/><text x="383" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">PRN</text>
+            <text x="422" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Gate G2</text>
+            <text x="422" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">ARB review</text>
+            <text x="422" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">person decides</text></g>
+          <g><rect x="484" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#b3a8cf" stroke-width="1"/>
+            <rect x="488" y="128" width="14" height="10" rx="2" fill="#b3a8cf"/><text x="495" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">PRN</text>
+            <text x="534" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Gate G3</text>
+            <text x="534" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">pilot ok</text>
+            <text x="534" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">person decides</text></g>
+          <g><rect x="596" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#b3a8cf" stroke-width="1"/>
+            <rect x="600" y="128" width="14" height="10" rx="2" fill="#b3a8cf"/><text x="607" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">PRN</text>
+            <text x="646" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Gate G4</text>
+            <text x="646" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">per unit</text>
+            <text x="646" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">person decides</text></g>
+          <g><rect x="708" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#b3a8cf" stroke-width="1"/>
+            <rect x="712" y="128" width="14" height="10" rx="2" fill="#b3a8cf"/><text x="719" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">PRN</text>
+            <text x="758" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Gate G5</text>
+            <text x="758" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">test exit · UAT</text>
+            <text x="758" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">person decides</text></g>
+          <g><rect x="820" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#b3a8cf" stroke-width="1"/>
+            <rect x="824" y="128" width="14" height="10" rx="2" fill="#b3a8cf"/><text x="831" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">PRN</text>
+            <text x="870" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Gate G6</text>
+            <text x="870" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">go / no-go</text>
+            <text x="870" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">person decides</text></g>
+        </g>
+
+        <!-- Legend -->
+        <g font-family="'Geist Mono', monospace" font-size="8" font-weight="500" letter-spacing="0.18em" fill="#a8b3c4">
+          <text x="130" y="228" text-anchor="end">STEPS</text>
+          <text x="130" y="252" text-anchor="end">FLOW</text>
+        </g>
+        <g>
+          <rect x="144" y="218" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/>
+          <text x="172" y="231" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">phase P0–P7 · lane KNT runs it</text>
+          <line x1="144" y1="252" x2="184" y2="252" stroke="#a8b3c4" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <text x="196" y="255" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">phase → gate → next phase · gate PRN decides</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>
