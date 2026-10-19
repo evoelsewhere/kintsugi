@@ -64,6 +64,7 @@ jobs:
       KINTSUGI_VERSION: sha-${{ github.sha }}
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Check out deployment bundle
         uses: actions/checkout@v7
@@ -73,7 +74,6 @@ jobs:
         env:
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
           set -euo pipefail
           : "${SSH_HOST:?Add the SSH_HOST repository variable}"
@@ -81,7 +81,6 @@ jobs:
           : "${KINTSUGI_REMOTE_DIR:?Add the KINTSUGI_REMOTE_DIR repository variable}"
           : "${SSH_PASSWORD:?Add the SSH_PASSWORD repository secret}"
           : "${SSH_KNOWN_HOSTS:?Add the SSH_KNOWN_HOSTS repository secret}"
-          : "${GHCR_PULL_TOKEN:?Add the GHCR_PULL_TOKEN repository secret}"
           [[ "$SSH_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "SSH_HOST has an invalid format" >&2; exit 1; }
           [[ "$SSH_USER" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "SSH_USER has an invalid format" >&2; exit 1; }
           [[ "$GHCR_USERNAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "GHCR username has an invalid format" >&2; exit 1; }
@@ -142,7 +141,7 @@ jobs:
         shell: bash
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_PULL_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           known_hosts="$RUNNER_TEMP/kintsugi_known_hosts"
