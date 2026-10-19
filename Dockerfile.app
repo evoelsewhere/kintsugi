@@ -16,7 +16,7 @@ ENV NODE_ENV=production \
 RUN groupadd --system --gid 10001 kintsugi \
     && useradd --system --uid 10001 --gid 10001 --home-dir /app --no-create-home kintsugi \
     && apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates \
+    && apt-get install --yes --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
