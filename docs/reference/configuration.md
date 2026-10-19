@@ -9,7 +9,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `KINTSUGI_VERSION` | no | `latest` | Image tag for `kintsugi-app` and `kintsugi-worker`; the worker also reports it in its heartbeat (Monitoring → Worker, [ADR-0030](../decisions/0030-worker-heartbeat-in-postgres.md)), falling back to its package version when unset |
-| `KINTSUGI_REGISTRY` | no | `registry.example.com/kintsugi` | Container registry hosting the images (use a local registry for air-gapped installs) |
+| `KINTSUGI_REGISTRY` | no | `ghcr.io/evoelsewhere` | Container registry namespace hosting `kintsugi-app` and `kintsugi-worker` (use a local registry for air-gapped installs) |
 | `KINTSUGI_HTTP_PORT` | no | `8080` | Published port of `kintsugi-app` |
 | `KINTSUGI_PUBLIC_URL` | yes | — | External URL (used for links, MCP and CLI configuration) |
 | `KINTSUGI_SECRET_KEY` | yes | — | Master key encrypting secrets in Postgres (`openssl rand -base64 32`) |
