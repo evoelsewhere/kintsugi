@@ -73,15 +73,12 @@ Add these repository secrets:
 |---|---|
 | `SSH_PASSWORD` | Password for the SSH account |
 | `SSH_KNOWN_HOSTS` | The verified known-hosts entry for the host and port |
-| `GHCR_PULL_TOKEN` | A read-only token with permission to pull the GHCR images |
 
 Enter secret values directly in GitHub's secret editor. Do not add passwords or tokens as repository variables, commit them, or paste them into workflow files.
 
 To obtain `SSH_KNOWN_HOSTS`, run `ssh-keyscan -p 22 host.example` from a trusted machine, replacing the example port and host. Verify the returned fingerprint with the server administrator or hosting console before saving the line as the secret. The workflow rejects an unknown or changed host key.
 
-To create `GHCR_PULL_TOKEN`, create a classic GitHub personal access token for an account that can read the repository's GHCR packages, with the `read:packages` scope, and save it as this secret. If the GitHub organization enforces SSO, authorize the token for that organization. This token is used only by the server to pull private images.
-
-GitHub Actions uses its built-in `GITHUB_TOKEN` with `packages: write` to publish images. The GHCR pull token is sent over SSH for the duration of the pull and stored in a temporary Docker config directory that the workflow removes afterward.
+GitHub Actions uses its built-in `GITHUB_TOKEN` to publish and pull the GHCR images, so no separate registry token is needed. The GHCR pull token is sent over SSH for the duration of the pull and stored in a temporary Docker config directory that the workflow removes afterward. If the packages already exist, grant this repository Actions access to them in the package settings.
 
 ## 3. Run the deployment
 
