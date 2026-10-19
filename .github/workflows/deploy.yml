@@ -1,0 +1,159 @@
+name: Build and deploy Kintsugi
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kintsugi-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        component: [app, worker]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.component }}
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/kintsugi-${{ matrix.component }}:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/kintsugi-${{ matrix.component }}:latest
+
+  deploy:
+    if: github.ref == 'refs/heads/master'
+    needs: publish
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ vars.SSH_HOST }}
+      SSH_USER: ${{ vars.SSH_USER }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      KINTSUGI_REMOTE_DIR: ${{ vars.KINTSUGI_REMOTE_DIR }}
+      GHCR_USERNAME: ${{ github.repository_owner }}
+      KINTSUGI_REGISTRY: ghcr.io/${{ github.repository_owner }}
+      KINTSUGI_VERSION: sha-${{ github.sha }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check out deployment bundle
+        uses: actions/checkout@v7
+
+      - name: Validate connection settings and pin the host key
+        shell: bash
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Add the SSH_HOST repository variable}"
+          : "${SSH_USER:?Add the SSH_USER repository variable}"
+          : "${KINTSUGI_REMOTE_DIR:?Add the KINTSUGI_REMOTE_DIR repository variable}"
+          : "${SSH_PASSWORD:?Add the SSH_PASSWORD repository secret}"
+          : "${SSH_KNOWN_HOSTS:?Add the SSH_KNOWN_HOSTS repository secret}"
+          : "${GHCR_PULL_TOKEN:?Add the GHCR_PULL_TOKEN repository secret}"
+          [[ "$SSH_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "SSH_HOST has an invalid format" >&2; exit 1; }
+          [[ "$SSH_USER" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "SSH_USER has an invalid format" >&2; exit 1; }
+          [[ "$GHCR_USERNAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "GHCR username has an invalid format" >&2; exit 1; }
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]] && (( SSH_PORT > 0 && SSH_PORT < 65536 )) || { echo "SSH_PORT must be between 1 and 65535" >&2; exit 1; }
+          [[ "$KINTSUGI_REMOTE_DIR" =~ ^/[A-Za-z0-9._/-]+$ && "$KINTSUGI_REMOTE_DIR" != *..* ]] || { echo "KINTSUGI_REMOTE_DIR must be a normalized absolute path" >&2; exit 1; }
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/kintsugi_known_hosts"
+          chmod 600 "$RUNNER_TEMP/kintsugi_known_hosts"
+
+      - name: Install sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends sshpass
+
+      - name: Copy Compose bundle and prepare the remote installation
+        shell: bash
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          known_hosts="$RUNNER_TEMP/kintsugi_known_hosts"
+          ssh_args=(-p "$SSH_PORT" -o BatchMode=no -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known_hosts")
+          remote="$SSH_USER@$SSH_HOST"
+          sshpass -e ssh "${ssh_args[@]}" "$remote" "mkdir -p -- '$KINTSUGI_REMOTE_DIR'"
+          tar -C deploy/compose -czf - docker-compose.yml .env.example \
+            | sshpass -e ssh "${ssh_args[@]}" "$remote" "tar -xzf - -C '$KINTSUGI_REMOTE_DIR'"
+          sshpass -e ssh "${ssh_args[@]}" "$remote" bash -s -- "$KINTSUGI_REMOTE_DIR" "$KINTSUGI_REGISTRY" "$KINTSUGI_VERSION" <<'REMOTE'
+          set -euo pipefail
+          install_dir="$1"
+          registry="$2"
+          version="$3"
+          if [[ ! -f "$install_dir/.env" ]]; then
+            echo "First install: copy .env.example to .env in $install_dir and fill the required values." >&2
+            exit 1
+          fi
+          for key in KINTSUGI_PUBLIC_URL KINTSUGI_SECRET_KEY POSTGRES_PASSWORD KINTSUGI_DATA_DIR; do
+            if ! grep -Eq "^${key}=.+$" "$install_dir/.env"; then
+              echo "Set $key in $install_dir/.env before deploying." >&2
+              exit 1
+            fi
+          done
+          set_env() {
+            key="$1"
+            value="$2"
+            if grep -q "^${key}=" "$install_dir/.env"; then
+              sed -i "s|^${key}=.*|${key}=${value}|" "$install_dir/.env"
+            else
+              printf '%s=%s\n' "$key" "$value" >> "$install_dir/.env"
+            fi
+          }
+          set_env KINTSUGI_REGISTRY "$registry"
+          set_env KINTSUGI_VERSION "$version"
+          docker version >/dev/null
+          docker compose version >/dev/null
+          docker compose --env-file "$install_dir/.env" -f "$install_dir/docker-compose.yml" config --quiet
+          REMOTE
+
+      - name: Pull and restart the Compose stack
+        shell: bash
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          set -euo pipefail
+          known_hosts="$RUNNER_TEMP/kintsugi_known_hosts"
+          ssh_args=(-p "$SSH_PORT" -o BatchMode=no -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known_hosts")
+          remote="$SSH_USER@$SSH_HOST"
+          auth_dir="$KINTSUGI_REMOTE_DIR/.ghcr-auth-$GITHUB_RUN_ID"
+          cleanup() {
+            sshpass -e ssh "${ssh_args[@]}" "$remote" "docker --config '$auth_dir' logout ghcr.io >/dev/null 2>&1 || true; rm -f -- '$auth_dir/config.json'; rmdir -- '$auth_dir' 2>/dev/null || true" || true
+          }
+          trap cleanup EXIT
+          sshpass -e ssh "${ssh_args[@]}" "$remote" "mkdir -m 700 -- '$auth_dir'"
+          printf '%s' "$GHCR_PULL_TOKEN" \
+            | sshpass -e ssh "${ssh_args[@]}" "$remote" "docker --config '$auth_dir' login ghcr.io --username '$GHCR_USERNAME' --password-stdin" >/dev/null
+          sshpass -e ssh "${ssh_args[@]}" "$remote" "cd '$KINTSUGI_REMOTE_DIR' && DOCKER_CONFIG='$auth_dir' docker compose pull && DOCKER_CONFIG='$auth_dir' docker compose up -d --remove-orphans --wait --wait-timeout 180 && docker compose ps"
