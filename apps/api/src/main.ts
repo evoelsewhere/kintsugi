@@ -4,8 +4,10 @@
 
 import "reflect-metadata";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { Logger, StandardSchemaValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NextFunction, Request, Response } from "express";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
@@ -22,6 +24,21 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: [env.logLevel] });
   // Agent packages (Agent Builder import, ADR-0026) are larger than the 100 kB default.
   app.useBodyParser("json", { limit: "4mb" });
+
+  const portalDir = process.env["KINTSUGI_PORTAL_DIR"];
+  if (portalDir !== undefined && portalDir.length > 0) {
+    const indexFile = join(portalDir, "index.html");
+    if (!existsSync(indexFile)) throw new Error(`Portal build is missing: ${indexFile}`);
+    app.useStaticAssets(portalDir, { index: false });
+    app.use((request: Request, response: Response, next: NextFunction) => {
+      const isApiPath = request.path === "/api" || request.path.startsWith("/api/");
+      if (request.method === "GET" && !isApiPath && request.accepts("html")) {
+        response.sendFile(indexFile);
+        return;
+      }
+      next();
+    });
+  }
 
   // Never serve on a partly migrated schema: a failed migration stops startup.
   await ensureSchema();

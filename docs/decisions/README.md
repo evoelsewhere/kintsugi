@@ -55,6 +55,7 @@ This page has two parts:
 | [0034](0034-understand-command-merges-map-rules-harden.md) | One understand command; map, extract-rules and harden are parts of it | Accepted |
 | [0037](0037-kernel-write-and-edit-tools-from-pi.md) | The kernel writes with pi's `write` and `edit`, not a custom `outputs_write` | Accepted (amends 0023) |
 | [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted |
+| [0039](0039-github-actions-ghcr-deployment.md) | Build and deploy the self-hosted package with GitHub Actions | Accepted |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amends 0015, 0026, 0027) |
 
@@ -115,6 +116,7 @@ This page has two parts:
 | D53 | Understand command | 🟢 | One `understand` command specifies the phase; `map`, `extract-rules` and `harden` commands and stage plans are removed (their method is its "Method reference") | M1 | ✅ [0034](0034-understand-command-merges-map-rules-harden.md) |
 | D54 | Kintsugi plugins | 🟢 | Plugins (Claude plugin format + workflows/scripts) are the catalog unit; built-in `understand` and `modernize`; project plugins in the document repo; marketplace, file tree + code view, workflow view | M1 | 🟡 [0035](0035-kintsugi-plugins-marketplace.md) |
 | D55 | Document repository layout | 🔴 | One repo per project; root for project-wide material, `applications/<app>/` for application content and one full-id unit directory for P1–P5 evidence; generated aggregates, rule-review separation, stable citation-derived rule ids, requirement/rule/PR/test traceability and merged gate records | M1 | ✅ [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) |
+| D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 

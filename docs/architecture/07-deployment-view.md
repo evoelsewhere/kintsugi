@@ -43,7 +43,7 @@ Details: [security](concepts/security.md).
 
 ## 7.4 Host requirements (estimate, D33)
 
-- Linux, Docker Engine 24+, Compose v2. Without Docker (development), the worker runs directly on Windows, macOS or Linux with Git, Python 3.12 and Node 22.
+- Linux, Docker Engine 24+, Compose v2.20+. Without Docker (development), the worker runs directly on Windows, macOS or Linux with Git, Python 3.12 and Node 22.
 - 4 vCPU, 16 GB RAM, 100 GB disk.
 - Outbound access to the configured Git servers and LLM providers.
 
@@ -53,6 +53,7 @@ Details: [security](concepts/security.md).
 |---|---|
 | Install | [Installation guide](../guides/installation.md) |
 | Upgrade | Pull new images; database migrations run on app start |
+| Build and deploy | GitHub Actions builds commit-tagged app and worker images, pushes them to GHCR, then updates the self-hosted Compose installation over SSH ([ADR-0039](../decisions/0039-github-actions-ghcr-deployment.md)) |
 | Backup | Postgres (`pg-data`). Code and documents are in Git; `KINTSUGI_DATA_DIR` and the KB can be rebuilt from Git (except imported repositories) |
 | Offline / air-gapped | Image tarballs + local registry (`KINTSUGI_REGISTRY`) |
 | Configuration | [Configuration reference](../reference/configuration.md) |
