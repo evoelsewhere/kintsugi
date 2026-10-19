@@ -59,6 +59,11 @@ jobs:
       SSH_USER: ${{ vars.SSH_USER }}
       SSH_PORT: ${{ vars.SSH_PORT || '22' }}
       KINTSUGI_REMOTE_DIR: ${{ vars.KINTSUGI_REMOTE_DIR }}
+      KINTSUGI_HTTP_BIND: ${{ vars.KINTSUGI_HTTP_BIND }}
+      KINTSUGI_HTTP_PORT: ${{ vars.KINTSUGI_HTTP_PORT }}
+      KINTSUGI_PUBLIC_URL: ${{ vars.KINTSUGI_PUBLIC_URL }}
+      KINTSUGI_DATA_DIR: ${{ vars.KINTSUGI_DATA_DIR }}
+      KINTSUGI_BOOTSTRAP_ADMIN_USER: ${{ vars.KINTSUGI_BOOTSTRAP_ADMIN_USER }}
       GHCR_USERNAME: ${{ github.repository_owner }}
       KINTSUGI_REGISTRY: ghcr.io/${{ github.repository_owner }}
       KINTSUGI_VERSION: sha-${{ github.sha }}
@@ -85,9 +90,20 @@ jobs:
           [[ "$SSH_USER" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "SSH_USER has an invalid format" >&2; exit 1; }
           [[ "$GHCR_USERNAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "GHCR username has an invalid format" >&2; exit 1; }
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]] && (( SSH_PORT > 0 && SSH_PORT < 65536 )) || { echo "SSH_PORT must be between 1 and 65535" >&2; exit 1; }
+          if [[ -n "$KINTSUGI_HTTP_PORT" ]]; then [[ "$KINTSUGI_HTTP_PORT" =~ ^[0-9]+$ ]] && (( KINTSUGI_HTTP_PORT > 0 && KINTSUGI_HTTP_PORT < 65536 )) || { echo "KINTSUGI_HTTP_PORT must be between 1 and 65535" >&2; exit 1; }; fi
+          if [[ -n "$KINTSUGI_HTTP_BIND" && ! "$KINTSUGI_HTTP_BIND" =~ ^(127\.0\.0\.1|0\.0\.0\.0)$ ]]; then echo "KINTSUGI_HTTP_BIND must be 127.0.0.1 or 0.0.0.0" >&2; exit 1; fi
+          if [[ -n "$KINTSUGI_PUBLIC_URL" && ! "$KINTSUGI_PUBLIC_URL" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?$ ]]; then echo "KINTSUGI_PUBLIC_URL must be a plain http(s) URL without spaces or query parameters" >&2; exit 1; fi
+          if [[ -n "$KINTSUGI_DATA_DIR" && ( ! "$KINTSUGI_DATA_DIR" =~ ^/[A-Za-z0-9._/-]+$ || "$KINTSUGI_DATA_DIR" == *..* ) ]]; then echo "KINTSUGI_DATA_DIR must be a normalized absolute path" >&2; exit 1; fi
+          if [[ -n "$KINTSUGI_BOOTSTRAP_ADMIN_USER" && ! "$KINTSUGI_BOOTSTRAP_ADMIN_USER" =~ ^[A-Za-z0-9._-]+$ ]]; then echo "KINTSUGI_BOOTSTRAP_ADMIN_USER has an invalid format" >&2; exit 1; fi
           [[ "$KINTSUGI_REMOTE_DIR" =~ ^/[A-Za-z0-9._/-]+$ && "$KINTSUGI_REMOTE_DIR" != *..* ]] || { echo "KINTSUGI_REMOTE_DIR must be a normalized absolute path" >&2; exit 1; }
           printf '%s\n' "$SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/kintsugi_known_hosts"
           chmod 600 "$RUNNER_TEMP/kintsugi_known_hosts"
+          host_key_name="$SSH_HOST"
+          if [[ "$SSH_PORT" != 22 ]]; then host_key_name="[$SSH_HOST]:$SSH_PORT"; fi
+          if ! ssh-keygen -F "$host_key_name" -f "$RUNNER_TEMP/kintsugi_known_hosts" | grep -q ' ssh-ed25519 '; then
+            echo "SSH_KNOWN_HOSTS must contain the full ED25519 host-key line for $host_key_name (not only its fingerprint)." >&2
+            exit 1
+          fi
 
       - name: Install sshpass
         run: |
@@ -98,6 +114,9 @@ jobs:
         shell: bash
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
+          KINTSUGI_SECRET_KEY: ${{ secrets.KINTSUGI_SECRET_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD }}
         run: |
           set -euo pipefail
           known_hosts="$RUNNER_TEMP/kintsugi_known_hosts"
@@ -106,36 +125,89 @@ jobs:
           sshpass -e ssh "${ssh_args[@]}" "$remote" "mkdir -p -- '$KINTSUGI_REMOTE_DIR'"
           tar -C deploy/compose -czf - docker-compose.yml .env.example \
             | sshpass -e ssh "${ssh_args[@]}" "$remote" "tar -xzf - -C '$KINTSUGI_REMOTE_DIR'"
-          sshpass -e ssh "${ssh_args[@]}" "$remote" bash -s -- "$KINTSUGI_REMOTE_DIR" "$KINTSUGI_REGISTRY" "$KINTSUGI_VERSION" <<'REMOTE'
+          {
+            printf 'DEPLOY_KINTSUGI_PUBLIC_URL=%q\n' "$KINTSUGI_PUBLIC_URL"
+            printf 'DEPLOY_KINTSUGI_HTTP_BIND=%q\n' "$KINTSUGI_HTTP_BIND"
+            printf 'DEPLOY_KINTSUGI_HTTP_PORT=%q\n' "$KINTSUGI_HTTP_PORT"
+            printf 'DEPLOY_KINTSUGI_DATA_DIR=%q\n' "$KINTSUGI_DATA_DIR"
+            printf 'DEPLOY_KINTSUGI_BOOTSTRAP_ADMIN_USER=%q\n' "$KINTSUGI_BOOTSTRAP_ADMIN_USER"
+            printf 'DEPLOY_KINTSUGI_SECRET_KEY=%q\n' "$KINTSUGI_SECRET_KEY"
+            printf 'DEPLOY_POSTGRES_PASSWORD=%q\n' "$POSTGRES_PASSWORD"
+            printf 'DEPLOY_KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD=%q\n' "$KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD"
+            cat <<'REMOTE'
           set -euo pipefail
           install_dir="$1"
           registry="$2"
           version="$3"
+          public_url="${DEPLOY_KINTSUGI_PUBLIC_URL:-}"
+          http_bind="${DEPLOY_KINTSUGI_HTTP_BIND:-}"
+          http_port="${DEPLOY_KINTSUGI_HTTP_PORT:-}"
+          data_dir="${DEPLOY_KINTSUGI_DATA_DIR:-}"
+          admin_user="${DEPLOY_KINTSUGI_BOOTSTRAP_ADMIN_USER:-}"
+          secret_key="${DEPLOY_KINTSUGI_SECRET_KEY:-}"
+          postgres_password="${DEPLOY_POSTGRES_PASSWORD:-}"
+          admin_password="${DEPLOY_KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD:-}"
+          set_env() {
+            key="$1"
+            value="$2"
+            escaped_value="${value//\\/\\\\}"
+            escaped_value="${escaped_value//&/\\&}"
+            escaped_value="${escaped_value//|/\\|}"
+            if grep -q "^${key}=" "$install_dir/.env"; then
+              sed -i "s|^${key}=.*|${key}=${escaped_value}|" "$install_dir/.env"
+            else
+              printf '%s=%s\n' "$key" "$value" >> "$install_dir/.env"
+            fi
+          }
           if [[ ! -f "$install_dir/.env" ]]; then
-            echo "First install: copy .env.example to .env in $install_dir and fill the required values." >&2
-            exit 1
+            cp "$install_dir/.env.example" "$install_dir/.env"
+            [[ -n "$data_dir" ]] || data_dir="$install_dir/data"
+            [[ -n "$secret_key" ]] || secret_key="$(openssl rand -base64 32 | tr -d '\n')"
+            [[ -n "$postgres_password" ]] || postgres_password="$(openssl rand -hex 32)"
+            [[ -n "$admin_password" ]] || admin_password="$(openssl rand -hex 24)"
+            [[ "$secret_key" =~ ^[A-Za-z0-9+/]+={0,2}$ ]] && [[ "$(printf '%s' "$secret_key" | base64 -d 2>/dev/null | wc -c)" -eq 32 ]] || { echo "KINTSUGI_SECRET_KEY must be a base64-encoded 32-byte key" >&2; exit 1; }
+            [[ "$postgres_password" =~ ^[A-Fa-f0-9]{32,}$ ]] || { echo "POSTGRES_PASSWORD must be at least 32 hexadecimal characters" >&2; exit 1; }
+            [[ "$admin_password" =~ ^[A-Za-z0-9._-]{8,}$ ]] || { echo "KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD must be at least 8 letters, digits, dots, underscores, or hyphens" >&2; exit 1; }
+            [[ -n "$public_url" ]] && set_env KINTSUGI_PUBLIC_URL "$public_url"
+            [[ -n "$http_bind" ]] && set_env KINTSUGI_HTTP_BIND "$http_bind"
+            [[ -n "$http_port" ]] && set_env KINTSUGI_HTTP_PORT "$http_port"
+            [[ -n "$admin_user" ]] && set_env KINTSUGI_BOOTSTRAP_ADMIN_USER "$admin_user"
+            set_env KINTSUGI_DATA_DIR "$data_dir"
+            set_env KINTSUGI_SECRET_KEY "$secret_key"
+            set_env POSTGRES_PASSWORD "$postgres_password"
+            set_env KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD "$admin_password"
+            chmod 600 "$install_dir/.env"
+          else
+            [[ -n "$public_url" ]] && set_env KINTSUGI_PUBLIC_URL "$public_url"
+            [[ -n "$http_bind" ]] && set_env KINTSUGI_HTTP_BIND "$http_bind"
+            [[ -n "$http_port" ]] && set_env KINTSUGI_HTTP_PORT "$http_port"
           fi
-          for key in KINTSUGI_PUBLIC_URL KINTSUGI_SECRET_KEY POSTGRES_PASSWORD KINTSUGI_DATA_DIR; do
+          for key in KINTSUGI_PUBLIC_URL KINTSUGI_SECRET_KEY POSTGRES_PASSWORD KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD KINTSUGI_DATA_DIR; do
             if ! grep -Eq "^${key}=.+$" "$install_dir/.env"; then
               echo "Set $key in $install_dir/.env before deploying." >&2
               exit 1
             fi
           done
-          set_env() {
-            key="$1"
-            value="$2"
-            if grep -q "^${key}=" "$install_dir/.env"; then
-              sed -i "s|^${key}=.*|${key}=${value}|" "$install_dir/.env"
-            else
-              printf '%s=%s\n' "$key" "$value" >> "$install_dir/.env"
+          data_dir="$(sed -n 's/^KINTSUGI_DATA_DIR=//p' "$install_dir/.env" | head -n 1)"
+          [[ "$data_dir" =~ ^/[A-Za-z0-9._/-]+$ && "$data_dir" != *..* && "$data_dir" != / ]] || { echo "KINTSUGI_DATA_DIR must be a normalized absolute path" >&2; exit 1; }
+          mkdir -p "$data_dir"
+          if [[ ! -f "$install_dir/.data-dir-owner-set" ]]; then
+            if [[ "$(stat -c '%u:%g' "$data_dir")" != 10001:10001 ]]; then
+              if ! sudo -n chown 10001:10001 "$data_dir"; then
+                echo "Cannot prepare the worker data directory. Run: sudo chown 10001:10001 '$data_dir'" >&2
+                exit 1
+              fi
             fi
-          }
+            touch "$install_dir/.data-dir-owner-set"
+          fi
           set_env KINTSUGI_REGISTRY "$registry"
           set_env KINTSUGI_VERSION "$version"
+          chmod 600 "$install_dir/.env"
           docker version >/dev/null
           docker compose version >/dev/null
           docker compose --env-file "$install_dir/.env" -f "$install_dir/docker-compose.yml" config --quiet
           REMOTE
+          } | sshpass -e ssh "${ssh_args[@]}" "$remote" bash -s -- "$KINTSUGI_REMOTE_DIR" "$KINTSUGI_REGISTRY" "$KINTSUGI_VERSION"
 
       - name: Pull and restart the Compose stack
         shell: bash

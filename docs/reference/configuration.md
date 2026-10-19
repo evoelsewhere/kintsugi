@@ -10,13 +10,14 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 |---|---|---|---|
 | `KINTSUGI_VERSION` | no | `latest` | Image tag for `kintsugi-app` and `kintsugi-worker`; the worker also reports it in its heartbeat (Monitoring → Worker, [ADR-0030](../decisions/0030-worker-heartbeat-in-postgres.md)), falling back to its package version when unset |
 | `KINTSUGI_REGISTRY` | no | `ghcr.io/evoelsewhere` | Container registry namespace hosting `kintsugi-app` and `kintsugi-worker` (use a local registry for air-gapped installs) |
+| `KINTSUGI_HTTP_BIND` | no | `127.0.0.1` | Host interface for the published app port. Loopback keeps the app private for SSH-tunnel access or a local TLS reverse proxy |
 | `KINTSUGI_HTTP_PORT` | no | `8080` | Published port of `kintsugi-app` |
-| `KINTSUGI_PUBLIC_URL` | yes | — | External URL (used for links, MCP and CLI configuration) |
+| `KINTSUGI_PUBLIC_URL` | yes | `http://localhost:8080` in the Compose starter | External URL (used for links, MCP and CLI configuration); use the HTTPS URL when publishing behind a TLS reverse proxy |
 | `KINTSUGI_SECRET_KEY` | yes | — | Master key encrypting secrets in Postgres (`openssl rand -base64 32`) |
 | `KINTSUGI_BOOTSTRAP_ADMIN_USER` | yes (first start) | `admin` | First admin account |
-| `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` | yes (first start) | — | First admin password, at least 8 characters; startup fails without it while the installation has no users. Change it after first sign-in |
-| `POSTGRES_PASSWORD` | yes | — | Password of the `kintsugi` database user |
-| `KINTSUGI_DATA_DIR` | yes | — | Host directory for Git mirrors, document repo clones and per-job checkouts ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)); size it for every registered repository plus running jobs. Without Docker (development) it defaults to `./.kintsugi/data`. The API reads the document repo mirrors here (read-only), so it needs the same value as the worker |
+| `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` | yes (first start) | — | First admin password; the deploy workflow accepts letters, digits, dots, underscores, and hyphens (minimum 8 characters). Change it after first sign-in |
+| `POSTGRES_PASSWORD` | yes | — | Hexadecimal password of the `kintsugi` database user (minimum 32 characters in the deploy workflow) |
+| `KINTSUGI_DATA_DIR` | yes | `<deployment directory>/data` in the first Compose deployment | Host directory for Git mirrors, document repo clones and per-job checkouts ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)); size it for every registered repository plus running jobs. Without Docker (development) it defaults to `./.kintsugi/data`. The API reads the document repo mirrors here (read-only), so it needs the same value as the worker |
 | `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between full Git re-syncs of every repository (minimum 30); new repositories are cloned within seconds |
 | `KINTSUGI_JOB_MAX_CONCURRENCY` | no | `2` | Parallel job runs per worker |
 | `KINTSUGI_JOB_DEFAULT_TIMEOUT` | no | `0` | Wall-clock limit of an agent job (seconds); `0` = no limit |

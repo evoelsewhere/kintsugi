@@ -5,9 +5,9 @@ The Docker Compose package for one Kintsugi installation. The app and worker ima
 | File | Purpose |
 |---|---|
 | `docker-compose.yml` | Services: `app`, `worker`, `postgres` |
-| `.env.example` | Installation settings — see the [configuration reference](../../docs/reference/configuration.md) |
+| `.env.example` | Template used to create a private `.env` on first deployment — see the [configuration reference](../../docs/reference/configuration.md) |
 
-The app and worker images are defined by [`Dockerfile.app`](../../Dockerfile.app) and [`Dockerfile.worker`](../../Dockerfile.worker). The deployment workflow updates the installation to the commit SHA that produced the images, without replacing the host `.env` file.
+The app and worker images are defined by [`Dockerfile.app`](../../Dockerfile.app) and [`Dockerfile.worker`](../../Dockerfile.worker). On first deploy, the workflow creates `.env` from GitHub Actions variables and secrets, generates any unset secrets on the host, and sets the file mode to `600`. It preserves stored secrets on later deployments and updates configured URL/bind/port variables plus the workflow-managed `KINTSUGI_REGISTRY` and `KINTSUGI_VERSION`.
 
 Runtime jobs run inside `worker`, each in its own job workspace under the data directory ([ADR-0029](../../docs/decisions/0029-job-workspaces-instead-of-os-sandboxes.md)): no Docker socket, no per-job container and no OS-level sandbox. The worker image therefore carries the standard script environment (git 2.40+, Python 3.12 and Node 22 with their standard libraries only) and runs as a non-root user. Jobs are not network-isolated: to restrict egress, attach the worker to a network that reaches only Postgres, the Git servers and the LLM providers.
 
