@@ -179,8 +179,7 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
             </Link>
           </CardTitle>
           <CardDescription>
-            {application.id} · {application.disposition}
-            {application.pipeline === undefined ? "" : ` · pipeline ${application.pipeline}`}
+            {application.id}
           </CardDescription>
         </div>
         <div className="flex shrink-0 items-center gap-2">

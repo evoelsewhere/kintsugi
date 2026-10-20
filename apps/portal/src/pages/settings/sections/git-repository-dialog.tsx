@@ -11,18 +11,10 @@ import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
 import { gitApi, type GitServerView, type TestAccessResult } from "@/lib/api/git";
-
-const REPOSITORY_ID = /^[a-z0-9][a-z0-9-]*$/;
+import { uniqueId } from "@/lib/ids";
 
 /** "https://host/org/legacy-app.git" → "legacy-app". */
-function idFromUrl(url: string): string {
-  const last = url.trim().replace(/\/+$/, "").split(/[/:]/).at(-1) ?? "";
-  return last
-    .replace(/\.git$/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+const lastSegment = (url: string): string => (url.trim().replace(/\/+$/, "").split(/[/:]/).at(-1) ?? "").replace(/\.git$/, "");
 
 export interface GitRepositoryDialogProps {
   open: boolean;
@@ -39,14 +31,12 @@ export function GitRepositoryDialog(props: GitRepositoryDialogProps): React.JSX.
 function GitRepositoryForm({ servers, existingIds, onClose, onSubmit }: GitRepositoryDialogProps): React.JSX.Element {
   const [serverId, setServerId] = useState(servers[0]?.id ?? "");
   const [url, setUrl] = useState("");
-  const [id, setId] = useState("");
-  const [idEdited, setIdEdited] = useState(false);
   const [test, setTest] = useState<TestAccessResult | "testing" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const server = servers.find((entry) => entry.id === serverId);
-  const effectiveId = idEdited ? id : idFromUrl(url);
+  const effectiveId = uniqueId(lastSegment(url), existingIds);
 
   async function runTest(): Promise<void> {
     if (serverId === "" || url.trim() === "") return;
@@ -61,8 +51,7 @@ function GitRepositoryForm({ servers, existingIds, onClose, onSubmit }: GitRepos
   async function submit(): Promise<void> {
     if (serverId === "") return setError("Add a Git server first.");
     if (url.trim() === "") return setError("Paste the repository's clone URL.");
-    if (!REPOSITORY_ID.test(effectiveId)) return setError("Id: lowercase letters, digits and dashes.");
-    if (existingIds.includes(effectiveId)) return setError(`A repository "${effectiveId}" already exists.`);
+    if (effectiveId === "") return setError("The clone URL does not name a repository.");
     setError(null);
     setSaving(true);
     try {
@@ -134,16 +123,6 @@ function GitRepositoryForm({ servers, existingIds, onClose, onSubmit }: GitRepos
             {test === "testing" ? "Testing…" : test.message}
           </p>
         )}
-        <Field label="Id" hint="Derived from the URL; used in storage paths.">
-          <Input
-            value={effectiveId}
-            placeholder="legacy-app"
-            onChange={(event) => {
-              setIdEdited(true);
-              setId(event.target.value.trim());
-            }}
-          />
-        </Field>
         {error === null ? null : (
           <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">
             {error}

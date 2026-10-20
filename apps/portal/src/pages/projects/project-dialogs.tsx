@@ -2,7 +2,7 @@
 // application, and link a registered repository to an application as legacy, legacy-data
 // or target (with its component). Repositories come from Settings -> Git.
 
-import { DISPOSITIONS, type ApplicationRepositoryRole, type Disposition } from "@kintsugi/domain";
+import type { ApplicationRepositoryRole } from "@kintsugi/domain";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -11,18 +11,8 @@ import { Modal } from "@/components/ui/modal";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { GitRepositoryView } from "@/lib/api/git";
+import { uniqueId } from "@/lib/ids";
 import type { ApplicationInput, ApplicationView, LinkInput, ProjectInput, ProjectView } from "@/lib/api/projects";
-
-const ID = /^[a-z0-9][a-z0-9-]*$/;
-
-/** "Billing web" → "billing-web". */
-function idFromName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 const message = (failure: unknown): string => (failure instanceof Error ? failure.message : String(failure));
 
@@ -91,17 +81,14 @@ export function ProjectDialog(props: ProjectDialogProps): React.JSX.Element | nu
 
 function ProjectForm({ project, repositories, existingIds, onClose, onSubmit }: ProjectDialogProps): React.JSX.Element {
   const [name, setName] = useState(project?.name ?? "");
-  const [id, setId] = useState(project?.id ?? "");
-  const [idEdited, setIdEdited] = useState(project !== null);
   const [description, setDescription] = useState(project?.description ?? "");
   const [documentRepositoryId, setDocumentRepositoryId] = useState(project?.documentRepositoryId ?? "");
   const { saving, error, setError, run } = useSubmit(onClose);
-  const effectiveId = idEdited ? id : idFromName(name);
 
   function submit(): void {
     if (name.trim() === "") return setError("Enter a name.");
-    if (!ID.test(effectiveId)) return setError("Id: lowercase letters, digits and dashes.");
-    if (project === null && existingIds.includes(effectiveId)) return setError(`A project "${effectiveId}" already exists.`);
+    const effectiveId = project?.id ?? uniqueId(name, existingIds);
+    if (effectiveId === "") return setError("The name needs at least one letter or digit.");
     if (documentRepositoryId === "") return setError("Pick the document repository.");
     void run(() =>
       onSubmit(effectiveId, { name: name.trim(), description: description.trim() === "" ? (project === null ? undefined : null) : description.trim(), documentRepositoryId }),
@@ -120,17 +107,6 @@ function ProjectForm({ project, repositories, existingIds, onClose, onSubmit }: 
         <Field label="Name">
           <Input value={name} placeholder="Billing modernization" onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label="Id" hint={project === null ? "Derived from the name; stable once created." : "The id cannot change."}>
-          <Input
-            value={effectiveId}
-            disabled={project !== null}
-            placeholder="billing-modernization"
-            onChange={(event) => {
-              setIdEdited(true);
-              setId(event.target.value.trim());
-            }}
-          />
-        </Field>
         <Field label="Description">
           <Textarea value={description} rows={3} onChange={(event) => setDescription(event.target.value)} />
         </Field>
@@ -144,8 +120,6 @@ function ProjectForm({ project, repositories, existingIds, onClose, onSubmit }: 
 }
 
 // ---- application ----
-
-const DISPOSITION_OPTIONS: SelectOption[] = DISPOSITIONS.map((disposition) => ({ value: disposition, label: disposition }));
 
 export interface ApplicationDialogProps {
   open: boolean;
@@ -162,50 +136,27 @@ export function ApplicationDialog(props: ApplicationDialogProps): React.JSX.Elem
 
 function ApplicationForm({ application, existingIds, onClose, onSubmit }: ApplicationDialogProps): React.JSX.Element {
   const [name, setName] = useState(application?.name ?? "");
-  const [id, setId] = useState(application?.id ?? "");
-  const [idEdited, setIdEdited] = useState(application !== null);
-  const [disposition, setDisposition] = useState<Disposition>(application?.disposition ?? "refactor");
-  const [pipeline, setPipeline] = useState(application?.pipeline ?? "");
   const { saving, error, setError, run } = useSubmit(onClose);
-  const effectiveId = idEdited ? id : idFromName(name);
 
   function submit(): void {
     if (name.trim() === "") return setError("Enter a name.");
-    if (!ID.test(effectiveId)) return setError("Id: lowercase letters, digits and dashes.");
-    if (application === null && existingIds.includes(effectiveId)) return setError(`An application "${effectiveId}" already exists.`);
-    const trimmed = pipeline.trim();
-    if (trimmed !== "" && !ID.test(trimmed)) return setError("Pipeline: lowercase letters, digits and dashes.");
-    void run(() => onSubmit(effectiveId, { name: name.trim(), disposition, pipeline: trimmed === "" ? (application === null ? undefined : null) : trimmed }));
+    const effectiveId = application?.id ?? uniqueId(name, existingIds);
+    if (effectiveId === "") return setError("The name needs at least one letter or digit.");
+    // Every application is rebuilt: the disposition is not a choice.
+    void run(() => onSubmit(effectiveId, { name: name.trim(), disposition: "rebuild" }));
   }
 
   return (
     <Modal
       open
       title={application === null ? "Add application" : "Edit application"}
-      description="An application in scope, with its 7R strategy and the pipeline it follows."
+      description="An application in scope: it is rebuilt from its legacy code."
       onClose={onClose}
       footer={<Footer saving={saving} label={application === null ? "Add application" : "Save"} onClose={onClose} onSubmit={submit} />}
     >
       <div className="flex flex-col gap-4">
         <Field label="Name">
           <Input value={name} placeholder="Billing web" onChange={(event) => setName(event.target.value)} />
-        </Field>
-        <Field label="Id" hint={application === null ? "Derived from the name; used in unit ids and paths." : "The id cannot change."}>
-          <Input
-            value={effectiveId}
-            disabled={application !== null}
-            placeholder="billing-web"
-            onChange={(event) => {
-              setIdEdited(true);
-              setId(event.target.value.trim());
-            }}
-          />
-        </Field>
-        <Field label="Disposition (7R)">
-          <Select value={disposition} options={DISPOSITION_OPTIONS} onChange={(value) => setDisposition(value as Disposition)} />
-        </Field>
-        <Field label="Pipeline" hint="A built-in pipeline id (e.g. refactor), or a pipeline declared in kintsugi.yaml. Optional.">
-          <Input value={pipeline} placeholder="refactor" onChange={(event) => setPipeline(event.target.value)} />
         </Field>
         <FormError error={error} />
       </div>
