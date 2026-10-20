@@ -25,7 +25,7 @@ export interface SnapshotRetentionRecord {
 export interface SnapshotRetentionRepository {
   get(snapshotId: string): Promise<SnapshotRetentionRecord | undefined>;
   claimExpired(): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }>;
-  markReady(snapshotId: string): Promise<void>;
+  markReady(snapshotId: string): Promise<boolean>;
   markFailed(snapshotId: string, code: string): Promise<void>;
   claimStalePreparing(): Promise<SnapshotRetentionRecord[]>;
   withSnapshotLock<T>(snapshotId: string, work: () => Promise<T>): Promise<T>;
@@ -158,11 +158,6 @@ async function retainSnapshotLocked(deps: SnapshotRetentionDependencies, snapsho
   if (snapshot.status === "expired" || snapshot.status === "expiring") return { status: "expired", pinned: 0 };
   if (snapshot.status === "failed") return { status: "failed", pinned: 0, ...(snapshot.errorCode === undefined ? {} : { errorCode: snapshot.errorCode }) };
   if (snapshot.status === "ready") return { status: "ready", pinned: snapshot.repositories.length };
-  if (Date.parse(snapshot.expiresAt) <= Date.now()) {
-    await releaseSnapshotPins(deps, snapshot);
-    await deps.repository.markFailed(snapshotId, "SNAPSHOT_PREPARATION_EXPIRED");
-    return { status: "failed", pinned: 0, errorCode: "SNAPSHOT_PREPARATION_EXPIRED" };
-  }
   if (snapshot.repositories.length === 0) {
     await deps.repository.markFailed(snapshotId, "SNAPSHOT_PIN_FAILED");
     return { status: "failed", pinned: 0, errorCode: "SNAPSHOT_PIN_FAILED" };
@@ -173,7 +168,11 @@ async function retainSnapshotLocked(deps: SnapshotRetentionDependencies, snapsho
     for (const pin of snapshot.repositories) {
       if (await deps.pins.retain(snapshotId, pin)) created.push(pin);
     }
-    await deps.repository.markReady(snapshotId);
+    if (!(await deps.repository.markReady(snapshotId))) {
+      await releaseSnapshotPins(deps, snapshot);
+      await deps.repository.markFailed(snapshotId, "SNAPSHOT_PREPARATION_EXPIRED");
+      return { status: "failed", pinned: 0, errorCode: "SNAPSHOT_PREPARATION_EXPIRED" };
+    }
     return { status: "ready", pinned: snapshot.repositories.length };
   } catch (error) {
     for (const pin of created.reverse()) await deps.pins.release(snapshotId, pin).catch(() => undefined);
