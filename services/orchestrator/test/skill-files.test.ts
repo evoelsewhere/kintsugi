@@ -1,15 +1,19 @@
 // A skill's supporting files are written into the job inputs and named in the definition, never carried in it.
 
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { makeReadOnly, makeWritable } from "@kintsugi/runtime/launcher";
 import type { AgentDefinition } from "@kintsugi/runtime-sdk";
 import { afterEach, describe, expect, it } from "vitest";
 import { materializeSkillFiles } from "../src/jobs/skill-files.js";
 
 let dir: string | undefined;
 afterEach(async () => {
-  if (dir !== undefined) await rm(dir, { recursive: true, force: true });
+  if (dir !== undefined) {
+    await makeWritable(dir);
+    await rm(dir, { recursive: true, force: true });
+  }
   dir = undefined;
 });
 
@@ -30,6 +34,19 @@ describe("materializeSkillFiles", () => {
     expect(skill.supporting).toEqual({ dir: join(dir, ".skills", "diagrams"), paths: ["references/a.md", "references/b.md"] });
     expect(await readFile(join(dir, ".skills", "diagrams", "references", "a.md"), "utf8")).toBe("A");
     expect(result.skills![1]).toEqual({ name: "plain", content: "body" });
+  });
+
+  it("materializes skill files in read-only inputs and locks them again", async () => {
+    dir = await mkdtemp(join(tmpdir(), "skill-files-"));
+    await makeReadOnly(dir);
+
+    const result = await materializeSkillFiles(definition({ "references/a.md": "A" }), dir);
+
+    expect(await readFile(join(dir, ".skills", "diagrams", "references", "a.md"), "utf8")).toBe("A");
+    expect(result.skills![0]!.supporting?.paths).toEqual(["references/a.md"]);
+    if (process.platform !== "win32") {
+      expect((await stat(dir)).mode & 0o222).toBe(0);
+    }
   });
 
   it("returns a definition without skill files unchanged", async () => {
