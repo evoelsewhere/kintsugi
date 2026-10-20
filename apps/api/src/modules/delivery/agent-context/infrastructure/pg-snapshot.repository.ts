@@ -9,6 +9,7 @@ import {
   SnapshotRepository,
   type SnapshotCursorInput,
   type SnapshotCursorRecord,
+  type SnapshotCreateInput,
   type SnapshotManifest,
   type SnapshotRecord,
   type SnapshotSource,
@@ -41,7 +42,10 @@ interface CursorRow {
 
 @Injectable()
 export class PgSnapshotRepository extends SnapshotRepository {
-  async create(snapshot: Omit<SnapshotRecord, "status">): Promise<void> {
+  async create(snapshot: SnapshotCreateInput): Promise<void> {
+    if (!Number.isSafeInteger(snapshot.retentionMs) || snapshot.retentionMs < 1) {
+      throw new TypeError("snapshot retentionMs must be a positive safe integer");
+    }
     const { manifest } = snapshot;
     const sourceRows = manifest.sources.map((source) => ({
       source_id: source.sourceId,
@@ -77,7 +81,8 @@ export class PgSnapshotRepository extends SnapshotRepository {
         await tx.query(
           "insert into delivery.member_snapshot " +
             "(snapshot_id, project_id, unit_id, activity, requested_by_user_id, context_revision, task, readiness, manifest, created_at, expires_at) " +
-            "values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11)",
+            "values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, clock_timestamp(), " +
+            "clock_timestamp() + ($10::double precision * interval '1 millisecond'))",
           [
             manifest.snapshotId,
             manifest.projectId,
@@ -88,8 +93,7 @@ export class PgSnapshotRepository extends SnapshotRepository {
             JSON.stringify(snapshot.workItem),
             JSON.stringify(snapshot.readiness),
             JSON.stringify(manifest),
-            snapshot.createdAt,
-            snapshot.expiresAt,
+            snapshot.retentionMs,
           ],
         );
         await tx.query(
@@ -126,6 +130,15 @@ export class PgSnapshotRepository extends SnapshotRepository {
       expiresAt: row.expires_at.toISOString(),
       ...(row.failure_code === null ? {} : { errorCode: row.failure_code }),
     };
+  }
+
+  async isAvailable(snapshotId: string): Promise<boolean> {
+    const result = await getPool().query<{ available: boolean }>(
+      "select status not in ('expired', 'expiring') and expires_at > clock_timestamp() as available " +
+        "from delivery.member_snapshot where snapshot_id = $1",
+      [snapshotId],
+    );
+    return result.rows[0]?.available === true;
   }
 
   async createCursor(cursor: SnapshotCursorInput): Promise<string> {

@@ -1,6 +1,7 @@
 // CTX-02/04/05/07/08: fixed Git revisions, bounded cited sections, persistent handles and access checks.
 
 import { mkdtemp, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +11,7 @@ import { SnapshotService } from "../../src/modules/delivery/agent-context/applic
 import { DocumentQueryService } from "../../src/modules/delivery/agent-context/application/document-query.service.js";
 import { SnapshotRepository } from "../../src/modules/delivery/agent-context/domain/snapshot.js";
 import type { MemberPrincipal } from "../../src/modules/core/auth/index.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { startGitHttpServer } from "@kintsugi/git/testing";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "../support/database.js";
 import { adminClient, memberClient, startTestAppWithDatabase, type TestApp } from "../support/app.js";
@@ -148,6 +149,47 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
     const source = brief.sources.find((item) => item.role === "task-pack");
     expect(source).toBeDefined();
     expect(brief.documentRepoCommit).toBe(commitA);
+
+    const repository = app.nest.get(SnapshotRepository);
+    const template = await repository.get(brief.snapshotId);
+    expect(template).toBeDefined();
+    const apiNow = new Date();
+    const retentionMs = 24 * 60 * 60 * 1000;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(apiNow.getTime() + retentionMs));
+      const futureId = "ctx_" + randomUUID();
+      await repository.create({
+        manifest: { ...template!.manifest, snapshotId: futureId },
+        workItem: template!.workItem,
+        readiness: template!.readiness,
+        requestedByUserId: template!.requestedByUserId,
+        retentionMs,
+      });
+      const future = await repository.get(futureId);
+      const databaseNow = await app.db.query<{ now: Date }>("select clock_timestamp() as now");
+      expect(future).toBeDefined();
+      expect(Math.abs(Date.parse(future!.createdAt) - databaseNow.rows[0]!.now.getTime())).toBeLessThan(5_000);
+      expect(Date.parse(future!.expiresAt) - databaseNow.rows[0]!.now.getTime()).toBeGreaterThan(23 * 60 * 60 * 1000);
+      await expect(snapshotService.assertAvailable(future!)).resolves.toBeUndefined();
+
+      vi.setSystemTime(new Date(apiNow.getTime() - retentionMs));
+      const expiredId = "ctx_" + randomUUID();
+      await repository.create({
+        manifest: { ...template!.manifest, snapshotId: expiredId },
+        workItem: template!.workItem,
+        readiness: template!.readiness,
+        requestedByUserId: template!.requestedByUserId,
+        retentionMs: 1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const expired = await repository.get(expiredId);
+      expect(expired).toBeDefined();
+      await expect(snapshotService.assertAvailable(expired!)).rejects.toThrow("SNAPSHOT_EXPIRED");
+    } finally {
+      vi.useRealTimers();
+    }
+
     expect(brief.requiredContextStatus).toBe("partial");
     expect(brief.omittedSections).toHaveLength(1);
     expect(brief.nextCursor).toBeDefined();
