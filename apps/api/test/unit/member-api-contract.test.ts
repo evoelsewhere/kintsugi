@@ -96,6 +96,27 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     expect(result.nextAction).toContain(action);
   });
 
+  it.each([
+    { ready: true, action: "The task is approved; implement it, then create a pull request." },
+    { ready: false, action: "Resolve the implementation readiness blockers before implementation." },
+  ] as const)("keeps approved task guidance explicit when implementation readiness is $ready", async ({ ready, action }) => {
+    const { subject, tasks } = service();
+    vi.mocked(tasks.get).mockResolvedValue({
+      projectId: "alpha",
+      unitId: "web/core/invoice",
+      workItem: { status: "approved" },
+      predecessorGates: [],
+      readiness: { readyFor: ready ? ["implementation"] : [], blockers: [], byActivity: {
+        design: { ready: true, blockers: [] },
+        implementation: { ready, blockers: [] },
+        verification: { ready: true, blockers: [] },
+      } },
+    } as never);
+
+    const result = await subject.taskStatus(principal, { projectId: "alpha", unitId: "web/core/invoice" });
+    expect(result.nextAction).toBe(action);
+  });
+
   it("reports review capability as unsupported without returning a verdict", async () => {
     const { subject, reviews } = service();
     vi.mocked(reviews.get).mockRejectedValue(new HttpException({
