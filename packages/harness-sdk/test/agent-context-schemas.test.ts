@@ -15,6 +15,7 @@ import {
   taskBriefQuerySchema,
   taskBriefSchema,
   taskQuerySchema,
+  taskStatusSchema,
 } from "../src/agent-context-schemas.js";
 
 const sha = (char: string): string => char.repeat(40);
@@ -119,6 +120,7 @@ const taskStatus: TaskStatus = {
   projectId: "modernization",
   unitId: "billing/invoices/tax",
   status: "in-progress",
+  evidenceAvailability: { pullRequests: "unavailable", reviews: "unavailable" },
   pullRequests: [],
   currentReviewIds: [],
   gates: [],
@@ -147,6 +149,12 @@ const port: CodingAgentWorkflowPort = {
 };
 
 describe("Coding Agent Workflow wire schemas", () => {
+  it("requires explicit PR and review observation availability in task status", () => {
+    expect(taskStatusSchema.parse(taskStatus)).toEqual(taskStatus);
+    const { evidenceAvailability: _availability, ...withoutAvailability } = taskStatus;
+    expect(taskStatusSchema.safeParse(withoutAvailability).success).toBe(false);
+  });
+
   it("rejects unknown selectors and arbitrary document paths", () => {
     expect(taskBriefQuerySchema.safeParse({
       schemaVersion: "1",

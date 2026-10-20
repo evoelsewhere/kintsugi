@@ -156,7 +156,11 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     const statusPath = withQuery("/member/v1/task-status", { projectId: "shop", unitId: "web/core/invoice" });
     const status = await client.request("GET", statusPath, { csrf: false, headers: bearer() });
     expect(status.status).toBe(200);
-    expect(taskStatusSchema.parse(status.body.data)).toMatchObject({ pullRequests: [], currentReviewIds: [] });
+    expect(taskStatusSchema.parse(status.body.data)).toMatchObject({
+      evidenceAvailability: { pullRequests: "unavailable", reviews: "unavailable" },
+      pullRequests: [],
+      currentReviewIds: [],
+    });
   }, 60_000);
 
   it("validates encoded unit slashes and rejects malformed query values and source URLs", async () => {

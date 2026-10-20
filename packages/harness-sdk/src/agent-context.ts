@@ -213,6 +213,11 @@ export interface TaskGateStatus {
 export interface TaskStatus extends TaskIdentity {
   schemaVersion: CodingAgentWorkflowSchemaVersion;
   status: WorkItemStatus;
+  /** When unavailable, an empty PR/review array does not mean no evidence exists. */
+  evidenceAvailability: {
+    pullRequests: "available" | "unavailable";
+    reviews: "available" | "unavailable";
+  };
   pullRequests: TaskPullRequest[];
   currentReviewIds: string[];
   gates: TaskGateStatus[];

@@ -66,8 +66,34 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     expect(taskStatusSchema.parse(status)).toEqual(status);
     expect(status.pullRequests).toEqual([]);
     expect(status.currentReviewIds).toEqual([]);
+    expect(status.evidenceAvailability).toEqual({ pullRequests: "unavailable", reviews: "unavailable" });
     expect(status.gates).toEqual([{ gateId: "G3", status: "unknown", publication: "unknown" }]);
     expect(status.nextAction).toContain("pull request");
+  });
+
+  it.each([
+    { status: "done", action: "No further action" },
+    { status: "skipped", action: "No further action" },
+    { status: "awaiting-review", action: "Wait for review feedback" },
+    { status: "rejected", action: "Review the rejection feedback" },
+    { status: "blocked", action: "Resolve the task's blocked status" },
+  ] as const)("recommends a status-aware action for $status tasks", async ({ status, action }) => {
+    const { subject, tasks } = service();
+    vi.mocked(tasks.get).mockResolvedValue({
+      projectId: "alpha",
+      unitId: "web/core/invoice",
+      workItem: { status },
+      predecessorGates: [],
+      readiness: { readyFor: ["implementation"], blockers: [], byActivity: {
+        design: { ready: true, blockers: [] },
+        implementation: { ready: true, blockers: [] },
+        verification: { ready: true, blockers: [] },
+      } },
+    } as never);
+
+    const result = await subject.taskStatus(principal, { projectId: "alpha", unitId: "web/core/invoice" });
+    expect(result.nextAction).not.toContain("Implement the task");
+    expect(result.nextAction).toContain(action);
   });
 
   it("reports review capability as unsupported without returning a verdict", async () => {

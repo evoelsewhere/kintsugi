@@ -276,6 +276,10 @@ export const reviewReportSchema = z.object({
 export const taskStatusSchema = z.object({
   ...identityShape,
   status: z.enum(WORK_ITEM_STATUSES),
+  evidenceAvailability: z.object({
+    pullRequests: z.enum(["available", "unavailable"]),
+    reviews: z.enum(["available", "unavailable"]),
+  }).strict(),
   pullRequests: z.array(z.object({
     repositoryId: opaqueIdSchema,
     pullRequestId: opaqueIdSchema,
