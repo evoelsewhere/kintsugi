@@ -121,7 +121,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
 
   it("every read needs a session", async () => {
     const anonymous = new Client(app);
-    for (const path of ["/monitoring/overview", "/monitoring/workers", "/governance/gates", "/monitoring/repositories", "/job-runs", "/document-writes", "/governance/restricted-records", "/stages"]) {
+    for (const path of ["/monitoring/overview", "/monitoring/portfolio", "/monitoring/workers", "/governance/gates", "/monitoring/repositories", "/job-runs", "/document-writes", "/governance/restricted-records", "/stages"]) {
       expect((await anonymous.get(path)).status, path).toBe(401);
     }
   });
@@ -192,6 +192,26 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     expect(overview.worker.oldestQueuedRunAt).toBeDefined();
     expect(overview.worker).toMatchObject({ up: true, workersUp: 1 });
     expect(overview.worker.lastSeenAt).toBeDefined();
+  });
+
+  it("the portfolio overview places each application in the lifecycle and lists what a person must decide", async () => {
+    const { client } = await memberClient(app, admin, "portfolio-viewer", ["user"]);
+    const response = await client.get<{
+      applications: Array<{ projectId: string; applicationId: string; phase: string; gate: { key: string; status: string } | null; assess: unknown; catalog: unknown; blocked?: string }>;
+      decisions: Array<{ kind: string; title: string; projectId: string; gateId?: string; prUrl?: string }>;
+      funnel: { total: number; counts: Record<string, number> };
+      riskiest: unknown[];
+    }>("/monitoring/portfolio");
+    expect(response.status).toBe(200);
+    const portfolio = response.body.data!;
+    // alpha/web is runnable but has no successful assess: discover-assess, its G1 not asked for yet.
+    expect(portfolio.applications).toEqual([expect.objectContaining({ projectId: "alpha", applicationId: "web", phase: "discover-assess", gate: { key: "G1", status: "not-requested" }, assess: null, catalog: null })]);
+    // The pending gate comes before the pull request waiting for review.
+    expect(portfolio.decisions.map((decision) => decision.kind)).toEqual(["gate", "pull-request"]);
+    expect(portfolio.decisions[0]).toMatchObject({ projectId: "alpha", gateId: "g-pending" });
+    expect(portfolio.decisions[1]).toMatchObject({ projectId: "beta", prUrl: "https://github.example.invalid/org/beta-docs/pull/3" });
+    expect(portfolio.funnel).toEqual({ total: 0, counts: {} });
+    expect(portfolio.riskiest).toEqual([]);
   });
 
   it("lists workers from their heartbeats with their state", async () => {

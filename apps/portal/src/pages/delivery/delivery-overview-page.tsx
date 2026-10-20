@@ -23,7 +23,7 @@ import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { DeliveryShell, NoApplications, WithProject } from "./delivery-shell";
 import { DocumentWritesCard } from "./document-writes-card";
-import { ActivityChart, MiniRunBars, NeedsAttention, PipelineProgress, ProjectKpis, RecentRuns } from "./overview-parts";
+import { ActivityChart, NeedsAttention, PipelineProgress, ProjectKpis, RecentRuns } from "./overview-parts";
 import { pipelineHealth } from "./pipeline-health";
 
 export function DeliveryOverviewPage(): React.JSX.Element {
@@ -93,21 +93,25 @@ function ProjectOverview({ projectId }: { projectId: string }): React.JSX.Elemen
                         <ApplicationStrip key={application.id} project={project} application={application} stages={list} runs={runs.data?.filter((run) => run.applicationId === application.id)} />
                       ))}
                     </div>
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-                      <div className="xl:col-span-3">
-                        <ActivityChart runs={all} />
-                      </div>
-                      <div className="xl:col-span-2">
-                        <NeedsAttention projectId={project.id} health={health} hasRuns={all.length > 0} />
-                      </div>
-                    </div>
-                    <RecentRuns projectId={project.id} applications={project.applications} runs={all} />
+                    <NeedsAttention projectId={project.id} health={health} hasRuns={all.length > 0} />
                   </div>
                 );
               }}
             </Loaded>
           )}
           <DocumentWritesCard loader={writes} documentRepository={project.documentRepository?.repositoryId} />
+          {project.applications.length === 0 || runs.data === undefined ? null : (
+            <details className="group rounded-xl bg-surface shadow-border-medium">
+              <summary className="flex cursor-pointer items-center justify-between rounded-xl px-4 py-3 text-[13px] font-medium text-text hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
+                Run history
+                <span className="text-[12px] font-normal text-text-muted">activity of the last two weeks and the newest stage runs · full detail in Monitoring</span>
+              </summary>
+              <div className="flex flex-col gap-4 p-4 pt-0">
+                <ActivityChart runs={runs.data} />
+                <RecentRuns projectId={project.id} applications={project.applications} runs={runs.data} />
+              </div>
+            </details>
+          )}
         </div>
       )}
     </WithProject>
@@ -221,8 +225,6 @@ interface TileProps {
 /** One stage of an application's pipeline: its latest run, the bars of its recent runs and the headline numbers of its results. */
 function StageTile({ index, stage, runs, headline, to }: TileProps): React.JSX.Element {
   const last = runs?.[0];
-  const finished = runs?.filter((run) => run.status === "succeeded" || run.status === "failed") ?? [];
-  const rate = finished.length === 0 ? undefined : Math.round((finished.filter((run) => run.status === "succeeded").length / finished.length) * 100);
   let badge: React.ReactNode = null;
   if (stage.audience === "member") badge = <StatusBadge tone="muted" label="In members' harnesses" />;
   else if (stage.audience === "portal") badge = <StatusBadge tone="muted" label="Planned" />;
@@ -245,18 +247,9 @@ function StageTile({ index, stage, runs, headline, to }: TileProps): React.JSX.E
       <span className="line-clamp-2 text-[12px] text-text-secondary">{stage.description}</span>
       {headline === undefined || headline.length === 0 ? null : <span className="truncate text-[13px] font-medium text-text tabular-nums">{headline.join(" · ")}</span>}
       {runs === undefined || last === undefined ? null : (
-        <span className="flex items-end justify-between gap-3">
-          <MiniRunBars runs={runs} />
-          <span className="min-w-0 text-right text-[11px] leading-4 text-text-muted">
-            <span className="block truncate" title={formatDateTime(last.createdAt)}>
-              {formatRelative(last.createdAt)}
-              {last.startedAt === undefined ? "" : ` · ${isActiveStatus(last.status) ? "running for " : "took "}${formatDuration(last.startedAt, last.finishedAt)}`}
-            </span>
-            <span className="block truncate">
-              {runs.length} run{runs.length === 1 ? "" : "s"}
-              {rate === undefined ? "" : ` · ${rate}% succeeded`}
-            </span>
-          </span>
+        <span className="truncate text-[11px] text-text-muted" title={formatDateTime(last.createdAt)}>
+          {formatRelative(last.createdAt)}
+          {last.startedAt === undefined ? "" : ` · ${isActiveStatus(last.status) ? "running for " : "took "}${formatDuration(last.startedAt, last.finishedAt)}`}
         </span>
       )}
     </Link>

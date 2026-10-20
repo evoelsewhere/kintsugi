@@ -4,6 +4,7 @@
 
 import { apiGet, type Page } from "../api";
 import { queryString } from "./job-runs";
+import type { GateStatus, ItemStatus, Phase } from "@kintsugi/domain";
 import type { DocumentWriteView } from "./projects";
 
 export interface OverviewCounts {
@@ -108,10 +109,63 @@ export interface MonitoredRepository {
   projects: Array<{ projectId: string; role: string; applicationId?: string; component?: string }>;
 }
 
+/** Mirrors apps/api → modules/monitoring/portfolio: where each application stands and what a person decides next. */
+export interface PortfolioGate {
+  key: string;
+  status: GateStatus | "not-requested";
+  gateId?: string;
+  requestedAt?: string;
+}
+
+export interface PortfolioApplication {
+  projectId: string;
+  projectName: string;
+  applicationId: string;
+  applicationName: string;
+  phase: Phase;
+  gate: PortfolioGate | null;
+  assess: { sloc: number; sourceFiles: number; complexityIndex: number; critical: number; high: number; securityFindings: number; recommendation?: string } | null;
+  catalog: { total: number; understood: number; counts: Partial<Record<ItemStatus, number>> } | null;
+  blocked?: string;
+  lastRunAt?: string;
+}
+
+export interface PortfolioDecision {
+  kind: "gate" | "pull-request" | "findings";
+  at: string;
+  title: string;
+  detail?: string;
+  projectId: string;
+  applicationId?: string;
+  gateId?: string;
+  documentWriteId?: string;
+  prUrl?: string;
+}
+
+export interface PortfolioUnit {
+  projectId: string;
+  applicationId: string;
+  id: string;
+  name: string;
+  module: string;
+  complexity: "low" | "medium" | "high";
+  loc: number;
+  status: ItemStatus;
+}
+
+export interface PortfolioOverview {
+  generatedAt: string;
+  applications: PortfolioApplication[];
+  decisions: PortfolioDecision[];
+  funnel: { total: number; counts: Partial<Record<ItemStatus, number>> };
+  riskiest: PortfolioUnit[];
+}
+
 export type DocumentWriteStatus = DocumentWriteView["status"];
 
 export const monitoringApi = {
   overview: () => apiGet<MonitoringOverview>("/api/monitoring/overview"),
+  portfolio: () => apiGet<PortfolioOverview>("/api/monitoring/portfolio"),
   repositories: () => apiGet<MonitoredRepository[]>("/api/monitoring/repositories"),
   /** Worker processes from their heartbeats, the latest beat first. */
   workers: () => apiGet<WorkerStatus[]>("/api/monitoring/workers"),
