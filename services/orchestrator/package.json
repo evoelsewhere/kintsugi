@@ -17,6 +17,10 @@
     "./stages": {
       "types": "./dist/jobs/stages.d.ts",
       "import": "./dist/jobs/stages.js"
+    },
+    "./outbox": {
+      "types": "./dist/outbox/index.d.ts",
+      "import": "./dist/outbox/index.js"
     }
   },
   "engines": {

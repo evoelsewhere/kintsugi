@@ -140,13 +140,13 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 **Depends on:** T01. **Files:** create migration `019_member_outbox.sql`; orchestrator `src/outbox/model.ts`, `store.ts`, `dispatch.ts`, `test/outbox.test.ts`; export `@kintsugi/orchestrator/outbox` through package metadata; reuse API `common/db/pool.ts` transaction wrapper at API call sites.
 
-**Interfaces:** `recordTransition(tx: PoolClient, change: TransitionInput, apply: (tx: PoolClient) => Promise<void>): Promise<TransitionReceipt>`; `dispatchOutbox(deps: OutboxDeps, signal: AbortSignal): Promise<DispatchSummary>`. Input owns stable transition key, project/unit, optional member event and queue intents. Publisher receives stable `operationId`; duplicate delivery is expected.
+**Interfaces:** `recordTransition(tx: PoolClient, change: TransitionInput, apply: (tx: PoolClient) => Promise<void>): Promise<TransitionReceipt>`; `dispatchOutbox(deps: DispatchDependencies, signal: AbortSignal): Promise<DispatchSummary>`. Input owns stable transition key, project/unit, optional member event and queue intents. Publisher receives stable `operationId`; duplicate delivery is expected.
 
-- [ ] Write EVT-01–03 tests: rollback leaves no projection/event/intent; duplicate concurrent transitions invoke `apply` once; crash after publish but before acknowledgment safely replays the same operation ID. Assert `projectionWrites === 1` and one effective next-step operation.
-- [ ] Run `pnpm --filter @kintsugi/orchestrator exec vitest run test/outbox.test.ts`; verify real Postgres execution, initially failing on missing transitions.
-- [ ] Implement `workflow.member_transition`, `member_event`, project event cursor and `outbox`. Allocate per-project event sequence under the project cursor row lock in the same transaction, so a later committed event cannot cause replay to skip an earlier still-uncommitted event. Domain projections remain reconstructible from Git.
-- [ ] Implement leasing/retry/backoff and idempotent operation IDs; no external Git/provider call inside the projection transaction. Snapshot retention and later review/gate intents all reuse this implementation, never per-feature queue boilerplate. Verify installed pg-boss API only at its publishing adapter.
-- [ ] Run rollback/concurrent-publisher tests and typecheck; commit `feat(workflow): add durable member transitions and outbox`.
+- [x] Write EVT-01/02/03 and OUTBOX-IDEMPOTENCY-01/RETRY-01 tests: rollback is atomic; project cursor ordering survives concurrent uncommitted transactions; concurrent duplicate transitions apply once; crash after publish replays the same operation ID; failed publication stores only a safe error code and retries the same operation.
+- [x] Run `pnpm --filter @kintsugi/orchestrator exec vitest run test/outbox.test.ts` against real Postgres; confirm the behavior fails before implementation and passes afterward.
+- [x] Implement `workflow.member_transition`, `member_event`, project event cursor and `outbox`. Allocate per-project event sequence under the project cursor row lock in the same transaction, so a later committed event cannot cause replay to skip an earlier still-uncommitted event. Domain projections remain reconstructible from Git.
+- [x] Implement leasing, retry/backoff and idempotent operation IDs; keep Git/provider/queue calls outside the projection transaction. Snapshot retention and later review/gate intents reuse this implementation. The publishing adapter remains an integration point for the owning workflow task.
+- [x] Run the full orchestrator suite (17 files, 72 tests), typecheck, lint and build. Commit `feat(workflow): add durable member transitions and outbox`.
 
 ### Task 4 (T04) — Authoritative Git task and assignment projection
 

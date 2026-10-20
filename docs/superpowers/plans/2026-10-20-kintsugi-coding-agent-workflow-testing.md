@@ -164,6 +164,8 @@ Every case names an observable result. A critical case cannot be waived merely b
 | EVT-01 | Projection/event/outbox failure in one transaction | All rollback; retry can safely apply once |
 | EVT-02 | Concurrent transactions commit out of allocation order | Project cursor serialization preserves replay order; no earlier event is skipped |
 | EVT-03 | Publish succeeds but acknowledgment fails | Replay uses stable operation ID and consumer idempotency |
+| OUTBOX-IDEMPOTENCY-01 | Concurrent duplicate transition with the same key | Projection applies once; a changed input under that key is rejected |
+| OUTBOX-RETRY-01 | Publisher fails with a sensitive response message | Retry is scheduled with a safe code and the same operation ID |
 | EVT-04 | SSE reconnect/expired cursor/revoked grant | Exact replay or explicit resync; only authorized project events; no secret/content payload |
 | EVT-05 | Client closes watch; proxy buffers or connection idles | Heartbeat/resume works; server review/workflow continues independently |
 | UI-01 | Member creates a token | Secret shown once in protected UI; copied setup command contains no token |
