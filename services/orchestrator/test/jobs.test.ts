@@ -214,6 +214,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(logged[0]).toMatch(/^masked 1 credential-shaped value in 1 file of legacy-analyst: credential_assignment at applications\/demo\/assessment\/ASSESSMENT\.md:1$/);
     expect(JSON.stringify([...store.events, ...store.children(id)])).not.toContain("hunter2");
     expect(store.children(id).at(-2)?.outputSummary?.["maskedCredentials"]).toBe(1);
+    // The reviewer sees where, by rule and line, on the step (never a value).
+    expect(store.children(id).at(-2)?.outputSummary?.["maskedCredentialsFirst"]).toEqual(["credential_assignment at applications/demo/assessment/ASSESSMENT.md:1"]);
   });
 
   it("still fails closed for what is not a credential: a malformed artifact, with a redacted reason and no write", async () => {

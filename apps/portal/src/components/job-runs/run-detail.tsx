@@ -6,7 +6,7 @@
 // Restricted records are only counted here; holders of restricted.read open them in Governance
 // (every read is audited).
 
-import { Check, Copy, ExternalLink, FileText, ShieldAlert } from "lucide-react";
+import { Check, Copy, ExternalLink, EyeOff, FileText, ShieldAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
@@ -93,6 +93,7 @@ function RunConsole({ run, events, live, version }: { run: JobRunDetail; events:
   return (
     <>
       <RunSummary run={run} stats={stats} events={events.length} now={now} />
+      <MaskedCredentials run={run} />
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,4fr)_minmax(0,7fr)]">
         <section className="flex min-w-0 flex-col gap-1.5">
           <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">Steps</h5>
@@ -154,6 +155,38 @@ function RunSummary({ run, stats, events, now }: { run: JobRunDetail; stats: Rea
         <Figure label="Blocked calls" value={blocked} tone={blocked > 0 ? "var(--ds-status-red)" : undefined} />
         <Figure label="Log lines" value={events} />
       </dl>
+    </div>
+  );
+}
+
+/** The credential-shaped values the run masked in its output (never the values): how many, and where, by rule and line. */
+function MaskedCredentials({ run }: { run: JobRunDetail }): React.JSX.Element | null {
+  const sources = [run, ...run.steps].map((entry) => entry.outputSummary);
+  const counts = sources.map((summary) => (typeof summary?.["maskedCredentials"] === "number" ? summary["maskedCredentials"] : 0));
+  const total = Math.max(counts[0] ?? 0, counts.slice(1).reduce((sum, count) => sum + count, 0));
+  if (total === 0) return null;
+  const places = [...new Set(sources.flatMap((summary) => (Array.isArray(summary?.["maskedCredentialsFirst"]) ? (summary["maskedCredentialsFirst"] as unknown[]).filter((entry): entry is string => typeof entry === "string") : [])))];
+  return (
+    <div role="status" className="flex items-start gap-3 rounded-xl px-3 py-2.5 shadow-border">
+      <EyeOff className="mt-0.5 size-4 shrink-0 text-[var(--ds-status-orange)]" strokeWidth={1.75} />
+      <div className="min-w-0 text-[12.5px] text-text-secondary">
+        <p className="font-medium text-text">
+          {total} credential-shaped value{total === 1 ? "" : "s"} masked in this run's output
+        </p>
+        <p className="mt-0.5">
+          The agents wrote values that look like credentials into their notes. They were cut to a short preview and `****` before the output was checked, so the pull request holds none. The legacy code is not changed: treat what it cites as exposed and rotate it.
+        </p>
+        {places.length === 0 ? null : (
+          <ul className="mt-1.5 font-mono text-[11.5px] text-text-muted">
+            {places.map((place) => (
+              <li key={place} className="truncate" title={place}>
+                {place}
+              </li>
+            ))}
+            {total > places.length ? <li>+{total - places.length} more in the log</li> : null}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

@@ -29,7 +29,7 @@ import type { AgentResolver } from "./agents.js";
 import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepRecord, stepKey } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
-import { maskJobOutput, runJobOutputHook } from "./hook.js";
+import { MAX_LISTED_MASKS, type MaskOutcome, maskJobOutput, runJobOutputHook } from "./hook.js";
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
@@ -621,7 +621,7 @@ export class JobRunner {
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
     const files = await listFiles(ws.out);
     return {
-      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary, ...(maskedByAgent === 0 ? {} : { maskedCredentials: maskedByAgent }) },
+      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary, ...(maskedByAgent.count === 0 ? {} : { maskedCredentials: maskedByAgent.count, maskedCredentialsFirst: maskedByAgent.first }) },
       agent: agentId,
       provenance: new Map(files.filter((entry) => !entry.path.startsWith("restricted/")).map((entry) => [entry.path, provenance])),
       ...(result === undefined ? {} : { result }),
@@ -841,13 +841,13 @@ export class JobRunner {
    * never fails a run; the hook after it stays the fail-closed check for whatever could not be masked.
    * Logs rule, file and line of each masking, never a value. Returns how many values were masked.
    */
-  async #maskCredentials(ws: StepWorkspace, stepId: string | undefined, who: string): Promise<number> {
+  async #maskCredentials(ws: StepWorkspace, stepId: string | undefined, who: string): Promise<MaskOutcome> {
     const outcome = await maskJobOutput({ outDir: ws.out, cwd: ws.root, tmp: ws.tmp, interpreters: this.#deps.interpreters });
     if (outcome.count > 0) {
-      const more = outcome.count > outcome.first.length ? ` (+${outcome.count - outcome.first.length} more)` : "";
-      await this.#event(ws, stepId, "log", `masked ${outcome.count} credential-shaped value${outcome.count === 1 ? "" : "s"} in ${outcome.files} file${outcome.files === 1 ? "" : "s"} of ${who}: ${outcome.first.join("; ")}${more}`);
+      const more = outcome.count > 10 ? ` (+${outcome.count - 10} more)` : "";
+      await this.#event(ws, stepId, "log", `masked ${outcome.count} credential-shaped value${outcome.count === 1 ? "" : "s"} in ${outcome.files} file${outcome.files === 1 ? "" : "s"} of ${who}: ${outcome.first.slice(0, 10).join("; ")}${more}`);
     }
-    return outcome.count;
+    return outcome;
   }
 
   /**
@@ -878,7 +878,12 @@ export class JobRunner {
       files: entries.length,
       bytes: entries.reduce((total, entry) => total + entry.size, 0),
       restrictedFiles: restricted,
-      ...(masked === 0 ? {} : { maskedCredentials: masked + (typeof outcome.summary["maskedCredentials"] === "number" ? outcome.summary["maskedCredentials"] : 0) }),
+      ...(masked.count === 0 && typeof outcome.summary["maskedCredentials"] !== "number"
+        ? {}
+        : {
+            maskedCredentials: masked.count + (typeof outcome.summary["maskedCredentials"] === "number" ? outcome.summary["maskedCredentials"] : 0),
+            maskedCredentialsFirst: [...(Array.isArray(outcome.summary["maskedCredentialsFirst"]) ? (outcome.summary["maskedCredentialsFirst"] as string[]) : []), ...masked.first].slice(0, MAX_LISTED_MASKS),
+          }),
       jobOutputHook: {
         checkedFiles: hook.checked.files,
         checkedBytes: hook.checked.bytes,
