@@ -11,3 +11,10 @@ export const listAllDocumentWritesQuerySchema = pageQuerySchema.extend({
   projectId: z.string().min(1).max(128).optional(),
 });
 export type ListAllDocumentWritesQuery = z.infer<typeof listAllDocumentWritesQuerySchema>;
+
+/** Body of the manifest publish; optional: the starter structure is included unless `scaffold` is false. */
+export const publishManifestSchema = z
+  .object({ scaffold: z.boolean().optional() })
+  .optional()
+  .default({});
+export type PublishManifestInput = z.infer<typeof publishManifestSchema>;

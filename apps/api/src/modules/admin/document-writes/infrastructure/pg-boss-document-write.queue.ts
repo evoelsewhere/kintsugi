@@ -24,7 +24,8 @@ export class PgBossDocumentWriteQueue extends DocumentWriteQueue implements OnAp
       projectId: write.projectId,
       kind: write.kind,
       message: write.message,
-      files: write.files.map((file) => ({ path: file.path, content: file.content })),
+      files: write.files.map((file) => ({ path: file.path, content: file.content, ...(file.createOnly === true ? { createOnly: true } : {}) })),
+      ...(write.reviewAll === true ? { reviewAll: true } : {}),
       ...(write.actor === undefined ? {} : { actor: write.actor }),
     });
   }
