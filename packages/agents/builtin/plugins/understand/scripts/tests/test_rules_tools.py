@@ -180,6 +180,25 @@ class RenderTests(unittest.TestCase):
             dto = open(os.path.join(ws, 'out/DATA_OBJECTS.md'), encoding='utf-8').read()
             self.assertIn('## Account', dto)
 
+    def test_the_gap_list_of_the_workflow_renders_and_splits(self):
+        # extract-rules returns rerunModules as re-passable {name, domain?, files, loc?} entries.
+        result = {'confirmedRules': [], 'rerunModules': [{'name': 'auth-identity.auth', 'domain': 'auth', 'files': ['a.java', 'b.java'], 'loc': 900}, 'plain-name'],
+                  'stats': {'failedModules': ['auth-identity.auth']}}
+        with tempfile.TemporaryDirectory() as ws:
+            write(ws, 'assessment/rules_result.json', json.dumps(result))
+            done = run('render_rules.py', 's', '--assessment', os.path.join(ws, 'assessment'), '--out', os.path.join(ws, 'out'))
+            self.assertEqual(done.returncode, 0, done.stderr)
+            text = open(os.path.join(ws, 'out/BUSINESS_RULES.md'), encoding='utf-8').read()
+            self.assertIn('A follow-up run for the 2 affected shard(s) covers them.', text)
+
+    def test_a_malformed_gap_entry_is_still_refused(self):
+        for bad in ([1], [{'files': ['a.java']}], [{'name': 'm', 'files': 'a.java'}], [{'name': 'm', 'files': [3]}]):
+            with tempfile.TemporaryDirectory() as ws:
+                write(ws, 'assessment/rules_result.json', json.dumps({'confirmedRules': [], 'rerunModules': bad}))
+                done = run('render_rules.py', 's', '--assessment', os.path.join(ws, 'assessment'), '--out', os.path.join(ws, 'out'))
+                self.assertNotEqual(done.returncode, 0, bad)
+                self.assertIn('rerunModules', done.stderr)
+
     def test_a_rule_keeps_one_citation_and_the_rest_moves_to_also_cited(self):
         sources = ['wwwroot/a.pl:100-120 (aggregation); family table at lib/b.pm:31-40',
                    'lib/x.pm:966,1018,1238 (order lists)', 'no citation here', 'c.cbl:7']
