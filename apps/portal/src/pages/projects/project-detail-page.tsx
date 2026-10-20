@@ -317,8 +317,7 @@ function ApplicationCard({ projectId, application, canManage, canLink, onEdit, o
         <div className="min-w-0">
           <CardTitle>{application.name}</CardTitle>
           <CardDescription>
-            {application.id} · {application.disposition}
-            {application.pipeline === undefined ? "" : ` · pipeline ${application.pipeline}`}
+            {application.id}
           </CardDescription>
         </div>
         <div className="flex shrink-0 items-center gap-1">

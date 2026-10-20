@@ -11,6 +11,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { identityApi, type PermissionRecord, type RoleRecord } from "@/lib/api/identity";
+import { uniqueId } from "@/lib/ids";
 
 export function RolesTab(): React.JSX.Element {
   const [roles, setRoles] = useState<RoleRecord[]>([]);
@@ -23,7 +24,7 @@ export function RolesTab(): React.JSX.Element {
   /** Roles with a save in flight — at most one request per role at a time. */
   const inFlight = useRef(new Set<string>());
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newRole, setNewRole] = useState({ id: "", name: "", description: "" });
+  const [newRole, setNewRole] = useState({ name: "", description: "" });
 
   const load = async (): Promise<void> => {
     try {
@@ -108,9 +109,11 @@ export function RolesTab(): React.JSX.Element {
 
   async function createSubRole(): Promise<void> {
     try {
-      await identityApi.createSubRole(newRole);
+      const id = uniqueId(newRole.name, roles.map((role) => role.id));
+      if (id === "") return setError("The name needs at least one letter or digit.");
+      await identityApi.createSubRole({ ...newRole, id });
       setDialogOpen(false);
-      setNewRole({ id: "", name: "", description: "" });
+      setNewRole({ name: "", description: "" });
       await load();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : String(createError));
@@ -235,16 +238,13 @@ export function RolesTab(): React.JSX.Element {
             <Button size="small" variant="ghost" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button size="small" variant="solid" onClick={() => void createSubRole()} disabled={newRole.id === "" || newRole.name === ""}>
+            <Button size="small" variant="solid" onClick={() => void createSubRole()} disabled={newRole.name.trim() === ""}>
               Create sub-role
             </Button>
           </>
         }
       >
         <div className="flex flex-col gap-3">
-          <Field label="Id" hint="Lowercase kebab-case, e.g. analyst.">
-            <Input value={newRole.id} placeholder="analyst" onChange={(event) => setNewRole((prev) => ({ ...prev, id: event.target.value }))} />
-          </Field>
           <Field label="Name">
             <Input value={newRole.name} placeholder="Analyst" onChange={(event) => setNewRole((prev) => ({ ...prev, name: event.target.value }))} />
           </Field>

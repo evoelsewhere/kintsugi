@@ -44,10 +44,7 @@ export function ProjectsInsights({ projects }: { projects: ProjectView[] }): Rea
         <Kpi label="Success rate" value={undefined} display={percent(successRate(top))} hint={`of ${top.length} sampled runs`} />
         <Kpi label="Failed runs" value={top.filter((run) => run.status === "failed").length} tone={top.some((run) => run.status === "failed") ? "red" : "green"} higherIsWorse hint="in the sample" />
       </KpiRow>
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Section title="Dispositions" description="What is planned for each application.">
-          {applications.length === 0 ? <p className="text-[12px] text-text-muted">No application yet.</p> : <ShareBar segments={segmentsOf(countBy(applications, (application) => application.disposition))} format={formatCount} />}
-        </Section>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Section title="Repository sync" description="Every repository the projects link.">
           {repositories.length === 0 ? <p className="text-[12px] text-text-muted">No repository is linked.</p> : <ShareBar segments={segmentsOf(countBy(repositories, (repository) => repository.syncStatus), (name) => SYNC_COLOR[name])} format={formatCount} />}
         </Section>
