@@ -74,6 +74,7 @@ const partialBrief: TaskBrief = {
   readiness,
   blockers: readiness.blockers,
   requiredContextStatus: "partial",
+  sections: [],
   omittedSections: [{ sourceId: "src-detail", sectionId: "rounding-boundaries", required: true }],
   freshness: { isCurrent: true, observedAt: "2026-10-20T07:00:00.000Z" },
   fetchedAt: "2026-10-20T07:00:00.000Z",
@@ -201,6 +202,27 @@ describe("coding-agent context wire schemas", () => {
       expect(result.data.requiredContextStatus).toBe("partial");
       expect(result.data.omittedSections[0]?.sectionId).toBe("rounding-boundaries");
     }
+  });
+
+  it("accepts bounded cited section text in a task brief", () => {
+    const result = taskBriefSchema.safeParse({
+      ...partialBrief,
+      sections: [{
+        sourceId: "src-detail",
+        sectionId: "sec-rounding",
+        title: "Rounding boundaries",
+        text: "Round once at the invoice total.",
+        required: true,
+        citation: {
+          sourceId: "src-detail",
+          path: "applications/billing/units/invoices/tax/design.md",
+          startLine: 4,
+          endLine: 4,
+        },
+      }],
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it("implements all eight shared port methods with typed results", async () => {

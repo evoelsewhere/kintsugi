@@ -3,6 +3,7 @@
 // picked up within seconds; every repository is re-synced each poll interval; removed ones
 // lose their mirror. Document writes run one at a time per document repository.
 
+import { randomUUID } from "node:crypto";
 import { CheckoutStorage } from "@kintsugi/git";
 import { type Interpreters, interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
@@ -21,15 +22,21 @@ import { JobCancelled } from "./jobs/model.js";
 import { PgJobStore } from "./jobs/store.js";
 import { onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.js";
 import { triggerRebuilds } from "./aggregates.js";
+import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
+import { GitSnapshotPins, pruneExpiredSnapshots, retainSnapshot } from "./git-sync/retention.js";
+import { PostgresSnapshotRetentionRepository } from "./git-sync/retention-store.js";
 import {
   DOCUMENT_WRITE_QUEUE,
   type DocumentWriteRequest,
   GIT_SYNC_QUEUE,
   JOB_RUN_QUEUE,
+  SNAPSHOT_RETENTION_QUEUE,
   type JobRunRequest,
+  type SnapshotRetentionRequest,
   QUEUE_SCHEMA,
   ensureDocumentWriteQueue,
   ensureJobRunQueue,
+  ensureSnapshotRetentionQueue,
   sendDocumentWrite,
   sendJobRun,
 } from "./queues.js";
@@ -57,6 +64,10 @@ export interface WorkerOptions {
   cancelPollSeconds?: number;
   /** Seconds between heartbeats in workflow.worker_heartbeat (ADR-0030, default 15). */
   heartbeatSeconds?: number;
+  /** Seconds between scans for durable member queue intents (default 1). */
+  outboxScanSeconds?: number;
+  /** Seconds between snapshot pin expiry sweeps (default: hourly). */
+  snapshotCleanupSeconds?: number;
   /** Runtime jobs (queue `job-run`); omitted = this worker runs no jobs. */
   jobs?: {
     /** pi in production; the mock backend in tests and mock-mode development. */
@@ -119,6 +130,25 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     expireInSeconds: 60 * 60,
   });
   await ensureDocumentWriteQueue(boss);
+  await ensureSnapshotRetentionQueue(boss);
+  const retentionRepository = new PostgresSnapshotRetentionRepository(options.pool);
+  const retentionDependencies = {
+    repository: retentionRepository,
+    pins: new GitSnapshotPins(options.storage, async (repositoryId) => {
+      const result = await options.pool.query<{ id: string; server_id: string }>(
+        "select id, server_id from admin.git_repository where id = $1",
+        [repositoryId],
+      );
+      const repository = result.rows[0];
+      return repository === undefined ? undefined : { repositoryId: repository.id, serverId: repository.server_id };
+    }),
+  };
+  await boss.work<SnapshotRetentionRequest>(SNAPSHOT_RETENTION_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
+    if (job === undefined) return;
+    if (typeof job.data.snapshotId !== "string") throw new TypeError("snapshot retention payload is invalid");
+    const result = await retainSnapshot(retentionDependencies, job.data.snapshotId);
+    log("snapshot " + job.data.snapshotId + ": " + result.status);
+  }));
 
   await boss.work<{ repositoryId: string }>(GIT_SYNC_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
     if (job === undefined) return;
@@ -211,6 +241,27 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   });
   const retentionMs = (options.jobRetentionDays ?? DEFAULT_JOB_RETENTION_DAYS) * 24 * 60 * 60 * 1000;
   const checkCancels = tick("cancel check", watchCancels);
+  const outboxStore = new PostgresOutboxStore(options.pool);
+  const outboxWorkerId = randomUUID();
+  const dispatchMemberOutbox = tick("member outbox", async () => {
+    await dispatchOutbox({
+      store: outboxStore,
+      workerId: outboxWorkerId,
+      publish: async (operation, signal) => {
+        if (signal.aborted) throw new Error("worker is stopping");
+        if (operation.queue !== SNAPSHOT_RETENTION_QUEUE) throw new Error("unsupported member outbox queue");
+        const payload = operation.payload;
+        if (payload === null || Array.isArray(payload) || typeof payload !== "object" || typeof payload["snapshotId"] !== "string") {
+          throw new TypeError("snapshot retention outbox payload is invalid");
+        }
+        await boss.send(SNAPSHOT_RETENTION_QUEUE, { snapshotId: payload["snapshotId"] }, { singletonKey: operation.operationId });
+      },
+    }, stopping.signal);
+  });
+  const pruneSnapshots = tick("snapshot cleanup", async () => {
+    const result = await pruneExpiredSnapshots(retentionDependencies);
+    if (result.released > 0 || result.retained > 0) log("snapshot cleanup released " + result.released + " and retained " + result.retained);
+  });
   const pruneJobs = tick("job workspace cleanup", async () => {
     const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
     if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
@@ -220,13 +271,17 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),
     setInterval(() => void pruneJobs(), (options.cleanupIntervalSeconds ?? 60 * 60) * 1000),
     setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
+    setInterval(() => void dispatchMemberOutbox(), (options.outboxScanSeconds ?? 1) * 1000),
+    setInterval(() => void pruneSnapshots(), (options.snapshotCleanupSeconds ?? 60 * 60) * 1000),
   ];
   void pollAll();
   void pruneJobs();
+  void dispatchMemberOutbox();
+  void pruneSnapshots();
 
   const heartbeat = await startHeartbeat({
     pool: options.pool,
-    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
+    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, SNAPSHOT_RETENTION_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
     activeJobs: () => busy,
     ...(options.heartbeatSeconds === undefined ? {} : { intervalSeconds: options.heartbeatSeconds }),
     log,

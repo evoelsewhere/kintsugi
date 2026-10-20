@@ -154,6 +154,30 @@ const omittedSectionSchema = z.object({
   required: z.boolean(),
 }).strict();
 
+export const citationSchema = z.object({
+  sourceId: opaqueIdSchema,
+  path: z.string().min(1).max(1000),
+  startLine: z.number().int().positive().optional(),
+  endLine: z.number().int().positive().optional(),
+}).strict().superRefine((citation, context) => {
+  if (citation.startLine !== undefined && citation.endLine !== undefined && citation.endLine < citation.startLine) {
+    context.addIssue({ code: "custom", path: ["endLine"], message: "must not be before startLine" });
+  }
+});
+
+const contextSectionSchema = z.object({
+  sourceId: opaqueIdSchema,
+  sectionId: opaqueIdSchema,
+  title: z.string().min(1).max(500),
+  text: z.string().max(DEFAULT_CONTEXT_BYTES),
+  required: z.boolean(),
+  citation: citationSchema,
+}).strict().superRefine((section, context) => {
+  if (section.citation.sourceId !== section.sourceId) {
+    context.addIssue({ code: "custom", path: ["citation", "sourceId"], message: "must match the section source" });
+  }
+});
+
 export const taskBriefSchema = z.object({
   ...identityShape,
   activity: activitySchema,
@@ -168,6 +192,7 @@ export const taskBriefSchema = z.object({
   readiness: readinessSchema,
   blockers: z.array(readinessBlockerSchema),
   requiredContextStatus: z.enum(["complete", "partial"]),
+  sections: z.array(contextSectionSchema).max(500),
   omittedSections: z.array(omittedSectionSchema).max(500),
   freshness: z.object({
     isCurrent: z.boolean(),
@@ -182,17 +207,6 @@ export const taskBriefSchema = z.object({
   }
   if (brief.requiredContextStatus === "complete" && brief.omittedSections.length > 0) {
     context.addIssue({ code: "custom", path: ["omittedSections"], message: "complete briefs cannot omit sections" });
-  }
-});
-
-export const citationSchema = z.object({
-  sourceId: opaqueIdSchema,
-  path: z.string().min(1).max(1000),
-  startLine: z.number().int().positive().optional(),
-  endLine: z.number().int().positive().optional(),
-}).strict().superRefine((citation, context) => {
-  if (citation.startLine !== undefined && citation.endLine !== undefined && citation.endLine < citation.startLine) {
-    context.addIssue({ code: "custom", path: ["endLine"], message: "must not be before startLine" });
   }
 });
 
