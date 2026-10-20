@@ -43,6 +43,9 @@ jobs:
           context: .
           file: Dockerfile.${{ matrix.component }}
           push: true
+          build-args: |
+            KINTSUGI_BUILD_COMMIT=${{ github.sha }}
+            KINTSUGI_BUILD_TIME=${{ github.event.head_commit.timestamp }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
