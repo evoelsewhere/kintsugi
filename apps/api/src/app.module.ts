@@ -20,6 +20,7 @@ import { IncidentsModule } from "./modules/delivery/hypercare/incidents.module.j
 import { PortfolioItemsModule } from "./modules/delivery/portfolio/portfolio-items.module.js";
 import { CatalogModule } from "./modules/delivery/catalog/catalog.module.js";
 import { DocumentsModule } from "./modules/delivery/documents/documents.module.js";
+import { AgentContextModule } from "./modules/delivery/agent-context/agent-context.module.js";
 import { RuntimeJobsModule } from "./modules/delivery/runtime-jobs/runtime-jobs.module.js";
 import { VerificationRunsModule } from "./modules/delivery/verification/verification-runs.module.js";
 import { WorkItemsModule } from "./modules/delivery/workbench/work-items.module.js";
@@ -65,6 +66,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     PortfolioItemsModule,
     RuntimeJobsModule,
     DocumentsModule,
+    AgentContextModule,
     CatalogModule,
     ArchitectureViewsModule,
     FactorySetupsModule,

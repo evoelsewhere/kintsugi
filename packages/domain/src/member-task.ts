@@ -31,6 +31,8 @@ export interface RequiredTaskInput {
 }
 
 export interface PredecessorGate {
+  /** The unit whose gate is authoritative; omitted for a gate on the current unit. */
+  unitId?: string;
   gateId: GateId | (string & {});
   status: "pending" | "approved" | "rejected" | "unknown";
   requiredFor: readonly MemberActivity[];

@@ -150,15 +150,15 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 ### Task 4 (T04) — Authoritative Git task and assignment projection
 
-**Depends on:** T01–T02. **Files:** create migration `020_member_tasks.sql`; domain validation from T01; agents `src/unit-document.ts` plus shared frontmatter helper as required, `test/unit-document.test.ts`; new API `delivery/agent-context/domain/{task,project-access.ports}.ts`, `application/task-query.service.ts`, `infrastructure/git-task.reader.ts`, `pg-task-projection.ts`, module/public exports; tests `unit/task-readiness.test.ts`, `integration/member-tasks.test.ts`.
+**Depends on:** T01–T02. Files: migration 020_member_tasks.sql; strict agents parser and tests; API agent-context domain, query service, Git reader, Postgres projection, fail-closed approval reader, Project Access adapter, module and public exports; task readiness and Git/Postgres integration tests.
 
-**Interfaces:** `parseUnitDocument(markdown: string): ValidationResult<WorkItemFile>`; `TaskQueryService.list(principal, query: TaskQuery): Promise<ListResult<TaskSummary>>`; `get(principal, id: TaskIdentity): Promise<TaskRecord>`. `TaskRecord` includes the authoritative Git location and explicit input/output references; `ApprovalEvidenceReader` returns verified, pending or unknown evidence, never a guessed boolean.
+**Interfaces:** parseUnitDocument(markdown: string, expectedUnitId?: string) validates WorkItemFile; TaskQueryService.list accepts shared TaskQuery and returns shared ListResult<TaskSummary>; get accepts shared TaskIdentity and returns MemberTaskRecord with Git provenance and explicit input references. TaskApprovalEvidenceReader returns verified, pending or unknown evidence, never a guessed boolean.
 
-- [ ] Write CTX-01/03 and AUTH-06 tests: actor matches stable assignee ID, malformed/mismatched files are rejected, draft-design tasks can proceed, implementation is blocked by missing required approval, and another project's unit cannot be listed. A task on main with a pending scaffold stays unapproved.
-- [ ] Run agents unit parsing and API member-task tests; verify expected failing assertions before implementation.
-- [ ] Reuse the existing YAML dependency/frontmatter utilities for a strict authoritative parser and domain validator. Keep the current tolerant `@kintsugi/agents/reader` view behavior for compatibility; never use its truncated summary as authorization or task authority. Reuse domain layout helpers for unit/task/design paths.
-- [ ] Persist `delivery.member_task_projection` keyed by project/full unit and source commit, rebuilding on document sync. Surface missing mirror/stale index explicitly. Normalize legacy assignee names through an explicit identity lookup; unknown/ambiguous assignees stay unresolved. Until T14 can verify real quality-gate evidence, unknown approvals block live implementation readiness; synthetic approved fixtures are test-only.
-- [ ] Run parser, readiness, assignment and existing document-result regressions; commit `feat(delivery): project member tasks from Git unit files`.
+- [x] Write CTX-01/03 and AUTH-06 tests: actor matches stable assignee ID, malformed/mismatched files are rejected, draft-design tasks can proceed, implementation is blocked by missing required approval, and another project's unit cannot be listed. A task on main with an approved-looking scaffold remains unapproved.
+- [x] Run agents unit parsing and API member-task tests; parser tests demonstrated the missing implementation before the parser was added.
+- [x] Reuse the existing YAML dependency/frontmatter utilities for a strict authoritative parser and domain validator. Keep the current tolerant `@kintsugi/agents/reader` view behavior for compatibility; never use its truncated summary as authorization or task authority. Reuse domain layout helpers for unit/task/design paths.
+- [x] Persist `delivery.member_task_projection` keyed by project/full unit and source commit, rebuilding when a read observes a new default-branch commit. Missing mirrors and repeated branch changes return explicit errors. Resolve only exact enabled usernames to stable user IDs; other assignees stay unresolved. Until T14 can verify real quality-gate evidence, unknown approvals block live implementation readiness; frontmatter approvals are never evidence.
+- [x] Run parser, readiness, assignment and existing document-result regressions; commit `feat(delivery): index coding agent tasks from Git`.
 
 ### Task 5 (T05) — Immutable snapshots, bounded retrieval and worker-owned pins
 
