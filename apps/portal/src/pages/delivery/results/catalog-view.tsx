@@ -40,7 +40,7 @@ function groupByFolder(paths: readonly string[]): Array<{ folder: string; paths:
 
 export function ItemStatusBadge({ status }: { status: string }): React.JSX.Element {
   const style = styleOf(ITEM_STATUS, status);
-  return <StatusBadge tone={style.tone} label={style.label} />;
+  return <StatusBadge tone={style.tone} label={style.label} busy={style.busy} />;
 }
 
 export interface CatalogSelection {

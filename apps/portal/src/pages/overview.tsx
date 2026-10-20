@@ -276,11 +276,11 @@ type Tone = StatusTone;
 
 /** One line of operational health: each figure links to its Monitoring tab. Detail and charts live there. */
 function Operations({ counts }: { counts: OverviewCounts | undefined }): React.JSX.Element {
-  const items: Array<{ label: string; value: string; tone: Tone; to: string }> =
+  const items: Array<{ label: string; value: string; tone: Tone; to: string; busy?: "spin" }> =
     counts === undefined
       ? []
       : [
-          { label: "Active runs", value: String(counts.activeRuns), tone: counts.activeRuns > 0 ? "blue" : "muted", to: monitoringLink("runs", "queued,running") },
+          { label: "Active runs", value: String(counts.activeRuns), tone: counts.activeRuns > 0 ? "blue" : "muted", to: monitoringLink("runs", "queued,running"), ...(counts.activeRuns > 0 ? { busy: "spin" as const } : {}) },
           { label: "Failed runs · 24 h", value: String(counts.failedRuns24h), tone: counts.failedRuns24h > 0 ? "red" : "green", to: monitoringLink("runs", "failed") },
           { label: "Pending writes", value: String(counts.pendingWrites), tone: counts.failedWrites24h > 0 ? "red" : counts.pendingWrites > 0 ? "blue" : "green", to: monitoringLink("writes") },
           { label: "Repository errors", value: String(counts.repositoriesWithErrors), tone: counts.repositoriesWithErrors > 0 ? "red" : counts.repositoriesNotReady > 0 ? "orange" : "green", to: monitoringLink("repositories") },
@@ -291,7 +291,7 @@ function Operations({ counts }: { counts: OverviewCounts | undefined }): React.J
       <span className="text-[10px] tracking-wide text-text-muted uppercase">Operations</span>
       {items.map((item) => (
         <Link key={item.label} to={item.to} className="flex items-center gap-1.5 rounded-[6px] text-[12.5px] text-text-secondary hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
-          <StatusDot tone={item.tone} className="size-2" />
+          <StatusDot tone={item.tone} busy={item.busy} className="size-2" />
           <span className="font-medium text-text tabular-nums">{item.value}</span>
           {item.label}
         </Link>
