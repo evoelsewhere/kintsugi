@@ -93,7 +93,7 @@ function RunConsole({ run, events, live, version }: { run: JobRunDetail; events:
   return (
     <>
       <RunSummary run={run} stats={stats} events={events.length} now={now} />
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,4fr)_minmax(0,7fr)]">
         <section className="flex min-w-0 flex-col gap-1.5">
           <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">Steps</h5>
           {run.steps.length === 0 ? <p className="text-[12px] text-text-muted">{active ? "Waiting for the first step…" : "No steps recorded."}</p> : <StepList steps={run.steps} context={context} />}
@@ -128,10 +128,9 @@ function RunSummary({ run, stats, events, now }: { run: JobRunDetail; stats: Rea
     <div className="flex flex-col gap-3 rounded-xl bg-recessed/60 p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <RunStatusBadge status={run.status} cancelling={run.cancelRequestedAt !== undefined && run.status === "running"} />
-        <span className="text-[12px] text-text-secondary">
+        <span className="text-[12px] tabular-nums text-text-secondary">
           {run.startedAt === undefined ? "Waiting for the worker" : `${isActiveStatus(run.status) ? "running for" : "took"} ${formatDuration(run.startedAt, run.finishedAt, now)}`}
         </span>
-        {run.failureReason === undefined ? null : <span className="min-w-0 flex-1 break-words text-[12px] text-[var(--ds-status-red)]">{run.failureReason}</span>}
       </div>
       {total === 0 ? null : (
         <div className="flex flex-col gap-1.5">
@@ -188,7 +187,7 @@ function CopyPath({ path }: { path: string }): React.JSX.Element {
           (failure: unknown) => toast.error("Could not copy the path", failure),
         );
       }}
-      className="shrink-0 rounded-[var(--geist-radius)] p-1 text-text-muted hover:bg-hover hover:text-text"
+      className="shrink-0 rounded-[var(--geist-radius)] p-1 text-text-muted hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
     >
       {copied ? <Check className="size-3.5 text-[var(--ds-status-green)]" /> : <Copy className="size-3.5" />}
     </button>
@@ -213,13 +212,14 @@ function RunOutput({ run }: { run: JobRunDetail }): React.JSX.Element {
         <ul className="flex flex-col">
           {run.artifacts.map((artifact) => (
             <li key={artifact.path} className="flex items-center gap-2 rounded-[var(--geist-radius)] px-1.5 py-1 hover:bg-hover">
-              <FileText className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.5} />
+              <FileText className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} />
               <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-text" title={`${artifact.path}\nsha256 ${artifact.sha256}`}>
                 {artifact.path}
               </span>
-              <span className="shrink-0 text-[11px] text-text-muted">
-                {formatBytes(artifact.size)} · {artifact.provenance.runtimeAgent ?? artifact.provenance.origin}
+              <span className="max-w-32 shrink-0 truncate rounded-full bg-hover px-1.5 py-0.5 text-[11px] text-text-muted" title={artifact.provenance.runtimeAgent ?? artifact.provenance.origin}>
+                {artifact.provenance.runtimeAgent ?? artifact.provenance.origin}
               </span>
+              <span className="w-16 shrink-0 text-right text-[11.5px] tabular-nums text-text-secondary">{formatBytes(artifact.size)}</span>
               <CopyPath path={artifact.path} />
             </li>
           ))}
@@ -229,17 +229,22 @@ function RunOutput({ run }: { run: JobRunDetail }): React.JSX.Element {
         <p className="flex flex-wrap items-center gap-2">
           <WriteStatusBadge status={write.status} />
           {write.branch === undefined ? null : (
-            <span className="font-mono text-[11px] text-text-muted" title="Branch in the document repo">
+            <span className="max-w-full truncate font-mono text-[11px] text-text-muted" title="Branch in the document repo">
               {write.branch}
             </span>
           )}
           {write.prUrl === undefined ? null : (
-            <a href={write.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline">
+            <a href={write.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-[var(--geist-radius)] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
               Pull request
               <ExternalLink className="size-3.5" />
             </a>
           )}
-          {write.error === undefined ? null : <span className="w-full break-words text-[var(--ds-status-red)]">{write.error}</span>}
+          {write.error === undefined ? null : (
+            <span className="flex w-full items-start gap-1.5 text-[11.5px] leading-[1.45] text-[var(--ds-status-red)]" title={write.error}>
+              <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-[var(--ds-status-red)]" aria-hidden />
+              <span className="line-clamp-2 break-words">{write.error}</span>
+            </span>
+          )}
         </p>
       )}
       {run.sourceCommit === undefined ? null : (

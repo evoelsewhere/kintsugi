@@ -30,11 +30,21 @@ export interface JobRunListProps {
   onChanged: () => void;
 }
 
-/** "running for 3m 12s", ticking while the run is active; "took 3m 12s" once it ended. */
+/** "3m 12s", ticking while the run is active; "—" before it started. */
 function Elapsed({ run }: { run: JobRunView }): React.JSX.Element {
   const active = isActive(run);
   const now = useNow(active);
-  return <>{`${active ? "running for " : "took "}${formatDuration(run.startedAt, run.finishedAt, now)}`}</>;
+  return <>{formatDuration(run.startedAt, run.finishedAt, now)}</>;
+}
+
+/** A failure line: small red dot, two lines at most, the full text on hover. */
+function Failure({ text }: { text: string }): React.JSX.Element {
+  return (
+    <p className="mt-0.5 flex items-start gap-1.5 text-[11.5px] leading-[1.45] text-[var(--ds-status-red)]" title={text}>
+      <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-[var(--ds-status-red)]" aria-hidden />
+      <span className="line-clamp-2 break-words">{text}</span>
+    </p>
+  );
 }
 
 export function JobRunList({ runs, canCancel, canRetry = false, showProject = false, initialOpen, onChanged }: JobRunListProps): React.JSX.Element {
@@ -69,7 +79,7 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
               className={cn(
                 "my-0.5 rounded-xl px-2 py-2",
                 expanded ? "bg-surface [box-shadow:var(--ds-shadow-border-small)]" : "hover:bg-hover",
-                !expanded && index > 0 && "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]",
+                !expanded && index > 0 && "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)] dark:[box-shadow:0_-1px_0_rgba(255,255,255,0.08)]",
               )}
             >
               <div
@@ -89,37 +99,62 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
                   {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                 </button>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" className="text-left text-[13px] font-medium text-text hover:underline" onClick={() => setOpen(expanded ? null : run.id)}>
-                      {run.kind === "stage" ? `Stage ${run.name}` : `${run.kind} ${run.name}`}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <button
+                      type="button"
+                      className="rounded-[var(--geist-radius)] text-left text-[13px] font-medium text-text hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+                      title={run.name}
+                      onClick={() => setOpen(expanded ? null : run.id)}
+                    >
+                      {run.name}
+                      <span className="ml-1.5 font-mono text-[11px] font-normal text-text-muted">{run.kind}</span>
                     </button>
                     <RunStatusBadge status={run.status} cancelling={cancelRequested} />
                     {showProject ? (
                       <Link
                         to={deliveryLink({ projectId: run.projectId, applicationId: run.applicationId, stage: run.kind === "stage" ? run.name : undefined, runId: run.id })}
-                        className="truncate text-[12px] text-accent hover:underline"
+                        className="min-w-0 truncate rounded-[var(--geist-radius)] text-[12px] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
                       >
                         {run.projectId}
                         {run.applicationId === undefined ? "" : ` / ${run.applicationId}`}
                       </Link>
                     ) : null}
                   </div>
-                  <p className="mt-0.5 truncate text-[11px] text-text-muted" title={formatDateTime(run.createdAt)}>
-                    {formatRelative(run.createdAt)}
-                    {run.startedAt === undefined ? "" : " · "}
-                    {run.startedAt === undefined ? null : <Elapsed run={run} />}
-                    {run.actor === undefined ? "" : ` · by ${run.actor}`}
-                    {run.agent === undefined ? "" : ` · ${run.agent}`}
-                    {run.sourceCommit === undefined ? "" : ` · ${run.sourceRepositoryId ?? ""}@${shortSha(run.sourceCommit)}`}
-                    {run.outputSummary?.files === undefined ? "" : ` · ${run.outputSummary.files} file(s)`}
-                  </p>
-                  {run.failureReason === undefined ? null : <p className="mt-0.5 break-words text-[12px] text-[var(--ds-status-red)]">{run.failureReason}</p>}
-                  {run.documentWrite?.error === undefined ? null : <p className="mt-0.5 break-words text-[12px] text-[var(--ds-status-red)]">Document write: {run.documentWrite.error}</p>}
+                  {run.actor === undefined && run.agent === undefined && run.sourceCommit === undefined && run.outputSummary?.files === undefined ? null : (
+                    <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-text-muted">
+                      {run.actor === undefined ? null : <span className="rounded-full bg-hover px-1.5 py-0.5">by {run.actor}</span>}
+                      {run.agent === undefined ? null : <span className="rounded-full bg-hover px-1.5 py-0.5">{run.agent}</span>}
+                      {run.sourceCommit === undefined ? null : (
+                        <span className="rounded-full bg-hover px-1.5 py-0.5 font-mono">
+                          {run.sourceRepositoryId === undefined ? "" : `${run.sourceRepositoryId}@`}
+                          {shortSha(run.sourceCommit)}
+                        </span>
+                      )}
+                      {run.outputSummary?.files === undefined ? null : (
+                        <span className="rounded-full bg-hover px-1.5 py-0.5 tabular-nums">
+                          {run.outputSummary.files} {run.outputSummary.files === 1 ? "file" : "files"}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {run.failureReason === undefined ? null : <Failure text={run.failureReason} />}
+                  {run.documentWrite?.error === undefined ? null : <Failure text={`Document write: ${run.documentWrite.error}`} />}
                 </div>
+                <span className="w-16 shrink-0 text-right text-[11.5px] tabular-nums text-text-secondary" title="Run time">
+                  {run.startedAt === undefined ? "—" : <Elapsed run={run} />}
+                </span>
+                <span className="hidden w-20 shrink-0 text-right text-[11.5px] tabular-nums text-text-muted sm:block" title={formatDateTime(run.createdAt)}>
+                  {formatRelative(run.createdAt)}
+                </span>
                 <div className="flex shrink-0 items-center gap-2">
                   {run.documentWrite === undefined ? null : <WriteStatusBadge status={run.documentWrite.status} title="Document write of this run" />}
                   {run.documentWrite?.prUrl === undefined ? null : (
-                    <a href={run.documentWrite.prUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[12px] text-accent hover:underline">
+                    <a
+                      href={run.documentWrite.prUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 rounded-[var(--geist-radius)] text-[12px] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+                    >
                       PR
                       <ExternalLink className="size-3.5" />
                     </a>
