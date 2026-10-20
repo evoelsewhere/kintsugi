@@ -183,9 +183,9 @@ Final review safety constraints: cap the section index at 400 ranges, leaving up
 
 **Interfaces:** HTTPS routes under `/api/member/v1`: GET `/projects`, `/tasks`, `/task-brief`, `/documents`, `/search`, `/task-status`; GET `/reviews/:reviewId` becomes available when T13 supplies `ReviewReader`. All data routes explicitly require catalog `member.read`, member-token scope metadata and project access. `AgentContextService` implements the seven nonstream methods of the port using authorized feature services, not transport code.
 
-- [x] Write contract tests for envelope, valid queries, 400 schema errors, 401/403, explicit unavailable reviews, slash-containing unit query values and matching CLI/MCP-ready payloads. Test that source URLs do not become server-side fetch requests.
+- [x] Write contract tests for envelope, valid queries, 400 schema errors, 401/403, explicit unavailable PR/review observations, status-aware next actions, slash-containing unit query values and matching CLI/MCP-ready payloads. Test that source URLs do not become server-side fetch requests.
 - [x] Run `pnpm --filter @kintsugi/api test -- test/integration/member-api.test.ts test/unit/member-api-contract.test.ts` against disposable Postgres.
-- [x] Wire plain-returning controllers and shared validators; preserve the global response interceptor. Export feature services through `index.ts`. Do not expose server MCP or change SPA fallback in this milestone. Represent absent review capability explicitly, with no passing stub report.
+- [x] Wire plain-returning controllers and shared validators; preserve the global response interceptor. Export feature services through `index.ts`. Do not expose server MCP or change SPA fallback in this milestone. Represent unavailable PR/review observations explicitly, with no passing stub report.
 - [x] Exercise one prepared draft/design brief through real HTTP and ensure missing quality approval is shown as a blocker; keep API methods and schema error codes stable.
 - [x] Run auth/context regressions and API typecheck/lint/build; commit `feat(api): expose coding agent workflow endpoints`.
 

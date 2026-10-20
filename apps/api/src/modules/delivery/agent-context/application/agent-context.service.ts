@@ -23,6 +23,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@kintsugi/harness-sdk";
+import type { WorkItemStatus } from "@kintsugi/domain";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
 import { DocumentQueryService } from "./document-query.service.js";
 import { SnapshotService } from "./snapshot.service.js";
@@ -110,6 +111,7 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
       projectId: task.projectId,
       unitId: task.unitId,
       status: task.workItem.status,
+      evidenceAvailability: { pullRequests: "unavailable", reviews: "unavailable" },
       pullRequests: [],
       currentReviewIds: [],
       gates: task.predecessorGates.map((gate) => ({
@@ -117,9 +119,7 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
         status: gate.status,
         publication: "unknown",
       })),
-      nextAction: task.readiness.byActivity.implementation.ready
-        ? "Implement the task, then create a pull request."
-        : "Resolve the implementation readiness blockers before implementation.",
+      nextAction: nextAction(task.workItem.status, task.readiness.byActivity.implementation.ready),
     };
     return taskStatusSchema.parse(result);
   }
@@ -156,6 +156,24 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
 
   private encodeProjectCursor(projectId: string): string {
     return Buffer.from(projectId, "utf8").toString("base64url");
+  }
+}
+
+function nextAction(status: WorkItemStatus, implementationReady: boolean): string {
+  switch (status) {
+    case "done":
+    case "skipped":
+      return "No further action is needed for this task.";
+    case "awaiting-review":
+      return "Wait for review feedback or address any requested changes.";
+    case "rejected":
+      return "Review the rejection feedback before continuing with the task.";
+    case "blocked":
+      return "Resolve the task's blocked status before implementation.";
+    default:
+      return implementationReady
+        ? "Implement the task, then create a pull request."
+        : "Resolve the implementation readiness blockers before implementation.";
   }
 }
 
