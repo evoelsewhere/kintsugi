@@ -7,5 +7,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["plugins/understand/hooks/reader/**/*.ts", "plugins/understand/tests/**/*.test.ts"]
+  "include": ["plugins/reverse_engineering/hooks/reader/**/*.ts", "plugins/reverse_engineering/tests/**/*.test.ts"]
 }

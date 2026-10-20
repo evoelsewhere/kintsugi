@@ -44,6 +44,7 @@ export const COMMAND_ORDER: readonly string[] = [
   "assess",
   "brief",
   "understand",
+  "plan-understand",
   "transform",
   "uplift",
   "reimagine",

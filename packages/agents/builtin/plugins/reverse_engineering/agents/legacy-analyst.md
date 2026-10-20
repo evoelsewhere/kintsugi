@@ -2,7 +2,6 @@
 name: legacy-analyst
 version: 1.1.0
 description: Deep-reads legacy codebases (COBOL, Java, .NET, Node, anything) to build structural and behavioral understanding. Use for discovery, dependency mapping, dead-code detection, and "what does this system actually do" questions.
-tools: [read, ls, grep, find, write, edit, shell, git]
 skills: [mermaid-diagrams]
 thinking: medium
 metadata:

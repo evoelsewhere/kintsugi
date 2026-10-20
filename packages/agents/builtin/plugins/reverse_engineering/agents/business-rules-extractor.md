@@ -2,7 +2,6 @@
 name: business-rules-extractor
 version: 1.1.0
 description: Mines domain logic, calculations, validations, and policies from legacy code into testable Given/When/Then specifications. Use when you need to separate "what the business requires" from "how the old code happened to implement it."
-tools: [read, ls, grep, find, write, edit, shell, git]
 skills: [mermaid-diagrams]
 thinking: medium
 metadata:

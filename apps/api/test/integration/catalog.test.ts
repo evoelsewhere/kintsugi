@@ -10,7 +10,7 @@ import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
-import { type Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
 
 const item = (id: string, files: string[], extra: Record<string, unknown> = {}): Record<string, unknown> => ({
   id,
@@ -64,6 +64,21 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
     await remote.commit("docs", "applications/web/assessment/catalog.json", JSON.stringify(CATALOG));
+    // The checked plan of a planning run (ADR-0041), at the catalog's source commit.
+    await remote.commit(
+      "docs",
+      "applications/web/assessment/understand/plan.json",
+      JSON.stringify({
+        version: 1,
+        app: "web",
+        strategy: "Billing first.",
+        catalog: { commit: "a".repeat(40), items: 7, open: 5 },
+        batches: [{ n: 1, title: "Billing", rationale: "Foundation.", risk: "high", items: ["billing/invoice", "billing/tax", "customers/gone"], loc: 30, high: 0, cohesion: 1, dependsOutside: [] }],
+        leftOut: [],
+        dropped: [],
+        summary: { batches: 1, planned: 3, open: 5 },
+      }),
+    );
     // Understood on main: invoice at the catalog's digest, rates at an older one (stale).
     await remote.commit("docs", "applications/web/units/billing/invoice/meta.json", JSON.stringify({ digest: "sha256:billinginvoice", commit: "b".repeat(40), runId: "run-merged" }));
     await remote.commit("docs", "applications/web/units/billing/rates/meta.json", JSON.stringify({ digest: "sha256:old", runId: "run-merged" }));
@@ -147,10 +162,25 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
       "customers/gone": "retired",
     });
     const byId = new Map(data.items.map((entry) => [entry.id, entry]));
+    expect(data.items.every((entry) => (entry as { assetClass?: string }).assetClass === "code")).toBe(true);
     expect(byId.get("billing/tax")?.pr).toEqual({ runId: "run-open", branch: "kintsugi/legacy-analyst/run-open", url: "https://git.example/pr/1" });
     expect(byId.get("billing/invoice")?.understood).toEqual({ commit: "b".repeat(40), runId: "run-merged" });
     expect(byId.get("billing/rates")?.lastRun?.id).toBe("run-failed");
     expect(data.counts).toEqual({ understood: 1, failed: 3, "in-pr": 1, "not-analysed": 1, retired: 1 });
+  });
+
+  it("serves the AI plan with where its items stand now", async () => {
+    const { client } = await memberClient(app, admin, "plan-reader", ["user"]);
+    const response = await client.get<{ plan: { strategy: string; batches: Array<{ items: string[] }> } | null; stale: boolean; status: Record<string, string> }>("/projects/shop/applications/web/understand/plan");
+    expect(response.status).toBe(200);
+    const view = response.body.data!;
+    expect(view.plan?.strategy).toBe("Billing first.");
+    expect(view.plan?.batches[0]?.items).toEqual(["billing/invoice", "billing/tax", "customers/gone"]);
+    // The catalog was not reassessed since: the plan fits; its items carry their status as of now.
+    expect(view.stale).toBe(false);
+    expect(view.status).toEqual({ "billing/invoice": "understood", "billing/tax": "in-pr", "customers/gone": "retired" });
+    expect((await admin.get("/projects/shop/applications/nope/understand/plan")).status).toBe(404);
+    expect((await new Client(app).get("/projects/shop/applications/web/understand/plan")).status).toBe(401);
   });
 
   it("is 404 without a catalog or for an unknown application, 400 for a bad ref", async () => {

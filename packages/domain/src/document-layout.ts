@@ -18,6 +18,8 @@ export const DEFAULT_DOCUMENT_AUTO_COMMIT_PATHS: readonly string[] = [
   "applications/*/units/**/unit.md",
   "applications/*/units/**/task.md",
   "applications/*/generated/**",
+  // The AI plan for what to understand next: advice, replaced by every planning run.
+  "applications/*/assessment/understand/plan.json",
 ];
 
 export function applicationsDir(): string {
@@ -147,6 +149,21 @@ export function understandRunFilePath(app: string, file: string): string {
 
 export function understandScopePath(app: string): string {
   return understandRunFilePath(app, "scope.json");
+}
+
+/** The item graph a planning run computes from the catalog and the topology (intermediate). */
+export function understandGraphPath(app: string): string {
+  return understandRunFilePath(app, "graph.json");
+}
+
+/** The planner's own answer before it is checked against the catalog (intermediate). */
+export function understandPlanDraftPath(app: string): string {
+  return understandRunFilePath(app, "plan-draft.json");
+}
+
+/** The checked plan of what to understand next, batch by batch (auto-committed advice). */
+export function understandPlanPath(app: string): string {
+  return understandRunFilePath(app, "plan.json");
 }
 
 /** Application aggregates rebuilt from authored unit documents. */

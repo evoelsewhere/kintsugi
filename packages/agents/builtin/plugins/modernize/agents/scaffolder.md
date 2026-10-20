@@ -2,7 +2,6 @@
 name: scaffolder
 version: 1.0.0
 description: Scaffolds one service of a reimagined system from the approved architecture and spec — project skeleton, domain model, API stubs, executable acceptance tests. Write access is scoped to its own service directory in the target repository.
-tools: Read, Glob, Grep, Write, Edit, Bash
 metadata:
   audience: member
   upstream: agents/scaffolder.md

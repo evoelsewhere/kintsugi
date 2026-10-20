@@ -2,6 +2,6 @@
   "title": "Modernize",
   "audience": "member",
   "requires": [
-    "understand"
+    "reverse_engineering"
   ]
 }

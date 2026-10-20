@@ -1,4 +1,4 @@
-// The JobOutput hook (packages/agents/builtin/plugins/understand/hooks/job_output.py, contract in JOB-OUTPUT.md):
+// The JobOutput hook (packages/agents/builtin/plugins/reverse_engineering/hooks/job_output.py, contract in JOB-OUTPUT.md):
 // run as a script step over a job's output directory before anything is indexed, stored or
 // committed. Fail-closed: anything but exit 0 blocks the output. The reason recorded is built
 // from the report's redacted fields only (rule, path, line), never from file content. Diagram

@@ -136,7 +136,10 @@ async function manifestOf(dir: string, problems: string[], folder: string): Prom
   try {
     const base = JSON.parse(await read(dir, PLUGIN_MANIFEST_FILE)) as { name?: string; version?: string; description?: string };
     const extra = JSON.parse(await read(dir, "kintsugi.json")) as { title?: string; audience?: string; requires?: string[] };
-    if (base.name !== folder) problems.push(`plugin ${folder}: plugin.json names it "${base.name ?? ""}"`);
+    // The folder is the plugin's id in Kintsugi; plugin.json carries the Claude Code name, which must be kebab-case
+    // (marketplace sync): the folder with dashes for underscores.
+    const claudeName = folder.replaceAll("_", "-");
+    if (base.name !== claudeName) problems.push(`plugin ${folder}: plugin.json names it "${base.name ?? ""}", expected "${claudeName}"`);
     if (extra.audience !== "runtime" && extra.audience !== "member") problems.push(`plugin ${folder}: kintsugi.json audience must be runtime or member`);
     return { name: folder, title: extra.title ?? folder, version: base.version ?? "0.0.0", description: base.description ?? "", audience: extra.audience === "member" ? "member" : "runtime", requires: extra.requires ?? [] };
   } catch (error) {

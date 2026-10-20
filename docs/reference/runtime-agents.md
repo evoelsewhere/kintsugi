@@ -30,7 +30,7 @@ Higher layers (orchestrator) translate their concepts (projects, units, standard
 | `id`, `version` | Identify the agent; model bindings name agents by `id` |
 | `instructions` | The system prompt, used verbatim |
 | `skills` | Optional inline skills `{ name, content }` (`name` matches `[a-z][a-z0-9-]*`), appended to the system prompt |
-| `tools` | Tool allowlist by name (kernel tools below); `[]` = no tools |
+| `tools` | Optional tool allowlist by name (kernel tools below). Absent = every kernel tool (the built-in agents list none); `[]` = no tools |
 | `denyCommandPatterns` | Optional regular expressions; a tool call whose `command` input matches is blocked before it runs |
 | `thinking` | Default thinking level |
 

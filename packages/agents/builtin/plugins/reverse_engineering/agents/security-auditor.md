@@ -2,7 +2,6 @@
 name: security-auditor
 version: 1.0.0
 description: Adversarial security reviewer — OWASP Top 10, CWE, dependency CVEs, secrets, injection. Use for security debt scanning and pre-modernization hardening.
-tools: [read, ls, grep, find, write, edit, shell, git]
 thinking: high
 metadata:
   audience: runtime

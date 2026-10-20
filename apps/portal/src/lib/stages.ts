@@ -31,6 +31,7 @@ export const RUNTIME_STAGES: readonly string[] = ["assess", "understand", "desig
 const STAGE_LABELS: Record<string, string> = {
   assess: "Assessment & Catalog",
   understand: "AS-IS Understanding",
+  "plan-understand": "Understanding Plan",
   design: "TO-BE Design",
   preflight: "Preflight Check",
   brief: "Modernization Brief",

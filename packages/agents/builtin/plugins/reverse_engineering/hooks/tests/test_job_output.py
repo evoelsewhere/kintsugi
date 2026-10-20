@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 ROOT = Path(__file__).resolve().parents[7]
-HOOK = ROOT / "packages" / "agents" / "builtin" / "plugins" / "understand" / "hooks" / "job_output.py"
+HOOK = ROOT / "packages" / "agents" / "builtin" / "plugins" / "reverse_engineering" / "hooks" / "job_output.py"
 
 VALID_TOPOLOGY = {
     "system": "Example app",

@@ -175,6 +175,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(stageInfo("demo")).toEqual([
       { id: "assess", requires: [] },
       { id: "understand", requires: [{ stage: "assess", path: "applications/demo/assessment/catalog.json" }] },
+      { id: "plan-understand", requires: [{ stage: "assess", path: "applications/demo/assessment/catalog.json" }] },
       { id: "rebuild", requires: [{ stage: "assess", path: "applications/demo/assessment/catalog.json" }] },
     ]);
   });
@@ -271,6 +272,61 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(writes[0]).toMatchObject({ outputOfJob: id, message: "Understand demo: main, rates", reviewAll: true });
     expect(store.children(id).filter((child) => child.status === "failed")).toHaveLength(0);
   }, 180_000);
+
+  const planningTask = (spec: { task: string }): boolean => spec.task.startsWith("Plan the order") || spec.task.startsWith("The plan for application");
+
+  it("plans what to understand next: the graph, an agent's batches, a checked plan committed straight to the default branch", async () => {
+    const draft = {
+      strategy: "Rates first, the entry point after.",
+      batches: [
+        { title: "Rates", items: ["rates/rates", "nope/x"], rationale: "Called by main.", risk: "high" },
+        { title: "Entry", items: ["billing/main"], rationale: "Needs rates.", risk: "medium" },
+      ],
+    };
+    const { run, writes, agents, summary, artifacts, out } = await runStage("plan-understand", {
+      legacy: "small",
+      docs: "cataloged-small-docs",
+      files: { "understand-planner": (spec) => (planningTask(spec) ? { "result.json": JSON.stringify(draft) } : {}) },
+    });
+    expect(run?.failureReason).toBeUndefined();
+    expect(run?.status).toBe("succeeded");
+    expect(summary?.steps.map((step) => [step.id, step.status])).toEqual([
+      ["graph", "succeeded"],
+      ["plan", "succeeded"],
+      ["check", "succeeded"],
+    ]);
+    // The planner is told where the graph is and gets the schema; only the plan is published.
+    const planner = agents.specs.find(planningTask);
+    expect(planner?.task).toContain("applications/demo/assessment/understand/graph.json");
+    expect(planner?.task).toContain("Return your result as JSON matching this schema");
+    expect(artifacts).toEqual(["applications/demo/assessment/understand/plan.json"]);
+    const plan = JSON.parse(readFileSync(join(out, "understand", "plan.json"), "utf8")) as {
+      batches: Array<{ items: string[]; loc: number; cohesion: number | null; dependsOutside: unknown[] }>;
+      dropped: Array<{ item: string; reason: string }>;
+    };
+    expect(plan.batches.map((batch) => batch.items)).toEqual([["rates/rates"], ["billing/main"]]);
+    expect(plan.dropped).toEqual([{ item: "nope/x", reason: "not an item of the catalog" }]);
+    // main depends on rates, which the earlier batch holds: nothing is left outside.
+    expect(plan.batches[1]).toMatchObject({ cohesion: 0, dependsOutside: [] });
+    // Advice, not a proposal: it is not sent to review.
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.reviewAll).toBeUndefined();
+  }, 120_000);
+
+  it("sends the planner back once with the check's reason when nothing in its plan can stand", async () => {
+    let calls = 0;
+    const good = { strategy: "Rates.", batches: [{ title: "Rates", items: ["rates/rates"], rationale: "Foundation.", risk: "high" }] };
+    const bad = { strategy: "Nothing.", batches: [{ title: "Unknown", items: ["nope/x"], rationale: "", risk: "low" }] };
+    const { run, summary, agents } = await runStage("plan-understand", {
+      legacy: "small",
+      docs: "cataloged-small-docs",
+      files: { "understand-planner": (spec) => (planningTask(spec) ? { "result.json": JSON.stringify(++calls === 1 ? bad : good) } : {}) },
+    });
+    expect(run?.status).toBe("succeeded");
+    expect(summary?.steps.map((step) => step.id)).toEqual(["graph", "plan", "check", "plan-fix", "check"]);
+    const repair = agents.specs.filter(planningTask).at(-1);
+    expect(repair?.task).toContain("no batch is left");
+  }, 120_000);
 
   it("names the pull request after the module when one module's items are selected", () => {
     expect(understandMessage("billing", { items: ["invoicing/a", "invoicing/b"], files: [] })).toBe("Understand billing: invoicing (2 items)");

@@ -2,4 +2,4 @@
 
 export { CatalogModule } from "./catalog.module.js";
 export { CatalogService } from "./application/catalog.service.js";
-export type { CatalogItemView, CatalogView } from "./domain/catalog.js";
+export type { CatalogItemView, CatalogView, PlanBatch, UnderstandPlan, UnderstandPlanView } from "./domain/catalog.js";

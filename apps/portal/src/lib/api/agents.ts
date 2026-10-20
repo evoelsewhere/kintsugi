@@ -22,7 +22,8 @@ export interface AgentManifest {
   audience: AgentAudience;
   version: string;
   description: string;
-  tools: string[];
+  /** Absent: every tool. */
+  tools?: string[];
   skills: string[];
   thinking?: ThinkingLevel;
   denyCommandPatterns?: string[];

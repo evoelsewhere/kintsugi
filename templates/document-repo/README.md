@@ -74,6 +74,7 @@ By default Kintsugi commits straight to the default branch only:
 applications/*/units/**/unit.md
 applications/*/units/**/task.md
 applications/*/generated/**
+applications/*/assessment/understand/plan.json
 ```
 
 `kintsugi.yaml` can replace the list with its `autoCommitPaths` key. Everything else arrives as

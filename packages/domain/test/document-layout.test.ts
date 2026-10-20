@@ -130,11 +130,12 @@ describe("ADR-0038 document-repo layout", () => {
     expect(reviewsDir("payroll/run-period")).toBe("applications/{app}/units/payroll/run-period/reviews");
   });
 
-  it("uses only unit state, task, and generated paths as auto-commit defaults", () => {
+  it("uses only unit state, task, generated and the understand plan as auto-commit defaults", () => {
     expect(DEFAULT_DOCUMENT_AUTO_COMMIT_PATHS).toEqual([
       "applications/*/units/**/unit.md",
       "applications/*/units/**/task.md",
       "applications/*/generated/**",
+      "applications/*/assessment/understand/plan.json",
     ]);
   });
 });

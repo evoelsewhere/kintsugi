@@ -232,7 +232,7 @@ export class AgentsService {
     return {
       problems,
       files: filesOf(agent),
-      ...(problems.length === 0 && agent.manifest.audience === "runtime" ? { definition: toAgentDefinition(agent, installation.sharedSkills) } : {}),
+      ...(problems.length === 0 && agent.manifest.audience === "runtime" ? { definition: toAgentDefinition(agent, installation.sharedSkills, installation.knownTools) } : {}),
     };
   }
 

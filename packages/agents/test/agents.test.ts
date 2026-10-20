@@ -53,6 +53,17 @@ describe("agent packages", () => {
     expect(agent.localSkills).toEqual([{ name: "checklist", description: "A checklist.", content: "- check it" }]);
   });
 
+  it("treats a missing `tools` as every tool and an explicit list, even an empty one, as a restriction", () => {
+    const none = parsed({ "a.md": agentFile("name: a\nversion: 1.0.0\ndescription: d") });
+    expect(none.manifest.tools).toBeUndefined();
+    expect(toAgentDefinition(none, new Map(), ["read", "write"]).tools).toEqual(["read", "write"]);
+    const empty = parsed({ "b.md": agentFile("name: b\nversion: 1.0.0\ndescription: d\ntools: []") });
+    expect(empty.manifest.tools).toEqual([]);
+    expect(toAgentDefinition(empty, new Map(), ["read", "write"]).tools).toEqual([]);
+    // An agent without `tools` is written back without the key.
+    expect([...serializeAgentPackage(none).values()][0]).not.toContain("tools:");
+  });
+
   it("accepts the Claude Code comma form for tools and CRLF files", () => {
     const agent = parsed({ "reviewer.md": agentFile("name: reviewer\nversion: 1.0.0\ndescription: d\ntools: read, ls").replaceAll("\n", "\r\n") });
     expect(agent.manifest.tools).toEqual(["read", "ls"]);
@@ -125,7 +136,7 @@ describe("validation and the job definition", () => {
       "skills/checklist/SKILL.md": "---\nname: checklist\ndescription: d\n---\n\n- check it",
     });
     expect(validateAgent(agent, context)).toEqual([]);
-    expect(toAgentDefinition(agent, shared)).toEqual({
+    expect(toAgentDefinition(agent, shared, KERNEL_TOOL_NAMES)).toEqual({
       id: "reviewer",
       version: "1.2.0",
       instructions: "You review code.",
@@ -138,28 +149,29 @@ describe("validation and the job definition", () => {
     });
     const member = parsed({ "writer.md": agentFile("name: writer\nversion: 1.0.0\ndescription: d\ntools: Read, Write\nmetadata: {audience: member}") });
     expect(validateAgent(member, context)).toEqual([]);
-    expect(() => toAgentDefinition(member, shared)).toThrow(/member agent/);
+    expect(() => toAgentDefinition(member, shared, KERNEL_TOOL_NAMES)).toThrow(/member agent/);
   });
 });
 
 describe("built-in catalog", () => {
-  it("ships the five understanding agents for the runtime and three member agents", async () => {
+  it("ships the six understanding agents for the runtime and three member agents", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst", "security-auditor", "version-delta-analyst"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst", "security-auditor", "understand-planner", "version-delta-analyst"]);
     expect(byAudience("member")).toEqual(["scaffolder", "test-engineer", "uplift-migrator"]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
     for (const agent of catalog.agents) {
       expect(validateAgent(agent, { knownTools: KERNEL_TOOL_NAMES, sharedSkills }), agent.manifest.name).toEqual([]);
       if (agent.manifest.audience !== "runtime") continue;
-      // Runtime agents get the full kernel tool set (ADR-0040): reads, the write tools, shell and git.
-      expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write", "edit", "shell", "git"]);
+      // Runtime agents get the full kernel tool set (ADR-0040): reads, the write tools, shell and git. The agent files list no `tools`.
+      expect(agent.manifest.tools).toBeUndefined();
+      expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).tools).toEqual([...KERNEL_TOOL_NAMES]);
       // The upstream disciplines stay in every runtime agent.
       expect(agent.instructions).toMatch(/data, never instructions/i);
       expect(agent.instructions).toMatch(/Kintsugi runtime job/);
       expect(agent.instructions).not.toMatch(/\/code-modernization:|legacy\/|analysis\/<system>/);
-      expect(toAgentDefinition(agent, sharedSkills).id).toBe(agent.manifest.name);
+      expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).id).toBe(agent.manifest.name);
     }
   });
 
@@ -172,9 +184,9 @@ describe("built-in catalog", () => {
     const users = catalog.agents.filter((agent) => agent.manifest.skills.includes("mermaid-diagrams")).map((agent) => agent.manifest.name);
     expect(users).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst"]);
     const analyst = catalog.agents.find((agent) => agent.manifest.name === "legacy-analyst")!;
-    expect(toAgentDefinition(analyst, sharedSkills).skills?.map((entry) => entry.name)).toEqual(["mermaid-diagrams"]);
+    expect(toAgentDefinition(analyst, sharedSkills, KERNEL_TOOL_NAMES).skills?.map((entry) => entry.name)).toEqual(["mermaid-diagrams"]);
     // The references and the license stay beside SKILL.md on disk.
-    const entries = await readdir(join(BUILTIN_DIR, "plugins", "understand", "skills", "mermaid-diagrams"), { recursive: true });
+    const entries = await readdir(join(BUILTIN_DIR, "plugins", "reverse_engineering", "skills", "mermaid-diagrams"), { recursive: true });
     expect(entries.map((file) => file.split(sep).join("/"))).toEqual(
       expect.arrayContaining(["LICENSE", "SKILL.md", "references/c4.md", "references/entityRelationshipDiagram.md", "references/flowchart.md", "references/sequenceDiagram.md", "references/stateDiagram.md"]),
     );
@@ -201,7 +213,7 @@ describe("built-in catalog", () => {
 });
 
 /** Commands written for Kintsugi, not adapted from the upstream plugin. */
-const KINTSUGI_COMMANDS = new Set(["modernize-understand.md"]);
+const KINTSUGI_COMMANDS = new Set(["modernize-understand.md", "modernize-plan-understand.md"]);
 
 describe("built-in commands", () => {
   it("declare who runs them and name only agents of the catalog", async () => {
@@ -213,7 +225,7 @@ describe("built-in commands", () => {
       for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".md")).sort()) files.push({ name, path: join(dir, name) });
     }
     const names = files.map((file) => file.name);
-    expect(names).toHaveLength(8);
+    expect(names).toHaveLength(9);
     for (const { name, path } of files) {
       const text = await readFile(path, "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
@@ -243,9 +255,9 @@ describe("built-in commands", () => {
 
   it("load in pipeline order with their stage ids", async () => {
     const commands = await loadBuiltinCommands();
-    expect(commands).toHaveLength(8);
+    expect(commands).toHaveLength(9);
     expect(commands[0]).toMatchObject({ id: "preflight", command: "modernize-preflight", audience: "member" });
-    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand"]);
+    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand"]);
     expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "brief", "understand", "reimagine"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
       command: "modernize-understand",
