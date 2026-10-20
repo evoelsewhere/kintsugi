@@ -37,18 +37,12 @@ export function ProjectKpis({ applications, stages, runs }: { applications: read
   const top = stageRuns(runs);
   const health = pipelineHealth(applications, stages, runs);
   const active = top.filter((run) => isActiveStatus(run.status));
-  const finished = top.filter((run) => run.status === "succeeded" || run.status === "failed");
-  const succeeded = finished.filter((run) => run.status === "succeeded").length;
   const activeApps = new Set(active.map((run) => run.applicationId)).size;
-  const newest = top[0];
   return (
     <KpiRow>
       <Kpi label="Applications" value={applications.length} hint={activeApps === 0 ? "no active run" : `${activeApps} with an active run`} />
       <Kpi label="Stages completed" value={undefined} display={`${health.done}/${health.total}`} hint="latest run succeeded" tone={health.total > 0 && health.done === health.total ? "green" : undefined} />
-      <Kpi label="Active runs" value={active.length} hint={active.length === 0 ? "nothing running" : "refreshing live"} tone={active.length > 0 ? "blue" : undefined} />
-      <Kpi label="Success rate" value={undefined} display={finished.length === 0 ? "—" : `${Math.round((succeeded / finished.length) * 100)}%`} hint={`of ${finished.length} finished runs`} />
       <Kpi label="Needs attention" value={health.attention.length} hint={health.attention.length === 0 ? "latest runs are healthy" : "latest run failed or stopped"} tone={health.attention.length > 0 ? "red" : "green"} />
-      <Kpi label="Last activity" value={undefined} display={newest === undefined ? "—" : formatRelative(newest.createdAt)} hint={newest === undefined ? "no run yet" : `${stageLabel(newest.name)} · ${styleOf(RUN_STATUS, newest.status).label.toLowerCase()}`} />
     </KpiRow>
   );
 }

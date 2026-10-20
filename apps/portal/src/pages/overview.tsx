@@ -8,14 +8,13 @@ import { AlertTriangle, CircleCheck, Clock, FolderKanban, FolderGit2, GitPullReq
 import { Link } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeading } from "@/components/page-heading";
 import { RunStatusBadge, WriteStatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
-import { type ActivityItem, type AttentionItem, monitoringApi, type MonitoringOverview } from "@/lib/api/monitoring";
+import { type ActivityItem, type AttentionItem, monitoringApi, type MonitoringOverview, type OverviewCounts } from "@/lib/api/monitoring";
 import { APP_VERSION } from "@/lib/app-info";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -23,9 +22,8 @@ import { deliveryLink, governanceLink, monitoringLink } from "@/lib/links";
 import { useHealth } from "@/lib/use-health";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
-import { OverviewInsights } from "./overview-insights";
+import { Portfolio } from "./overview-portfolio";
 
-const n = (value: number | undefined): string | undefined => (value === undefined ? undefined : String(value));
 
 export function OverviewPage(): React.JSX.Element {
   const overview = useLoader("overview", monitoringApi.overview, { refresh: (data) => (data.counts.activeRuns > 0 ? 5000 : 20000) });
@@ -37,7 +35,7 @@ export function OverviewPage(): React.JSX.Element {
       <Breadcrumbs items={["Overview"]} />
       <PageHeading
         title="Overview"
-        description="Projects, runtime jobs, document writes and repositories across the installation."
+        description="The modernization portfolio: what was found, how much is understood and how far each application is."
         actions={
           <Button size="small" variant="ghost" onClick={() => void overview.reload()}>
             <RefreshCw className="size-4" />
@@ -46,47 +44,9 @@ export function OverviewPage(): React.JSX.Element {
         }
       />
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
-        <MetricCard title="Projects" value={n(counts?.projects)} subtitle="Configured in Administration → Projects" tone={counts?.projects === 0 ? "muted" : "green"} to="/projects" />
-        <MetricCard title="Applications" value={n(counts?.applications)} subtitle="In scope across all projects" tone={counts?.applications === 0 ? "muted" : "green"} to="/delivery" />
-        <MetricCard
-          title="Active job runs"
-          value={n(counts?.activeRuns)}
-          subtitle={counts === undefined ? "…" : `${counts.runningRuns} running · ${counts.queuedRuns} queued`}
-          tone={counts !== undefined && counts.activeRuns > 0 ? "blue" : "muted"}
-          to={monitoringLink("runs", "queued,running")}
-        />
-        <MetricCard
-          title="Failed runs · 24 h"
-          value={n(counts?.failedRuns24h)}
-          subtitle={counts === undefined ? "…" : `${counts.succeededRuns24h} succeeded in the same period`}
-          tone={counts === undefined ? "muted" : counts.failedRuns24h > 0 ? "red" : "green"}
-          to={monitoringLink("runs", "failed")}
-        />
-        <MetricCard
-          title="Pending document writes"
-          value={n(counts?.pendingWrites)}
-          subtitle={counts === undefined ? "…" : `${counts.pullRequests7d} pull request${counts.pullRequests7d === 1 ? "" : "s"} opened · 7 d · ${counts.failedWrites24h} failed · 24 h`}
-          tone={counts === undefined ? "muted" : counts.failedWrites24h > 0 ? "red" : counts.pendingWrites > 0 ? "blue" : "green"}
-          to={monitoringLink("writes")}
-        />
-        <MetricCard
-          title="Repository sync errors"
-          value={n(counts?.repositoriesWithErrors)}
-          subtitle={counts === undefined ? "…" : `${counts.repositories} repositories · ${counts.repositoriesNotReady} not ready yet`}
-          tone={counts === undefined ? "muted" : counts.repositoriesWithErrors > 0 ? "red" : counts.repositoriesNotReady > 0 ? "orange" : "green"}
-          to={monitoringLink("repositories")}
-        />
-        <MetricCard
-          title="Pending gates"
-          value={n(counts?.pendingGates)}
-          subtitle={counts === undefined ? "…" : counts.pendingGates === 0 ? "Nothing waiting for a decision" : "Waiting for a decision in Governance"}
-          tone={counts === undefined ? "muted" : counts.pendingGates > 0 ? "orange" : "green"}
-          to={governanceLink("gates", "pending")}
-        />
-      </section>
+      <Portfolio />
 
-      <OverviewInsights counts={counts} />
+      <Operations counts={counts} />
 
       {counts?.projects === 0 ? (
         <Card>
@@ -222,12 +182,19 @@ function ActivityList({ items }: { items: ActivityItem[] }): React.JSX.Element {
       />
     );
   }
+  // Repeated runs with the same title and outcome (a cancelled batch, retries) read as one line.
+  const grouped = items.reduce<Array<{ item: ActivityItem; repeats: number }>>((list, item) => {
+    const last = list.at(-1);
+    if (last !== undefined && item.kind === "run" && last.item.kind === "run" && last.item.title === item.title && last.item.status === item.status && last.item.projectId === item.projectId) last.repeats += 1;
+    else list.push({ item, repeats: 1 });
+    return list;
+  }, []);
   return (
     <ol className="flex flex-col">
-      {items.map((item, index) => (
+      {grouped.slice(0, 8).map(({ item, repeats }, index, shown) => (
         <li key={`${item.kind}-${item.jobRunId ?? item.documentWriteId ?? index}`} className="relative flex gap-3 pb-3 pl-1 last:pb-0">
           {/* Timeline rail */}
-          {index < items.length - 1 ? <span aria-hidden className="absolute top-5 bottom-0 left-[7px] w-px bg-black/10 dark:bg-white/10" /> : null}
+          {index < shown.length - 1 ? <span aria-hidden className="absolute top-5 bottom-0 left-[7px] w-px bg-black/10 dark:bg-white/10" /> : null}
           <span className="relative mt-1.5 flex size-3 shrink-0 items-center justify-center rounded-full bg-surface">
             <span className="size-2 rounded-full bg-text-muted" />
           </span>
@@ -240,6 +207,7 @@ function ActivityList({ items }: { items: ActivityItem[] }): React.JSX.Element {
                 {item.title}
               </Link>
               {item.kind === "run" ? <RunStatusBadge status={item.status} /> : <WriteStatusBadge status={item.status} />}
+              {repeats > 1 ? <span className="text-[12px] text-text-muted tabular-nums">× {repeats}</span> : null}
               {item.prUrl === undefined ? null : (
                 <a href={item.prUrl} target="_blank" rel="noreferrer" className="text-[12px] text-accent hover:underline">
                   Pull request
@@ -301,5 +269,36 @@ function SystemCard({ overview }: { overview: MonitoringOverview | undefined }):
         </li>
       </ul>
     </Card>
+  );
+}
+
+type Tone = StatusTone;
+
+/** One line of operational health: each figure links to its Monitoring tab. Detail and charts live there. */
+function Operations({ counts }: { counts: OverviewCounts | undefined }): React.JSX.Element {
+  const items: Array<{ label: string; value: string; tone: Tone; to: string }> =
+    counts === undefined
+      ? []
+      : [
+          { label: "Active runs", value: String(counts.activeRuns), tone: counts.activeRuns > 0 ? "blue" : "muted", to: monitoringLink("runs", "queued,running") },
+          { label: "Failed runs · 24 h", value: String(counts.failedRuns24h), tone: counts.failedRuns24h > 0 ? "red" : "green", to: monitoringLink("runs", "failed") },
+          { label: "Pending writes", value: String(counts.pendingWrites), tone: counts.failedWrites24h > 0 ? "red" : counts.pendingWrites > 0 ? "blue" : "green", to: monitoringLink("writes") },
+          { label: "Repository errors", value: String(counts.repositoriesWithErrors), tone: counts.repositoriesWithErrors > 0 ? "red" : counts.repositoriesNotReady > 0 ? "orange" : "green", to: monitoringLink("repositories") },
+          { label: "Pending gates", value: String(counts.pendingGates), tone: counts.pendingGates > 0 ? "orange" : "green", to: governanceLink("gates", "pending") },
+        ];
+  return (
+    <nav aria-label="Operations" className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl bg-surface px-4 py-2.5 shadow-border-medium">
+      <span className="text-[10px] tracking-wide text-text-muted uppercase">Operations</span>
+      {items.map((item) => (
+        <Link key={item.label} to={item.to} className="flex items-center gap-1.5 rounded-[6px] text-[12.5px] text-text-secondary hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
+          <StatusDot tone={item.tone} className="size-2" />
+          <span className="font-medium text-text tabular-nums">{item.value}</span>
+          {item.label}
+        </Link>
+      ))}
+      <Link to="/monitoring" className="ml-auto text-[12px] text-accent hover:underline">
+        Monitoring →
+      </Link>
+    </nav>
   );
 }

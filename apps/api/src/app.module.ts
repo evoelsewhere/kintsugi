@@ -28,6 +28,7 @@ import { CostEntriesModule } from "./modules/monitoring/cost/cost-entries.module
 import { DashboardStatsModule } from "./modules/monitoring/dashboards/dashboard-stats.module.js";
 import { JobRunsModule } from "./modules/monitoring/observability/job-runs.module.js";
 import { OverviewModule } from "./modules/monitoring/overview/overview.module.js";
+import { PortfolioOverviewModule } from "./modules/monitoring/portfolio/portfolio.module.js";
 import { HealthChecksModule } from "./modules/monitoring/target-health/health-checks.module.js";
 import { AuditEntriesModule } from "./modules/governance/audit/audit-entries.module.js";
 import { GatesModule } from "./modules/governance/gates/gates.module.js";
@@ -74,6 +75,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     IncidentsModule,
     // monitoring
     OverviewModule,
+    PortfolioOverviewModule,
     JobRunsModule,
     DashboardStatsModule,
     AiMetricsModule,

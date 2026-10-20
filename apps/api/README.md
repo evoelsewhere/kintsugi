@@ -42,6 +42,10 @@ Responsibilities beyond the feature modules below:
   (`?status=queued,failed&projectId`); `GET /api/monitoring/overview` (counts, what needs
   attention, recent activity, the worker's pg-boss queue counts — `null` when unreadable) and
   `GET /api/monitoring/repositories` (sync state and project links, never credentials).
+- Portfolio overview (session only, read-only): `GET /api/monitoring/portfolio` (module `monitoring/portfolio`) places every
+  application in the lifecycle (phase derived from its runtime stages, the gate that closes it), lists what a person must
+  decide (pending gates, pull requests waiting for review, critical and high findings), the unit funnel of the item
+  catalogs and the riskiest units still to analyse. Parts that cannot be read for an application come back `null`.
 - Worker health (ADR-0030): `GET /api/monitoring/workers` lists worker processes from
   `workflow.worker_heartbeat` (migration `014_worker_heartbeat.sql`; up when seen < 45 s ago);
   the overview adds `worker.up`, pending gates and `gate-pending` / `worker-down` attention items.
