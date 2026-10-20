@@ -44,10 +44,16 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Decision register and ADR index](decisions/README.md)
 - [ADR template](decisions/template.md)
 
+**Approved design and implementation planning**
+
+- [Member access design](superpowers/specs/2026-10-20-kintsugi-member-access-design.md): approved CLI, local MCP, task/design context and PR continuation architecture
+- [Member access implementation plan](superpowers/plans/2026-10-20-kintsugi-member-access-implementation.md): ordered tasks, files, interfaces and acceptance gates
+- [Member access testing plan](superpowers/plans/2026-10-20-kintsugi-member-access-testing.md): verification cases, environments and release evidence requirements
+
 **Reference**
 - [Glossary](reference/glossary.md)
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
-- [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
+- [Harness integration](reference/harness-integration.md): read-only CLI and local MCP contract, snapshots, client setup and workflow
 - [Data model](reference/data-model.md)
 - [Document repository layout](reference/document-repo.md): the ADR-0038 subject and phase layout, gate records and auto-commit
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`
@@ -56,6 +62,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Document reads and stage results](reference/document-repo-read-path.md): file APIs and result views
 - [Commit conventions](reference/document-repo-commit-conventions.md): identity, trailers and auto-commit defaults
 - [Unit files](reference/document-repo-unit-files.md): the unit directory, unit state, rule verdicts and traceability
+- [Member access compatibility](reference/member-access-compatibility.md): exact toolchain and client/provider probes
 - [Configuration](reference/configuration.md): installation environment variables
 
 **Guides**

@@ -1,6 +1,6 @@
 # ADR-0015: Member-harness assets are agent plugins (Claude Code plugin format)
 
-- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): project plugins live in the document repo's `plugins/`, published without a maturity gate. Amended (2026-10-11): the built-in plugin has no source folder of its own; it is assembled from `packages/agents/builtin/member/` and the built-in member agents and commands, and generated into the document repo as `plugins/kintsugi/`.
+- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): project plugins live in the document repo's `plugins`, published without a maturity gate. Amended (2026-10-11): the built-in plugin has no source folder of its own; it is assembled from `packages/agents/builtin/member/` and the built-in member agents and commands, and generated into the document repo as `plugins/kintsugi/`. Further amended by [ADR-0041](0041-member-access-through-cli-and-local-mcp.md): member access is a separate hookless local connector.
 - Date: 2026-10-09
 - Decision register: D19, D40, D43
 - Amends: ADR-0005 (canonical asset format), ADR-0013 decision 9 (harness renderers become a fallback)

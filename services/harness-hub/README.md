@@ -1,16 +1,17 @@
 # services/harness-hub
 
-Bridge between Kintsugi and the AI harnesses members run on their own machines (Claude Code, GitHub Copilot, Codex, ChatGPT, …). Implements the contracts in `packages/harness-sdk`.
+Boundary for member-harness adapters and generated client assets. The approved member-access implementation is in progress; the existing remote MCP and member-write commands described by earlier drafts are not the v1 contract.
 
-| Capability | Description |
+| Capability | Responsibility |
 |---|---|
-| Kintsugi MCP server | Remote Streamable HTTP on `kintsugi-app`, Personal Access Token auth (OAuth once Entra ID is enabled): `kb.*`, `task.*`, `artifact.register`, `gate.status`, `guideline.get`. Bundled in the built-in `kintsugi` plugin |
-| Plugins & marketplaces | Planned, not implemented: validate project plugins from `plugins/`, generate the built-in `plugins/kintsugi/` from `packages/agents/builtin/member/`, and write the marketplace paths declared in `packages/harness-sdk` for Claude Code / Copilot CLI / Codex (ADR-0015). No current code writes these document-repo files. |
-| Fallback rendering | `AssetRenderer` per harness without plugin support: skills, agents, project context, MCP config |
-| CLI API | Backend for the `kintsugi` CLI (`plugins setup`, `task start`, `artifact register`, `hook <event>`) |
-| Policy distribution | `HarnessPolicy` → managed settings / org policies per harness |
-| Telemetry ingest | Plugin hooks, optional OTLP endpoint, vendor metrics API pollers, git/PR polling or webhooks → `HarnessActivity` |
+| Local stdio MCP adapter | Planned adapter over the shared typed member-access port; launched by the installed CLI on a developer machine. It has no network listener and never owns authorization rules. |
+| Access plugin generation | Planned small hookless skill and client-specific MCP configuration, installed separately from project method plugins. A client is supported only after its versioned setup and protocol matrix passes. |
+| Typed member API contract | Shared query and result schemas. CLI and MCP use the same project, task, snapshot, citation and error vocabulary. |
+| Provider PR observation | Owned by the Git provider adapters and workflow services, not by this package. GitHub.com is first; webhook receipts and durable reconciliation feed the review workflow. |
+| Existing harness policy and telemetry concepts | Future integrations. Client hooks and telemetry are optional later capabilities and do not enforce access or gate decisions. |
 
-Deliverables are never uploaded to Kintsugi: members commit them to Git, and `artifact.register` records `repo@commit:path` plus provenance (harness, AI share) — ADR-0007.
+The target flow is developer's AI → local CLI/stdio MCP → HTTPS member API. The AI retrieves documents and answers with citations under the developer's existing subscription. It cannot claim a task, change its status, register arbitrary files, approve a gate or administer the installation.
 
-Vendor plugin formats and native paths change often. Verify them against current vendor docs when implementing each generator or renderer.
+Kintsugi continues after the developer opens normal pull requests. Provider reconciliation and review are server-side. Effective phase exit requires an authenticated human decision and a merged Git gate record bound to the final required deliverables.
+
+See [the approved member-access ADR](../../docs/decisions/0041-member-access-through-cli-and-local-mcp.md), [task and snapshot contract](../../docs/decisions/0042-member-context-and-project-access.md), and [PR continuation contract](../../docs/decisions/0043-evidence-bound-pr-continuation.md).

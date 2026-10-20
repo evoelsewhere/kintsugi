@@ -31,10 +31,10 @@ The runner never writes to repositories:
 
 ## Member deliverables
 
-Deliverables are **never uploaded** to Kintsugi:
-1. Members commit them to Git.
-2. They register them with `artifact.register`.
-3. Kintsugi records `repo@commit:path` and provenance (harness, AI share).
+Deliverables stay in their Git repositories:
+1. The member commits code and documents on normal branches.
+2. The member opens pull requests with the Kintsugi unit identity and required deliverable paths.
+3. Kintsugi discovers provider state, binds review to exact revisions and records validated workflow evidence. The member connector does not require a separate artifact-register write.
 
 ## What Postgres keeps
 
@@ -47,7 +47,7 @@ Deliverables are **never uploaded** to Kintsugi:
 Each unit is a directory, `applications/<app>/units/<module>/<unit>/`, whose `unit.md` frontmatter holds its state ([format](../../reference/document-repo-unit-files.md)).
 
 - **One write path**:
-  1. Portal, CLI, MCP and runtime agents call the Kintsugi API.
+  1. Portal and separately authorized API actions call the Kintsugi API. The member CLI/MCP connector is read-only and cannot claim a unit or change its state (ADRs 0041–0042).
   2. The API validates the actor's effective access-role permissions and the transition, then updates the index immediately.
   3. The worker commits the change as `kintsugi-bot` with a `Kintsugi-Actor` trailer.
   4. If the commit fails, the index change is rolled back.

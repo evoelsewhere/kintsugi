@@ -40,7 +40,7 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 **Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one file per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a file is left unchanged.
 
 **Rules**:
-- **Write path**: state changes go through the Kintsugi API (portal, CLI, MCP, runtime agents). The API validates the actor's effective access-role permissions and the allowed transition, updates the index, and the worker commits as `kintsugi-bot` with `Kintsugi-Actor`. `unit.md` and `task.md` are auto-commit paths; every other file in the unit directory arrives as a pull request.
+- **Write path**: authorized portal and administrative API actions validate access-role permissions and allowed transitions, update the index, and commit as the Kintsugi bot with a Kintsugi-Actor trailer. The default unit.md and task.md paths may auto-commit; other unit documents arrive through PRs. The member-access CLI/MCP connector is read-only and cannot claim or update a unit (ADRs 0041–0042).
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 

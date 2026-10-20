@@ -1,0 +1,8 @@
+{
+  "fixtureSchema": "member-access-v1",
+  "variant": "missing",
+  "missingSource": "applications/billing/units/invoices/tax/design.md",
+  "reason": "fixture intentionally omits this path",
+  "expectedBehavior": "report missing source and do not substitute a branch head or another unit design",
+  "fixtureOnly": true
+}

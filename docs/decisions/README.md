@@ -25,15 +25,15 @@ This page has two parts:
 | [0004](0004-runner-container-per-job.md) | One Docker container per runtime job, with a pi SDK runner inside | Accepted (isolation amended by 0029) |
 | [0005](0005-canonical-asset-format.md) | Canonical asset format = Agent Skills + AGENTS.md | Superseded by 0015 |
 | [0006](0006-self-hosted-package.md) | Kintsugi is distributed as a self-hosted package | Accepted |
-| [0007](0007-git-as-source-of-truth.md) | Git is the source of truth for code, documents and assets | Accepted |
+| [0007](0007-git-as-source-of-truth.md) | Git is the source of truth for code, documents and assets | Accepted (amended by 0043) |
 | [0008](0008-authentication.md) | Local username/password first, Azure AD (Entra ID) later | Accepted |
 | [0009](0009-llm-provider-config.md) | LLM provider configuration for the pi runtime | Accepted |
 | [0010](0010-postgres-only.md) | PostgreSQL is the only datastore | Accepted (graph tables removed by 0014) |
 | [0011](0011-project-rulebook.md) | Every project builds its own rulebook before running the pipeline | Superseded by 0028 |
-| [0012](0012-work-items-as-files-in-git.md) | Work items are files in the workspace repo; Postgres indexes them | Accepted (amended by 0028) |
+| [0012](0012-work-items-as-files-in-git.md) | Work items are files in the workspace repo; Postgres indexes them | Accepted (amended by 0028, 0042) |
 | [0013](0013-composable-open-rulebook.md) | Composable, open rulebook | Superseded by 0028 |
 | [0014](0014-no-code-graph-no-agent-config.md) | No code graph or parsing, no unit-discovery config, built-in runtime agents fixed in code | Accepted (decision 3 superseded by 0023) |
-| [0015](0015-member-assets-as-agent-plugins.md) | Member-harness assets are agent plugins (Claude Code plugin format) | Accepted (amended by 0028) |
+| [0015](0015-member-assets-as-agent-plugins.md) | Member-harness assets are agent plugins (Claude Code plugin format) | Accepted (amended by 0028, 0041) |
 | [0016](0016-nestjs-api-framework.md) | NestJS is the API framework for `apps/api` | Accepted |
 | [0017](0017-portal-vite-react-shadcn.md) | Portal is a Vite + React SPA with shadcn/ui | Accepted |
 | [0018](0018-pin-pi-exact-version.md) | Pin pi to an exact version; track the latest release | Accepted |
@@ -42,11 +42,11 @@ This page has two parts:
 | [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Superseded by 0029 |
 | [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Superseded by 0023 |
 | [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted (write tool amended by 0037) |
-| [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
+| [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted (amended by 0042) |
 | [0025](0025-git-core-and-checkout-storage.md) | Git core package and Kintsugi-managed checkout storage | Accepted |
 | [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Accepted |
 | [0027](0027-builtin-modernization-content.md) | Built-in modernization content in packages/agents: agents, commands, workflows, scripts, hooks and tests | Accepted (amended by 0028, 0029, 0033) |
-| [0028](0028-remove-rulebook-single-document-repo.md) | Remove the rulebook; one document repo per project | Accepted |
+| [0028](0028-remove-rulebook-single-document-repo.md) | Remove the rulebook; one document repo per project | Accepted (amended by 0041, 0043) |
 | [0029](0029-job-workspaces-instead-of-os-sandboxes.md) | Job workspaces instead of OS sandboxes | Accepted |
 | [0030](0030-worker-heartbeat-in-postgres.md) | Worker heartbeat in Postgres | Accepted |
 | [0031](0031-understand-stage-as-is-specification.md) | understand stage: per-unit AS-IS specification closes the Understand phase | Accepted (diagrams amended by 0032; §1, §3, §6 superseded by 0033) |
@@ -54,11 +54,14 @@ This page has two parts:
 | [0033](0033-assess-catalog-understand-selection.md) | Two runtime stages: assess builds the item catalog; understand runs on a selection | Accepted (layout statements amended by 0038) |
 | [0034](0034-understand-command-merges-map-rules-harden.md) | One understand command; map, extract-rules and harden are parts of it | Accepted |
 | [0037](0037-kernel-write-and-edit-tools-from-pi.md) | The kernel writes with pi's `write` and `edit`, not a custom `outputs_write` | Accepted (amends 0023) |
-| [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted |
+| [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted (amended by 0042, 0043) |
 | [0039](0039-github-actions-ghcr-deployment.md) | Build and deploy the self-hosted package with GitHub Actions | Accepted |
 | [0040](0040-kernel-shell-and-git-tools.md) | The kernel gets `shell` and `git` tools and an `ls` tree mode | Accepted (supersedes 0037 D4 and 0029's no-shell statements) |
+| [0041](0041-member-access-through-cli-and-local-mcp.md) | Local member access through the CLI and stdio MCP | Accepted |
+| [0042](0042-member-context-and-project-access.md) | Scope member context to project access and immutable snapshots | Accepted |
+| [0043](0043-evidence-bound-pr-continuation.md) | Continue workflows from evidence-bound pull requests and gates | Accepted |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
-| [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amends 0015, 0026, 0027) |
+| [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0041) |
 
 ## Decision register
 
@@ -80,9 +83,9 @@ This page has two parts:
 | D14 | Source-code analysis | — | None: agents read source files directly; KB is text chunks + embeddings | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D15 | Document conversion (xlsx/docx → md, multilingual) | 🟠 | Python sidecar (docling / markitdown + Excel → Markdown); adds one container | M1 | ⬜ |
 | D16 | Embedding model | 🟠 | Configured like LLM providers; must offer a local option | M1 | ⬜ |
-| D17 | MCP transport + auth | 🟠 | Remote Streamable HTTP on `kintsugi-app`, PAT auth; OAuth with Entra ID | M2 | 🟡 |
-| D18 | Priority member harness + license tier | 🟠 | Copilot first, Claude Code second | M2 | ⬜ |
-| D19 | Asset distribution to harnesses | 🟠 | Agent plugins via marketplaces generated in the document repo (generated built-in plugin + project plugins, all under `plugins/`, relative paths); `kintsugi plugins setup`; fallback rendering for harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D17 | MCP transport + auth | 🟠 | Local stdio MCP from the installed CLI over the HTTPS member API; remote MCP/OAuth later | M2 | ✅ [0041](0041-member-access-through-cli-and-local-mcp.md) |
+| D18 | Priority member harness + license tier | 🟠 | Claude Code end-to-end pilot first; Codex and Copilot CLI follow the same contract and require separate compatibility proof; member keeps its own AI subscription | M2 | ✅ [0041](0041-member-access-through-cli-and-local-mcp.md) |
+| D19 | Asset distribution to harnesses | 🟠 | A small hookless member-access plugin is generated separately from optional method plugins; use client-specific setup after compatibility proof | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md), [0041](0041-member-access-through-cli-and-local-mcp.md) |
 | D20 | Source of truth for units | 🟠 | One file per unit in the document repo (`units/**`), state in frontmatter; Postgres is a rebuildable index; single write path through the Kintsugi API (bot commits with actor trailer); Jira / Azure DevOps are mirrors | M2 | ✅ [0012](0012-work-items-as-files-in-git.md) |
 | D21 | Measuring "AI-generated" | 🟠 | Mandatory declaration (commit trailer + PR template); telemetry for cross-checking | M3 | 🟡 |
 | D22 | Git servers & repositories | 🔴 | Many Git servers and many repos; plain git everywhere; API adapters GitHub → Azure DevOps → GitLab → Bitbucket → Gitea | M0 | ✅ [0007](0007-git-as-source-of-truth.md) |
@@ -102,7 +105,7 @@ This page has two parts:
 | D37 | Reuse across projects | 🟢 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M4 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D38 | Runner images | 🔴 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M0 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
 | D39 | Project runtime agents & runtime MCP | — | Not supported (removed) | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
-| D43 | Member asset packaging | 🟠 | Claude Code plugin format (skills, agents, commands, hooks, MCP, `userConfig`); built-in `kintsugi` plugin with MCP + guardrail/telemetry hooks; project plugins in the document repo's `plugins/` | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md), [0028](0028-remove-rulebook-single-document-repo.md) |
+| D43 | Member asset packaging | 🟠 | Keep method plugins in Claude Code format; generate a separate hookless access plugin that launches the installed CLI local MCP bridge; server authorization is authoritative | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md), [0028](0028-remove-rulebook-single-document-repo.md), [0041](0041-member-access-through-cli-and-local-mcp.md) |
 | D42 | Unit discovery | — | No discovery config; unit files declared by people or proposed by `assessment` via PR; `dependsOn` written, not computed | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
 | D40 | Member harness registry | 🟠 | Open harness ids; plugin support per harness (native / converted / none); declarative fallback renderers (built-in / installation / project); transformer plugins installed by admins | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
 | D41 | Stale units on rule change | 🟠 | Superseded: the rulebook is removed ([0028](0028-remove-rulebook-single-document-repo.md)) | M3 | ✅ [0028](0028-remove-rulebook-single-document-repo.md) |
@@ -115,9 +118,12 @@ This page has two parts:
 | D50 | Reverse engineering of the AS-IS system | 🔴 | Current plans: `assess` builds application inventory, topology and the item catalog; `understand` runs on selected units and writes per-unit topology, rules, findings, AS-IS specifications, trace/meta and unit state in a pull request; aggregates are rebuilt after merge under `generated/`. This supersedes the original separate-stage layout | M1 | ✅ [0031](0031-understand-stage-as-is-specification.md), amended by [0033](0033-assess-catalog-understand-selection.md) |
 | D52 | Selective understanding | 🔴 | Two runtime stages: `assess` builds the item catalog (`assessment/<app>/catalog.json`, module → item, from the topology without parsers, curated, reconciled across re-assess); `understand` runs topology, rule extraction and security review as steps on selected catalog items, one pull request per run, per-unit outputs, aggregates rebuilt under `generated/` after merge, unit-namespaced ids, item status derived, units in an open PR blocked, failed runs resumable | M1 | ✅ [0033](0033-assess-catalog-understand-selection.md), layout amended by [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) |
 | D53 | Understand command | 🟢 | One `understand` command specifies the phase; `map`, `extract-rules` and `harden` commands and stage plans are removed (their method is its "Method reference") | M1 | ✅ [0034](0034-understand-command-merges-map-rules-harden.md) |
-| D54 | Kintsugi plugins | 🟢 | Plugins (Claude plugin format + workflows/scripts) are the catalog unit; built-in `understand` and `modernize`; project plugins in the document repo; marketplace, file tree + code view, workflow view | M1 | 🟡 [0035](0035-kintsugi-plugins-marketplace.md) |
+| D54 | Kintsugi plugins | 🟢 | Plugins are method capabilities (understand, modernize, project methods); member access is a separate hookless connector and does not require a method plugin | M1 | ✅ [0035](0035-kintsugi-plugins-marketplace.md), [0041](0041-member-access-through-cli-and-local-mcp.md) |
 | D55 | Document repository layout | 🔴 | One repo per project; root for project-wide material, `applications/<app>/` for application content and one full-id unit directory for P1–P5 evidence; generated aggregates, rule-review separation, stable citation-derived rule ids, requirement/rule/PR/test traceability and merged gate records | M1 | ✅ [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
+| D57 | Read-only member access | 🟠 | Local CLI and stdio MCP share one project-scoped HTTPS contract; the developer chosen AI reads and explains authorized Kintsugi documents | M2 | ✅ [0041](0041-member-access-through-cli-and-local-mcp.md) |
+| D58 | Task context and snapshot | 🟠 | Read validated Git task sources with activity-specific readiness; pin every contextual response to an authorized immutable multi-repository snapshot with citations | M2 | ✅ [0042](0042-member-context-and-project-access.md) |
+| D59 | PR continuation and effective gates | 🟠 | Reconcile current GitHub PR state; review fixed complete revisions; advance only from authorized human approval and a merged evidence-bound gate record | M2 | ✅ [0043](0043-evidence-bound-pr-continuation.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
 
