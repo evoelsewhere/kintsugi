@@ -1,4 +1,4 @@
-# Member access compatibility and pilot baseline
+# Coding Agent Workflow compatibility and pilot baseline
 
 Status: probe record for implementation planning, recorded 2026-10-20. Presence and version checks do not establish native client compatibility.
 
@@ -21,7 +21,7 @@ The package manager pin and installation facts are from the current implementati
 
 ## Baseline verification
 
-The repository test command was run in the isolated implementation worktree before product changes. One existing Windows environment test fails in services/runtime/test/shell.test.ts: it assumes the shell HOME value ends with the literal path segment tmp. The actual Windows Git Bash path does not satisfy that string check. The focused test reproduces the same assertion at line 43; the member-access changes do not touch runtime shell behavior. All other reported failures were absent. This is recorded as a baseline limitation and is not counted as a member-access regression.
+The repository test command was run in the isolated implementation worktree before product changes. One existing Windows environment test fails in services/runtime/test/shell.test.ts: it assumes the shell HOME value ends with the literal path segment tmp. The actual Windows Git Bash path does not satisfy that string check. The focused test reproduces the same assertion at line 43; the Coding Agent Workflow changes do not touch runtime shell behavior. All other reported failures were absent. This is recorded as a baseline limitation and is not counted as a regression from this work.
 
 ## Exact boundary dependency research
 

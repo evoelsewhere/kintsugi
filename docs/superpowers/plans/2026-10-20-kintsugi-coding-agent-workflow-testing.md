@@ -1,17 +1,17 @@
-# Kintsugi Member Access Testing Plan
+# Kintsugi Coding Agent Workflow Testing Plan
 
 Date: 20 October 2026. Status: planned verification; no product test or native-client result is asserted by this document.
 
 **Purpose:** Prove the approved task/design handoff and PR-to-effective-gate journey without relying on skipped suites, synthetic model output or one client's success as evidence for unsupported surfaces.
 
-**Design:** [approved design v2](../specs/2026-10-20-kintsugi-member-access-design.md). **Implementation owners:** [T00–T17](2026-10-20-kintsugi-member-access-implementation.md). Task IDs below refer to that ledger; case IDs are stable acceptance references.
+**Design:** [approved design v2](../specs/2026-10-20-kintsugi-coding-agent-workflow-design.md). **Implementation owners:** [T00–T17](2026-10-20-kintsugi-coding-agent-workflow-implementation.md). Task IDs below refer to that ledger; case IDs are stable acceptance references.
 
 ## 1. Current test foundation and gaps
 
 Verified by static inspection at `1bfa73d`:
 
 - API and orchestrator use Vitest. API tests already start a real Nest app, use uniform envelopes/cookie/CSRF checks and have disposable database helpers. Git package supplies a local smart-HTTP fixture server through `@kintsugi/git/testing`.
-- API/orchestrator database helpers derive a server from `DATABASE_URL` or root `.env`, create randomly named throwaway databases and can skip integration suites when configuration is absent. Required member-access checks must use an explicitly configured isolated server and reject missing/skipped proof.
+- API/orchestrator database helpers derive a server from `DATABASE_URL` or root `.env`, create randomly named throwaway databases and can skip integration suites when configuration is absent. Required Coding Agent Workflow checks must use an explicitly configured isolated server and reject missing/skipped proof.
 - API/worker package tests typecheck separately; SDK currently has no test script, and Harness Hub/CLI/client packages do not yet exist. Their test/package configuration is part of T01/T07/T08, not assumed available now.
 - Root Turbo test tasks depend on upstream builds and cache by default. Strict environment filtering can omit database configuration. A cached result or a silently filtered environment is not fresh integration proof.
 - The only observed GitHub workflow is deployment. T17 adds a separate non-publishing validation workflow; it must not run production deployment.
@@ -57,7 +57,7 @@ Database/Git integration environment:
 
 Every case names an observable result. A critical case cannot be waived merely because the happy path passes. Owners add the named tests to the task's files; a group covers multiple parameterized inputs, not necessarily one test per table row.
 
-### Authentication and authorization — T02/T06/T07
+### Authentication and authorization — T02/T05/T06/T07/T08
 
 | ID | Scenario | Required result |
 |---|---|---|
@@ -194,7 +194,7 @@ Build dependencies before package-level Vitest commands:
 ```powershell
 pnpm exec turbo run build --filter=@kintsugi/api --filter=@kintsugi/orchestrator --filter=@kintsugi/cli --filter=@kintsugi/harness-hub
 pnpm --filter @kintsugi/domain exec vitest run test/member-task.test.ts test/gate-evidence.test.ts
-pnpm --filter @kintsugi/harness-sdk exec vitest run test/member-schemas.test.ts
+pnpm --filter @kintsugi/harness-sdk exec vitest run test/agent-context-schemas.test.ts
 pnpm --filter @kintsugi/kintsugi-client exec vitest run test/client.test.ts
 pnpm --filter @kintsugi/cli exec vitest run test/cli.test.ts test/export.test.ts
 pnpm --filter @kintsugi/harness-hub exec vitest run test/stdio.test.ts test/tool-contract.test.ts test/plugins.test.ts
@@ -205,7 +205,7 @@ T07 sets the client package name to `@kintsugi/kintsugi-client`. Public npm name
 The mandatory real DB/Git lane uses a parent-supplied `KINTSUGI_TEST_DATABASE_URL` for a dedicated disposable server. T17 adds `scripts/run-member-integration.mjs --suite api|worker|pilot|all`: it runs preflight, forwards that validated URL as child `DATABASE_URL`, sets `KINTSUGI_REQUIRED_INTEGRATION=1`, runs fresh Vitest processes and checks their JSON reports. Mandatory-mode helpers reject absent configuration before root `.env` fallback. The CLI arguments and report do not contain the URL. These scripts are planned deliverables, not tools available now.
 
 ```powershell
-node --test test/member-access/runner.test.mjs
+node --test test/coding-agent-workflow/runner.test.mjs
 node scripts/run-member-integration.mjs --suite all
 ```
 
@@ -215,7 +215,7 @@ Exact child suite selection (all include `--reporter=json --outputFile=<run-owne
 |---|---|
 | `api` | `pnpm --filter @kintsugi/api exec vitest run` with `test/integration/member-auth.test.ts`, `project-access.test.ts`, `member-tasks.test.ts`, `member-context.test.ts`, `member-api.test.ts`, `member-reviews.test.ts`, `gate-publication.test.ts`, `member-events.test.ts`; every abbreviated filename is under `test/integration/` |
 | `worker` | `pnpm --filter @kintsugi/orchestrator exec vitest run` with `test/outbox.test.ts`, `snapshot-retention.test.ts`, `provider-sync.test.ts`, `review-inputs.test.ts`, `review-scheduling.test.ts`, `gate-publication.test.ts`, `continuation.test.ts`, `stage-decisions.test.ts`; every abbreviated filename is under `test/` |
-| `pilot` | `pnpm exec vitest run --config test/member-access/vitest.config.ts`; T17 adds the root dev dependency, config, `test:member:pilot` script and separate test typecheck script |
+| `pilot` | `pnpm exec vitest run --config test/coding-agent-workflow/vitest.config.ts`; T17 adds the root dev dependency, config, `test:coding-agent:pilot` script and separate test typecheck script |
 | `all` | Run `api`, `worker`, then `pilot`; fail on any child/report failure |
 
 The pilot starts built API/worker processes with explicit isolated child configuration and public APIs, not imports into private modules. Required report gates reject zero executed cases or any required skipped/pending case. Runner tests prove environment forwarding and missing-prerequisite behavior under CI-01/02. Direct package commands avoid Turbo cache/env filtering for DB/recovery proof; if routed through Turbo instead, declare pass-through test env and force fresh execution, then verify the same report gates.
@@ -273,7 +273,7 @@ Coverage goal: every critical invariant/case above has an owner and explicit exe
 
 For each run, record: code revision, packages/files tested, command, environment identity (nonsecret), passed/failed/skipped counts, actual duration, fixture/provider/model revisions, report/artifact paths and validation limits. The initial ledger status for every product case is **Not run**. A skipped suite is neither a pass nor a product failure; it is missing proof and blocks any gate requiring it.
 
-Rollback acceptance: disabling member access stops tokens/tools from retrieving data; old cookie sessions preserve established behavior. Disabling review/continuation stops new dispatch without losing durable receipts or inventing gate success. Existing model jobs retain normal cancellation semantics; no duplicate auto-rerun. Roll back compatible client/plugin versions through explicit recorded artifacts. Prefer disabling new behavior over dropping audit/evidence tables or reversing applied migrations. Server downgrade compatibility must be tested against additive migrations and schema version checks before release.
+Rollback acceptance: revoking Project Access stops tokens/tools from retrieving data; old cookie sessions preserve established behavior. Disabling review/continuation stops new dispatch without losing durable receipts or inventing gate success. Existing model jobs retain normal cancellation semantics; no duplicate auto-rerun. Roll back compatible client/plugin versions through explicit recorded artifacts. Prefer disabling new behavior over dropping audit/evidence tables or reversing applied migrations. Server downgrade compatibility must be tested against additive migrations and schema version checks before release.
 
 ## 9. Planning self-check
 

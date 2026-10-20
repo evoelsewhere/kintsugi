@@ -18,7 +18,7 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function startTestApp(): Promise<TestApp> {
+export async function startTestApp(extraModules: import("@nestjs/common").Type[] = []): Promise<TestApp> {
   const db = await createTestDatabase();
   // Configuration is read when modules load: set it before importing the app.
   process.env["DATABASE_URL"] = db.url;
@@ -28,15 +28,17 @@ export async function startTestApp(): Promise<TestApp> {
 
   let app: INestApplication | undefined;
   try {
-    const { Logger, StandardSchemaValidationPipe } = await import("@nestjs/common");
+    const { Logger, Module, StandardSchemaValidationPipe } = await import("@nestjs/common");
     const { NestFactory } = await import("@nestjs/core");
     const { AppModule } = await import("../../src/app.module.js");
+    @Module({ imports: [AppModule, ...extraModules] })
+    class TestRootModule {}
     const { ensureSchema } = await import("#common/db/pool.js");
     const { HttpExceptionFilter } = await import("#common/filters/http-exception.filter.js");
     const { ResponseInterceptor } = await import("#common/interface/response.js");
 
     Logger.overrideLogger(false);
-    const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(AppModule, { logger: false });
+    const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(TestRootModule, { logger: false });
     nest.useBodyParser("json", { limit: "4mb" });
     app = nest;
     await ensureSchema();

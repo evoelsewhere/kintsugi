@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type {
   DocumentPage,
-  MemberAccessPort,
+  CodingAgentContextPort,
   ReviewReport,
   TaskBrief,
   TaskEvent,
   TaskStatus,
   TaskSummary,
-} from "../src/member-access.js";
+} from "../src/agent-context.js";
 import {
   documentQuerySchema,
   documentSearchQuerySchema,
@@ -15,7 +15,7 @@ import {
   taskBriefQuerySchema,
   taskBriefSchema,
   taskQuerySchema,
-} from "../src/member-schemas.js";
+} from "../src/agent-context-schemas.js";
 
 const sha = (char: string): string => char.repeat(40);
 const hash = (char: string): string => "sha256:" + char.repeat(64);
@@ -124,7 +124,7 @@ const taskStatus: TaskStatus = {
   nextAction: "Open the required deliverable pull request.",
 };
 
-const port: MemberAccessPort = {
+const port: CodingAgentContextPort = {
   listProjects: async () => ({ schemaVersion: "1", items: [{ projectId: "modernization", name: "Modernization" }], limit: 25 }),
   listTasks: async () => ({
     schemaVersion: "1",
@@ -145,7 +145,7 @@ const port: MemberAccessPort = {
   },
 };
 
-describe("member-access wire schemas", () => {
+describe("coding-agent context wire schemas", () => {
   it("rejects unknown selectors and arbitrary document paths", () => {
     expect(taskBriefQuerySchema.safeParse({
       schemaVersion: "1",

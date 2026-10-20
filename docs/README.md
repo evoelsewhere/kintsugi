@@ -46,9 +46,9 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 
 **Approved design and implementation planning**
 
-- [Member access design](superpowers/specs/2026-10-20-kintsugi-member-access-design.md): approved CLI, local MCP, task/design context and PR continuation architecture
-- [Member access implementation plan](superpowers/plans/2026-10-20-kintsugi-member-access-implementation.md): ordered tasks, files, interfaces and acceptance gates
-- [Member access testing plan](superpowers/plans/2026-10-20-kintsugi-member-access-testing.md): verification cases, environments and release evidence requirements
+- [Coding Agent Workflow design](superpowers/specs/2026-10-20-kintsugi-coding-agent-workflow-design.md): approved CLI, local MCP, task/design context and PR continuation architecture
+- [Coding Agent Workflow implementation plan](superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-implementation.md): ordered tasks, files, interfaces and acceptance gates
+- [Coding Agent Workflow testing plan](superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-testing.md): verification cases, environments and release evidence requirements
 
 **Reference**
 - [Glossary](reference/glossary.md)
@@ -62,14 +62,14 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Document reads and stage results](reference/document-repo-read-path.md): file APIs and result views
 - [Commit conventions](reference/document-repo-commit-conventions.md): identity, trailers and auto-commit defaults
 - [Unit files](reference/document-repo-unit-files.md): the unit directory, unit state, rule verdicts and traceability
-- [Member access compatibility](reference/member-access-compatibility.md): exact toolchain and client/provider probes
+- [Coding Agent Workflow compatibility](reference/coding-agent-workflow-compatibility.md): exact toolchain and client/provider probes
 - [Configuration](reference/configuration.md): installation environment variables
 
 **Guides**
 - [Install Kintsugi](guides/installation.md)
 - [Build a project (register repos, write standards)](guides/build-project.md)
 - [Configure LLM providers for the runtime](guides/configure-llm-providers.md)
-- [Work on a migration task as a member](guides/member-workflow.md)
+- [Use a coding agent on a migration task](guides/coding-agent-workflow.md)
 
 ## Conventions
 

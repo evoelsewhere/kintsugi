@@ -160,5 +160,5 @@ export interface HarnessPolicy {
   requiredPlugins?: string[];
 }
 
-export * from "./member-access.js";
-export * from "./member-schemas.js";
+export * from "./agent-context.js";
+export * from "./agent-context-schemas.js";

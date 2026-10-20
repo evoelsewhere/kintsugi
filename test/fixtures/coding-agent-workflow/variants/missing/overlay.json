@@ -1,5 +1,5 @@
 {
-  "fixtureSchema": "member-access-v1",
+  "fixtureSchema": "coding-agent-workflow-v1",
   "variant": "missing",
   "missingSource": "applications/billing/units/invoices/tax/design.md",
   "reason": "fixture intentionally omits this path",

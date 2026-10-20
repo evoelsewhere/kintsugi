@@ -1,16 +1,16 @@
 # Harness integration
 
-Status: the member-access contract is approved; the CLI, local MCP bridge and PR continuation are being implemented. This page describes the target behavior and does not claim that these commands are available in a release.
+Status: the Coding Agent Workflow context contract is approved; the CLI, local MCP bridge and PR continuation are being implemented. This page describes the target behavior and does not claim that these commands are available in a release.
 
-Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The member-access plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-member-access-through-cli-and-local-mcp.md)).
+Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
 ## Connection path
 
-The developer installs the Kintsugi CLI and signs in to a self-hosted installation over HTTPS. The CLI starts a local stdio MCP process when a client asks for tools. The process has no inbound listener, shares the CLI's project-scoped credentials and calls the same typed member API. A CLI-only path remains available for shells and explicit Markdown export.
+The developer installs the Kintsugi CLI and signs in to a self-hosted installation over HTTPS. The CLI starts a local stdio MCP process when a client asks for tools. The process has no inbound listener, shares the CLI's project-scoped credentials and calls the same typed Coding Agent Context API. A CLI-only path remains available for shells and explicit Markdown export.
 
-Claude Code is the first complete client pilot. Codex and GitHub Copilot CLI are distinct targets; support is claimed only after each exact client version passes authentication, setup, protocol, upgrade and removal checks. See the [compatibility record](member-access-compatibility.md).
+Claude Code is the first complete client pilot. Codex and GitHub Copilot CLI are distinct targets; support is claimed only after each exact client version passes authentication, setup, protocol, upgrade and removal checks. See the [compatibility record](coding-agent-workflow-compatibility.md).
 
-The access plugin contains a small skill and client-specific MCP configuration. It has no hooks and does not edit arbitrary project instructions. Optional method plugins stay in the project document repository and are installed separately. Client-side instructions help the AI retrieve information; the server enforces authorization.
+The Coding Agent Workflow plugin contains a small skill and client-specific MCP configuration. It has no hooks and does not edit arbitrary project instructions. Optional method plugins stay in the project document repository and are installed separately. Client-side instructions help the AI retrieve information; the server enforces authorization.
 
 ## CLI contract
 
@@ -60,7 +60,7 @@ The unit state and task document in the project document repository are authorit
 
 The application TO-BE design is a basic-design candidate; the unit design is a detailed-design candidate. Explicit references and shared document-layout helpers determine which sources actually apply. Every source reports availability separately from approval. An auto-committed task or a pending gate scaffold does not approve itself. A design task can be ready to produce the detailed design it lacks; implementation reports a blocker when required design or predecessor approval is missing.
 
-A brief returns an immutable snapshot ID and an index of mandatory sections. Each repository is pinned to its own full Git commit. Source paths, content hashes, approval records, required deliverables and policy version are part of the manifest. Follow-up get/search calls return the same revisions and exact path citations. If content is too large for the brief, the result is explicitly partial and names the sections the AI must retrieve before coding. An expired or unavailable snapshot does not silently switch to the latest branch head ([ADR-0042](../decisions/0042-member-context-and-project-access.md)).
+A brief returns an immutable snapshot ID and an index of mandatory sections. Each repository is pinned to its own full Git commit. Source paths, content hashes, approval records, required deliverables and policy version are part of the manifest. Follow-up get/search calls return the same revisions and exact path citations. If content is too large for the brief, the result is explicitly partial and names the sections the AI must retrieve before coding. An expired or unavailable snapshot does not silently switch to the latest branch head ([ADR-0042](../decisions/0042-coding-agent-context-and-project-access.md)).
 
 The member token is project-scoped. Current user and project authorization are checked on every call, even for an existing snapshot. Task assignment filters use a stable user identity, not a display-name match. Reading or listing tasks never claims, assigns, approves or changes their status.
 

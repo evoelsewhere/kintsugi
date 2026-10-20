@@ -78,11 +78,11 @@ Guide: [build a project](../guides/build-project.md).
 4. GitHub notifications and durable reconciliation find current PR state, including changes made while the developer is offline. Kintsugi reviews a complete fixed revision and exposes current, cited findings through the portal, CLI or MCP.
 5. The developer addresses findings and completes provider-required human review. After every required deliverable merges, an authorized human gate decision is recorded in a gate-record PR. Kintsugi advances the workflow only when the merged record validates against the exact final revisions.
 
-Step-by-step instructions for members: [member workflow guide](../guides/member-workflow.md).
+Step-by-step instructions for members: [Coding Agent Workflow guide](../guides/coding-agent-workflow.md).
 
 ## 6.4 KB question & answer
 
-For member workflow questions, the developer's chosen AI reads authorized project documents through the local CLI/MCP access path and answers with citations. A Kintsugi-owned conversational assistant is deferred. Server-side review is a separate workflow job over fixed pull-request inputs.
+For Coding Agent Workflow questions, the developer's chosen AI reads authorized project documents through the local CLI/MCP access path and answers with citations. A Kintsugi-owned conversational assistant is deferred. Server-side review is a separate workflow job over fixed pull-request inputs.
 
 ## 6.5 Git sync and change detection
 

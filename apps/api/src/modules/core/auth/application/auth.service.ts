@@ -68,9 +68,13 @@ export class AuthService implements OnApplicationBootstrap {
   /** Validates a session token → session user (used by the global AuthGuard). */
   async authenticate(token: string): Promise<SessionUser | undefined> {
     const userId = await this.sessions.validate(token);
-    if (userId === undefined) return undefined;
+    return userId === undefined ? undefined : this.authenticateUser(userId);
+  }
+
+  /** Loads the current enabled identity and permissions for a non-session credential. */
+  async authenticateUser(userId: string): Promise<SessionUser | undefined> {
     const user = await this.users.get(userId);
-    if (!user.enabled) return undefined;
+    if (user === undefined || !user.enabled) return undefined;
     return this.sessionUser(user);
   }
 }
