@@ -254,7 +254,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     const filtered = (await admin.get<Page<{ id: string }>>("/document-writes?status=failed,queued&projectId=alpha")).body.data!;
     expect(filtered.items.map((write) => write.id)).toEqual(["w-queued", "w-failed"]);
     expect((await admin.get<Page<{ id: string }>>("/document-writes?status=pr-opened")).body.data?.items.map((write) => write.id)).toEqual(["w-pr"]);
-    expect((await admin.get("/document-writes?status=merged")).status).toBe(400);
+    expect((await admin.get("/document-writes?status=bogus")).status).toBe(400);
   });
 
   it("lists restricted records as metadata only, with restricted.read, without auditing", async () => {

@@ -3,7 +3,7 @@
 // The API records the write as `queued` and enqueues it; the worker records the outcome.
 // Pure types — no framework, no I/O.
 
-export const DOCUMENT_WRITE_STATUSES = ["queued", "committed", "pr-opened", "unchanged", "failed"] as const;
+export const DOCUMENT_WRITE_STATUSES = ["queued", "committed", "pr-opened", "merged", "closed", "unchanged", "failed"] as const;
 export type DocumentWriteStatus = (typeof DOCUMENT_WRITE_STATUSES)[number];
 
 /** Filter of the cross-project write list. */
