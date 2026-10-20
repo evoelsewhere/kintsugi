@@ -285,6 +285,58 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(0);
   });
 
+  describe("an agent that misplaces an expected file", () => {
+    const EXPECTED = "applications/demo/assessment/ASSESSMENT.md";
+    const agentRun = async (files: AgentFiles) => {
+      const { store, agents } = setup(files);
+      const runner = new JobRunner({
+        store,
+        storage,
+        checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
+        agents,
+        agentDefinitions: builtinAgents(),
+        interpreters: interpretersFromEnv(),
+        mockOutputs: false,
+        requestWrite: async () => undefined,
+        log: () => undefined,
+      });
+      const id = randomUUID();
+      await store.create({ id, projectId: "demo", applicationId: "demo", kind: "agent", name: "legacy-analyst", sourceRepositoryId: "legacy", inputs: { task: "Write it.", expects: [EXPECTED] } });
+      const run = await runner.run(id);
+      return { id, run, agents, logs: store.events.filter((event) => event.runId === id && event.kind === "log").map((event) => event.message) };
+    };
+
+    it("moves a bare-named file into place without asking the agent again", async () => {
+      const { id, run, agents, logs } = await agentRun({ "legacy-analyst": () => ({ "ASSESSMENT.md": "# Assessment\n" }) });
+      expect(run?.status).toBe("succeeded");
+      expect(agents.specs).toHaveLength(1);
+      expect(logs.some((line) => line.includes("moved into place"))).toBe(true);
+      expect(readFileSync(join(storage.job(id).out, ...EXPECTED.split("/")), "utf8")).toBe("# Assessment\n");
+      expect(existsSync(join(storage.job(id).out, "ASSESSMENT.md"))).toBe(false);
+    });
+
+    it("asks the agent once, naming the exact paths, when nothing usable was written", async () => {
+      let calls = 0;
+      const { run, agents } = await agentRun({
+        "legacy-analyst": (): Record<string, string> => {
+          calls += 1;
+          return calls === 1 ? { "notes.md": "x" } : { [EXPECTED]: "# Assessment\n" };
+        },
+      });
+      expect(run?.status).toBe("succeeded");
+      expect(agents.specs).toHaveLength(2);
+      expect(agents.specs[1]?.task).toContain(`- ${EXPECTED}`);
+      expect(agents.specs[1]?.task).toContain("notes.md");
+    });
+
+    it("fails after the one repair attempt when the file is still missing", async () => {
+      const { run, agents } = await agentRun({});
+      expect(run?.status).toBe("failed");
+      expect(run?.failureReason).toBe(`Agent legacy-analyst did not write ${EXPECTED}`);
+      expect(agents.specs).toHaveLength(2);
+    });
+  });
+
   it("records a failing script step with its exit code", async () => {
     const { store, runner } = setup({});
     const id = randomUUID();
