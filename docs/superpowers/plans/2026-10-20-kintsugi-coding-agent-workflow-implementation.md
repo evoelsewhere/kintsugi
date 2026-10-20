@@ -55,7 +55,7 @@ Read access and draft/design Q&A can preview before M4. Do not label a task impl
 
 ## Files and responsibilities
 
-Paths are relative to the repository root. New modules follow domain/application/infrastructure/interface anatomy. Each task's file list names the owning files; package metadata, tsconfigs, tests and public exports belong to that deliverable. New migration numbers below start after observed `017_agent_write_tools.sql`; reallocate before execution if another branch has used a number, and update all references together.
+Paths are relative to the repository root. New modules follow domain/application/infrastructure/interface anatomy. Each task's file list names the owning files; package metadata, tsconfigs, tests and public exports belong to that deliverable. Integration with `origin/master` on 20 October added upstream migration `018_document_write_merge_state.sql`; the unreleased feature migrations are reallocated to 019–023, with later planned migrations starting at 024. Reallocate again if another branch uses a reserved number.
 
 | Owner | Files / responsibility |
 |---|---|
@@ -126,7 +126,7 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 ### Task 2 (T02) — Scoped tokens and Project Access, including legacy-route denial
 
-**Depends on:** T01. **Files:** create migration `018_project_access_and_member_tokens.sql`; core auth `domain/member-token.repository.ts`, `application/member-token.service.ts`, `infrastructure/pg-member-token.repository.ts`, `interface/member-tokens.controller.ts`; new `admin/project-access/` feature and public `index.ts`; modify auth guard/module/decorators, app composition and API tests `integration/member-auth.test.ts`, `integration/project-access.test.ts`.
+**Depends on:** T01. **Files:** create migration `019_project_access_and_member_tokens.sql`; core auth `domain/member-token.repository.ts`, `application/member-token.service.ts`, `infrastructure/pg-member-token.repository.ts`, `interface/member-tokens.controller.ts`; new `admin/project-access/` feature and public `index.ts`; modify auth guard/module/decorators, app composition and API tests `integration/member-auth.test.ts`, `integration/project-access.test.ts`.
 
 **Interfaces:** `MemberTokenService.issue(actor, {name, projectIds, expiresAt}): Promise<{token:string; metadata:TokenMetadata}>`, `revoke(actor, tokenId): Promise<void>`, `authenticateMemberToken(token): Promise<MemberPrincipal | undefined>`; `ProjectAccessService.requireRead(userId, projectId): Promise<void>`. `MemberPrincipal` carries immutable user/token IDs and a restricted credential kind; it is created server-side, never accepted from wire data.
 
@@ -139,7 +139,7 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 ### Task 3 (T03) — Shared durable transitions, event ordering and outbox
 
-**Depends on:** T01. **Files:** create migration `019_member_outbox.sql`; orchestrator `src/outbox/model.ts`, `store.ts`, `dispatch.ts`, `test/outbox.test.ts`; export `@kintsugi/orchestrator/outbox` through package metadata; reuse API `common/db/pool.ts` transaction wrapper at API call sites.
+**Depends on:** T01. **Files:** create migration `020_member_outbox.sql`; orchestrator `src/outbox/model.ts`, `store.ts`, `dispatch.ts`, `test/outbox.test.ts`; export `@kintsugi/orchestrator/outbox` through package metadata; reuse API `common/db/pool.ts` transaction wrapper at API call sites.
 
 **Interfaces:** `recordTransition(tx: PoolClient, change: TransitionInput, apply: (tx: PoolClient) => Promise<void>): Promise<TransitionReceipt>`; `dispatchOutbox(deps: DispatchDependencies, signal: AbortSignal): Promise<DispatchSummary>`. Input owns stable transition key, project/unit, optional member event and queue intents. Publisher receives stable `operationId`; duplicate delivery is expected.
 
@@ -151,7 +151,7 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 ### Task 4 (T04) — Authoritative Git task and assignment projection
 
-**Depends on:** T01–T02. Files: migration 020_member_tasks.sql; strict agents parser and tests; API agent-context domain, query service, Git reader, Postgres projection, fail-closed approval reader, Project Access adapter, module and public exports; task readiness and Git/Postgres integration tests.
+**Depends on:** T01–T02. Files: migration 021_member_tasks.sql; strict agents parser and tests; API agent-context domain, query service, Git reader, Postgres projection, fail-closed approval reader, Project Access adapter, module and public exports; task readiness and Git/Postgres integration tests.
 
 **Interfaces:** parseUnitDocument(markdown: string, expectedUnitId?: string) validates WorkItemFile; TaskQueryService.list accepts shared TaskQuery and returns shared ListResult<TaskSummary>; get accepts shared TaskIdentity and returns MemberTaskRecord with Git provenance and explicit input references. TaskApprovalEvidenceReader returns verified, pending or unknown evidence, never a guessed boolean.
 
@@ -163,7 +163,7 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 ### Task 5 (T05) — Immutable snapshots, bounded retrieval and worker-owned pins
 
-**Depends on:** T03–T04. **Files:** create migration `021_member_snapshots.sql`; API agent-context `application/{snapshot,document-query}.service.ts`, infrastructure `pg-snapshot.repository.ts`, domain `snapshot.ts`; extend the harness SDK task brief with bounded cited sections; worker `git-sync/retention.ts`, `git-sync/retention-store.ts`, `test/snapshot-retention.test.ts`; tests `integration/member-context.test.ts`, `unit/context-manifest.test.ts`, `unit/context-brief.test.ts`, `unit/context-snapshot.test.ts`.
+**Depends on:** T03–T04. **Files:** create migration `022_member_snapshots.sql`; API agent-context `application/{snapshot,document-query}.service.ts`, infrastructure `pg-snapshot.repository.ts`, domain `snapshot.ts`; extend the harness SDK task brief with bounded cited sections; worker `git-sync/retention.ts`, `git-sync/retention-store.ts`, `test/snapshot-retention.test.ts`; tests `integration/member-context.test.ts`, `unit/context-manifest.test.ts`, `unit/context-brief.test.ts`, `unit/context-snapshot.test.ts`.
 
 **Interfaces:** `SnapshotService.brief(principal, query: TaskBriefQuery): Promise<TaskBrief>`; `DocumentQueryService.get(principal, query: DocumentQuery): Promise<DocumentPage>` and `search(principal, query: DocumentSearchQuery): Promise<ListResult<SourceHit>>`; worker `retainSnapshot(deps, snapshotId): Promise<RetentionResult>`. Manifest hash canonicalizes relevant input identity/content/policy, not generated output or observation timestamps.
 
@@ -229,7 +229,7 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 ### Task 10 (T10) — GitHub/GHE observation and credential capability adapter
 
-**Depends on:** T01/T03. **Files:** migration `022_member_provider.sql`; Git `src/{pull-request-observer,github-observer,github-app}.ts`, existing exports and tests `observer.test.ts`, `github-app.test.ts`; API/worker Git credential binding through existing public registry adapters; administrative connection DTO/service changes and tests.
+**Depends on:** T01/T03. **Files:** migration `024_member_provider.sql`; Git `src/{pull-request-observer,github-observer,github-app}.ts`, existing exports and tests `observer.test.ts`, `github-app.test.ts`; API/worker Git credential binding through existing public registry adapters; administrative connection DTO/service changes and tests.
 
 **Interfaces:** `PullRequestObserver.capabilities(connection): Promise<ProviderCapabilities>`, `listChanged(connection, watermark, cursor?): Promise<ChangePage>`, `get(connection, identity): Promise<ObservedPullRequest>`; `GitHubInstallationCredentialProvider.resolve(connection, purpose): Promise<GitCredential>`. `ObservedPullRequest` uses stable host/repository/PR IDs plus head/base/merge-base/test-merge/final merge facts, checks and reviews; GitHub payload fields remain private to its adapter.
 
@@ -253,7 +253,7 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 ### Task 12 (T12) — Complete fixed review inputs and versioned runtime job
 
-**Depends on:** T05/T10/T11. **Files:** migration `023_member_reviews.sql`; worker `member-reviews/{inputs,schedule,store}.ts`, tests `review-inputs.test.ts`, `review-scheduling.test.ts`; canonical runtime plugin `packages/agents/builtin/plugins/review/` with `gate-reviewer.md` and output schema; agents catalog tests; existing generic job queue/store integration.
+**Depends on:** T05/T10/T11. **Files:** migration `025_member_reviews.sql`; worker `member-reviews/{inputs,schedule,store}.ts`, tests `review-inputs.test.ts`, `review-scheduling.test.ts`; canonical runtime plugin `packages/agents/builtin/plugins/review/` with `gate-reviewer.md` and output schema; agents catalog tests; existing generic job queue/store integration.
 
 **Interfaces:** `materializeReviewInput(deps, observed: ObservedPullRequest, context: SnapshotManifest): Promise<ReviewInputManifest>`; `scheduleReview(deps, key: ReviewKey, generationReason): Promise<ReviewAttempt>`. Key binds immutable revisions/context/policy/agent version; generation records intentional reruns separately from duplicates.
 
@@ -277,7 +277,7 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 ### Task 14 (T14) — Evidence-bound human decision and Git gate publication
 
-**Depends on:** T03/T10–T13. **Files:** migration `024_gate_publication.sql`; existing governance gates application/domain/infra plus `gate-publication` module/adapter; worker `gates/{publish,effective}.ts`; domain gate-evidence validator from T01; tests `integration/gate-publication.test.ts`, worker `gate-publication.test.ts`; update gate record reference/template and decision docs.
+**Depends on:** T03/T10–T13. **Files:** migration `026_gate_publication.sql`; existing governance gates application/domain/infra plus `gate-publication` module/adapter; worker `gates/{publish,effective}.ts`; domain gate-evidence validator from T01; tests `integration/gate-publication.test.ts`, worker `gate-publication.test.ts`; update gate record reference/template and decision docs.
 
 **Interfaces:** `GatePublicationService.requestDecision(actor, input: GateEvidence): Promise<GatePublication>`; `publishGate(deps, decisionId): Promise<PublicationResult>`; `verifyEffectiveGate(deps, record: GitLocation): Promise<EffectiveGateResult>`. `GatePublication` separates decision state from `awaiting-evidence | pending-publication | awaiting-merge | effective | stale | failed`.
 
@@ -289,7 +289,7 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 ### Task 15 (T15) — Effective continuation, durable events and CLI watch
 
-**Depends on:** T03/T13/T14. **Files:** worker `member-workflow/{continue,project,dispatch}.ts`; API member status/event reader/controller; SDK/client SSE implementation; CLI watch; tests `continuation.test.ts`, `integration/member-events.test.ts`, client `events.test.ts`. For required procedural choices, create migration `025_stage_decisions.sql`, worker `jobs/persisted-gate-decider.ts`, `test/stage-decisions.test.ts`; modify existing job plan/model/executor/runner wiring and expose a session-authorized decision endpoint through the existing governance module.
+**Depends on:** T03/T13/T14. **Files:** worker `member-workflow/{continue,project,dispatch}.ts`; API member status/event reader/controller; SDK/client SSE implementation; CLI watch; tests `continuation.test.ts`, `integration/member-events.test.ts`, client `events.test.ts`. For required procedural choices, create migration `027_stage_decisions.sql`, worker `jobs/persisted-gate-decider.ts`, `test/stage-decisions.test.ts`; modify existing job plan/model/executor/runner wiring and expose a session-authorized decision endpoint through the existing governance module.
 
 **Interfaces:** `planContinuation(input: EffectiveGateFacts, taskPlan: ApprovedTaskPlan): WorkflowIntent[]`; `applyContinuation(deps, input): Promise<TransitionReceipt>`; `MemberEventReader.follow(principal, query: TaskEventQuery, signal): AsyncIterable<TaskEvent>`. `ApprovedTaskPlan` references existing manifest pipeline/task definitions, never model-invented next jobs.
 
@@ -343,6 +343,8 @@ Completed during planning (not product verification):
 - [x] Source/assignment validation does not use the tolerant view parser as authority; source approval is separate from publication.
 - [x] Five Review Focus failures each assigned to concrete tests/tasks.
 - [x] Gate ordering, code-check/G4 cycle, worker-owned retention and API read-only mount covered.
-- [x] New files and configuration are planned, not silently installed or executed. No product task above is checked complete.
+- [x] The planning checklist describes intended coverage. Product completion is recorded separately in each task and the execution ledger.
 
 **Execution status:** implementation was authorized on 20 October 2026. The active branch is `codex/member-access`, based on freshly fetched `origin/master` commit `881b6856e13ed874f25584b05088a466ee35f680`. Resume from the plan-scoped execution ledger; task completion is recorded only after its required checks pass.
+
+T00–T06 are implemented before release; T07–T17 remain planned. The integration audit against upstream `347548b` adds projection serialization/configuration invalidation, strict metadata bounds, compatible project IDs, authoritative deliverable declarations, retention fairness/connection ownership, structured lifecycle errors and source-retrieval edge coverage. See the [integration review record](../reviews/2026-10-20-coding-agent-workflow-integration.md) for fresh verification and remaining release boundaries.

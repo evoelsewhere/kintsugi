@@ -8,11 +8,13 @@ import type {
   TaskApprovalEvidenceReader,
   TaskProjectionRepository,
   TaskSourceReader,
+  TaskIndexRevision,
 } from "../../src/modules/delivery/agent-context/domain/task.js";
 import type { ProjectAccessPort } from "../../src/modules/delivery/agent-context/domain/project-access.ports.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const COMMIT = "a".repeat(40);
+const FINGERPRINT = "f".repeat(64);
 const principal: MemberPrincipal = {
   userId: "user-alice",
   tokenId: "token-1",
@@ -95,23 +97,24 @@ function projection(unitId = "billing/invoices/tax", assignedUserId: string | nu
 }
 
 function setup(records: IndexedMemberTask[] = [projection()]) {
-  let indexCommit: string | undefined;
+  let indexRevision: TaskIndexRevision | undefined;
   let indexed = records;
   const snapshot: ProjectTaskSnapshot = {
     projectId: "project-a",
     repositoryId: "docs",
     commit: COMMIT,
+    applicationIdsFingerprint: FINGERPRINT,
     tasks: records,
     issues: [],
   };
   const source = {
-    currentRevision: vi.fn(async () => ({ repositoryId: "docs", commit: COMMIT })),
+    currentRevision: vi.fn(async () => ({ repositoryId: "docs", commit: COMMIT, applicationIdsFingerprint: FINGERPRINT })),
     readProject: vi.fn(async () => snapshot),
   };
   const repository = {
-    indexRevision: vi.fn(async () => indexCommit === undefined ? undefined : ({ repositoryId: "docs", commit: indexCommit })),
+    indexRevision: vi.fn(async () => indexRevision),
     replaceProject: vi.fn(async (next: ProjectTaskSnapshot) => {
-      indexCommit = next.commit;
+      indexRevision = { ...next, indexId: "index-1" };
       indexed = next.tasks.map((task) => ({
         ...task,
         ...(task.workItem.assignee === "alice" ? { assignedUserId: "user-alice" } : {}),
@@ -120,6 +123,7 @@ function setup(records: IndexedMemberTask[] = [projection()]) {
           ? "unassigned" as const
           : task.workItem.assignee === "alice" || task.workItem.assignee === "bob" ? "resolved" as const : "unresolved" as const,
       }));
+      return true;
     }),
     list: vi.fn(async (_projectId: string, afterUnitId?: string) => indexed.filter((task) => afterUnitId === undefined || task.unitId > afterUnitId)),
     get: vi.fn(async (_projectId: string, unitId: string) => indexed.find((task) => task.unitId === unitId)),
@@ -178,5 +182,26 @@ describe("TaskQueryService", () => {
     const { service } = setup([incomplete]);
     await expect(service.get(principal, { projectId: "project-a", unitId: "billing/invoices/tax" }))
       .rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+
+describe("task index refresh coordination", () => {
+  it("rechecks a winning refresh instead of returning rows after a lost compare-and-swap", async () => {
+    const { service, source, repository } = setup();
+    repository.replaceProject.mockImplementationOnce(async () => false);
+    await service.list(principal, { projectId: "project-a" });
+    expect(source.readProject).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses one bytewise order for punctuation in every page regardless of repository ordering", async () => {
+    const records = [projection("billing/invoices/a0"), projection("billing/invoices/a-b"), projection("billing/invoices/a")];
+    const { service } = setup(records);
+    const first = await service.list(principal, { projectId: "project-a", limit: 1 });
+    const second = await service.list(principal, { projectId: "project-a", limit: 1, cursor: first.nextCursor });
+    const third = await service.list(principal, { projectId: "project-a", limit: 1, cursor: second.nextCursor });
+    expect([...first.items, ...second.items, ...third.items].map(({ unitId }) => unitId)).toEqual([
+      "billing/invoices/a", "billing/invoices/a-b", "billing/invoices/a0",
+    ]);
   });
 });

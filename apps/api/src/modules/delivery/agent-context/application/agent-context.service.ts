@@ -23,7 +23,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@kintsugi/harness-sdk";
-import type { WorkItemStatus } from "@kintsugi/domain";
+import { PROJECT_ID_PATTERN, type WorkItemStatus } from "@kintsugi/domain";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
 import { DocumentQueryService } from "./document-query.service.js";
 import { SnapshotService } from "./snapshot.service.js";
@@ -33,7 +33,6 @@ import { ReviewReader } from "../domain/review-reader.port.js";
 
 const MAX_PROJECTS_PER_TOKEN = 100;
 const MAX_STATUS_GATES = 20;
-const PROJECT_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 type AuthenticatedOperation<Operation> = Operation extends (...args: infer Arguments) => infer Result
   ? (principal: MemberPrincipal, ...args: Arguments) => Result
   : never;
@@ -146,7 +145,7 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
       if (
         decoded.length === 0 ||
         Buffer.from(decoded, "utf8").toString("base64url") !== cursor ||
-        !PROJECT_ID.test(decoded)
+        !PROJECT_ID_PATTERN.test(decoded)
       ) throw new Error("invalid");
       return decoded;
     } catch {

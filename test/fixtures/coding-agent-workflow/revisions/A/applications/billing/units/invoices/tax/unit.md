@@ -18,6 +18,13 @@ target:
   - repo: billing-api
     paths:
       - src/billing/tax
+requiredDeliverables:
+  - id: code
+    repositoryId: billing-api
+    path: src/billing/tax
+  - id: design
+    repositoryId: project-docs
+    path: applications/billing/units/invoices/tax/design.md
 links:
   taskPack: applications/billing/units/invoices/tax/task.md
 gates:

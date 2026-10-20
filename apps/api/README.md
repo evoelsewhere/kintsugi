@@ -6,8 +6,13 @@ Kintsugi MCP server and CLI API (`services/harness-hub`).
 
 Responsibilities beyond the feature modules below:
 
-- Auth: local username/password sessions (httpOnly cookie); Personal Access Tokens and an
-  `AuthProvider` interface for Entra ID are planned (ADR-0008).
+- Auth: local username/password sessions (httpOnly cookie) and personal project-scoped
+  Coding Agent Workflow read tokens. Token management uses session permissions; read tokens
+  cannot access unmarked legacy routes. Entra ID remains planned (ADRs 0008, 0042).
+- Coding Agent Workflow context: versioned read-only `/api/member/v1` endpoints for projects,
+  tasks, briefs, pinned documents, search and status. Review retrieval explicitly returns
+  unsupported capability until its reader is implemented. See the
+  [API reference](../../docs/reference/harness-integration.md#implemented-context-api).
 - Admin → LLM Providers: runtime provider registry (ADR-0009).
 - Admin → Agents: the Agent Builder (ADR-0026): built-in agents from `packages/agents/builtin`
   (read-only) plus custom agents and shared skills (migration `012_agents.sql`), with

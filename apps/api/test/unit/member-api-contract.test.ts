@@ -131,3 +131,14 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     expect(reviews.get).toHaveBeenCalledWith(principal, { projectId: "alpha", reviewId: "review-1" });
   });
 });
+
+
+it("continues project pagination across valid 100-character project IDs", async () => {
+  const { subject, projectAccess } = service();
+  const projectId = "a".repeat(100);
+  vi.mocked(projectAccess.listReadableProjects).mockResolvedValue([{ projectId, name: "Long" }, { projectId: "beta", name: "Beta" }]);
+  const scoped = { ...principal, projectIds: [projectId, "beta"] };
+  const first = await subject.listProjects(scoped, { limit: 1 });
+  const next = await subject.listProjects(scoped, { limit: 1, cursor: first.nextCursor });
+  expect(next.items.map(({ projectId }) => projectId)).toEqual(["beta"]);
+});

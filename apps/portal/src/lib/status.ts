@@ -32,6 +32,8 @@ export const WRITE_STATUS: Record<string, StatusStyle> = {
   queued: { tone: "blue", label: "Queued" },
   committed: { tone: "green", label: "Committed" },
   "pr-opened": { tone: "purple-light", label: "Pull request opened" },
+  merged: { tone: "green", label: "Merged" },
+  closed: { tone: "muted", label: "Closed" },
   unchanged: { tone: "muted", label: "No changes" },
   failed: { tone: "red", label: "Failed" },
 };

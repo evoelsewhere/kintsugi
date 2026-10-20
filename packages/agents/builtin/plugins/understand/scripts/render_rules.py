@@ -129,9 +129,17 @@ def validate_result(result):
         for field in ('edgeCases', 'alsoCited'):
             if any(not isinstance(item, str) for item in (rule.get(field) or [])):
                 raise DataError(f'confirmed rule field {field} must contain strings')
-    for field in ('injectionFlags', 'rerunModules'):
-        if any(not isinstance(item, str) for item in (result.get(field) or [])):
-            raise DataError(f'rules_result.json field {field} must contain strings')
+    if any(not isinstance(item, str) for item in (result.get('injectionFlags') or [])):
+        raise DataError('rules_result.json field injectionFlags must contain strings')
+    # The extract-rules workflow returns the gap list ready to be passed back as `modules`: entries
+    # {name, domain?, files, loc?}. A bare module name is accepted too.
+    for item in result.get('rerunModules') or []:
+        if isinstance(item, str):
+            continue
+        if not isinstance(item, dict) or not isinstance(item.get('name'), str):
+            raise DataError('rules_result.json field rerunModules must contain module names or {name, files} entries')
+        if item.get('files') is not None and (not isinstance(item['files'], list) or any(not isinstance(path, str) for path in item['files'])):
+            raise DataError('rules_result.json field rerunModules entry files must be an array of strings')
     for obj in result.get('dataObjects') or []:
         if obj.get('fields') is not None and not isinstance(obj['fields'], list):
             raise DataError('data object fields must be an array')

@@ -1,4 +1,4 @@
-import { GATE_IDS, MEMBER_ACTIVITIES, PHASES, WORK_ITEM_STATUSES, isFullUnitId } from "@kintsugi/domain";
+import { DELIVERABLE_ID_PATTERN, IDENTIFIER_MAX_LENGTH, MAX_REQUIRED_DELIVERABLES, MAX_TASK_ASSIGNEE_LENGTH, MAX_TASK_TITLE_LENGTH, PROJECT_ID_PATTERN, GATE_IDS, MEMBER_ACTIVITIES, PHASES, WORK_ITEM_STATUSES, isFullUnitId } from "@kintsugi/domain";
 import { z } from "zod";
 import type { ReadinessBlockerCode } from "@kintsugi/domain";
 
@@ -9,7 +9,7 @@ export const DEFAULT_CONTEXT_BYTES = 32 * 1024;
 export const MAX_SEARCH_QUERY_LENGTH = 500;
 export const SEARCHABLE_LIMIT = 100;
 
-const projectIdSchema = z.string().trim().min(1).max(63).regex(/^[a-z0-9][a-z0-9-]{0,62}$/);
+const projectIdSchema = z.string().trim().min(1).max(IDENTIFIER_MAX_LENGTH).regex(PROJECT_ID_PATTERN);
 const opaqueIdSchema = z.string().trim().min(1).max(512);
 const fullShaSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i);
 const contentHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/i);
@@ -124,10 +124,10 @@ export const projectSummarySchema = z.object({
 export const taskSummarySchema = z.object({
   projectId: projectIdSchema,
   unitId: z.string().refine(isFullUnitId),
-  title: z.string().min(1).max(500),
+  title: z.string().min(1).max(MAX_TASK_TITLE_LENGTH),
   phase: z.enum(PHASES),
   status: z.enum(WORK_ITEM_STATUSES),
-  assignee: z.string().min(1).max(200).optional(),
+  assignee: z.string().min(1).max(MAX_TASK_ASSIGNEE_LENGTH).optional(),
   readiness: readinessSchema,
 }).strict();
 
@@ -173,7 +173,7 @@ export const citationSchema = z.object({
 const contextSectionSchema = z.object({
   sourceId: opaqueIdSchema,
   sectionId: opaqueIdSchema,
-  title: z.string().min(1).max(500),
+  title: z.string().min(1).max(MAX_TASK_TITLE_LENGTH),
   text: z.string().max(DEFAULT_CONTEXT_BYTES),
   required: z.boolean(),
   citation: citationSchema,
@@ -186,14 +186,14 @@ const contextSectionSchema = z.object({
 export const taskBriefSchema = z.object({
   ...identityShape,
   activity: activitySchema,
-  title: z.string().min(1).max(500),
+  title: z.string().min(1).max(MAX_TASK_TITLE_LENGTH),
   objective: z.string().min(1).max(16_384),
   acceptanceCriteria: z.array(z.string().min(1).max(2_000)).max(100),
   snapshotId: opaqueIdSchema,
   contextRevision: contextRevisionSchema,
   documentRepoCommit: fullShaSchema,
   sources: z.array(contextSourceSchema).max(500),
-  requiredDeliverableIds: z.array(opaqueIdSchema).max(100),
+  requiredDeliverableIds: z.array(z.string().regex(DELIVERABLE_ID_PATTERN)).max(MAX_REQUIRED_DELIVERABLES),
   readiness: readinessSchema,
   blockers: z.array(readinessBlockerSchema),
   requiredContextStatus: z.enum(["complete", "partial"]),
@@ -245,7 +245,7 @@ export const sourceHitSchema = z.object({
 export const reviewFindingSchema = z.object({
   findingId: opaqueIdSchema,
   severity: z.enum(["critical", "high", "medium", "low", "info"]),
-  title: z.string().min(1).max(500),
+  title: z.string().min(1).max(MAX_TASK_TITLE_LENGTH),
   rationale: z.string().min(1).max(8_000),
   citation: citationSchema.optional(),
   currentness: z.enum(["current", "superseded"]),

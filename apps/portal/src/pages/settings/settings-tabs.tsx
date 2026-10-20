@@ -41,7 +41,7 @@ export function SettingsTabs({ initial = "general" }: { initial?: string }): Rea
       {/* Sidebar navigation */}
       <nav
         aria-label="Settings sections"
-        className="flex w-full shrink-0 gap-0.5 overflow-x-auto border-b border-transparent p-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)] md:w-44 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:border-r md:border-b-0 md:[box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]"
+        className="flex w-full shrink-0 gap-0.5 overflow-x-auto border-b border-transparent p-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)] md:w-56 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:border-r md:border-b-0 md:[box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]"
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -51,7 +51,7 @@ export function SettingsTabs({ initial = "general" }: { initial?: string }): Rea
               type="button"
               onClick={() => setActive(tab.id)}
               className={cn(
-                "flex h-8 w-auto shrink-0 items-center gap-2 rounded-[var(--geist-radius)] px-2 text-left text-[13px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] md:w-full",
+                "flex h-9 w-auto shrink-0 items-center gap-2.5 rounded-[var(--geist-radius)] px-2.5 text-left text-[13px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] md:w-full",
                 tab.id === active && "bg-hover font-medium text-text",
               )}
             >
@@ -63,7 +63,7 @@ export function SettingsTabs({ initial = "general" }: { initial?: string }): Rea
       </nav>
 
       {/* Active section */}
-      <div className="min-w-0 flex-1 overflow-y-auto px-3 py-2.5">
+      <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
         <Section />
       </div>
     </div>

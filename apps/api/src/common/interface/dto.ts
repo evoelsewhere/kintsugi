@@ -1,13 +1,14 @@
 // Shared interface kernel: request-schema helpers (ADR-0016: Standard Schema).
 
+import { IDENTIFIER_MAX_LENGTH, IDENTIFIER_PATTERN } from "@kintsugi/domain";
 import { z } from "zod";
 
 /** Lowercase kebab-case identifier, e.g. "billing-web". */
 export const idSchema = z
   .string()
   .min(1)
-  .max(100)
-  .regex(/^[a-z0-9][a-z0-9-]*$/, "must be lowercase kebab-case");
+  .max(IDENTIFIER_MAX_LENGTH)
+  .regex(IDENTIFIER_PATTERN, "must be lowercase kebab-case");
 
 /** Short free-text field used by the skeleton DTOs. */
 export function stringField(): z.ZodString;

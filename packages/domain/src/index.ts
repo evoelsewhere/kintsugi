@@ -81,6 +81,8 @@ export interface WorkItemFile {
   dependsOn?: string[];
   source?: { repo: string; paths: string[] }[];
   target?: { repo: string; paths: string[] }[];
+  /** Authoritative declarations only; never inferred from prose or observed pull requests. */
+  requiredDeliverables?: { id: string; repositoryId: string; path: string }[];
   links?: {
     taskPack?: string;
     asIs?: string;

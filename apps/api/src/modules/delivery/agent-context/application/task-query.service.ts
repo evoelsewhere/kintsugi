@@ -9,6 +9,7 @@ import {
   TaskApprovalEvidenceReader,
   TaskProjectionRepository,
   TaskSourceReader,
+  sameTaskSourceRevision,
   type IndexedMemberTask,
   type MemberTaskRecord,
 } from "../domain/task.js";
@@ -32,7 +33,8 @@ export class TaskQueryService {
     const afterUnitId = this.decodeCursor(query.cursor);
     await this.ensureFresh(query.projectId);
 
-    const records = await this.projections.list(query.projectId);
+    const records = (await this.projections.list(query.projectId)).sort((left, right) =>
+      left.unitId < right.unitId ? -1 : left.unitId > right.unitId ? 1 : 0);
     const items: TaskSummary[] = [];
     for (const record of records) {
       if (afterUnitId !== undefined && record.unitId <= afterUnitId) continue;
@@ -104,23 +106,25 @@ export class TaskQueryService {
     for (let attempt = 0; attempt < MAX_FRESHNESS_ATTEMPTS; attempt += 1) {
       const revision = await this.source.currentRevision(projectId);
       const indexed = await this.projections.indexRevision(projectId);
-      if (indexed?.repositoryId === revision.repositoryId && indexed.commit === revision.commit) return;
+      if (sameTaskSourceRevision(indexed, revision)) return;
 
       const snapshot = await this.source.readProject(projectId, revision);
       if (
         snapshot.projectId !== projectId ||
-        snapshot.repositoryId !== revision.repositoryId ||
-        snapshot.commit !== revision.commit
+        !sameTaskSourceRevision(snapshot, revision)
       ) {
         throw new ConflictException("The document repository returned an inconsistent task snapshot");
       }
 
       const beforeWrite = await this.source.currentRevision(projectId);
-      if (beforeWrite.repositoryId !== revision.repositoryId || beforeWrite.commit !== revision.commit) continue;
+      if (!sameTaskSourceRevision(beforeWrite, revision)) continue;
 
-      await this.projections.replaceProject(snapshot);
+      if (!await this.projections.replaceProject(snapshot, indexed)) continue;
       const afterWrite = await this.source.currentRevision(projectId);
-      if (afterWrite.repositoryId === revision.repositoryId && afterWrite.commit === revision.commit) return;
+      if (sameTaskSourceRevision(afterWrite, revision)) {
+        const stored = await this.projections.indexRevision(projectId);
+        if (sameTaskSourceRevision(stored, revision)) return;
+      }
     }
     throw new ConflictException("The document repository changed while its task index was being refreshed");
   }

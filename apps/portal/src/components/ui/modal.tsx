@@ -48,7 +48,7 @@ export function Modal({ open, title, description, onClose, children, footer, siz
         className={cn(
           "relative flex w-full flex-col overflow-hidden rounded-xl bg-surface outline-none data-[under=true]:scale-[0.98]",
           page
-            ? "h-[85vh] max-w-5xl"
+            ? "h-[92vh] max-w-[1480px]"
             : nested
               ? "max-h-[calc(85vh-2rem)] max-w-3xl"
               : "max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]",

@@ -194,6 +194,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       "catalog-edits",
       "catalog-reconcile",
       "synthesis",
+      "architecture-style",
     ]);
     expect(artifacts).toEqual(
       expect.arrayContaining(["applications/demo/assessment/catalog.json", "applications/demo/assessment/topology.json", "applications/demo/assessment/tools/extract_topology.py"]),

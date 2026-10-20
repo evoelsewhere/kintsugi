@@ -1,7 +1,7 @@
 // Ports of document writes — the DI tokens of this module: where writes are recorded
 // (Postgres, workflow.document_write) and how they reach the worker (the job queue).
 
-import type { DocumentWriteFilter, DocumentWriteRecord, NewDocumentWrite } from "./document-write.js";
+import type { DocumentWriteFile, DocumentWriteFilter, DocumentWriteRecord, NewDocumentWrite } from "./document-write.js";
 
 export abstract class DocumentWriteStore {
   /** Records the write as `queued`. */
@@ -12,6 +12,12 @@ export abstract class DocumentWriteStore {
   abstract list(filter: DocumentWriteFilter, limit: number, offset: number): Promise<{ items: DocumentWriteRecord[]; total: number }>;
   /** Marks a write failed before it reached the worker. */
   abstract markFailed(id: string, error: string): Promise<void>;
+}
+
+/** The starter structure of a document repo (templates/document-repo), made for a set of applications. */
+export abstract class DocumentRepoSkeleton {
+  /** Create-only files: the project-level folders once, and the per-application folders for each application id. */
+  abstract files(applicationIds: readonly string[]): Promise<DocumentWriteFile[]>;
 }
 
 export abstract class DocumentWriteQueue {

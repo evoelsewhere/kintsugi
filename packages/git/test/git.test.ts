@@ -19,6 +19,7 @@ import {
   lsRemote,
   parseGitVersion,
   removeWorktree,
+  isAncestor,
   resolveCommit,
   runGit,
 } from "../src/index.js";
@@ -100,6 +101,10 @@ describe("mirror and job worktrees", () => {
     const second = await commitFile("README.md", "v2\n");
     await fetchMirror(mirror, local);
     expect(await resolveCommit(mirror, "main")).toBe(second);
+    // Ancestry: the older commit is in main, the newer one is not in the older one.
+    expect(await isAncestor(mirror, first, "main")).toBe(true);
+    expect(await isAncestor(mirror, second, first)).toBe(false);
+    await expect(isAncestor(mirror, "0".repeat(40), "main")).rejects.toThrow();
 
     const job2 = storage.job("job-2");
     await addWorktree(mirror, job2.src, second, local);

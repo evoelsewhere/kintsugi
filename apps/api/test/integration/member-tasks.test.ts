@@ -8,6 +8,9 @@ import { CheckoutStorage, cloneMirror, fetchMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import type { MemberPrincipal } from "../../src/modules/core/auth/index.js";
 import { TaskQueryService } from "../../src/modules/delivery/agent-context/application/task-query.service.js";
+import { GitTaskReader } from "../../src/modules/delivery/agent-context/infrastructure/git-task.reader.js";
+import { contextSourceId } from "../../src/modules/delivery/agent-context/domain/snapshot.js";
+import { taskListResultSchema } from "@kintsugi/harness-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
@@ -108,7 +111,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow task index (integration)", 
     expect(task.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
     expect(task.readiness.byActivity.design.ready).toBe(true);
     expect(task.readiness.byActivity.implementation.ready).toBe(false);
-    expect(task.readiness.blockers.some((item) => item.code === "SOURCE_MISSING" && item.sourceId?.startsWith("basic-design:"))).toBe(true);
+    expect(task.readiness.blockers.some((item) => item.code === "SOURCE_MISSING" && item.sourceId === contextSourceId("docs", "basic-design", "applications/web/to-be/design.md"))).toBe(true);
     expect(task.readiness.blockers.some((item) => item.code === "GATE_UNKNOWN" && item.gateId === "G3")).toBe(true);
     expect(task.readiness.blockers.some((item) => item.code === "GATE_PENDING")).toBe(false);
     expect(task.assignmentState).toBe("resolved");
@@ -129,6 +132,57 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow task index (integration)", 
       "select issue_count from delivery.member_task_index where project_id = 'shop'",
     );
     expect(issue.rows[0]?.issue_count).toBe(1);
+  });
+
+  it("includes a newly registered application's existing Git unit without moving the branch", async () => {
+    await remote.commit("docs", "applications/mobile/units/core/app/unit.md",
+      unitMarkdown("mobile/core/app", "Mobile").replace("application: web", "application: mobile"));
+    await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
+    expect((await taskService.list(principal, { projectId: "shop" })).items).toHaveLength(2);
+    const before = await app.db.query<{ source_commit: string; application_ids_fingerprint: string }>(
+      "select source_commit, application_ids_fingerprint from delivery.member_task_index where project_id = 'shop'");
+    await app.db.query("insert into admin.application (project_id, id, name, disposition) values ('shop', 'mobile', 'Mobile', 'refactor')");
+    expect((await taskService.list(principal, { projectId: "shop" })).items.map(({ unitId }) => unitId)).toEqual([
+      "mobile/core/app", "web/core/invoice", "web/core/reported",
+    ]);
+    const after = await app.db.query<{ source_commit: string; application_ids_fingerprint: string }>(
+      "select source_commit, application_ids_fingerprint from delivery.member_task_index where project_id = 'shop'");
+    expect(after.rows[0]?.source_commit).toBe(before.rows[0]?.source_commit);
+    expect(after.rows[0]?.application_ids_fingerprint).not.toBe(before.rows[0]?.application_ids_fingerprint);
+    await app.db.query("delete from admin.application where project_id = 'shop' and id = 'mobile'");
+  });
+
+  it("refreshes registered applications without a Git commit change, including delete and recreate", async () => {
+    const before = await taskService.get(principal, { projectId: "shop", unitId: "web/core/invoice" });
+    await app.db.query("delete from admin.application where project_id = 'shop' and id = 'web'");
+    await app.db.query("insert into admin.application (project_id, id, name, disposition) values ('shop', 'web', 'Web', 'refactor')");
+    const recreated = await taskService.get(principal, { projectId: "shop", unitId: "web/core/invoice" });
+    expect(recreated.sourceCommit).toBe(before.sourceCommit);
+    await app.db.query("delete from admin.application where project_id = 'shop' and id = 'web'");
+    expect((await taskService.list(principal, { projectId: "shop" })).items).toEqual([]);
+    await app.db.query("insert into admin.application (project_id, id, name, disposition) values ('shop', 'web', 'Web', 'refactor')");
+    expect((await taskService.list(principal, { projectId: "shop" })).items.map(({ unitId }) => unitId)).toEqual(["web/core/invoice", "web/core/reported"]);
+  });
+
+  it("returns bounded source identities for long missing paths and rejects oversized linked paths", async () => {
+    const longPath = "standards/" + "x".repeat(600) + ".md";
+    const markdown = unitMarkdown("web/core/invoice", "Invoice with mapping")
+      .replace("gates:\n", "links:\n  mappings:\n    - " + longPath + "\ngates:\n");
+    await remote.commit("docs", "applications/web/units/core/invoice/unit.md", markdown);
+    await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
+    const listed = await taskService.list(principal, { projectId: "shop" });
+    expect(taskListResultSchema.safeParse(listed).success).toBe(true);
+    const blocker = listed.items.find(({ unitId }) => unitId === "web/core/invoice")?.readiness.blockers
+      .find(({ code, sourceId }) => code === "SOURCE_MISSING" && sourceId !== undefined);
+    expect(blocker?.sourceId).toMatch(/^src_[a-f0-9]{24}$/);
+    const reader = app.nest.get(GitTaskReader);
+    const snapshot = await reader.readProject("shop", await reader.currentRevision("shop"));
+    const mapping = snapshot.tasks.find(({ unitId }) => unitId === "web/core/invoice")?.sourceReferences.find(({ role }) => role === "mapping");
+    expect(mapping?.sourceId).toMatch(/^src_[a-f0-9]{24}$/);
+
+    await remote.commit("docs", "applications/web/units/core/invoice/unit.md", markdown.replace(longPath, "x".repeat(1001)));
+    await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
+    expect((await taskService.list(principal, { projectId: "shop" })).items.map(({ unitId }) => unitId)).toEqual(["web/core/reported"]);
   });
 
   it("rechecks current Project Access before touching the Git index", async () => {

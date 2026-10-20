@@ -16,6 +16,8 @@ import {
 } from "@kintsugi/domain";
 import { parseUnitDocument, MAX_UNIT_DOCUMENT_BYTES } from "@kintsugi/agents";
 import { DocumentsService, type DocumentContext } from "#modules/delivery/documents/index.js";
+import { applicationIdsFingerprint } from "./task-configuration.js";
+import { contextSourceId } from "../domain/snapshot.js";
 import {
   TaskSourceReader,
   type MemberTaskProjection,
@@ -41,12 +43,12 @@ export class GitTaskReader extends TaskSourceReader {
   async currentRevision(projectId: string): Promise<TaskSourceRevision> {
     const context = await this.documents.context(projectId);
     const resolved = await this.documents.resolve(context, undefined);
-    return { repositoryId: context.repo.repositoryId, commit: resolved.commit };
+    return { repositoryId: context.repo.repositoryId, commit: resolved.commit, applicationIdsFingerprint: applicationFingerprint(context) };
   }
 
   async readProject(projectId: string, revision: TaskSourceRevision): Promise<ProjectTaskSnapshot> {
     const context = await this.documents.context(projectId);
-    if (context.repo.repositoryId !== revision.repositoryId) {
+    if (context.repo.repositoryId !== revision.repositoryId || applicationFingerprint(context) !== revision.applicationIdsFingerprint) {
       throw new ConflictException("The project's document repository changed during task indexing");
     }
     const resolved = await this.documents.resolve(context, revision.commit);
@@ -120,11 +122,12 @@ export class GitTaskReader extends TaskSourceReader {
       }
     }
 
-    tasks.sort((left, right) => left.unitId.localeCompare(right.unitId));
+    tasks.sort((left, right) => left.unitId < right.unitId ? -1 : left.unitId > right.unitId ? 1 : 0);
     return {
       projectId,
       repositoryId: revision.repositoryId,
       commit: resolved.commit,
+      applicationIdsFingerprint: revision.applicationIdsFingerprint,
       tasks,
       issues,
     };
@@ -154,7 +157,7 @@ export class GitTaskReader extends TaskSourceReader {
     ): Promise<void> => {
       const content = await this.documents.readText(context, commit, path, MAX_SOURCE_BYTES);
       if (content !== undefined) this.accountSourceBudget(sourceBudget, content);
-      const sourceId = role + ":" + path;
+      const sourceId = contextSourceId(context.repo.repositoryId, role, path);
       const availability = content === undefined ? "missing" as const : "present" as const;
       const publication = availability === "present" ? "published" as const : "unknown" as const;
       requiredInputs.push({
@@ -244,4 +247,8 @@ export class GitTaskReader extends TaskSourceReader {
       throw new PayloadTooLargeException("The project task sources exceed the indexing byte limit");
     }
   }
+}
+
+function applicationFingerprint(context: DocumentContext): string {
+  return applicationIdsFingerprint(context.project.applications.map(({ id }) => id));
 }

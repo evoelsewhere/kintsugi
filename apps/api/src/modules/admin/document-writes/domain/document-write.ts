@@ -3,7 +3,7 @@
 // The API records the write as `queued` and enqueues it; the worker records the outcome.
 // Pure types — no framework, no I/O.
 
-export const DOCUMENT_WRITE_STATUSES = ["queued", "committed", "pr-opened", "unchanged", "failed"] as const;
+export const DOCUMENT_WRITE_STATUSES = ["queued", "committed", "pr-opened", "merged", "closed", "unchanged", "failed"] as const;
 export type DocumentWriteStatus = (typeof DOCUMENT_WRITE_STATUSES)[number];
 
 /** Filter of the cross-project write list. */
@@ -41,6 +41,8 @@ export interface DocumentWriteFile {
   /** Path relative to the document repo root, forward slashes. */
   path: string;
   content: string;
+  /** Written only when the default branch does not have the file yet. */
+  createOnly?: boolean;
 }
 
 /** A write to enqueue: the files plus the provenance that becomes commit trailers. */
@@ -52,5 +54,7 @@ export interface NewDocumentWrite {
   kind: DocumentWriteKind;
   message: string;
   files: DocumentWriteFile[];
+  /** Every file goes to one pull request, auto-commit paths included. */
+  reviewAll?: boolean;
   actor?: string;
 }

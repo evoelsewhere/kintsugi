@@ -1,6 +1,6 @@
 # Kintsugi Coding Agent Workflow Testing Plan
 
-Date: 20 October 2026. Status: planned verification; no product test or native-client result is asserted by this document.
+Date: 20 October 2026. Status: acceptance matrix for the complete workflow. Fresh evidence for the implemented T00–T06 foundation is recorded in the [integration review](../reviews/2026-10-20-coding-agent-workflow-integration.md); native-client and full-workflow release gates remain pending.
 
 **Purpose:** Prove the approved task/design handoff and PR-to-effective-gate journey without relying on skipped suites, synthetic model output or one client's success as evidence for unsupported surfaces.
 

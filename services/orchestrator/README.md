@@ -26,6 +26,7 @@ The only component that commits to a project's document repo (ADR-0019):
 - **Commits**: author and committer the commit identity set in the portal (default `kintsugi-bot <kintsugi-bot@kintsugi.invalid>`), read per write, trailers `Kintsugi-Job`, `Kintsugi-Agent`, `Kintsugi-Actor`, `Kintsugi-Unit` as provided. Pushes are fast-forward only; a rejection triggers fetch → rebase → retry (4 attempts); a rebase conflict fails the write. Never force-pushes; only the default branch and `kintsugi/*` are writable.
 - **Pull requests**: GitHub, GitHub Enterprise, GitLab, Gitea and Azure DevOps through `packages/git` REST adapters with the server token. `plain-git` servers, servers authenticated by SSH key and Bitbucket (no adapter yet) keep the pushed branch (status `committed`).
 - **Outcome**: `workflow.document_write` (`queued` → `committed`, `pr-opened`, `unchanged` or `failed` with a redacted error), shown on the project page.
+- **Review watch** (`src/document-write/watch.ts`): every minute (`reviewWatchSeconds`) the worker fetches the document repository of each write still waiting on a review branch and records `merged` (branch commit reachable from the default branch, or the pull request merged on the server) or `closed` (declined or abandoned).
 
 ## Runtime job runs (implemented)
 
@@ -40,7 +41,7 @@ Runs stages, script steps, agent jobs and workflows in job workspaces ([ADR-0029
 - **After every step**: `out/restricted/` → `governance.restricted_record` (encrypted) and removed; the JobOutput hook (`hooks/job_output.py`) over `out/`, fail-closed, with a reason from its redacted report; `workflow.artifact` rows with provenance.
 - **Hand-off**: a top-level run with output enqueues a `document-write` with `outputOfJob` = the run (its `out/`), `jobId`, `agent`, `actor`, and records `document_write_id`.
 - **Live events and cancel**: status, steps, agent tool calls (tool and path only) and log lines go to `workflow.job_event`, redacted; cancel requests (`cancel_requested_at`) are polled every 2 seconds and abort the run (processes killed, run `cancelled`).
-- **Cleanup** (`src/jobs/cleanup.ts`): `out/` is deleted once its write is `committed`, `pr-opened` or `unchanged`; failed runs and writes keep it for `KINTSUGI_JOB_RETENTION_DAYS`; an hourly sweep removes expired workspaces.
+- **Cleanup** (`src/jobs/cleanup.ts`): `out/` is deleted once its write is `committed`, `pr-opened`, `merged`, `closed` or `unchanged`; failed runs and writes keep it for `KINTSUGI_JOB_RETENTION_DAYS`; an hourly sweep removes expired workspaces.
 - **Gates** (`src/gates.ts`, database only): `requestGate()` opens a pending `governance.gate` (or returns the one already pending for the same project, application, key and subject) and audits it as `gate.request`; `gateState()` reads it; `waitForGate()` polls until a person approves, rejects or waives it (abortable). For stage plans that stop at a gate.
 - More stages (the full assess plan, map, extract-rules, …) and workflows per application source.
 - Ingestion, webhooks (D30).

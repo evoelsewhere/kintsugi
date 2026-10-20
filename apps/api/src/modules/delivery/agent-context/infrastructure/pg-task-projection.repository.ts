@@ -2,13 +2,14 @@
 
 import { Injectable } from "@nestjs/common";
 import { getPool, withTransaction } from "#common/db/pool.js";
+import { applicationIdsFingerprint } from "./task-configuration.js";
 import {
   TaskProjectionRepository,
   type AssignmentState,
   type IndexedMemberTask,
   type MemberTaskProjection,
   type ProjectTaskSnapshot,
-  type TaskSourceRevision,
+  type TaskIndexRevision,
 } from "../domain/task.js";
 
 interface IndexedTaskRow {
@@ -42,17 +43,31 @@ export class PgTaskProjectionRepository extends TaskProjectionRepository {
     super();
   }
 
-  async indexRevision(projectId: string): Promise<TaskSourceRevision | undefined> {
-    const result = await getPool().query<{ repository_id: string; source_commit: string }>(
-      "select repository_id, source_commit from delivery.member_task_index where project_id = $1",
+  async indexRevision(projectId: string): Promise<TaskIndexRevision | undefined> {
+    const result = await getPool().query<{ repository_id: string; source_commit: string; application_ids_fingerprint: string; index_id: string }>(
+      "select repository_id, source_commit, application_ids_fingerprint, index_id from delivery.member_task_index where project_id = $1",
       [projectId],
     );
     const row = result.rows[0];
-    return row === undefined ? undefined : { repositoryId: row.repository_id, commit: row.source_commit };
+    return row === undefined ? undefined : { repositoryId: row.repository_id, commit: row.source_commit, applicationIdsFingerprint: row.application_ids_fingerprint, indexId: row.index_id };
   }
 
-  async replaceProject(snapshot: ProjectTaskSnapshot): Promise<void> {
-    await withTransaction(async (client) => {
+  async replaceProject(snapshot: ProjectTaskSnapshot, expectedIndex: TaskIndexRevision | undefined): Promise<boolean> {
+    return withTransaction(async (client) => {
+      // The parent row exists even for an initial index. Lock before any projection DELETE:
+      // locking an absent index/projection cannot serialize initial refreshes.
+      const project = await client.query("select id from admin.project where id = $1 for update", [snapshot.projectId]);
+      if (project.rowCount !== 1) return false;
+      // Lock FK parents before destructive child changes. An application DELETE otherwise
+      // takes the opposite lock order through its cascade, or removes a task's FK parent.
+      const applications = await client.query<{ id: string }>(
+        'select id from admin.application where project_id = $1 order by id collate "C" for key share',
+        [snapshot.projectId],
+      );
+      if (applicationIdsFingerprint(applications.rows.map(({ id }) => id)) !== snapshot.applicationIdsFingerprint) return false;
+      const current = await client.query<{ index_id: string }>(
+        "select index_id from delivery.member_task_index where project_id = $1", [snapshot.projectId]);
+      if (current.rows[0]?.index_id !== expectedIndex?.indexId) return false;
       await client.query("delete from delivery.member_task_projection where project_id = $1", [snapshot.projectId]);
       await client.query("delete from delivery.member_task_index_issue where project_id = $1", [snapshot.projectId]);
 
@@ -92,13 +107,15 @@ export class PgTaskProjectionRepository extends TaskProjectionRepository {
       );
 
       await client.query(
-        "insert into delivery.member_task_index (project_id, repository_id, source_commit, task_count, issue_count, indexed_at) " +
-          "values ($1, $2, $3, $4, $5, now()) " +
+        "insert into delivery.member_task_index (project_id, repository_id, source_commit, task_count, issue_count, application_ids_fingerprint, indexed_at) " +
+          "values ($1, $2, $3, $4, $5, $6, now()) " +
           "on conflict (project_id) do update set repository_id = excluded.repository_id, " +
           "source_commit = excluded.source_commit, task_count = excluded.task_count, " +
-          "issue_count = excluded.issue_count, indexed_at = excluded.indexed_at",
-        [snapshot.projectId, snapshot.repositoryId, snapshot.commit, snapshot.tasks.length, snapshot.issues.length],
+          "issue_count = excluded.issue_count, application_ids_fingerprint = excluded.application_ids_fingerprint, " +
+          "index_id = excluded.index_id, indexed_at = excluded.indexed_at",
+        [snapshot.projectId, snapshot.repositoryId, snapshot.commit, snapshot.tasks.length, snapshot.issues.length, snapshot.applicationIdsFingerprint],
       );
+      return true;
     });
   }
 

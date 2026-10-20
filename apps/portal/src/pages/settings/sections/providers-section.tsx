@@ -224,14 +224,6 @@ export function ProvidersSection(): React.JSX.Element {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,0.75fr)_2rem] gap-2 px-2 text-[11px] font-medium tracking-wide text-text-muted uppercase md:grid">
-                <span>Agent</span>
-                <span>Scope</span>
-                <span>Provider</span>
-                <span>Model</span>
-                <span>Thinking</span>
-                <span className="sr-only">Actions</span>
-              </div>
               {bindings.map((binding, index) => {
                 const provider = providers.find((entry) => entry.id === binding.provider);
                 const reasoningSupported = modelSupportsReasoning(provider, supported, binding.model);
@@ -243,13 +235,14 @@ export function ProvidersSection(): React.JSX.Element {
                     : []),
                 ];
                 return (
-                <div key={index} className="grid grid-cols-2 items-end gap-x-3 gap-y-3 rounded-lg bg-background p-3 shadow-border md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,0.75fr)_2rem] md:items-center md:gap-2 md:p-2">
-                  <div className="min-w-0">
-                    <label htmlFor={`binding-agent-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Agent</label>
+                <div key={index} className="flex items-start gap-3 rounded-lg bg-background p-3 shadow-border">
+                  <div className="grid min-w-0 flex-1 grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2 xl:grid-cols-12">
+                  <div className="min-w-0 xl:col-span-4">
+                    <label htmlFor={`binding-agent-${index}`} className="mb-1 block text-[11px] font-medium tracking-wide text-text-muted uppercase">Agent</label>
                     <Select id={`binding-agent-${index}`} className="min-w-0" value={binding.agent} placeholder="Choose agent" options={withCurrent(agentOptions, binding.agent)} onChange={(value) => patch(index, { agent: value })} />
                   </div>
-                  <div className="min-w-0">
-                    <label htmlFor={`binding-scope-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Scope</label>
+                  <div className="min-w-0 xl:col-span-3">
+                    <label htmlFor={`binding-scope-${index}`} className="mb-1 block text-[11px] font-medium tracking-wide text-text-muted uppercase">Scope</label>
                     <Select
                       id={`binding-scope-${index}`}
                       className="min-w-0"
@@ -266,8 +259,8 @@ export function ProvidersSection(): React.JSX.Element {
                       }
                     />
                   </div>
-                  <div className="min-w-0">
-                    <label htmlFor={`binding-provider-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Provider</label>
+                  <div className="min-w-0 xl:col-span-5">
+                    <label htmlFor={`binding-provider-${index}`} className="mb-1 block text-[11px] font-medium tracking-wide text-text-muted uppercase">Provider</label>
                     <Select
                       id={`binding-provider-${index}`}
                       className="min-w-0"
@@ -285,8 +278,8 @@ export function ProvidersSection(): React.JSX.Element {
                       }
                     />
                   </div>
-                  <div className="min-w-0">
-                    <label htmlFor={`binding-model-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Model</label>
+                  <div className="min-w-0 xl:col-span-8">
+                    <label htmlFor={`binding-model-${index}`} className="mb-1 block text-[11px] font-medium tracking-wide text-text-muted uppercase">Model</label>
                     <Select
                       id={`binding-model-${index}`}
                       className="min-w-0"
@@ -307,8 +300,8 @@ export function ProvidersSection(): React.JSX.Element {
                       }
                     />
                   </div>
-                  <div className="min-w-0">
-                    <label htmlFor={`binding-thinking-${index}`} className="mb-1 block text-[11px] font-medium text-text-secondary md:hidden">Thinking</label>
+                  <div className="min-w-0 xl:col-span-4">
+                    <label htmlFor={`binding-thinking-${index}`} className="mb-1 block text-[11px] font-medium tracking-wide text-text-muted uppercase">Thinking</label>
                     <Select
                       id={`binding-thinking-${index}`}
                       className="min-w-0"
@@ -325,7 +318,8 @@ export function ProvidersSection(): React.JSX.Element {
                       }
                     />
                   </div>
-                  <div className="col-span-2 flex justify-end md:col-span-1">
+                  </div>
+                  <div className="flex shrink-0 justify-end pt-[18px]">
                     <Button size="icon" variant="danger" aria-label={`Remove ${binding.agent || "new"} model binding`} title="Remove binding" onClick={() => setBindings((prev) => prev.filter((_, i) => i !== index))}>
                       <Trash2 className="size-4" />
                     </Button>

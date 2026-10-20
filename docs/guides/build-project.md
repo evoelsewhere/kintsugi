@@ -1,6 +1,6 @@
 # Build a project
 
-> **Partly available.** The portal manages projects, applications and their repositories, and renders `kintsugi.yaml` (**Administration → Projects**). It does not scaffold a document repo from `templates/document-repo/`: that portal capability and committing `kintsugi.yaml` are planned (milestones M0–M3). The template is currently used by `scripts/e2e/start.mjs` for end-to-end seed data. Until portal publishing is available, create or join the document repo and commit the rendered manifest through a pull request.
+> **Partly available.** The portal manages projects, applications and their repositories, renders `kintsugi.yaml` and publishes it (**Administration → Projects → Publish kintsugi.yaml**). The same pull request carries the starter structure from `templates/document-repo/` for everything the document repo does not have yet; joining an existing repo by reading its `kintsugi.yaml` is planned.
 
 Kintsugi is a common engine. Before the migration starts, the team sets the project up:
 1. create or join the document repo;
@@ -22,12 +22,12 @@ Exact formats: [document repository reference](../reference/document-repo.md).
 ## Step 1 — Document repo (P0)
 
 Prepare the document repo, then register it in Settings → Git:
-- **New**: create it from the [starter template](../../templates/document-repo/).
+- **New**: create an empty repository. **Publish kintsugi.yaml** fills in the [starter structure](../../templates/document-repo/) through one pull request.
 - **Existing**: use the project's existing document repo.
 
 Then **Administration → Projects → New project**: name, id and the document repo. A project has exactly one document repo, and a document repo belongs to one project only. In `kintsugi.yaml` it is declared once, under `document:`.
 
-Planned: the portal scaffolds a new document repo from the template, or joins an existing one by reading its `kintsugi.yaml`.
+**Publish kintsugi.yaml** proposes the rendered manifest together with the starter structure: the project-level folders (`program/`, `portfolio/`, `architecture/`, `standards/`, `plugins/`, `gates/`) with their READMEs, and one skeleton per application under `applications/<app>/` (made from the template's `billing-web` folder, with the application's id). Files the repo already has are never replaced, so publishing again after adding an application only brings that application's skeleton; untick "Also create the starter structure" in the dialog to publish the manifest alone. Format samples (`*.example`) stay in the template. Planned: joining an existing repo by reading its `kintsugi.yaml`.
 
 ## Step 2 — Register the repos (P0)
 

@@ -10,6 +10,7 @@ import { CheckoutStorage, DEFAULT_COMMIT_IDENTITY } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DocumentWriteStore, type DocumentRepoTarget } from "../src/document-write/store.js";
+import { watchPullRequests } from "../src/document-write/watch.js";
 import { type WriterDeps, writeDocument } from "../src/document-write/writer.js";
 import { RepositoryStore } from "../src/git-sync/repositories.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
@@ -221,5 +222,89 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     } finally {
       await worker.stop();
     }
+  });
+
+  describe("create-only files (the starter structure)", () => {
+    it("adds what the default branch lacks and never replaces a document that is there", async () => {
+      const write = request("docs", {
+        files: [
+          { path: "kintsugi.yaml", content: "schemaVersion: 1\nproject: {}\n" },
+          { path: "README.md", content: "starter readme\n", createOnly: true },
+          { path: "program/charter.md", content: "# Charter\n", createOnly: true },
+        ],
+        reviewAll: true,
+      });
+      const outcome = await writeDocument(deps, write);
+      const branch = `kintsugi/alice/${write.writeId}`;
+      expect(outcome).toMatchObject({ status: "pr-opened", branch });
+      // One pull request holds the manifest and the missing starter file; README.md was on main, so it is left alone.
+      expect(remote.git("docs", "show", `${branch}:program/charter.md`)).toBe("# Charter\n");
+      expect(remote.git("docs", "show", `${branch}:README.md`)).toBe("docs\n");
+      expect(remote.git("docs", "show", `${branch}:kintsugi.yaml`)).toBe("schemaVersion: 1\nproject: {}\n");
+      expect(() => remote.git("docs", "show", "main:program/charter.md")).toThrow();
+    });
+
+    it("is unchanged when every create-only file is already there", async () => {
+      const write = request("docs", { files: [{ path: "README.md", content: "starter readme\n", createOnly: true }], reviewAll: true });
+      expect(await writeDocument(deps, write)).toEqual({ status: "unchanged" });
+      expect((await row(write.writeId))?.branch).toBeNull();
+    });
+  });
+
+  describe("review watch", () => {
+    const status = async (id: string): Promise<string | undefined> => (await row(id))?.status;
+    const review = (projectId: string): DocumentWriteRequest => request(projectId, { files: [{ path: "kintsugi.yaml", content: "schemaVersion: 1\n" }] });
+
+    it("records a merge it sees in git when there is no pull request (plain-git)", async () => {
+      const write = review("plain-docs");
+      const outcome = await writeDocument(deps, write);
+      expect(outcome).toMatchObject({ status: "committed", branch: `kintsugi/alice/${write.writeId}` });
+
+      expect((await watchPullRequests(deps)).merged).not.toContain(write.writeId);
+      expect(await status(write.writeId)).toBe("committed");
+
+      // A person merges the branch: its tip becomes part of main.
+      remote.git("plain-docs", "update-ref", "refs/heads/main", String((await row(write.writeId))?.branch_commit_sha));
+      expect((await watchPullRequests(deps)).merged).toContain(write.writeId);
+      expect(await status(write.writeId)).toBe("merged");
+      // A recorded outcome is final: the next pass does not look at it again.
+      expect((await watchPullRequests(deps)).merged).not.toContain(write.writeId);
+    });
+
+    it("asks the server about open pull requests: squash merges and closes are recorded, open ones stay", async () => {
+      const [merged, closed, open] = [review("docs"), review("docs"), review("docs")];
+      const numbers = new Map<string, number>();
+      for (const write of [merged, closed, open]) {
+        await writeDocument(deps, write);
+        numbers.set(write.writeId, Number(/(\d+)$/.exec(String((await row(write.writeId))?.pr_url))?.[1]));
+      }
+      const states: Record<number, string> = { [numbers.get(merged.writeId)!]: "merged", [numbers.get(closed.writeId)!]: "closed" };
+      const asked: string[] = [];
+      const serverFetch = (async (url: string | URL | Request): Promise<Response> => {
+        asked.push(String(url));
+        const number = Number(/(\d+)$/.exec(String(url))?.[1]);
+        return new Response(JSON.stringify({ state: states[number] ?? "opened" }), { status: 200 });
+      }) as typeof fetch;
+
+      const result = await watchPullRequests({ ...deps, fetch: serverFetch });
+      expect(result.merged).toContain(merged.writeId);
+      expect(result.closed).toContain(closed.writeId);
+      expect(result.merged).not.toContain(open.writeId);
+      expect(await status(merged.writeId)).toBe("merged");
+      expect(await status(closed.writeId)).toBe("closed");
+      expect(await status(open.writeId)).toBe("pr-opened");
+      expect(asked.some((url) => url.startsWith("https://gitlab.example.invalid/api/v4/projects/docs/merge_requests/"))).toBe(true);
+    });
+
+    it("a server that cannot be read leaves the write waiting and does not stop the pass", async () => {
+      const write = review("docs");
+      await writeDocument(deps, write);
+      const lines: string[] = [];
+      const broken = (async () => new Response("{}", { status: 500 })) as unknown as typeof fetch;
+      const result = await watchPullRequests({ ...deps, fetch: broken, log: (line) => lines.push(line) });
+      expect(result.merged).toEqual([]);
+      expect(await status(write.writeId)).toBe("pr-opened");
+      expect(lines.some((line) => line.includes("could not read its state"))).toBe(true);
+    });
   });
 });

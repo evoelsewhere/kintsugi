@@ -27,8 +27,21 @@ export interface PullRequest {
   created: boolean;
 }
 
+/** Where a pull request stands on the server. `merged` includes squash and rebase merges, which git ancestry cannot see. */
+export type PullRequestState = "open" | "merged" | "closed";
+
+export interface PullRequestStatusQuery {
+  baseUrl: string;
+  path: string;
+  token: string;
+  /** The pull request URL the provider returned from open(); its number is read from the end. */
+  url: string;
+}
+
 export interface PullRequestProvider {
   open(input: OpenPullRequest): Promise<PullRequest>;
+  /** The state of a pull request opened earlier; undefined when the server does not know it (deleted, no access). */
+  state(input: PullRequestStatusQuery): Promise<PullRequestState | undefined>;
 }
 
 /** The server kind has no pull-request adapter yet. */
@@ -69,6 +82,13 @@ const fail = (provider: string, status: number, json: unknown, token: string): n
 
 const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
 
+/** The number at the end of a pull-request URL (.../pull/12, .../merge_requests/12, .../pullrequest/12). */
+function numberOf(url: string): number {
+  const number = Number(/(\d+)\/*$/.exec(url.split(/[?#]/)[0] ?? "")?.[1]);
+  if (!Number.isInteger(number) || number <= 0) throw new GitError(`No pull request number in "${url}"`, null, "");
+  return number;
+}
+
 function ownerAndRepo(path: string): [string, string] {
   const parts = path.split("/");
   if (parts.length !== 2 || parts.some((part) => part === "")) throw new GitError(`Expected an owner/repo path, got "${path}"`, null, "");
@@ -106,6 +126,17 @@ class GitHubPullRequests implements PullRequestProvider {
     }
     return fail("GitHub", created.status, created.json, input.token);
   }
+
+  async state(input: PullRequestStatusQuery): Promise<PullRequestState | undefined> {
+    const [owner, repo] = ownerAndRepo(input.path);
+    const headers = { authorization: `Bearer ${input.token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" };
+    const url = `${this.apiBase(input.baseUrl)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${numberOf(input.url)}`;
+    const found = await call(this.fetchImpl, input.token, url, { method: "GET", headers });
+    if (found.status === 404) return undefined;
+    if (found.status !== 200) return fail("GitHub", found.status, found.json, input.token);
+    const pull = record(found.json);
+    return typeof pull["merged_at"] === "string" ? "merged" : pull["state"] === "closed" ? "closed" : "open";
+  }
 }
 
 /** GitLab (REST v4 merge requests), gitlab.com or self-managed. */
@@ -128,6 +159,15 @@ class GitLabMergeRequests implements PullRequestProvider {
       if (existing.status === 200 && typeof first["web_url"] === "string") return { url: first["web_url"], number: Number(first["iid"]), created: false };
     }
     return fail("GitLab", created.status, created.json, input.token);
+  }
+
+  async state(input: PullRequestStatusQuery): Promise<PullRequestState | undefined> {
+    const url = `${trimSlash(input.baseUrl)}/api/v4/projects/${encodeURIComponent(input.path)}/merge_requests/${numberOf(input.url)}`;
+    const found = await call(this.fetchImpl, input.token, url, { method: "GET", headers: { "private-token": input.token } });
+    if (found.status === 404) return undefined;
+    if (found.status !== 200) return fail("GitLab", found.status, found.json, input.token);
+    const state = record(found.json)["state"];
+    return state === "merged" ? "merged" : state === "closed" ? "closed" : "open";
   }
 }
 
@@ -153,6 +193,16 @@ class GiteaPullRequests implements PullRequestProvider {
       if (match !== undefined && typeof match["html_url"] === "string") return { url: match["html_url"], number: Number(match["number"]), created: false };
     }
     return fail("Gitea", created.status, created.json, input.token);
+  }
+
+  async state(input: PullRequestStatusQuery): Promise<PullRequestState | undefined> {
+    const [owner, repo] = ownerAndRepo(input.path);
+    const url = `${trimSlash(input.baseUrl)}/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${numberOf(input.url)}`;
+    const found = await call(this.fetchImpl, input.token, url, { method: "GET", headers: { authorization: `token ${input.token}` } });
+    if (found.status === 404) return undefined;
+    if (found.status !== 200) return fail("Gitea", found.status, found.json, input.token);
+    const pull = record(found.json);
+    return pull["merged"] === true ? "merged" : pull["state"] === "closed" ? "closed" : "open";
   }
 }
 
@@ -191,6 +241,17 @@ class AzureDevOpsPullRequests implements PullRequestProvider {
     }
     return fail("Azure DevOps", created.status, created.json, input.token);
   }
+
+  async state(input: PullRequestStatusQuery): Promise<PullRequestState | undefined> {
+    const match = /^([^/]+)\/_git\/([^/]+)$/.exec(input.path);
+    if (match === null) throw new GitError(`Expected a <project>/_git/<repo> path, got "${input.path}"`, null, "");
+    const url = `${trimSlash(input.baseUrl)}/${encodeURIComponent(match[1]!)}/_apis/git/repositories/${encodeURIComponent(match[2]!)}/pullrequests/${numberOf(input.url)}?api-version=7.1`;
+    const found = await call(this.fetchImpl, input.token, url, { method: "GET", headers: { authorization: `Basic ${Buffer.from(`:${input.token}`).toString("base64")}` } });
+    if (found.status === 404) return undefined;
+    if (found.status !== 200) return fail("Azure DevOps", found.status, found.json, input.token);
+    const status = record(found.json)["status"];
+    return status === "completed" ? "merged" : status === "abandoned" ? "closed" : "open";
+  }
 }
 
 /**
@@ -212,6 +273,6 @@ export function pullRequestProvider(kind: PullRequestServerKind, fetchImpl: Fetc
     case "plain-git":
       return undefined;
     default:
-      return { open: () => Promise.reject(new PullRequestsUnsupportedError(kind)) };
+      return { open: () => Promise.reject(new PullRequestsUnsupportedError(kind)), state: () => Promise.resolve(undefined) };
   }
 }

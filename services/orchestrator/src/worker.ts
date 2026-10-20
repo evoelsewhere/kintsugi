@@ -8,10 +8,11 @@ import { CheckoutStorage } from "@kintsugi/git";
 import { type Interpreters, interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { PgBoss } from "pg-boss";
-import type { Pool } from "pg";
+import { Pool } from "pg";
 import { DocumentWriteStore } from "./document-write/store.js";
 import { startHeartbeat } from "./heartbeat.js";
 import { failOrphanedRuns } from "./orphans.js";
+import { watchPullRequests } from "./document-write/watch.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
 import { installedAgents } from "./jobs/agents.js";
@@ -58,6 +59,8 @@ export interface WorkerOptions {
   log?: (message: string) => void;
   /** Days the output of a failed run or write is kept (KINTSUGI_JOB_RETENTION_DAYS, default 7). */
   jobRetentionDays?: number;
+  /** Seconds between looks at pull requests awaiting review, to record a merge or a close (default 60). */
+  reviewWatchSeconds?: number;
   /** Seconds between sweeps of expired job workspaces (default: hourly). */
   cleanupIntervalSeconds?: number;
   /** Seconds between checks for cancel requests of the runs this worker runs (default 2). */
@@ -133,22 +136,34 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   });
   await ensureDocumentWriteQueue(boss);
   await ensureSnapshotRetentionQueue(boss);
-  const retentionRepository = new PostgresSnapshotRetentionRepository(options.pool);
+  // Mirror owners use options.pool before releasing their lock. Retention sessions must
+  // use separate capacity while waiting for that mirror, or the two locks can deadlock.
+  const retentionConcurrency = 2;
+  const retentionPool = new Pool({
+    connectionString: options.databaseUrl,
+    application_name: "kintsugi-snapshot-retention",
+    max: retentionConcurrency,
+  });
+  retentionPool.on("error", (error) => log(`snapshot retention pool error: ${error.message}`));
+  const retentionOperations = new Set<Promise<unknown>>();
+  const trackRetention = async <T>(work: () => Promise<T>): Promise<T> => {
+    const operation = work();
+    retentionOperations.add(operation);
+    try {
+      return await operation;
+    } finally {
+      retentionOperations.delete(operation);
+    }
+  };
+  const retentionRepository = new PostgresSnapshotRetentionRepository(options.pool, retentionPool);
   const retentionDependencies = {
     repository: retentionRepository,
-    pins: new GitSnapshotPins(options.storage, async (repositoryId) => {
-      const result = await options.pool.query<{ id: string; server_id: string }>(
-        "select id, server_id from admin.git_repository where id = $1",
-        [repositoryId],
-      );
-      const repository = result.rows[0];
-      return repository === undefined ? undefined : { repositoryId: repository.id, serverId: repository.server_id };
-    }),
+    pins: new GitSnapshotPins(options.storage),
   };
-  await boss.work<SnapshotRetentionRequest>(SNAPSHOT_RETENTION_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
+  await boss.work<SnapshotRetentionRequest>(SNAPSHOT_RETENTION_QUEUE, { localConcurrency: retentionConcurrency }, counted(async ([job]) => {
     if (job === undefined) return;
     if (typeof job.data.snapshotId !== "string") throw new TypeError("snapshot retention payload is invalid");
-    const result = await retainSnapshot(retentionDependencies, job.data.snapshotId);
+    const result = await trackRetention(() => retainSnapshot(retentionDependencies, job.data.snapshotId));
     log("snapshot " + job.data.snapshotId + ": " + result.status);
   }));
 
@@ -226,13 +241,22 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
 
   // Scheduler: each tick is independent; a failed tick is logged and the next one retries.
   let stopped = false;
-  const tick = (name: string, work: () => Promise<void>) => async (): Promise<void> => {
-    if (stopped) return;
-    try {
-      await work();
-    } catch (error) {
-      log(`${name} failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  const backgroundTicks = new Map<string, Promise<void>>();
+  const tick = (name: string, work: () => Promise<void>) => (): Promise<void> => {
+    if (stopped) return Promise.resolve();
+    const previous = backgroundTicks.get(name);
+    if (previous !== undefined) return previous;
+    const operation = (async () => {
+      try {
+        await work();
+      } catch (error) {
+        log(`${name} failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    })();
+    backgroundTicks.set(name, operation);
+    const finished = () => { backgroundTicks.delete(name); };
+    void operation.then(finished, finished);
+    return operation;
   };
   const scanPending = tick("pending scan", async () => {
     for (const id of await store.ids("pending")) await requestSync(id);
@@ -240,6 +264,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const pollAll = tick("poll", async () => {
     for (const id of await store.ids()) await requestSync(id);
     for (const key of await pruneMirrors(deps)) log(`pruned mirror ${key}`);
+  });
+  const watchReviews = tick("review watch", async () => {
+    const outcome = await watchPullRequests({ ...writerDeps, log });
+    if (outcome.merged.length + outcome.closed.length > 0) log(`review watch: ${outcome.merged.length} merged, ${outcome.closed.length} closed`);
   });
   const retentionMs = (options.jobRetentionDays ?? DEFAULT_JOB_RETENTION_DAYS) * 24 * 60 * 60 * 1000;
   const checkCancels = tick("cancel check", watchCancels);
@@ -261,11 +289,11 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     }, stopping.signal);
   });
   const pruneSnapshots = tick("snapshot cleanup", async () => {
-    const result = await pruneExpiredSnapshots(retentionDependencies);
+    const result = await trackRetention(() => pruneExpiredSnapshots(retentionDependencies));
     if (result.released > 0 || result.retained > 0) log("snapshot cleanup released " + result.released + " and retained " + result.retained);
   });
   const recoverSnapshots = tick("snapshot recovery", async () => {
-    const result = await recoverStaleSnapshots(retentionDependencies);
+    const result = await trackRetention(() => recoverStaleSnapshots(retentionDependencies));
     if (result.attempted > 0) {
       log("snapshot recovery attempted " + result.attempted + ", readied " + result.ready
         + ", failed " + result.failed + ", retryable " + result.retryable);
@@ -278,6 +306,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const timers = [
     setInterval(() => void scanPending(), (options.pendingScanSeconds ?? 5) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),
+    setInterval(() => void watchReviews(), (options.reviewWatchSeconds ?? 60) * 1000),
     setInterval(() => void pruneJobs(), (options.cleanupIntervalSeconds ?? 60 * 60) * 1000),
     setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
     setInterval(() => void dispatchMemberOutbox(), (options.outboxScanSeconds ?? 1) * 1000),
@@ -289,6 +318,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   void dispatchMemberOutbox();
   void pruneSnapshots();
   void recoverSnapshots();
+  void watchReviews();
 
   const heartbeat = await startHeartbeat({
     pool: options.pool,
@@ -298,18 +328,30 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     log,
   });
 
+  let stopResult: Promise<void> | undefined;
   return {
     workerId: heartbeat.workerId,
     requestSync,
     requestWrite,
     requestJobRun: (request) => sendJobRun(boss, request),
-    async stop() {
+    stop() {
+      if (stopResult !== undefined) return stopResult;
       stopped = true;
       stopRebuilds();
       stopping.abort();
       for (const timer of timers) clearInterval(timer);
-      await boss.stop({ graceful: true });
-      await heartbeat.stop();
+      stopResult = (async () => {
+        try {
+          // Ticks may still send work to the queue, so drain them before stopping it.
+          await Promise.allSettled(backgroundTicks.values());
+          await boss.stop({ graceful: true });
+        } finally {
+          // A queue stop timeout must not close sessions beneath active retention work.
+          await Promise.allSettled(retentionOperations);
+          await Promise.all([heartbeat.stop(), retentionPool.end()]);
+        }
+      })();
+      return stopResult;
     },
   };
 }

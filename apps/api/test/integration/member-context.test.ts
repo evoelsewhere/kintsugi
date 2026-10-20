@@ -139,7 +139,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
     else process.env["KINTSUGI_DATA_DIR"] = previousDataDir;
   });
 
-  it("keeps a paged task brief and search on commit A after Git and the API move to B", async () => {
+  it("keeps a paged task brief and search on commit A after restart and oversized newer HEAD", async () => {
     const brief = await snapshotService.brief(principal, {
       projectId: "shop",
       unitId: "web/core/invoice",
@@ -149,6 +149,9 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
     const source = brief.sources.find((item) => item.role === "task-pack");
     expect(source).toBeDefined();
     expect(brief.documentRepoCommit).toBe(commitA);
+    for (const blocker of brief.readiness.blockers) {
+      if (blocker.sourceId !== undefined) expect(brief.sources.some(({ sourceId }) => sourceId === blocker.sourceId)).toBe(true);
+    }
 
     const repository = app.nest.get(SnapshotRepository);
     const template = await repository.get(brief.snapshotId);
@@ -239,6 +242,20 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
     expect(refreshed.snapshotId).toBe(brief.snapshotId);
     expect(refreshed.freshness.isCurrent).toBe(false);
     expect(refreshed.freshness.newerContextRevision).toBeDefined();
+
+    const oversizedUnit = unit.replace("status: pending", "status: pending\nlinks:\n  mappings:\n" +
+      Array.from({ length: 100 }, (_, index) => "    - standards/mapping-" + index + ".md").join("\n"));
+    await remote.commit("docs", "applications/web/units/core/invoice/unit.md", oversizedUnit);
+    await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
+    const historical = await snapshotService.brief(principal, {
+      projectId: brief.projectId, unitId: brief.unitId, activity: "design", snapshotId: brief.snapshotId,
+    });
+    expect(historical.snapshotId).toBe(brief.snapshotId);
+    expect(historical.documentRepoCommit).toBe(commitA);
+    expect(historical.objective).toContain("snapshot A");
+    expect(historical.freshness.isCurrent).toBe(false);
+    expect(historical.freshness.newerContextRevision).toBeUndefined();
+
     const afterRestart = await documentQuery.get(principal, {
       projectId: brief.projectId,
       unitId: brief.unitId,
@@ -308,5 +325,5 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
       await connection.query("rollback").catch(() => undefined);
       await connection.end();
     }
-  });
+  }, 60_000);
 });

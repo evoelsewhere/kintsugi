@@ -65,7 +65,7 @@ Writes to a project's document repo ([ADR-0019](../decisions/0019-workspace-repo
 
 | Table | Key | Content |
 |---|---|---|
-| `workflow.document_write` | `id` | `project_id` (cascade on project delete), `kind` (`manifest`, `job-output`, `state-change`), `status` (`queued`, `committed`, `pr-opened`, `unchanged`, `failed`), `message`, `commit_sha` (default-branch commit of auto-commit paths), `branch` + `branch_commit_sha` (the `kintsugi/*` branch of the other paths), `pr_url`, `error` (redacted), provenance `actor`, `job_id`, `agent` |
+| `workflow.document_write` | `id` | `project_id` (cascade on project delete), `kind` (`manifest`, `job-output`, `state-change`), `status` (`queued`, `committed`, `pr-opened`, `merged`, `closed`, `unchanged`, `failed`; the worker's review watch moves a write on a review branch to `merged` or `closed`), `message`, `commit_sha` (default-branch commit of auto-commit paths), `branch` + `branch_commit_sha` (the `kintsugi/*` branch of the other paths), `pr_url`, `error` (redacted), provenance `actor`, `job_id`, `agent` |
 
 ## Job runs
 

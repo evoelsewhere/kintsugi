@@ -19,6 +19,7 @@ The document repository is the source of truth for unit state, tasks, designs, s
 6. A task brief creates an explicit immutable snapshot handle. The manifest binds each repository to its full Git commit, source path and content hash, task and deliverable revisions, source role, validated approval evidence and policy version. Repositories retain separate commit identities. Retrieval, search and pagination require the handle and return exact citations. A handle identifies a snapshot but grants no authority.
 7. Bounded responses preserve an index of mandatory sections. If required content is omitted or too large, the result is partial and names the exact source and section to fetch. No request substitutes the current branch head when a pinned object is unavailable. Expired, revoked and unavailable snapshots return stable errors and a repair path.
 8. Stable member identity is used for task assignment filters. Ambiguous display names do not match an assignee. Reading or selecting a task has no assignment side effect.
+9. Required deliverables are declared in unit-state frontmatter as a bounded list of stable IDs, repository IDs and relative paths. Briefs carry those declared IDs into their context manifest. Prose and PR links are not parsed into authoritative declarations; existing units without declarations remain readable while implementation approval stays fail-closed.
 
 ## Consequences
 

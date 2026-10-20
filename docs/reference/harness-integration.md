@@ -1,6 +1,6 @@
 # Harness integration
 
-Status: the Coding Agent Workflow context contract is approved; the CLI, local MCP bridge and PR continuation are being implemented. This page describes the target behavior and does not claim that these commands are available in a release.
+Status: T00–T06 implement the unreleased context API and shared SDK. The CLI, local MCP bridge and PR continuation remain planned. API and SDK changes must ship together; their strict version-1 schemas are still being finalized before release.
 
 Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
@@ -12,7 +12,35 @@ Claude Code is the first complete client pilot. Codex and GitHub Copilot CLI are
 
 The Coding Agent Workflow plugin contains a small skill and client-specific MCP configuration. It has no hooks and does not edit arbitrary project instructions. Optional method plugins stay in the project document repository and are installed separately. Client-side instructions help the AI retrieve information; the server enforces authorization.
 
-## CLI contract
+## Implemented context API
+
+All routes below use Kintsugi's normal response envelope and require the catalog permission `member.read`, explicit token scope metadata and current Project Access. A session alone does not bypass project checks. Project listing intersects the token's project IDs with the user's current grants.
+
+| GET path under `/api/member/v1` | Result |
+|---|---|
+| `/projects` | Authorized projects with a stable cursor |
+| `/tasks?projectId=…` | Validated Git tasks; optional `mine`, `readyFor`, `limit` and `cursor` |
+| `/task-brief?projectId=…&unitId=…&activity=…` | Bounded, cited context and immutable snapshot handle |
+| `/documents?projectId=…&unitId=…&snapshotId=…&sourceId=…` | One registered source/section at the snapshot revision |
+| `/search?projectId=…&unitId=…&snapshotId=…&query=…` | Bounded keyword matches with citations |
+| `/task-status?projectId=…&unitId=…` | Work-item status, next action and observation availability |
+| `/reviews/:reviewId?projectId=…` | HTTP 501 with `details.code: UNSUPPORTED_CAPABILITY` until review ingestion exists |
+
+Use the full `application/module/unit` identity in `unitId`, encoded as a query value. Documents accept registered source IDs rather than arbitrary paths or URLs. Read tokens cannot issue tokens, change Project Access, claim tasks or call legacy session routes.
+
+`TaskStatus.evidenceAvailability` reports `pullRequests` and `reviews` as `unavailable` in this preview. Empty arrays do not establish that no PR or review exists. Unknown gate publication remains `unknown`; source approval is fail-closed until trustworthy evidence readers exist.
+
+Snapshot failures put a stable code and `snapshotId` in the error envelope's `details`:
+
+| Code | HTTP status | Recovery |
+|---|---|---|
+| `SNAPSHOT_PREPARING` | 409 | Wait at least `retryAfterMs`, then retry the brief with the returned `snapshotId` |
+| `SNAPSHOT_EXPIRED` | 410 | Request a new brief without the old handle |
+| `SNAPSHOT_UNAVAILABLE` | 409 | Request a new brief; if retention continues to fail, check worker/mirror health |
+
+Every retry rechecks authorization. A valid historical snapshot remains readable when newer context is invalid or oversized; its freshness is reported as stale when currentness cannot be established.
+
+## Planned CLI contract
 
 The initial commands are read-only except for local sign-in, profile selection, explicit file export and client setup.
 

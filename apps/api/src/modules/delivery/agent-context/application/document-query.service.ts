@@ -3,7 +3,6 @@
 import { createHash } from "node:crypto";
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   PayloadTooLargeException,
 } from "@nestjs/common";
@@ -18,6 +17,7 @@ import { DEFAULT_CONTEXT_BYTES, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT } from "@kint
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
 import { MAX_CONTEXT_SECTIONS, SnapshotRepository, type SnapshotSectionIndex } from "../domain/snapshot.js";
 import { SnapshotService } from "./snapshot.service.js";
+import { snapshotError } from "./snapshot-error.js";
 
 const MAX_SEARCH_SOURCE_COUNT = 100;
 const MAX_SEARCH_BYTES = 8 * 1024 * 1024;
@@ -36,7 +36,7 @@ export class DocumentQueryService {
     const record = await this.snapshotService.requireSnapshot(query.snapshotId);
     this.snapshotService.assertIdentity(record, query.projectId, query.unitId, record.manifest.activity);
     await this.snapshotService.assertAvailable(record);
-    this.assertReady(record.status);
+    this.assertReady(record.status, record.manifest.snapshotId);
 
     const sourceId = query.sourceId;
     let sectionId = query.sectionId;
@@ -125,7 +125,7 @@ export class DocumentQueryService {
     const record = await this.snapshotService.requireSnapshot(query.snapshotId);
     this.snapshotService.assertIdentity(record, query.projectId, query.unitId, record.manifest.activity);
     await this.snapshotService.assertAvailable(record);
-    this.assertReady(record.status);
+    this.assertReady(record.status, record.manifest.snapshotId);
 
     const normalizedQuery = query.query.trim().toLocaleLowerCase("en-US");
     const queryHash = hash(normalizedQuery);
@@ -196,9 +196,9 @@ export class DocumentQueryService {
     };
   }
 
-  private assertReady(status: string): void {
-    if (status === "failed") throw new ConflictException("SNAPSHOT_UNAVAILABLE");
-    if (status !== "ready") throw new ConflictException("SNAPSHOT_PREPARING");
+  private assertReady(status: string, snapshotId: string): void {
+    if (status === "failed") throw snapshotError("SNAPSHOT_UNAVAILABLE", snapshotId);
+    if (status !== "ready") throw snapshotError("SNAPSHOT_PREPARING", snapshotId);
   }
 }
 
@@ -244,13 +244,27 @@ function requiredSectionsAfter(
 
 function findExcerpt(text: string, query: string): string | undefined {
   const points = Array.from(text);
-  const lower = points.map((point) => point.toLocaleLowerCase("en-US")).join("");
-  const needle = query.toLocaleLowerCase("en-US");
-  const index = lower.indexOf(needle);
-  if (index < 0) return undefined;
+  const lowerPoints = points.map((point) => point.toLocaleLowerCase("en-US"));
+  const needle = searchFold(query);
+  const matchOffset = searchFold(text).indexOf(needle);
+  if (matchOffset < 0) return undefined;
+  // Map the normalized UTF-16 offset back to an original code-point index.
+  // Astral characters and case-fold expansions can both change these offsets.
+  let index = 0;
+  let offset = 0;
+  while (index < points.length && offset + lowerPoints[index]!.length <= matchOffset) {
+    offset += lowerPoints[index]!.length;
+    index += 1;
+  }
   const start = Math.max(0, index - 80);
   const end = Math.min(points.length, start + 320);
   return points.slice(start, end).join("").trim();
+}
+
+function searchFold(value: string): string {
+  // Final sigma and ordinary sigma are equivalent for case-insensitive substring search.
+  // Their equal UTF-16 lengths preserve the offset mapping used for excerpts.
+  return value.toLocaleLowerCase("en-US").replace(/\u03c2/g, "\u03c3");
 }
 
 function hash(value: string): string {
