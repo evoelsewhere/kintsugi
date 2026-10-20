@@ -170,6 +170,10 @@ function nextAction(status: WorkItemStatus, implementationReady: boolean): strin
       return "Review the rejection feedback before continuing with the task.";
     case "blocked":
       return "Resolve the task's blocked status before implementation.";
+    case "approved":
+      return implementationReady
+        ? "The task is approved; implement it, then create a pull request."
+        : "Resolve the implementation readiness blockers before implementation.";
     default:
       return implementationReady
         ? "Implement the task, then create a pull request."
