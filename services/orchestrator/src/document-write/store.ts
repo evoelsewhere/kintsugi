@@ -16,14 +16,23 @@ export interface DocumentRepoTarget {
   apiToken?: string;
 }
 
-export type DocumentWriteStatus = "queued" | "committed" | "pr-opened" | "unchanged" | "failed";
+export type DocumentWriteStatus = "queued" | "committed" | "pr-opened" | "merged" | "closed" | "unchanged" | "failed";
 
 export interface DocumentWriteOutcome {
-  status: Exclude<DocumentWriteStatus, "queued" | "failed">;
+  status: Exclude<DocumentWriteStatus, "queued" | "failed" | "merged" | "closed">;
   /** Commit on the default branch (auto-commit paths). */
   commit?: string;
   /** The kintsugi/* branch holding the other paths, its tip and the pull request. */
   branch?: string;
+  branchCommit?: string;
+  prUrl?: string;
+}
+
+/** A write whose review branch has no recorded outcome yet. */
+export interface AwaitingReview {
+  id: string;
+  projectId: string;
+  branch: string;
   branchCommit?: string;
   prUrl?: string;
 }
@@ -86,6 +95,34 @@ export class DocumentWriteStore {
         where id = $1`,
       [id, outcome.status, outcome.commit ?? null, outcome.branch ?? null, outcome.branchCommit ?? null, outcome.prUrl ?? null],
     );
+  }
+
+  /** Writes on a review branch that nobody has merged or closed yet, newest first. */
+  async awaitingReview(limit: number): Promise<AwaitingReview[]> {
+    const result = await this.pool.query<{ id: string; project_id: string; branch: string; branch_commit_sha: string | null; pr_url: string | null }>(
+      `select id, project_id, branch, branch_commit_sha, pr_url
+         from workflow.document_write
+        where branch is not null and status in ('committed', 'pr-opened')
+        order by created_at desc
+        limit $1`,
+      [limit],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      branch: row.branch,
+      ...(row.branch_commit_sha === null ? {} : { branchCommit: row.branch_commit_sha }),
+      ...(row.pr_url === null ? {} : { prUrl: row.pr_url }),
+    }));
+  }
+
+  /** Records how a review ended; false when the write was not waiting any more (another pass was first). */
+  async markReviewOutcome(id: string, outcome: "merged" | "closed"): Promise<boolean> {
+    const result = await this.pool.query(
+      "update workflow.document_write set status = $2, updated_at = now() where id = $1 and branch is not null and status in ('committed', 'pr-opened')",
+      [id, outcome],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   /** Records a failure; `message` must already be redacted. */

@@ -1,6 +1,6 @@
 // Job workspace cleanup (ADR-0029). A top-level run leaves only <data>/jobs/<id>/out behind,
 // for the document repo writer (a failed stage also its work/, so it can be resumed, ADR-0033). It is deleted as soon as the write of that output reaches a
-// final state (committed, pr-opened, unchanged). Outputs of failed or cancelled runs and of
+// final state (committed, pr-opened, merged, closed, unchanged). Outputs of failed or cancelled runs and of
 // failed writes stay for a retention period (KINTSUGI_JOB_RETENTION_DAYS, default 7) so they can
 // be inspected or the write retried; a periodic sweep of the worker removes them afterwards,
 // along with workspaces no run refers to any more.
@@ -11,7 +11,7 @@ import type { CheckoutStorage } from "@kintsugi/git";
 import { removeTree } from "@kintsugi/runtime/launcher";
 
 /** Document write statuses after which a job's output is no longer needed. */
-export const FINAL_WRITE_STATUSES: readonly string[] = ["committed", "pr-opened", "unchanged"];
+export const FINAL_WRITE_STATUSES: readonly string[] = ["committed", "pr-opened", "merged", "closed", "unchanged"];
 
 export const DEFAULT_JOB_RETENTION_DAYS = 7;
 
