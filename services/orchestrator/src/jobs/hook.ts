@@ -93,3 +93,50 @@ export async function runJobOutputHook(options: {
   const meaning = EXIT_MEANING[result.exitCode ?? -1] ?? `exit code ${result.exitCode}`;
   return { ok: false, reason: `JobOutput hook blocked the output: ${meaning}${listed.length === 0 ? "" : ` — ${listed.join("; ")}${more}`}`, checked, findings: findings.length, items, warnings };
 }
+
+export const MASK_OUTPUT = findBuiltinFile("hooks", "mask_output.py") ?? "mask_output.py";
+
+interface MaskReport {
+  files?: number;
+  masked?: Array<{ rule?: string; path?: string; line?: number }>;
+}
+
+export interface MaskOutcome {
+  /** Values masked in total, and the files they were in. */
+  count: number;
+  files: number;
+  /** The first few as `rule at path:line`: never a value. */
+  first: string[];
+}
+
+const MAX_LISTED_MASKS = 10;
+
+/**
+ * Masks credential-shaped values in a job's output in place, before the JobOutput hook looks at it
+ * (hooks/mask_output.py, which shares the hook's patterns). Best effort: if the script cannot run,
+ * nothing is masked and the hook, which stays fail-closed, decides about what is left.
+ */
+export async function maskJobOutput(options: { outDir: string; cwd: string; tmp: string; interpreters: Interpreters; timeoutSec?: number; maskFile?: string }): Promise<MaskOutcome> {
+  const none: MaskOutcome = { count: 0, files: 0, first: [] };
+  const result = await runScript({
+    file: options.maskFile ?? MASK_OUTPUT,
+    args: ["--output-dir", options.outDir],
+    workspace: { cwd: options.cwd, readOnly: [], writable: [options.outDir, options.tmp], tmp: options.tmp, out: options.tmp },
+    limits: { timeoutSec: options.timeoutSec ?? 120, maxOutputBytes: 1024 * 1024 },
+    interpreters: options.interpreters,
+  }).catch(() => undefined);
+  if (result === undefined || result.exitCode !== 0 || result.stopped !== undefined) return none;
+  const line = result.stdout.trim().split(/\r?\n/).at(-1);
+  let report: MaskReport;
+  try {
+    report = JSON.parse(line ?? "") as MaskReport;
+  } catch {
+    return none;
+  }
+  const masked = Array.isArray(report.masked) ? report.masked : [];
+  return {
+    count: masked.length,
+    files: typeof report.files === "number" ? report.files : 0,
+    first: masked.slice(0, MAX_LISTED_MASKS).map((item) => `${safe(item.rule)} at ${safe(item.path)}:${typeof item.line === "number" ? item.line : "?"}`),
+  };
+}
