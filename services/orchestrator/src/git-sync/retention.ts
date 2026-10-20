@@ -24,12 +24,12 @@ export interface SnapshotRetentionRecord {
 
 export interface SnapshotRetentionRepository {
   get(snapshotId: string): Promise<SnapshotRetentionRecord | undefined>;
-  claimExpired(now: Date): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }>;
+  claimExpired(): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }>;
   markReady(snapshotId: string): Promise<void>;
   markFailed(snapshotId: string, code: string): Promise<void>;
-  claimStalePreparing(now: Date): Promise<SnapshotRetentionRecord[]>;
+  claimStalePreparing(): Promise<SnapshotRetentionRecord[]>;
   withSnapshotLock<T>(snapshotId: string, work: () => Promise<T>): Promise<T>;
-  markExpired(snapshotId: string, now: Date): Promise<void>;
+  markExpired(snapshotId: string): Promise<void>;
 }
 
 export interface SnapshotPinCoordinates {
@@ -203,9 +203,8 @@ export interface SnapshotRecoveryResult {
 /** Recovers preparing snapshots after queue retry exhaustion, with durable backoff in Postgres. */
 export async function recoverStaleSnapshots(
   deps: SnapshotRetentionDependencies,
-  now = new Date(),
 ): Promise<SnapshotRecoveryResult> {
-  const candidates = await deps.repository.claimStalePreparing(now);
+  const candidates = await deps.repository.claimStalePreparing();
   const result: SnapshotRecoveryResult = { attempted: candidates.length, ready: 0, failed: 0, retryable: 0 };
   for (const candidate of candidates) {
     try {
@@ -221,12 +220,12 @@ export async function recoverStaleSnapshots(
 
 
 /** Releases refs only after expiry and every active review/evidence lease have ended. */
-export async function pruneExpiredSnapshots(deps: SnapshotRetentionDependencies, now = new Date()): Promise<CleanupResult> {
-  const claimed = await deps.repository.claimExpired(now);
+export async function pruneExpiredSnapshots(deps: SnapshotRetentionDependencies): Promise<CleanupResult> {
+  const claimed = await deps.repository.claimExpired();
   const result: CleanupResult = { released: 0, retained: claimed.retained };
   for (const snapshot of claimed.snapshots) {
     for (const pin of snapshot.repositories) await deps.pins.release(snapshot.snapshotId, pin);
-    await deps.repository.markExpired(snapshot.snapshotId, now);
+    await deps.repository.markExpired(snapshot.snapshotId);
     result.released += 1;
   }
   return result;

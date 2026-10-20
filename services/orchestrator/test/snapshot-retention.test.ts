@@ -17,6 +17,7 @@ import {
 
 class MemoryRetentionRepository implements SnapshotRetentionRepository {
   readonly records = new Map<string, SnapshotRetentionRecord>();
+  databaseNow = new Date("2026-10-20T00:00:00.000Z");
 
   async get(snapshotId: string): Promise<SnapshotRetentionRecord | undefined> {
     return this.records.get(snapshotId);
@@ -26,11 +27,11 @@ class MemoryRetentionRepository implements SnapshotRetentionRepository {
     return work();
   }
 
-  async claimStalePreparing(_now: Date): Promise<SnapshotRetentionRecord[]> {
+  async claimStalePreparing(): Promise<SnapshotRetentionRecord[]> {
     return [...this.records.values()].filter((record) => record.status === "preparing");
   }
 
-  async claimExpired(now: Date): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }> {
+  async claimExpired(): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }> {
     const snapshots: SnapshotRetentionRecord[] = [];
     let retained = 0;
     for (const record of this.records.values()) {
@@ -38,8 +39,8 @@ class MemoryRetentionRepository implements SnapshotRetentionRepository {
         snapshots.push(record);
         continue;
       }
-      if (record.status !== "ready" || Date.parse(record.expiresAt) > now.getTime()) continue;
-      if (record.leases.some((lease) => lease.expiresAt === null || Date.parse(lease.expiresAt) > now.getTime())) {
+      if (record.status !== "ready" || Date.parse(record.expiresAt) > this.databaseNow.getTime()) continue;
+      if (record.leases.some((lease) => lease.expiresAt === null || Date.parse(lease.expiresAt) > this.databaseNow.getTime())) {
         retained += 1;
         continue;
       }
@@ -62,7 +63,7 @@ class MemoryRetentionRepository implements SnapshotRetentionRepository {
     }
   }
 
-  async markExpired(snapshotId: string, _now: Date): Promise<void> {
+  async markExpired(snapshotId: string): Promise<void> {
     const record = this.records.get(snapshotId);
     if (record !== undefined) record.status = "expired";
   }
@@ -112,7 +113,8 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     expect(await resolveCommit(mirror, snapshotPinRef(snapshotId, "docs"))).toBe(commitA);
     expect(await resolveCommit(mirror, "refs/heads/main")).toBe(commitB);
 
-    const result = await pruneExpiredSnapshots({ repository: records, pins }, new Date("2026-10-22T00:00:00.000Z"));
+    records.databaseNow = new Date("2026-10-22T00:00:00.000Z");
+    const result = await pruneExpiredSnapshots({ repository: records, pins });
     expect(result).toMatchObject({ released: 1, retained: 0 });
     expect(records.records.get(snapshotId)?.status).toBe("expired");
     await expect(resolveCommit(mirror, snapshotPinRef(snapshotId, "docs"))).rejects.toThrow();
@@ -136,11 +138,12 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
       },
     };
     const deps = { repository: records, pins: interruptedPins };
-    await expect(pruneExpiredSnapshots(deps, new Date("2026-10-22T00:00:00.000Z")))
+    records.databaseNow = new Date("2026-10-22T00:00:00.000Z");
+    await expect(pruneExpiredSnapshots(deps))
       .rejects.toThrow("temporary ref deletion failure");
     expect(records.records.get(recoveringId)?.status).toBe("expiring");
 
-    const resumed = await pruneExpiredSnapshots(deps, new Date("2026-10-22T00:05:00.000Z"));
+    const resumed = await pruneExpiredSnapshots(deps);
     expect(resumed.released).toBe(1);
     expect(records.records.get(recoveringId)?.status).toBe("expired");
     expect(attempts).toBe(2);
@@ -167,7 +170,7 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     await expect(retainSnapshot(deps, exhaustedId)).rejects.toThrow("temporary mirror I/O failure");
     failFirst = false;
 
-    const recovered = await recoverStaleSnapshots(deps, new Date("2026-10-20T12:00:00.000Z"));
+    const recovered = await recoverStaleSnapshots(deps);
     expect(recovered).toEqual({ attempted: 1, ready: 1, failed: 0, retryable: 0 });
     expect(records.records.get(exhaustedId)?.status).toBe("ready");
   });
@@ -230,7 +233,8 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     const retained = await retainSnapshot({ repository: records, pins }, leasedId);
     expect(retained.status).toBe("ready");
     records.records.get(leasedId)!.expiresAt = "2026-10-19T00:00:00.000Z";
-    const prune = await pruneExpiredSnapshots({ repository: records, pins }, new Date("2026-10-22T00:00:00.000Z"));
+    records.databaseNow = new Date("2026-10-22T00:00:00.000Z");
+    const prune = await pruneExpiredSnapshots({ repository: records, pins });
     expect(prune.retained).toBe(1);
     expect(await resolveCommit(storage.mirror("local", "docs"), snapshotPinRef(leasedId, "docs"))).toBe(commitA);
 

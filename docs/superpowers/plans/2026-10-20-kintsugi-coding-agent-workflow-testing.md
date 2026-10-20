@@ -84,6 +84,8 @@ Every case names an observable result. A critical case cannot be waived merely b
 | CTX-08 | Active review/snapshot lease versus cleanup | Worker-owned refs protect required commits; expired unreferenced pins may be reclaimed |
 | CTX-09 | Relevant input B versus generated-only change C | B changes context revision; C does not cause a review loop |
 | CTX-10 | Malicious text, URL, restricted path, source selector or cursor | Treated as source data; no recursive fetch or forbidden path read; direct tool invocation stays scoped |
+| CTX-11 | Worker clock is ahead of Postgres while snapshot expiry is still in the future | DB wall clock controls lease and cleanup; snapshot stays ready and pinned |
+| CTX-12 | Dense document with more than 500 short headings and a high-match search | Brief stays within schema bounds with complete line coverage; brief/search split each source once |
 
 ### CLI/client process contract — T07
 

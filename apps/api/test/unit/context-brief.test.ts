@@ -1,6 +1,6 @@
 import type { SnapshotSource } from "../../src/modules/delivery/agent-context/domain/snapshot.js";
 import { selectBriefSections } from "../../src/modules/delivery/agent-context/application/brief-sections.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const source: SnapshotSource = {
   sourceId: "src_large_design",
@@ -34,6 +34,30 @@ describe("brief section budget", () => {
     expect(selected.omittedSections).toEqual([
       { sourceId: source.sourceId, sectionId: "sec_rounding", required: true },
     ]);
+  });
+
+  it("splits each source once when selecting multiple sections", () => {
+    const multiSectionSource: SnapshotSource = {
+      ...source,
+      sections: [
+        { sectionId: "sec_one", title: "One", startLine: 1, endLine: 2, byteLength: 7, required: true },
+        { sectionId: "sec_two", title: "Two", startLine: 3, endLine: 4, byteLength: 7, required: true },
+      ],
+    };
+    const split = vi.spyOn(String.prototype, "split");
+    try {
+      const selected = selectBriefSections(
+        [multiSectionSource],
+        new Map([[source.sourceId, "# One\nA\n# Two\nB"]]),
+        1024,
+      );
+      const lineSplits = split.mock.calls.filter(([separator]) => separator instanceof RegExp && separator.source === "\\r\\n|\\n|\\r");
+
+      expect(selected.sections).toHaveLength(2);
+      expect(lineSplits).toHaveLength(1);
+    } finally {
+      split.mockRestore();
+    }
   });
 
   it("does not make optional omitted sections block required context", () => {
