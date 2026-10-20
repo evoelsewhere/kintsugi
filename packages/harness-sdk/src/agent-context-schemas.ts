@@ -16,8 +16,13 @@ const contentHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/i);
 const contextRevisionSchema = contentHashSchema;
 const timestampSchema = z.string().datetime({ offset: true });
 const activitySchema = z.enum(MEMBER_ACTIVITIES);
-const limitSchema = z.number().int().min(1).max(MAX_LIST_LIMIT).default(DEFAULT_LIST_LIMIT);
-const maxBytesSchema = z.number().int().min(1).max(DEFAULT_CONTEXT_BYTES).default(DEFAULT_CONTEXT_BYTES);
+const limitSchema = z.coerce.number().int().min(1).max(MAX_LIST_LIMIT).default(DEFAULT_LIST_LIMIT);
+const maxBytesSchema = z.coerce.number().int().min(1).max(DEFAULT_CONTEXT_BYTES).default(DEFAULT_CONTEXT_BYTES);
+const booleanQuerySchema = z.preprocess((value: unknown) => {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return value;
+}, z.boolean());
 const identityShape = {
   schemaVersion: z.literal(MEMBER_SCHEMA_VERSION).default(MEMBER_SCHEMA_VERSION),
   projectId: projectIdSchema,
@@ -66,7 +71,7 @@ export const taskIdentitySchema = z.object(identityShape).strict();
 export const taskQuerySchema = z.object({
   schemaVersion: z.literal(MEMBER_SCHEMA_VERSION).default(MEMBER_SCHEMA_VERSION),
   projectId: projectIdSchema,
-  mine: z.boolean().optional(),
+  mine: booleanQuerySchema.optional(),
   readyFor: activitySchema.optional(),
   limit: limitSchema,
   cursor: opaqueIdSchema.optional(),

@@ -2,4 +2,5 @@
 
 export abstract class ProjectAccessPort {
   abstract requireRead(userId: string, projectId: string): Promise<void>;
+  abstract listReadableProjects(userId: string, projectIds: readonly string[]): Promise<{ projectId: string; name: string }[]>;
 }
