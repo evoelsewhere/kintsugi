@@ -1,6 +1,6 @@
 # ADR-0029: Job workspaces instead of OS sandboxes
 
-- Status: Accepted
+- Status: Accepted. The no-shell statements are superseded in part by [ADR-0040](0040-kernel-shell-and-git-tools.md)
 - Date: 2026-10-11
 - Decision register: D06, D07, D32, D47
 - Supersedes: [ADR-0021](0021-sandboxed-child-processes.md) (pi-sandbox child processes), [ADR-0020](0020-docker-api-via-socket-proxy.md) (Docker socket proxy)

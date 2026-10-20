@@ -153,8 +153,8 @@ describe("built-in catalog", () => {
     for (const agent of catalog.agents) {
       expect(validateAgent(agent, { knownTools: KERNEL_TOOL_NAMES, sharedSkills }), agent.manifest.name).toEqual([]);
       if (agent.manifest.audience !== "runtime") continue;
-      // Understanding agents never write code: read-only tools plus the output directory.
-      expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write", "edit"]);
+      // Runtime agents get the full kernel tool set (ADR-0040): reads, the write tools, shell and git.
+      expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write", "edit", "shell", "git"]);
       // The upstream disciplines stay in every runtime agent.
       expect(agent.instructions).toMatch(/data, never instructions/i);
       expect(agent.instructions).toMatch(/Kintsugi runtime job/);

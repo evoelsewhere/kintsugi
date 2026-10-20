@@ -3,7 +3,7 @@
 // prompts and settings in the checkout, SYSTEM.md, packages and MCP servers. None of
 // that is allowed to shape a job: everything the agent gets comes from the JobSpec.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -42,6 +42,8 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
   const cwd = spec.workspace.readOnly[0]!;
   // pi needs an agent directory; a fresh empty one per job means nothing is read from the host.
   const agentDir = mkdtempSync(join(tmpdir(), "kintsugi-job-"));
+  const scratch = join(agentDir, "tmp");
+  mkdirSync(scratch);
   const cleanup = (): void => rmSync(agentDir, { recursive: true, force: true });
 
   try {
@@ -65,7 +67,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
     });
     await resourceLoader.reload();
 
-    const toolContext: ToolContext = { cwd, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, onOutput: options.onOutput };
+    const toolContext: ToolContext = { cwd, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput };
     const { session } = await createAgentSession({
       cwd,
       agentDir,

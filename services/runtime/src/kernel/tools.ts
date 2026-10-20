@@ -3,18 +3,20 @@
 // File tools are pi's own, with their file operations confined to the job workspace.
 // Adding a tool here widens what any agent can do: review its security boundary.
 
-import { glob as fsGlob, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { glob as fsGlob, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, sep } from "node:path";
 import {
   createEditToolDefinition,
   createFindToolDefinition,
-  createLsToolDefinition,
   createReadToolDefinition,
   createWriteToolDefinition,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { createKernelGrepTool } from "./grep.js";
+import { createKernelGitTool } from "./git.js";
+import { createKernelLsTool } from "./ls.js";
 import { PathGuard } from "./paths.js";
+import { createKernelShellTool } from "./shell.js";
 import type { KernelToolName } from "./tool-names.js";
 
 export interface ToolContext {
@@ -22,6 +24,8 @@ export interface ToolContext {
   cwd: string;
   readOnly: readonly string[];
   outDir: string;
+  /** Scratch directory: HOME, TEMP and TMPDIR of every child process the tools start. */
+  tmpDir: string;
   /** Reports a file written to outDir (path relative to outDir). */
   onOutput(path: string): void;
 }
@@ -47,25 +51,7 @@ const readTool: ToolFactory = (context) => {
   );
 };
 
-const lsTool: ToolFactory = (context) => {
-  const guard = readGuard(context);
-  return erase(
-    createLsToolDefinition(context.cwd, {
-      operations: {
-        exists: async (path) => {
-          try {
-            await stat(guard.check(path));
-            return true;
-          } catch {
-            return false;
-          }
-        },
-        stat: (path) => stat(guard.check(path)),
-        readdir: (path) => readdir(guard.check(path)),
-      },
-    }),
-  );
-};
+const lsTool: ToolFactory = (context) => erase(createKernelLsTool(context.cwd, readGuard(context)));
 
 // grep searches in-process (grep.ts): pi's grep needs ripgrep, which a job has no way to get.
 const grepTool: ToolFactory = (context) => erase(createKernelGrepTool(context.cwd, readGuard(context)));
@@ -156,6 +142,20 @@ const editTool: ToolFactory = (context) => {
   );
 };
 
+// shell and git run child processes (ADR-0039) through the launcher's runProcess: the job's
+// cleared environment, a wall-clock timeout and kill-tree on timeout or abort.
+const shellTool: ToolFactory = (context) => erase(createKernelShellTool(context.cwd, context.tmpDir));
+
+const gitTool: ToolFactory = (context) =>
+  erase(
+    createKernelGitTool(
+      context.cwd,
+      new PathGuard([...context.readOnly, context.outDir, context.tmpDir]),
+      new PathGuard([context.outDir, context.tmpDir]),
+      context.tmpDir,
+    ),
+  );
+
 const KERNEL_TOOLS: Record<KernelToolName, ToolFactory> = {
   read: readTool,
   ls: lsTool,
@@ -163,6 +163,8 @@ const KERNEL_TOOLS: Record<KernelToolName, ToolFactory> = {
   find: findTool,
   write: writeTool,
   edit: editTool,
+  shell: shellTool,
+  git: gitTool,
 };
 
 export { KERNEL_TOOL_NAMES } from "./tool-names.js";

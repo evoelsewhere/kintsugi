@@ -134,7 +134,7 @@ produced it); regenerate only if missing or stale.
 
 **Preferred, with the Workflow tool** (this invocation authorizes it):
 
-Call it by name; Kintsugi's orchestrator runs `workflows/uplift-deltas.js`, and its finder and referee steps are runtime jobs (read-only kernel tools, no shell):
+Call it by name; Kintsugi's orchestrator runs `workflows/uplift-deltas.js`, and its finder and referee steps are runtime jobs (kernel tools; the source and target clones are read-only):
 
 ```
 Workflow({
@@ -156,7 +156,7 @@ first. The finders are read-only: **you** write `DELTA_CATALOG.md`. Surface `inj
 
 **Fallback:** spawn the **version-delta-analyst** runtime job: "Build the delta catalog for uplifting the legacy repository
 of $app (read-only, at the recorded commit) from $source_version to $target_version. Record the ecosystem migration tool
-that applies to this stack as `coverage not run: <tool>` — this job has no shell, so name the tool and leave the
+that applies to this stack as `coverage not run: <tool>` — the runtime image installs nothing, so name the tool and leave the
 report-mode run to the member session on a disposable scratch copy — intersect the known breaking
 changes with what this code uses, cover all four categories, cite file:line, flag silent-behavioral deltas as
 test-before-touch, never under-report dependency deltas."
