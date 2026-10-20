@@ -4,6 +4,13 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
+- The built-in agents list no `tools`: an agent file without `tools` runs with every kernel tool (runtime) or everything its harness offers (member), and `tools: []` still means none. `AgentManifest.tools` is optional and `toAgentDefinition` takes the kernel tool names to fill in the full set.
+
+- Rename the `understand` plugin folder and name to `reverse_engineering`, the title the portal shows; `modernize` `requires` it under the new name. Stage and command ids (`assess`, `understand`, `plan-understand`) are unchanged.
+- Drop `allowed-tools` from the skills (`mermaid-diagrams` in both plugins, `understand-planning`): a skill does not restrict the tools of the agent that loads it.
+
+- Add the `plan-understand` stage to the `reverse_engineering` plugin (ADR-0041): `commands/modernize-plan-understand.md`, the agent `understand-planner` and the skill `understand-planning` (with `references/item-graph.md`), the scripts `plan_graph.py` (the item graph from the catalog and the topology) and `check_plan.py` (checks the planner's batches against the graph and measures them), with Python tests; `paths.py` gains the graph, draft and plan paths (copied into `modernize`).
+
 - Adapt the upstream modernization method to Kintsugi runtime jobs, member harnesses, document-repository artifacts, and portal-owned progress presentation.
 - Retain pure progress readers under `hooks/reader/`, mapping assessment, source, target, golden, and run data to Kintsugi repository namespaces for future portal use.
 - Add the server-side JobOutput hook and its fail-closed credential scan, artifact-shape checks, redacted JSON report, bounds, and tests.

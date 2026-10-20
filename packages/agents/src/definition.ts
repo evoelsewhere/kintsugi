@@ -17,12 +17,13 @@ export function validateAgent(agent: AgentPackage, context: AgentContext): strin
   const problems: string[] = [];
   const { manifest } = agent;
   // Member agents name their harness's tools; only runtime agents are checked against the kernel.
+  const tools = manifest.tools ?? [];
   if (manifest.audience === "runtime") {
-    for (const tool of manifest.tools) {
+    for (const tool of tools) {
       if (!context.knownTools.includes(tool)) problems.push(`unknown tool "${tool}" (available: ${context.knownTools.join(", ")})`);
     }
   }
-  if (new Set(manifest.tools).size !== manifest.tools.length) problems.push("a tool is listed twice");
+  if (new Set(tools).size !== tools.length) problems.push("a tool is listed twice");
   const local = new Set(agent.localSkills.map((skill) => skill.name));
   for (const name of manifest.skills) {
     if (!context.sharedSkills.has(name)) problems.push(`unknown shared skill "${name}"`);
@@ -45,8 +46,11 @@ function runtimeFiles(skill: SkillPackage): { files?: Record<string, string> } {
   return kept.length === 0 ? {} : { files: Object.fromEntries(kept) };
 }
 
-/** The job's agent definition: shared skills first (in manifest order), then local ones. */
-export function toAgentDefinition(agent: AgentPackage, sharedSkills: ReadonlyMap<string, SkillPackage>): AgentDefinition {
+/**
+ * The job's agent definition: shared skills first (in manifest order), then local ones. An agent that lists no
+ * `tools` gets every kernel tool (`knownTools`).
+ */
+export function toAgentDefinition(agent: AgentPackage, sharedSkills: ReadonlyMap<string, SkillPackage>, knownTools: readonly string[]): AgentDefinition {
   const { manifest } = agent;
   if (manifest.audience !== "runtime") throw new Error(`Agent ${manifest.name} is a member agent; the runtime kernel does not run it`);
   const skills = [
@@ -62,7 +66,7 @@ export function toAgentDefinition(agent: AgentPackage, sharedSkills: ReadonlyMap
     version: manifest.version,
     instructions: agent.instructions,
     ...(skills.length === 0 ? {} : { skills: skills.map((skill) => ({ name: skill.name, content: skill.content, ...runtimeFiles(skill) })) }),
-    tools: [...manifest.tools],
+    tools: [...(manifest.tools ?? knownTools)],
     ...(manifest.denyCommandPatterns === undefined ? {} : { denyCommandPatterns: [...manifest.denyCommandPatterns] }),
     ...(manifest.thinking === undefined ? {} : { thinking: manifest.thinking }),
   };

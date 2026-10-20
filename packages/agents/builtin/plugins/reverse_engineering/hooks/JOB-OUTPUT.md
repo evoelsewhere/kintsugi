@@ -7,7 +7,7 @@ Run this hook as a standard script step after a runtime job has written its cand
 ## CLI
 
 ```text
-python packages/agents/builtin/plugins/understand/hooks/job_output.py --output-dir <job-output-directory>
+python packages/agents/builtin/plugins/reverse_engineering/hooks/job_output.py --output-dir <job-output-directory>
 ```
 
 `--output-dir` is required. The process writes one JSON report line to stdout on a normal scan, including usage and safety failures. It never writes scanned content, matching text, credential values, parser exceptions, or command arguments to the report. Stderr is reserved for unexpected interpreter/runtime failures; the implementation suppresses file contents and exception messages.
@@ -94,5 +94,5 @@ The checks identify likely credential material and required artifact structure; 
 Tests are in `hooks/tests/test_job_output.py`. Run from the repository root:
 
 ```text
-python -m pytest -q packages/agents/builtin/plugins/understand/hooks/tests
+python -m pytest -q packages/agents/builtin/plugins/reverse_engineering/hooks/tests
 ```

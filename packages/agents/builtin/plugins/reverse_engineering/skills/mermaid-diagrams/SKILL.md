@@ -1,7 +1,6 @@
 ---
 name: mermaid-diagrams
 description: Generate Mermaid diagrams from user requirements. Supports flowcharts, sequence diagrams, class diagrams, ER diagrams, Gantt charts, and 18 more diagram types.
-allowed-tools: Read Write Edit
 metadata:
   argument-hint: "[diagram description or requirements]"
 ---

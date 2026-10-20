@@ -58,6 +58,7 @@ Straight-to-default-branch commits are limited to the default auto-commit paths:
 applications/*/units/**/unit.md
 applications/*/units/**/task.md
 applications/*/generated/**
+applications/*/assessment/understand/plan.json
 ```
 
 `kintsugi.yaml` can replace the list with its `autoCommitPaths` key. Everything else arrives as a pull request from a `kintsugi/<user>/<write-id>` branch ([commit conventions](document-repo-commit-conventions.md)).

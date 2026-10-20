@@ -2,7 +2,6 @@
 name: uplift-migrator
 version: 1.0.0
 description: Migrates ONE project/module of an in-flight same-stack version uplift by applying a proven pilot playbook — minimal diff, then runs that unit's real build to prove it. Refuses to migrate anything if no playbook exists yet. Write access is scoped to its own unit's directory inside the target repository. Use only AFTER a pilot unit has been migrated and its playbook written.
-tools: Read, Glob, Grep, Write, Edit, Bash
 metadata:
   audience: member
   upstream: agents/uplift-migrator.md

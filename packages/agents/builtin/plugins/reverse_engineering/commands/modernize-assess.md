@@ -30,6 +30,7 @@ metadata:
     - script: reconcile_catalog
     - agent: legacy-analyst
       as: synthesis
+    - script: style_architecture
 ---
 
 **This stage runs as Kintsugi runtime jobs**, started by the orchestrator. Single-application mode: a script step

@@ -9,6 +9,7 @@ import { CheckMark } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import type { CatalogItem, CatalogView, ItemStatus } from "@/lib/api/catalog";
+import { assetClassOf, ASSET_CLASS_LABEL } from "@/lib/catalog-batch";
 import { shortSha } from "@/lib/format";
 import { ITEM_STATUS, styleOf } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -26,9 +27,6 @@ const FOCUS = "focus-visible:outline-none focus-visible:[box-shadow:var(--ds-foc
 const STATUS_ORDER: ItemStatus[] = ["running", "in-pr", "failed", "stale", "understood", "not-analysed", "retired"];
 
 const plural = (count: number, noun: string): string => `${formatCount(count)} ${noun}${count === 1 ? "" : "s"}`;
-
-/** Test code: an item named like a test class, or whose files all sit in a test folder. */
-const isTestItem = (item: CatalogItem): boolean => /tests?$/i.test(item.name) || (item.files.length > 0 && item.files.every((file) => /(^|\/)tests?\//i.test(file)));
 
 /** Unassigned files grouped by their first folder (root files together), biggest group first. */
 function groupByFolder(paths: readonly string[]): Array<{ folder: string; paths: string[] }> {
@@ -211,11 +209,11 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                             <p className="truncate text-[13px] font-medium text-text" title={item.name}>
                               {item.name}
                               <span className="ml-1.5 font-mono text-[11px] font-normal text-text-muted">{item.id}</span>
-                              {isTestItem(item) ? (
-                                <span className="ml-1.5 rounded-full bg-hover px-1.5 py-0.5 text-[10.5px] font-normal text-text-secondary" title="Test code: counted in the size but carries no behaviour to modernise">
-                                  test
+                              {assetClassOf(item) === "code" ? null : (
+                                <span className="ml-1.5 rounded-full bg-hover px-1.5 py-0.5 text-[10.5px] font-normal text-text-secondary" title={`${ASSET_CLASS_LABEL[assetClassOf(item)]} code: counted in the size, not the first to understand`}>
+                                  {assetClassOf(item)}
                                 </span>
-                              ) : null}
+                              )}
                             </p>
                             {item.summary === "" ? null : (
                               <p className="line-clamp-2 text-[12px] text-text-secondary" title={item.summary}>
@@ -299,7 +297,7 @@ export function CatalogResults({ view, selection, children }: { view: CatalogVie
           <Kpi key={status} label={styleOf(ITEM_STATUS, status).label} value={view.counts[status] ?? 0} tone={styleOf(ITEM_STATUS, status).tone} />
         ))}
         <Kpi label="Unassigned files" value={view.catalog.unassigned.length} hint={`${formatCount(active.reduce((total, item) => total + item.files.length, 0))} files in items`} />
-        <Kpi label="Code lines" value={active.reduce((total, item) => total + item.loc, 0)} hint={`${formatCount(active.filter(isTestItem).reduce((total, item) => total + item.loc, 0))} in test items`} />
+        <Kpi label="Code lines" value={active.reduce((total, item) => total + item.loc, 0)} hint={`${formatCount(active.filter((item) => assetClassOf(item) !== "code").reduce((total, item) => total + item.loc, 0))} in test or generated items`} />
       </KpiRow>
       <Section
         title="Item catalog"

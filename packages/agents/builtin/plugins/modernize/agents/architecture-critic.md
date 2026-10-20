@@ -2,7 +2,6 @@
 name: architecture-critic
 version: 1.1.0
 description: Reviews proposed target architectures and transformed code against modern best practice. Adversarial — looks for over-engineering, missed requirements, and simpler alternatives.
-tools: [read, ls, grep, find, write, edit, shell, git]
 skills: [mermaid-diagrams]
 thinking: high
 metadata:

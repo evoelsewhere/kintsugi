@@ -115,6 +115,18 @@ def understand_scope_path(app):
     return understand_run_file_path(app, 'scope.json')
 
 
+def understand_graph_path(app):
+    return understand_run_file_path(app, 'graph.json')
+
+
+def understand_plan_draft_path(app):
+    return understand_run_file_path(app, 'plan-draft.json')
+
+
+def understand_plan_path(app):
+    return understand_run_file_path(app, 'plan.json')
+
+
 def understand_shards_path(app):
     return understand_run_file_path(app, 'shards.json')
 

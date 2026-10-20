@@ -63,7 +63,8 @@ function nextVersion(version: string): string {
   return match === null ? version : `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
 }
 
-function draftOf(detail: AgentDetail): AgentDraft {
+/** An agent file without `tools` runs with every tool: the draft lists them. */
+function draftOf(detail: AgentDetail, kernelTools: readonly string[]): AgentDraft {
   const manifest = detail.manifest;
   if (manifest === undefined) return { ...BLANK, name: detail.name, audience: detail.audience, version: nextVersion(detail.version) };
   return {
@@ -71,7 +72,7 @@ function draftOf(detail: AgentDetail): AgentDraft {
     audience: manifest.audience,
     version: detail.source === "custom" ? nextVersion(manifest.version) : manifest.version,
     description: manifest.description,
-    tools: manifest.tools,
+    tools: manifest.tools ?? [...kernelTools],
     skills: manifest.skills,
     ...(manifest.thinking === undefined ? {} : { thinking: manifest.thinking }),
     ...(manifest.denyCommandPatterns === undefined ? {} : { denyCommandPatterns: manifest.denyCommandPatterns }),
@@ -115,7 +116,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
       if (agentName === null) return;
       const loaded = await agentsApi.get(agentName);
       setDetail(loaded);
-      setDraft(draftOf(loaded));
+      setDraft(draftOf(loaded, nextContext.kernelTools));
       setProblems(loaded.problems);
       if (loaded.source === "custom") setVersions(await agentsApi.versions(agentName));
       if (loaded.audience === "runtime" && loaded.problems.length === 0 && (loaded.source === "builtin" || !manage)) {
@@ -164,7 +165,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
       }
       setName(saved.name);
       setDetail(saved);
-      setDraft(draftOf(saved));
+      setDraft(draftOf(saved, context?.kernelTools ?? []));
       setVersions(await agentsApi.versions(saved.name));
     } catch (failure) {
       setError(errorText(failure));
@@ -178,7 +179,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
     if (name === null) return;
     const restored = await agentsApi.restore(name, version);
     setDetail(restored);
-    setDraft(draftOf(restored));
+    setDraft(draftOf(restored, context?.kernelTools ?? []));
     setVersions(await agentsApi.versions(name));
     toast.success(`Restored ${version}`, "It is the current version again.");
   }

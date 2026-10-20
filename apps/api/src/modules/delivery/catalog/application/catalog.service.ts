@@ -6,10 +6,10 @@
 
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { type ItemCatalog, parseItemCatalog } from "@kintsugi/agents/reader";
-import { type ItemStatus, catalogPath, unitMetaPath, unitModuleDir } from "@kintsugi/domain";
+import { type ItemStatus, catalogPath, classifyItem, understandPlanPath, unitMetaPath, unitModuleDir } from "@kintsugi/domain";
 import { type DocumentContext, DocumentsService } from "#modules/delivery/documents/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
-import { type CatalogItemView, type CatalogView, type ItemMeta, type UnderstandRunFacts, deriveItemStatus } from "../domain/catalog.js";
+import { type CatalogItemView, type CatalogView, type ItemMeta, type UnderstandPlan, type UnderstandPlanView, type UnderstandRunFacts, deriveItemStatus } from "../domain/catalog.js";
 
 /** The understand stage's id (ADR-0033). */
 export const UNDERSTAND_STAGE = "understand";
@@ -17,6 +17,7 @@ export const UNDERSTAND_STAGE = "understand";
 const RECENT_RUNS = 200;
 const MAX_CATALOG_BYTES = 16 * 1024 * 1024;
 const MAX_META_BYTES = 64 * 1024;
+const MAX_PLAN_BYTES = 1024 * 1024;
 
 /** A catalog read at a ref, with the document context it was read in. */
 export interface LoadedCatalog {
@@ -32,6 +33,18 @@ function failedItems(run: JobRunView): string[] {
   const steps = run.outputSummary?.["steps"];
   if (!Array.isArray(steps)) return [];
   return steps.flatMap((step) => (isRecord(step) && step["status"] === "failed" && typeof step["key"] === "string" ? [step["key"]] : []));
+}
+
+/** The plan file as a plan, or null when it is not one (a hand edit, another version). */
+function parsePlan(text: string): UnderstandPlan | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isRecord(raw) || raw["version"] !== 1 || !Array.isArray(raw["batches"]) || !isRecord(raw["catalog"])) return null;
+  return raw as unknown as UnderstandPlan;
 }
 
 @Injectable()
@@ -60,13 +73,33 @@ export class CatalogService {
     return this.withStatus(loaded, applicationId);
   }
 
+  /**
+   * The AI plan of what to understand next (ADR-0041) from the default branch, with where its items stand now.
+   * 404 for an unknown application; `plan: null` before a planning run was merged or when the file is not a plan.
+   */
+  async plan(projectId: string, applicationId: string): Promise<UnderstandPlanView> {
+    const context = await this.documents.context(projectId);
+    if (!context.project.applications.some((application) => application.id === applicationId)) {
+      throw new NotFoundException(`Application ${applicationId} not found in project ${projectId}`);
+    }
+    const resolved = await this.documents.resolve(context, undefined);
+    const text = await this.documents.readText(context, resolved.commit, understandPlanPath(applicationId), MAX_PLAN_BYTES);
+    const plan = text === undefined ? null : parsePlan(text);
+    if (plan === null) return { plan: null, stale: false, status: {} };
+    const view = await this.view(projectId, applicationId, undefined).catch(() => undefined);
+    const status: Record<string, ItemStatus> = {};
+    for (const batch of plan.batches) for (const id of batch.items) status[id] = view?.items.find((item) => item.id === id)?.status ?? "retired";
+    const stale = view !== undefined && plan.catalog.commit !== undefined && view.catalog.source.commit !== undefined && view.catalog.source.commit !== plan.catalog.commit;
+    return { plan, stale, status };
+  }
+
   /** The catalog's items with their derived status. */
   async withStatus(loaded: LoadedCatalog, applicationId: string): Promise<CatalogView> {
     const { context, catalog } = loaded;
     const [metas, runs] = await Promise.all([this.metas(context, applicationId, catalog), this.understandRuns(context, applicationId)]);
     const counts: Partial<Record<ItemStatus, number>> = {};
     const items: CatalogItemView[] = catalog.items.map((item) => {
-      const view: CatalogItemView = { ...item, ...deriveItemStatus(item, metas.get(item.id), runs) };
+      const view: CatalogItemView = { ...item, assetClass: classifyItem(item.files), ...deriveItemStatus(item, metas.get(item.id), runs) };
       counts[view.status] = (counts[view.status] ?? 0) + 1;
       return view;
     });

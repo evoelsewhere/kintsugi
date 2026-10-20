@@ -3,7 +3,7 @@
 
 import { CATALOG_ITEM_ID_PATTERN } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
-import { ITEM_ID } from "../builtin/plugins/understand/hooks/reader/item-catalog.js";
+import { ITEM_ID } from "../builtin/plugins/reverse_engineering/hooks/reader/item-catalog.js";
 
 describe("item id pattern", () => {
   it("is the same in the reader and in the domain", () => {

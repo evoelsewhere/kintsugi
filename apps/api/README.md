@@ -42,6 +42,7 @@ Responsibilities beyond the feature modules below:
   (`?status=queued,failed&projectId`); `GET /api/monitoring/overview` (counts, what needs
   attention, recent activity, the worker's pg-boss queue counts — `null` when unreadable) and
   `GET /api/monitoring/repositories` (sync state and project links, never credentials).
+- AI plan for understanding (ADR-0041): `GET /api/projects/:id/applications/:appId/understand/plan` (session) reads `assessment/understand/plan.json` from the default branch, with the current status of its items and `stale` when the catalog was reassessed since; a plan is made by `POST …/stages/plan-understand/run` (`jobs.run`, needs the assess catalog merged).
 - Portfolio overview (session only, read-only): `GET /api/monitoring/portfolio` (module `monitoring/portfolio`) places every
   application in the lifecycle (phase derived from its runtime stages, the gate that closes it), lists what a person must
   decide (pending gates, pull requests waiting for review, critical and high findings), the unit funnel of the item

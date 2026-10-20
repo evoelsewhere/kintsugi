@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[7]
-HOOKS = ROOT / "packages" / "agents" / "builtin" / "plugins" / "understand" / "hooks"
+HOOKS = ROOT / "packages" / "agents" / "builtin" / "plugins" / "reverse_engineering" / "hooks"
 HOOK = HOOKS / "job_output.py"
 MASK = HOOKS / "mask_output.py"
 

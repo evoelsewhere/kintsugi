@@ -2,7 +2,6 @@
 name: version-delta-analyst
 version: 1.0.0
 description: Identifies the breaking changes between two versions of the SAME stack (e.g. .NET Framework 4.8 → .NET 8, Java 8 → 17/21, Spring Boot 2 → 3) that actually bite a given codebase, and names the ecosystem's migration tooling for each mechanical fix. Use for same-stack uplifts, where code is preserved and tweaked — not rewritten from intent. (Note — some "same-stack" bumps are really rewrites — Python 2 → 3 with pervasive str/bytes, AngularJS → Angular — where minimal-diff fails; flag those as rewrites.)
-tools: [read, ls, grep, find, write, edit, shell, git]
 thinking: high
 metadata:
   audience: runtime

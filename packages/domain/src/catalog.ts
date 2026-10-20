@@ -86,3 +86,22 @@ export const workItemIdOf = (app: string, itemId: string): string => `${app}/${i
 /** Document-repo paths of the catalog and of an item's per-item files. */
 export const catalogPath = (app: string): string => assessmentCatalogPath(app);
 export const itemMetaPath = (app: string, itemId: string): string => knowledgeAsIsItemFilePath(app, itemId, "meta.json");
+
+/**
+ * What an item is made of: `test` (every file is a test), `generated` (every file is build output,
+ * a generated source or a minified bundle) or `code`. Test and generated items are counted in the
+ * size of an application but carry no behaviour to understand first.
+ */
+export const ITEM_ASSET_CLASSES = ["code", "test", "generated"] as const;
+export type ItemAssetClass = (typeof ITEM_ASSET_CLASSES)[number];
+
+const TEST_PATH = /(^|\/)(tests?|__tests__|spec|specs|testing|testdata|fixtures)\/|\.(test|spec)\.[a-z0-9]+$|(Tests?|IT)\.(java|kt|cs|scala|groovy)$|_test\.(go|py|rb|rs)$|(^|\/)test_[^/]+\.py$/i;
+const GENERATED_PATH = /(^|\/)(generated|gen|build|dist|target|node_modules|vendor|__generated__)\/|\.min\.(js|css)$|\.pb\.go$|_pb2\.py$|\.generated\.[a-z0-9]+$|\.designer\.cs$/i;
+
+/** The asset class of a catalog item from its files; an item without files is `code`. */
+export function classifyItem(files: readonly string[]): ItemAssetClass {
+  if (files.length === 0) return "code";
+  if (files.every((file) => TEST_PATH.test(file))) return "test";
+  if (files.every((file) => GENERATED_PATH.test(file))) return "generated";
+  return "code";
+}

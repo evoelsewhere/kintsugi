@@ -5,7 +5,7 @@
 // (map, rules, security and traceability for the whole application or one item).
 // URL: …&tab=catalog|runs|results (&run=<id> opens Runs on that run; &view, &item on Results).
 
-import { ListTree, Play, RefreshCw, RotateCcw, Undo2, X } from "lucide-react";
+import { ListTree, Play, RefreshCw, RotateCcw, Sparkles, Undo2, X } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { JobRunList } from "@/components/job-runs/job-run-list";
@@ -25,12 +25,15 @@ import { type CatalogItem, type CatalogView, catalogApi, type ItemStatus, type S
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
+import { ASSET_CLASS_LABEL, assetClassOf, BATCH_MAX_LOC, estimateRun, formatEstimate, recommendBatch } from "@/lib/catalog-batch";
 import { formatRelative } from "@/lib/format";
 import { isActiveStatus, ITEM_STATUS, styleOf } from "@/lib/status";
 import { runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { type Loader, useLoader } from "@/lib/use-loader";
 import { CompactFacts, StageHeader } from "./delivery-shell";
+import { PlanPanel } from "./plan-panel";
 import { CatalogResults, type CatalogSelection } from "./results/catalog-view";
+import { formatCount } from "./results/results-format";
 
 // The result views and their libraries (Markdown, Mermaid) load with the Results tab.
 const UnderstandResultsTab = lazy(() => import("./results/understand-results-tab"));
@@ -143,6 +146,11 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
                 project={project}
                 application={application}
                 view={view}
+                runs={understandRuns ?? []}
+                planRuns={runs.data === undefined ? [] : runsOfStage(runs.data, "plan-understand")}
+                canRun={can("jobs.run")}
+                blocked={blocked}
+                onRunsChanged={runs.reload}
                 disabledReason={runDisabled}
                 onStarted={async (run) => {
                   setParam({ tab: "runs", run: run.id });
@@ -174,18 +182,26 @@ interface CatalogTabProps {
   project: ProjectDetail;
   application: ApplicationView;
   view: CatalogView;
+  /** The application's understand runs, for the time estimate. */
+  runs: JobRunView[];
+  /** The application's plan-understand runs, newest first. */
+  planRuns: JobRunView[];
+  canRun: boolean;
+  blocked: string | undefined;
+  onRunsChanged(): Promise<void>;
   disabledReason: string | undefined;
   onStarted(run: JobRunView): Promise<void>;
   onChanged(): Promise<void>;
 }
 
-function CatalogTab({ project, application, view, disabledReason, onStarted, onChanged }: CatalogTabProps): React.JSX.Element {
+function CatalogTab({ project, application, view, runs, planRuns, canRun, blocked, onRunsChanged, disabledReason, onStarted, onChanged }: CatalogTabProps): React.JSX.Element {
   const toast = useToast();
   const { can } = useAuth();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [kind, setKind] = useState("");
   const [module, setModule] = useState("");
+  const [assetClass, setAssetClass] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [conflicts, setConflicts] = useState<SelectionConflict[]>([]);
   const [confirming, setConfirming] = useState(false);
@@ -201,10 +217,11 @@ function CatalogTab({ project, application, view, disabledReason, onStarted, onC
           (status === "" || item.status === status) &&
           (kind === "" || item.kind === kind) &&
           (module === "" || item.module === module) &&
+          (assetClass === "" || assetClassOf(item) === assetClass) &&
           (needle === "" || item.id.includes(needle) || item.name.toLowerCase().includes(needle) || item.files.some((file) => file.toLowerCase().includes(needle))),
       ),
     };
-  }, [view, search, status, kind, module]);
+  }, [view, search, status, kind, module, assetClass]);
 
   const blockedReason = (item: CatalogItem): string | undefined =>
     item.status === "retired" ? "Retired: no longer in the source" : item.status === "running" ? "A run on this item is active" : item.status === "in-pr" ? "In an open pull request: merge it, or abandon it to release the item" : undefined;
@@ -249,11 +266,37 @@ function CatalogTab({ project, application, view, disabledReason, onStarted, onC
     }
   }
 
+  const estimate = estimateRun(chosen.length, runs);
+  const nothingLeft = recommendBatch(view.items.filter((item) => blockedReason(item) === undefined)).ids.length === 0;
+  function recommend(): void {
+    const batch = recommendBatch(view.items.filter((item) => blockedReason(item) === undefined));
+    setSelected(new Set(batch.ids));
+    setConflicts([]);
+    toast.success(
+      `${batch.ids.length} item${batch.ids.length === 1 ? "" : "s"} recommended`,
+      `${batch.high} high complexity, ${formatCount(batch.loc)} code lines${batch.budgetHit ? `; the next item would pass ${formatCount(BATCH_MAX_LOC)} lines` : ""}. Test and generated code is not picked.`,
+    );
+  }
+
   const over = chosen.length > MAX_ITEMS;
   const runBlocked = disabledReason ?? (chosen.length === 0 ? "Select items or modules to run understand on." : over ? `A run takes at most ${MAX_ITEMS} items.` : conflicts.length > 0 ? "Some selected items are blocked: see below." : undefined);
 
   return (
     <div className="flex flex-col gap-4">
+      <PlanPanel
+        projectId={project.id}
+        applicationId={application.id}
+        items={view.items}
+        planRuns={planRuns}
+        canRun={canRun}
+        blocked={blocked}
+        selected={new Set(chosen)}
+        onSelect={(ids) => {
+          setSelected(new Set(ids));
+          setConflicts([]);
+        }}
+        onRunsChanged={onRunsChanged}
+      />
       <CatalogResults view={filtered} selection={selection}>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="w-full sm:w-64">
@@ -268,8 +311,11 @@ function CatalogTab({ project, application, view, disabledReason, onStarted, onC
           <div className="w-44">
             <Select value={module} onChange={setModule} options={[{ value: "", label: "Any module" }, ...view.catalog.modules.map((entry) => ({ value: entry.id, label: entry.name }))]} />
           </div>
-          {search === "" && status === "" && kind === "" && module === "" ? null : (
-            <Button size="small" variant="ghost" onClick={() => { setSearch(""); setStatus(""); setKind(""); setModule(""); }}>
+          <div className="w-36">
+            <Select value={assetClass} onChange={setAssetClass} options={[{ value: "", label: "Any class" }, ...(["code", "test", "generated"] as const).map((value) => ({ value, label: ASSET_CLASS_LABEL[value] }))]} />
+          </div>
+          {search === "" && status === "" && kind === "" && module === "" && assetClass === "" ? null : (
+            <Button size="small" variant="ghost" onClick={() => { setSearch(""); setStatus(""); setKind(""); setModule(""); setAssetClass(""); }}>
               <X className="size-3.5" />
               Clear filters
             </Button>
@@ -286,7 +332,16 @@ function CatalogTab({ project, application, view, disabledReason, onStarted, onC
             <p className="text-[13px] text-text tabular-nums">
               <span className="font-medium">{chosen.length} item{chosen.length === 1 ? "" : "s"}</span>
               <span className="text-text-muted"> · ~{agentEstimate(chosen.length)} agent jobs</span>
+              {estimate === undefined ? (
+                chosen.length === 0 ? null : <span className="text-text-muted" title="No successful understand run of this application to estimate from yet"> · no time estimate yet</span>
+              ) : (
+                <span className="text-text-muted" title={`Median ${formatEstimate(estimate.perItemMs)} per item over ${estimate.basis} earlier successful run${estimate.basis === 1 ? "" : "s"}`}> · ~{formatEstimate(estimate.totalMs)}</span>
+              )}
             </p>
+            <Button size="small" variant="ghost" className="shadow-border" disabled={nothingLeft} onClick={recommend} title="Without AI: the most complex open code items, up to a size budget. The AI plan above also weighs how items call each other.">
+              <Sparkles className="size-3.5" />
+              Quick pick
+            </Button>
             {chosen.length === 0 ? null : (
               <Button size="small" variant="ghost" onClick={() => { setSelected(new Set()); setConflicts([]); }}>
                 Clear selection
@@ -324,7 +379,7 @@ function CatalogTab({ project, application, view, disabledReason, onStarted, onC
       >
         <p>
           The worker reads {application.asIs.legacy[0]?.repositoryId ?? "the legacy repo"} read-only and proposes, in one pull request to {project.documentRepository?.repositoryId ?? "the document repo"}, per item:
-          its topology fragment, business rules, security findings, AS-IS specification, traceability and work item. About {agentEstimate(chosen.length)} agent jobs.
+          its topology fragment, business rules, security findings, AS-IS specification, traceability and work item. About {agentEstimate(chosen.length)} agent jobs{estimate === undefined ? "" : `, roughly ${formatEstimate(estimate.totalMs)} from earlier runs`}.
         </p>
         <p className="mt-2 font-mono text-[12px] text-text-secondary">{chosen.slice(0, 12).join(", ")}{chosen.length > 12 ? ` +${chosen.length - 12}` : ""}</p>
       </ConfirmDialog>

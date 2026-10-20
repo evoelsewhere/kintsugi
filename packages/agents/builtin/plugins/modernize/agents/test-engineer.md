@@ -2,7 +2,6 @@
 name: test-engineer
 version: 1.0.0
 description: Writes characterization, contract, and equivalence tests that pin down legacy behavior so transformation can be proven correct. Use before any rewrite.
-tools: Read, Write, Edit, Glob, Grep, Bash
 metadata:
   audience: member
   upstream: agents/test-engineer.md
