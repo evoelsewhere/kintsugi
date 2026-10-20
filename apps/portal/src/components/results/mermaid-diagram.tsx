@@ -36,6 +36,17 @@ function flowchartNodeId(target: EventTarget): string | undefined {
   return node.getAttribute("data-id") ?? /flowchart-(.+)-\d+$/.exec(node.id)?.[1];
 }
 
+/** Whether the portal is in the dark theme; follows the class on <html> so diagrams redraw on a switch. */
+function useDarkTheme(): boolean {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+  useEffect(() => {
+    const observer = new MutationObserver(() => setDark(document.documentElement.classList.contains("dark")));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  return dark;
+}
+
 /** The smallest box, so a one-node diagram still has room to drag. */
 const MIN_HEIGHT = 96;
 /** The box while the diagram is drawn. */
@@ -55,6 +66,7 @@ export interface MermaidDiagramProps {
 
 export function MermaidDiagram({ source, title, className, height = 560, onNodeClick, toolbar }: MermaidDiagramProps): React.JSX.Element {
   const id = `mmd-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  const dark = useDarkTheme();
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(false);
@@ -94,7 +106,7 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
     return () => {
       cancelled = true;
     };
-  }, [id, source]);
+  }, [id, source, dark]);
 
   /** Fits the whole diagram in the view (never enlarges it). */
   const fit = (): void => {
