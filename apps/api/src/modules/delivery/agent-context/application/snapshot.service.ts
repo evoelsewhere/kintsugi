@@ -64,20 +64,18 @@ export class SnapshotService {
     if (query.snapshotId === undefined) {
       const task = await this.tasks.get(principal, { projectId: query.projectId, unitId: query.unitId });
       const prepared = await this.prepareSnapshot(task, query.activity, "ctx_" + randomUUID());
-      const createdAt = new Date();
       await this.snapshots.create({
         manifest: prepared.manifest,
         workItem: prepared.workItem,
         readiness: prepared.readiness,
         requestedByUserId: principal.userId,
-        createdAt: createdAt.toISOString(),
-        expiresAt: new Date(createdAt.getTime() + SNAPSHOT_TTL_MS).toISOString(),
+        retentionMs: SNAPSHOT_TTL_MS,
       });
       record = await this.waitUntilReady(prepared.manifest.snapshotId);
     } else {
       record = await this.requireSnapshot(query.snapshotId);
       this.assertIdentity(record, query.projectId, query.unitId, query.activity);
-      this.assertAvailable(record);
+      await this.assertAvailable(record);
       if (record.status === "preparing") record = await this.waitUntilReady(query.snapshotId);
       if (record.status === "failed") throw new ConflictException(record.errorCode ?? "SNAPSHOT_UNAVAILABLE");
       if (record.status === "expired" || record.status === "expiring") throw new GoneException("SNAPSHOT_EXPIRED");
@@ -161,8 +159,12 @@ export class SnapshotService {
     return record;
   }
 
-  assertAvailable(record: SnapshotRecord): void {
-    if (record.status === "expired" || record.status === "expiring" || Date.parse(record.expiresAt) <= Date.now()) {
+  async assertAvailable(record: SnapshotRecord): Promise<void> {
+    if (
+      record.status === "expired" ||
+      record.status === "expiring" ||
+      !(await this.snapshots.isAvailable(record.manifest.snapshotId))
+    ) {
       throw new GoneException("SNAPSHOT_EXPIRED");
     }
   }
@@ -197,7 +199,7 @@ export class SnapshotService {
     const deadline = Date.now() + PREPARE_TIMEOUT_MS;
     while (Date.now() < deadline) {
       const record = await this.requireSnapshot(snapshotId);
-      this.assertAvailable(record);
+      await this.assertAvailable(record);
       if (record.status === "ready") return record;
       if (record.status === "failed") throw new ConflictException(record.errorCode ?? "SNAPSHOT_UNAVAILABLE");
       if (record.status === "expired") throw new GoneException("SNAPSHOT_EXPIRED");

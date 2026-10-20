@@ -35,7 +35,7 @@ export class DocumentQueryService {
     await this.snapshotService.authorize(principal, query.projectId);
     const record = await this.snapshotService.requireSnapshot(query.snapshotId);
     this.snapshotService.assertIdentity(record, query.projectId, query.unitId, record.manifest.activity);
-    this.snapshotService.assertAvailable(record);
+    await this.snapshotService.assertAvailable(record);
     this.assertReady(record.status);
 
     const sourceId = query.sourceId;
@@ -124,7 +124,7 @@ export class DocumentQueryService {
     await this.snapshotService.authorize(principal, query.projectId);
     const record = await this.snapshotService.requireSnapshot(query.snapshotId);
     this.snapshotService.assertIdentity(record, query.projectId, query.unitId, record.manifest.activity);
-    this.snapshotService.assertAvailable(record);
+    await this.snapshotService.assertAvailable(record);
     this.assertReady(record.status);
 
     const normalizedQuery = query.query.trim().toLocaleLowerCase("en-US");

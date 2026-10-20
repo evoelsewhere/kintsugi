@@ -80,6 +80,10 @@ export interface SnapshotRecord {
   errorCode?: string;
 }
 
+export type SnapshotCreateInput = Omit<SnapshotRecord, "status" | "createdAt" | "expiresAt"> & {
+  retentionMs: number;
+};
+
 export interface SnapshotCursorRecord {
   cursorId: string;
   snapshotId: string;
@@ -95,8 +99,9 @@ export type SnapshotCursorInput = Omit<SnapshotCursorRecord, "cursorId">;
 
 /** Persistence port; create atomically records the manifest, source index and retention outbox intent. */
 export abstract class SnapshotRepository {
-  abstract create(snapshot: Omit<SnapshotRecord, "status">): Promise<void>;
+  abstract create(snapshot: SnapshotCreateInput): Promise<void>;
   abstract get(snapshotId: string): Promise<SnapshotRecord | undefined>;
+  abstract isAvailable(snapshotId: string): Promise<boolean>;
   abstract createCursor(cursor: SnapshotCursorInput): Promise<string>;
   abstract getCursor(cursorId: string): Promise<SnapshotCursorRecord | undefined>;
   abstract acquireLease(snapshotId: string, purpose: string, ownerId: string, expiresAt?: string): Promise<void>;

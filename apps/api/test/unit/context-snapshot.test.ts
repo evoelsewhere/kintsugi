@@ -39,8 +39,11 @@ function snapshot(status: SnapshotRecord["status"], expiresAt = new Date(Date.no
   };
 }
 
-function service(get: () => Promise<SnapshotRecord | undefined>): SnapshotService {
-  const repository = { get } as unknown as SnapshotRepository;
+function service(
+  get: () => Promise<SnapshotRecord | undefined>,
+  isAvailable: (snapshotId: string) => Promise<boolean> = async () => true,
+): SnapshotService {
+  const repository = { get, isAvailable } as unknown as SnapshotRepository;
   return new SnapshotService(
     {} as TaskQueryService,
     {} as TaskApprovalEvidenceReader,
@@ -74,7 +77,29 @@ describe("snapshot lifecycle errors", () => {
   });
 
   it("rejects an expired snapshot handle", async () => {
-    const instance = service(async () => snapshot("expired", new Date(Date.now() - 1000).toISOString()));
+    const instance = service(async () => snapshot("expired"), async () => false);
     await expect(instance.requireSnapshot(snapshotId).then((record) => instance.assertAvailable(record))).rejects.toThrow("SNAPSHOT_EXPIRED");
+  });
+
+  it("uses persisted Postgres availability when the API clock is ahead", async () => {
+    const instance = service(async () => snapshot("ready", "2026-10-21T00:00:00.000Z"), async () => true);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-22T00:00:00.000Z"));
+    try {
+      await expect(instance.assertAvailable(snapshot("ready", "2026-10-21T00:00:00.000Z"))).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects a snapshot Postgres says is expired when the API clock is behind", async () => {
+    const instance = service(async () => snapshot("ready", "2026-10-21T00:00:00.000Z"), async () => false);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T00:00:00.000Z"));
+    try {
+      await expect(instance.assertAvailable(snapshot("ready", "2026-10-21T00:00:00.000Z"))).rejects.toThrow("SNAPSHOT_EXPIRED");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
