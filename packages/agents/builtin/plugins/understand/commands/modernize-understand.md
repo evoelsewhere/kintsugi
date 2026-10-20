@@ -173,8 +173,8 @@ summary or a job log.
 
 Five class-scoped finders run in parallel (injection, auth and session, secrets, dependency CVEs, input
 validation); findings are de-duplicated, adversarially refuted, and Critical and High ones double-judged, so
-false positives die before `findings.json`. Runtime jobs have no shell and no network, so no SAST, audit or
-secret-scanning tool runs here: **the finders' manual review is the scan**. Each finder returns the files it read
+false positives die before `findings.json`. Runtime jobs install nothing at run time and download nothing, so no
+SAST, audit or secret-scanning tool runs here: **the finders' manual review is the scan**. Each finder returns the files it read
 and the scanners that would apply and did not run. A weakness the code exhibits is a finding even when no caller
 reaches it (latent): it gets the severity its reachable impact warrants and confidence Low. Every finding carries a
 confidence (High: exploit path traced in the code; Medium: reachability inferred; Low: latent or depends on code

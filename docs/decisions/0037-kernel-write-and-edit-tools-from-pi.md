@@ -1,6 +1,6 @@
 # ADR-0037: The kernel writes with pi's `write` and `edit`, not a custom `outputs_write`
 
-- Status: Accepted
+- Status: Accepted. Decision 4 (`bash` stays out of the kernel) superseded by [ADR-0040](0040-kernel-shell-and-git-tools.md)
 - Date: 2026-10-14
 - Decision register: D28 (amended)
 
