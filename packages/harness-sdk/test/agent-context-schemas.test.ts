@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   DocumentPage,
-  CodingAgentContextPort,
+  CodingAgentWorkflowPort,
   ReviewReport,
   TaskBrief,
   TaskEvent,
@@ -125,7 +125,7 @@ const taskStatus: TaskStatus = {
   nextAction: "Open the required deliverable pull request.",
 };
 
-const port: CodingAgentContextPort = {
+const port: CodingAgentWorkflowPort = {
   listProjects: async () => ({ schemaVersion: "1", items: [{ projectId: "modernization", name: "Modernization" }], limit: 25 }),
   listTasks: async () => ({
     schemaVersion: "1",

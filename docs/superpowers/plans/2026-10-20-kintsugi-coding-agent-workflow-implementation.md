@@ -16,6 +16,7 @@
 
 - Keep self-hosted Compose, Postgres, pg-boss and Git. No broker, extra datastore, new coding-agent runner or runtime-specific business logic.
 - Read access first: tasks, basic/detailed designs, standards, evidence and review findings. No member-agent task claiming, assignment, approval or administration writes in v1.
+- Naming: the capability is **Coding Agent Workflow** and its project authorization is **Project Access**. The SDK exports `CodingAgentWorkflowPort`, `CodingAgentWorkflowSchemaVersion` and `CodingAgentWorkflowCapabilities`; `agent-context` remains the API subdomain.
 - The developer's chosen AI answers questions. A Kintsugi-owned conversational assistant is later; server-side PR review remains part of the complete workflow.
 - Support Claude Code, Codex and Copilot CLI as three distinct local client targets. Hosted/web agents and other IDE surfaces are later targets.
 - Basic v1 excludes merge-queue repositories until `merge_group` input/check semantics are implemented and tested.
@@ -59,7 +60,7 @@ Paths are relative to the repository root. New modules follow domain/application
 | Owner | Files / responsibility |
 |---|---|
 | Domain | `packages/domain/src/member-task.ts`, `gate-evidence.ts`, existing `index.ts` / `document-layout.ts`: pure vocabulary, validation, readiness and paths |
-| Contract | `packages/harness-sdk/src/agent-context.ts`, `agent-context-schemas.ts`, `index.ts`: queries/results and `CodingAgentContextPort` |
+| Contract | `packages/harness-sdk/src/agent-context.ts`, `agent-context-schemas.ts`, `index.ts`: queries/results and `CodingAgentWorkflowPort` |
 | Authentication | Existing core auth module plus `member-token.*`; new `admin/project-access/` module: token lifecycle and explicit project grants |
 | Task/context API | New `delivery/agent-context/`: Git-backed task/approval reads, snapshot indexing, bounded retrieval and controller |
 | Durability | `services/orchestrator/src/outbox/`: shared transactional transition/outbox implementation, exported as `@kintsugi/orchestrator/outbox` |
@@ -75,7 +76,7 @@ Paths are relative to the repository root. New modules follow domain/application
 
 T01 owns the exact exported DTO definitions; later tasks use these names. Dates are UTC ISO strings; Git object IDs are full SHA-1 or SHA-256 IDs validated by shared schemas. All wire shapes have `schemaVersion: "1"`. Query unit IDs travel as query values, never path fragments that split `<app>/<module>/<unit>`.
 
-`CodingAgentContextPort` has eight methods (seven MCP tools plus the CLI-only event stream):
+`CodingAgentWorkflowPort` has eight methods (seven MCP tools plus the CLI-only event stream):
 
 ```ts
 listProjects(query: ProjectQuery): Promise<ListResult<ProjectSummary>>;
@@ -166,11 +167,14 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 **Interfaces:** `SnapshotService.brief(principal, query: TaskBriefQuery): Promise<TaskBrief>`; `DocumentQueryService.get(principal, query: DocumentQuery): Promise<DocumentPage>` and `search(principal, query: DocumentSearchQuery): Promise<ListResult<SourceHit>>`; worker `retainSnapshot(deps, snapshotId): Promise<RetentionResult>`. Manifest hash canonicalizes relevant input identity/content/policy, not generated output or observation timestamps.
 
+Final review safety constraints: cap the section index at 400 ranges, leaving up to 100 of the 500 brief slots for unavailable-source markers; coalesce excess heading ranges while preserving line coverage; split each source once during search; serialize lease acquisition against expiry using the snapshot row lock and database clock; resume interrupted ref cleanup, release leftover refs before permanent failure, and recover stale preparing snapshots after queue retries are exhausted.
+
 - [x] Write CTX-02/04–10 tests. Given brief A, commit/push B, restart API, then fetch/search with A: `expect(page.commit).toBe(commitA)`. Set a mandatory section above 32 KiB and assert `requiredContextStatus === "partial"`, a continuation and exact remaining section IDs. Relevant input B changes the manifest hash; generated-only C does not. Restricted selectors/injection cannot expand reads; revocation blocks existing handles.
 - [x] Run API context/manifest tests and worker retention tests; verify real Git fixtures rather than only mocked strings.
 - [x] Store the immutable manifest and source index in `delivery.member_snapshot`/`member_snapshot_source`; no content duplication or new semantic index. Reuse registered document readers via public ports. API data mounts stay read-only: request retention through the shared outbox; the worker creates local `refs/kintsugi/snapshots/<id>` pins under its mirror lock before marking the snapshot ready.
 - [x] Return `SNAPSHOT_PREPARING` until required pins exist; clients may retry safe preparation for at most 30 seconds. Implement 24-hour expiry, bounded section/cursor reads and keyword search within the same manifest. Reject foreign source IDs, cursor tampering, arbitrary links, `.git` and restricted paths. An unavailable historical object returns an explicit failure, never HEAD.
 - [x] Verify cleanup removes only expired, unreferenced local pins; active reviews and merged evidence retain leases. Test that unrelated generated commits do not change context revision. Run relevant suites and commit `feat(context): add pinned member snapshots and paged sources`.
+- [x] Resolve the final read-only review findings: serialize lease/expiry transitions, resume interrupted cleanup and stale snapshot preparation, bound aggregate section ranges, and split source text once per search. Cover the lease race with Postgres integration and recovery/bounds with focused unit tests.
 
 ### Task 6 (T06) — Versioned Coding Agent Context API and complete preview capability contract
 
@@ -188,7 +192,7 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 **Depends on:** T06. **Files:** new `packages/kintsugi-client/{package.json,tsconfig.json,src/client.ts,src/errors.ts,test/client.test.ts}`; new `packages/cli/` (`@kintsugi/cli`) with exact Commander/keyring dependencies and `src/{main,cli,profile,credential-store,render}.ts`, `src/commands/{auth,project,task,document,doctor}.ts`, `test/{cli,credential-store,export}.test.ts` and package/test configs. Reuse SDK types rather than API-private imports.
 
-**Interfaces:** `createAgentContextClient({baseUrl, tokenProvider, fetch, signal?}): CodingAgentContextPort`; `runCli(argv: readonly string[], deps: CliDeps): Promise<number>`; `CredentialStore.get/set/delete(profileId)`; `writeBrief(path, brief, {overwrite:false}): Promise<void>`. IO/clock/credential/fetch dependencies are injected; the entrypoint alone sets process exit status.
+**Interfaces:** `createCodingAgentWorkflowClient({baseUrl, tokenProvider, fetch, signal?}): CodingAgentWorkflowPort`; `runCli(argv: readonly string[], deps: CliDeps): Promise<number>`; `CredentialStore.get/set/delete(profileId)`; `writeBrief(path, brief, {overwrite:false}): Promise<void>`. IO/clock/credential/fetch dependencies are injected; the entrypoint alone sets process exit status.
 
 Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the executable is `kintsugi`. `review list --task` renders the authorized review references from `taskStatus`; it does not introduce an eighth MCP query or a second review-list API. The CLI `--format` values are `text | json | markdown`, with `--json` as the JSON alias; `task brief` passes an explicit activity (default `implementation`) and prints blockers without claiming that a blocked task is ready.
 
@@ -202,7 +206,7 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 **Depends on:** T07. **Files:** create Harness Hub package/tsconfigs with exact `@modelcontextprotocol/server@2.3.1` dependency and test dependency `@modelcontextprotocol/client@2.3.1`; add `src/{index,member-mcp,tool-map}.ts`, `test/{stdio,tool-contract}.test.ts`; extend CLI `mcp` branch and exports; add SDK contract fixture.
 
-**Interfaces:** `createAgentContextMcp(access: CodingAgentContextPort, capabilities: AgentContextCapabilities): McpServer`; `serveCodingAgentStdio(deps: StdioDeps): Promise<void>`. Use `McpServer` and `registerTool` from `@modelcontextprotocol/server`; own connection lifecycle through `serveStdio(() => buildServer())` from its `/stdio` entry. Pin client and server to 2.3.1. SDK-specific code stays in Harness Hub; API never depends on it for business rules. CLI `kintsugi mcp serve --profile work` receives the same local credential profile. Exercise the installed clients protocol negotiation; SDK compatibility across the 2025 legacy and 2026-07-28 modern eras must be configured and tested through `serveStdio`.
+**Interfaces:** `createCodingAgentWorkflowMcp(access: CodingAgentWorkflowPort, capabilities: CodingAgentWorkflowCapabilities): McpServer`; `serveCodingAgentStdio(deps: StdioDeps): Promise<void>`. Use `McpServer` and `registerTool` from `@modelcontextprotocol/server`; own connection lifecycle through `serveStdio(() => buildServer())` from its `/stdio` entry. Pin client and server to 2.3.1. SDK-specific code stays in Harness Hub; API never depends on it for business rules. CLI `kintsugi mcp serve --profile work` receives the same local credential profile. Exercise the installed clients protocol negotiation; SDK compatibility across the 2025 legacy and 2026-07-28 modern eras must be configured and tested through `serveStdio`.
 
 - [ ] Write MCP-01–05 tests: initialize/list/call through the real pinned SDK client/server over a spawned stdio process, seven-tool names when enabled, read-only annotations, explicit project/snapshot/source inputs and structured plus textual results. Assert every stdout record is a protocol message and EOF releases resources.
 - [ ] Run `pnpm --filter @kintsugi/harness-hub exec vitest run test/stdio.test.ts test/tool-contract.test.ts` and the CLI process bridge test; inspect initial failure.

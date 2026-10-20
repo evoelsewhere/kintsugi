@@ -11,25 +11,27 @@ create table delivery.member_snapshot (
   task jsonb not null,
   readiness jsonb not null,
   manifest jsonb not null,
-  status text not null default 'preparing' check (status in ('preparing', 'ready', 'failed', 'expired')),
-  pin_state text not null default 'pending' check (pin_state in ('pending', 'retained', 'failed', 'released')),
+  status text not null default 'preparing' check (status in ('preparing', 'ready', 'failed', 'expiring', 'expired')),
+  pin_state text not null default 'pending' check (pin_state in ('pending', 'retained', 'failed', 'releasing', 'released')),
   failure_code text check (failure_code is null or failure_code ~ '^[A-Z0-9_]{1,100}$'),
   created_at timestamptz not null default now(),
   expires_at timestamptz not null,
   ready_at timestamptz,
   expired_at timestamptz,
+  retention_checked_at timestamptz,
   check (expires_at > created_at),
   check ((status = 'ready') = (ready_at is not null)),
   check ((status = 'expired') = (expired_at is not null)),
   check ((status = 'failed') = (failure_code is not null)),
-  check ((pin_state = 'retained') = (status = 'ready'))
+  check ((pin_state = 'retained') = (status = 'ready')),
+  check ((pin_state = 'releasing') = (status = 'expiring'))
 );
 
 create index member_snapshot_project_task_idx
   on delivery.member_snapshot (project_id, unit_id, created_at desc);
 create index member_snapshot_expiry_idx
   on delivery.member_snapshot (expires_at, snapshot_id)
-  where status = 'ready';
+  where status in ('ready', 'expiring');
 
 create table delivery.member_snapshot_source (
   snapshot_id text not null references delivery.member_snapshot(snapshot_id) on delete cascade,

@@ -60,7 +60,14 @@ export interface SnapshotManifest extends SnapshotManifestInput {
   contextRevision: string;
 }
 
-export type SnapshotStatus = "preparing" | "ready" | "failed" | "expired";
+export type SnapshotStatus = "preparing" | "ready" | "failed" | "expiring" | "expired";
+
+export class SnapshotLeaseUnavailableError extends Error {
+  constructor() {
+    super("snapshot lease is unavailable");
+    this.name = "SnapshotLeaseUnavailableError";
+  }
+}
 
 export interface SnapshotRecord {
   manifest: SnapshotManifest;
@@ -152,32 +159,133 @@ export function buildSnapshotManifest(input: SnapshotManifestInput): SnapshotMan
   };
 }
 
-/** Indexes Markdown by ATX headings without retaining source text in Postgres. */
-export function indexMarkdownSections(sourceId: string, markdown: string, required: boolean): SnapshotSectionIndex[] {
-  const lines = markdown.split(/\r\n|\n|\r/);
-  const headings = lines.flatMap((line, index) => {
-    const match = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(line);
-    return match === null ? [] : [{ line: index + 1, title: match[2]!.trim() }];
-  });
-  const starts = headings[0]?.line === 1 ? headings : [{ line: 1, title: "Document" }, ...headings];
-  if (headings.length === 0) starts.splice(0, starts.length, { line: 1, title: "Document" });
+// Keep 100 slots for unavailable-source markers in the 100-source snapshot limit.
+export const MAX_CONTEXT_SECTIONS = 400;
 
+/** Indexes Markdown by ATX headings without retaining source text in Postgres. */
+export function indexMarkdownSections(
+  sourceId: string,
+  markdown: string,
+  required: boolean,
+  maxSections = MAX_CONTEXT_SECTIONS,
+): SnapshotSectionIndex[] {
+  if (!Number.isSafeInteger(maxSections) || maxSections < 1) throw new TypeError("maxSections must be a positive safe integer");
+  const lines = markdown.split(/\r\n|\n|\r/);
+  const headings: Array<{ line: number; title: string }> = [];
+  let headingCount = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(lines[index] ?? "");
+    if (match === null) continue;
+    headingCount += 1;
+    if (headings.length < maxSections) headings.push({ line: index + 1, title: match[2]!.trim() });
+  }
+  if (headingCount === 0) {
+    const text = lines.join("\n");
+    return [{
+      sectionId: "sec_" + digest(sourceId + "\0document").slice(0, 24),
+      title: "Document",
+      startLine: 1,
+      endLine: lines.length,
+      byteLength: Buffer.byteLength(text, "utf8"),
+      required,
+    }];
+  }
+
+  const hasPreamble = headings[0]!.line !== 1;
+  const totalSections = headingCount + (hasPreamble ? 1 : 0);
+  const grouped = totalSections > maxSections;
+  if (hasPreamble && maxSections === 1) {
+    const suffix = " + " + totalSections + " sections";
+    const text = lines.join("\n");
+    return [{
+      sectionId: "sec_" + digest(sourceId + "\0document-range\0" + lines.length).slice(0, 24),
+      title: ("Document").slice(0, Math.max(1, 500 - suffix.length)) + suffix,
+      startLine: 1,
+      endLine: lines.length,
+      byteLength: Buffer.byteLength(text, "utf8"),
+      required,
+    }];
+  }
+  const prefixCount = hasPreamble ? 1 : 0;
+  const individualHeadingCount = grouped ? Math.max(0, maxSections - prefixCount - 1) : headingCount;
+  const sections: SnapshotSectionIndex[] = [];
   const occurrences = new Map<string, number>();
-  return starts.map((heading, index) => {
-    const endLine = starts[index + 1]?.line === undefined ? lines.length : starts[index + 1]!.line - 1;
+
+  const addHeading = (heading: { line: number; title: string }, endLine: number, groupedCount?: number): void => {
     const key = heading.title.normalize("NFC").toLowerCase();
     const occurrence = occurrences.get(key) ?? 0;
     occurrences.set(key, occurrence + 1);
     const sectionId = "sec_" + digest(sourceId + "\0" + key + "\0" + occurrence).slice(0, 24);
     const text = lines.slice(heading.line - 1, endLine).join("\n");
-    return {
-      sectionId,
-      title: heading.title,
+    const suffix = groupedCount === undefined ? "" : " + " + groupedCount + " sections";
+    sections.push({
+      sectionId: groupedCount === undefined
+        ? sectionId
+        : "sec_" + digest(sourceId + "\0range\0" + sectionId + "\0" + groupedCount + "\0" + endLine).slice(0, 24),
+      title: suffix === "" ? heading.title : heading.title.slice(0, Math.max(1, 500 - suffix.length)) + suffix,
       startLine: heading.line,
       endLine,
       byteLength: Buffer.byteLength(text, "utf8"),
       required,
+    });
+  };
+
+  if (hasPreamble) {
+    const preambleEnd = headings[0]!.line - 1;
+    const text = lines.slice(0, preambleEnd).join("\n");
+    sections.push({
+      sectionId: "sec_" + digest(sourceId + "\0document").slice(0, 24),
+      title: "Document",
+      startLine: 1,
+      endLine: preambleEnd,
+      byteLength: Buffer.byteLength(text, "utf8"),
+      required,
+    });
+  }
+
+  for (let index = 0; index < individualHeadingCount; index += 1) {
+    const heading = headings[index]!;
+    const endLine = headings[index + 1]?.line === undefined ? lines.length : headings[index + 1]!.line - 1;
+    addHeading(heading, endLine);
+  }
+
+  if (grouped) {
+    const groupStart = individualHeadingCount;
+    const heading = headings[groupStart]!;
+    const groupCount = headingCount - groupStart;
+    addHeading(heading, lines.length, groupCount);
+  }
+  return sections;
+}
+
+/** Bounds the total section index while retaining every source range through coalesced tails. */
+export function boundSnapshotSections(sources: readonly SnapshotSource[]): SnapshotSource[] {
+  const nonEmptyCount = sources.reduce((count, source) => count + (source.sections.length > 0 ? 1 : 0), 0);
+  if (nonEmptyCount > MAX_CONTEXT_SECTIONS) throw new RangeError("snapshot has more non-empty sources than the section limit");
+
+  let remainingBudget = MAX_CONTEXT_SECTIONS;
+  let remainingNonEmpty = nonEmptyCount;
+  return sources.map((source) => {
+    if (source.sections.length === 0) return { ...source, sections: [] };
+    remainingNonEmpty -= 1;
+    const allocation = Math.min(source.sections.length, Math.max(1, remainingBudget - remainingNonEmpty));
+    remainingBudget -= allocation;
+    if (source.sections.length <= allocation) return { ...source, sections: [...source.sections] };
+
+    const prefix = source.sections.slice(0, allocation - 1);
+    const tail = source.sections.slice(allocation - 1);
+    const first = tail[0]!;
+    const last = tail.at(-1)!;
+    const titleSuffix = " + " + tail.length + " sections";
+    const merged: SnapshotSectionIndex = {
+      sectionId: "sec_" + digest(source.sourceId + "\0range\0" + first.sectionId + "\0" + last.sectionId).slice(0, 24),
+      title: first.title.slice(0, Math.max(1, 500 - titleSuffix.length)) + titleSuffix,
+      startLine: first.startLine,
+      endLine: last.endLine,
+      byteLength: tail.reduce((total, section) => total + section.byteLength, 0) + tail.length - 1,
+      required: tail.some((section) => section.required),
     };
+    return { ...source, sections: [...prefix, merged] };
   });
 }
 

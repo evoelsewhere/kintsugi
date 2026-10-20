@@ -13,16 +13,16 @@ import type {
   SourcePublication,
 } from "@kintsugi/domain";
 
-export type AgentContextSchemaVersion = "1";
+export type CodingAgentWorkflowSchemaVersion = "1";
 
 export interface ProjectQuery {
-  schemaVersion?: AgentContextSchemaVersion;
+  schemaVersion?: CodingAgentWorkflowSchemaVersion;
   limit?: number;
   cursor?: string;
 }
 
 export interface TaskIdentity {
-  schemaVersion?: AgentContextSchemaVersion;
+  schemaVersion?: CodingAgentWorkflowSchemaVersion;
   projectId: string;
   unitId: string;
 }
@@ -55,7 +55,7 @@ export interface DocumentSearchQuery extends TaskIdentity {
 }
 
 export interface ReviewQuery {
-  schemaVersion?: AgentContextSchemaVersion;
+  schemaVersion?: CodingAgentWorkflowSchemaVersion;
   projectId: string;
   reviewId: string;
 }
@@ -66,7 +66,7 @@ export interface TaskEventQuery extends TaskIdentity {
 }
 
 export interface ListResult<T> {
-  schemaVersion: AgentContextSchemaVersion;
+  schemaVersion: CodingAgentWorkflowSchemaVersion;
   items: T[];
   limit: number;
   nextCursor?: string;
@@ -116,7 +116,7 @@ export interface ContextSection {
 }
 
 export interface TaskBrief extends TaskIdentity {
-  schemaVersion: AgentContextSchemaVersion;
+  schemaVersion: CodingAgentWorkflowSchemaVersion;
   activity: MemberActivity;
   title: string;
   objective: string;
@@ -144,7 +144,7 @@ export interface Citation {
 }
 
 export interface DocumentPage extends TaskIdentity {
-  schemaVersion: AgentContextSchemaVersion;
+  schemaVersion: CodingAgentWorkflowSchemaVersion;
   snapshotId: string;
   sourceId: string;
   repositoryId: string;
@@ -181,7 +181,7 @@ export interface ReviewFinding {
 }
 
 export interface ReviewReport extends ReviewQueryResultIdentity {
-  schemaVersion: AgentContextSchemaVersion;
+  schemaVersion: CodingAgentWorkflowSchemaVersion;
   reviewId: string;
   generation: number;
   currentness: "current" | "superseded" | "inconclusive";
@@ -211,7 +211,7 @@ export interface TaskGateStatus {
 }
 
 export interface TaskStatus extends TaskIdentity {
-  schemaVersion: AgentContextSchemaVersion;
+  schemaVersion: CodingAgentWorkflowSchemaVersion;
   status: WorkItemStatus;
   pullRequests: TaskPullRequest[];
   currentReviewIds: string[];
@@ -227,7 +227,7 @@ export interface TaskEvent extends TaskIdentity {
 }
 
 /** Shared member operations used by the CLI, local MCP adapter and API composition. */
-export interface CodingAgentContextPort {
+export interface CodingAgentWorkflowPort {
   listProjects(query: ProjectQuery): Promise<ListResult<ProjectSummary>>;
   listTasks(query: TaskQuery): Promise<ListResult<TaskSummary>>;
   briefTask(query: TaskBriefQuery): Promise<TaskBrief>;
@@ -239,6 +239,6 @@ export interface CodingAgentContextPort {
 }
 
 /** Narrow feature flags let a local adapter omit capabilities it cannot really serve. */
-export interface AgentContextCapabilities {
+export interface CodingAgentWorkflowCapabilities {
   reviews: boolean;
 }

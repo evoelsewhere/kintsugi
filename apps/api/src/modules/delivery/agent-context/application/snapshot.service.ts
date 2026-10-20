@@ -19,6 +19,7 @@ import type { MemberTaskRecord } from "../domain/task.js";
 import { ProjectAccessPort } from "../domain/project-access.ports.js";
 import {
   SnapshotRepository,
+  boundSnapshotSections,
   buildSnapshotManifest,
   indexMarkdownSections,
   type SnapshotManifest,
@@ -79,7 +80,7 @@ export class SnapshotService {
       this.assertAvailable(record);
       if (record.status === "preparing") record = await this.waitUntilReady(query.snapshotId);
       if (record.status === "failed") throw new ConflictException(record.errorCode ?? "SNAPSHOT_UNAVAILABLE");
-      if (record.status === "expired") throw new GoneException("SNAPSHOT_EXPIRED");
+      if (record.status === "expired" || record.status === "expiring") throw new GoneException("SNAPSHOT_EXPIRED");
     }
 
     const currentness = await this.currentness(principal, record);
@@ -161,7 +162,7 @@ export class SnapshotService {
   }
 
   assertAvailable(record: SnapshotRecord): void {
-    if (record.status === "expired" || Date.parse(record.expiresAt) <= Date.now()) {
+    if (record.status === "expired" || record.status === "expiring" || Date.parse(record.expiresAt) <= Date.now()) {
       throw new GoneException("SNAPSHOT_EXPIRED");
     }
   }
@@ -296,7 +297,7 @@ export class SnapshotService {
         commit: task.sourceCommit,
         contentHash: taskHash,
       },
-      sources,
+      sources: boundSnapshotSections(sources),
       requiredDeliverableIds: [],
       policyRevision: POLICY_REVISION,
     });

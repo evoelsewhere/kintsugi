@@ -13,6 +13,7 @@ import {
   type SnapshotRecord,
   type SnapshotSource,
   type SnapshotStatus,
+  SnapshotLeaseUnavailableError,
 } from "../domain/snapshot.js";
 
 interface SnapshotRow {
@@ -168,12 +169,25 @@ export class PgSnapshotRepository extends SnapshotRepository {
   }
 
   async acquireLease(snapshotId: string, purpose: string, ownerId: string, expiresAt?: string): Promise<void> {
-    await getPool().query(
-      "insert into delivery.member_snapshot_lease (lease_id, snapshot_id, purpose, owner_id, expires_at) " +
-        "values ($1, $2, $3, $4, $5) on conflict (snapshot_id, purpose, owner_id) " +
-        "do update set expires_at = excluded.expires_at",
-      [randomUUID(), snapshotId, purpose, ownerId, expiresAt ?? null],
-    );
+    await withTransaction(async (client) => {
+      const result = await client.query<{ status: SnapshotStatus }>(
+        "select status from delivery.member_snapshot where snapshot_id = $1 for update",
+        [snapshotId],
+      );
+      const snapshot = result.rows[0];
+      if (snapshot === undefined || snapshot.status !== "ready") throw new SnapshotLeaseUnavailableError();
+      const expiry = await client.query<{ is_unexpired: boolean }>(
+        "select expires_at > clock_timestamp() as is_unexpired from delivery.member_snapshot where snapshot_id = $1",
+        [snapshotId],
+      );
+      if (expiry.rows[0]?.is_unexpired !== true) throw new SnapshotLeaseUnavailableError();
+      await client.query(
+        "insert into delivery.member_snapshot_lease (lease_id, snapshot_id, purpose, owner_id, expires_at) " +
+          "values ($1, $2, $3, $4, $5) on conflict (snapshot_id, purpose, owner_id) " +
+          "do update set expires_at = excluded.expires_at",
+        [randomUUID(), snapshotId, purpose, ownerId, expiresAt ?? null],
+      );
+    });
   }
 
   async releaseLease(snapshotId: string, purpose: string, ownerId: string): Promise<void> {
