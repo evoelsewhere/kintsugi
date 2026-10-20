@@ -17,7 +17,7 @@ metadata:
 ---
 
 **This stage runs as Kintsugi runtime jobs and script steps** (ADR-0041), started from the catalog of the portal's
-AS-IS Understanding page ("Plan with AI"). It does not read the legacy code and proposes nothing a person must
+AS-IS Understanding page ("Generate Plan"). It does not read the legacy code and proposes nothing a person must
 review: its one output, `applications/$app/assessment/understand/plan.json`, is **advice that every run replaces**,
 committed straight to the default branch (it is one of the default `autoCommitPaths`). `$app` is the application id
 from `kintsugi.yaml`.
