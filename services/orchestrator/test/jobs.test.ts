@@ -185,15 +185,42 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     for (const child of store.children(id)) expect(existsSync(storage.job(child.id).root)).toBe(false);
   });
 
-  it("fails the stage when the JobOutput hook finds a credential, with a redacted reason and no write", async () => {
-    const { store, runner, writes } = setup({
+  const BAD_TOPOLOGY = { "applications/demo/assessment/topology.json": "{}" };
+  const GOOD_TOPOLOGY = JSON.stringify({
+    system: "demo",
+    root: { id: "root", name: "root", kind: "group", children: [] },
+    edges: [],
+    entryPoints: [],
+    deadEnds: [],
+    observations: [],
+    flows: [],
+  });
+
+  it("masks a credential an agent left in its files instead of failing the run", async () => {
+    const { store, runner, writes, agents } = setup({
       "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
     });
     const id = await assess(store);
     const run = await runner.run(id);
+    expect(run?.status).toBe("succeeded");
+    expect(agents.specs.filter(synthesis)).toHaveLength(1);
+    expect(writes).toHaveLength(1);
+    const text = readFileSync(join(storage.job(id).out, "applications", "demo", "assessment", "ASSESSMENT.md"), "utf8");
+    expect(text).toBe("Config: password = hu****\n");
+    // What was masked is logged by rule, file and line; never the value.
+    const logged = store.events.map((event) => event.message).filter((message) => message.startsWith("masked "));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/^masked 1 credential-shaped value in 1 file of legacy-analyst: credential_assignment at applications\/demo\/assessment\/ASSESSMENT\.md:1$/);
+    expect(JSON.stringify([...store.events, ...store.children(id)])).not.toContain("hunter2");
+    expect(store.children(id).at(-1)?.outputSummary?.["maskedCredentials"]).toBe(1);
+  });
+
+  it("still fails closed for what is not a credential: a malformed artifact, with a redacted reason and no write", async () => {
+    const { store, runner, writes } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? BAD_TOPOLOGY : {}) });
+    const id = await assess(store);
+    const run = await runner.run(id);
     expect(run?.status).toBe("failed");
-    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: credential-shaped values found — .* at applications\/demo\/assessment\/ASSESSMENT\.md:1/);
-    expect(run?.failureReason).not.toContain("hunter2");
+    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: malformed artifact found — invalid_topology_schema at applications\/demo\/assessment\/topology\.json:1/);
     expect(writes).toHaveLength(0);
     expect(store.children(id).map((child) => child.status)).toEqual([...Array<string>(10).fill("succeeded"), "failed"]);
   });
@@ -202,8 +229,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const { store, runner, writes, agents } = setup({
       "legacy-analyst": (spec): Record<string, string> => {
         if (!synthesis(spec)) return {};
-        const fixing = spec.task.includes("The output checks rejected the files you wrote");
-        return { "applications/demo/assessment/ASSESSMENT.md": fixing ? "# Assessment\npassword in config.properties:3 (pa****)\n" : "Config: password = hunter2hunter2\n" };
+        return spec.task.includes("The output checks rejected the files you wrote") ? { "applications/demo/assessment/topology.json": GOOD_TOPOLOGY } : BAD_TOPOLOGY;
       },
     });
     const id = await assess(store);
@@ -212,14 +238,11 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(1);
     const attempts = agents.specs.filter(synthesis);
     expect(attempts).toHaveLength(2);
-    expect(attempts[1]?.task).toMatch(/- credential_assignment at applications\/demo\/assessment\/ASSESSMENT\.md:1\n/);
-    expect(attempts[1]?.task).not.toContain("hunter2");
+    expect(attempts[1]?.task).toMatch(/- invalid_topology_schema at applications\/demo\/assessment\/topology\.json:1\n/);
   });
 
-  it("fails after the one retry when the agent keeps the credential in its files", async () => {
-    const { store, runner, writes, agents } = setup({
-      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
-    });
+  it("fails after the one retry when the agent keeps the artifact malformed", async () => {
+    const { store, runner, writes, agents } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? BAD_TOPOLOGY : {}) });
     const id = await assess(store);
     const run = await runner.run(id);
     expect(run?.status).toBe("failed");
@@ -230,7 +253,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   it("resumes a failed stage: keeps work/, skips the agent jobs that succeeded, reruns the scripts and the failed step", async () => {
     let fail = true;
     const { store, runner, writes } = setup({
-      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": fail ? "Config: password = hunter2hunter2\n" : "# Assessment\n" } : {}),
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? (fail ? BAD_TOPOLOGY : { "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n" }) : {}),
     });
     const first = await assess(store);
     expect((await runner.run(first))?.status).toBe("failed");
