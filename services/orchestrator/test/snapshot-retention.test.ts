@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CheckoutStorage, cloneMirror, fetchMirror, resolveCommit } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GitSnapshotPins,
   SnapshotObjectUnavailableError,
@@ -50,9 +50,13 @@ class MemoryRetentionRepository implements SnapshotRetentionRepository {
     return { snapshots, retained };
   }
 
-  async markReady(snapshotId: string): Promise<void> {
+  async markReady(snapshotId: string): Promise<boolean> {
     const record = this.records.get(snapshotId);
-    if (record !== undefined) record.status = "ready";
+    if (record === undefined || record.status !== "preparing" || Date.parse(record.expiresAt) <= this.databaseNow.getTime()) {
+      return false;
+    }
+    record.status = "ready";
+    return true;
   }
 
   async markFailed(snapshotId: string, code: string): Promise<void> {
@@ -96,6 +100,10 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     });
     pins = new GitSnapshotPins(storage, async (repositoryId) => ({ serverId: "local", repositoryId }));
   }, 180_000);
+
+  beforeEach(() => {
+    records.databaseNow = new Date("2026-10-20T00:00:00.000Z");
+  });
 
   afterAll(async () => {
     await remote?.close();
@@ -173,6 +181,60 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     const recovered = await recoverStaleSnapshots(deps);
     expect(recovered).toEqual({ attempted: 1, ready: 1, failed: 0, retryable: 0 });
     expect(records.records.get(exhaustedId)?.status).toBe("ready");
+  });
+
+  it("does not fail a preparing snapshot when the worker clock is ahead of Postgres", async () => {
+    const aheadId = "ctx_00000000-0000-4000-8000-000000000011";
+    records.databaseNow = new Date("2026-10-20T00:00:00.000Z");
+    records.records.set(aheadId, {
+      snapshotId: aheadId,
+      status: "preparing",
+      repositories: [{ repositoryId: "docs", commit: commitA }],
+      expiresAt: "2026-10-21T00:00:00.000Z",
+      leases: [],
+    });
+    const deps = { repository: records, pins: { retain: async () => true, release: async () => undefined } };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-22T00:00:00.000Z"));
+    try {
+      const result = await retainSnapshot(deps, aheadId);
+
+      expect(result.status).toBe("ready");
+      expect(records.records.get(aheadId)?.status).toBe("ready");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("releases pins and fails preparation when Postgres expiry has passed but the worker clock is behind", async () => {
+    const behindId = "ctx_00000000-0000-4000-8000-000000000012";
+    records.databaseNow = new Date("2026-10-22T00:00:00.000Z");
+    records.records.set(behindId, {
+      snapshotId: behindId,
+      status: "preparing",
+      repositories: [{ repositoryId: "docs", commit: commitA }],
+      expiresAt: "2026-10-21T00:00:00.000Z",
+      leases: [],
+    });
+    const released: string[] = [];
+    const deps = {
+      repository: records,
+      pins: {
+        retain: async () => true,
+        release: async (_snapshot: string, pin: { repositoryId: string }) => { released.push(pin.repositoryId); },
+      },
+    };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T00:00:00.000Z"));
+    try {
+      const result = await retainSnapshot(deps, behindId);
+
+      expect(result).toMatchObject({ status: "failed", errorCode: "SNAPSHOT_PREPARATION_EXPIRED" });
+      expect(released).toContain("docs");
+      expect(records.records.get(behindId)?.status).toBe("failed");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("releases refs left by an earlier retry before permanently failing a snapshot", async () => {

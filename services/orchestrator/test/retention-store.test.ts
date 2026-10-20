@@ -50,6 +50,19 @@ function retentionPool() {
 }
 
 describe("Postgres snapshot retention clock", () => {
+  it("marks a preparing snapshot ready only while database expiry is in the future", async () => {
+    const query = vi.fn(async (_sql: string) => ({ rows: [], rowCount: 1 }));
+    const pool = { query } as unknown as Pool;
+    const repository = new PostgresSnapshotRetentionRepository(pool);
+
+    expect(await repository.markReady(snapshotId)).toBe(true);
+    expect(query.mock.calls[0]?.[0]).toContain("expires_at > clock_timestamp()");
+    expect(query.mock.calls[0]?.[0]).toContain("ready_at = clock_timestamp()");
+
+    query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    expect(await repository.markReady(snapshotId)).toBe(false);
+  });
+
   it("uses database time when the worker clock is ahead", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(workerNow);

@@ -141,12 +141,13 @@ export class PostgresSnapshotRetentionRepository implements SnapshotRetentionRep
     return snapshots.filter((record): record is SnapshotRetentionRecord => record !== undefined);
   }
 
-  async markReady(snapshotId: string): Promise<void> {
-    await this.pool.query(
-      "update delivery.member_snapshot set status = 'ready', pin_state = 'retained', ready_at = now(), failure_code = null " +
-        "where snapshot_id = $1 and status = 'preparing'",
+  async markReady(snapshotId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "update delivery.member_snapshot set status = 'ready', pin_state = 'retained', ready_at = clock_timestamp(), failure_code = null " +
+        "where snapshot_id = $1 and status = 'preparing' and expires_at > clock_timestamp()",
       [snapshotId],
     );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async markFailed(snapshotId: string, code: string): Promise<void> {
