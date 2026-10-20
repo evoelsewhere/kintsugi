@@ -39,8 +39,22 @@ export function AssessResultsView({ results, compare, projectId, runs }: { resul
         <Kpi label="SLOC" value={inventory?.sloc} previous={previous?.["sloc"]} hint={inventory === null ? undefined : `${formatCount(inventory.totalLines)} lines`} />
         <Kpi label="KSLOC" value={inventory?.ksloc} previous={previous?.["ksloc"]} />
         <Kpi label="Complexity index" value={inventory?.complexityIndex} previous={previous?.["complexityIndex"]} hint={inventory?.complexityIndexFormula} higherIsWorse />
-        <Kpi label="Languages" value={inventory?.languages.length} previous={previous?.["languages"]} hint={inventory?.languages.slice(0, 3).map((language) => language.language).join(", ")} />
-        <Kpi label="Security findings" value={highlights.security.length} hint={highlights.debt === null ? undefined : `${highlights.debt.rows.length} debt items`} higherIsWorse tone={highlights.security.some((finding) => finding.severity === "Critical" || finding.severity === "High") ? "red" : undefined} />
+        <Kpi
+          label="Languages"
+          value={inventory?.languages.length}
+          previous={previous?.["languages"]}
+          hint={inventory?.languages
+            .slice(0, 3)
+            .map((language) => language.language)
+            .join(", ")}
+        />
+        <Kpi
+          label="Security findings"
+          value={highlights.security.length}
+          hint={highlights.debt === null ? undefined : `${highlights.debt.rows.length} debt items`}
+          higherIsWorse
+          tone={highlights.security.some((finding) => finding.severity === "Critical" || finding.severity === "High") ? "red" : undefined}
+        />
       </KpiRow>
 
       <SubTabs<Tab>
@@ -91,6 +105,7 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
   const { highlights, inventory } = results;
   const signals = useMemo(() => (inventory === null ? undefined : inventorySignals(inventory)), [inventory]);
   const priorities = tableColumnCounts(highlights.debt, /priority/i);
+  const urgent = highlights.security.filter((finding) => finding.severity === "Critical" || finding.severity === "High").sort((x, y) => SEVERITY_RANK[x.severity] - SEVERITY_RANK[y.severity]);
   const topLanguage = inventory === null ? undefined : [...inventory.languages].sort((a, b) => b.sloc - a.sloc)[0];
   return (
     <div className="flex flex-col gap-4">
@@ -102,8 +117,26 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
             </Section>
           )}
           {highlights.recommendation === undefined ? null : (
-            <Section title="Recommended pattern">
+            <Section title="Recommended pattern" actions={<MoreLink label="Risk & debt" onClick={() => onTab("risk")} />}>
               <ClampedText text={highlights.recommendation} />
+              {urgent.length === 0 ? null : (
+                <div className="mt-3 border-t border-hover pt-3">
+                  <p className="mb-1.5 text-[11px] tracking-wide text-text-muted uppercase">Fix first · {urgent.length} critical or high</p>
+                  <ul className="flex flex-col gap-1.5">
+                    {urgent.slice(0, 4).map((finding) => (
+                      <li key={finding.id} className="text-[12.5px]">
+                        <SeverityMark severity={finding.severity} />
+                        <span className="ml-1.5 text-text-secondary">{finding.title}</span>
+                        {finding.location === undefined ? null : (
+                          <p className="truncate font-mono text-[11px] text-text-muted" title={finding.location}>
+                            {finding.location}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </Section>
           )}
         </div>
@@ -111,7 +144,7 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
 
       {results.architecture === undefined ? null : (
         <Section title="Architecture" description="ARCHITECTURE.mmd: the domains and how they depend on each other.">
-          <MermaidDiagram source={results.architecture} title="Domain diagram" />
+          <MermaidDiagram source={results.architecture} title="Domain diagram" height={760} />
         </Section>
       )}
 
@@ -125,9 +158,18 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
               <Signal label="Dominant language" value={topLanguage === undefined ? "—" : topLanguage.language} note={topLanguage === undefined ? undefined : `${percentOf(topLanguage.sloc, inventory.sloc)} of the code`} />
               <Signal label="Complexity per KSLOC" value={formatCount(inventory.complexityPerKsloc ?? (inventory.ksloc === 0 ? 0 : Math.round((inventory.complexity / inventory.ksloc) * 10) / 10))} note="decision keywords" />
               <Signal label="Median file size" value={`${formatCount(signals?.medianSloc)} SLOC`} note={`over ${formatCount(signals?.codeFiles)} source files`} />
-              <Signal label="Largest file" value={signals?.largest === undefined ? "—" : `${formatCount(signals.largest.sloc)} SLOC`} note={signals?.largest === undefined ? undefined : shortPath(signals.largest.path)} title={signals?.largest?.path} />
+              <Signal
+                label="Largest file"
+                value={signals?.largest === undefined ? "—" : `${formatCount(signals.largest.sloc)} SLOC`}
+                note={signals?.largest === undefined ? undefined : shortPath(signals.largest.path)}
+                title={signals?.largest?.path}
+              />
               <Signal label="Files over 1,000 SLOC" value={formatCount(signals?.oversized)} note={signals === undefined ? undefined : percentOf(signals.oversized, signals.codeFiles)} />
-              <Signal label="Complexity concentration" value={signals === undefined ? "—" : `${percentOf(signals.topTenShare * 100, 100)} in 10 files`} note={signals === undefined ? undefined : `${formatCount(signals.halfComplexityFiles)} files hold half`} />
+              <Signal
+                label="Complexity concentration"
+                value={signals === undefined ? "—" : `${percentOf(signals.topTenShare * 100, 100)} in 10 files`}
+                note={signals === undefined ? undefined : `${formatCount(signals.halfComplexityFiles)} files hold half`}
+              />
             </SignalList>
           </Section>
         </div>
@@ -197,7 +239,13 @@ function CodeTab({ inventory }: { inventory: Inventory }): React.JSX.Element {
           <Scatter
             xLabel="SLOC"
             yLabel="Complexity"
-            points={code.map((file) => ({ key: file.path, x: file.sloc, y: file.complexity, color: colors.get(file.language) ?? CHART_COLOR.blue, title: `${file.path}\n${file.language} · ${formatCount(file.sloc)} SLOC · complexity ${formatCount(file.complexity)}` }))}
+            points={code.map((file) => ({
+              key: file.path,
+              x: file.sloc,
+              y: file.complexity,
+              color: colors.get(file.language) ?? CHART_COLOR.blue,
+              title: `${file.path}\n${file.language} · ${formatCount(file.sloc)} SLOC · complexity ${formatCount(file.complexity)}`,
+            }))}
           />
           <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-text-secondary">
             {inventory.languages.slice(0, 8).map((language) => (
