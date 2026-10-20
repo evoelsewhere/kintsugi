@@ -64,7 +64,7 @@ With the mock backend (`KINTSUGI_RUNTIME_MODE=mock`) no agent writes anything, s
 
 ## 6.2 Project build
 
-1. **Create / join / copy-from.** An admin or architect creates the project and registers its application/repository records in the portal; the portal renders `kintsugi.yaml` but does not scaffold a document repo from `templates/document-repo/` yet. The template is currently used by `scripts/e2e/start.mjs` for end-to-end seed data. Create or join the document repo separately, then commit the rendered manifest through a pull request; that PR is gate G0. Portal scaffolding and publishing remain planned (see [Build a project](../guides/build-project.md)).
+1. **Create / join / copy-from.** An admin or architect creates the project and registers its application/repository records in the portal; the portal renders `kintsugi.yaml`. **Publish kintsugi.yaml** proposes it, together with the starter structure of `templates/document-repo/` for everything the document repo lacks (create-only files, one skeleton per application), as one pull request from `kintsugi/<user>/<write-id>`; that PR is gate G0. Joining an existing repo by reading its `kintsugi.yaml` remains planned (see [Build a project](../guides/build-project.md)).
 2. **Standards.** The team writes `standards/` and `plugins/` through normal PRs, helped by `knowledge-ingest` dry runs and `to-be-analyst`. Plugins are validated after each merge.
 3. **Pilot.** Pilot units run through task-planner → member → gate-reviewer (→ compare). The team fixes the standards where results were wrong; the architect then approves gate G3.
 
