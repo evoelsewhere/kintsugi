@@ -146,7 +146,7 @@ const port: CodingAgentWorkflowPort = {
   },
 };
 
-describe("coding-agent context wire schemas", () => {
+describe("Coding Agent Workflow wire schemas", () => {
   it("rejects unknown selectors and arbitrary document paths", () => {
     expect(taskBriefQuerySchema.safeParse({
       schemaVersion: "1",
@@ -184,6 +184,15 @@ describe("coding-agent context wire schemas", () => {
 
   it("applies bounded pagination and rejects an excessive search query", () => {
     expect(projectQuerySchema.parse({}).limit).toBe(25);
+    expect(projectQuerySchema.parse({ limit: "1" }).limit).toBe(1);
+    expect(taskQuerySchema.parse({ projectId: "modernization", limit: "3", mine: "true" })).toMatchObject({ limit: 3, mine: true });
+    expect(taskQuerySchema.parse({ projectId: "modernization", mine: "false" }).mine).toBe(false);
+    expect(taskBriefQuerySchema.parse({
+      projectId: "modernization",
+      unitId: "billing/invoices/tax",
+      activity: "implementation",
+      maxBytes: "2048",
+    }).maxBytes).toBe(2048);
     expect(taskQuerySchema.safeParse({ schemaVersion: "1", projectId: "modernization", limit: 101 }).success).toBe(false);
     expect(documentSearchQuerySchema.safeParse({
       schemaVersion: "1",

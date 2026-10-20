@@ -13,4 +13,8 @@ export class ProjectAccessAdapter extends ProjectAccessPort {
   requireRead(userId: string, projectId: string): Promise<void> {
     return this.projects.requireRead(userId, projectId);
   }
+
+  listReadableProjects(userId: string, projectIds: readonly string[]): Promise<{ projectId: string; name: string }[]> {
+    return this.projects.listReadableProjects(userId, projectIds);
+  }
 }

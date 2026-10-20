@@ -83,12 +83,18 @@ export class PermissionsGuard implements CanActivate {
       if (request.method !== "GET") throw new ForbiddenException("Coding Agent Workflow routes are read-only");
       if (!user.permissions.includes("member.read")) throw new ForbiddenException("Missing permission: member.read");
       if (required?.some((code) => code !== "member.read")) throw new ForbiddenException("Coding Agent Workflow tokens cannot satisfy installation permissions");
-      const projectId = this.#projectId(request, scope);
-      if (projectId === undefined) throw new ForbiddenException("Project scope is required");
-      if (request.memberPrincipal !== undefined && !request.memberPrincipal.projectIds.includes(projectId)) {
-        throw new ForbiddenException("Token is not scoped to this project");
+      if (scope.projectIdFrom === "token-projects") {
+        if (request.memberPrincipal === undefined || request.memberPrincipal.projectIds.length === 0) {
+          throw new ForbiddenException("A project-scoped Coding Agent Workflow token is required");
+        }
+      } else {
+        const projectId = this.#projectId(request, scope);
+        if (projectId === undefined) throw new ForbiddenException("Project scope is required");
+        if (request.memberPrincipal !== undefined && !request.memberPrincipal.projectIds.includes(projectId)) {
+          throw new ForbiddenException("Token is not scoped to this project");
+        }
+        await this.projectAccess.requireRead(user.id, projectId);
       }
-      await this.projectAccess.requireRead(user.id, projectId);
     }
 
     if (request.memberPrincipal !== undefined) return true;
@@ -100,6 +106,7 @@ export class PermissionsGuard implements CanActivate {
   }
 
   #projectId(request: AuthenticatedRequest, scope: MemberReadScope): string | undefined {
+    if (scope.projectIdFrom === "token-projects") return undefined;
     const raw = scope.projectIdFrom === "query" ? request.query["projectId"] : request.params["projectId"];
     return typeof raw === "string" && raw.length > 0 ? raw : undefined;
   }

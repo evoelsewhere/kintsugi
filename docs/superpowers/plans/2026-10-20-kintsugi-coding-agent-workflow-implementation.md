@@ -177,17 +177,17 @@ Final review safety constraints: cap the section index at 400 ranges, leaving up
 - [x] Resolve the final read-only review findings: serialize lease/expiry transitions, resume interrupted cleanup and stale snapshot preparation, bound aggregate section ranges, and split source text once per search. Cover the lease race with Postgres integration and recovery/bounds with focused unit tests.
 - [x] Resolve API and worker clock-skew findings: use Postgres for snapshot creation/expiry and API availability, plus worker ready/expiry transitions. Cover ahead/behind skew with API/Postgres and worker/Postgres checks.
 
-### Task 6 (T06) — Versioned Coding Agent Context API and complete preview capability contract
+### Task 6 (T06) — Versioned Coding Agent Workflow API and complete capability contract
 
 **Depends on:** T02/T04/T05. **Files:** agent-context `interface/agent-context.controller.ts`, `agent-context.dto.ts`, `application/agent-context.service.ts`, `domain/review-reader.port.ts`, module; SDK exports; API app composition and `test/integration/member-api.test.ts`, `test/unit/member-api-contract.test.ts`.
 
 **Interfaces:** HTTPS routes under `/api/member/v1`: GET `/projects`, `/tasks`, `/task-brief`, `/documents`, `/search`, `/task-status`; GET `/reviews/:reviewId` becomes available when T13 supplies `ReviewReader`. All data routes explicitly require catalog `member.read`, member-token scope metadata and project access. `AgentContextService` implements the seven nonstream methods of the port using authorized feature services, not transport code.
 
-- [ ] Write contract tests for envelope, valid queries, 400 schema errors, 401/403, explicit unavailable reviews, slash-containing unit query values and matching CLI/MCP-ready payloads. Test that source URLs do not become server-side fetch requests.
-- [ ] Run `pnpm --filter @kintsugi/api exec vitest run test/integration/member-api.test.ts test/unit/member-api-contract.test.ts`.
-- [ ] Wire plain-returning controllers and shared validators; preserve the global response interceptor. Export feature services through `index.ts`. Do not expose server MCP or change SPA fallback in this milestone. Represent absent review capability explicitly, with no passing stub report.
-- [ ] Exercise one prepared draft/design brief through real HTTP and ensure missing quality approval is shown as a blocker; keep API methods and schema error codes stable.
-- [ ] Run auth/context regressions and API typecheck/lint; commit `feat(api): expose versioned member query endpoints`.
+- [x] Write contract tests for envelope, valid queries, 400 schema errors, 401/403, explicit unavailable reviews, slash-containing unit query values and matching CLI/MCP-ready payloads. Test that source URLs do not become server-side fetch requests.
+- [x] Run `pnpm --filter @kintsugi/api test -- test/integration/member-api.test.ts test/unit/member-api-contract.test.ts` against disposable Postgres.
+- [x] Wire plain-returning controllers and shared validators; preserve the global response interceptor. Export feature services through `index.ts`. Do not expose server MCP or change SPA fallback in this milestone. Represent absent review capability explicitly, with no passing stub report.
+- [x] Exercise one prepared draft/design brief through real HTTP and ensure missing quality approval is shown as a blocker; keep API methods and schema error codes stable.
+- [x] Run auth/context regressions and API typecheck/lint/build; commit `feat(api): expose coding agent workflow endpoints`.
 
 ### Task 7 (T07) — Typed HTTPS client, secure CLI and coherent export
 

@@ -3,7 +3,7 @@
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
 import { getPool } from "#common/db/pool.js";
-import { ProjectAccessRepository, type ProjectAccessGrant } from "../domain/project-access.repository.js";
+import { ProjectAccessRepository, type ProjectAccessGrant, type ReadableProject } from "../domain/project-access.repository.js";
 
 interface GrantRow {
   project_id: string;
@@ -29,6 +29,17 @@ export class PgProjectAccessRepository extends ProjectAccessRepository {
       grantedAt: row.granted_at.toISOString(),
       ...(row.granted_by === null ? {} : { grantedBy: row.granted_by }),
     }));
+  }
+
+  async listReadableProjects(userId: string, projectIds: readonly string[]): Promise<ReadableProject[]> {
+    if (projectIds.length === 0) return [];
+    const result = await this.#pool.query<{ project_id: string; name: string }>(
+      "select p.id as project_id, p.name from admin.project p " +
+        "join admin.project_access a on a.project_id = p.id " +
+        "where a.user_id = $1 and p.id = any($2::text[]) order by p.id",
+      [userId, [...projectIds]],
+    );
+    return result.rows.map((row) => ({ projectId: row.project_id, name: row.name }));
   }
 
   async has(userId: string, projectId: string): Promise<boolean> {

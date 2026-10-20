@@ -3,7 +3,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
-import type { ProjectAccessGrant } from "../domain/project-access.repository.js";
+import type { ProjectAccessGrant, ReadableProject } from "../domain/project-access.repository.js";
 import { ProjectAccessRepository } from "../domain/project-access.repository.js";
 
 @Injectable()
@@ -39,6 +39,10 @@ export class ProjectAccessService {
 
   async requireRead(userId: string, projectId: string): Promise<void> {
     if (!(await this.access.has(userId, projectId))) throw new ForbiddenException("Project Access is required");
+  }
+
+  listReadableProjects(userId: string, projectIds: readonly string[]): Promise<ReadableProject[]> {
+    return this.access.listReadableProjects(userId, [...new Set(projectIds)]);
   }
 
   #requireManagementPermission(actor: Actor): void {

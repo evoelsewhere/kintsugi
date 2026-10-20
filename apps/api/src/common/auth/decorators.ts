@@ -11,7 +11,7 @@ export const PERMISSION_KEY = "kintsugi:required-permission";
 export const MEMBER_READ_SCOPE_KEY = "kintsugi:member-read-scope";
 
 export interface MemberReadScope {
-  projectIdFrom: "query" | "params";
+  projectIdFrom: "query" | "params" | "token-projects";
 }
 
 /** The signed-in caller as seen by use cases: identity plus effective permissions. */
