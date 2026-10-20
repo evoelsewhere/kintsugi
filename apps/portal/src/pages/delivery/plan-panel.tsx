@@ -121,7 +121,7 @@ export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, b
               Select batch {open[0].n}
             </Button>
           )}
-          {planButton("Plan again")}
+          {planButton("Regenerate Plan")}
         </div>
       </CardHeader>
       {failure === undefined ? null : <p className="mt-2 text-[12px] text-[var(--ds-status-red)]">The last planning run failed: {failure}</p>}
