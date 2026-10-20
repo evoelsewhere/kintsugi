@@ -24,9 +24,6 @@ interface LeaseRow {
   expires_at: Date | null;
 }
 
-const PREPARATION_STALE_MS = 5 * 60 * 1000;
-const RECOVERY_BACKOFF_MS = 5 * 60 * 1000;
-
 export class PostgresSnapshotRetentionRepository implements SnapshotRetentionRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -70,7 +67,7 @@ export class PostgresSnapshotRetentionRepository implements SnapshotRetentionRep
     };
   }
 
-  async claimExpired(now: Date): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }> {
+  async claimExpired(): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }> {
     const client = await this.pool.connect();
     const claimedIds: string[] = [];
     let retained = 0;
@@ -78,16 +75,15 @@ export class PostgresSnapshotRetentionRepository implements SnapshotRetentionRep
       await client.query("begin");
       const candidates = await client.query<SnapshotRow>(
         "select snapshot_id, status, expires_at, failure_code from delivery.member_snapshot " +
-          "where status = 'expiring' or (status = 'ready' and expires_at <= $1) " +
+        "where status in ('ready', 'expiring') and expires_at <= clock_timestamp() " +
           "order by expires_at, snapshot_id limit 100 for update skip locked",
-        [now],
       );
       for (const candidate of candidates.rows) {
         if (candidate.status === "ready") {
           const activeLease = await client.query<{ present: boolean }>(
             "select exists (select 1 from delivery.member_snapshot_lease " +
-              "where snapshot_id = $1 and (expires_at is null or expires_at > $2)) as present",
-            [candidate.snapshot_id, now],
+              "where snapshot_id = $1 and (expires_at is null or expires_at > clock_timestamp())) as present",
+            [candidate.snapshot_id],
           );
           if (activeLease.rows[0]?.present === true) {
             retained += 1;
@@ -115,25 +111,22 @@ export class PostgresSnapshotRetentionRepository implements SnapshotRetentionRep
     };
   }
 
-  async claimStalePreparing(now: Date): Promise<SnapshotRetentionRecord[]> {
-    const staleBefore = new Date(now.getTime() - PREPARATION_STALE_MS);
-    const retryBefore = new Date(now.getTime() - RECOVERY_BACKOFF_MS);
+  async claimStalePreparing(): Promise<SnapshotRetentionRecord[]> {
     const client = await this.pool.connect();
     const claimedIds: string[] = [];
     try {
       await client.query("begin");
       const candidates = await client.query<{ snapshot_id: string }>(
         "select snapshot_id from delivery.member_snapshot " +
-          "where status = 'preparing' and created_at <= $1 and " +
-          "(retention_checked_at is null or retention_checked_at <= $2) " +
+          "where status = 'preparing' and created_at <= clock_timestamp() - interval '5 minutes' and " +
+          "(retention_checked_at is null or retention_checked_at <= clock_timestamp() - interval '5 minutes') " +
           "order by created_at, snapshot_id limit 100 for update skip locked",
-        [staleBefore, retryBefore],
       );
       for (const candidate of candidates.rows) {
         await client.query(
-          "update delivery.member_snapshot set retention_checked_at = $2 " +
+          "update delivery.member_snapshot set retention_checked_at = clock_timestamp() " +
             "where snapshot_id = $1 and status = 'preparing'",
-          [candidate.snapshot_id, now],
+          [candidate.snapshot_id],
         );
         claimedIds.push(candidate.snapshot_id);
       }
@@ -164,14 +157,14 @@ export class PostgresSnapshotRetentionRepository implements SnapshotRetentionRep
     );
   }
 
-  async markExpired(snapshotId: string, now: Date): Promise<void> {
+  async markExpired(snapshotId: string): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
       const result = await client.query(
-        "update delivery.member_snapshot set status = 'expired', pin_state = 'released', expired_at = $2 " +
-          "where snapshot_id = $1 and status = 'expiring' and expires_at <= $2",
-        [snapshotId, now],
+        "update delivery.member_snapshot set status = 'expired', pin_state = 'released', expired_at = clock_timestamp() " +
+          "where snapshot_id = $1 and status = 'expiring' and expires_at <= clock_timestamp()",
+        [snapshotId],
       );
       if ((result.rowCount ?? 0) > 0) {
         await client.query("delete from delivery.member_snapshot_cursor where snapshot_id = $1", [snapshotId]);

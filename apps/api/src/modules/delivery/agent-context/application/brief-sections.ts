@@ -21,6 +21,7 @@ export function selectBriefSections(
       || left.section.startLine - right.section.startLine);
   const sections: ContextSection[] = [];
   const omittedSections: OmittedSection[] = [];
+  const sourceLines = new Map<string, string[]>();
   let remainingBytes = Math.max(0, maxBytes);
 
   for (const { source, section } of candidates) {
@@ -30,7 +31,12 @@ export function selectBriefSections(
       continue;
     }
 
-    const text = markdown.split(/\r\n|\n|\r/).slice(section.startLine - 1, section.endLine).join("\n");
+    let lines = sourceLines.get(source.sourceId);
+    if (lines === undefined) {
+      lines = markdown.split(/\r\n|\n|\r/);
+      sourceLines.set(source.sourceId, lines);
+    }
+    const text = lines.slice(section.startLine - 1, section.endLine).join("\n");
     const bytes = Buffer.byteLength(text, "utf8");
     if (bytes > remainingBytes) {
       if (section.required) omittedSections.push({ sourceId: source.sourceId, sectionId: section.sectionId, required: true });
