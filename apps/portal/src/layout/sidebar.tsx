@@ -1,9 +1,10 @@
 // Sidebar — admin-panel navigation: logo + app name + version, search, grouped nav
-// with icons and badges, user card at the bottom. Collapsible (icon rail).
+// with icons and badges, user card at the bottom. Collapsible (icon rail) with a
+// width transition, and resizable by dragging the right edge (persisted per user).
 // Items come from nav-config.tsx; the user card and the Settings entry open the
 // settings modal. Styled per DESIGN.md (14px/400 items, gray hover fill).
 import { ChevronDown, LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Settings } from "lucide-react";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { BrandMark } from "../components/brand-mark";
 import { StatusDot } from "../components/ui/status-dot";
@@ -17,6 +18,18 @@ import { NAV_SECTIONS, type NavItem } from "./nav-config";
 
 const HEALTH_TONE = { checking: "orange", up: "green", down: "red" } as const;
 const COLLAPSE_KEY = "kintsugi-sidebar-collapsed";
+const WIDTH_KEY = "kintsugi-sidebar-width";
+const RAIL_WIDTH = 64;
+const MIN_WIDTH = 220;
+const MAX_WIDTH = 420;
+const DEFAULT_WIDTH = 288;
+const TRANSITION_MS = 200;
+
+const clampWidth = (value: number): number => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value));
+function storedWidth(): number {
+  const parsed = Number(localStorage.getItem(WIDTH_KEY));
+  return Number.isFinite(parsed) && parsed > 0 ? clampWidth(parsed) : DEFAULT_WIDTH;
+}
 
 function SidebarLink({
   item,
@@ -70,7 +83,41 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
   const { user, logout } = useAuth();
   const dynamicChildren = useDynamicNavChildren();
   // Narrow screens always use the icon rail so content keeps its width.
-  const rail = collapsed || !isDesktop;
+  const targetRail = collapsed || !isDesktop;
+  const [width, setWidth] = useState(storedWidth);
+  const [dragging, setDragging] = useState(false);
+  const widthRef = useRef(width);
+  // Content switches to the icon rail only after the collapse animation ends, so labels
+  // do not vanish while the sidebar is still wide; expanding switches at once.
+  const [rail, setRail] = useState(targetRail);
+  useEffect(() => {
+    if (!targetRail) {
+      setRail(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setRail(true), TRANSITION_MS);
+    return () => window.clearTimeout(timer);
+  }, [targetRail]);
+
+  const startResize = (event: React.PointerEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = widthRef.current;
+    setDragging(true);
+    const onMove = (move: PointerEvent): void => {
+      const next = clampWidth(startWidth + move.clientX - startX);
+      widthRef.current = next;
+      setWidth(next);
+    };
+    const onUp = (): void => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setDragging(false);
+      localStorage.setItem(WIDTH_KEY, String(widthRef.current));
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const displayName = user?.displayName || user?.username || "Account";
   const initials = displayName
@@ -104,11 +151,27 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
 
   return (
     <aside
+      style={{ width: targetRail ? RAIL_WIDTH : width }}
       className={cn(
         "sticky top-0 flex h-screen shrink-0 flex-col gap-4 bg-surface px-3 py-5 [box-shadow:1px_0_0_0_rgba(0,0,0,0.08)]",
-        rail ? "w-16" : "w-72",
+        !dragging && "transition-[width] duration-200 ease-out",
       )}
     >
+      {/* Resize handle on the right edge (expanded desktop only) */}
+      {targetRail ? null : (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          onPointerDown={startResize}
+          onDoubleClick={() => {
+            widthRef.current = DEFAULT_WIDTH;
+            setWidth(DEFAULT_WIDTH);
+            localStorage.setItem(WIDTH_KEY, String(DEFAULT_WIDTH));
+          }}
+          className={cn("absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize hover:bg-black/10 dark:hover:bg-white/10", dragging && "bg-black/10 dark:bg-white/10")}
+        />
+      )}
       {/* Logo + app name + version */}
       <div className={cn("flex items-center gap-2 px-2", rail && "justify-center px-0")}>
         <BrandMark className="size-8" />
