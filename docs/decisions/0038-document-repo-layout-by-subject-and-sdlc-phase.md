@@ -1,6 +1,6 @@
 # ADR-0038: Document repo layout by subject and SDLC phase
 
-- Status: Accepted
+- Status: Accepted. Amended by [ADR-0042](0042-member-context-and-project-access.md) and [ADR-0043](0043-evidence-bound-pr-continuation.md) for immutable member context and effective evidence-bound gate continuation.
 - Date: 2026-10-15
 - Decision register: D55
 

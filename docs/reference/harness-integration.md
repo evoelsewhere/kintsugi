@@ -1,168 +1,75 @@
 # Harness integration
 
-How Kintsugi connects to members' harnesses (Claude Code, GitHub Copilot, ChatGPT/Codex, …). Implemented by `services/harness-hub`. Contracts are in [`packages/harness-sdk`](../../packages/harness-sdk/src/index.ts).
+Status: the member-access contract is approved; the CLI, local MCP bridge and PR continuation are being implemented. This page describes the target behavior and does not claim that these commands are available in a release.
 
-Everything Kintsugi gives to a harness is packaged as an **agent plugin** in the Claude Code plugin format and distributed through a **marketplace** generated in the project's document repo ([ADR-0015](../decisions/0015-member-assets-as-agent-plugins.md)).
+Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The member-access plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-member-access-through-cli-and-local-mcp.md)).
 
-## 1. Plugins
+## Connection path
 
-### 1.1 Format
+The developer installs the Kintsugi CLI and signs in to a self-hosted installation over HTTPS. The CLI starts a local stdio MCP process when a client asks for tools. The process has no inbound listener, shares the CLI's project-scoped credentials and calls the same typed member API. A CLI-only path remains available for shells and explicit Markdown export.
 
-```
-<plugin>/
-  .claude-plugin/plugin.json   # manifest: name (kebab-case), version, description, author, dependencies, userConfig
-  skills/<name>/SKILL.md       # Agent Skills
-  agents/*.md                  # subagents
-  commands/*.md                # slash commands (skills are preferred for new content)
-  hooks/hooks.json             # lifecycle hooks: SessionStart, PreToolUse, PostToolUse, Stop, …
-  .mcp.json                    # MCP servers
-  scripts/  bin/               # files the hooks call (${CLAUDE_PLUGIN_ROOT})
-```
+Claude Code is the first complete client pilot. Codex and GitHub Copilot CLI are distinct targets; support is claimed only after each exact client version passes authentication, setup, protocol, upgrade and removal checks. See the [compatibility record](member-access-compatibility.md).
 
-**Authoring rules:**
-- **Names**: component names are namespaced `<plugin>:<name>` (e.g. `kintsugi:kintsugi-task`). Project plugins are named `<project-id>-<topic>`, and reserved prefixes (`claude-`, `anthropic-`, …) are rejected.
-- **Paths**: every path in a manifest starts with `./` and stays inside the plugin root.
-- **Validation**: Kintsugi validates plugins on every change to the document repo's `plugins/` with the same rules as `claude plugin validate`.
+The access plugin contains a small skill and client-specific MCP configuration. It has no hooks and does not edit arbitrary project instructions. Optional method plugins stay in the project document repository and are installed separately. Client-side instructions help the AI retrieve information; the server enforces authorization.
 
-### 1.2 Built-in plugin `kintsugi`
+## CLI contract
 
-Sources: [`packages/agents/builtin/member/`](../../packages/agents/builtin/member/) (skills, hooks) plus the member agents and commands of the built-in content. It is versioned with Kintsugi and generated into each document repo as `plugins/kintsugi/` (never edited by hand).
+The initial commands are read-only except for local sign-in, profile selection, explicit file export and client setup.
 
-| Component | Content |
+| Command | Purpose |
 |---|---|
-| `userConfig` | `kintsugi_url` and `kintsugi_token` (sensitive, stored in the harness's secure storage) |
-| `.mcp.json` | The Kintsugi MCP server (§2), authenticated with the PAT |
-| `skills/kintsugi-task` | How to work a task pack: cited standards, read-only legacy repos, trailers, PRs, registration |
-| `skills/reverse-design` | Stack-agnostic reverse-design method |
-| `hooks/hooks.json` | Calls the `kintsugi` CLI (see below) |
+| kintsugi auth login --url URL | Sign in to one installation; secret input is hidden and kept in the OS credential store |
+| kintsugi auth status | Show the selected profile and connection status without showing a token |
+| kintsugi project list / use ID | List authorized projects and select a local default |
+| kintsugi task list --mine | List tasks assigned to the authenticated stable user identity |
+| kintsugi task list --ready-for implementation | List tasks whose current inputs allow the requested activity |
+| kintsugi task brief UNIT | Print the task, readiness blockers, required context index and citations |
+| kintsugi task brief UNIT --format markdown --output FILE | Explicitly export a private, source-referenced brief |
+| kintsugi document get --snapshot ID --source ID --section ID | Fetch a cited document section from the pinned snapshot |
+| kintsugi document search --snapshot ID --query TEXT | Bounded keyword search inside the pinned context |
+| kintsugi review list --task UNIT / review get ID | Find current authorized review references and retrieve actionable findings |
+| kintsugi task status UNIT | Read current task and relevant PR/gate state |
+| kintsugi task watch UNIT | Stream authorized workflow progress over resumable SSE |
+| kintsugi plugins setup --harness claude-code | Install or update the access package for one tested client |
+| kintsugi doctor | Check local installation, credential store, network and client capabilities |
+| kintsugi mcp serve --profile NAME | Run the local stdio MCP bridge for the selected profile |
 
-| Hook | Event | Effect |
-|---|---|---|
-| `kintsugi hook session-start` | `SessionStart` | Adds the active task pack and its cited standards to the session context |
-| `kintsugi hook guard-write` | `PreToolUse` (`Write\|Edit`) | Refuses writes to paths in source (legacy) repos |
-| `kintsugi hook activity` | `PostToolUse` (`Write\|Edit`) | Reports activity (`plugin-hook` source) for AI metrics |
-| `kintsugi hook session-end` | `Stop` | Closes the activity record |
+The executable returns stable JSON when requested, uses stdout for results and stderr for diagnostics. Noninteractive mode does not prompt. Export refuses to overwrite an existing file unless the user explicitly requests it. A CLI can export text for a chat without tools; it cannot inject a prompt into an arbitrary running AI conversation.
 
-### 1.3 Project plugins
+## MCP tools
 
-Project plugins live in the document repo at `plugins/<plugin>/` ([document repository](document-repo.md)). They hold stack-specific skills, reviewer agents, commands, and hooks such as running the target formatter. Every valid plugin is published to the project marketplace; there is no maturity gate.
+The local server exposes these read-only tools when the matching backend capability is enabled:
 
-### 1.4 Marketplaces
-
-After every change to `plugins/`, the worker auto-commits the generated files below to the document repo. All plugin sources are **relative paths** under `plugins/`: the generated built-in plugin and the project plugins. This works on any Git server.
-
-| File | Read by |
+| Tool | Required scope |
 |---|---|
-| `.claude-plugin/marketplace.json` | Claude Code, GitHub Copilot CLI |
-| `.github/plugin/marketplace.json` | GitHub Copilot CLI |
-| `.agents/plugins/marketplace.json` + `.codex-plugin/plugin.json` per plugin (converted) | Codex |
+| project_list | Current installation and authenticated user |
+| task_list | Explicit project and optional stable-user/readiness filters |
+| task_brief | Explicit project, full unit identity and requested activity |
+| document_get | Explicit project, snapshot ID, registered source ID and section |
+| document_search | Explicit project and snapshot ID with a bounded query |
+| review_get | Explicit project and authorized review ID |
+| task_status | Explicit project and full unit identity |
 
-**Install.** Members add the document repo as a marketplace once, then install the plugins:
-- **Claude Code**: `/plugin marketplace add <document-repo-url>` then `/plugin install kintsugi@<project>`.
-- **Copilot CLI**: `copilot plugin marketplace add <document-repo-url>`.
-- **Codex**: through its repo marketplace.
-- **All harnesses**: `kintsugi plugins setup --harness <id>` runs these commands.
+Document retrieval calls require the snapshot returned by task_brief. The bridge does not keep an implicit active project or task. If review capability is unavailable, review_get is not advertised. Read-only annotations communicate intent but never replace server authorization.
 
-**Claude Code shortcut.** Kintsugi can also write `extraKnownMarketplaces` and `enabledPlugins` into the target repo's `.claude/settings.json`, so Claude Code offers the plugins when the repo is opened.
+CLI JSON, MCP structured results and cited text use the same validated DTOs. REST keeps Kintsugi's standard response envelope; MCP uses the protocol's native tool results and errors.
 
-### 1.5 Harness support
+## Task context and readiness
 
-| Harness | Plugins | Hooks | Notes |
-|---|---|---|---|
-| Claude Code | Native | Full | Reference format |
-| GitHub Copilot CLI | Native | Full | No `git-subdir` sources; Kintsugi uses relative paths only |
-| Codex | Converted manifest | Command hooks only | Kintsugi generates `.codex-plugin/plugin.json` |
-| Harnesses without plugin support (ChatGPT chat, some IDE extensions, Cursor, …) | Fallback renderer | None | §1.6 |
+The unit state and task document in the project document repository are authoritative. A brief resolves the full project/application/module/unit identity, assignment, objective, acceptance criteria, required deliverables, referenced basic and detailed designs, applicable standards and relevant gate evidence.
 
-> Vendor formats change quickly, especially for Copilot and Codex. Re-verify them when implementing each generator, and cover each one with snapshot tests.
+The application TO-BE design is a basic-design candidate; the unit design is a detailed-design candidate. Explicit references and shared document-layout helpers determine which sources actually apply. Every source reports availability separately from approval. An auto-committed task or a pending gate scaffold does not approve itself. A design task can be ready to produce the detailed design it lacks; implementation reports a blocker when required design or predecessor approval is missing.
 
-### 1.6 Fallback renderers
+A brief returns an immutable snapshot ID and an index of mandatory sections. Each repository is pinned to its own full Git commit. Source paths, content hashes, approval records, required deliverables and policy version are part of the manifest. Follow-up get/search calls return the same revisions and exact path citations. If content is too large for the brief, the result is explicitly partial and names the sections the AI must retrieve before coding. An expired or unavailable snapshot does not silently switch to the latest branch head ([ADR-0042](../decisions/0042-member-context-and-project-access.md)).
 
-For harnesses without plugin support, declarative renderer configs (built-in, Admin → Harnesses, or declared in `kintsugi.yaml`) flatten the published plugins into native paths:
+The member token is project-scoped. Current user and project authorization are checked on every call, even for an existing snapshot. Task assignment filters use a stable user identity, not a display-name match. Reading or listing tasks never claims, assigns, approves or changes their status.
 
-| Plugin component | Typical fallback target |
-|---|---|
-| `skills/*/SKILL.md` | `.claude/skills/`, `.github/skills/`, `.agents/skills/`, `.cursor/rules/`, project instructions |
-| Project context | `AGENTS.md`, `.github/copilot-instructions.md`, project instructions |
-| `agents/*.md` | `.github/agents/*.agent.md`, custom GPT |
-| `.mcp.json` | `.vscode/mcp.json`, `.cursor/mcp.json`, connector |
-| `hooks/` | Not rendered: server-side gates cover the gap |
+## PR and gate continuation
 
-**Transformers**: `copy`, `agent-skill`, `markdown`, `markdown-frontmatter`, `json-mcp`, `toml-mcp`, plus plugins installed by admins.
+The developer works in the normal code and document repositories and opens ordinary pull requests. GitHub.com is the first provider. GitHub Enterprise Server requires an exact tested server version. Other providers, including GitLab, Bitbucket, Azure DevOps and AWS-hosted Git services, need later provider adapters.
 
-## 2. Kintsugi MCP server
+Kintsugi receives signed provider notifications when configured and reconciles current PR state on a durable polling schedule. Reconciliation finds changes that arrived while the installation was offline. Each review binds the PR head and base, context snapshot, policy version and reviewer version. Incomplete inputs produce an inconclusive result. New relevant changes make old findings stale. The AI can fetch current cited findings through the CLI or MCP while the developer is online.
 
-The built-in plugin bundles this server.
-- **Transport**: remote Streamable HTTP on `kintsugi-app`.
-- **Authentication**: `Authorization: Bearer <PAT>`. OAuth will be added once Entra ID is enabled (D17).
+Provider-required checks and human PR reviews apply before code or document deliverables merge. The effective unit gate is a later phase-exit decision covering exact merged revisions. An authorized human decision is published as a readable gate-record PR; the gate is effective only after that record merges and validates against every required deliverable. A failed Git publication, changed evidence or duplicate event cannot silently advance the workflow. After validation, Kintsugi records the transition once and makes it visible through the portal and resumable SSE ([ADR-0043](../decisions/0043-evidence-bound-pr-continuation.md)).
 
-| Tool | Description |
-|---|---|
-| `kb.search` | Semantic search over the project's AS-IS / TO-BE KB |
-| `kb.ask` | Question answered by the `kb-assistant` runtime agent, with citations |
-| `task.next` | Next unit assigned to the caller |
-| `task.get` | Task pack and unit details |
-| `task.update` | Change unit status / notes; validated by the API and committed to the unit file by `kintsugi-bot` (ADR-0012) |
-| `artifact.register` | Register a deliverable already committed to Git: `repo@commit:path`, type, harness, AI share |
-| `gate.status` | Gate status for a unit / PR |
-| `guideline.get` | Project guidelines and rules |
-
-## 3. `kintsugi` CLI
-
-| Command | Description |
-|---|---|
-| `kintsugi login` | Store a PAT for an installation |
-| `kintsugi plugins setup [--harness <id>]` | Add the project marketplace and install the plugins with the harness's own commands; run the fallback renderer for harnesses without plugin support |
-| `kintsugi task start <id>` | Claim the unit (assignee, harness, `in-progress`), create a branch in the target repo, and fetch the task pack from the document repo |
-| `kintsugi task status <id> <status>` | Update unit status |
-| `kintsugi artifact register <path> --type <type>` | Register a committed deliverable |
-| `kintsugi kb ask "<question>"` | Ask the KB |
-| `kintsugi hook <event>` | Entry point for the built-in plugin's hooks (reads the hook JSON on stdin) |
-
-## 4. Task pack
-
-The `task-planner` runtime agent produces a task pack for each unit and commits it to `tasks/<unit-id>.md` in the document repo.
-- Template: `task-pack.template.md`, shipped with the `task-planner` agent.
-- Type: `TaskPack`.
-
-| Field | Description |
-|---|---|
-| `objective` | What the unit must achieve |
-| `acceptanceCriteria` | Checklist the gate verifies |
-| `context` | AS-IS excerpts with sources (from the KB) |
-| `relevantPaths` | Files in the source and target repos to start from |
-| `suggestedSkills` | Plugin skills to use, namespaced `<plugin>:<skill>` |
-| `deliverables` | Type, description, target repo (`document` / `target`) and path |
-| `documentRepoCommit` | Document repo commit the task pack was generated against |
-| `standards` | The standards (paths under `standards/`) that apply to the unit |
-
-## 5. Harness policy
-
-`HarnessPolicy` fields:
-
-| Field | Description |
-|---|---|
-| `allowedModels` | Models a harness may use for the project |
-| `allowedMcpServers` | MCP servers allowed (always includes Kintsugi's) |
-| `contentExclusions` | Glob patterns the harness must not read or send |
-| `requireCommitTrailer` | Require `Assisted-by: <harness>` on AI-assisted commits |
-| `requiredPlugins` | Plugins members must have enabled (always includes `kintsugi`) |
-
-## 6. Telemetry sources
-
-All sources are normalized into `HarnessActivity`.
-
-| Source | Data | Notes |
-|---|---|---|
-| Kintsugi MCP / CLI | KB usage, task updates, artifact registrations | Always available; the most complete |
-| Built-in plugin hooks | Sessions, writes, blocked writes, active plugin versions | Where hooks are supported and enabled; best-effort |
-| OpenTelemetry from Claude Code / Codex | Sessions, tokens, tool usage | Optional; enabled via managed config; sent to the OTLP endpoint of `kintsugi-app` |
-| GitHub Copilot metrics API | Aggregated usage per org / team | No per-session detail |
-| ChatGPT Enterprise compliance / analytics | Aggregated usage | Depends on the plan |
-| Git / PRs | `Assisted-by` trailers, PR template AI-usage section, labels | Mandatory convention, checked by gates |
-
-## 7. Conventions for members
-
-- **Commit trailer**: `Assisted-by: <claude-code | copilot | codex | chatgpt | …>` on AI-assisted commits.
-- **PR description**: reference the unit id and fill in the AI-usage section of the PR template.
-- **Plugins**: keep the `kintsugi` plugin enabled. Hooks are assistive; gates stay authoritative.
+The initial workflow does not let the member AI claim or approve tasks, write gate decisions, merge code PRs or administer Kintsugi. Remote MCP/OAuth, Kintsugi-owned chat, semantic search, telemetry hooks and additional Git providers are later work.
