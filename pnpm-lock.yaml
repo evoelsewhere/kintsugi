@@ -44,6 +44,9 @@ importers:
       '@kintsugi/git':
         specifier: workspace:*
         version: link:../../packages/git
+      '@kintsugi/harness-sdk':
+        specifier: workspace:*
+        version: link:../../packages/harness-sdk
       '@kintsugi/manifest':
         specifier: workspace:*
         version: link:../../packages/manifest

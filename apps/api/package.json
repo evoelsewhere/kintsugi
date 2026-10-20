@@ -26,6 +26,7 @@
     "@kintsugi/agents": "workspace:*",
     "@kintsugi/domain": "workspace:*",
     "@kintsugi/git": "workspace:*",
+    "@kintsugi/harness-sdk": "workspace:*",
     "@kintsugi/manifest": "workspace:*",
     "@kintsugi/orchestrator": "workspace:*",
     "@kintsugi/runtime": "workspace:*",

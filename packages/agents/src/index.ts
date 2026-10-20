@@ -52,3 +52,5 @@ export {
   type StoredSkill,
 } from "./catalog.js";
 export { unzipFiles, zipFiles, type UnzipLimits } from "./zip.js";
+
+export { MAX_UNIT_DOCUMENT_BYTES, parseUnitDocument } from "./unit-document.js";
