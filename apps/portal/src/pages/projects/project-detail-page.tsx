@@ -13,6 +13,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SyncStatusBadge } from "@/components/status-badges";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -41,6 +42,7 @@ export function ProjectDetailPage(): React.JSX.Element {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [manifest, setManifest] = useState<string>("");
   const [publishOpen, setPublishOpen] = useState(false);
+  const [scaffold, setScaffold] = useState(true);
   const [repositories, setRepositories] = useState<GitRepositoryView[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editProject, setEditProject] = useState(false);
@@ -214,13 +216,19 @@ export function ProjectDetailPage(): React.JSX.Element {
         busyLabel="Queuing…"
         confirmVariant="solid"
         onConfirm={async () => {
-          await projectsApi.publishManifest(projectId);
-          toast.success("kintsugi.yaml queued for publishing", "Follow the pull request under Document writes in Delivery.");
+          await projectsApi.publishManifest(projectId, { scaffold });
+          toast.success(scaffold ? "kintsugi.yaml and the starter structure queued" : "kintsugi.yaml queued for publishing", "Follow the pull request under Document writes in Delivery.");
         }}
         onClose={() => setPublishOpen(false)}
       >
         Kintsugi commits the rendered kintsugi.yaml as kintsugi-bot on a new <code className="font-mono">kintsugi/*</code> branch of{" "}
         {project.documentRepository?.repositoryId ?? "the document repo"} and opens a pull request for review. Plain Git servers get the branch only.
+        <div className="mt-3">
+          <Checkbox checked={scaffold} onChange={setScaffold} label="Also create the starter structure that is missing" />
+          <p className="mt-1 pl-6 text-[12px] text-text-muted">
+            Program, portfolio, architecture, standards, plugins and gate folders with their READMEs, and one skeleton per application ({project.applications.length}). Files already in the repo are never replaced.
+          </p>
+        </div>
       </ConfirmDialog>
 
       <ProjectDialog
