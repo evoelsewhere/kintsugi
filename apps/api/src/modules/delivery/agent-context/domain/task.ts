@@ -10,6 +10,11 @@ import type {
 export interface TaskSourceRevision {
   repositoryId: string;
   commit: string;
+  applicationIdsFingerprint: string;
+}
+
+export interface TaskIndexRevision extends TaskSourceRevision {
+  indexId: string;
 }
 
 export interface TaskSourceReference extends RequiredTaskInput {
@@ -55,8 +60,9 @@ export abstract class TaskSourceReader {
 }
 
 export abstract class TaskProjectionRepository {
-  abstract indexRevision(projectId: string): Promise<TaskSourceRevision | undefined>;
-  abstract replaceProject(snapshot: ProjectTaskSnapshot): Promise<void>;
+  abstract indexRevision(projectId: string): Promise<TaskIndexRevision | undefined>;
+  /** Replaces the entire project only if its last observed index identity still matches. */
+  abstract replaceProject(snapshot: ProjectTaskSnapshot, expectedIndex: TaskIndexRevision | undefined): Promise<boolean>;
   abstract list(projectId: string): Promise<IndexedMemberTask[]>;
   abstract get(projectId: string, unitId: string): Promise<IndexedMemberTask | undefined>;
 }
@@ -73,4 +79,10 @@ export abstract class TaskApprovalEvidenceReader {
 
 export interface MemberTaskRecord extends IndexedMemberTask {
   readiness: ReadinessResult;
+}
+
+/** Configuration is part of freshness even when the repository commit does not move. */
+export function sameTaskSourceRevision(left: TaskSourceRevision | undefined, right: TaskSourceRevision): boolean {
+  return left?.repositoryId === right.repositoryId && left.commit === right.commit &&
+    left.applicationIdsFingerprint === right.applicationIdsFingerprint;
 }

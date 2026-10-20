@@ -151,7 +151,8 @@ function WritesInsights(): React.JSX.Element | null {
     <div className="flex flex-col gap-4">
       <KpiRow>
         <Kpi label="Writes sampled" value={list.length} hint="the latest document writes" />
-        <Kpi label="Pull requests" value={list.filter((write) => write.status === "pr-opened").length} hint="proposed for review" />
+        <Kpi label="Awaiting review" value={list.filter((write) => write.status === "pr-opened").length} tone={list.some((write) => write.status === "pr-opened") ? "orange" : undefined} hint="open pull requests" />
+        <Kpi label="Merged" value={list.filter((write) => write.status === "merged").length} tone="green" hint="reviewed and merged" />
         <Kpi label="Committed" value={list.filter((write) => write.status === "committed").length} tone="green" hint="auto-commit paths" />
         <Kpi label="Queued" value={list.filter((write) => write.status === "queued").length} tone={list.some((write) => write.status === "queued") ? "blue" : undefined} hint="waiting for the worker" />
         <Kpi label="Failed" value={failed} tone={failed > 0 ? "red" : "green"} higherIsWorse hint={failed > 0 ? "see the list below" : "none"} />

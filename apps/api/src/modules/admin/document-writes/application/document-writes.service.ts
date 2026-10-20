@@ -10,36 +10,45 @@ import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import type { DocumentWriteFilter, DocumentWriteRecord, NewDocumentWrite } from "../domain/document-write.js";
-import { DocumentWriteQueue, DocumentWriteStore } from "../domain/document-write.ports.js";
+import { DocumentRepoSkeleton, DocumentWriteQueue, DocumentWriteStore } from "../domain/document-write.ports.js";
 
 @Injectable()
 export class DocumentWritesService {
   constructor(
     private readonly store: DocumentWriteStore,
     private readonly queue: DocumentWriteQueue,
+    private readonly skeleton: DocumentRepoSkeleton,
     private readonly projects: ProjectsService,
     private readonly audit: AuditTrail,
   ) {}
 
-  /** Renders kintsugi.yaml from the project's state and enqueues it as a pull request. */
-  async publishManifest(projectId: string, actor: Actor): Promise<DocumentWriteRecord> {
+  /**
+   * Renders kintsugi.yaml from the project's state and enqueues it as a pull request. Unless
+   * `scaffold` is off, the same pull request carries the starter structure (program, portfolio,
+   * architecture, standards, plugins, gates and one skeleton per application) for everything
+   * the document repo does not have yet: existing documents are never replaced.
+   */
+  async publishManifest(projectId: string, actor: Actor, options: { scaffold?: boolean } = {}): Promise<DocumentWriteRecord> {
     const project = await this.projects.getProject(projectId);
     if (project.documentRepository === null) throw new ConflictException(`Project ${projectId} has no document repository`);
     const manifest = await this.projects.renderManifest(projectId);
+    const scaffold = options.scaffold !== false;
+    const structure = scaffold ? await this.skeleton.files(project.applications.map((application) => application.id)) : [];
     const write = await this.#enqueue({
       id: newId(),
       projectId,
       documentRepositoryId: project.documentRepository.repositoryId,
       kind: "manifest",
-      message: `Publish ${manifest.fileName} from the project settings`,
-      files: [{ path: manifest.fileName, content: manifest.content }],
+      message: `Publish ${manifest.fileName} ${scaffold ? "and the starter structure " : ""}from the project settings`,
+      files: [{ path: manifest.fileName, content: manifest.content }, ...structure.filter((file) => file.path !== manifest.fileName)],
+      ...(scaffold ? { reviewAll: true } : {}),
       actor: actor.username ?? actor.id,
     });
     await this.audit.recordChange(
       auditRecord(actor, AUDIT_ACTIONS.manifestPublish, {
         projectId,
         subject: write.id,
-        detail: { path: manifest.fileName, documentRepositoryId: project.documentRepository.repositoryId },
+        detail: { path: manifest.fileName, scaffold, structureFiles: structure.length, documentRepositoryId: project.documentRepository.repositoryId },
       }),
     );
     return write;

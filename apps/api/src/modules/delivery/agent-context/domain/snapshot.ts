@@ -167,6 +167,11 @@ export function buildSnapshotManifest(input: SnapshotManifestInput): SnapshotMan
 // Keep 100 slots for unavailable-source markers in the 100-source snapshot limit.
 export const MAX_CONTEXT_SECTIONS = 400;
 
+/** One bounded source identity shared by readiness blockers and snapshot manifests. */
+export function contextSourceId(repositoryId: string, role: string, path: string): string {
+  return "src_" + digest(repositoryId + "\0" + role + "\0" + path).slice(0, 24);
+}
+
 /** Indexes Markdown by ATX headings without retaining source text in Postgres. */
 export function indexMarkdownSections(
   sourceId: string,
@@ -227,7 +232,7 @@ export function indexMarkdownSections(
       sectionId: groupedCount === undefined
         ? sectionId
         : "sec_" + digest(sourceId + "\0range\0" + sectionId + "\0" + groupedCount + "\0" + endLine).slice(0, 24),
-      title: suffix === "" ? heading.title : heading.title.slice(0, Math.max(1, 500 - suffix.length)) + suffix,
+      title: heading.title.slice(0, Math.max(1, 500 - suffix.length)) + suffix,
       startLine: heading.line,
       endLine,
       byteLength: Buffer.byteLength(text, "utf8"),

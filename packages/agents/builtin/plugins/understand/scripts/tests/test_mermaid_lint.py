@@ -224,7 +224,8 @@ class Limits(unittest.TestCase):
 
 class Cli(unittest.TestCase):
     def run_lint(self, *args):
-        return subprocess.run([sys.executable, '-I', LINT, *args], capture_output=True, text=True)
+        # Isolated Python ignores PYTHONUTF8; keep child output and capture decoding explicit.
+        return subprocess.run([sys.executable, '-I', '-X', 'utf8', LINT, *args], capture_output=True, text=True, encoding='utf-8')
 
     def test_exit_codes_and_messages(self):
         with tempfile.TemporaryDirectory() as root:

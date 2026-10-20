@@ -8,7 +8,7 @@ import {
   type WorkItemStatus,
 } from "./index.js";
 import { ITEM_SEGMENT_PATTERN } from "./catalog.js";
-import { DomainValidationReader, type ValidationResult } from "./validation.js";
+import { DELIVERABLE_ID_PATTERN, IDENTIFIER_MAX_LENGTH, IDENTIFIER_PATTERN, MAX_REQUIRED_DELIVERABLES, MAX_REPOSITORY_PATH_LENGTH, MAX_TASK_ASSIGNEE_LENGTH, MAX_TASK_TITLE_LENGTH, isSafeRepositoryPath, DomainValidationReader, type ValidationResult } from "./validation.js";
 
 /** Activities a member can request from a task brief; these are not pipeline phases. */
 export const MEMBER_ACTIVITIES = ["design", "implementation", "verification"] as const;
@@ -86,7 +86,7 @@ export function parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile
   const reader = new DomainValidationReader();
   const keys = [
     "id", "application", "module", "kind", "title", "wave", "pilot", "phase", "stage", "status",
-    "assignee", "harness", "complexity", "dependsOn", "source", "target", "links", "gates",
+    "assignee", "harness", "complexity", "dependsOn", "source", "target", "links", "gates", "requiredDeliverables",
   ];
   const source = reader.object(value, "", keys);
   if (source === undefined) return reader.result({} as WorkItemFile);
@@ -95,7 +95,7 @@ export function parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile
   const application = reader.string(source["application"], "application", { pattern: ITEM_SEGMENT_PATTERN });
   const module = reader.string(source["module"], "module", { pattern: ITEM_SEGMENT_PATTERN });
   const kind = reader.string(source["kind"], "kind");
-  const title = reader.string(source["title"], "title");
+  const title = reader.string(source["title"], "title", { maxLength: MAX_TASK_TITLE_LENGTH });
   const phase = reader.oneOf(source["phase"], "phase", PHASES) as Phase | undefined;
   const status = reader.oneOf(source["status"], "status", WORK_ITEM_STATUSES) as WorkItemStatus | undefined;
 
@@ -117,7 +117,7 @@ export function parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile
   }
   const pilot = source["pilot"] === undefined ? undefined : reader.boolean(source["pilot"], "pilot");
   const stage = reader.optionalString(source["stage"], "stage");
-  const assignee = reader.optionalString(source["assignee"], "assignee");
+  const assignee = reader.optionalString(source["assignee"], "assignee", { maxLength: MAX_TASK_ASSIGNEE_LENGTH });
   const harness = reader.optionalString(source["harness"], "harness");
   const complexity = source["complexity"] === undefined
     ? undefined
@@ -129,6 +129,8 @@ export function parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile
   const sourceRefs = source["source"] === undefined ? undefined : parseRepositoryReferences(reader, source["source"], "source");
   const targetRefs = source["target"] === undefined ? undefined : parseRepositoryReferences(reader, source["target"], "target");
   const links = source["links"] === undefined ? undefined : parseWorkItemLinks(reader, source["links"]);
+  const requiredDeliverables = source["requiredDeliverables"] === undefined
+    ? undefined : parseRequiredDeliverables(reader, source["requiredDeliverables"]);
   const gates = source["gates"] === undefined ? undefined : parseWorkItemGates(reader, source["gates"]);
 
   const workItem: WorkItemFile = {
@@ -150,8 +152,32 @@ export function parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile
     ...(targetRefs !== undefined ? { target: targetRefs } : {}),
     ...(links !== undefined ? { links } : {}),
     ...(gates !== undefined ? { gates } : {}),
+    ...(requiredDeliverables !== undefined ? { requiredDeliverables } : {}),
   };
   return reader.result(workItem);
+}
+
+function parseRequiredDeliverables(
+  reader: DomainValidationReader,
+  value: unknown,
+): NonNullable<WorkItemFile["requiredDeliverables"]> | undefined {
+  const list = reader.array(value, "requiredDeliverables", { maxLength: MAX_REQUIRED_DELIVERABLES });
+  if (list === undefined) return undefined;
+  const seen = new Set<string>();
+  return list.map((entry, index) => {
+    const at = "requiredDeliverables[" + index + "]";
+    const item = reader.object(entry, at, ["id", "repositoryId", "path"]);
+    if (item === undefined) return { id: "", repositoryId: "", path: "" };
+    const id = reader.string(item["id"], at + ".id", { pattern: DELIVERABLE_ID_PATTERN }) ?? "";
+    if (seen.has(id)) reader.problem(at + ".id", "must be unique");
+    seen.add(id);
+    const repositoryId = reader.string(item["repositoryId"], at + ".repositoryId", {
+      pattern: IDENTIFIER_PATTERN, maxLength: IDENTIFIER_MAX_LENGTH,
+    }) ?? "";
+    const path = reader.string(item["path"], at + ".path", { maxLength: MAX_REPOSITORY_PATH_LENGTH }) ?? "";
+    if (!isSafeRepositoryPath(path)) reader.problem(at + ".path", "must be a safe relative repository path");
+    return { id, repositoryId, path };
+  });
 }
 
 function parseRepositoryReferences(
@@ -178,10 +204,10 @@ function parseWorkItemLinks(
 ): NonNullable<WorkItemFile["links"]> | undefined {
   const item = reader.object(value, "links", ["taskPack", "asIs", "mappings", "businessRules", "pullRequests"]);
   if (item === undefined) return undefined;
-  const taskPack = reader.optionalString(item["taskPack"], "links.taskPack");
-  const asIs = reader.optionalString(item["asIs"], "links.asIs");
-  const mappings = item["mappings"] === undefined ? undefined : reader.strings(item["mappings"], "links.mappings", { unique: true });
-  const businessRules = item["businessRules"] === undefined ? undefined : reader.strings(item["businessRules"], "links.businessRules", { unique: true });
+  const taskPack = reader.optionalString(item["taskPack"], "links.taskPack", { maxLength: MAX_REPOSITORY_PATH_LENGTH });
+  const asIs = reader.optionalString(item["asIs"], "links.asIs", { maxLength: MAX_REPOSITORY_PATH_LENGTH });
+  const mappings = item["mappings"] === undefined ? undefined : reader.strings(item["mappings"], "links.mappings", { unique: true, itemMaxLength: MAX_REPOSITORY_PATH_LENGTH });
+  const businessRules = item["businessRules"] === undefined ? undefined : reader.strings(item["businessRules"], "links.businessRules", { unique: true, itemMaxLength: MAX_REPOSITORY_PATH_LENGTH });
   const pullRequests = item["pullRequests"] === undefined ? undefined : reader.strings(item["pullRequests"], "links.pullRequests", { unique: true });
   return {
     ...(taskPack !== undefined ? { taskPack } : {}),

@@ -13,6 +13,7 @@ import {
   snapshotPinRef,
   type SnapshotRetentionRecord,
   type SnapshotRetentionRepository,
+  type SnapshotRetentionSession,
 } from "../src/git-sync/retention.js";
 
 class MemoryRetentionRepository implements SnapshotRetentionRepository {
@@ -23,8 +24,8 @@ class MemoryRetentionRepository implements SnapshotRetentionRepository {
     return this.records.get(snapshotId);
   }
 
-  async withSnapshotLock<T>(_snapshotId: string, work: () => Promise<T>): Promise<T> {
-    return work();
+  async withSnapshotLock<T>(_snapshotId: string, work: (repository: SnapshotRetentionSession) => Promise<T>): Promise<T> {
+    return work(this);
   }
 
   async claimStalePreparing(): Promise<SnapshotRetentionRecord[]> {
@@ -94,11 +95,11 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     records.records.set(snapshotId, {
       snapshotId,
       status: "preparing",
-      repositories: [{ repositoryId: "docs", commit: commitA }],
+      repositories: [{ serverId: "local", repositoryId: "docs", commit: commitA }],
       expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [],
     });
-    pins = new GitSnapshotPins(storage, async (repositoryId) => ({ serverId: "local", repositoryId }));
+    pins = new GitSnapshotPins(storage);
   }, 180_000);
 
   beforeEach(() => {
@@ -133,7 +134,7 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     records.records.set(recoveringId, {
       snapshotId: recoveringId,
       status: "ready",
-      repositories: [{ repositoryId: "docs", commit: commitA }],
+      repositories: [{ serverId: "local", repositoryId: "docs", commit: commitA }],
       expiresAt: "2026-10-19T00:00:00.000Z",
       leases: [],
     });
@@ -162,7 +163,7 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     records.records.set(exhaustedId, {
       snapshotId: exhaustedId,
       status: "preparing",
-      repositories: [{ repositoryId: "docs", commit: commitA }],
+      repositories: [{ serverId: "local", repositoryId: "docs", commit: commitA }],
       expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [],
     });
@@ -189,7 +190,7 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     records.records.set(aheadId, {
       snapshotId: aheadId,
       status: "preparing",
-      repositories: [{ repositoryId: "docs", commit: commitA }],
+      repositories: [{ serverId: "local", repositoryId: "docs", commit: commitA }],
       expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [],
     });
@@ -212,7 +213,7 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     records.records.set(behindId, {
       snapshotId: behindId,
       status: "preparing",
-      repositories: [{ repositoryId: "docs", commit: commitA }],
+      repositories: [{ serverId: "local", repositoryId: "docs", commit: commitA }],
       expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [],
     });
@@ -243,8 +244,8 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
       snapshotId: unavailableId,
       status: "preparing",
       repositories: [
-        { repositoryId: "docs-a", commit: commitA },
-        { repositoryId: "docs-b", commit: commitA },
+        { serverId: "local", repositoryId: "docs-a", commit: commitA },
+        { serverId: "local", repositoryId: "docs-b", commit: commitA },
       ],
       expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [],
@@ -270,7 +271,7 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     records.records.set(retryId, {
       snapshotId: retryId,
       status: "preparing",
-      repositories: [{ repositoryId: "docs", commit: commitA }],
+      repositories: [{ serverId: "local", repositoryId: "docs", commit: commitA }],
       expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [],
     });
@@ -288,7 +289,7 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     records.records.set(leasedId, {
       snapshotId: leasedId,
       status: "preparing",
-      repositories: [{ repositoryId: "docs", commit: commitA }],
+      repositories: [{ serverId: "local", repositoryId: "docs", commit: commitA }],
       expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [{ expiresAt: null }],
     });
@@ -304,7 +305,7 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     records.records.set(missingId, {
       snapshotId: missingId,
       status: "preparing",
-      repositories: [{ repositoryId: "docs", commit: "f".repeat(40) }],
+      repositories: [{ serverId: "local", repositoryId: "docs", commit: "f".repeat(40) }],
       expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [],
     });

@@ -34,12 +34,16 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 | `assignee`, `harness` | Who works on it, and with which member harness |
 | `dependsOn` | Unit ids (used for leaves-first ordering) |
 | `source`, `target` | `{repo, paths}` lists in the legacy (read-only) and target repos |
+| `requiredDeliverables` | Optional bounded `{id, repositoryId, path}` declarations; stable IDs appear in task briefs and evidence manifests |
 | `links` | Task pack, AS-IS doc, mappings (paths under `standards/mappings/`), business rules, pull requests |
 | `gates` | Per-gate result: `status`, `by`, `at`, and the record path (`review: reviews/G4.md`) |
 
 **Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one file per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a file is left unchanged.
 
 **Rules**:
+
+- Document links (`taskPack`, `asIs`, `mappings`, `businessRules`) are repository-relative paths with a maximum of 1000 characters. Invalid or restricted paths are reported as task-index issues.
+- Required deliverables use structured frontmatter. For example, `requiredDeliverables: [{id: code, repositoryId: billing-api, path: src/invoice}]`. IDs are unique; paths are repository-relative. The context API does not infer declarations from prose, target paths or PR links. Older units without the field remain readable and report no declared IDs; this does not certify delivery completeness or approval. Provider matching and gate enforcement follow in later workflow tasks.
 - **Write path**: authorized portal and administrative API actions validate access-role permissions and allowed transitions, update the index, and commit as the Kintsugi bot with a Kintsugi-Actor trailer. The default unit.md and task.md paths may auto-commit; other unit documents arrive through PRs. The Coding Agent Workflow CLI/MCP connector is read-only and cannot claim or update a unit (ADRs 0041–0042).
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.

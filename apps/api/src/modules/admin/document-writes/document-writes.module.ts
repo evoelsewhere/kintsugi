@@ -4,7 +4,8 @@
 import { Module } from "@nestjs/common";
 import { ProjectsModule } from "#modules/admin/projects/index.js";
 import { DocumentWritesService } from "./application/document-writes.service.js";
-import { DocumentWriteQueue, DocumentWriteStore } from "./domain/document-write.ports.js";
+import { DocumentRepoSkeleton, DocumentWriteQueue, DocumentWriteStore } from "./domain/document-write.ports.js";
+import { FsDocumentRepoSkeleton } from "./infrastructure/fs-document-repo-skeleton.js";
 import { PgBossDocumentWriteQueue } from "./infrastructure/pg-boss-document-write.queue.js";
 import { PgDocumentWriteStore } from "./infrastructure/pg-document-write.store.js";
 import { AllDocumentWritesController } from "./interface/all-document-writes.controller.js";
@@ -18,6 +19,7 @@ import { DocumentWritesController } from "./interface/document-writes.controller
     DocumentWritesService,
     { provide: DocumentWriteStore, useClass: PgDocumentWriteStore },
     { provide: DocumentWriteQueue, useClass: PgBossDocumentWriteQueue },
+    { provide: DocumentRepoSkeleton, useClass: FsDocumentRepoSkeleton },
   ],
   exports: [DocumentWritesService],
 })

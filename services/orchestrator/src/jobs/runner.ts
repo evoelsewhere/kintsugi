@@ -17,8 +17,8 @@
 // its provider credentials (launcher/agent-process.ts); scripts never get any.
 
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { findBuiltinFile } from "@kintsugi/agents";
 import { THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
 import type { CheckoutStorage } from "@kintsugi/git";
@@ -29,7 +29,7 @@ import type { AgentResolver } from "./agents.js";
 import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepRecord, stepKey } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
-import { runJobOutputHook } from "./hook.js";
+import { maskJobOutput, runJobOutputHook } from "./hook.js";
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
@@ -173,6 +173,13 @@ const outputFixNote = (findings: readonly string[]): string =>
   "Open each of those files with edit and fix the cited lines. A credential-shaped value (password, key, token, connection string, even in a quoted excerpt) must not appear in any output: " +
   "name the credential and cite its file:line, with at most a 2-4 character preview followed by ****, and no full value. " +
   "Change only what was flagged, check every other line of those files for the same problem, then stop.";
+
+/** Appended to an agent's task when files it had to write are missing: the exact paths, and what it wrote instead (names only). */
+const missingFilesNote = (missing: readonly string[], written: readonly string[]): string =>
+  `\n\nThe step needs these files, and they are not in the output directory:\n${missing.map((path) => `- ${path}`).join("\n")}\n` +
+  `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
+  "write and edit take paths relative to the output directory, not to the repository: give the full path above, never a bare file name. " +
+  "Write each missing file at exactly that path (reuse what you already wrote), then stop.";
 
 const sha256 = (content: Buffer): string => createHash("sha256").update(content).digest("hex");
 
@@ -418,13 +425,41 @@ export class JobRunner {
     return Array.isArray(expects) ? expects.map((entry) => this.#outputPath(run, ws, entry, "expects")) : [];
   }
 
-  /** Fails the step when a file it must write is missing. */
-  async #checkExpected(run: JobRun, ws: StepWorkspace, what: string): Promise<void> {
+  /** The expected files that are not in out/ (document-repo paths). */
+  async #missingExpected(run: JobRun, ws: StepWorkspace): Promise<string[]> {
     const missing: string[] = [];
     for (const path of this.#expects(run, ws)) {
       const stat = await lstat(join(ws.out, ...path.split("/"))).catch(() => undefined);
       if (stat?.isFile() !== true) missing.push(path);
     }
+    return missing;
+  }
+
+  /**
+   * An agent that wrote an expected file under the right name but in the wrong folder (a bare
+   * "ASSESSMENT.md" for "applications/<app>/assessment/ASSESSMENT.md") keeps its work: when exactly one
+   * stray file has the missing file's name, it is moved into place. Returns whether files are still missing.
+   */
+  async #recoverExpected(run: JobRun, ws: StepWorkspace, stepId: string | undefined): Promise<boolean> {
+    const missing = await this.#missingExpected(run, ws);
+    if (missing.length === 0) return false;
+    const expected = new Set(this.#expects(run, ws));
+    const stray = (await listFiles(ws.out)).filter((entry) => !expected.has(entry.path) && !entry.path.startsWith("restricted/"));
+    for (const path of missing) {
+      const candidates = stray.filter((entry) => basename(entry.path) === basename(path));
+      const [only] = candidates;
+      if (candidates.length !== 1 || only === undefined) continue;
+      const target = join(ws.out, ...path.split("/"));
+      await mkdir(dirname(target), { recursive: true });
+      await rename(only.full, target);
+      await this.#event(ws, stepId, "log", `${run.name} wrote ${only.path} instead of ${path}: moved into place`);
+    }
+    return (await this.#missingExpected(run, ws)).length > 0;
+  }
+
+  /** Fails the step when a file it must write is missing. */
+  async #checkExpected(run: JobRun, ws: StepWorkspace, what: string): Promise<void> {
+    const missing = await this.#missingExpected(run, ws);
     if (missing.length > 0) throw new JobFailure(`${what} did not write ${missing.join(", ")}`);
   }
 
@@ -549,6 +584,7 @@ export class JobRunner {
     // The output checks (#finish) are fail-closed. An agent that slipped a credential or a malformed
     // artifact into its files gets the redacted findings (rule, path, line: never content) and one
     // chance to fix just those lines, in the out/ it already wrote.
+    const maskedByAgent = await this.#maskCredentials(ws, stepId, run.name);
     const flagged = await this.#flaggedOutput(ws);
     if (flagged !== undefined && signal?.aborted !== true) {
       await this.#event(ws, stepId, "log", `output checks flagged ${flagged.length} finding${flagged.length === 1 ? "" : "s"} in the files of ${run.name}: ${flagged.join("; ")}; asking it to fix them once`);
@@ -570,11 +606,22 @@ export class JobRunner {
       }
       if (run.inputs["resultTo"] !== undefined) await this.#saveResult(run, ws, result);
     }
+    // Missing expected files: a file written under the right name in the wrong folder is moved into place;
+    // what is still missing gets the agent one repair attempt (same output directory).
+    if ((await this.#recoverExpected(run, ws, stepId)) && signal?.aborted !== true) {
+      const missing = await this.#missingExpected(run, ws);
+      await this.#event(ws, stepId, "log", `agent ${run.name} did not write ${missing.join(", ")}; asking it to write them once`);
+      const written = (await listFiles(ws.out)).map((entry) => entry.path);
+      done = await attempt(`${spec.task}${missingFilesNote(missing, written)}`);
+      if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
+      await writeMock();
+      await this.#recoverExpected(run, ws, stepId);
+    }
     await this.#checkExpected(run, ws, `Agent ${run.name}`);
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
     const files = await listFiles(ws.out);
     return {
-      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary },
+      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary, ...(maskedByAgent === 0 ? {} : { maskedCredentials: maskedByAgent }) },
       agent: agentId,
       provenance: new Map(files.filter((entry) => !entry.path.startsWith("restricted/")).map((entry) => [entry.path, provenance])),
       ...(result === undefined ? {} : { result }),
@@ -790,6 +837,20 @@ export class JobRunner {
   }
 
   /**
+   * Masks credential-shaped values in out/ (a preview and `****`) so a stray value in an analysis note
+   * never fails a run; the hook after it stays the fail-closed check for whatever could not be masked.
+   * Logs rule, file and line of each masking, never a value. Returns how many values were masked.
+   */
+  async #maskCredentials(ws: StepWorkspace, stepId: string | undefined, who: string): Promise<number> {
+    const outcome = await maskJobOutput({ outDir: ws.out, cwd: ws.root, tmp: ws.tmp, interpreters: this.#deps.interpreters });
+    if (outcome.count > 0) {
+      const more = outcome.count > outcome.first.length ? ` (+${outcome.count - outcome.first.length} more)` : "";
+      await this.#event(ws, stepId, "log", `masked ${outcome.count} credential-shaped value${outcome.count === 1 ? "" : "s"} in ${outcome.files} file${outcome.files === 1 ? "" : "s"} of ${who}: ${outcome.first.join("; ")}${more}`);
+    }
+    return outcome.count;
+  }
+
+  /**
    * The JobOutput hook's redacted findings (`rule at path:line`) over an agent's out/ so far, or
    * undefined when it is clean or the hook could not report. restricted/ is left to #finish, which
    * stores it before the check.
@@ -803,6 +864,7 @@ export class JobRunner {
   /** restricted/ → encrypted records; the JobOutput hook over out/; the artifact index. */
   async #finish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<Record<string, unknown>> {
     const restricted = await this.#storeRestricted(run, ws);
+    const masked = await this.#maskCredentials(ws, run.id === ws.rootId ? undefined : run.id, run.name);
     const hook = await this.#hook(ws);
     if (!hook.ok) throw new JobFailure(hook.reason ?? "JobOutput hook blocked the output");
     const files = await listFiles(ws.out);
@@ -816,6 +878,7 @@ export class JobRunner {
       files: entries.length,
       bytes: entries.reduce((total, entry) => total + entry.size, 0),
       restrictedFiles: restricted,
+      ...(masked === 0 ? {} : { maskedCredentials: masked + (typeof outcome.summary["maskedCredentials"] === "number" ? outcome.summary["maskedCredentials"] : 0) }),
       jobOutputHook: {
         checkedFiles: hook.checked.files,
         checkedBytes: hook.checked.bytes,

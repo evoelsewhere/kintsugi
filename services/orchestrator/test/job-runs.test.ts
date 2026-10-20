@@ -85,13 +85,14 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
         "script|apply_catalog_edits.py|succeeded",
         "script|reconcile_catalog.py|succeeded",
         "agent|legacy-analyst|succeeded",
+        "script|style_architecture.py|succeeded",
       ].sort());
       expect(steps.rows.find((row) => row.name === "inventory.py")?.script_hash).toMatch(/^[0-9a-f]{64}$/);
       expect(steps.rows[10]?.agent).toBe("legacy-analyst@1.1.0");
 
       const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
       expect(artifacts.rows.map((row) => [row.path, row.provenance.origin])).toEqual([
-        ["applications/web/assessment/ARCHITECTURE.mmd", "runtime-agent"],
+        ["applications/web/assessment/ARCHITECTURE.mmd", "tool"],
         ["applications/web/assessment/ASSESSMENT.md", "runtime-agent"],
         ["applications/web/assessment/catalog.json", "tool"],
         ["applications/web/assessment/inventory.json", "tool"],

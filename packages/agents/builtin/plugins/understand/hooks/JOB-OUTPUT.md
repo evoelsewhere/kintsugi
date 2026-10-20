@@ -2,7 +2,7 @@
 
 ## Purpose and lifecycle
 
-Run this hook as a standard script step after a runtime job has written its candidate outputs and before the job output is committed or otherwise published. Invoke it inside the standard script environment (Python 3.12, standard library only, no network access). A non-zero exit blocks the output from being committed. This hook scans only the supplied output tree; it does not modify, delete, redact-in-place, or upload files. The runtime must keep the output tree available until the report is recorded and a reviewer can correct findings.
+Run this hook as a standard script step after a runtime job has written its candidate outputs and before the job output is committed or otherwise published. Invoke it inside the standard script environment (Python 3.12, standard library only, no network access). A non-zero exit blocks the output from being committed. This hook scans only the supplied output tree; it does not modify, delete, redact-in-place, or upload files. Masking is a separate step that runs before it (`mask_output.py --output-dir <dir>`, same patterns, imported from this file): it rewrites credential-shaped values in text files as a 2-character preview and `****` (a password in a connection string becomes `***`, a private key block is removed), keeps every line number, and reports rule, path and line, never a value. This hook stays the backstop for whatever masking could not reach (binary files, patterns it does not know). The runtime must keep the output tree available until the report is recorded and a reviewer can correct findings.
 
 ## CLI
 

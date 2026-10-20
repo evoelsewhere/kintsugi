@@ -54,7 +54,7 @@ scripts a model wrote in an earlier job.
 4. **After every step**, before anything is indexed or published:
    - `out/restricted/` is stored as encrypted restricted records (`governance.restricted_record`) and
      removed from `out`; it never reaches Git, logs or summaries;
-   - the JobOutput hook (`hooks/job_output.py`) checks `out/` as a script step; any finding fails the step
+   - credential-shaped values in `out/` are masked in place (`hooks/mask_output.py`, sharing the hook's patterns); the JobOutput hook (`hooks/job_output.py`) then checks `out/` as a script step and any remaining finding fails the step. A false positive in a note therefore never fails a run, while an unmaskable value still does
      with a reason built from the hook's redacted report;
    - the files are indexed as artifacts with their provenance.
    A top-level run then hands `out/` to the document repo writer (ADR-0019).
@@ -100,7 +100,7 @@ Settled while hardening job runs (`services/runtime`, `services/orchestrator`, `
 
 - **Agent jobs run in child processes** (refines decision 3): each agent job is a Node child process of the worker (`services/runtime` `bin/agent-job.js`), started by the same launcher as script steps: `cwd` = the job directory, the cleared environment, a wall-clock timeout (the job's own timeout plus a grace period) and a process-tree kill on timeout, abort or cancel. Node's permission model limits the child's reads to the runtime's own code and the job workspace and its writes to `out` and `tmp`, and forbids child processes. The kernel's path confinement still applies inside it.
 - **Credentials per child**: the worker decrypts the bound provider's record per job. The `JobSpec`, the API key and inline secrets reach the child on stdin; environment credentials (cloud regions, keys read from variables) are set in that child's environment only. Nothing is written to disk and concurrent jobs share nothing, so providers with environment credentials are supported. `JobEvent`s come back as JSON lines on stdout. `KINTSUGI_RUNTIME_MODE=mock` runs the mock backend in the same kind of child.
-- **Cleanup**: a top-level run's `out/` is deleted when its document write is `committed`, `pr-opened` or `unchanged`. Outputs of failed or cancelled runs and of failed writes stay for `KINTSUGI_JOB_RETENTION_DAYS` (default 7); an hourly sweep in the worker removes them and workspaces no run refers to.
+- **Cleanup**: a top-level run's `out/` is deleted when its document write is `committed`, `pr-opened`, `merged`, `closed` or `unchanged`. Outputs of failed or cancelled runs and of failed writes stay for `KINTSUGI_JOB_RETENTION_DAYS` (default 7); an hourly sweep in the worker removes them and workspaces no run refers to.
 - **Cancel**: `POST /api/projects/:id/job-runs/:runId/cancel` (`jobs.run`) cancels a queued run at once; for a running run it records a cancel request that the worker polls (every 2 seconds) and honours by aborting the run: running processes are killed, the step and the run end as `cancelled`, nothing is published.
 - **Live events**: status changes, steps, agent tool calls (tool and workspace path only) and log lines are stored redacted in `workflow.job_event` and streamed to the portal over Server-Sent Events.
 - **Audit**: every read of a restricted record is written to the append-only `governance.audit_event` (who, when, job run, path; never the content) before it is returned.

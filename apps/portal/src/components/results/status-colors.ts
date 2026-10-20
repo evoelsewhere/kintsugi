@@ -21,6 +21,8 @@ export const SYNC_COLOR: Record<string, string> = {
 export const WRITE_COLOR: Record<string, string> = {
   committed: CHART_COLOR.green,
   "pr-opened": CHART_COLOR.purple,
+  merged: CHART_COLOR.green,
+  closed: CHART_COLOR.muted,
   queued: CHART_COLOR.blue,
   unchanged: CHART_COLOR.muted,
   failed: CHART_COLOR.red,

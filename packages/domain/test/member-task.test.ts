@@ -98,3 +98,48 @@ describe("member task contract", () => {
     expect(result.blockers.some((blocker) => blocker.code === "SOURCE_APPROVAL_PENDING" && blocker.sourceId === "src-standards")).toBe(true);
   });
 });
+
+
+describe("strict task wire boundaries", () => {
+  it.each([
+    { title: "x".repeat(501) },
+    { assignee: "x".repeat(201) },
+  ])("rejects oversized task summary fields", (fields) => {
+    expect(parseWorkItemFile({ ...workItem, ...fields }).ok).toBe(false);
+  });
+
+  it.each(["taskPack", "asIs", "mappings", "businessRules"])("bounds linked document path lengths in %s", (key) => {
+    const path = "standards/" + "x".repeat(990);
+    const links = { [key]: key === "mappings" || key === "businessRules" ? [path] : path };
+    expect(parseWorkItemFile({ ...workItem, links }).ok).toBe(true);
+    const oversized = { [key]: key === "mappings" || key === "businessRules" ? [path + "x"] : path + "x" };
+    expect(parseWorkItemFile({ ...workItem, links: oversized }).ok).toBe(false);
+  });
+
+  it("preserves explicit deliverables and leaves undeclared units absent", () => {
+    const requiredDeliverables = [
+      { id: "code", repositoryId: "billing-api", path: "src/billing/tax.ts" },
+      { id: "design", repositoryId: "project-docs", path: "applications/billing/units/invoices/tax/design.md" },
+    ];
+    expect(parseWorkItemFile({ ...workItem, requiredDeliverables })).toEqual({ ok: true, value: { ...workItem, requiredDeliverables } });
+    const old = parseWorkItemFile(workItem);
+    expect(old.ok && old.value.requiredDeliverables).toBeUndefined();
+  });
+
+  it.each([
+    [{ id: "code", repositoryId: "billing-api", path: "../secret" }],
+    [{ id: "code", repositoryId: "billing-api", path: ".git/config" }],
+    [{ id: "code", repositoryId: "billing-api", path: "C:/secret" }],
+    [{ id: "code", repositoryId: "billing-api", path: "/secret" }],
+    [{ id: "code", repositoryId: "billing-api", path: "src\\secret" }],
+    [{ id: "code", repositoryId: "billing-api", path: "src/secret\u0001.ts" }],
+    [{ id: "code", repositoryId: "billing-api", path: "x".repeat(1001) }],
+    [{ id: "code", repositoryId: "x".repeat(101), path: "src/tax.ts" }],
+    [{ id: "code", repositoryId: "../billing-api", path: "src/tax.ts" }],
+    [{ id: "x".repeat(101), repositoryId: "billing-api", path: "src/tax.ts" }],
+    [{ id: "code", repositoryId: "billing-api", path: "src/a.ts" }, { id: "code", repositoryId: "billing-api", path: "src/b.ts" }],
+    Array.from({ length: 101 }, (_, index) => ({ id: "code-" + index, repositoryId: "billing-api", path: "src/tax.ts" })),
+  ])("rejects unsafe, duplicate, or unbounded declarations %#", (...requiredDeliverables) => {
+    expect(parseWorkItemFile({ ...workItem, requiredDeliverables }).ok).toBe(false);
+  });
+});

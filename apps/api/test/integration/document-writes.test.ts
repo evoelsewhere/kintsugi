@@ -40,11 +40,11 @@ describe.skipIf(!hasDatabase)("document writes (integration)", () => {
     expect((await client.get("/admin/projects/billing/document-writes")).status).toBe(200);
   });
 
-  it("enqueues the rendered kintsugi.yaml as a write keyed by the document repository", async () => {
-    const published = await admin.request<WriteView>("POST", "/admin/projects/billing/kintsugi.yaml/publish");
+  it("enqueues the rendered kintsugi.yaml alone, as a write keyed by the document repository, when the starter structure is off", async () => {
+    const published = await admin.request<WriteView>("POST", "/admin/projects/billing/kintsugi.yaml/publish", { body: { scaffold: false } });
     expect(published.status).toBe(202);
     const write = published.body.data!;
-    expect(write).toMatchObject({ projectId: "billing", kind: "manifest", status: "queued", actor: "admin" });
+    expect(write).toMatchObject({ projectId: "billing", kind: "manifest", status: "queued", actor: "admin", message: "Publish kintsugi.yaml from the project settings" });
 
     const jobs = await app.db.query<{ singleton_key: string; data: { writeId: string; files: Array<{ path: string; content: string }>; actor: string } }>(
       "select singleton_key, data from pgboss.job where name = 'document-write'",
@@ -74,5 +74,33 @@ describe.skipIf(!hasDatabase)("document writes (integration)", () => {
   it("answers 404 for an unknown project", async () => {
     expect((await admin.request("POST", "/admin/projects/missing/kintsugi.yaml/publish")).status).toBe(404);
     expect((await admin.get("/admin/projects/missing/document-writes")).status).toBe(404);
+  });
+
+  it("publishes the starter structure with the manifest: one pull request, create-only files, one skeleton per application", async () => {
+    const application = await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "web", name: "Web", disposition: "refactor" } });
+    expect(application.status).toBe(201);
+    const before = await app.db.query<{ id: string }>("select id from pgboss.job where name = 'document-write'");
+
+    const published = await admin.request<WriteView>("POST", "/admin/projects/billing/kintsugi.yaml/publish");
+    expect(published.status).toBe(202);
+    expect(published.body.data?.message).toBe("Publish kintsugi.yaml and the starter structure from the project settings");
+
+    const jobs = await app.db.query<{ data: { writeId: string; reviewAll?: boolean; files: Array<{ path: string; content: string; createOnly?: boolean }> } }>(
+      "select data from pgboss.job where name = 'document-write' and data->>'writeId' = $1",
+      [published.body.data!.id],
+    );
+    expect(before.rows.length).toBeGreaterThan(0);
+    const { data } = jobs.rows[0]!;
+    expect(data.reviewAll).toBe(true);
+    const paths = data.files.map((file) => file.path);
+    // The manifest is rendered and replaces; everything else only fills in what is missing.
+    expect(data.files.find((file) => file.path === "kintsugi.yaml")?.createOnly).toBeUndefined();
+    expect(data.files.filter((file) => file.path !== "kintsugi.yaml").every((file) => file.createOnly === true)).toBe(true);
+    expect(paths).toEqual(expect.arrayContaining(["program/charter.md", "standards/review-rules.md", "architecture/blueprint.md", "gates/G0.md", "portfolio/scorecard.md", "applications/README.md"]));
+    // The template's sample application becomes this project's application; samples and the sample's own name do not travel.
+    expect(paths).toEqual(expect.arrayContaining(["applications/web/README.md", "applications/web/assessment/README.md", "applications/web/units/README.md", "applications/web/gates/G1.md"]));
+    expect(paths.some((path) => path.includes("billing-web") || path.includes(".example"))).toBe(false);
+    expect(data.files.filter((file) => file.path.startsWith("applications/web/")).some((file) => file.content.includes("billing-web"))).toBe(false);
+    expect(new Set(paths).size).toBe(paths.length);
   });
 });

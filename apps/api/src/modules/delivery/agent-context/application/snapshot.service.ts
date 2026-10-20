@@ -4,7 +4,6 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   ConflictException,
   ForbiddenException,
-  GoneException,
   Injectable,
   NotFoundException,
   PayloadTooLargeException,
@@ -21,6 +20,7 @@ import {
   SnapshotRepository,
   boundSnapshotSections,
   buildSnapshotManifest,
+  contextSourceId,
   indexMarkdownSections,
   type SnapshotManifest,
   type SnapshotRecord,
@@ -28,6 +28,7 @@ import {
 } from "../domain/snapshot.js";
 import { TaskQueryService } from "./task-query.service.js";
 import { selectBriefSections } from "./brief-sections.js";
+import { snapshotError } from "./snapshot-error.js";
 
 const SNAPSHOT_TTL_MS = 24 * 60 * 60 * 1000;
 const PREPARE_TIMEOUT_MS = 30_000;
@@ -77,8 +78,8 @@ export class SnapshotService {
       this.assertIdentity(record, query.projectId, query.unitId, query.activity);
       await this.assertAvailable(record);
       if (record.status === "preparing") record = await this.waitUntilReady(query.snapshotId);
-      if (record.status === "failed") throw new ConflictException(record.errorCode ?? "SNAPSHOT_UNAVAILABLE");
-      if (record.status === "expired" || record.status === "expiring") throw new GoneException("SNAPSHOT_EXPIRED");
+      if (record.status === "failed") throw snapshotError("SNAPSHOT_UNAVAILABLE", record.manifest.snapshotId, record.errorCode ?? "SNAPSHOT_UNAVAILABLE");
+      if (record.status === "expired" || record.status === "expiring") throw snapshotError("SNAPSHOT_EXPIRED", record.manifest.snapshotId);
     }
 
     const currentness = await this.currentness(principal, record);
@@ -165,7 +166,7 @@ export class SnapshotService {
       record.status === "expiring" ||
       !(await this.snapshots.isAvailable(record.manifest.snapshotId))
     ) {
-      throw new GoneException("SNAPSHOT_EXPIRED");
+      throw snapshotError("SNAPSHOT_EXPIRED", record.manifest.snapshotId);
     }
   }
 
@@ -181,17 +182,27 @@ export class SnapshotService {
 
   async readSource(record: SnapshotRecord, source: SnapshotSource): Promise<string> {
     if (!source.readable || source.availability !== "present" || source.commit === undefined || source.contentHash === undefined) {
-      throw new ConflictException("SNAPSHOT_SOURCE_UNAVAILABLE");
+      throw snapshotError("SNAPSHOT_UNAVAILABLE", record.manifest.snapshotId, "SNAPSHOT_SOURCE_UNAVAILABLE");
     }
-    const context = await this.documents.context(record.manifest.projectId);
+    const context = await this.documents.context(record.manifest.projectId).catch((error: unknown) => {
+      if (error instanceof ConflictException) {
+        throw snapshotError("SNAPSHOT_UNAVAILABLE", record.manifest.snapshotId, "Snapshot repository context is unavailable");
+      }
+      throw error;
+    });
     if (context.repo.repositoryId !== source.repositoryId) {
-      throw new ConflictException("The snapshot repository is no longer linked to this project");
+      throw snapshotError("SNAPSHOT_UNAVAILABLE", record.manifest.snapshotId, "The snapshot repository is no longer linked to this project");
     }
-    await this.documents.resolve(context, source.commit);
+    try {
+      await this.documents.resolve(context, source.commit);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw snapshotError("SNAPSHOT_UNAVAILABLE", record.manifest.snapshotId);
+      throw error;
+    }
     const text = await this.documents.readText(context, source.commit, source.path, MAX_SOURCE_BYTES);
-    if (text === undefined) throw new ConflictException("SNAPSHOT_SOURCE_UNAVAILABLE");
+    if (text === undefined) throw snapshotError("SNAPSHOT_UNAVAILABLE", record.manifest.snapshotId, "SNAPSHOT_SOURCE_UNAVAILABLE");
     const actualHash = "sha256:" + hash(text);
-    if (actualHash !== source.contentHash) throw new ConflictException("SNAPSHOT_SOURCE_HASH_MISMATCH");
+    if (actualHash !== source.contentHash) throw snapshotError("SNAPSHOT_UNAVAILABLE", record.manifest.snapshotId, "SNAPSHOT_SOURCE_HASH_MISMATCH");
     return text;
   }
 
@@ -201,11 +212,11 @@ export class SnapshotService {
       const record = await this.requireSnapshot(snapshotId);
       await this.assertAvailable(record);
       if (record.status === "ready") return record;
-      if (record.status === "failed") throw new ConflictException(record.errorCode ?? "SNAPSHOT_UNAVAILABLE");
-      if (record.status === "expired") throw new GoneException("SNAPSHOT_EXPIRED");
+      if (record.status === "failed") throw snapshotError("SNAPSHOT_UNAVAILABLE", record.manifest.snapshotId, record.errorCode ?? "SNAPSHOT_UNAVAILABLE");
+      if (record.status === "expired") throw snapshotError("SNAPSHOT_EXPIRED", record.manifest.snapshotId);
       await new Promise((resolve) => setTimeout(resolve, PREPARE_POLL_MS));
     }
-    throw new ConflictException("SNAPSHOT_PREPARING: the worker is still retaining this snapshot");
+    throw snapshotError("SNAPSHOT_PREPARING", snapshotId);
   }
 
   private async prepareSnapshot(task: MemberTaskRecord, activity: MemberActivity, snapshotId: string): Promise<PreparedSnapshot> {
@@ -221,7 +232,7 @@ export class SnapshotService {
     if (taskText === undefined) throw new ConflictException("The task source is missing at its indexed commit");
     const taskHash = "sha256:" + hash(taskText);
     if (taskHash !== "sha256:" + task.sourceHash) throw new ConflictException("The task source hash changed during snapshot preparation");
-    const taskSourceId = sourceId(task.repositoryId, "task", task.sourcePath);
+    const taskSourceId = contextSourceId(task.repositoryId, "task", task.sourcePath);
     sources.push({
       sourceId: taskSourceId,
       role: "task",
@@ -264,7 +275,7 @@ export class SnapshotService {
       if (reference.availability === "present" && reference.contentHash === undefined) {
         throw new ConflictException("A present source has no indexed content hash");
       }
-      const sourceIdValue = sourceId(reference.repositoryId, reference.role, reference.path);
+      const sourceIdValue = contextSourceId(reference.repositoryId, reference.role, reference.path);
       sources.push({
         sourceId: sourceIdValue,
         role: reference.role,
@@ -300,7 +311,7 @@ export class SnapshotService {
         contentHash: taskHash,
       },
       sources: boundSnapshotSections(sources),
-      requiredDeliverableIds: [],
+      requiredDeliverableIds: task.workItem.requiredDeliverables?.map((deliverable) => deliverable.id) ?? [],
       policyRevision: POLICY_REVISION,
     });
     return { manifest, workItem: task.workItem, readiness: task.readiness };
@@ -331,14 +342,12 @@ export class SnapshotService {
         ? { isCurrent: true, observedAt }
         : { isCurrent: false, observedAt, newerContextRevision: current.manifest.contextRevision };
     } catch (error) {
-      if (error instanceof ConflictException || error instanceof NotFoundException) return { isCurrent: false, observedAt };
+      if (error instanceof ConflictException || error instanceof NotFoundException || error instanceof PayloadTooLargeException) {
+        return { isCurrent: false, observedAt };
+      }
       throw error;
     }
   }
-}
-
-function sourceId(repositoryId: string, role: string, path: string): string {
-  return "src_" + hash(repositoryId + "\0" + role + "\0" + path).slice(0, 24);
 }
 
 function hash(value: string): string {

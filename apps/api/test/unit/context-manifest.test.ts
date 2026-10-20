@@ -40,6 +40,14 @@ const input = {
 };
 
 describe("immutable task context manifest", () => {
+  it("bounds ordinary heading titles without losing their source text or identity", () => {
+    const title = "x".repeat(501);
+    const sections = indexMarkdownSections("src_long_heading", "# " + title + "\nDetails.", true);
+    expect(sections[0]?.title).toBe(title.slice(0, 500));
+    expect(sections[0]?.endLine).toBe(2);
+    expect(sections[0]?.byteLength).toBe(Buffer.byteLength("# " + title + "\nDetails."));
+  });
+
   it("hashes relevant inputs while keeping generated commits and observation times out of context revision", () => {
     const first = buildSnapshotManifest(input);
     const generatedOnlyInput = {

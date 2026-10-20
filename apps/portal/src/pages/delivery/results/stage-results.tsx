@@ -4,7 +4,7 @@
 // previous run" adds the change of every count. Loaded lazily with its heavy libraries.
 // URL: …&tab=results&ref=<refs/heads/… | commit>.
 
-import { GitBranch, GitCommitHorizontal, PackageOpen, RefreshCw } from "lucide-react";
+import { ChevronRight, GitBranch, GitCommitHorizontal, PackageOpen, RefreshCw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { DocumentLinksProvider } from "@/components/results/document-links";
@@ -22,7 +22,7 @@ import { useLoader } from "@/lib/use-loader";
 import { AssessResultsView } from "./assess-results";
 import { HardenResultsView } from "./harden-results";
 import { MapResultsView } from "./map-results";
-import { OutputFiles, Section } from "./results-parts";
+import { OutputFiles } from "./results-parts";
 import { RulesResultsView } from "./rules-results";
 import { UnderstandResultsView } from "./understand-results";
 
@@ -36,6 +36,8 @@ export interface StageResultsProps {
   runBlocked: string | undefined;
   /** The stage's runs of the application, newest first (the monitoring views read them). */
   runs?: JobRunView[] | undefined;
+  /** Shown instead of the plain empty state while the stage has no output yet. */
+  firstRun?: React.ReactNode;
 }
 
 const STATUS: Record<DocumentRef["status"], { tone: StatusTone; label: string }> = {
@@ -54,7 +56,7 @@ const NEXT_ACTION: Partial<Record<ResultStage, string>> = {
 const refLabel = (ref: DocumentRef): string =>
   ref.kind === "default" ? ref.label : ref.kind === "run" ? `Run of ${formatDateTime(ref.date)} · ${STATUS[ref.status].label.toLowerCase()}` : ref.label;
 
-export default function StageResults({ project, application, stage, version, runBlocked, runs }: StageResultsProps): React.JSX.Element {
+export default function StageResults({ project, application, stage, version, runBlocked, runs, firstRun }: StageResultsProps): React.JSX.Element {
   const [params, setParams] = useSearchParams();
   const ref = params.get("ref") ?? undefined;
   const compare = params.get("compare") === "1";
@@ -75,6 +77,8 @@ export default function StageResults({ project, application, stage, version, run
       { replace: true },
     );
 
+  // With no output at all (and no ref picked) there is nothing to select or compare: the first-run panel stands alone.
+  const firstRunOnly = firstRun !== undefined && ref === undefined && results.data?.empty === true;
   const stageRefs = (refs.data?.refs ?? []).filter((entry) => entry.kind === "run" && entry.stage === stage && entry.applicationId === application.id);
   const defaultRef = refs.data?.refs.find((entry) => entry.kind === "default");
   const options = [
@@ -86,38 +90,39 @@ export default function StageResults({ project, application, stage, version, run
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-full sm:w-[340px]">
+      {firstRunOnly ? null : (
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] tracking-wide text-text-muted uppercase">Showing</span>
+          <div className="w-full sm:w-[280px] [&>div>button]:h-[var(--geist-form-small-height)] [&>div>button]:text-[13px]">
             <Select value={ref ?? ""} options={options} onChange={(value) => update("ref", value === "" ? undefined : value)} />
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1.5">
             <Button size="small" variant={compare ? "solid" : "ghost"} aria-pressed={compare} onClick={() => update("compare", compare ? undefined : "1")} className={compare ? undefined : "shadow-border"}>
               Compare with previous run
             </Button>
-            <Button size="icon" variant="ghost" aria-label="Reload the results" onClick={() => void results.reload()}>
+            <Button size="icon" variant="ghost" aria-label="Reload the results" title="Reload the results" onClick={() => void results.reload()}>
               <RefreshCw />
             </Button>
           </div>
         </div>
-        {results.data === undefined ? null : (
-          <div className="mt-2.5">
-            <RefFacts results={results.data} />
-          </div>
-        )}
+        {results.data === undefined ? null : <RefFacts results={results.data} />}
         {compare && results.data !== undefined && results.data.previous === undefined ? (
-          <p className="mt-2 text-[12px] text-text-muted">No earlier successful run of {stage} whose output is still in the document repo: nothing to compare with.</p>
+          <p className="text-[12px] text-text-muted">No earlier successful run of {stage} whose output is still in the document repo: nothing to compare with.</p>
         ) : null}
         {compare && results.data?.previous !== undefined ? (
-          <p className="mt-2 text-[12px] text-text-muted">
-            Changes are against the run of {formatDateTime(results.data.previous.ref.date)} ({shortSha(results.data.previous.ref.commit)}).
+          <p className="text-[12px] text-text-muted">
+            Changes are against the run of {formatDateTime(results.data.previous.ref.date)} <span className="font-mono text-[11px]">{shortSha(results.data.previous.ref.commit)}</span>.
           </p>
         ) : null}
-      </Card>
+      </div>
+      )}
 
       <Loaded loader={results} rows={6}>
         {(loaded) =>
-          loaded.empty ? (
+          loaded.empty && ref === undefined && firstRun !== undefined ? (
+            firstRun
+          ) : loaded.empty ? (
             <Card>
               <EmptyState
                 icon={PackageOpen}
@@ -135,9 +140,19 @@ export default function StageResults({ project, application, stage, version, run
               <DocumentLinksProvider projectId={project.id} commit={loaded.ref.commit}>
                 <StageView results={loaded} compare={compare} projectId={project.id} runs={runs} />
               </DocumentLinksProvider>
-              <Section title="Output files" description={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}.`}>
-                <OutputFiles files={loaded.files} />
-              </Section>
+              <details className="group shadow-border rounded-xl bg-surface">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-2.5 hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="size-3.5 text-text-muted group-open:rotate-90" strokeWidth={1.75} />
+                  <span className="text-[10px] tracking-wide text-text-muted uppercase">Output files</span>
+                  <span className="text-[12px] text-text tabular-nums">{loaded.files.length}</span>
+                  <span className="min-w-0 flex-1 truncate text-right text-[11.5px] text-text-muted" title={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}`}>
+                    {loaded.ref.branch ?? shortSha(loaded.ref.commit)} in {project.documentRepository?.repositoryId ?? "the document repo"}
+                  </span>
+                </summary>
+                <div className="px-4 pt-1 pb-3">
+                  <OutputFiles files={loaded.files} />
+                </div>
+              </details>
             </>
           )
         }

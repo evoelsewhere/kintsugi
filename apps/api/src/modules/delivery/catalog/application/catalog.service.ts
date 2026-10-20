@@ -82,7 +82,7 @@ export class CatalogService {
     return Promise.all(
       runs.map(async (run): Promise<UnderstandRunFacts> => {
         const write = run.documentWrite;
-        const ref = write?.status === "pr-opened" ? await this.documents.runRef(context, run, tips, defaultTip) : undefined;
+        const ref = write?.status === "pr-opened" || write?.status === "merged" ? await this.documents.runRef(context, run, tips, defaultTip) : undefined;
         return {
           id: run.id,
           status: run.status,

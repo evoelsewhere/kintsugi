@@ -114,7 +114,7 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
                      count(*) filter (where status = 'succeeded' and coalesce(finished_at, created_at) >= now() - interval '24 hours')::int as succeeded_runs_24h
                 from workflow.job_run where parent_id is null) runs,
              (select count(*) filter (where status = 'queued')::int as pending_writes,
-                     count(*) filter (where status = 'pr-opened' and created_at >= now() - interval '7 days')::int as pull_requests_7d,
+                     count(*) filter (where status in ('pr-opened', 'merged', 'closed') and created_at >= now() - interval '7 days')::int as pull_requests_7d,
                      count(*) filter (where status = 'failed' and updated_at >= now() - interval '24 hours')::int as failed_writes_24h
                 from workflow.document_write) writes,
              (select count(*)::int as repositories,

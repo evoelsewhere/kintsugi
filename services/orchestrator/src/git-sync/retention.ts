@@ -5,6 +5,7 @@ import { CheckoutStorage, GitError, resolveCommit, runGit } from "@kintsugi/git"
 import { withMirrorLock } from "./sync.js";
 
 export interface SnapshotRepositoryPin {
+  serverId: string;
   repositoryId: string;
   commit: string;
 }
@@ -22,19 +23,18 @@ export interface SnapshotRetentionRecord {
   errorCode?: string;
 }
 
-export interface SnapshotRetentionRepository {
+/** Operations that reuse the connection holding a snapshot's session advisory lock. */
+export interface SnapshotRetentionSession {
   get(snapshotId: string): Promise<SnapshotRetentionRecord | undefined>;
-  claimExpired(): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }>;
   markReady(snapshotId: string): Promise<boolean>;
   markFailed(snapshotId: string, code: string): Promise<void>;
-  claimStalePreparing(): Promise<SnapshotRetentionRecord[]>;
-  withSnapshotLock<T>(snapshotId: string, work: () => Promise<T>): Promise<T>;
   markExpired(snapshotId: string): Promise<void>;
 }
 
-export interface SnapshotPinCoordinates {
-  serverId: string;
-  repositoryId: string;
+export interface SnapshotRetentionRepository extends SnapshotRetentionSession {
+  claimExpired(): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }>;
+  claimStalePreparing(): Promise<SnapshotRetentionRecord[]>;
+  withSnapshotLock<T>(snapshotId: string, work: (repository: SnapshotRetentionSession) => Promise<T>): Promise<T>;
 }
 
 export interface SnapshotPins {
@@ -80,17 +80,13 @@ export function snapshotPinRef(snapshotId: string, repositoryId: string): string
 
 /** A local Git ref writer; all mutations run under the same per-repository mirror lock as sync. */
 export class GitSnapshotPins implements SnapshotPins {
-  constructor(
-    private readonly storage: CheckoutStorage,
-    private readonly coordinates: (repositoryId: string) => Promise<SnapshotPinCoordinates | undefined>,
-  ) {}
+  constructor(private readonly storage: CheckoutStorage) {}
 
   async retain(snapshotId: string, pin: SnapshotRepositoryPin): Promise<boolean> {
     const ref = snapshotPinRef(snapshotId, pin.repositoryId);
     validateCommit(pin.commit);
-    const coordinates = await this.requireCoordinates(pin.repositoryId);
     return withMirrorLock(pin.repositoryId, async () => {
-      const mirror = this.storage.mirror(coordinates.serverId, coordinates.repositoryId);
+      const mirror = this.storage.mirror(pin.serverId, pin.repositoryId);
       let resolved: string;
       try {
         resolved = await resolveCommit(mirror, pin.commit);
@@ -119,20 +115,13 @@ export class GitSnapshotPins implements SnapshotPins {
   async release(snapshotId: string, pin: SnapshotRepositoryPin): Promise<void> {
     const ref = snapshotPinRef(snapshotId, pin.repositoryId);
     validateCommit(pin.commit);
-    const coordinates = await this.requireCoordinates(pin.repositoryId);
     await withMirrorLock(pin.repositoryId, async () => {
-      const mirror = this.storage.mirror(coordinates.serverId, coordinates.repositoryId);
+      const mirror = this.storage.mirror(pin.serverId, pin.repositoryId);
       const existing = await this.refCommit(mirror, ref);
       if (existing === undefined) return;
       if (existing !== pin.commit) throw new Error("snapshot pin changed before release");
       await runGit(["--git-dir", mirror, "update-ref", "-d", ref, pin.commit], runOptions);
     });
-  }
-
-  private async requireCoordinates(repositoryId: string): Promise<SnapshotPinCoordinates> {
-    const coordinates = await this.coordinates(repositoryId);
-    if (coordinates === undefined) throw new Error("snapshot repository is not registered");
-    return coordinates;
   }
 
   private async refCommit(mirror: string, ref: string): Promise<string | undefined> {
@@ -149,10 +138,10 @@ export class GitSnapshotPins implements SnapshotPins {
 /** Pins every repository before exposing the immutable snapshot as ready. */
 export async function retainSnapshot(deps: SnapshotRetentionDependencies, snapshotId: string): Promise<RetentionResult> {
   validateSnapshotId(snapshotId);
-  return deps.repository.withSnapshotLock(snapshotId, () => retainSnapshotLocked(deps, snapshotId));
+  return deps.repository.withSnapshotLock(snapshotId, (repository) => retainSnapshotLocked({ ...deps, repository }, snapshotId));
 }
 
-async function retainSnapshotLocked(deps: SnapshotRetentionDependencies, snapshotId: string): Promise<RetentionResult> {
+async function retainSnapshotLocked(deps: { repository: SnapshotRetentionSession; pins: SnapshotPins }, snapshotId: string): Promise<RetentionResult> {
   const snapshot = await deps.repository.get(snapshotId);
   if (snapshot === undefined) return { status: "missing", pinned: 0 };
   if (snapshot.status === "expired" || snapshot.status === "expiring") return { status: "expired", pinned: 0 };
@@ -186,7 +175,7 @@ async function retainSnapshotLocked(deps: SnapshotRetentionDependencies, snapsho
 }
 
 async function releaseSnapshotPins(
-  deps: SnapshotRetentionDependencies,
+  deps: { pins: SnapshotPins },
   snapshot: SnapshotRetentionRecord,
 ): Promise<void> {
   for (const pin of snapshot.repositories) await deps.pins.release(snapshot.snapshotId, pin);

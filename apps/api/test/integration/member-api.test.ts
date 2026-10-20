@@ -161,6 +161,25 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
       pullRequests: [],
       currentReviewIds: [],
     });
+
+    for (const state of [
+      { status: "preparing", pinState: "pending", failureCode: null, code: "SNAPSHOT_PREPARING", httpStatus: 409 },
+      { status: "failed", pinState: "failed", failureCode: "SNAPSHOT_PIN_FAILED", code: "SNAPSHOT_UNAVAILABLE", httpStatus: 409 },
+      { status: "expiring", pinState: "releasing", failureCode: null, code: "SNAPSHOT_EXPIRED", httpStatus: 410 },
+    ]) {
+      await app.db.query(
+        "update delivery.member_snapshot set status = $2, pin_state = $3, ready_at = null, failure_code = $4 where snapshot_id = $1",
+        [brief.snapshotId, state.status, state.pinState, state.failureCode],
+      );
+      for (const path of [documentPath, searchPath]) {
+        const unavailable = await client.request("GET", path, { csrf: false, headers: bearer() });
+        expect(unavailable.status).toBe(state.httpStatus);
+        expect(unavailable.body).toMatchObject({
+          success: false,
+          details: { code: state.code, snapshotId: brief.snapshotId, ...(state.status === "preparing" ? { retryAfterMs: 1000 } : {}) },
+        });
+      }
+    }
   }, 60_000);
 
   it("validates encoded unit slashes and rejects malformed query values and source URLs", async () => {
@@ -215,6 +234,16 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     const revoked = await member().request("GET", withQuery("/member/v1/tasks", { projectId: "shop" }), { csrf: false, headers: bearer() });
     expect(revoked.status).toBe(403);
     expect((await admin.request("PUT", `/admin/project-access/shop/${memberId}`, { body: {} })).status).toBe(204);
+  });
+
+  it.each([
+    { label: "overlong", reviewId: "x".repeat(513) },
+    { label: "whitespace", reviewId: "   " },
+  ])("returns 400 for an invalid $label review path ID", async ({ reviewId }) => {
+    const response = await member().request("GET", withQuery("/member/v1/reviews/" + encodeURIComponent(reviewId), { projectId: "shop" }), { csrf: false, headers: bearer() });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ success: false, statusCode: 400 });
+    expect(response.raw).not.toContain("Internal server error");
   });
 
   it("returns an explicit unavailable review capability without a passing stub", async () => {

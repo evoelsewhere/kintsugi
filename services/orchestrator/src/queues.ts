@@ -65,6 +65,8 @@ export interface DocumentWriteFile {
   path: string;
   content: string;
   encoding?: "utf8" | "base64";
+  /** Written only when the default branch does not have the file yet (starter structure never overwrites people's work). */
+  createOnly?: boolean;
 }
 
 /**

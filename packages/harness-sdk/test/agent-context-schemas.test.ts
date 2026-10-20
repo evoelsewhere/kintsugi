@@ -15,6 +15,7 @@ import {
   taskBriefQuerySchema,
   taskBriefSchema,
   taskQuerySchema,
+  taskIdentitySchema,
   taskStatusSchema,
 } from "../src/agent-context-schemas.js";
 
@@ -245,5 +246,16 @@ describe("Coding Agent Workflow wire schemas", () => {
   it("implements all eight shared port methods with typed results", async () => {
     expect(Object.keys(port)).toHaveLength(8);
     expect((await port.taskStatus({ schemaVersion: "1", projectId: "modernization", unitId: "billing/invoices/tax" })).status).toBe("in-progress");
+  });
+});
+
+
+describe("existing project identifier compatibility", () => {
+  it("accepts existing API project IDs up to 100 characters", () => {
+    expect(taskQuerySchema.safeParse({ projectId: "a".repeat(100) }).success).toBe(true);
+    expect(taskQuerySchema.safeParse({ projectId: "a".repeat(101) }).success).toBe(false);
+    expect(taskIdentitySchema.safeParse({ projectId: "a".repeat(100), unitId: "billing/invoices/" + "u".repeat(63) }).success).toBe(true);
+    expect(taskIdentitySchema.safeParse({ projectId: "shop", unitId: "billing/invoices/Tax" }).success).toBe(false);
+    expect(taskIdentitySchema.safeParse({ projectId: "a".repeat(100), unitId: "billing/invoices/" + "u".repeat(64) }).success).toBe(false);
   });
 });

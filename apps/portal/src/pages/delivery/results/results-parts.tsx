@@ -30,15 +30,15 @@ export function Kpi({ label, value, display, hint, previous, higherIsWorse = fal
   const worse = delta !== undefined && delta !== 0 && delta > 0 === higherIsWorse;
   return (
     <div className="shadow-border-medium flex min-w-0 flex-col gap-1 rounded-xl bg-surface px-4 py-3">
-      <p className="flex items-center gap-1.5 truncate text-[12px] text-text-secondary">
-        {tone === undefined ? null : <StatusDot tone={tone} className="size-2" />}
-        {label}
+      <p className="flex items-center gap-1.5 text-[10px] tracking-wide text-text-muted uppercase" title={label}>
+        {tone === undefined ? null : <StatusDot tone={tone} className="size-2 shrink-0" />}
+        <span className="min-w-0 truncate">{label}</span>
       </p>
       <p className="text-[24px] leading-7 font-semibold tracking-tight text-text tabular-nums">{display ?? formatCount(value)}</p>
       {delta === undefined ? (
-        hint === undefined ? null : <p className="truncate text-[11px] text-text-muted">{hint}</p>
+        hint === undefined ? null : <p className="truncate text-[11px] text-text-muted" title={hint}>{hint}</p>
       ) : (
-        <p className={cn("flex items-center gap-0.5 text-[11px]", delta === 0 ? "text-text-muted" : worse ? "text-[var(--ds-status-red)]" : "text-[var(--ds-status-green-dark)]")}>
+        <p className={cn("flex items-center gap-0.5 text-[11px] tabular-nums", delta === 0 ? "text-text-muted" : worse ? "text-[var(--ds-status-red)]" : "text-[var(--ds-status-green-dark)]")}>
           {delta === 0 ? "No change" : delta > 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
           {delta === 0 ? "" : `${delta > 0 ? "+" : ""}${formatCount(delta)} since the previous run`}
         </p>
@@ -53,7 +53,7 @@ export function KpiRow({ children }: { children: React.ReactNode }): React.JSX.E
 
 export function Section({ title, description, actions, children, className }: { title: string; description?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string }): React.JSX.Element {
   return (
-    <Card className={className}>
+    <Card className={cn("min-w-0", className)}>
       <CardHeader>
         <div className="min-w-0">
           <CardTitle>{title}</CardTitle>
@@ -157,10 +157,12 @@ export function OutputFiles({ files }: { files: Array<{ path: string; size: numb
   return (
     <ul className="flex flex-col gap-1">
       {files.map((file) => (
-        <li key={file.path} className="flex items-center gap-2 text-[12px]">
-          <FileText className="size-4 shrink-0 text-text-muted" strokeWidth={1.5} />
-          <span className="min-w-0 truncate font-mono text-text">{file.path}</span>
-          <span className="shrink-0 text-text-muted">{formatBytes(file.size)}</span>
+        <li key={file.path} className="flex items-center gap-2 rounded-[6px] px-1.5 py-1 text-[12px] hover:bg-hover">
+          <FileText className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-text" title={file.path}>
+            {file.path}
+          </span>
+          <span className="w-16 shrink-0 text-right text-[11.5px] tabular-nums text-text-secondary">{formatBytes(file.size)}</span>
         </li>
       ))}
     </ul>
@@ -196,7 +198,7 @@ export function SubTabs<T extends string>({ tabs, value, onChange }: { tabs: Arr
 /** A label/value line of a signals list (put several in a <dl>). */
 export function Signal({ label, value, note, title }: { label: string; value: string; note?: string | undefined; title?: string | undefined }): React.JSX.Element {
   return (
-    <div className="flex items-baseline justify-between gap-3 [box-shadow:0_1px_0_rgba(0,0,0,0.05)] pb-2 last:pb-0 last:shadow-none" title={title}>
+    <div className="flex items-baseline justify-between gap-3 [box-shadow:0_1px_0_var(--color-hover)] pb-2 last:pb-0 last:shadow-none" title={title}>
       <dt className="shrink-0 text-text-secondary">{label}</dt>
       <dd className="flex min-w-0 items-baseline justify-end gap-2">
         <span className="shrink-0 font-medium text-text tabular-nums">{value}</span>

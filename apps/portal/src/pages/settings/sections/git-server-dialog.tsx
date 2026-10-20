@@ -12,8 +12,7 @@ import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { GitAuthType, GitServerInput, GitServerView } from "@/lib/api/git";
-
-const SERVER_ID = /^[a-z0-9][a-z0-9-]*$/;
+import { uniqueId } from "@/lib/ids";
 
 const KIND_LABELS: Record<GitServerKind, string> = {
   github: "GitHub",
@@ -45,8 +44,8 @@ export function GitServerDialog(props: GitServerDialogProps): React.JSX.Element 
 
 function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDialogProps): React.JSX.Element {
   const editing = server !== null;
-  const [id, setId] = useState(server?.id ?? "");
   const [name, setName] = useState(server?.name ?? "");
+  const id = server?.id ?? uniqueId(name, existingIds);
   const [kind, setKind] = useState<GitServerKind>(server?.kind ?? "github");
   const [baseUrl, setBaseUrl] = useState(server?.baseUrl ?? "");
   const [authType, setAuthType] = useState<GitAuthType>(server?.authType ?? "token");
@@ -61,9 +60,8 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
   const storedCredential = editing && server.hasCredential && server.authType === authType;
 
   function validate(): string | GitServerInput {
-    if (!editing && !SERVER_ID.test(id)) return "Id: lowercase letters, digits and dashes.";
-    if (!editing && existingIds.includes(id)) return `A server "${id}" already exists.`;
     if (name.trim() === "") return "Name is required.";
+    if (!editing && id === "") return "The name needs at least one letter or digit.";
     if (!/^https?:\/\/\S+$/.test(baseUrl.trim())) return "Base URL must start with https:// (or http:// for anonymous internal servers).";
     if (authType === "token" && token === "" && !storedCredential) return "Enter the access token.";
     if (authType === "ssh-key" && privateKey === "" && !storedCredential) return "Paste the SSH private key.";
@@ -115,11 +113,6 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
     >
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {editing ? null : (
-            <Field label="Id" hint="Used in storage paths; cannot change later.">
-              <Input value={id} placeholder="github-org" onChange={(event) => setId(event.target.value.trim())} />
-            </Field>
-          )}
           <Field label="Name">
             <Input value={name} placeholder="GitHub (org)" onChange={(event) => setName(event.target.value)} />
           </Field>

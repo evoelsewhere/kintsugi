@@ -105,9 +105,9 @@ export class AgentContextController {
   @ApiOperation({ summary: "Read a review report when review evidence is configured" })
   review(
     @CurrentMemberPrincipal() principal: MemberPrincipal,
-    @Param("reviewId") reviewId: string,
+    @Param("reviewId", { schema: reviewQuerySchema.shape.reviewId }) reviewId: string,
     @Query({ schema: reviewQuerySchema.omit({ reviewId: true }).strict() }) query: Omit<ReviewQuery, "reviewId">,
   ) {
-    return this.context.getReview(principal, reviewQuerySchema.parse({ ...query, reviewId }));
+    return this.context.getReview(principal, { ...query, reviewId });
   }
 }

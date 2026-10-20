@@ -26,7 +26,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_JOB_MAX_OUTPUT_BYTES` | no | `52428800` | Bytes a step may write to its output directory; a script that exceeds it is killed |
 | `KINTSUGI_JOB_MAX_TURNS` | no | unset | Assistant turns per agent job; unset = no limit |
 | `KINTSUGI_JOB_MAX_COST_USD` | no | unset | Cost limit per agent job (USD); unset = no limit |
-| `KINTSUGI_JOB_RETENTION_DAYS` | no | `7` | Days the output directory of a failed or cancelled run, or of a run whose document write failed, is kept under `KINTSUGI_DATA_DIR/jobs/` for inspection and retries. Outputs whose document write is committed, opened as a pull request or unchanged are deleted at once; the worker sweeps expired ones hourly |
+| `KINTSUGI_JOB_RETENTION_DAYS` | no | `7` | Days the output directory of a failed or cancelled run, or of a run whose document write failed, is kept under `KINTSUGI_DATA_DIR/jobs/` for inspection and retries. Outputs whose document write is committed, opened as a pull request, merged, closed or unchanged are deleted at once; the worker sweeps expired ones hourly |
 | `KINTSUGI_WORKFLOW_MAX_AGENTS` | no | `50` | Agent jobs one workflow may start |
 | `KINTSUGI_WORKFLOW_CONCURRENCY` | no | `4` | Agent jobs of one workflow running at a time |
 | `KINTSUGI_STAGE_MAX_AGENTS` | no | `200` | Agent jobs one stage run may start, workflow jobs included (a workflow in a stage gets the smaller of what is left and `KINTSUGI_WORKFLOW_MAX_AGENTS`) |

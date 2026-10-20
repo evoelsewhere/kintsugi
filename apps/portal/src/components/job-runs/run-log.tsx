@@ -49,7 +49,7 @@ function Chip({ label, count, active, onClick, tone }: { label: string; count?: 
       onClick={onClick}
       className={cn(
         "inline-flex h-6 items-center gap-1.5 rounded-[var(--geist-pill-radius)] px-2 text-[11.5px] shadow-border focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
-        active ? "bg-hover text-text [box-shadow:0_0_0_1px_var(--color-text)]" : "text-text-muted hover:bg-hover hover:text-text-secondary",
+        active ? "bg-hover font-medium text-text" : "text-text-muted hover:bg-hover hover:text-text-secondary",
       )}
     >
       {tone === undefined ? null : <span className="size-1.5 rounded-full" style={{ backgroundColor: tone }} />}
@@ -160,8 +160,8 @@ export function RunLog({
           {live ? "Live log" : "Log"}
         </h5>
         {stepName === undefined ? null : (
-          <button type="button" onClick={onClearStep} className="inline-flex h-6 items-center gap-1.5 rounded-[var(--geist-pill-radius)] bg-hover px-2 text-[11.5px] text-text hover:bg-[var(--color-recessed)]" title="Show every step again">
-            {stepName}
+          <button type="button" onClick={onClearStep} className="inline-flex h-6 max-w-48 items-center gap-1.5 rounded-[var(--geist-pill-radius)] bg-hover px-2 text-[11.5px] text-text hover:bg-[var(--color-recessed)] focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]" title="Show every step again">
+            <span className="truncate">{stepName}</span>
             <span aria-hidden className="text-text-muted">
               ×
             </span>
@@ -177,10 +177,10 @@ export function RunLog({
             className="h-7 w-full rounded-[var(--geist-radius)] bg-surface pr-2 pl-7 text-[12px] text-text shadow-border placeholder:text-text-muted focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
           />
         </div>
-        <button type="button" onClick={() => void copy()} aria-label="Copy the shown lines" title="Copy the shown lines" className="rounded-[var(--geist-radius)] p-1.5 text-text-muted hover:bg-hover hover:text-text">
+        <button type="button" onClick={() => void copy()} aria-label="Copy the shown lines" title="Copy the shown lines" className="rounded-[var(--geist-radius)] p-1.5 text-text-muted hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
           <Copy className="size-3.5" />
         </button>
-        <button type="button" onClick={download} aria-label="Download the shown lines" title="Download the shown lines" className="rounded-[var(--geist-radius)] p-1.5 text-text-muted hover:bg-hover hover:text-text">
+        <button type="button" onClick={download} aria-label="Download the shown lines" title="Download the shown lines" className="rounded-[var(--geist-radius)] p-1.5 text-text-muted hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
           <Download className="size-3.5" />
         </button>
       </div>
@@ -211,10 +211,10 @@ export function RunLog({
             const element = event.currentTarget;
             setFollow(element.scrollHeight - element.scrollTop - element.clientHeight < 24);
           }}
-          className="max-h-[420px] min-h-32 overflow-y-auto rounded-[var(--geist-radius)] bg-recessed py-1 font-mono text-[11.5px] leading-[18px]"
+          className="max-h-[420px] min-h-32 overflow-y-auto rounded-[var(--geist-radius)] bg-surface py-1 font-mono text-[11.5px] leading-[20px] shadow-border [scrollbar-gutter:stable]"
         >
           {visible.length > rows.length ? (
-            <button type="button" onClick={() => setLimit(limit + PAGE)} className="w-full py-1 text-center text-[11px] text-accent hover:underline">
+            <button type="button" onClick={() => setLimit(limit + PAGE)} className="w-full py-1 text-center font-sans text-[11px] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
               {visible.length - rows.length} earlier lines — show more
             </button>
           ) : null}
@@ -228,7 +228,7 @@ export function RunLog({
           <button
             type="button"
             onClick={() => setFollow(true)}
-            className="absolute right-4 bottom-3 inline-flex h-7 items-center gap-1.5 rounded-[var(--geist-pill-radius)] bg-text px-2.5 font-sans text-[11.5px] text-background shadow-md"
+            className="absolute right-4 bottom-3 inline-flex h-7 items-center gap-1.5 rounded-[var(--geist-pill-radius)] bg-text px-2.5 font-sans text-[11.5px] text-background shadow-md focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
           >
             <ArrowDownToLine className="size-3.5" />
             Latest
@@ -248,10 +248,27 @@ export function RunLog({
           ))}
         </ul>
       )}
-      <p className="text-[11px] text-text-muted">
+      <p className="text-[11px] tabular-nums text-text-muted">
         {visible.length} of {events.length} lines{live ? " · following the run" : ""}
       </p>
     </section>
+  );
+}
+
+/**
+ * What a tool call touched, on one line: a path keeps its file name whole and gives up the
+ * folders first (never a break inside a name); a pattern or anything else just truncates.
+ */
+function ToolTarget({ text }: { text: string }): React.JSX.Element {
+  const [target = "", ...pattern] = text.split(" ");
+  const slash = target.lastIndexOf("/");
+  const extra = pattern.join(" ");
+  return (
+    <span className="flex min-w-0 flex-1 items-baseline text-text-secondary" title={text}>
+      {slash < 0 ? null : <span className="min-w-0 truncate text-text-muted">{target.slice(0, slash + 1)}</span>}
+      <span className={cn("shrink-0", slash < 0 && "min-w-0 truncate")}>{target.slice(slash + 1)}</span>
+      {extra === "" ? null : <span className="ml-2 min-w-0 truncate text-text-muted">{extra}</span>}
+    </span>
   );
 }
 
@@ -263,17 +280,21 @@ function LogRow({ event, runStart, label }: { event: JobRunEvent; runStart: numb
   // A tool line reads "<tool> <path or pattern>"; the tool name becomes a coloured tag.
   const rest = tool !== undefined && event.message.startsWith(tool) ? event.message.slice(tool.length).trimStart() : event.message;
   return (
-    <p className={cn("flex gap-2 px-2 py-px hover:bg-hover", problem && "bg-[var(--ds-status-red)]/10")} title={new Date(event.at).toLocaleString()}>
-      <span className="w-11 shrink-0 text-right text-text-muted tabular-nums">{runStart === undefined ? "" : clock(new Date(event.at).getTime() - runStart)}</span>
-      <span className="w-28 shrink-0 truncate font-sans text-[11px] text-text-muted" title={label}>
+    <p className={cn("flex gap-2 px-2 py-px hover:bg-hover", problem && "bg-[color-mix(in_srgb,var(--ds-status-red)_10%,transparent)]")} title={new Date(event.at).toLocaleString()}>
+      <span className="w-12 shrink-0 text-right text-text-muted tabular-nums">{runStart === undefined ? "" : clock(new Date(event.at).getTime() - runStart)}</span>
+      <span className="w-32 shrink-0 truncate font-sans text-[11px] leading-[18px] text-text-muted" title={label}>
         {label}
       </span>
-      {category === "tool" && tool !== undefined ? (
-        <span className="w-9 shrink-0 font-medium" style={{ color: blocked ? "var(--ds-status-red)" : (TOOL_COLOR[tool] ?? "var(--ds-text-secondary)") }}>
-          {tool}
+      <span className="w-11 shrink-0 truncate font-medium" style={{ color: blocked ? "var(--ds-status-red)" : tool === undefined ? undefined : (TOOL_COLOR[tool] ?? "var(--ds-text-secondary)") }}>
+        {category === "tool" && tool !== undefined ? tool : null}
+      </span>
+      {category === "tool" && tool !== undefined && !problem ? (
+        <ToolTarget text={rest} />
+      ) : (
+        <span className={cn("line-clamp-3 min-w-0 flex-1 break-words", category === "status" ? "font-medium text-text" : "text-text-muted", problem && "text-[var(--ds-status-red)]")} title={event.message}>
+          {rest}
         </span>
-      ) : null}
-      <span className={cn("min-w-0 flex-1 break-words", category === "status" ? "font-medium text-text" : category === "tool" ? "text-text-secondary" : "text-text-muted", problem && "text-[var(--ds-status-red)]")}>{rest}</span>
+      )}
     </p>
   );
 }

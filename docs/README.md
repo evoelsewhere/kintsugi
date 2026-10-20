@@ -49,6 +49,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Coding Agent Workflow design](superpowers/specs/2026-10-20-kintsugi-coding-agent-workflow-design.md): approved CLI, local MCP, task/design context and PR continuation architecture
 - [Coding Agent Workflow implementation plan](superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-implementation.md): ordered tasks, files, interfaces and acceptance gates
 - [Coding Agent Workflow testing plan](superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-testing.md): verification cases, environments and release evidence requirements
+- [Coding Agent Workflow integration review](superpowers/reviews/2026-10-20-coding-agent-workflow-integration.md): implemented scope, corrected edge cases and verification evidence
 
 **Reference**
 - [Glossary](reference/glossary.md)
