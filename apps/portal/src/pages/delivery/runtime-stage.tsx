@@ -1,7 +1,7 @@
-// A runtime stage of one application (ADR-0027): the header (status, Run), then three tabs —
-// Results (what the stage produced, read from the document repo; the default once any output
-// exists), Runs & logs (its job runs with steps, live log, artifacts, cancel, and the latest
-// output) and Inputs & agents (paths it reads and writes, agents and bindings, decision points).
+// A runtime stage of one application (ADR-0027): the header (status, Run), then the tabs —
+// Overview (what the stage produced, read from the document repo; always the default, with a
+// first-run panel while there is no output), Runs & logs (its job runs with steps, live log,
+// artifacts, cancel, and the latest output) and Inputs & agents (paths it reads and writes, agents and bindings, decision points).
 // URL: …&tab=results|runs|inputs (&run=<id> opens Runs & logs on that run).
 
 import { FileText, Play } from "lucide-react";
@@ -27,6 +27,7 @@ import { isActiveStatus } from "@/lib/status";
 import { agentProblems, runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { type Loader, useLoader } from "@/lib/use-loader";
 import { CompactFacts, StageHeader } from "./delivery-shell";
+import { FirstRun } from "./results/first-run";
 import { DecisionPoints, StageAgents, StagePaths } from "./stage-parts";
 
 const RUN_LIMIT = 100;
@@ -67,7 +68,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
       ? requested
       : params.get("run") !== null
         ? "runs"
-        : withResults && (stageRuns === undefined || latestSucceeded !== undefined)
+        : withResults
           ? "results"
           : "runs";
   const chooseTab = (next: StageTab): void =>
@@ -122,7 +123,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
             ) : (
               <span className="flex items-center gap-1.5" title={formatDateTime(latest.createdAt)}>
                 <RunStatusBadge status={latest.status} cancelling={latest.cancelRequestedAt !== undefined && latest.status === "running"} />
-                <span className="text-[12px] text-text-muted">
+                <span className="text-[12px] tabular-nums text-text-muted">
                   {formatRelative(latest.createdAt)}
                   {latest.startedAt === undefined ? "" : ` · ${isActiveStatus(latest.status) ? "running for " : "took "}${formatDuration(latest.startedAt, latest.finishedAt)}`}
                 </span>
@@ -163,6 +164,16 @@ export function RuntimeStage({ project, application, stage }: { project: Project
             version={`${latestSucceeded?.id ?? "none"}/${latestSucceeded?.documentWrite?.status ?? ""}`}
             runBlocked={disabledReason}
             runs={stageRuns}
+            firstRun={
+              <FirstRun
+                stage={stage.id}
+                applicationName={application.name}
+                latest={latest}
+                blocked={disabledReason}
+                onRun={() => setConfirming(true)}
+                onOpenRun={(id) => setParams({ tab: "runs", run: id }, { replace: true })}
+              />
+            }
           />
         </Suspense>
       ) : null}
@@ -264,25 +275,27 @@ function LatestOutput({ run, detail, writes }: { run: JobRunView; detail: Loader
         <Loaded loader={detail} rows={2}>
           {(loaded) =>
             loaded === null || loaded.artifacts.length === 0 ? (
-              <p className="text-[12px] text-text-muted">The run produced no artifacts.</p>
+              <p className="px-1.5 text-[12px] text-text-muted">The run produced no artifacts.</p>
             ) : (
               <ul className="flex flex-col gap-1">
                 {loaded.artifacts.map((artifact) => (
-                  <li key={artifact.path} className="flex items-center gap-2 text-[12px]">
-                    <FileText className="size-4 shrink-0 text-text-muted" strokeWidth={1.5} />
-                    <span className="min-w-0 truncate font-mono text-text">{artifact.path}</span>
-                    <span className="shrink-0 text-text-muted">{formatBytes(artifact.size)}</span>
+                  <li key={artifact.path} className="grid grid-cols-[auto_minmax(0,1fr)_4.5rem] items-center gap-x-2 rounded-[10px] px-1.5 py-1 text-[12px] hover:bg-hover">
+                    <FileText className="size-3.5 text-text-muted" strokeWidth={1.75} />
+                    <span className="min-w-0 truncate font-mono text-[11.5px] text-text" title={artifact.path}>
+                      {artifact.path}
+                    </span>
+                    <span className="text-right text-[11.5px] tabular-nums text-text-secondary">{formatBytes(artifact.size)}</span>
                   </li>
                 ))}
               </ul>
             )
           }
         </Loaded>
-        <p className="text-[12px] text-text-secondary">
+        <p className="px-1.5 text-[12px] text-text-secondary">
           {run.documentWrite === undefined
             ? "No document write recorded for this run."
             : [
-                run.documentWrite.status === "pr-opened" ? "Proposed in a pull request" : run.documentWrite.status === "committed" ? "Committed" : `Document write ${run.documentWrite.status}`,
+                run.documentWrite.status === "pr-opened" ? "Proposed in a pull request" : run.documentWrite.status === "merged" ? "Pull request merged" : run.documentWrite.status === "closed" ? "Pull request closed without a merge" : run.documentWrite.status === "committed" ? "Committed" : `Document write ${run.documentWrite.status}`,
                 run.documentWrite.branch === undefined ? undefined : `branch ${run.documentWrite.branch}`,
                 write?.commit === undefined ? undefined : `commit ${shortSha(write.commit)}`,
                 write?.branchCommit === undefined ? undefined : `branch tip ${shortSha(write.branchCommit)}`,
@@ -292,7 +305,7 @@ function LatestOutput({ run, detail, writes }: { run: JobRunView; detail: Loader
           {run.documentWrite?.prUrl === undefined ? null : (
             <>
               {" · "}
-              <a href={run.documentWrite.prUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              <a href={run.documentWrite.prUrl} target="_blank" rel="noreferrer" className="rounded-[var(--geist-radius)] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
                 Open the pull request
               </a>
             </>

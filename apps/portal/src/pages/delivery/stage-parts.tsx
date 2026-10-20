@@ -24,51 +24,75 @@ export interface StagePathsProps {
   write?: JobRunView["documentWrite"] | undefined;
 }
 
+const EYEBROW = "text-[10px] tracking-wide text-text-muted uppercase";
+
+/** A card title with the number of entries after it, so the count leads over the description. */
+function CountedTitle({ children, count }: { children: React.ReactNode; count: number }): React.JSX.Element {
+  return (
+    <CardTitle>
+      {children} <span className="ml-1 text-[11px] font-normal tabular-nums text-text-muted">{count}</span>
+    </CardTitle>
+  );
+}
+
 /** Inputs the stage reads and outputs it writes in the document repo, resolved for the application. */
 export function StagePaths({ stage, applicationId, documentRepository, produced, write }: StagePathsProps): React.JSX.Element {
   const reads = stage.reads;
   return (
     <Card>
       <CardHeader>
-        <div>
+        <div className="min-w-0">
           <CardTitle>Inputs and outputs</CardTitle>
-          <CardDescription>Paths in {documentRepository ?? "the document repo"}, for application {applicationId}.</CardDescription>
+          <CardDescription>
+            Paths in <span className="font-mono text-[11px] text-text">{documentRepository ?? "the document repo"}</span>, for application {applicationId}.
+          </CardDescription>
         </div>
       </CardHeader>
-      <div className="mt-3 flex flex-col gap-3 text-[12px]">
+      <div className="mt-3 flex flex-col gap-4 text-[12px]">
         <section>
-          <h5 className="mb-1 flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-text-muted uppercase">
+          <h5 className={`mb-1 flex items-center gap-1.5 px-1.5 ${EYEBROW}`}>
             <ArrowDownToLine className="size-3.5" strokeWidth={1.75} />
             Reads
+            {reads === undefined ? null : <span className="tabular-nums">{reads.length}</span>}
           </h5>
           {reads === undefined ? (
-            <p className="text-text-muted">The legacy code repo of the application (read-only). The API does not report the stage's document inputs yet.</p>
+            <p className="px-1.5 text-text-muted">The legacy code repo of the application (read-only). The API does not report the stage's document inputs yet.</p>
           ) : reads.length === 0 ? (
-            <p className="text-text-muted">Nothing from the document repo.</p>
+            <p className="px-1.5 text-text-muted">Nothing from the document repo.</p>
           ) : (
             <PathList patterns={reads} applicationId={applicationId} />
           )}
         </section>
         <section>
-          <h5 className="mb-1 flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-text-muted uppercase">
+          <h5 className={`mb-1 flex items-center gap-1.5 px-1.5 ${EYEBROW}`}>
             <ArrowUpFromLine className="size-3.5" strokeWidth={1.75} />
             Writes
+            <span className="tabular-nums">{stage.writes.length}</span>
           </h5>
-          {stage.writes.length === 0 ? <p className="text-text-muted">Nothing; the stage only shows information.</p> : <PathList patterns={stage.writes} applicationId={applicationId} produced={produced} />}
+          {stage.writes.length === 0 ? <p className="px-1.5 text-text-muted">Nothing; the stage only shows information.</p> : <PathList patterns={stage.writes} applicationId={applicationId} produced={produced} />}
         </section>
         {write === undefined ? null : (
-          <p className="flex flex-wrap items-center gap-2 text-text-secondary">
-            Latest output:
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1.5 text-text-secondary">
+            <span className={EYEBROW}>Latest output</span>
             <WriteStatusBadge status={write.status} />
-            {write.branch === undefined ? null : <span className="font-mono text-[11px] text-text-muted">{write.branch}</span>}
+            {write.branch === undefined ? null : (
+              <span className="max-w-full truncate rounded-full bg-hover px-1.5 py-0.5 font-mono text-[11px] text-text-muted" title={write.branch}>
+                {write.branch}
+              </span>
+            )}
             {write.prUrl === undefined ? null : (
-              <a href={write.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline">
+              <a
+                href={write.prUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-[var(--geist-radius)] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+              >
                 <GitPullRequest className="size-3.5" />
                 Pull request
                 <ExternalLink className="size-3" />
               </a>
             )}
-          </p>
+          </div>
         )}
       </div>
     </Card>
@@ -80,18 +104,19 @@ function PathList({ patterns, applicationId, produced }: { patterns: string[]; a
     <ul className="flex flex-col gap-0.5">
       {patterns.map((pattern) => {
         const count = produced?.filter((path) => matchesPattern(pattern, applicationId, path)).length;
+        const resolved = resolvePath(pattern, applicationId);
         return (
-          <li key={pattern} className="flex items-center gap-2">
-            <span className="min-w-0 truncate font-mono text-[11px] text-text" title={pattern}>
-              {resolvePath(pattern, applicationId)}
+          <li key={pattern} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-[10px] px-1.5 py-1 hover:bg-hover">
+            <span className="min-w-0 truncate font-mono text-[11.5px] text-text" title={resolved}>
+              {resolved}
             </span>
             {count === undefined ? null : count > 0 ? (
-              <span className="flex shrink-0 items-center gap-1 text-[11px] text-text-muted" title="Produced by the latest successful run">
-                <CheckCircle2 className="size-3.5 text-[var(--ds-status-green)]" strokeWidth={1.75} />
+              <span className="flex items-center justify-end gap-1 text-[11px] tabular-nums text-text-secondary" title="Produced by the latest successful run">
+                <CheckCircle2 className="size-3.5 shrink-0 text-[var(--ds-status-green)]" strokeWidth={1.75} />
                 {count > 1 ? `${count} files` : "latest run"}
               </span>
             ) : (
-              <span className="shrink-0 text-[11px] text-text-muted">not in the latest run</span>
+              <span className="text-right text-[11px] text-text-muted">not in the latest run</span>
             )}
           </li>
         );
@@ -106,22 +131,24 @@ export function DecisionPoints({ stage }: { stage: StageView }): React.JSX.Eleme
   return (
     <Card>
       <CardHeader>
-        <div>
-          <CardTitle>Decision points</CardTitle>
+        <div className="min-w-0">
+          <CountedTitle count={stage.gates.length}>Decision points</CountedTitle>
           <CardDescription>Where a person decides before the stage goes on, from the stage's command definition.</CardDescription>
         </div>
       </CardHeader>
-      <ul className="mt-3 flex flex-col gap-1.5 text-[12px] text-text-secondary">
+      <ul className="mt-3 flex flex-col gap-0.5 text-[12px] text-text-secondary">
         {stage.gates.map((gate) => (
-          <li key={gate} className="flex items-start gap-2">
+          <li key={gate} className="flex items-start gap-2 rounded-[10px] px-1.5 py-1 hover:bg-hover">
             <Hand className="mt-0.5 size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} />
-            <span>{gate}</span>
+            <span className="min-w-0 break-words">{gate}</span>
           </li>
         ))}
       </ul>
     </Card>
   );
 }
+
+const bindingLabel = (binding: NonNullable<AgentSummary["binding"]>): string => `${binding.provider} · ${binding.model}${binding.thinking === undefined ? "" : ` · thinking ${binding.thinking}`}`;
 
 /**
  * The agents a stage starts with their model binding. `runtime` agents need a binding (Settings
@@ -135,47 +162,62 @@ export function StageAgents({ stage, agents }: { stage: StageView; agents: Loade
   return (
     <Card>
       <CardHeader>
-        <div>
-          <CardTitle>Agents</CardTitle>
+        <div className="min-w-0">
+          <CountedTitle count={stage.agents.length}>Agents</CountedTitle>
           <CardDescription>{runtime ? "Started by the stage as runtime jobs; each needs a model binding." : "Used by members in their harness through the Kintsugi plugin."}</CardDescription>
         </div>
       </CardHeader>
       <div className="mt-3">
         <Loaded loader={agents} rows={2}>
           {(list) => (
-            <ul className="flex flex-col gap-1.5 text-[12px]">
+            <ul className="flex flex-col gap-0.5 text-[12px]">
               {stage.agents.map((name) => {
                 const agent = list.find((entry) => entry.name === name);
                 return (
-                  <li key={name} className="flex flex-wrap items-center gap-2">
-                    <Bot className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} />
-                    {agent === undefined ? <span className="text-text">{name}</span> : <Link to={`/plugins/builder/${encodeURIComponent(name)}`} className="text-text hover:underline">{name}</Link>}
-                    {agent === undefined ? (
-                      <StatusBadge tone="red" label="Not in the catalog" />
-                    ) : !agent.enabled ? (
-                      <StatusBadge tone="orange" label="Disabled" />
-                    ) : agent.problems.length > 0 ? (
-                      <StatusBadge tone="red" label="Invalid" title={agent.problems.join("\n")} />
-                    ) : !runtime ? null : agent.binding === undefined ? (
-                      <>
-                        <span className="flex items-center gap-1 text-text">
-                          <AlertTriangle className="size-3.5 text-[var(--ds-status-orange)]" strokeWidth={1.75} />
-                          No model binding
+                  <li key={name} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] px-1.5 py-1.5 hover:bg-hover">
+                    <span className="flex min-w-40 flex-1 items-center gap-2">
+                      <Bot className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} />
+                      {agent === undefined ? (
+                        <span className="min-w-0 truncate text-[13px] font-medium text-text" title={name}>
+                          {name}
                         </span>
-                        {can("providers.manage") ? (
-                          <Button size="small" variant="link" className="h-auto px-0 text-[12px]" onClick={() => openSettings("providers")}>
-                            Bind in Settings → Providers
-                          </Button>
-                        ) : (
-                          <span className="text-text-muted">an administrator binds it in Settings → Providers</span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-text-muted">
-                        {agent.binding.provider} · {agent.binding.model}
-                        {agent.binding.thinking === undefined ? "" : ` · thinking ${agent.binding.thinking}`}
-                      </span>
-                    )}
+                      ) : (
+                        <Link
+                          to={`/plugins/builder/${encodeURIComponent(name)}`}
+                          title={name}
+                          className="min-w-0 truncate rounded-[var(--geist-radius)] text-[13px] font-medium text-text hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+                        >
+                          {name}
+                        </Link>
+                      )}
+                    </span>
+                    <span className="flex max-w-full flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                      {agent === undefined ? (
+                        <StatusBadge tone="red" label="Not in the catalog" />
+                      ) : !agent.enabled ? (
+                        <StatusBadge tone="orange" label="Disabled" />
+                      ) : agent.problems.length > 0 ? (
+                        <StatusBadge tone="red" label="Invalid" title={agent.problems.join("\n")} />
+                      ) : !runtime ? null : agent.binding === undefined ? (
+                        <>
+                          <span className="flex items-center gap-1 text-text">
+                            <AlertTriangle className="size-3.5 text-[var(--ds-status-orange)]" strokeWidth={1.75} />
+                            No model binding
+                          </span>
+                          {can("providers.manage") ? (
+                            <Button size="small" variant="link" className="h-auto px-0 text-[12px]" onClick={() => openSettings("providers")}>
+                              Bind in Settings → Providers
+                            </Button>
+                          ) : (
+                            <span className="text-text-muted">an administrator binds it in Settings → Providers</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="max-w-full truncate font-mono text-[11px] text-text-secondary" title={bindingLabel(agent.binding)}>
+                          {bindingLabel(agent.binding)}
+                        </span>
+                      )}
+                    </span>
                   </li>
                 );
               })}

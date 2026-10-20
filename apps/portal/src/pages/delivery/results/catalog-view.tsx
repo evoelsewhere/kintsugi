@@ -7,12 +7,17 @@ import { useMemo, useState } from "react";
 import { StatusBadge } from "@/components/status-badges";
 import { CheckMark } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import type { CatalogItem, CatalogView, ItemStatus } from "@/lib/api/catalog";
 import { shortSha } from "@/lib/format";
 import { ITEM_STATUS, styleOf } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { formatCount } from "./results-format";
 import { Kpi, KpiRow, Section } from "./results-parts";
+
+const COMPLEXITY_TONE: Record<CatalogItem["complexity"], StatusTone> = { low: "green", medium: "orange", high: "red" };
+
+const FOCUS = "focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]";
 
 const STATUS_ORDER: ItemStatus[] = ["running", "in-pr", "failed", "stale", "understood", "not-analysed", "retired"];
 
@@ -51,15 +56,15 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-[13px]" aria-label="Item catalog">
         <thead>
-          <tr className="text-left text-[11px] tracking-wide text-text-muted uppercase">
-            {selection === undefined ? null : <th className="w-8 py-2" />}
-            <th className="py-2 font-medium">Module / item</th>
-            <th className="py-2 font-medium">Kind</th>
-            <th className="py-2 text-right font-medium">Files</th>
-            <th className="py-2 text-right font-medium">Code lines</th>
-            <th className="py-2 font-medium">Complexity</th>
-            <th className="py-2 font-medium">Status</th>
-            {selection?.action === undefined ? null : <th className="py-2" />}
+          <tr className="text-left text-[10px] tracking-wide text-text-muted uppercase">
+            {selection === undefined ? null : <th className="w-8 px-1.5 py-2" />}
+            <th className="px-2 py-2 font-medium">Module / item</th>
+            <th className="px-2 py-2 font-medium">Kind</th>
+            <th className="w-16 px-2 py-2 text-right font-medium">Files</th>
+            <th className="w-24 px-2 py-2 text-right font-medium">Code lines</th>
+            <th className="w-28 px-2 py-2 font-medium">Complexity</th>
+            <th className="px-2 py-2 font-medium">Status</th>
+            {selection?.action === undefined ? null : <th className="px-2 py-2" />}
           </tr>
         </thead>
         <tbody>
@@ -70,9 +75,9 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
             const loc = group.items.reduce((total, item) => total + item.loc, 0);
             const understood = group.items.filter((item) => item.status === "understood").length;
             return [
-              <tr key={`m:${group.id}`} className="[box-shadow:0_-1px_0_rgba(0,0,0,0.06)] bg-surface-subtle/40">
+              <tr key={`m:${group.id}`} className="bg-recessed/60 [box-shadow:0_-1px_0_var(--color-hover)]">
                 {selection === undefined ? null : (
-                  <td className="py-2">
+                  <td className="px-1.5 py-2">
                     <button
                       type="button"
                       role="checkbox"
@@ -80,25 +85,29 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                       aria-label={`Select module ${group.name}`}
                       disabled={selectable.length === 0}
                       onClick={() => selection.toggle(selectable, chosen < selectable.length)}
-                      className="disabled:opacity-40"
+                      className={cn("rounded-[4px] disabled:cursor-not-allowed disabled:opacity-40", FOCUS)}
                     >
                       <CheckMark checked={chosen > 0} />
                     </button>
                   </td>
                 )}
-                <td className="py-2" colSpan={1}>
-                  <button type="button" className="flex items-center gap-1 font-medium text-text" onClick={() => toggleModule(group.id)} aria-expanded={open}>
-                    {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                    {group.name}
-                    <span className="font-mono text-[11px] font-normal text-text-muted">{group.id}</span>
+                <td className="px-2 py-2" colSpan={1}>
+                  <button type="button" className={cn("flex max-w-full items-center gap-1.5 rounded-[6px] font-medium text-text", FOCUS)} onClick={() => toggleModule(group.id)} aria-expanded={open} title={group.name}>
+                    {open ? <ChevronDown className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} /> : <ChevronRight className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} />}
+                    <span className="truncate">{group.name}</span>
+                    <span className="shrink-0 font-mono text-[11px] font-normal text-text-muted">{group.id}</span>
                   </button>
-                  {group.summary === "" ? null : <p className="ml-5 text-[12px] text-text-secondary">{group.summary}</p>}
+                  {group.summary === "" ? null : (
+                    <p className="ml-5 line-clamp-2 text-[12px] text-text-secondary" title={group.summary}>
+                      {group.summary}
+                    </p>
+                  )}
                 </td>
-                <td className="py-2 text-text-muted">{group.items.length} items</td>
-                <td className="py-2 text-right tabular-nums">{formatCount(group.items.reduce((total, item) => total + item.files.length, 0))}</td>
-                <td className="py-2 text-right tabular-nums">{formatCount(loc)}</td>
-                <td className="py-2" />
-                <td className="py-2 text-[12px] text-text-secondary">
+                <td className="px-2 py-2 text-[11.5px] text-text-muted tabular-nums">{group.items.length} items</td>
+                <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums">{formatCount(group.items.reduce((total, item) => total + item.files.length, 0))}</td>
+                <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums">{formatCount(loc)}</td>
+                <td className="px-2 py-2" />
+                <td className="px-2 py-2 text-[11.5px] text-text-secondary tabular-nums">
                   {understood}/{group.items.filter((item) => item.status !== "retired").length} understood
                 </td>
                 {selection?.action === undefined ? null : <td />}
@@ -106,10 +115,11 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
               ...(open
                 ? group.items.map((item) => {
                     const reason = selection?.blocked(item);
+                    const picked = selection?.selected.has(item.id) === true;
                     return (
-                      <tr key={item.id} className={cn("[box-shadow:0_-1px_0_rgba(0,0,0,0.04)]", item.status === "retired" && "text-text-muted")}>
+                      <tr key={item.id} className={cn("align-top [box-shadow:0_-1px_0_var(--color-hover)] focus-within:bg-hover hover:bg-hover", picked && "bg-hover", item.status === "retired" && "text-text-muted")}>
                         {selection === undefined ? null : (
-                          <td className="py-1.5">
+                          <td className="px-1.5 py-2">
                             <button
                               type="button"
                               role="checkbox"
@@ -118,38 +128,59 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                               title={reason}
                               disabled={reason !== undefined}
                               onClick={() => selection.toggle([item.id], !selection.selected.has(item.id))}
-                              className="disabled:opacity-40"
+                              className={cn("rounded-[4px] disabled:cursor-not-allowed disabled:opacity-40", FOCUS)}
                             >
                               <CheckMark checked={selection.selected.has(item.id)} />
                             </button>
                           </td>
                         )}
-                        <td className="py-1.5 pl-5">
-                          <p className="text-text">{item.name}</p>
-                          <p className="font-mono text-[11px] text-text-muted">
-                            {item.id}
-                            {item.aliases.length === 0 ? "" : ` · was ${item.aliases.join(", ")}`}
+                        <td className="max-w-[360px] px-2 py-2 pl-7">
+                          <p className="truncate text-[13px] font-medium text-text" title={item.name}>
+                            {item.name}
+                            <span className="ml-1.5 font-mono text-[11px] font-normal text-text-muted">{item.id}</span>
                           </p>
-                          {item.summary === "" ? null : <p className="text-[12px] text-text-secondary">{item.summary}</p>}
-                          {item.parts.length === 0 ? null : <p className="text-[11px] text-text-muted">Parts: {item.parts.map((part) => part.name).join(", ")}</p>}
+                          {item.summary === "" ? null : (
+                            <p className="line-clamp-2 text-[12px] text-text-secondary" title={item.summary}>
+                              {item.summary}
+                            </p>
+                          )}
+                          {item.aliases.length === 0 && item.parts.length === 0 ? null : (
+                            <span className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-text-muted">
+                              {item.aliases.length === 0 ? null : (
+                                <span className="rounded-full bg-hover px-1.5 py-0.5 font-mono" title={`Previously ${item.aliases.join(", ")}`}>
+                                  was {item.aliases.join(", ")}
+                                </span>
+                              )}
+                              {item.parts.map((part) => (
+                                <span key={part.name} className="rounded-full bg-hover px-1.5 py-0.5" title={part.file ?? part.kind}>
+                                  {part.name}
+                                </span>
+                              ))}
+                            </span>
+                          )}
                         </td>
-                        <td className="py-1.5">{item.kind}</td>
-                        <td className="py-1.5 text-right tabular-nums" title={item.files.slice(0, 20).join("\n")}>
+                        <td className="px-2 py-2 text-[12px] text-text-secondary">{item.kind}</td>
+                        <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums" title={item.files.slice(0, 20).join("\n")}>
                           {formatCount(item.files.length)}
                         </td>
-                        <td className="py-1.5 text-right tabular-nums">{formatCount(item.loc)}</td>
-                        <td className="py-1.5">{item.complexity}</td>
-                        <td className="py-1.5">
+                        <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums">{formatCount(item.loc)}</td>
+                        <td className="px-2 py-2">
+                          <span className="inline-flex items-center gap-1.5 text-[12px] text-text-secondary">
+                            <StatusDot tone={COMPLEXITY_TONE[item.complexity]} className="size-2" />
+                            {item.complexity}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2">
                           <span className="flex flex-wrap items-center gap-1.5">
                             <ItemStatusBadge status={item.status} />
                             {item.pr?.url === undefined ? null : (
-                              <a className="text-[12px] underline" href={item.pr.url} target="_blank" rel="noreferrer">
+                              <a className={cn("rounded-[4px] text-[12px] text-accent hover:underline", FOCUS)} href={item.pr.url} target="_blank" rel="noreferrer">
                                 PR
                               </a>
                             )}
                           </span>
                         </td>
-                        {selection?.action === undefined ? null : <td className="py-1.5 text-right">{selection.action(item)}</td>}
+                        {selection?.action === undefined ? null : <td className="px-2 py-2 text-right">{selection.action(item)}</td>}
                       </tr>
                     );
                   })
@@ -190,9 +221,11 @@ export function CatalogResults({ view, selection, children }: { view: CatalogVie
           {view.catalog.unassigned.length === 0 ? (
             <p className="text-[13px] text-text-muted">Every file is in an item.</p>
           ) : (
-            <ul className="max-h-72 overflow-auto font-mono text-[12px] text-text-secondary">
+            <ul className="max-h-72 overflow-auto font-mono text-[11.5px] text-text-secondary">
               {view.catalog.unassigned.map((path) => (
-                <li key={path}>{path}</li>
+                <li key={path} className="truncate rounded-[4px] px-1.5 py-0.5 hover:bg-hover" title={path}>
+                  {path}
+                </li>
               ))}
             </ul>
           )}
@@ -203,7 +236,9 @@ export function CatalogResults({ view, selection, children }: { view: CatalogVie
           ) : (
             <ul className="max-h-72 list-disc overflow-auto pl-5 text-[13px] text-text-secondary">
               {view.catalog.ambiguities.map((line, index) => (
-                <li key={index}>{line}</li>
+                <li key={index} className="py-0.5 break-words">
+                  {line}
+                </li>
               ))}
             </ul>
           )}
