@@ -1,6 +1,6 @@
-# Work on a migration task as a member
+# Use a coding agent on a migration task
 
-> Planned behavior. The CLI, local MCP connection and PR continuation described here are being implemented. Commands become available with a released member-access package.
+> Planned behavior. The CLI, local MCP connection and PR continuation described here are being implemented. Commands become available with a released Coding Agent Workflow release.
 
 You work in your chosen AI harness and keep using your existing model subscription. Kintsugi supplies the authorized task and design context, then follows your normal pull request through review and the human gate. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
 
@@ -21,7 +21,7 @@ You work in your chosen AI harness and keep using your existing model subscripti
    kintsugi project use modernization
    ~~~
 
-4. Set up the access plugin for a tested AI client. It gives the AI read-only Kintsugi tools and a short guide for retrieving complete cited context. It does not install a Kintsugi assistant or run hooks.
+4. Set up the Coding Agent Workflow plugin for a tested AI client. It gives the AI read-only Kintsugi tools and a short guide for retrieving complete cited context. It does not install a Kintsugi assistant or run hooks.
 
    ~~~sh
    kintsugi plugins setup --harness claude-code
@@ -61,4 +61,4 @@ kintsugi task status billing/invoices/tax
 kintsugi task watch billing/invoices/tax
 ~~~
 
-See the exact [commands and MCP tools](../reference/harness-integration.md), and the [client/provider compatibility evidence](../reference/member-access-compatibility.md).
+See the exact [commands and MCP tools](../reference/harness-integration.md), and the [client/provider compatibility evidence](../reference/coding-agent-workflow-compatibility.md).

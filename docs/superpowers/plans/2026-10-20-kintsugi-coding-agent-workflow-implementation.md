@@ -1,16 +1,16 @@
-# Kintsugi Member Access Implementation Plan
+# Kintsugi Coding Agent Workflow Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended for independently reviewed security/durability tasks) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This document authorizes no deployment, publication or changes to a developer's installed clients by itself.
 
 **Goal:** Let a developer's chosen AI retrieve a coherent task/design brief, answer cited questions, work locally and open normal PRs that Kintsugi reviews and advances through evidence-bound human gates.
 
-**Architecture:** One authorized HTTPS member API serves a typed CLI client and a local stdio MCP adapter. Git owns tasks, design and gate evidence; Postgres holds access controls, immutable snapshot indexes, projections, inbox/outbox and review coordination. GitHub/GHE observation and a generic runtime review job feed an explicit post-merge quality-gate bridge.
+**Architecture:** One authorized HTTPS Coding Agent Context API serves a typed CLI client and a local stdio MCP adapter. Git owns tasks, design and gate evidence; Postgres holds access controls, immutable snapshot indexes, projections, inbox/outbox and review coordination. GitHub/GHE observation and a generic runtime review job feed an explicit post-merge quality-gate bridge.
 
 **Tech Stack:** TypeScript/ESM, Node ≥22.19.0, pnpm 10.18.0, installed Turbo 2.11.7, NestJS 12, PostgreSQL, pg-boss 12.37.1, system Git, Vitest, Commander 15.0.0, `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.3.1, and `@napi-rs/keyring` 2.0.0. Linux credential storage is explicitly pinned to Secret Service.
 
-**Spec:** [approved design v2](../specs/2026-10-20-kintsugi-member-access-design.md).
+**Spec:** [approved design v2](../specs/2026-10-20-kintsugi-coding-agent-workflow-design.md).
 
-**Testing:** [testing plan and case IDs](2026-10-20-kintsugi-member-access-testing.md). Product-task checkboxes remain unchecked until task completion is recorded in the plan ledger.
+**Testing:** [testing plan and case IDs](2026-10-20-kintsugi-coding-agent-workflow-testing.md). Product-task checkboxes remain unchecked until task completion is recorded in the plan ledger.
 
 ## Global Constraints
 
@@ -44,8 +44,8 @@ Use the ordered tasks as the implementation ledger. Steps within each task are s
 | Milestone | Tasks | Reviewable result |
 |---|---|---|
 | M0 — Baseline and contracts | T00–T01 | ADR records, frozen query/evidence shapes and synthetic pilot fixture |
-| M1 — Authorized reads | T02–T06 | Scoped member access, Git task projection, immutable context and API; approval-unknown content remains blocked for implementation |
-| M2 — Developer access preview | T07–T09 | CLI, stdio MCP and small generated access plugin; cited Q&A and export |
+| M1 — Authorized reads | T02–T06 | Project Access, Git task projection, immutable context and API; approval-unknown content remains blocked for implementation |
+| M2 — Coding Agent Workflow preview | T07–T09 | CLI, stdio MCP and small generated Coding Agent Workflow plugin; cited Q&A and export |
 | M3 — PR feedback | T10–T13 | Provider observations, complete review inputs, current findings and policy evaluation |
 | M4 — Effective gates | T14–T16 | Verified Git gate publication, exactly-once effective advancement, SSE and portal workflow |
 | M5 — Release evidence | T17 | Mandatory checks, native-client matrix and populated end-to-end pilot |
@@ -59,23 +59,23 @@ Paths are relative to the repository root. New modules follow domain/application
 | Owner | Files / responsibility |
 |---|---|
 | Domain | `packages/domain/src/member-task.ts`, `gate-evidence.ts`, existing `index.ts` / `document-layout.ts`: pure vocabulary, validation, readiness and paths |
-| Contract | `packages/harness-sdk/src/member-access.ts`, `member-schemas.ts`, `index.ts`: queries/results and `MemberAccessPort` |
+| Contract | `packages/harness-sdk/src/agent-context.ts`, `agent-context-schemas.ts`, `index.ts`: queries/results and `CodingAgentContextPort` |
 | Authentication | Existing core auth module plus `member-token.*`; new `admin/project-access/` module: token lifecycle and explicit project grants |
-| Task/context API | New `delivery/member-access/`: Git-backed task/approval reads, snapshot indexing, bounded retrieval and controller |
+| Task/context API | New `delivery/agent-context/`: Git-backed task/approval reads, snapshot indexing, bounded retrieval and controller |
 | Durability | `services/orchestrator/src/outbox/`: shared transactional transition/outbox implementation, exported as `@kintsugi/orchestrator/outbox` |
 | Client | New `packages/kintsugi-client/`: authenticated HTTPS and SSE only; no database/Git access |
 | CLI | New `packages/cli/`: profile/OS credential adapter, commands, rendering and process entry |
 | Harness Hub | New package metadata and `services/harness-hub/src/`: injected stdio transport and generated native packages |
 | Provider | `packages/git/src/github-app.ts`, `pull-request-observer.ts`, `github-observer.ts`: credentials and GitHub/GHE facts, without Kintsugi workflow policy |
 | Review/gates | New `delivery/member-reviews/`, `orchestrator/src/member-reviews/`, existing governance gates + new gate-publication adapter: fixed inputs, findings, effective decisions |
-| Portal | Focused `member-task`, `member-access`, `member-tokens`, `gate-publication` components; existing project/gate surfaces compose them |
+| Portal | Focused `agent-context`, `project-access`, `member-tokens`, `gate-publication` components; existing project/gate surfaces compose them |
 | Verification | Existing test support plus synthetic fixtures and new non-publishing CI workflow; no production service or user database |
 
 ## Frozen interfaces and planning defaults
 
 T01 owns the exact exported DTO definitions; later tasks use these names. Dates are UTC ISO strings; Git object IDs are full SHA-1 or SHA-256 IDs validated by shared schemas. All wire shapes have `schemaVersion: "1"`. Query unit IDs travel as query values, never path fragments that split `<app>/<module>/<unit>`.
 
-`MemberAccessPort` has eight methods (seven MCP tools plus the CLI-only event stream):
+`CodingAgentContextPort` has eight methods (seven MCP tools plus the CLI-only event stream):
 
 ```ts
 listProjects(query: ProjectQuery): Promise<ListResult<ProjectSummary>>;
@@ -101,19 +101,19 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 ### Task 0 (T00) — Record the approved decisions and reproducible pilot baseline
 
-**Depends on:** approved spec. **Files:** create ADRs `0041-member-access-through-cli-and-local-mcp.md`, `0042-member-context-and-project-access.md`, `0043-evidence-bound-pr-continuation.md`; amend the decision register (D17–D19, D43, D54) and affected harness/identity references; create `docs/reference/member-access-compatibility.md`, `test/fixtures/member-access/README.md` and synthetic project/revision/variant documents. Use new register rows D57–D59 for approved access, snapshot and gate decisions. Do not rewrite accepted ADR decisions; link amendments/supersession precisely.
+**Depends on:** approved spec. **Files:** create ADRs `0041-coding-agent-workflow-through-cli-and-local-mcp.md`, `0042-coding-agent-context-and-project-access.md`, `0043-evidence-bound-pr-continuation.md`; amend the decision register (D17–D19, D43, D54) and affected harness/identity references; create `docs/reference/coding-agent-workflow-compatibility.md`, `test/fixtures/coding-agent-workflow/README.md` and synthetic project/revision/variant documents. Use new register rows D57–D59 for approved access, snapshot and gate decisions. Do not rewrite accepted ADR decisions; link amendments/supersession precisely.
 
 **Interfaces:** consumes existing ADRs and package manifests; produces the version/capability matrix, fixture IDs and named policies used throughout T01–T17. Fixture: project `modernization`, application `billing`, unit `billing/invoices/tax`, users `reader-a`, `reader-b`, `maintainer`, docs `project-docs`, target `billing-api`, required deliverables `code` and `design`.
 
 - [x] Record host Node 24.21.0, Corepack pnpm 10.18.0, Git 2.45.1, installed Turbo 2.11.7 and OS. Claude Code 2.1.278 and Codex 0.163.0-alpha.10.2 were observed; Copilot CLI is absent, and none of these probes establishes native compatibility. Resolve Turbo and read its bundled docs before changing commands/config. Freeze exact boundary dependencies Commander 15.0.0 (ESM, Node >=22.12), MCP server/client 2.3.1 (same fixed release group; server v2.3.1 supports legacy and modern eras through `serveStdio`), and `@napi-rs/keyring` 2.0.0 (official Node-API/Rust package); on Linux require Secret Service so unavailable persistent storage fails closed instead of falling back to the ephemeral kernel keyring. Sources: https://github.com/tj/commander.js/releases/tag/v15.0.0; https://github.com/modelcontextprotocol/typescript-sdk/releases/tag/v2.3.1; https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/serving/stdio.md; https://github.com/Brooooooklyn/keyring-node; https://www.npmjs.com/package/%40napi-rs/keyring. Keep exact versions and lockfile entries; no floating ranges for these boundary dependencies.
-- [x] Write the three ADR records and compatibility table. Explicitly amend accepted plugin/harness decisions: the dedicated hookless access plugin is separate from `modernize`, the installed CLI launches local MCP, and remote MCP/OAuth is deferred. Update D17–D19, D43 and D54; add D57–D59. GitHub.com is the reference pilot; an exact GHE version remains unsupported until probed. Record private workspace names separately from the still-unverified public package namespace; verify public ownership only before publication.
+- [x] Write the three ADR records and compatibility table. Explicitly amend accepted plugin/harness decisions: the dedicated hookless Coding Agent Workflow plugin is separate from `modernize`, the installed CLI launches local MCP, and remote MCP/OAuth is deferred. Update D17–D19, D43 and D54; add D57–D59. GitHub.com is the reference pilot; an exact GHE version remains unsupported until probed. Record private workspace names separately from the still-unverified public package namespace; verify public ownership only before publication.
 - [x] Prepare synthetic unit/task/basic/detail-design/standards/gate fixtures and two revisions A/B. Include draft/pending/missing/injection/large-design variants. No real source, credentials or customer material.
 - [x] Review the fixture against design sections 5–6 and testing cases CTX-01/03. Expected: one full unit identity, explicit required deliverables, exact source roles and independent approval fixtures; missing approvals do not become implementation-ready.
 - [x] Commit the approved design, plans, ADRs, affected references and fixtures with the message docs(member-access): record contracts and pilot baseline.
 
-### Task 1 (T01) — Shared validation, readiness and member-access contract
+### Task 1 (T01) — Shared validation, readiness and Coding Agent Workflow context contract
 
-**Depends on:** T00. **Files:** create domain `member-task.ts`, `gate-evidence.ts`, tests `member-task.test.ts`, `gate-evidence.test.ts`; create SDK `member-access.ts`, `member-schemas.ts`, `test/member-schemas.test.ts`; update their `index.ts`, SDK package/test configuration and tsconfigs.
+**Depends on:** T00. **Files:** create domain `member-task.ts`, `gate-evidence.ts`, tests `member-task.test.ts`, `gate-evidence.test.ts`; create SDK `agent-context.ts`, `agent-context-schemas.ts`, `test/agent-context-schemas.test.ts`; update their `index.ts`, SDK package/test configuration and tsconfigs.
 
 **Interfaces:** consumes `WorkItemFile`, existing Phase/ProjectRole/MemberHarnessId/path helpers. Produces the frozen DTOs above; `parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile>`, `evaluateReadiness(input: TaskReadinessInput): ReadinessResult`, `validateGateEvidence(value: unknown): ValidationResult<GateEvidence>`. `ValidationResult<T>` is `{ok:true,value:T} | {ok:false,issues:ValidationProblem[]}`, reusing existing validation problem types.
 
@@ -123,17 +123,18 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 - [x] Add a compile-time port implementation fixture proving all eight method signatures and discriminated results; add schema limits/defaults and partial-context tests. Do not add a runtime use case to the generic runtime.
 - [x] Run both package tests/typechecks, then commit `feat(member-access): define shared query and evidence contracts`.
 
-### Task 2 (T02) — Scoped tokens and project access, including old-route denial
+### Task 2 (T02) — Scoped tokens and Project Access, including legacy-route denial
 
-**Depends on:** T01. **Files:** create migration `018_member_access.sql`; core auth `domain/member-token.repository.ts`, `application/member-token.service.ts`, `infrastructure/pg-member-token.repository.ts`, `interface/member-tokens.controller.ts`; new `admin/project-access/` feature and public `index.ts`; modify auth guard/module/decorators, app composition and API tests `integration/member-auth.test.ts`, `integration/project-access.test.ts`.
+**Depends on:** T01. **Files:** create migration `018_project_access_and_member_tokens.sql`; core auth `domain/member-token.repository.ts`, `application/member-token.service.ts`, `infrastructure/pg-member-token.repository.ts`, `interface/member-tokens.controller.ts`; new `admin/project-access/` feature and public `index.ts`; modify auth guard/module/decorators, app composition and API tests `integration/member-auth.test.ts`, `integration/project-access.test.ts`.
 
 **Interfaces:** `MemberTokenService.issue(actor, {name, projectIds, expiresAt}): Promise<{token:string; metadata:TokenMetadata}>`, `revoke(actor, tokenId): Promise<void>`, `authenticateMemberToken(token): Promise<MemberPrincipal | undefined>`; `ProjectAccessService.requireRead(userId, projectId): Promise<void>`. `MemberPrincipal` carries immutable user/token IDs and a restricted credential kind; it is created server-side, never accepted from wire data.
 
-- [ ] Write AUTH-01–08 tests. Critical assertion: an admin-owned member token gets 403 on `POST /api/admin/roles`, `POST /api/governance/gates` and every unmarked legacy read route, despite the owner's installation permissions. A normal cookie session retains current behavior. Test source/data markers never appear in denied responses.
-- [ ] Run `pnpm --filter @kintsugi/api exec vitest run test/integration/member-auth.test.ts test/integration/project-access.test.ts` with the isolated test database configured. Expect the restricted-token behavior to fail before implementation; skip is not proof.
-- [ ] Add `core.member_token`, its project allowlist and `admin.project_access` with FKs and fully qualified names. Insert catalog codes `member.read`, `tokens.manage-own`, `project.access.manage`; seed only the intended admin management permissions and explicit pilot grants. RACI/assignee values grant nothing.
-- [ ] Implement random token issuance, hash-only storage, expiry/revocation/current-user checks and safe listing. Extend the global guard so member tokens require explicit route-scope metadata and intersect token scope, current user permission and project access. Never let a PAT inherit session-wide authority on legacy routes.
-- [ ] Add cookie-authenticated own-token/grant management endpoints (issuance returns the secret once; lists never do). Run auth/identity regressions and typecheck; commit `feat(auth): add project-scoped member read tokens`.
+- [x] Write AUTH-01–06 and AUTH-08 integration tests. AUTH-07 is owned by T05/T07 once snapshot and profile APIs exist. Critical assertion: an admin-owned member token gets 403 on `POST /api/admin/roles`, `POST /api/governance/gates` and every unmarked legacy read route, despite the owner's installation permissions. A normal cookie session retains current behavior. Test source/data markers never appear in denied responses.
+- [x] Run `pnpm --filter @kintsugi/api exec vitest run test/integration/member-auth.test.ts test/integration/project-access.test.ts` with the isolated test database configured. All assertions must execute; skips do not count as proof.
+- [x] Add `core.member_token`, its project allowlist and `admin.project_access` with FKs and fully qualified names. Insert catalog codes `member.read`, `tokens.manage-own`, `project.access.manage`; grant `member.read` and `tokens.manage-own` to primary roles, `project.access.manage` to admin, and add project grants explicitly; never infer access from RACI or assignment.
+- [x] Implement random token issuance, hash-only storage, expiry/revocation/current-user checks and safe listing. Extend the global guard so member tokens require explicit route-scope metadata and intersect token scope, current user permission and Project Access. Never let a PAT inherit session-wide authority on legacy routes.
+- [x] Add session-authenticated own-token and Project Access management endpoints (issuance returns the secret once; lists never do). Focused auth regression tests, typecheck and lint pass.
+- [x] Review the T02 diff and commit `feat(auth): add project-scoped member read tokens`.
 
 ### Task 3 (T03) — Shared durable transitions, event ordering and outbox
 
@@ -149,7 +150,7 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 ### Task 4 (T04) — Authoritative Git task and assignment projection
 
-**Depends on:** T01–T02. **Files:** create migration `020_member_tasks.sql`; domain validation from T01; agents `src/unit-document.ts` plus shared frontmatter helper as required, `test/unit-document.test.ts`; new API `delivery/member-access/domain/{task,member-access.ports}.ts`, `application/task-query.service.ts`, `infrastructure/git-task.reader.ts`, `pg-task-projection.ts`, module/public exports; tests `unit/task-readiness.test.ts`, `integration/member-tasks.test.ts`.
+**Depends on:** T01–T02. **Files:** create migration `020_member_tasks.sql`; domain validation from T01; agents `src/unit-document.ts` plus shared frontmatter helper as required, `test/unit-document.test.ts`; new API `delivery/agent-context/domain/{task,project-access.ports}.ts`, `application/task-query.service.ts`, `infrastructure/git-task.reader.ts`, `pg-task-projection.ts`, module/public exports; tests `unit/task-readiness.test.ts`, `integration/member-tasks.test.ts`.
 
 **Interfaces:** `parseUnitDocument(markdown: string): ValidationResult<WorkItemFile>`; `TaskQueryService.list(principal, query: TaskQuery): Promise<ListResult<TaskSummary>>`; `get(principal, id: TaskIdentity): Promise<TaskRecord>`. `TaskRecord` includes the authoritative Git location and explicit input/output references; `ApprovalEvidenceReader` returns verified, pending or unknown evidence, never a guessed boolean.
 
@@ -161,7 +162,7 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 ### Task 5 (T05) — Immutable snapshots, bounded retrieval and worker-owned pins
 
-**Depends on:** T03–T04. **Files:** create migration `021_member_snapshots.sql`; API member-access `application/{snapshot,document-query}.service.ts`, infrastructure `pg-snapshot.repository.ts`, domain `snapshot.ts`; worker `git-sync/retention.ts`, `test/snapshot-retention.test.ts`; tests `integration/member-context.test.ts`, `unit/context-manifest.test.ts`.
+**Depends on:** T03–T04. **Files:** create migration `021_member_snapshots.sql`; API agent-context `application/{snapshot,document-query}.service.ts`, infrastructure `pg-snapshot.repository.ts`, domain `snapshot.ts`; worker `git-sync/retention.ts`, `test/snapshot-retention.test.ts`; tests `integration/member-context.test.ts`, `unit/context-manifest.test.ts`.
 
 **Interfaces:** `SnapshotService.brief(principal, query: TaskBriefQuery): Promise<TaskBrief>`; `DocumentQueryService.get(principal, query: DocumentQuery): Promise<DocumentPage>` and `search(principal, query: DocumentSearchQuery): Promise<ListResult<SourceHit>>`; worker `retainSnapshot(deps, snapshotId): Promise<RetentionResult>`. Manifest hash canonicalizes relevant input identity/content/policy, not generated output or observation timestamps.
 
@@ -171,11 +172,11 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 - [ ] Return `SNAPSHOT_PREPARING` until required pins exist; clients may retry safe preparation for at most 30 seconds. Implement 24-hour expiry, bounded section/cursor reads and keyword search within the same manifest. Reject foreign source IDs, cursor tampering, arbitrary links, `.git` and restricted paths. An unavailable historical object returns an explicit failure, never HEAD.
 - [ ] Verify cleanup removes only expired, unreferenced local pins; active reviews and merged evidence retain leases. Test that unrelated generated commits do not change context revision. Run relevant suites and commit `feat(context): add pinned member snapshots and paged sources`.
 
-### Task 6 (T06) — Versioned member API and complete preview capability contract
+### Task 6 (T06) — Versioned Coding Agent Context API and complete preview capability contract
 
-**Depends on:** T02/T04/T05. **Files:** member-access `interface/member-access.controller.ts`, `member-access.dto.ts`, `application/member-access.service.ts`, `domain/review-reader.port.ts`, module; SDK exports; API app composition and `test/integration/member-api.test.ts`, `test/unit/member-api-contract.test.ts`.
+**Depends on:** T02/T04/T05. **Files:** agent-context `interface/agent-context.controller.ts`, `agent-context.dto.ts`, `application/agent-context.service.ts`, `domain/review-reader.port.ts`, module; SDK exports; API app composition and `test/integration/member-api.test.ts`, `test/unit/member-api-contract.test.ts`.
 
-**Interfaces:** HTTPS routes under `/api/member/v1`: GET `/projects`, `/tasks`, `/task-brief`, `/documents`, `/search`, `/task-status`; GET `/reviews/:reviewId` becomes available when T13 supplies `ReviewReader`. All data routes explicitly require catalog `member.read`, member-token scope metadata and project access. `MemberAccessService` implements the seven nonstream methods of the port using authorized feature services, not transport code.
+**Interfaces:** HTTPS routes under `/api/member/v1`: GET `/projects`, `/tasks`, `/task-brief`, `/documents`, `/search`, `/task-status`; GET `/reviews/:reviewId` becomes available when T13 supplies `ReviewReader`. All data routes explicitly require catalog `member.read`, member-token scope metadata and project access. `AgentContextService` implements the seven nonstream methods of the port using authorized feature services, not transport code.
 
 - [ ] Write contract tests for envelope, valid queries, 400 schema errors, 401/403, explicit unavailable reviews, slash-containing unit query values and matching CLI/MCP-ready payloads. Test that source URLs do not become server-side fetch requests.
 - [ ] Run `pnpm --filter @kintsugi/api exec vitest run test/integration/member-api.test.ts test/unit/member-api-contract.test.ts`.
@@ -187,7 +188,7 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 **Depends on:** T06. **Files:** new `packages/kintsugi-client/{package.json,tsconfig.json,src/client.ts,src/errors.ts,test/client.test.ts}`; new `packages/cli/` (`@kintsugi/cli`) with exact Commander/keyring dependencies and `src/{main,cli,profile,credential-store,render}.ts`, `src/commands/{auth,project,task,document,doctor}.ts`, `test/{cli,credential-store,export}.test.ts` and package/test configs. Reuse SDK types rather than API-private imports.
 
-**Interfaces:** `createMemberClient({baseUrl, tokenProvider, fetch, signal?}): MemberAccessPort`; `runCli(argv: readonly string[], deps: CliDeps): Promise<number>`; `CredentialStore.get/set/delete(profileId)`; `writeBrief(path, brief, {overwrite:false}): Promise<void>`. IO/clock/credential/fetch dependencies are injected; the entrypoint alone sets process exit status.
+**Interfaces:** `createAgentContextClient({baseUrl, tokenProvider, fetch, signal?}): CodingAgentContextPort`; `runCli(argv: readonly string[], deps: CliDeps): Promise<number>`; `CredentialStore.get/set/delete(profileId)`; `writeBrief(path, brief, {overwrite:false}): Promise<void>`. IO/clock/credential/fetch dependencies are injected; the entrypoint alone sets process exit status.
 
 Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the executable is `kintsugi`. `review list --task` renders the authorized review references from `taskStatus`; it does not introduce an eighth MCP query or a second review-list API. The CLI `--format` values are `text | json | markdown`, with `--json` as the JSON alias; `task brief` passes an explicit activity (default `implementation`) and prints blockers without claiming that a blocked task is ready.
 
@@ -201,7 +202,7 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 **Depends on:** T07. **Files:** create Harness Hub package/tsconfigs with exact `@modelcontextprotocol/server@2.3.1` dependency and test dependency `@modelcontextprotocol/client@2.3.1`; add `src/{index,member-mcp,tool-map}.ts`, `test/{stdio,tool-contract}.test.ts`; extend CLI `mcp` branch and exports; add SDK contract fixture.
 
-**Interfaces:** `createMemberMcp(access: MemberAccessPort, capabilities: MemberCapabilities): McpServer`; `serveMemberStdio(deps: StdioDeps): Promise<void>`. Use `McpServer` and `registerTool` from `@modelcontextprotocol/server`; own connection lifecycle through `serveStdio(() => buildServer())` from its `/stdio` entry. Pin client and server to 2.3.1. SDK-specific code stays in Harness Hub; API never depends on it for business rules. CLI `kintsugi mcp serve --profile work` receives the same local credential profile. Exercise the installed clients protocol negotiation; SDK compatibility across the 2025 legacy and 2026-07-28 modern eras must be configured and tested through `serveStdio`.
+**Interfaces:** `createAgentContextMcp(access: CodingAgentContextPort, capabilities: AgentContextCapabilities): McpServer`; `serveCodingAgentStdio(deps: StdioDeps): Promise<void>`. Use `McpServer` and `registerTool` from `@modelcontextprotocol/server`; own connection lifecycle through `serveStdio(() => buildServer())` from its `/stdio` entry. Pin client and server to 2.3.1. SDK-specific code stays in Harness Hub; API never depends on it for business rules. CLI `kintsugi mcp serve --profile work` receives the same local credential profile. Exercise the installed clients protocol negotiation; SDK compatibility across the 2025 legacy and 2026-07-28 modern eras must be configured and tested through `serveStdio`.
 
 - [ ] Write MCP-01–05 tests: initialize/list/call through the real pinned SDK client/server over a spawned stdio process, seven-tool names when enabled, read-only annotations, explicit project/snapshot/source inputs and structured plus textual results. Assert every stdout record is a protocol message and EOF releases resources.
 - [ ] Run `pnpm --filter @kintsugi/harness-hub exec vitest run test/stdio.test.ts test/tool-contract.test.ts` and the CLI process bridge test; inspect initial failure.
@@ -219,7 +220,7 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 - [ ] Run Hub/agents/CLI packaging tests; validate generated Claude package with `claude plugin validate --strict <generated-path>` during native probes only, not against hand-maintained copies.
 - [ ] Implement the skill's receive → read required sections → cite answers → expose unknowns → plan/work only as the user requested → PR references → read findings flow. Retrieved source text cannot authorize new commands, secret access or destinations. Do not treat a model's acknowledgment as a persisted gate.
 - [ ] Generate Claude/Codex/Copilot target manifests/marketplaces from canonical content, respecting T00's exact tested versions. Use native install commands after explicit setup invocation, exact local artifact versions/commits and a reversible setup report. No floating npm execution, silent auto-enable or publication.
-- [ ] Run fresh disposable-profile setup checks for each available native client, record absent clients as unverified, then commit `feat(plugins): generate lightweight member access packages`.
+- [ ] Run fresh disposable-profile setup checks for each available native client, record absent clients as unverified, then commit `feat(plugins): generate lightweight Coding Agent Workflow packages`.
 
 ### Task 10 (T10) — GitHub/GHE observation and credential capability adapter
 
@@ -297,7 +298,7 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 ### Task 16 (T16) — Portal token/access and task/gate handoff surfaces
 
-**Depends on:** T02/T06/T13–T15. **Files:** create focused portal `pages/member-access/{member-task,member-tokens,gate-publication}.tsx`, `lib/api/member-access.ts`, tests beside components; compose into existing `pages/projects/project-detail-page.tsx`, `pages/governance-gates.tsx` and authenticated routes. Do not overwrite unrelated untracked onboarding/navigation work.
+**Depends on:** T02/T06/T13–T15. **Files:** create focused portal `pages/agent-context/{member-task,member-tokens,gate-publication}.tsx`, `lib/api/agent-context.ts`, tests beside components; compose into existing `pages/projects/project-detail-page.tsx`, `pages/governance-gates.tsx` and authenticated routes. Do not overwrite unrelated untracked onboarding/navigation work.
 
 **Interfaces:** use T01 DTOs and existing `apiGet/apiPost` helpers, auth/permissions and SSE pattern. Access-token issue/revoke and project grants use cookie/session endpoints; task context and findings share backend use cases. No duplicated readiness or approval rules in React.
 
@@ -309,17 +310,17 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 ### Task 17 (T17) — Required CI, release matrix and full pilot evidence
 
-**Depends on:** T00–T16. **Files:** create `.github/workflows/member-access-checks.yml`, `scripts/check-member-test-env.mjs`, `scripts/run-member-integration.mjs`, `scripts/assert-member-test-report.mjs`, `test/member-access/{pilot.test.ts,runner.test.mjs,vitest.config.ts,tsconfig.json}` and support; modify root `package.json`/lockfile and both existing API/worker `test/support/database.ts` helpers; testing plan evidence records; update `docs/guides/member-workflow.md`, harness reference and package release docs. Do not modify or trigger production deploy workflow during this task.
+**Depends on:** T00–T16. **Files:** create `.github/workflows/coding-agent-workflow-checks.yml`, `scripts/check-member-test-env.mjs`, `scripts/run-member-integration.mjs`, `scripts/assert-member-test-report.mjs`, `test/coding-agent-workflow/{pilot.test.ts,runner.test.mjs,vitest.config.ts,tsconfig.json}` and support; modify root `package.json`/lockfile and both existing API/worker `test/support/database.ts` helpers; testing plan evidence records; update `docs/guides/coding-agent-workflow.md`, harness reference and package release docs. Do not modify or trigger production deploy workflow during this task.
 
 **Interfaces:** `node scripts/run-member-integration.mjs --suite api|worker|pilot|all` validates the explicit `KINTSUGI_TEST_DATABASE_URL`, then spawns the exact suites listed in the testing plan with child `DATABASE_URL` and `KINTSUGI_REQUIRED_INTEGRATION=1`. Its preflight helper exits nonzero when DB/Git/tool/fixture prerequisites are absent. Mandatory-mode DB helpers reject absent configuration before any `.env` fallback. Every suite emits a JSON report; the runner calls `assert-member-test-report.mjs <report> --require-executed --forbid-required-skips` and propagates nonzero status. No URL/secret appears in arguments or reports.
 
-Add a root Vitest dev dependency pinned to the compatible version resolved in T00, a root `test:member:pilot` script invoking `vitest run --config test/member-access/vitest.config.ts`, and a separate typecheck script for this test tsconfig. The pilot starts compiled API/worker entrypoints as child processes on loopback; it uses public HTTP/package exports rather than importing API-private internals. Scripted model output makes workflow assertions deterministic; manual native/real-provider/real-model runs remain distinct evidence.
+Add a root Vitest dev dependency pinned to the compatible version resolved in T00, a root `test:coding-agent:pilot` script invoking `vitest run --config test/coding-agent-workflow/vitest.config.ts`, and a separate typecheck script for this test tsconfig. The pilot starts compiled API/worker entrypoints as child processes on loopback; it uses public HTTP/package exports rather than importing API-private internals. Scripted model output makes workflow assertions deterministic; manual native/real-provider/real-model runs remain distinct evidence.
 
-- [ ] Write CI-01/02 runner tests using `node --test test/member-access/runner.test.mjs`: missing Postgres fails before Vitest, child environment receives the explicit isolated URL, root `.env` is ignored in mandatory mode, and skipped/zero-case required suites fail the report check. E2E-01–04 in the separate root pilot suite reach effective G4 and next existing activity after provider human approval and deliverable merge.
+- [ ] Write CI-01/02 runner tests using `node --test test/coding-agent-workflow/runner.test.mjs`: missing Postgres fails before Vitest, child environment receives the explicit isolated URL, root `.env` is ignored in mandatory mode, and skipped/zero-case required suites fail the report check. E2E-01–04 in the separate root pilot suite reach effective G4 and next existing activity after provider human approval and deliverable merge.
 - [ ] Run targeted checks using the commands in the testing plan. Expect the current missing-environment skip behavior to be caught by the new preflight/report test before CI is considered required.
 - [ ] Add Windows/Linux unit/contract checks and an isolated Linux Postgres/worker recovery lane. Pass only declared test env variables through Turbo or invoke package scripts directly after dependency builds; disable test cache for required DB/recovery proof. Keep fork PR jobs secret-free and never execute untrusted fixture PR code with installation secrets.
 - [ ] Perform fresh isolated native-client setup and GitHub.com pilot with exact version/commit/report evidence; GHE remains unverified until its selected server version is exercised. Test real cited Q&A separately from scripted semantic output. Run upgrade/rollback and capture failed-publish/recovery evidence.
-- [ ] Complete all release gates in the testing plan, review the combined diff and update docs around final behavior. Commit `test(member-access): add required workflow and client release gates`. Package publication, real client installation outside disposable profiles, merge and deployment need their separately authorized release action.
+- [ ] Complete all release gates in the testing plan, review the combined diff and update docs around final behavior. Commit `test(coding-agent-workflow): add required release gates`. Package publication, real client installation outside disposable profiles, merge and deployment need their separately authorized release action.
 
 ## Execution checkpoints and review policy
 

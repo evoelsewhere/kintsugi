@@ -1,14 +1,11 @@
 // Postgres adapter for sessions (schema: core). Tokens are stored as SHA-256 hashes.
 
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
 import { getPool } from "#common/db/pool.js";
+import { hashToken } from "#common/security/token-hash.js";
 import { SESSION_TTL_SECONDS, SessionRepository } from "../domain/session.repository.js";
-
-export function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
 
 @Injectable()
 export class PgSessionRepository extends SessionRepository {

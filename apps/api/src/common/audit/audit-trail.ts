@@ -51,6 +51,10 @@ export const AUDIT_ACTIONS = {
   userUpdate: "user.update",
   userPasswordReset: "user.password",
   userDelete: "user.delete",
+  memberTokenIssue: "member-token.issue",
+  memberTokenRevoke: "member-token.revoke",
+  projectAccessGrant: "project-access.grant",
+  projectAccessRevoke: "project-access.revoke",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

@@ -1,8 +1,8 @@
-# Kintsugi member access and PR continuation — design v2
+# Kintsugi Coding Agent Workflow — design v2
 
 Date: 20 October 2026. Status: approved by the user as the basis for implementation and testing planning on 20 October 2026. This repository copy is the planning source of truth and supersedes the initial external research draft. Based on static inspection of Kintsugi `master` at `1bfa73d`, current official documentation, and three independent reviews. Research proves documented behavior and code structure, not runtime compatibility.
 
-Implementation: [implementation plan](../plans/2026-10-20-kintsugi-member-access-implementation.md). Validation: [testing plan](../plans/2026-10-20-kintsugi-member-access-testing.md). Approval covers the design and planning phase; task checkboxes and runtime proof are tracked separately in those documents.
+Implementation: [implementation plan](../plans/2026-10-20-kintsugi-coding-agent-workflow-implementation.md). Validation: [testing plan](../plans/2026-10-20-kintsugi-coding-agent-workflow-testing.md). Approval covers the design and planning phase; task checkboxes and runtime proof are tracked separately in those documents.
 
 ## 1. Outcome and confirmed scope
 
@@ -16,7 +16,7 @@ Confirmed choices:
 - Support Claude Code, Codex and Copilot CLI as three distinct local client targets. Prove the complete journey with one client, then pass the same contract and setup tests on the other two before claiming support. Hosted/web agents and other IDE surfaces are later targets.
 - Keep self-hosted Compose, Postgres, pg-boss and Git. No broker, extra datastore, new coding-agent runner or runtime-specific business logic.
 
-The first pilot uses one manually prepared unit, real authored designs as needed, one target code repo and the project's document repo. Automatic task generation is not a prerequisite for proving member access.
+The first pilot uses one manually prepared unit, real authored designs as needed, one target code repo and the project's document repo. Automatic task generation is not a prerequisite for proving the Coding Agent Workflow.
 
 ## 2. What deeper review changed
 
@@ -28,8 +28,8 @@ The first pilot uses one manually prepared unit, real authored designs as needed
 | P1 | Default-branch presence was too close to an approval signal | Separate availability, publication and approval; validate the precise evidence revision covered |
 | P1 | “Passing checks” and “latest PR revision” hid provider semantics | Specify producer/check identity, review/test/merge revisions, completeness and review generation |
 | P1 | Recovery could miss already-merged PRs and a crash could lose next-step scheduling | Reconcile all PR states with a durable watermark; commit projection, event and queue intent atomically |
-| P2 | CLI + local MCP + remote MCP + OAuth enlarged the initial surface | Ship CLI + local stdio MCP bridge using one HTTPS member API/profile; defer remote MCP/OAuth |
-| P2 | Bundling modernization content made simple access depend on workflows, hooks and extra tools | Publish a separate small member-access plugin; keep modernization method plugins opt-in |
+| P2 | CLI + local MCP + remote MCP + OAuth enlarged the initial surface | Ship CLI + local stdio MCP bridge using one HTTPS Coding Agent Context API/profile; defer remote MCP/OAuth |
+| P2 | Bundling modernization content made simple access depend on workflows, hooks and extra tools | Publish a separate small Coding Agent Workflow plugin; keep modernization method plugins opt-in |
 
 ## 3. Evidence from the current repository
 
@@ -57,7 +57,7 @@ flowchart LR
   A[Developer's AI] --> P[Small access skill]
   P --> M[Local stdio MCP bridge]
   A --> C[Kintsugi CLI]
-  M --> H[Typed HTTPS member API client]
+  M --> H[Typed HTTPS Coding Agent Context API client]
   C --> H
   H --> U[Authorized task and context use cases]
   U --> G[Git snapshots and projections]
@@ -86,17 +86,17 @@ Proposed ownership:
 
 ```text
 packages/domain                 existing units, roles, phases and document path helpers
-packages/harness-sdk            validated wire DTOs, snapshot/query schemas, MemberAccessPort
-packages/kintsugi-client        proposed typed HTTPS implementation of MemberAccessPort
+packages/harness-sdk            validated wire DTOs, snapshot/query schemas, CodingAgentContextPort
+packages/kintsugi-client        proposed typed HTTPS implementation of CodingAgentContextPort
 packages/cli                    commands, formatting, local profile and credential-store adapter
-services/harness-hub            stdio MCP adapter, access plugin generators, client capability data
+services/harness-hub            stdio MCP adapter, Coding Agent Workflow plugin generators, client capability data
 apps/api                        authorized member use cases, domain ports and adapter composition
 packages/git                    provider-specific Git/PR observation operations
 services/orchestrator           reconciliation, review scheduling, Git writer and outbox dispatch
 packages/agents                 canonical small access skill; existing method plugins remain separate
 ```
 
-`MemberAccessPort` is framework-neutral. The local MCP adapter receives a typed HTTPS client implementing it. API use cases delegate to feature modules through their public exports. A future server-hosted MCP adapter can receive an in-process implementation at the API composition root; no Harness Hub import of `@kintsugi/api`, private `#modules` aliases, Postgres or server mirrors. The API can compose adapters without depending on them for domain behavior. Shared validators are built before consumers; use common utilities and domain vocabulary rather than duplicating them.
+`CodingAgentContextPort` is framework-neutral. The local MCP adapter receives a typed HTTPS client implementing it. API use cases delegate to feature modules through their public exports. A future server-hosted MCP adapter can receive an in-process implementation at the API composition root; no Harness Hub import of `@kintsugi/api`, private `#modules` aliases, Postgres or server mirrors. The API can compose adapters without depending on them for domain behavior. Shared validators are built before consumers; use common utilities and domain vocabulary rather than duplicating them.
 
 REST retains `{success:true,data}` and the established error envelope. CLI JSON uses the same payload contract. MCP translates use-case values/errors into native structured results and tool errors; it does not put the REST envelope around the MCP protocol. Future remote MCP must also bypass the current REST response interceptor and HTML SPA fallback deliberately. SSE remains its documented streaming exception.
 
@@ -202,7 +202,7 @@ Terminal rules: compact human output, stable explicit JSON, stdout reserved for 
 
 The portal uses its existing design system: one next action, compact task/PR/evidence rows and a timeline. Distinguish installed, connected, authorized, context currentness and provider-sync health. Readiness and blockers are visible before “Work in my AI”; provider credentials and model settings do not appear in a member's task flow.
 
-## 8. Credentials, trust and plugin distribution
+## 8. Credentials, Project Access, trust and plugin distribution
 
 There are separate credential boundaries:
 
@@ -214,13 +214,13 @@ There are separate credential boundaries:
 
 Implement the member token lifecycle; bearer session transport is not scoped PAT support. Hash issued Kintsugi tokens at rest, show once, expire/revoke/audit. Login uses hidden input or `--token-stdin`; no token values in command arguments, plugin configs, Git or URLs. If secure local storage is unavailable, fail with a clear supported alternative; do not silently store plaintext. CI injection is explicit and not forwarded into runtime job environments.
 
-Project authorization is a prerequisite: current access permission ∩ explicit project access ∩ token scope. Assignment or RACI is not an access grant. Reuse the permission catalog/migrations and add the missing project-access persistence/use cases; do not implement security by checking only a project ID string. Apply this to task listings, snippets, links, review findings, replay and live SSE. Recheck streams before events and periodically while idle.
+Project Access is a prerequisite: current `member.read` permission ∩ explicit Project Access grant ∩ token scope. Assignment or RACI is not an access grant. Reuse the permission catalog/migrations and add the missing Project Access persistence and use cases; do not implement security by checking only a project ID string. Apply this to task listings, snippets, links, review findings, replay and live SSE. Recheck streams before events and periodically while idle.
 
 Prefer an organization-installed GitHub App for the server connector, separate from member identity and tokens. Start with selected-repo metadata/content/PR/check/status reads. Optional publishing needs explicit additional permissions: checks write and/or PR comments. No automatic merge or repository administration. Installation tokens are short-lived and may be narrowed to selected repositories/permissions. Existing encrypted provider tokens can support a capability-tested observation pilot; do not promise identical Checks API write behavior for every token/GHE version. Current Checks documentation contains conflicting prose and fine-grained-token tables, so probe the intended mode rather than infer it. [GitHub App installation authentication](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation), [Checks API](https://docs.github.com/en/rest/checks/runs).
 
 Retrieved documents and PR content are source data, not authority to run unrelated commands, fetch secrets, change configuration or redirect destinations. The reviewed access skill supplies workflow instructions. Approved design text expresses project requirements within the user's task; it cannot override user/platform instructions. Read-only server tools do not prevent an agent from executing malicious retrieved text with other local tools, so add output provenance, source roles, adversarial tests and explicit skill boundaries without claiming complete prompt-injection protection. [OpenAI skill guidance](https://developers.openai.com/plugins/build/skills), [MCP security guidance](https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices).
 
-Ship a small dedicated access plugin. Do not bundle `modernize` in v1: its current commands assume hooks, subagents, Python and server workflow tools, beyond read-only task retrieval. It remains an opt-in method pack after semantic compatibility review. Author one canonical skill set in the existing plugin content system, keeping ADR-0015's Claude source format until amended; generate target exports. Portable skills/MCP do not make hooks, agents or workflow execution interchangeable. [OpenAI packaging](https://developers.openai.com/plugins/build/plugins), [Copilot portable components](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference).
+Ship the small dedicated Coding Agent Workflow plugin. Do not bundle `modernize` in v1: its current commands assume hooks, subagents, Python and server workflow tools, beyond read-only task retrieval. It remains an opt-in method pack after semantic compatibility review. Author one canonical skill set in the existing plugin content system, keeping ADR-0015's Claude source format until amended; generate target exports. Portable skills/MCP do not make hooks, agents or workflow execution interchangeable. [OpenAI packaging](https://developers.openai.com/plugins/build/plugins), [Copilot portable components](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference).
 
 Generated MCP wiring launches the installed CLI's stdio bridge with a nonsecret profile name. A verified local launcher/path is resolved by setup; avoid floating `npx ...@latest` and shell-built command strings. Native installation validates each client package, including `claude plugin validate --strict`. Setup preserves unrelated settings, reports the configuration scope, tests authentication and can repeat safely. Publish to an owned verified package namespace/repository with exact artifact versions/commits, integrity/provenance, supported CLI/API/schema ranges and explicit upgrades/rollback. Registry names and install links are not yet registered or verified. Provenance is traceability, not a security review. [npm provenance](https://docs.npmjs.com/generating-provenance-statements/).
 
@@ -287,7 +287,7 @@ Minimum meaningful verification:
 
 - Same snapshot/provenance across CLI/MCP, paged retrieval and follow-up search; updates never silently change sources.
 - Task-specific readiness, stable assignee identity, missing design, pending gate scaffold, auto-committed task, malformed/foreign-project source and required-context completeness.
-- Expired/revoked/over-scoped tokens, current project access, cross-profile/snapshot confusion, malicious document commands/links, private output files and no credential leakage.
+- Expired/revoked/over-scoped tokens, current Project Access, cross-profile/snapshot confusion, malicious document commands/links, private output files and no credential leakage.
 - Fresh native install and upgrade/rollback on Windows and Linux, spaces in paths, GUI PATH differences, disabled plugins, no secure-store availability and incompatible schema/client versions.
 - PR identity/association/forks, duplicate and out-of-order notifications, a PR opened-and-merged entirely during downtime, watermark partial failure, API rate-limit backoff and input caps.
 - New head/base/context during review, skipped or wrong-producer checks, dismissed reviews, squash/rebase merges, incomplete required files, intentional same-revision rerun and stale findings retrieval.

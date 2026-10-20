@@ -1,4 +1,4 @@
-# ADR-0042: Scope member context to project access and immutable snapshots
+# ADR-0042: Scope Coding Agent Workflow context with Project Access and immutable snapshots
 
 - Status: Accepted
 - Date: 2026-10-20
@@ -7,11 +7,11 @@
 
 ## Context
 
-The document repository is the source of truth for unit state, tasks, designs, standards and gate records. A member-facing API must not create a second authoritative task store or allow an assignment, display name, snapshot handle or document string to grant access. Follow-up questions also need to use the same revisions as the task brief; silently switching to a newer default branch can mix incompatible requirements.
+The document repository is the source of truth for unit state, tasks, designs, standards and gate records. The Coding Agent Context API must not create a second authoritative task store or allow an assignment, display name, snapshot handle or document string to grant access. Follow-up questions also need to use the same revisions as the task brief; silently switching to a newer default branch can mix incompatible requirements.
 
 ## Decision
 
-1. Authorization starts with an authenticated installation user and current project membership. Member tokens are scoped to named projects and read operations. Access roles and project RACI responsibilities remain separate; assignment is not an access grant. Every request, including requests using a prior snapshot, checks current authorization.
+1. Authorization starts with an authenticated installation user and current Project Access grant. Member tokens are scoped to named projects and read operations. Access roles and project RACI responsibilities remain separate; assignment is not an access grant. Every request, including requests using a prior snapshot, checks current authorization.
 2. The unit's full identity is project, application, module and unit. The validated unit-state file and task document in the document repository remain authoritative; Postgres holds only rebuildable indexes and bounded operational snapshot metadata.
 3. Context sources are selected from the unit, its explicit references and shared document-layout helpers. The application-level TO-BE design is a basic-design candidate; the unit-level design is a detailed-design candidate. Standards and evidence are included only when the task or policy identifies them.
 4. Readiness is a deterministic projection for a requested activity. Design work may begin when its predecessors permit even if the detailed design is the output being produced. Implementation requires the applicable approved predecessor gates and required designs and standards at their referenced revisions. The task's acceptance gate is an exit condition and cannot block producing its own evidence.

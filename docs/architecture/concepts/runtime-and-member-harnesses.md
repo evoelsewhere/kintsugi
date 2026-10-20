@@ -4,7 +4,7 @@ Kintsugi has two kinds of agents with separate execution models ([ADR-0001](../.
 
 | | **Kintsugi Runtime (pi)** | **Member harnesses** (Claude Code, GitHub Copilot, ChatGPT/Codex) |
 |---|---|---|
-| Where it runs | The project Kintsugi installation, in the worker, one job workspace per job | Members' machines; the installed CLI launches a local stdio MCP bridge that calls the HTTPS member API |
+| Where it runs | The project Kintsugi installation, in the worker, one job workspace per job | Members' machines; the installed CLI launches a local stdio MCP bridge that calls the HTTPS Coding Agent Context API |
 | Who drives it | Kintsugi (orchestrator), automatically or on request from the portal | The member's chosen AI works interactively; Kintsugi supplies scoped context and observes Git PRs |
 | What it does | A **generic agent kernel** ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)) for **platform intelligence**; the agents (knowledge, assessment, to-be analysis, planning, review / gates, reporting) are planned and supplied per job as data | **The actual work**: write / migrate code, tests, designs, deliverable documents |
 | Writes to project repos | **Not directly.** The runner writes only to its output directory; the worker commits or opens a PR in the document repo | **Yes**, through the member's branches and PRs |
@@ -53,7 +53,7 @@ Survey as of 2026-10-09:
 ## Why members keep their own harnesses
 
 - Teams already use Copilot, Claude Code or ChatGPT/Codex under existing licenses and habits.
-- A small hookless member-access plugin starts the installed CLI local MCP bridge. It is separate from optional method plugins; each client target must pass its own setup and protocol tests ([ADR-0041](../../decisions/0041-member-access-through-cli-and-local-mcp.md)).
+- A small hookless Coding Agent Workflow plugin starts the installed CLI local MCP bridge. It is separate from optional method plugins; each client target must pass its own setup and protocol tests ([ADR-0041](../../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 - The planned gate review evaluates the **result** (the PR), not how it was produced, so behavior differences between harnesses matter less.
 
 Reference: [runtime agents](../../reference/runtime-agents.md) · [harness integration](../../reference/harness-integration.md).

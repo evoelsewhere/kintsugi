@@ -1,4 +1,4 @@
-# Synthetic member-access pilot fixtures
+# Synthetic Coding Agent Workflow pilot fixtures
 
 These documents contain invented identifiers and behavior only. They contain no source code, credentials, customer records or real approval evidence. They are deterministic input data, not a customer project template.
 
