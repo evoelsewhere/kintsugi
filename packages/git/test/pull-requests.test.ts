@@ -126,3 +126,54 @@ describe("other servers", () => {
     await expect(pullRequestProvider("bitbucket")!.open(input("https://bitbucket.org", "org/docs"))).rejects.toBeInstanceOf(PullRequestsUnsupportedError);
   });
 });
+
+describe("pull request state", () => {
+  const query = (baseUrl: string, path: string, url: string) => ({ baseUrl, path, token, url });
+
+  it("GitHub: merged_at means merged (squash merges included), closed without it means closed", async () => {
+    const mock = mockFetch({ status: 200, json: { state: "closed", merged_at: "2026-10-20T10:00:00Z" } }, { status: 200, json: { state: "closed", merged_at: null } }, { status: 200, json: { state: "open", merged_at: null } });
+    const provider = pullRequestProvider("github", mock.fetch)!;
+    const url = "https://github.com/org/docs/pull/12";
+    expect(await provider.state(query("https://github.com", "org/docs", url))).toBe("merged");
+    expect(await provider.state(query("https://github.com", "org/docs", url))).toBe("closed");
+    expect(await provider.state(query("https://github.com", "org/docs", url))).toBe("open");
+    expect(mock.calls[0]).toMatchObject({ method: "GET", url: "https://api.github.com/repos/org/docs/pulls/12" });
+    expect(mock.calls[0]?.headers["authorization"]).toBe(`Bearer ${token}`);
+  });
+
+  it("GitLab: merged, closed and opened merge requests", async () => {
+    const mock = mockFetch({ status: 200, json: { state: "merged" } }, { status: 200, json: { state: "closed" } }, { status: 200, json: { state: "opened" } });
+    const provider = pullRequestProvider("gitlab", mock.fetch)!;
+    const url = "https://gitlab.example.com/team/docs/-/merge_requests/7";
+    expect(await provider.state(query("https://gitlab.example.com", "team/docs", url))).toBe("merged");
+    expect(await provider.state(query("https://gitlab.example.com", "team/docs", url))).toBe("closed");
+    expect(await provider.state(query("https://gitlab.example.com", "team/docs", url))).toBe("open");
+    expect(mock.calls[0]?.url).toBe("https://gitlab.example.com/api/v4/projects/team%2Fdocs/merge_requests/7");
+  });
+
+  it("Gitea and Azure DevOps read their own merged markers", async () => {
+    const gitea = mockFetch({ status: 200, json: { merged: true, state: "closed" } });
+    expect(await pullRequestProvider("gitea", gitea.fetch)!.state(query("https://gitea.example.com", "org/docs", "https://gitea.example.com/org/docs/pulls/4"))).toBe("merged");
+    const azure = mockFetch({ status: 200, json: { status: "completed" } }, { status: 200, json: { status: "abandoned" } });
+    const provider = pullRequestProvider("azure-devops", azure.fetch)!;
+    const url = "https://dev.azure.com/acme/Billing/_git/docs/pullrequest/9";
+    expect(await provider.state(query("https://dev.azure.com/acme", "Billing/_git/docs", url))).toBe("merged");
+    expect(await provider.state(query("https://dev.azure.com/acme", "Billing/_git/docs", url))).toBe("closed");
+    expect(azure.calls[0]?.url).toBe("https://dev.azure.com/acme/Billing/_apis/git/repositories/docs/pullrequests/9?api-version=7.1");
+  });
+
+  it("an unknown pull request (404) has no state, other refusals are errors without the token", async () => {
+    const mock = mockFetch({ status: 404, json: { message: "Not Found" } }, { status: 500, json: { message: `boom ${token}` } });
+    const provider = pullRequestProvider("github", mock.fetch)!;
+    const q = query("https://github.com", "org/docs", "https://github.com/org/docs/pull/3");
+    expect(await provider.state(q)).toBeUndefined();
+    const error = await provider.state(q).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(GitError);
+    expect(String((error as Error).message)).not.toContain(token);
+  });
+
+  it("refuses a URL without a number and reports no state for unsupported servers", async () => {
+    await expect(pullRequestProvider("github", mockFetch().fetch)!.state(query("https://github.com", "org/docs", "https://github.com/org/docs/pulls"))).rejects.toThrow(/No pull request number/);
+    expect(await pullRequestProvider("bitbucket")!.state(query("https://bitbucket.org", "org/docs", "https://bitbucket.org/org/docs/pull-requests/1"))).toBeUndefined();
+  });
+});

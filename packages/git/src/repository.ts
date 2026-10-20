@@ -111,6 +111,18 @@ export async function resolveCommit(mirrorPath: string, ref: string): Promise<st
   return stdout.trim();
 }
 
+/** Whether `commit` is reachable from `ref` in a mirror (a merge or fast-forward brought it in; squash merges do not). */
+export async function isAncestor(mirrorPath: string, commit: string, ref: string): Promise<boolean> {
+  try {
+    await runGit(["--git-dir", mirrorPath, "merge-base", "--is-ancestor", commit, ref]);
+    return true;
+  } catch (error) {
+    // Exit status 1 is the answer "no"; anything else (unknown commit, broken mirror) is a real failure.
+    if (error instanceof GitError && error.exitCode === 1) return false;
+    throw error;
+  }
+}
+
 const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 
 /**

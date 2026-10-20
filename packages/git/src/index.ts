@@ -12,6 +12,7 @@ export {
   lsRemote,
   parseGitVersion,
   removeWorktree,
+  isAncestor,
   resolveCommit,
   type MirrorOptions,
   type RemoteBranch,
@@ -48,5 +49,7 @@ export {
   type OpenPullRequest,
   type PullRequest,
   type PullRequestProvider,
+  type PullRequestState,
+  type PullRequestStatusQuery,
   type PullRequestServerKind,
 } from "./pull-requests.js";
