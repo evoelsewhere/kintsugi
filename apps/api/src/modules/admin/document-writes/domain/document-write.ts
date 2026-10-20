@@ -41,6 +41,8 @@ export interface DocumentWriteFile {
   /** Path relative to the document repo root, forward slashes. */
   path: string;
   content: string;
+  /** Written only when the default branch does not have the file yet. */
+  createOnly?: boolean;
 }
 
 /** A write to enqueue: the files plus the provenance that becomes commit trailers. */
@@ -52,5 +54,7 @@ export interface NewDocumentWrite {
   kind: DocumentWriteKind;
   message: string;
   files: DocumentWriteFile[];
+  /** Every file goes to one pull request, auto-commit paths included. */
+  reviewAll?: boolean;
   actor?: string;
 }

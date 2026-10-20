@@ -1,13 +1,14 @@
 // Interface layer: document writes of a project (ADR-0019). Publishing needs projects.manage;
 // the list needs a session, like the project itself.
 
-import { Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { pageQuerySchema } from "#common/interface/pagination.js";
 import { DocumentWritesService } from "../application/document-writes.service.js";
 import type { DocumentWriteRecord } from "../domain/document-write.js";
+import { type PublishManifestInput, publishManifestSchema } from "./document-write.dto.js";
 
 @ApiTags("admin · projects & applications")
 @Controller("admin/projects")
@@ -17,10 +18,10 @@ export class DocumentWritesController {
   @RequirePermission("projects.manage")
   @Post(":id/kintsugi.yaml/publish")
   @HttpCode(202)
-  @ApiOperation({ summary: "Publish the rendered kintsugi.yaml to the document repo (queued; the worker opens a pull request)" })
+  @ApiOperation({ summary: "Publish the rendered kintsugi.yaml, with the starter structure for what is missing (body { scaffold: false } for the manifest alone), to the document repo (queued; the worker opens one pull request)" })
   @ApiAcceptedResponse({ description: "The queued document write." })
-  publish(@Param("id") id: string, @CurrentActor() actor: Actor): Promise<DocumentWriteRecord> {
-    return this.writes.publishManifest(id, actor);
+  publish(@Param("id") id: string, @CurrentActor() actor: Actor, @Body({ schema: publishManifestSchema }) input: PublishManifestInput): Promise<DocumentWriteRecord> {
+    return this.writes.publishManifest(id, actor, input);
   }
 
   @Get(":id/document-writes")
