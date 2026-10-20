@@ -1,12 +1,16 @@
-// Wiring for the read-only Coding Agent Workflow task context.
+// Wiring for the read-only Coding Agent Workflow task and immutable context APIs.
 
 import { Module } from "@nestjs/common";
 import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { TaskQueryService } from "./application/task-query.service.js";
+import { SnapshotService } from "./application/snapshot.service.js";
+import { DocumentQueryService } from "./application/document-query.service.js";
 import { ProjectAccessPort } from "./domain/project-access.ports.js";
+import { SnapshotRepository } from "./domain/snapshot.js";
 import { TaskApprovalEvidenceReader, TaskProjectionRepository, TaskSourceReader } from "./domain/task.js";
 import { GitTaskReader } from "./infrastructure/git-task.reader.js";
+import { PgSnapshotRepository } from "./infrastructure/pg-snapshot.repository.js";
 import { PgTaskProjectionRepository } from "./infrastructure/pg-task-projection.repository.js";
 import { ProjectAccessAdapter } from "./infrastructure/project-access.adapter.js";
 import { UnknownTaskApprovalEvidenceReader } from "./infrastructure/unknown-task-approval.reader.js";
@@ -15,15 +19,19 @@ import { UnknownTaskApprovalEvidenceReader } from "./infrastructure/unknown-task
   imports: [DocumentsModule, ProjectAccessModule],
   providers: [
     TaskQueryService,
+    SnapshotService,
+    DocumentQueryService,
     GitTaskReader,
+    PgSnapshotRepository,
     PgTaskProjectionRepository,
     UnknownTaskApprovalEvidenceReader,
     ProjectAccessAdapter,
+    { provide: SnapshotRepository, useExisting: PgSnapshotRepository },
     { provide: TaskSourceReader, useExisting: GitTaskReader },
     { provide: TaskProjectionRepository, useExisting: PgTaskProjectionRepository },
     { provide: TaskApprovalEvidenceReader, useExisting: UnknownTaskApprovalEvidenceReader },
     { provide: ProjectAccessPort, useExisting: ProjectAccessAdapter },
   ],
-  exports: [TaskQueryService],
+  exports: [TaskQueryService, SnapshotService, DocumentQueryService],
 })
 export class AgentContextModule {}

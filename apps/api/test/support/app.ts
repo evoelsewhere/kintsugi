@@ -20,6 +20,27 @@ export interface TestApp {
 
 export async function startTestApp(extraModules: import("@nestjs/common").Type[] = []): Promise<TestApp> {
   const db = await createTestDatabase();
+  try {
+    return await bootTestApp(db, extraModules, true);
+  } catch (error) {
+    await db.drop();
+    throw error;
+  }
+}
+
+/** Boots a fresh API process facade against an existing test database without dropping it on close. */
+export async function startTestAppWithDatabase(
+  db: TestDatabase,
+  extraModules: import("@nestjs/common").Type[] = [],
+): Promise<TestApp> {
+  return bootTestApp(db, extraModules, false);
+}
+
+async function bootTestApp(
+  db: TestDatabase,
+  extraModules: import("@nestjs/common").Type[],
+  dropDatabaseOnClose: boolean,
+): Promise<TestApp> {
   // Configuration is read when modules load: set it before importing the app.
   process.env["DATABASE_URL"] = db.url;
   process.env["KINTSUGI_SECRET_KEY"] = randomBytes(32).toString("base64");
@@ -49,7 +70,8 @@ export async function startTestApp(extraModules: import("@nestjs/common").Type[]
     await app.listen(0, "127.0.0.1");
   } catch (error) {
     await app?.close();
-    await db.drop();
+    const { closePool } = await import("#common/db/pool.js");
+    await closePool();
     throw error;
   }
 
@@ -61,9 +83,9 @@ export async function startTestApp(extraModules: import("@nestjs/common").Type[]
     nest: started,
     close: async () => {
       await started.close();
-      const { getPool } = await import("#common/db/pool.js");
-      await getPool().end();
-      await db.drop();
+      const { closePool } = await import("#common/db/pool.js");
+      await closePool();
+      if (dropDatabaseOnClose) await db.drop();
     },
   };
 }

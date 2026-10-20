@@ -102,7 +102,9 @@ export async function cloneMirror(url: string, mirrorPath: string, options: Mirr
 
 /** Updates a mirror from its remote, pruning deleted refs. */
 export async function fetchMirror(mirrorPath: string, options: RemoteOptions = {}): Promise<void> {
-  await runGit(["--git-dir", mirrorPath, "fetch", "--prune", "origin"], options);
+  // A mirror's default `refs/*:refs/*` refspec would prune worker-owned refs/kintsugi pins.
+  // Keep mirroring every remote namespace while excluding Kintsugi's local retention namespace.
+  await runGit(["--git-dir", mirrorPath, "fetch", "--prune", "origin", "+refs/*:refs/*", "^refs/kintsugi/*"], options);
 }
 
 /** Resolves a ref (branch, tag, sha) in a mirror to a full commit id. */

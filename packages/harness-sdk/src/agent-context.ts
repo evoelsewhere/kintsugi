@@ -106,6 +106,15 @@ export interface OmittedSection {
   required: boolean;
 }
 
+export interface ContextSection {
+  sourceId: string;
+  sectionId: string;
+  title: string;
+  text: string;
+  required: boolean;
+  citation: Citation;
+}
+
 export interface TaskBrief extends TaskIdentity {
   schemaVersion: AgentContextSchemaVersion;
   activity: MemberActivity;
@@ -120,6 +129,7 @@ export interface TaskBrief extends TaskIdentity {
   readiness: ReadinessResult;
   blockers: ReadinessBlocker[];
   requiredContextStatus: "complete" | "partial";
+  sections: ContextSection[];
   omittedSections: OmittedSection[];
   freshness: { isCurrent: boolean; observedAt: string; newerContextRevision?: string };
   fetchedAt: string;
