@@ -64,7 +64,7 @@ export interface DocumentWriteView {
   id: string;
   projectId: string;
   kind: string;
-  status: "queued" | "committed" | "pr-opened" | "unchanged" | "failed";
+  status: "queued" | "committed" | "pr-opened" | "merged" | "closed" | "unchanged" | "failed";
   message: string;
   commit?: string;
   branch?: string;

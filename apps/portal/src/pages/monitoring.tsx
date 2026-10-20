@@ -258,7 +258,8 @@ function RepositoryTable({ repositories }: { repositories: MonitoredRepository[]
 const WRITE_FILTERS: { id: string; label: string; statuses: DocumentWriteStatus[] }[] = [
   { id: "", label: "All", statuses: [] },
   { id: "queued", label: "Queued", statuses: ["queued"] },
-  { id: "pr-opened", label: "Pull requests", statuses: ["pr-opened"] },
+  { id: "pr-opened", label: "Open pull requests", statuses: ["pr-opened"] },
+  { id: "merged", label: "Merged", statuses: ["merged"] },
   { id: "committed", label: "Committed", statuses: ["committed"] },
   { id: "failed", label: "Failed", statuses: ["failed"] },
 ];
