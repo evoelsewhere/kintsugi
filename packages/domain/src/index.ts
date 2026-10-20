@@ -57,15 +57,8 @@ export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhig
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 /** Work item status as stored in the unit file frontmatter. */
-export type WorkItemStatus =
-  | "pending"
-  | "in-progress"
-  | "awaiting-review"
-  | "approved"
-  | "rejected"
-  | "blocked"
-  | "done"
-  | "skipped";
+export const WORK_ITEM_STATUSES = ["pending", "in-progress", "awaiting-review", "approved", "rejected", "blocked", "done", "skipped"] as const;
+export type WorkItemStatus = (typeof WORK_ITEM_STATUSES)[number];
 
 /**
  * Frontmatter of the unit-state path returned by `unitStatePath` in the document repo (ADR-0012, ADR-0028).
@@ -272,6 +265,9 @@ export interface CompareReport {
 
 // Projects and the kintsugi.yaml manifest (ADR-0028).
 export * from "./project.js";
+export * from "./validation.js";
+export * from "./member-task.js";
+export * from "./gate-evidence.js";
 export * from "./manifest.js";
 
 // Application and per-unit document-repo paths (ADR-0038), with catalog vocabulary (ADR-0033).

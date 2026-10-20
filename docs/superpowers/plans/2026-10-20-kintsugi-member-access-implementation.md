@@ -117,11 +117,11 @@ watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncIterable<TaskEvent>;
 
 **Interfaces:** consumes `WorkItemFile`, existing Phase/ProjectRole/MemberHarnessId/path helpers. Produces the frozen DTOs above; `parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile>`, `evaluateReadiness(input: TaskReadinessInput): ReadinessResult`, `validateGateEvidence(value: unknown): ValidationResult<GateEvidence>`. `ValidationResult<T>` is `{ok:true,value:T} | {ok:false,issues:ValidationProblem[]}`, reusing existing validation problem types.
 
-- [ ] Add failing tests: `rejectsShortOrForeignUnitId`, `draftDesignTaskDoesNotRequireItsOutput`, `pendingGateDoesNotApprovePublishedTask`, `wireSchemasRejectUnknownSelectors`. Assertion examples: `expect(evaluateReadiness(designFixture).readyFor).toContain("design")`; `expect(evaluateReadiness(pendingFixture).readyFor).not.toContain("implementation")`. Fixture factories/data live with these tests and are exported only through test support.
-- [ ] Run `pnpm --filter @kintsugi/domain exec vitest run test/member-task.test.ts test/gate-evidence.test.ts`; run the new SDK suite after its test script is present. Expected initial failure is the named missing behavior/export, not an unrelated dependency failure.
-- [ ] Implement pure validation/readiness and the seven query/result schemas. Gate evidence includes decision/audit identity, policy/context, deliverable IDs, PR/repo IDs and reviewed/merged revisions; actor names alone do not validate authority. Keep YAML, SQL and HTTP out of domain.
-- [ ] Add a compile-time port implementation fixture proving all eight method signatures and discriminated results; add schema limits/defaults and partial-context tests. Do not add a runtime use case to the generic runtime.
-- [ ] Run both package tests/typechecks, then commit `feat(member-access): define shared query and evidence contracts`.
+- [x] Add failing tests: `rejectsShortOrForeignUnitId`, `draftDesignTaskDoesNotRequireItsOutput`, `pendingGateDoesNotApprovePublishedTask`, `wireSchemasRejectUnknownSelectors`. Assertion examples: `expect(evaluateReadiness(designFixture).readyFor).toContain("design")`; `expect(evaluateReadiness(pendingFixture).readyFor).not.toContain("implementation")`. Fixture factories/data live with these tests and are exported only through test support.
+- [x] Run `pnpm --filter @kintsugi/domain exec vitest run test/member-task.test.ts test/gate-evidence.test.ts`; run the new SDK suite after its test script is present. Expected initial failure is the named missing behavior/export, not an unrelated dependency failure.
+- [x] Implement pure validation/readiness and the seven query/result schemas. Gate evidence includes decision/audit identity, policy/context, deliverable IDs, PR/repo IDs and reviewed/merged revisions; actor names alone do not validate authority. Keep YAML, SQL and HTTP out of domain.
+- [x] Add a compile-time port implementation fixture proving all eight method signatures and discriminated results; add schema limits/defaults and partial-context tests. Do not add a runtime use case to the generic runtime.
+- [x] Run both package tests/typechecks, then commit `feat(member-access): define shared query and evidence contracts`.
 
 ### Task 2 (T02) — Scoped tokens and project access, including old-route denial
 
