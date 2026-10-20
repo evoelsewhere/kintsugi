@@ -109,7 +109,8 @@ export interface MaskOutcome {
   first: string[];
 }
 
-const MAX_LISTED_MASKS = 10;
+/** Maskings listed on the step and run summaries (the portal shows them to the reviewer). */
+export const MAX_LISTED_MASKS = 20;
 
 /**
  * Masks credential-shaped values in a job's output in place, before the JobOutput hook looks at it
