@@ -224,6 +224,33 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     }
   });
 
+  describe("create-only files (the starter structure)", () => {
+    it("adds what the default branch lacks and never replaces a document that is there", async () => {
+      const write = request("docs", {
+        files: [
+          { path: "kintsugi.yaml", content: "schemaVersion: 1\nproject: {}\n" },
+          { path: "README.md", content: "starter readme\n", createOnly: true },
+          { path: "program/charter.md", content: "# Charter\n", createOnly: true },
+        ],
+        reviewAll: true,
+      });
+      const outcome = await writeDocument(deps, write);
+      const branch = `kintsugi/alice/${write.writeId}`;
+      expect(outcome).toMatchObject({ status: "pr-opened", branch });
+      // One pull request holds the manifest and the missing starter file; README.md was on main, so it is left alone.
+      expect(remote.git("docs", "show", `${branch}:program/charter.md`)).toBe("# Charter\n");
+      expect(remote.git("docs", "show", `${branch}:README.md`)).toBe("docs\n");
+      expect(remote.git("docs", "show", `${branch}:kintsugi.yaml`)).toBe("schemaVersion: 1\nproject: {}\n");
+      expect(() => remote.git("docs", "show", "main:program/charter.md")).toThrow();
+    });
+
+    it("is unchanged when every create-only file is already there", async () => {
+      const write = request("docs", { files: [{ path: "README.md", content: "starter readme\n", createOnly: true }], reviewAll: true });
+      expect(await writeDocument(deps, write)).toEqual({ status: "unchanged" });
+      expect((await row(write.writeId))?.branch).toBeNull();
+    });
+  });
+
   describe("review watch", () => {
     const status = async (id: string): Promise<string | undefined> => (await row(id))?.status;
     const review = (projectId: string): DocumentWriteRequest => request(projectId, { files: [{ path: "kintsugi.yaml", content: "schemaVersion: 1\n" }] });

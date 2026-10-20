@@ -78,6 +78,23 @@ export async function mirrorDefaultBranch(mirror: string): Promise<string> {
   return stdout.trim();
 }
 
+/**
+ * The files of a write without the create-only ones the default branch already has: the starter
+ * structure fills in what is missing and never replaces a document a person wrote.
+ */
+async function withoutExisting(mirror: string, commit: string, files: readonly FileWrite[], createOnly: ReadonlySet<string>): Promise<FileWrite[]> {
+  if (createOnly.size === 0) return [...files];
+  const kept: FileWrite[] = [];
+  for (const file of files) {
+    const exists = createOnly.has(file.path) && (await runGit(["--git-dir", mirror, "cat-file", "-e", `${commit}:${file.path}`]).then(
+      () => true,
+      () => false,
+    ));
+    if (!exists) kept.push(file);
+  }
+  return kept;
+}
+
 /** `autoCommitPaths` from kintsugi.yaml on the default branch; the defaults when it is missing or invalid. */
 async function autoCommitPaths(mirror: string, commit: string, options: RemoteOptions): Promise<readonly string[]> {
   const text = await runGit(["--git-dir", mirror, "show", `${commit}:${MANIFEST_FILE}`], options).then(
@@ -124,7 +141,8 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
     const options = remoteOptions(repository);
     const defaultBranch = repository.defaultBranch ?? (await mirrorDefaultBranch(mirror));
     const head = await resolveCommit(mirror, `refs/heads/${defaultBranch}`);
-    const { autoCommit, review } = request.reviewAll === true ? { autoCommit: [], review: files } : splitByAutoCommit(files, await autoCommitPaths(mirror, head, options));
+    const toWrite = await withoutExisting(mirror, head, files, new Set((request.files ?? []).filter((file) => file.createOnly === true).map((file) => file.path)));
+    const { autoCommit, review } = request.reviewAll === true ? { autoCommit: [], review: toWrite } : splitByAutoCommit(toWrite, await autoCommitPaths(mirror, head, options));
 
     const common = {
       url: repository.url,
