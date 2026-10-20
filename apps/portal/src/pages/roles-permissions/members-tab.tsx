@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
+import { permissionsOf } from "@/lib/access";
 import { identityApi, type RoleRecord, type UserRecord } from "@/lib/api/identity";
 import { cn } from "@/lib/utils";
-import { MembersInsights } from "./members-insights";
+import { AccessOverview, MembersSummary } from "./members-insights";
 
 interface FormState {
   id: string | null;
@@ -95,7 +96,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
 
   const roleOptions: SelectOption[] = [
     { value: "all", label: "All roles" },
-    ...roles.map((role) => ({ value: role.id, label: role.name, hint: role.kind })),
+    ...roles.map((role) => ({ value: role.id, label: role.name, hint: `${role.kind} · ${users.filter((user) => user.roleIds.includes(role.id)).length}` })),
   ];
 
   function openCreate(): void {
@@ -172,7 +173,6 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
 
   return (
     <div className="flex flex-col gap-4">
-      <MembersInsights users={users} roles={roles} />
       {/* Toolbar: filters always visible + actions */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1">
@@ -193,21 +193,24 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
         </div>
       </div>
 
+      <MembersSummary users={users} roles={roles} />
+
       {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
 
       {/* Members table */}
       <div className="shadow-border overflow-hidden rounded-xl">
-        <div className="hidden grid-cols-[1.2fr_1fr_1.4fr_auto] gap-3 px-4 py-2 text-[11px] tracking-wider text-text-muted uppercase sm:grid">
+        <div className="hidden grid-cols-[1.2fr_1fr_1.4fr_5.5rem_auto] gap-3 px-4 py-2 text-[11px] tracking-wider text-text-muted uppercase sm:grid">
           <span>Member</span>
           <span>Username</span>
           <span>Roles</span>
+          <span className="text-right">Permissions</span>
           <span className="w-20" />
         </div>
         {filtered.map((user, index) => (
           <div
             key={user.id}
             className={cn(
-              "grid grid-cols-1 items-center gap-2 px-4 py-2.5 sm:grid-cols-[1.2fr_1fr_1.4fr_auto] sm:gap-3",
+              "grid grid-cols-1 items-center gap-2 px-4 py-2.5 sm:grid-cols-[1.2fr_1fr_1.4fr_5.5rem_auto] sm:gap-3",
               index > 0 && "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]",
             )}
           >
@@ -226,6 +229,9 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
                 </span>
               ))}
             </div>
+            <span className="text-[12px] text-text-secondary tabular-nums sm:text-right" title="Distinct permissions through all of the member's roles">
+              {permissionsOf(user, roles).size}
+            </span>
             <div className="flex items-center gap-1">
               <Button size="small" variant="ghost" onClick={() => openEdit(user)}>
                 <Settings2 className="size-4" />
@@ -243,6 +249,8 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
           </p>
         ) : null}
       </div>
+
+      <AccessOverview users={users} roles={roles} />
 
       {/* Create / edit member */}
       <Modal
