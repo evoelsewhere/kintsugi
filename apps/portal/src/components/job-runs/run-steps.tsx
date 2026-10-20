@@ -126,7 +126,7 @@ function StepRow({ step, mark, context, depth }: { step: JobRunView; mark: strin
         >
           <span className="grid grid-cols-[minmax(0,1fr)_auto_92px] items-center gap-x-2">
             <span className="flex min-w-0 items-center gap-2">
-              <StatusDot tone={styleOf(RUN_STATUS, step.status).tone} className={cn("size-2", active && "animate-pulse")} />
+              <StatusDot tone={styleOf(RUN_STATUS, step.status).tone} busy={active ? styleOf(RUN_STATUS, step.status).busy : undefined} className="size-2" />
               <Icon className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.75} />
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text" title={step.name}>
                 {step.name}

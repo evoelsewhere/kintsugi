@@ -35,11 +35,19 @@ const TONE_COLOR: Record<StatusTone, string> = {
   muted: "var(--ds-text-muted)",
 };
 
+/** `spin`: work is going on (a ring turns); `pulse`: waiting for something to start (the dot breathes). */
+export type StatusBusy = "spin" | "pulse";
+
 export interface StatusDotProps {
   tone: StatusTone;
   className?: string;
+  busy?: StatusBusy | undefined;
 }
 
-export function StatusDot({ tone, className }: StatusDotProps): React.JSX.Element {
-  return <span aria-hidden className={cn("inline-block size-2.5 rounded-full", className)} style={{ backgroundColor: TONE_COLOR[tone] }} />;
+export function StatusDot({ tone, className, busy }: StatusDotProps): React.JSX.Element {
+  // A spinner needs more room than a dot to read as motion: it is a ring one step larger than the dot it replaces.
+  if (busy === "spin") {
+    return <span aria-hidden className={cn("inline-block size-2.5 animate-spin rounded-full border-2 border-solid border-r-transparent", className, "size-3")} style={{ borderColor: TONE_COLOR[tone], borderRightColor: "transparent" }} />;
+  }
+  return <span aria-hidden className={cn("inline-block size-2.5 rounded-full", busy === "pulse" && "animate-pulse", className)} style={{ backgroundColor: TONE_COLOR[tone] }} />;
 }
