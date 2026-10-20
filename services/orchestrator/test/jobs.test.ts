@@ -117,9 +117,10 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       ["script", "apply_catalog_edits.py", null, "succeeded"],
       ["script", "reconcile_catalog.py", null, "succeeded"],
       ["agent", "legacy-analyst", "synthesis", "succeeded"],
+      ["script", "style_architecture.py", null, "succeeded"],
     ]);
     const [script] = children;
-    const agent = children.at(-1);
+    const agent = children.at(-2);
     expect(script?.sourceCommit).toBe(run?.sourceCommit);
     expect(script?.scriptHash).toMatch(/^[0-9a-f]{64}$/);
     expect(agent?.agent).toBe("legacy-analyst@1.1.0");
@@ -212,7 +213,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(logged).toHaveLength(1);
     expect(logged[0]).toMatch(/^masked 1 credential-shaped value in 1 file of legacy-analyst: credential_assignment at applications\/demo\/assessment\/ASSESSMENT\.md:1$/);
     expect(JSON.stringify([...store.events, ...store.children(id)])).not.toContain("hunter2");
-    expect(store.children(id).at(-1)?.outputSummary?.["maskedCredentials"]).toBe(1);
+    expect(store.children(id).at(-2)?.outputSummary?.["maskedCredentials"]).toBe(1);
   });
 
   it("still fails closed for what is not a credential: a malformed artifact, with a redacted reason and no write", async () => {
@@ -278,6 +279,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       ["script", "apply_catalog_edits.py"],
       ["script", "reconcile_catalog.py"],
       ["agent", "synthesis"],
+      ["script", "style_architecture.py"],
     ]);
     const summary = resumed?.outputSummary as { resumeOf: string; steps: Array<{ id: string; reused?: boolean }> };
     expect(summary.resumeOf).toBe(first);

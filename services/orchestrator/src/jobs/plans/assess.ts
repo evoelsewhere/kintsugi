@@ -5,8 +5,8 @@
 // (catalog_from_topology.py proposes it, a legacy-analyst curation job returns structured edits,
 // apply_catalog_edits.py applies the valid ones, reconcile_catalog.py keeps the ids of the catalog on
 // the default branch); then the legacy-analyst synthesis job that writes ASSESSMENT.md and
-// ARCHITECTURE.mmd. The analysis notes and the catalog drafts are intermediate; the inventory, the
-// extraction script, the skeleton topology, the catalog and the synthesis are committed.
+// ARCHITECTURE.mmd, and a script step that gives the diagram the skill classes. The analysis notes and
+// the catalog drafts are intermediate; the inventory, the extraction script, the skeleton topology, the catalog and the synthesis are committed.
 // Portfolio mode (workflows/portfolio-assess.js) is not a portal stage yet.
 
 import type { StagePlan } from "../plan.js";
@@ -181,9 +181,16 @@ Replace, with a one-paragraph rationale and the stage it routes to: a newer vers
 uplift; a rewrite in another technology piece by piece → transform; a rebuild on a new architecture → reimagine;
 Rehost and Replace change no code, so say so and what the analysis is still good for).
 
-Also write ${assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")}: the domain diagram from the structure notes, one Mermaid \`flowchart TB\`
-per the mermaid-diagrams skill (a \`subgraph\` per domain, nodes classed ui, service, batch, store or external, sanitized
-ids and quoted labels, within its size limits), without a Markdown fence.
+Also write ${assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")}: the domain diagram from the structure notes, one Mermaid \`flowchart LR\`
+per the mermaid-diagrams skill, without a Markdown fence. It must be readable at a glance, so keep to these rules:
+- at most 20 nodes and 30 edges: one box per domain or major component, never one per class or file;
+- tiers as \`subgraph\` groups, left to right: entry points and clients, the domains, the data stores, the external services;
+- a dependency every domain has (a shared kernel or base library, the main database, authentication) is ONE box in its
+  own group whose label says "used by all domains"; never draw an edge from each domain to it;
+- draw only the 8–15 dependencies that matter most between domains, with edge labels of at most three words;
+- sanitized ids, quoted labels of at most three short lines separated by \`<br/>\` (never a literal \\n);
+- give each box one of the classes ui, service, batch, store or external (\`:::ui\`) and define all five with \`classDef\`
+  (translucent fill, same-colour stroke); if you leave the classes out, a later step adds them.
 
 Secrets first: the assessment is shared and committed, so masking applies to every section, whichever note a finding
 came from. ${RESTRICTED} Security Findings then points to "Credential inventory in the restricted portal record (not
@@ -286,6 +293,14 @@ export const ASSESS: StagePlan = {
       agent: "legacy-analyst",
       task: SYNTHESIS_TASK,
       expects: [assessmentFilePath(APP_TOKEN, "ASSESSMENT.md"), assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")],
+    },
+    {
+      // The agent draws the structure; this step makes sure the diagram has the skill's ui/service/batch/store/external classes.
+      id: "architecture-style",
+      kind: "script",
+      script: "style_architecture.py",
+      args: ["--input", `{in}/${assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")}`, "--out", `{out}/${assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")}`],
+      expects: [assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")],
     },
   ],
 };
