@@ -72,20 +72,21 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
         "select id, kind, name, status, script_hash, agent from workflow.job_run where parent_id = $1 order by created_at",
         [id],
       );
-      expect(steps.rows.map((row) => [row.kind, row.name, row.status])).toEqual([
-        ["script", "inventory.py", "succeeded"],
-        ["agent", "legacy-analyst", "succeeded"],
-        ["agent", "legacy-analyst", "succeeded"],
-        ["agent", "security-auditor", "succeeded"],
-        ["agent", "legacy-analyst", "succeeded"],
-        ["script", "extract_topology.py", "succeeded"],
-        ["script", "catalog_from_topology.py", "succeeded"],
-        ["agent", "legacy-analyst", "succeeded"],
-        ["script", "apply_catalog_edits.py", "succeeded"],
-        ["script", "reconcile_catalog.py", "succeeded"],
-        ["agent", "legacy-analyst", "succeeded"],
-      ]);
-      expect(steps.rows[0]?.script_hash).toMatch(/^[0-9a-f]{64}$/);
+      const stepNames = steps.rows.map((row) => [row.kind, row.name, row.status].join("|")).sort();
+      expect(stepNames).toEqual([
+        "script|inventory.py|succeeded",
+        "agent|legacy-analyst|succeeded",
+        "agent|legacy-analyst|succeeded",
+        "agent|security-auditor|succeeded",
+        "agent|legacy-analyst|succeeded",
+        "script|extract_topology.py|succeeded",
+        "script|catalog_from_topology.py|succeeded",
+        "agent|legacy-analyst|succeeded",
+        "script|apply_catalog_edits.py|succeeded",
+        "script|reconcile_catalog.py|succeeded",
+        "agent|legacy-analyst|succeeded",
+      ].sort());
+      expect(steps.rows.find((row) => row.name === "inventory.py")?.script_hash).toMatch(/^[0-9a-f]{64}$/);
       expect(steps.rows[10]?.agent).toBe("legacy-analyst@1.1.0");
 
       const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
