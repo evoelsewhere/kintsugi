@@ -69,7 +69,7 @@ export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, b
   const planButton = (label: string): React.JSX.Element => (
     <Button size="small" variant={view.data?.plan === null || view.data?.plan === undefined ? "solid" : "ghost"} className={view.data?.plan === null || view.data?.plan === undefined ? undefined : "shadow-border"} disabled={disabled !== undefined || planning} title={disabled} onClick={() => void plan()}>
       <Sparkles className="size-3.5" />
-      {planning ? "Planning…" : label}
+      {planning ? "Generating…" : label}
     </Button>
   );
 
@@ -95,7 +95,7 @@ export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, b
               An agent reads how the {formatCount(items.length)} items call each other, which data they share and what the assessment found, and proposes batches that read well together, foundations first. Test and generated code is left out.
             </CardDescription>
           </div>
-          {planButton("Plan with AI")}
+          {planButton("Generate Plan")}
         </CardHeader>
         {planning ? <p className="mt-2 text-[12px] text-text-secondary">Planning: the run started {formatRelative(latest.createdAt)}.</p> : null}
         {problems.length === 0 ? null : <p className="mt-2 text-[12px] text-text-secondary">Before planning: {problems.join("; ")}. Bind a model to the agent in Settings → Providers → Agent model bindings.</p>}
