@@ -11,6 +11,7 @@ import type { Pool } from "pg";
 import { DocumentWriteStore } from "./document-write/store.js";
 import { startHeartbeat } from "./heartbeat.js";
 import { failOrphanedRuns } from "./orphans.js";
+import { watchPullRequests } from "./document-write/watch.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
 import { installedAgents } from "./jobs/agents.js";
@@ -51,6 +52,8 @@ export interface WorkerOptions {
   log?: (message: string) => void;
   /** Days the output of a failed run or write is kept (KINTSUGI_JOB_RETENTION_DAYS, default 7). */
   jobRetentionDays?: number;
+  /** Seconds between looks at pull requests awaiting review, to record a merge or a close (default 60). */
+  reviewWatchSeconds?: number;
   /** Seconds between sweeps of expired job workspaces (default: hourly). */
   cleanupIntervalSeconds?: number;
   /** Seconds between checks for cancel requests of the runs this worker runs (default 2). */
@@ -209,6 +212,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     for (const id of await store.ids()) await requestSync(id);
     for (const key of await pruneMirrors(deps)) log(`pruned mirror ${key}`);
   });
+  const watchReviews = tick("review watch", async () => {
+    const outcome = await watchPullRequests({ ...writerDeps, log });
+    if (outcome.merged.length + outcome.closed.length > 0) log(`review watch: ${outcome.merged.length} merged, ${outcome.closed.length} closed`);
+  });
   const retentionMs = (options.jobRetentionDays ?? DEFAULT_JOB_RETENTION_DAYS) * 24 * 60 * 60 * 1000;
   const checkCancels = tick("cancel check", watchCancels);
   const pruneJobs = tick("job workspace cleanup", async () => {
@@ -218,11 +225,13 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const timers = [
     setInterval(() => void scanPending(), (options.pendingScanSeconds ?? 5) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),
+    setInterval(() => void watchReviews(), (options.reviewWatchSeconds ?? 60) * 1000),
     setInterval(() => void pruneJobs(), (options.cleanupIntervalSeconds ?? 60 * 60) * 1000),
     setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
   ];
   void pollAll();
   void pruneJobs();
+  void watchReviews();
 
   const heartbeat = await startHeartbeat({
     pool: options.pool,

@@ -73,7 +73,7 @@ function redact(text: string, secrets: readonly string[]): string {
 }
 
 /** The branch HEAD of the mirror points to (the remote's default branch). */
-async function mirrorDefaultBranch(mirror: string): Promise<string> {
+export async function mirrorDefaultBranch(mirror: string): Promise<string> {
   const { stdout } = await runGit(["--git-dir", mirror, "symbolic-ref", "--short", "HEAD"]);
   return stdout.trim();
 }
