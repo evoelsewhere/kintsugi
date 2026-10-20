@@ -16,7 +16,7 @@ import type {
 } from "@kintsugi/harness-sdk";
 import { DEFAULT_CONTEXT_BYTES, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT } from "@kintsugi/harness-sdk";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
-import { SnapshotRepository, type SnapshotSectionIndex } from "../domain/snapshot.js";
+import { MAX_CONTEXT_SECTIONS, SnapshotRepository, type SnapshotSectionIndex } from "../domain/snapshot.js";
 import { SnapshotService } from "./snapshot.service.js";
 
 const MAX_SEARCH_SOURCE_COUNT = 100;
@@ -147,14 +147,19 @@ export class DocumentQueryService {
     if (searchable.length > MAX_SEARCH_SOURCE_COUNT) {
       throw new PayloadTooLargeException("The snapshot has too many sources for bounded search");
     }
+    const sectionCount = searchable.reduce((total, source) => total + source.sections.length, 0);
+    if (sectionCount > MAX_CONTEXT_SECTIONS) {
+      throw new PayloadTooLargeException("The snapshot has too many sections for bounded search");
+    }
     const hits: SourceHit[] = [];
     let totalBytes = 0;
     for (const source of searchable) {
       const content = await this.snapshotService.readSource(record, source);
       totalBytes += Buffer.byteLength(content, "utf8");
       if (totalBytes > MAX_SEARCH_BYTES) throw new PayloadTooLargeException("The snapshot exceeds the bounded search byte limit");
+      const lines = content.split(/\r\n|\n|\r/);
       for (const section of source.sections) {
-        const sectionText = content.split(/\r\n|\n|\r/).slice(section.startLine - 1, section.endLine).join("\n");
+        const sectionText = lines.slice(section.startLine - 1, section.endLine).join("\n");
         const excerpt = findExcerpt(sectionText, query.query.trim());
         if (excerpt === undefined) continue;
         hits.push({

@@ -15,7 +15,7 @@ export interface SnapshotLease {
 
 export interface SnapshotRetentionRecord {
   snapshotId: string;
-  status: "preparing" | "ready" | "failed" | "expired";
+  status: "preparing" | "ready" | "failed" | "expiring" | "expired";
   repositories: SnapshotRepositoryPin[];
   expiresAt: string;
   leases: SnapshotLease[];
@@ -24,10 +24,12 @@ export interface SnapshotRetentionRecord {
 
 export interface SnapshotRetentionRepository {
   get(snapshotId: string): Promise<SnapshotRetentionRecord | undefined>;
-  listExpired(now: Date): Promise<SnapshotRetentionRecord[]>;
+  claimExpired(now: Date): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }>;
   markReady(snapshotId: string): Promise<void>;
   markFailed(snapshotId: string, code: string): Promise<void>;
-  markExpired(snapshotId: string): Promise<void>;
+  claimStalePreparing(now: Date): Promise<SnapshotRetentionRecord[]>;
+  withSnapshotLock<T>(snapshotId: string, work: () => Promise<T>): Promise<T>;
+  markExpired(snapshotId: string, now: Date): Promise<void>;
 }
 
 export interface SnapshotPinCoordinates {
@@ -147,11 +149,20 @@ export class GitSnapshotPins implements SnapshotPins {
 /** Pins every repository before exposing the immutable snapshot as ready. */
 export async function retainSnapshot(deps: SnapshotRetentionDependencies, snapshotId: string): Promise<RetentionResult> {
   validateSnapshotId(snapshotId);
+  return deps.repository.withSnapshotLock(snapshotId, () => retainSnapshotLocked(deps, snapshotId));
+}
+
+async function retainSnapshotLocked(deps: SnapshotRetentionDependencies, snapshotId: string): Promise<RetentionResult> {
   const snapshot = await deps.repository.get(snapshotId);
   if (snapshot === undefined) return { status: "missing", pinned: 0 };
-  if (snapshot.status === "expired") return { status: "expired", pinned: 0 };
+  if (snapshot.status === "expired" || snapshot.status === "expiring") return { status: "expired", pinned: 0 };
   if (snapshot.status === "failed") return { status: "failed", pinned: 0, ...(snapshot.errorCode === undefined ? {} : { errorCode: snapshot.errorCode }) };
   if (snapshot.status === "ready") return { status: "ready", pinned: snapshot.repositories.length };
+  if (Date.parse(snapshot.expiresAt) <= Date.now()) {
+    await releaseSnapshotPins(deps, snapshot);
+    await deps.repository.markFailed(snapshotId, "SNAPSHOT_PREPARATION_EXPIRED");
+    return { status: "failed", pinned: 0, errorCode: "SNAPSHOT_PREPARATION_EXPIRED" };
+  }
   if (snapshot.repositories.length === 0) {
     await deps.repository.markFailed(snapshotId, "SNAPSHOT_PIN_FAILED");
     return { status: "failed", pinned: 0, errorCode: "SNAPSHOT_PIN_FAILED" };
@@ -167,6 +178,7 @@ export async function retainSnapshot(deps: SnapshotRetentionDependencies, snapsh
   } catch (error) {
     for (const pin of created.reverse()) await deps.pins.release(snapshotId, pin).catch(() => undefined);
     if (error instanceof SnapshotObjectUnavailableError) {
+      await releaseSnapshotPins(deps, snapshot);
       await deps.repository.markFailed(snapshotId, "SNAPSHOT_PIN_FAILED");
       return { status: "failed", pinned: 0, errorCode: "SNAPSHOT_PIN_FAILED" };
     }
@@ -174,18 +186,47 @@ export async function retainSnapshot(deps: SnapshotRetentionDependencies, snapsh
   }
 }
 
+async function releaseSnapshotPins(
+  deps: SnapshotRetentionDependencies,
+  snapshot: SnapshotRetentionRecord,
+): Promise<void> {
+  for (const pin of snapshot.repositories) await deps.pins.release(snapshot.snapshotId, pin);
+}
+
+export interface SnapshotRecoveryResult {
+  attempted: number;
+  ready: number;
+  failed: number;
+  retryable: number;
+}
+
+/** Recovers preparing snapshots after queue retry exhaustion, with durable backoff in Postgres. */
+export async function recoverStaleSnapshots(
+  deps: SnapshotRetentionDependencies,
+  now = new Date(),
+): Promise<SnapshotRecoveryResult> {
+  const candidates = await deps.repository.claimStalePreparing(now);
+  const result: SnapshotRecoveryResult = { attempted: candidates.length, ready: 0, failed: 0, retryable: 0 };
+  for (const candidate of candidates) {
+    try {
+      const retained = await retainSnapshot(deps, candidate.snapshotId);
+      if (retained.status === "ready") result.ready += 1;
+      else if (retained.status === "failed") result.failed += 1;
+    } catch {
+      result.retryable += 1;
+    }
+  }
+  return result;
+}
+
+
 /** Releases refs only after expiry and every active review/evidence lease have ended. */
 export async function pruneExpiredSnapshots(deps: SnapshotRetentionDependencies, now = new Date()): Promise<CleanupResult> {
-  const candidates = await deps.repository.listExpired(now);
-  const result: CleanupResult = { released: 0, retained: 0 };
-  for (const snapshot of candidates) {
-    if (snapshot.status !== "ready" || Date.parse(snapshot.expiresAt) > now.getTime()) continue;
-    if (snapshot.leases.some((lease) => lease.expiresAt === null || Date.parse(lease.expiresAt) > now.getTime())) {
-      result.retained += 1;
-      continue;
-    }
+  const claimed = await deps.repository.claimExpired(now);
+  const result: CleanupResult = { released: 0, retained: claimed.retained };
+  for (const snapshot of claimed.snapshots) {
     for (const pin of snapshot.repositories) await deps.pins.release(snapshot.snapshotId, pin);
-    await deps.repository.markExpired(snapshot.snapshotId);
+    await deps.repository.markExpired(snapshot.snapshotId, now);
     result.released += 1;
   }
   return result;

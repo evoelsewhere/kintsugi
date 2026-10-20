@@ -10,6 +10,8 @@ A developer tells their chosen AI: “Get my task, read the description and desi
 
 Confirmed choices:
 
+- Name the end-to-end capability **Coding Agent Workflow** and its user/project authorization **Project Access**. Use these names in the product and public SDK; keep `agent-context` for the API subdomain and wire-resource names.
+
 - Read access first: tasks, basic/detailed designs, standards, evidence and review findings. No member-agent task claiming, assignment, approval or administration writes in v1.
 - The developer's chosen AI answers questions. A Kintsugi-owned conversational assistant is later; server-side PR review remains part of the complete workflow.
 - GitHub is the first provider family, including a specifically tested GitHub Enterprise Server version when required. GitLab, Bitbucket, Azure DevOps and exact AWS repository services are future adapters. Hosting a Git service on AWS does not change its provider protocol.
@@ -86,8 +88,8 @@ Proposed ownership:
 
 ```text
 packages/domain                 existing units, roles, phases and document path helpers
-packages/harness-sdk            validated wire DTOs, snapshot/query schemas, CodingAgentContextPort
-packages/kintsugi-client        proposed typed HTTPS implementation of CodingAgentContextPort
+packages/harness-sdk            validated wire DTOs, snapshot/query schemas, CodingAgentWorkflowPort
+packages/kintsugi-client        proposed typed HTTPS implementation of CodingAgentWorkflowPort
 packages/cli                    commands, formatting, local profile and credential-store adapter
 services/harness-hub            stdio MCP adapter, Coding Agent Workflow plugin generators, client capability data
 apps/api                        authorized member use cases, domain ports and adapter composition
@@ -96,7 +98,7 @@ services/orchestrator           reconciliation, review scheduling, Git writer an
 packages/agents                 canonical small access skill; existing method plugins remain separate
 ```
 
-`CodingAgentContextPort` is framework-neutral. The local MCP adapter receives a typed HTTPS client implementing it. API use cases delegate to feature modules through their public exports. A future server-hosted MCP adapter can receive an in-process implementation at the API composition root; no Harness Hub import of `@kintsugi/api`, private `#modules` aliases, Postgres or server mirrors. The API can compose adapters without depending on them for domain behavior. Shared validators are built before consumers; use common utilities and domain vocabulary rather than duplicating them.
+`CodingAgentWorkflowPort` is framework-neutral. The local MCP adapter receives a typed HTTPS client implementing it. API use cases delegate to feature modules through their public exports. A future server-hosted MCP adapter can receive an in-process implementation at the API composition root; no Harness Hub import of `@kintsugi/api`, private `#modules` aliases, Postgres or server mirrors. The API can compose adapters without depending on them for domain behavior. Shared validators are built before consumers; use common utilities and domain vocabulary rather than duplicating them.
 
 REST retains `{success:true,data}` and the established error envelope. CLI JSON uses the same payload contract. MCP translates use-case values/errors into native structured results and tool errors; it does not put the REST envelope around the MCP protocol. Future remote MCP must also bypass the current REST response interceptor and HTML SPA fallback deliberately. SSE remains its documented streaming exception.
 

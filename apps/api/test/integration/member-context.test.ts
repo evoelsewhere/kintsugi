@@ -1,12 +1,14 @@
 // CTX-02/04/05/07/08: fixed Git revisions, bounded cited sections, persistent handles and access checks.
 
 import { mkdtemp, rm } from "node:fs/promises";
+import pg from "pg";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CheckoutStorage, cloneMirror, fetchMirror } from "@kintsugi/git";
 import type { GitHttpServer } from "@kintsugi/git/testing";
 import { SnapshotService } from "../../src/modules/delivery/agent-context/application/snapshot.service.js";
 import { DocumentQueryService } from "../../src/modules/delivery/agent-context/application/document-query.service.js";
+import { SnapshotRepository } from "../../src/modules/delivery/agent-context/domain/snapshot.js";
 import type { MemberPrincipal } from "../../src/modules/core/auth/index.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startGitHttpServer } from "@kintsugi/git/testing";
@@ -41,6 +43,25 @@ function taskPack(revision: string): string {
     "The verified rounding details for " + revision + ":",
     "x".repeat(36 * 1024),
     "",
+  ].join("\n");
+}
+
+function taskPackManySections(): string {
+  const requirements = Array.from({ length: 501 }, (_, index) => [
+    "## Requirement " + (index + 1),
+    "Detail for requirement " + (index + 1) + ".",
+    "",
+  ]).flat();
+  return [
+    "# Task",
+    "",
+    "## Objective",
+    "Calculate invoice tax. snapshot B task context phrase.",
+    "",
+    "## Acceptance criteria",
+    "- Use a consistent rounding rule.",
+    "",
+    ...requirements,
   ].join("\n");
 }
 
@@ -147,9 +168,18 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
     expect(page.commit).toBe(commitA);
     expect(page.text).toContain("snapshot A");
 
-    const commitB = await remote.commit("docs", taskPath, taskPack("snapshot B"));
+    const commitB = await remote.commit("docs", taskPath, taskPackManySections());
     await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
     expect(commitB).not.toBe(commitA);
+    const denseBrief = await snapshotService.brief(principal, {
+      projectId: "shop",
+      unitId: "web/core/invoice",
+      activity: "design",
+      maxBytes: 32 * 1024,
+    });
+    expect(denseBrief.documentRepoCommit).toBe(commitB);
+    expect(denseBrief.sections.length).toBeLessThanOrEqual(500);
+    expect(denseBrief.sections.some((section) => section.text.includes("Detail for requirement 501."))).toBe(true);
     await worker?.stop();
     worker = undefined;
     await app.close();
@@ -213,5 +243,28 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
       snapshotId: brief.snapshotId,
       sourceId: source!.sourceId,
     })).rejects.toThrow("token is not scoped to this project");
+
+    const connection = new pg.Client({ connectionString: database.url });
+    await connection.connect();
+    try {
+      await connection.query("begin");
+      await connection.query(
+        "update delivery.member_snapshot set status = 'expiring', pin_state = 'releasing', ready_at = null where snapshot_id = $1",
+        [brief.snapshotId],
+      );
+      const repository = app.nest.get(SnapshotRepository);
+      let settledBeforeExpiryCommit = false;
+      const leaseAttempt = repository.acquireLease(brief.snapshotId, "review", "concurrent-review")
+        .then(() => { settledBeforeExpiryCommit = true; })
+        .catch((error: unknown) => { settledBeforeExpiryCommit = true; throw error; });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const acquiredBeforeExpiryCommit = settledBeforeExpiryCommit;
+      await connection.query("commit");
+      await expect(leaseAttempt).rejects.toThrow("snapshot lease is unavailable");
+      expect(acquiredBeforeExpiryCommit).toBe(false);
+    } finally {
+      await connection.query("rollback").catch(() => undefined);
+      await connection.end();
+    }
   });
 });

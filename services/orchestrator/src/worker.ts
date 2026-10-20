@@ -23,7 +23,7 @@ import { PgJobStore } from "./jobs/store.js";
 import { onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.js";
 import { triggerRebuilds } from "./aggregates.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
-import { GitSnapshotPins, pruneExpiredSnapshots, retainSnapshot } from "./git-sync/retention.js";
+import { GitSnapshotPins, pruneExpiredSnapshots, recoverStaleSnapshots, retainSnapshot } from "./git-sync/retention.js";
 import { PostgresSnapshotRetentionRepository } from "./git-sync/retention-store.js";
 import {
   DOCUMENT_WRITE_QUEUE,
@@ -68,6 +68,8 @@ export interface WorkerOptions {
   outboxScanSeconds?: number;
   /** Seconds between snapshot pin expiry sweeps (default: hourly). */
   snapshotCleanupSeconds?: number;
+  /** Seconds between recovery scans for exhausted snapshot retention jobs (default: 60). */
+  snapshotRecoverySeconds?: number;
   /** Runtime jobs (queue `job-run`); omitted = this worker runs no jobs. */
   jobs?: {
     /** pi in production; the mock backend in tests and mock-mode development. */
@@ -262,6 +264,13 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     const result = await pruneExpiredSnapshots(retentionDependencies);
     if (result.released > 0 || result.retained > 0) log("snapshot cleanup released " + result.released + " and retained " + result.retained);
   });
+  const recoverSnapshots = tick("snapshot recovery", async () => {
+    const result = await recoverStaleSnapshots(retentionDependencies);
+    if (result.attempted > 0) {
+      log("snapshot recovery attempted " + result.attempted + ", readied " + result.ready
+        + ", failed " + result.failed + ", retryable " + result.retryable);
+    }
+  });
   const pruneJobs = tick("job workspace cleanup", async () => {
     const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
     if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
@@ -273,11 +282,13 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
     setInterval(() => void dispatchMemberOutbox(), (options.outboxScanSeconds ?? 1) * 1000),
     setInterval(() => void pruneSnapshots(), (options.snapshotCleanupSeconds ?? 60 * 60) * 1000),
+    setInterval(() => void recoverSnapshots(), (options.snapshotRecoverySeconds ?? 60) * 1000),
   ];
   void pollAll();
   void pruneJobs();
   void dispatchMemberOutbox();
   void pruneSnapshots();
+  void recoverSnapshots();
 
   const heartbeat = await startHeartbeat({
     pool: options.pool,

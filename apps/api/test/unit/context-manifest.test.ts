@@ -1,4 +1,4 @@
-import { buildSnapshotManifest, indexMarkdownSections } from "../../src/modules/delivery/agent-context/domain/snapshot.js";
+import { boundSnapshotSections, buildSnapshotManifest, indexMarkdownSections } from "../../src/modules/delivery/agent-context/domain/snapshot.js";
 import { describe, expect, it } from "vitest";
 
 const sha = (character: string): string => character.repeat(40);
@@ -61,6 +61,41 @@ describe("immutable task context manifest", () => {
     expect(generatedOnly.repositories[0]?.commit).toBe(sha("d"));
     expect(generatedOnly.contextRevision).toBe(first.contextRevision);
     expect(relevantInputChanged.contextRevision).not.toBe(first.contextRevision);
+  });
+
+  it("bounds dense section indexes while preserving the complete source tail", () => {
+    const markdown = Array.from({ length: 501 }, (_, index) =>
+      "## Requirement " + (index + 1) + "\nDetail " + (index + 1),
+    ).join("\n");
+    const indexed = indexMarkdownSections("src_dense", markdown, true);
+    expect(indexed).toHaveLength(400);
+    expect(indexed.at(-1)?.startLine).toBe(799);
+    expect(indexed.at(-1)?.endLine).toBe(1002);
+
+    const source = input.sources[0]!;
+    const crowded = {
+      ...source,
+      sections: Array.from({ length: 500 }, (_, index) => ({
+        sectionId: "sec_" + index,
+        title: "Requirement " + index,
+        startLine: index * 2 + 1,
+        endLine: index * 2 + 2,
+        byteLength: 16,
+        required: true,
+      })),
+    };
+    const other = { ...source, sourceId: "src_other", sections: [source.sections[0] ?? {
+      sectionId: "sec_other",
+      title: "Other",
+      startLine: 1,
+      endLine: 1,
+      byteLength: 5,
+      required: true,
+    }] };
+    const bounded = boundSnapshotSections([crowded, other]);
+    expect(bounded.reduce((total, item) => total + item.sections.length, 0)).toBe(400);
+    expect(bounded[1]?.sections).toHaveLength(1);
+    expect(bounded[0]?.sections.at(-1)?.endLine).toBe(1000);
   });
 
   it("indexes deterministic Markdown sections with source line ranges", () => {

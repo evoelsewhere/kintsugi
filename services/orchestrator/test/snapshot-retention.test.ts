@@ -6,7 +6,9 @@ import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   GitSnapshotPins,
+  SnapshotObjectUnavailableError,
   pruneExpiredSnapshots,
+  recoverStaleSnapshots,
   retainSnapshot,
   snapshotPinRef,
   type SnapshotRetentionRecord,
@@ -20,8 +22,31 @@ class MemoryRetentionRepository implements SnapshotRetentionRepository {
     return this.records.get(snapshotId);
   }
 
-  async listExpired(_now: Date): Promise<SnapshotRetentionRecord[]> {
-    return [...this.records.values()].filter((record) => record.status === "ready");
+  async withSnapshotLock<T>(_snapshotId: string, work: () => Promise<T>): Promise<T> {
+    return work();
+  }
+
+  async claimStalePreparing(_now: Date): Promise<SnapshotRetentionRecord[]> {
+    return [...this.records.values()].filter((record) => record.status === "preparing");
+  }
+
+  async claimExpired(now: Date): Promise<{ snapshots: SnapshotRetentionRecord[]; retained: number }> {
+    const snapshots: SnapshotRetentionRecord[] = [];
+    let retained = 0;
+    for (const record of this.records.values()) {
+      if (record.status === "expiring") {
+        snapshots.push(record);
+        continue;
+      }
+      if (record.status !== "ready" || Date.parse(record.expiresAt) > now.getTime()) continue;
+      if (record.leases.some((lease) => lease.expiresAt === null || Date.parse(lease.expiresAt) > now.getTime())) {
+        retained += 1;
+        continue;
+      }
+      record.status = "expiring";
+      snapshots.push(record);
+    }
+    return { snapshots, retained };
   }
 
   async markReady(snapshotId: string): Promise<void> {
@@ -37,7 +62,7 @@ class MemoryRetentionRepository implements SnapshotRetentionRepository {
     }
   }
 
-  async markExpired(snapshotId: string): Promise<void> {
+  async markExpired(snapshotId: string, _now: Date): Promise<void> {
     const record = this.records.get(snapshotId);
     if (record !== undefined) record.status = "expired";
   }
@@ -93,6 +118,88 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
     await expect(resolveCommit(mirror, snapshotPinRef(snapshotId, "docs"))).rejects.toThrow();
   });
 
+  it("resumes an expiry after ref release fails partway through", async () => {
+    const recoveringId = "ctx_00000000-0000-4000-8000-000000000005";
+    records.records.set(recoveringId, {
+      snapshotId: recoveringId,
+      status: "ready",
+      repositories: [{ repositoryId: "docs", commit: commitA }],
+      expiresAt: "2026-10-19T00:00:00.000Z",
+      leases: [],
+    });
+    let attempts = 0;
+    const interruptedPins = {
+      retain: async () => false,
+      release: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("temporary ref deletion failure");
+      },
+    };
+    const deps = { repository: records, pins: interruptedPins };
+    await expect(pruneExpiredSnapshots(deps, new Date("2026-10-22T00:00:00.000Z")))
+      .rejects.toThrow("temporary ref deletion failure");
+    expect(records.records.get(recoveringId)?.status).toBe("expiring");
+
+    const resumed = await pruneExpiredSnapshots(deps, new Date("2026-10-22T00:05:00.000Z"));
+    expect(resumed.released).toBe(1);
+    expect(records.records.get(recoveringId)?.status).toBe("expired");
+    expect(attempts).toBe(2);
+  });
+
+  it("recovers a preparing snapshot after its retention queue retries are exhausted", async () => {
+    const exhaustedId = "ctx_00000000-0000-4000-8000-000000000006";
+    records.records.set(exhaustedId, {
+      snapshotId: exhaustedId,
+      status: "preparing",
+      repositories: [{ repositoryId: "docs", commit: commitA }],
+      expiresAt: "2026-10-21T00:00:00.000Z",
+      leases: [],
+    });
+    let failFirst = true;
+    const retryablePins = {
+      retain: async () => {
+        if (failFirst) throw new Error("temporary mirror I/O failure");
+        return true;
+      },
+      release: async () => undefined,
+    };
+    const deps = { repository: records, pins: retryablePins };
+    await expect(retainSnapshot(deps, exhaustedId)).rejects.toThrow("temporary mirror I/O failure");
+    failFirst = false;
+
+    const recovered = await recoverStaleSnapshots(deps, new Date("2026-10-20T12:00:00.000Z"));
+    expect(recovered).toEqual({ attempted: 1, ready: 1, failed: 0, retryable: 0 });
+    expect(records.records.get(exhaustedId)?.status).toBe("ready");
+  });
+
+  it("releases refs left by an earlier retry before permanently failing a snapshot", async () => {
+    const unavailableId = "ctx_00000000-0000-4000-8000-000000000007";
+    records.records.set(unavailableId, {
+      snapshotId: unavailableId,
+      status: "preparing",
+      repositories: [
+        { repositoryId: "docs-a", commit: commitA },
+        { repositoryId: "docs-b", commit: commitA },
+      ],
+      expiresAt: "2026-10-21T00:00:00.000Z",
+      leases: [],
+    });
+    const released: string[] = [];
+    const unavailablePins = {
+      retain: async (_snapshot: string, pin: { repositoryId: string }) => {
+        if (pin.repositoryId === "docs-a") return false;
+        throw new SnapshotObjectUnavailableError();
+      },
+      release: async (_snapshot: string, pin: { repositoryId: string }) => { released.push(pin.repositoryId); },
+    };
+
+    const result = await retainSnapshot({ repository: records, pins: unavailablePins }, unavailableId);
+
+    expect(result).toMatchObject({ status: "failed", errorCode: "SNAPSHOT_PIN_FAILED" });
+    expect(released).toContain("docs-a");
+    expect(records.records.get(unavailableId)?.status).toBe("failed");
+  });
+
   it("leaves transient pin errors retryable", async () => {
     const retryId = "ctx_00000000-0000-4000-8000-000000000004";
     records.records.set(retryId, {
@@ -117,11 +224,12 @@ describe("worker-owned Coding Agent Workflow snapshot retention", () => {
       snapshotId: leasedId,
       status: "preparing",
       repositories: [{ repositoryId: "docs", commit: commitA }],
-      expiresAt: "2026-10-19T00:00:00.000Z",
+      expiresAt: "2026-10-21T00:00:00.000Z",
       leases: [{ expiresAt: null }],
     });
     const retained = await retainSnapshot({ repository: records, pins }, leasedId);
     expect(retained.status).toBe("ready");
+    records.records.get(leasedId)!.expiresAt = "2026-10-19T00:00:00.000Z";
     const prune = await pruneExpiredSnapshots({ repository: records, pins }, new Date("2026-10-22T00:00:00.000Z"));
     expect(prune.retained).toBe(1);
     expect(await resolveCommit(storage.mirror("local", "docs"), snapshotPinRef(leasedId, "docs"))).toBe(commitA);
