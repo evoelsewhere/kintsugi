@@ -94,6 +94,27 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
   const topLanguage = inventory === null ? undefined : [...inventory.languages].sort((a, b) => b.sloc - a.sloc)[0];
   return (
     <div className="flex flex-col gap-4">
+      {highlights.summary === undefined && highlights.recommendation === undefined ? null : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {highlights.summary === undefined ? null : (
+            <Section title="Executive summary" className="lg:col-span-2" description={inventory?.sourceRepository === undefined ? undefined : `${inventory.sourceRepository} at ${shortSha(inventory.sourceCommit)}`}>
+              <ClampedText text={highlights.summary} />
+            </Section>
+          )}
+          {highlights.recommendation === undefined ? null : (
+            <Section title="Recommended pattern">
+              <ClampedText text={highlights.recommendation} />
+            </Section>
+          )}
+        </div>
+      )}
+
+      {results.architecture === undefined ? null : (
+        <Section title="Architecture" description="ARCHITECTURE.mmd: the domains and how they depend on each other.">
+          <MermaidDiagram source={results.architecture} title="Domain diagram" />
+        </Section>
+      )}
+
       {inventory === null ? null : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           <Section title="Code composition" description="SLOC by language." className="lg:col-span-3">
@@ -109,21 +130,6 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
               <Signal label="Complexity concentration" value={signals === undefined ? "—" : `${percentOf(signals.topTenShare * 100, 100)} in 10 files`} note={signals === undefined ? undefined : `${formatCount(signals.halfComplexityFiles)} files hold half`} />
             </SignalList>
           </Section>
-        </div>
-      )}
-
-      {highlights.summary === undefined && highlights.recommendation === undefined ? null : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {highlights.summary === undefined ? null : (
-            <Section title="Executive summary" className="lg:col-span-2" description={inventory?.sourceRepository === undefined ? undefined : `${inventory.sourceRepository} at ${shortSha(inventory.sourceCommit)}`}>
-              <ClampedText text={highlights.summary} />
-            </Section>
-          )}
-          {highlights.recommendation === undefined ? null : (
-            <Section title="Recommended pattern">
-              <ClampedText text={highlights.recommendation} />
-            </Section>
-          )}
         </div>
       )}
 
@@ -149,12 +155,6 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
         </Section>
         <RunSnapshot runs={runs} onMore={() => onTab("monitoring")} />
       </div>
-
-      {results.architecture === undefined ? null : (
-        <Section title="Architecture" description="ARCHITECTURE.mmd: the domains and how they depend on each other.">
-          <MermaidDiagram source={results.architecture} title="Domain diagram" />
-        </Section>
-      )}
     </div>
   );
 }

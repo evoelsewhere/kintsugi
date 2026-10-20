@@ -48,7 +48,7 @@ export function DeliveryShell({ crumbs = [], title, description, actions, childr
                 to={projectLink(projectId)}
                 aria-label="Configure the project"
                 title="Configure the project"
-                className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-2.5 text-[13px] text-text-secondary hover:bg-hover hover:text-text"
+                className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-2.5 text-[13px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
               >
                 <Settings2 className="size-4" />
                 Configure
@@ -117,7 +117,7 @@ export function NoApplications({ project }: { project: ProjectDetail }): React.J
 
 export function ApplicationTabs({ project, value, onChange }: { project: ProjectDetail; value: string; onChange: (id: string) => void }): React.JSX.Element {
   return (
-    <nav aria-label="Applications" className="flex flex-wrap gap-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)]">
+    <nav aria-label="Applications" className="flex flex-wrap gap-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)] dark:[box-shadow:0_1px_0_0_rgba(255,255,255,0.12)]">
       {project.applications.map((entry) => (
         <button
           key={entry.id}
@@ -125,7 +125,7 @@ export function ApplicationTabs({ project, value, onChange }: { project: Project
           aria-current={entry.id === value ? "page" : undefined}
           onClick={() => onChange(entry.id)}
           className={cn(
-            "-mb-px flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-text-secondary hover:text-text",
+            "-mb-px flex items-center gap-1.5 rounded-[var(--geist-radius)] px-3 py-1.5 text-[13px] text-text-secondary hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
             entry.id === value && "font-medium text-text [box-shadow:0_-2px_0_0_var(--color-text)_inset]",
           )}
         >
@@ -145,7 +145,7 @@ export function ApplicationFacts({ project, application }: { project: ProjectDet
       <RepoFact label="Legacy code (read-only)" repository={legacy} extra={application.asIs.legacy.length > 1 ? `+${application.asIs.legacy.length - 1} more` : undefined} />
       <RepoFact label="Document repo" repository={project.documentRepository ?? undefined} />
       <div className="min-w-0">
-        <p className="text-text-muted">Target repos</p>
+        <p className="text-[10px] tracking-wide text-text-muted uppercase">Target repos</p>
         <p className="text-text">{application.toBe.targets.length === 0 ? "None linked" : application.toBe.targets.map((target) => target.component ?? target.repositoryId).join(", ")}</p>
       </div>
     </div>
@@ -155,9 +155,9 @@ export function ApplicationFacts({ project, application }: { project: ProjectDet
 function RepoFact({ label, repository, extra }: { label: string; repository: { repositoryId: string; syncStatus: string; url: string } | undefined; extra?: string | undefined }): React.JSX.Element {
   return (
     <div className="min-w-0">
-      <p className="text-text-muted">{label}</p>
+      <p className="text-[10px] tracking-wide text-text-muted uppercase">{label}</p>
       {repository === undefined ? (
-        <p className="text-text">None linked</p>
+        <p className="text-text-muted">None linked</p>
       ) : (
         <p className="flex items-center gap-2 text-text" title={repository.url}>
           <FolderGit2 className="size-3.5 shrink-0 text-text-muted" strokeWidth={1.5} />
@@ -170,35 +170,44 @@ function RepoFact({ label, repository, extra }: { label: string; repository: { r
   );
 }
 
-/** One repository of an application in a line: its name and sync state. */
+/** One fact of the header as a chip: a short eyebrow label, then its value. */
+function FactChip({ label, title, children }: { label: string; title?: string | undefined; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-hover px-2 py-0.5" title={title}>
+      <span className="shrink-0 text-[10px] tracking-wide text-text-muted uppercase">{label}</span>
+      {children}
+    </span>
+  );
+}
+
+/** One repository of an application as a chip: its name and sync state. */
 function InlineRepo({ label, repository, extra }: { label: string; repository: { repositoryId: string; syncStatus: string; url: string } | undefined; extra?: string | undefined }): React.JSX.Element {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5" title={repository?.url}>
-      <span className="text-text-muted">{label}</span>
+    <FactChip label={label} title={repository?.url}>
       {repository === undefined ? (
-        <span className="text-text">none linked</span>
+        <span className="text-text-muted">none linked</span>
       ) : (
         <>
           <span className="max-w-40 truncate text-text">{repository.repositoryId}</span>
           <SyncStatusBadge status={repository.syncStatus} />
-          {extra === undefined ? null : <span className="text-text-muted">{extra}</span>}
+          {extra === undefined ? null : <span className="tabular-nums text-text-muted">{extra}</span>}
         </>
       )}
-    </span>
+    </FactChip>
   );
 }
 
 /** The repositories of an application on one line: legacy code, the document repo and the targets. */
 export function CompactFacts({ project, application }: { project: ProjectDetail; application: ApplicationView }): React.JSX.Element {
   const legacy = application.asIs.legacy[0];
+  const targets = application.toBe.targets.map((target) => target.component ?? target.repositoryId).join(", ");
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-text-secondary">
+    <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-text-secondary">
       <InlineRepo label="Legacy" repository={legacy} extra={application.asIs.legacy.length > 1 ? `+${application.asIs.legacy.length - 1}` : undefined} />
       <InlineRepo label="Docs" repository={project.documentRepository ?? undefined} />
-      <span className="inline-flex min-w-0 items-center gap-1.5">
-        <span className="text-text-muted">Targets</span>
-        <span className="max-w-48 truncate text-text">{application.toBe.targets.length === 0 ? "none linked" : application.toBe.targets.map((target) => target.component ?? target.repositoryId).join(", ")}</span>
-      </span>
+      <FactChip label="Targets" title={targets === "" ? undefined : targets}>
+        {targets === "" ? <span className="text-text-muted">none linked</span> : <span className="max-w-48 truncate text-text">{targets}</span>}
+      </FactChip>
     </div>
   );
 }
@@ -233,7 +242,9 @@ export function StageHeader({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
           <p className="text-[16px] font-semibold tracking-tight text-text">{title}</p>
-          <span className="font-mono text-[11px] text-text-muted">/{command}</span>
+          <span className="font-mono text-[11px] text-text-muted" title={`Command /${command}`}>
+            /{command}
+          </span>
           {application === undefined ? null : (
             <span className="inline-flex items-center gap-1 rounded-[var(--geist-pill-radius)] bg-hover px-2 py-0.5 text-[11.5px] text-text-secondary">
               <Package className="size-3" strokeWidth={1.75} />
@@ -244,7 +255,7 @@ export function StageHeader({
         </div>
         {actions === undefined ? null : <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-1">
+      <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
         <p className="min-w-48 flex-1 truncate text-[12.5px] text-text-secondary" title={description}>
           {description}
         </p>
