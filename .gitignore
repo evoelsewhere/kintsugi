@@ -16,3 +16,4 @@ coverage/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.tmp/coding-agent-workflow/

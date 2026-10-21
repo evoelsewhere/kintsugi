@@ -3,20 +3,16 @@
 // else the repo-root .env); the database it names is never touched.
 
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { databaseUrlFromEnvironment } from "../../../../scripts/member-db-config.mjs";
 import pg from "pg";
 
 const repoRoot = resolve(import.meta.dirname, "../../../..");
 
 function serverUrl(): URL | undefined {
-  let raw = process.env["DATABASE_URL"];
-  const envFile = resolve(repoRoot, ".env");
-  if ((raw === undefined || raw === "") && existsSync(envFile)) {
-    raw = /^DATABASE_URL=(.*)$/m.exec(readFileSync(envFile, "utf8"))?.[1]?.trim();
-  }
-  return raw === undefined || raw === "" ? undefined : new URL(raw);
+  const raw = databaseUrlFromEnvironment(process.env, resolve(repoRoot, ".env"));
+  return raw === undefined ? undefined : new URL(raw);
 }
 
 /** False when no Postgres is configured: integration suites skip themselves. */
