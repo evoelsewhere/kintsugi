@@ -59,8 +59,9 @@ async function bootTestApp(
     const { ResponseInterceptor } = await import("#common/interface/response.js");
 
     Logger.overrideLogger(false);
-    const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(TestRootModule, { logger: false });
-    nest.useBodyParser("json", { limit: "4mb" });
+    const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(TestRootModule, { logger: false, bodyParser: false });
+    const { configureApiBodyParser } = await import("../../src/common/interface/body-parser.js");
+    configureApiBodyParser(nest);
     app = nest;
     await ensureSchema();
     app.setGlobalPrefix("api");

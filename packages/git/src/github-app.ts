@@ -42,7 +42,7 @@ export interface GitHubCredentialResolver {
 }
 
 export class GitHubAppError extends Error {
-  constructor(readonly code: string, message: string) {
+  constructor(readonly code: string, message: string, readonly retryAfterMs?: number) {
     super(message);
     this.name = "GitHubAppError";
   }

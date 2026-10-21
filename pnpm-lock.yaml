@@ -77,6 +77,9 @@ importers:
       '@node-rs/argon2':
         specifier: ^2.2.2
         version: 2.2.2
+      express:
+        specifier: 5.2.1
+        version: 5.2.1
       pg:
         specifier: ^8.23.1
         version: 8.23.1

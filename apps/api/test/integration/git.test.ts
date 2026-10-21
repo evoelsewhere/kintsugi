@@ -8,6 +8,7 @@ import { type Client, adminClient, memberClient, startTestApp, type TestApp } fr
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 
 const TOKEN = "glpat-TEST-secret-token-0123456789";
+const GITHUB_WEBHOOK_SECRET = "TEST-github-webhook-secret-0123456789";
 const SSH_KEY = "-----BEGIN OPENSSH PRIVATE KEY-----\nTEST-secret-key-material\n-----END OPENSSH PRIVATE KEY-----";
 const GITHUB_APP_KEY = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 
@@ -107,6 +108,57 @@ describe.skipIf(!hasDatabase)("git servers and repositories (integration)", () =
     const fetched = await call("GET", "/admin/git-servers/ghes-app");
     expect(fetched.body.data).toMatchObject({ githubApp: { hasPrivateKey: true } });
     expect(JSON.stringify(fetched.body)).not.toContain(GITHUB_APP_KEY);
+  });
+
+  it("stores the GitHub webhook secret encrypted, preserves omission and removes it only when requested", async () => {
+    const weak = await call("POST", "/admin/git-servers", {
+      id: "github-hook-weak",
+      kind: "github",
+      name: "Weak webhook config",
+      baseUrl: "https://github.com",
+      authType: "none",
+      githubWebhookSecret: "too-short",
+    });
+    expect(weak.status).toBe(400);
+
+    const created = await call("POST", "/admin/git-servers", {
+      id: "github-hook-config",
+      kind: "github",
+      name: "GitHub webhook config",
+      baseUrl: "https://github.com",
+      authType: "none",
+      githubWebhookSecret: GITHUB_WEBHOOK_SECRET,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({ id: "github-hook-config", hasGithubWebhookSecret: true });
+    expect(JSON.stringify(created.body)).not.toContain(GITHUB_WEBHOOK_SECRET);
+
+    const stored = await app.db.query<{ ciphertext: string; secret_id: string }>(
+      "select secret_id, ciphertext from admin.git_secret where server_id = 'github-hook-config'",
+    );
+    expect(stored.rows).toHaveLength(1);
+    expect(stored.rows[0]?.secret_id).toBe("git-server:github-hook-config:github-webhook-secret");
+    expect(stored.rows[0]?.ciphertext).not.toContain(GITHUB_WEBHOOK_SECRET);
+
+    const omitted = await call("PATCH", "/admin/git-servers/github-hook-config", {
+      kind: "github",
+      name: "GitHub webhook config",
+      baseUrl: "https://github.com",
+      authType: "none",
+    });
+    expect(omitted.status).toBe(200);
+    expect(omitted.body.data).toMatchObject({ hasGithubWebhookSecret: true });
+
+    const removed = await call("PATCH", "/admin/git-servers/github-hook-config", {
+      kind: "github",
+      name: "GitHub webhook config",
+      baseUrl: "https://github.com",
+      authType: "none",
+      githubWebhookSecret: null,
+    });
+    expect(removed.status).toBe(200);
+    expect(removed.body.data).toMatchObject({ hasGithubWebhookSecret: false });
+    expect((await app.db.query("select secret_id from admin.git_secret where server_id = 'github-hook-config'")).rows).toHaveLength(0);
   });
 
   it("rejects provider observations that pair a repository with another Git server", async () => {

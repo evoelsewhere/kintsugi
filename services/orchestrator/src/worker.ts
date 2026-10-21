@@ -4,7 +4,12 @@
 // lose their mirror. Document writes run one at a time per document repository.
 
 import { randomUUID } from "node:crypto";
-import { CheckoutStorage } from "@kintsugi/git";
+import {
+  CheckoutStorage,
+  GitHubInstallationCredentialProvider,
+  GitHubProviderCredentialProvider,
+  GitHubPullRequestObserver,
+} from "@kintsugi/git";
 import { type Interpreters, interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { PgBoss } from "pg-boss";
@@ -26,6 +31,8 @@ import { triggerRebuilds } from "./aggregates.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
 import { GitSnapshotPins, pruneExpiredSnapshots, recoverStaleSnapshots, retainSnapshot } from "./git-sync/retention.js";
 import { PostgresSnapshotRetentionRepository } from "./git-sync/retention-store.js";
+import { PostgresProviderSyncStore } from "./provider-sync/inbox.js";
+import { discoverChanges } from "./provider-sync/reconcile.js";
 import {
   DOCUMENT_WRITE_QUEUE,
   type DocumentWriteRequest,
@@ -52,6 +59,14 @@ export interface WorkerOptions {
   pollIntervalSeconds: number;
   /** Seconds between scans for newly registered (pending) repositories. */
   pendingScanSeconds?: number;
+  /** Seconds between scans of due GitHub/GHES provider repositories (default 1). */
+  providerSyncScanSeconds?: number;
+  /** Maximum due provider repositories claimed by one scan (default 20). */
+  providerSyncBatchSize?: number;
+  /** Poll interval after a complete provider sweep (default 120). */
+  providerPollIntervalSeconds?: number;
+  /** Full all-state history backfill interval (default daily). */
+  providerDeepBackfillSeconds?: number;
   /** Parallel syncs in this process. */
   concurrency?: number;
   /** For tests: the HTTP client of the pull-request adapters. */
@@ -99,6 +114,13 @@ export interface Worker {
 export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const log = options.log ?? ((message: string) => console.log(`[worker] ${message}`));
   const store = new RepositoryStore(options.pool);
+  const providerSyncStore = new PostgresProviderSyncStore(options.pool);
+  const githubObserver = new GitHubPullRequestObserver({
+    credentials: new GitHubProviderCredentialProvider({
+      apps: new GitHubInstallationCredentialProvider({ ...(options.fetch === undefined ? {} : { fetch: options.fetch }) }),
+    }),
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+  });
   const jobStore = new PgJobStore(options.pool);
   const deps = { store, storage: options.storage };
   const writerDeps = {
@@ -265,6 +287,19 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     for (const id of await store.ids()) await requestSync(id);
     for (const key of await pruneMirrors(deps)) log(`pruned mirror ${key}`);
   });
+  const syncProviderChanges = tick("provider sync", async () => {
+    for (const repositoryId of await providerSyncStore.repositoriesToSync(options.providerSyncBatchSize ?? 20)) {
+      const result = await discoverChanges({
+        store: providerSyncStore,
+        connections: store,
+        observer: githubObserver,
+        ...(options.providerPollIntervalSeconds === undefined ? {} : { pollIntervalSeconds: options.providerPollIntervalSeconds }),
+        ...(options.providerDeepBackfillSeconds === undefined ? {} : { deepBackfillSeconds: options.providerDeepBackfillSeconds }),
+      }, repositoryId);
+      if (result.status === "failed") log(`provider sync ${repositoryId} failed: ${result.errorCode}`);
+      else if (result.status === "partial") log(`provider sync ${repositoryId} resumed after ${result.pages} page(s)`);
+    }
+  });
   const watchReviews = tick("review watch", async () => {
     const outcome = await watchPullRequests({ ...writerDeps, log });
     if (outcome.merged.length + outcome.closed.length > 0) log(`review watch: ${outcome.merged.length} merged, ${outcome.closed.length} closed`);
@@ -305,6 +340,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   });
   const timers = [
     setInterval(() => void scanPending(), (options.pendingScanSeconds ?? 5) * 1000),
+    setInterval(() => void syncProviderChanges(), (options.providerSyncScanSeconds ?? 1) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),
     setInterval(() => void watchReviews(), (options.reviewWatchSeconds ?? 60) * 1000),
     setInterval(() => void pruneJobs(), (options.cleanupIntervalSeconds ?? 60 * 60) * 1000),
@@ -314,6 +350,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void recoverSnapshots(), (options.snapshotRecoverySeconds ?? 60) * 1000),
   ];
   void pollAll();
+  void syncProviderChanges();
   void pruneJobs();
   void dispatchMemberOutbox();
   void pruneSnapshots();

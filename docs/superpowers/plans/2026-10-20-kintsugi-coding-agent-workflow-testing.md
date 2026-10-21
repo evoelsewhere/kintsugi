@@ -1,6 +1,6 @@
 # Kintsugi Coding Agent Workflow Testing Plan
 
-Date: 21 October 2026. Status: acceptance matrix for the complete workflow. The T00–T06 integration evidence is recorded in the [integration review](../reviews/2026-10-20-coding-agent-workflow-integration.md); T07–T09 package/client checks and T10 fake-provider/API/portal contracts now exist on the implementation branch. T10 database integration and live GitHub/GHES probes remain pending. Authenticated native MCP calls and full-workflow release gates remain pending.
+Date: 21 October 2026. Status: acceptance matrix for the complete workflow. The T00–T06 integration evidence is recorded in the [integration review](../reviews/2026-10-20-coding-agent-workflow-integration.md); T07–T09 package/client checks, T10 fake-provider/API/portal contracts, and T11 webhook/recovery tests now exist on the implementation branch. T10/T11 database integration has run against disposable local Postgres; live GitHub/GHES probes remain pending. Authenticated native MCP calls and full-workflow release gates remain pending.
 
 **Purpose:** Prove the approved task/design handoff and PR-to-effective-gate journey without relying on skipped suites, synthetic model output or one client's success as evidence for unsupported surfaces.
 
@@ -123,7 +123,7 @@ Every case names an observable result. A critical case cannot be waived merely b
 |---|---|---|
 | PR-01 | GitHub.com versus selected GHE URL/version | Correct registered API/host identities and permission/capability facts; unsupported mode explicit |
 | PR-02 | GitHub App token refresh/narrowed permissions or legacy token | Correct server-side credential boundary; no member/runtime exposure or assumed Checks capability |
-| PR-03 | Valid/forged/duplicate/out-of-order webhook | Verify raw bytes before persist; one receipt per delivery; reconcile authoritative current state |
+| PR-03 | Valid/forged/replayed/out-of-order webhook | Verify exact raw bytes before persist; deduplicate delivery IDs and repeated payload hashes; fetch current PR state from stable hints before the broad sweep |
 | PR-04 | PR opens and merges entirely while Kintsugi is down | All-state sweep/backfill discovers it; missing historical evidence stays review-needed |
 | PR-05 | Discovery crashes mid-pagination | Watermark unchanged; overlap replay recovers all changes and no duplicate effective association |
 | PR-06 | Draft/reopen/close-unmerged/retarget/edited body | Appropriate current state; no completion from closed-unmerged or stale association |

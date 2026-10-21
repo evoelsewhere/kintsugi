@@ -15,15 +15,16 @@ import { loadEnv } from "./common/config/env.js";
 import { ensureSchema } from "./common/db/pool.js";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter.js";
 import { ResponseInterceptor } from "./common/interface/response.js";
+import { configureApiBodyParser } from "./common/interface/body-parser.js";
 
 /** Local development configuration lives in .env (gitignored); the compose package passes env directly. */
 if (existsSync(".env")) process.loadEnvFile(".env");
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: [env.logLevel] });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: [env.logLevel], bodyParser: false });
   // Agent packages (Agent Builder import, ADR-0026) are larger than the 100 kB default.
-  app.useBodyParser("json", { limit: "4mb" });
+  configureApiBodyParser(app);
 
   const portalDir = process.env["KINTSUGI_PORTAL_DIR"];
   if (portalDir !== undefined && portalDir.length > 0) {

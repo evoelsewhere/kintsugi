@@ -116,6 +116,12 @@ export function GitSection(): React.JSX.Element {
                   {server.githubApp.hasPrivateKey ? "PR App stored" : "PR App needs key"}
                 </span>
               )}
+              {server.kind === "github" || server.kind === "github-enterprise" ? (
+                <span className="hidden shrink-0 items-center gap-1.5 text-[12px] text-text-secondary lg:inline-flex">
+                  <StatusDot tone={server.hasGithubWebhookSecret ? "green" : "muted"} />
+                  {server.hasGithubWebhookSecret ? "PR webhook stored" : "polling only"}
+                </span>
+              ) : null}
               <div className="flex shrink-0 items-center gap-1">
                 <Button size="small" variant="ghost" onClick={() => setServerDialog({ open: true, server })}>
                   <Settings2 className="size-4" />

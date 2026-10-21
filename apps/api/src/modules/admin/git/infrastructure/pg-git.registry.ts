@@ -24,6 +24,7 @@ const SECRETS: SecretTable = { table: "admin.git_secret", ownerColumn: "server_i
 const tokenSecretId = (serverId: string): string => `git-server:${serverId}:token`;
 const keySecretId = (serverId: string): string => `git-server:${serverId}:ssh-key`;
 const githubAppKeySecretId = (serverId: string): string => `git-server:${serverId}:github-app-private-key`;
+const githubWebhookSecretId = (serverId: string): string => `git-server:${serverId}:github-webhook-secret`;
 
 interface ServerRow {
   id: string;
@@ -83,6 +84,9 @@ export class PgGitRegistry extends GitRegistry {
       if (input.githubApp !== undefined && input.githubApp !== null) {
         await storeSecret(client, SECRETS, input.id, githubAppKeySecretId(input.id), input.githubApp.privateKey);
       }
+      if (typeof input.githubWebhookSecret === "string") {
+        await storeSecret(client, SECRETS, input.id, githubWebhookSecretId(input.id), input.githubWebhookSecret);
+      }
     });
     return (await this.getServer(input.id))!;
   }
@@ -121,6 +125,11 @@ export class PgGitRegistry extends GitRegistry {
       } else if (input.githubApp !== undefined) {
         await storeSecret(client, SECRETS, id, githubAppKeySecretId(id), input.githubApp.privateKey);
       }
+      if (input.githubWebhookSecret === null) {
+        await client.query("delete from admin.git_secret where server_id = $1 and secret_id = $2", [id, githubWebhookSecretId(id)]);
+      } else if (typeof input.githubWebhookSecret === "string") {
+        await storeSecret(client, SECRETS, id, githubWebhookSecretId(id), input.githubWebhookSecret);
+      }
       return true;
     });
     return updated ? this.getServer(id) : undefined;
@@ -143,6 +152,11 @@ export class PgGitRegistry extends GitRegistry {
       ...(privateKey === undefined ? {} : { privateKey }),
       ...(server.knownHosts === undefined ? {} : { knownHosts: server.knownHosts }),
     };
+  }
+
+  async githubWebhookSecret(id: string): Promise<string | undefined> {
+    const server = await this.getServer(id);
+    return server === undefined ? undefined : readSecret(this.#pool, SECRETS, githubWebhookSecretId(id));
   }
 
   async listRepositories(): Promise<GitRepositoryRecord[]> {
@@ -206,6 +220,7 @@ export class PgGitRegistry extends GitRegistry {
       ...(row.username === null ? {} : { username: row.username }),
       ...(row.known_hosts === null ? {} : { knownHosts: row.known_hosts }),
       hasCredential: secretId === undefined ? false : await secretExists(this.#pool, SECRETS, secretId),
+      hasGithubWebhookSecret: await secretExists(this.#pool, SECRETS, githubWebhookSecretId(row.id)),
       ...(row.github_app_id === null || row.github_installation_id === null
         ? {}
         : {

@@ -60,14 +60,17 @@ function apiPath(target: GitHubApiTarget, routePath: string): string {
   return `${prefix}${routePath}`;
 }
 
-function safeCursor(raw: string, target: GitHubApiTarget, pathname: string, mode: "pull-list" | "collection"): URL {
+type CursorMode = "changed-pull-list" | "all-pull-list" | "collection";
+
+function safeCursor(raw: string, target: GitHubApiTarget, pathname: string, mode: CursorMode): URL {
   let cursor: URL;
   try {
     cursor = new URL(raw);
   } catch {
     throw new GitHubAppError("GITHUB_CURSOR_INVALID", "GitHub returned an invalid pagination cursor");
   }
-  const allowedParameters = mode === "pull-list"
+  const pullList = mode !== "collection";
+  const allowedParameters = pullList
     ? new Set(["state", "sort", "direction", "per_page", "page"])
     : new Set(["per_page", "page"]);
   const queryIsBounded = [...cursor.searchParams.keys()].every((name) => allowedParameters.has(name)) &&
@@ -82,17 +85,21 @@ function safeCursor(raw: string, target: GitHubApiTarget, pathname: string, mode
     !queryIsBounded ||
     cursor.searchParams.get("per_page") !== "100" ||
     (page === null || !/^[1-9]\d*$/.test(page)) ||
-    (mode === "pull-list" &&
+    (mode === "changed-pull-list" &&
       (cursor.searchParams.get("state") !== "all" ||
         cursor.searchParams.get("sort") !== "updated" ||
-        cursor.searchParams.get("direction") !== "desc"))
+        cursor.searchParams.get("direction") !== "desc")) ||
+    (mode === "all-pull-list" &&
+      (cursor.searchParams.get("state") !== "all" ||
+        cursor.searchParams.get("sort") !== "created" ||
+        cursor.searchParams.get("direction") !== "asc"))
   ) {
     throw new GitHubAppError("GITHUB_CURSOR_INVALID", "GitHub pagination cursor does not match the registered host and pull-request route");
   }
   return cursor;
 }
 
-function nextCursor(response: Response, target: GitHubApiTarget, pathname: string, mode: "pull-list" | "collection"): string | undefined {
+function nextCursor(response: Response, target: GitHubApiTarget, pathname: string, mode: CursorMode): string | undefined {
   const link = response.headers.get("link");
   if (link === null) return undefined;
   const next = /<([^>]+)>\s*;\s*rel\s*=\s*"?next"?/i.exec(link)?.[1];
@@ -243,7 +250,7 @@ export class GitHubPullRequestObserver implements PullRequestObserver<GitHubObse
     const pathname = pullPath(target);
     const url = cursor === undefined
       ? new URL(`${target.apiBase}${pathname}`)
-      : safeCursor(cursor, target, apiPath(target, pathname), "pull-list");
+      : safeCursor(cursor, target, apiPath(target, pathname), "changed-pull-list");
     if (cursor === undefined) {
       url.search = new URLSearchParams({ state: "all", sort: "updated", direction: "desc", per_page: "100" }).toString();
     }
@@ -265,13 +272,38 @@ export class GitHubPullRequestObserver implements PullRequestObserver<GitHubObse
       items.push(pull);
       if (updated > Date.parse(latestUpdatedAt)) latestUpdatedAt = pull.updatedAt;
     }
-    const next = reachedWatermark ? undefined : nextCursor(response, target, expectedPath, "pull-list");
+    const next = reachedWatermark ? undefined : nextCursor(response, target, expectedPath, "changed-pull-list");
     return {
       items,
       latestUpdatedAt,
       complete: reachedWatermark || next === undefined,
       ...(next === undefined ? {} : { nextCursor: next }),
     };
+  }
+
+  /** Full all-state recovery scan in immutable creation order, so updates cannot shift older items between pages. */
+  async listAll(connection: GitHubObservationConnection, cursor?: string): Promise<ChangePage> {
+    const target = githubApiTarget(connection);
+    if (connection.mergeQueueEnabled === true) throw new GitHubAppError("GITHUB_MERGE_QUEUE_UNSUPPORTED", "The Coding Agent Workflow pilot does not support merge queues");
+    const pathname = pullPath(target);
+    const expectedPath = apiPath(target, pathname);
+    const url = cursor === undefined
+      ? new URL(`${target.apiBase}${pathname}`)
+      : safeCursor(cursor, target, expectedPath, "all-pull-list");
+    if (cursor === undefined) {
+      url.search = new URLSearchParams({ state: "all", sort: "created", direction: "asc", per_page: "100" }).toString();
+    }
+    const credential = await this.#credential(connection, "pull-requests-read");
+    const { body, response } = await this.#getJson(target, credential.token, url.toString(), expectedPath);
+    if (!Array.isArray(body)) throw new GitHubAppError("GITHUB_RESPONSE_INVALID", "GitHub pull-request list response is not an array");
+
+    const items = body.map((raw) => mapPullRequest(raw, connection, target));
+    const latestUpdatedAt = items.reduce(
+      (latest, item) => Date.parse(item.updatedAt) > Date.parse(latest) ? item.updatedAt : latest,
+      "1970-01-01T00:00:00.000Z",
+    );
+    const next = nextCursor(response, target, expectedPath, "all-pull-list");
+    return { items, latestUpdatedAt, complete: next === undefined, ...(next === undefined ? {} : { nextCursor: next }) };
   }
 
   async get(connection: GitHubObservationConnection, identity: PullRequestIdentity): Promise<ObservedPullRequest> {
@@ -370,7 +402,14 @@ export class GitHubPullRequestObserver implements PullRequestObserver<GitHubObse
     if (finalUrl.origin !== target.origin || finalUrl.pathname !== expectedPath) {
       throw new GitHubAppError("GITHUB_REDIRECT_REJECTED", "GitHub observation response left the registered API route");
     }
-    if (response.status !== 200) throw new GitHubAppError(`GITHUB_HTTP_${response.status}`, `GitHub observation request failed (HTTP ${response.status})`);
+    if (response.status !== 200) {
+      const retryAfterMs = this.#retryAfterMs(response.headers);
+      throw new GitHubAppError(
+        `GITHUB_HTTP_${response.status}`,
+        `GitHub observation request failed (HTTP ${response.status})`,
+        retryAfterMs,
+      );
+    }
     let body: unknown;
     try {
       body = await response.json();
@@ -378,6 +417,23 @@ export class GitHubPullRequestObserver implements PullRequestObserver<GitHubObse
       throw new GitHubAppError("GITHUB_RESPONSE_INVALID", "GitHub returned invalid JSON for an observation request");
     }
     return { body, response };
+  }
+
+  #retryAfterMs(headers: Headers): number | undefined {
+    const retryAfter = headers.get("retry-after");
+    if (retryAfter !== null) {
+      const seconds = Number(retryAfter);
+      const delay = Number.isFinite(seconds) && seconds >= 0
+        ? seconds * 1000
+        : Date.parse(retryAfter) - Date.now();
+      if (Number.isFinite(delay) && delay >= 0) return Math.min(delay, 24 * 60 * 60 * 1000);
+    }
+    if (headers.get("x-ratelimit-remaining") === "0") {
+      const resetSeconds = Number(headers.get("x-ratelimit-reset"));
+      const delay = resetSeconds * 1000 - Date.now();
+      if (Number.isFinite(delay) && delay >= 0) return Math.min(delay, 24 * 60 * 60 * 1000);
+    }
+    return undefined;
   }
 
   async #getAllPages<T>(target: GitHubApiTarget, token: string, startUrl: string, pathname: string, parse: (body: unknown) => T[]): Promise<T[]> {

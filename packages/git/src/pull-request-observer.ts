@@ -85,5 +85,7 @@ export interface ChangePage {
 export interface PullRequestObserver<Connection = GitHubObservationConnection> {
   capabilities(connection: Connection): Promise<ProviderCapabilities>;
   listChanged(connection: Connection, watermark: string, cursor?: string): Promise<ChangePage>;
+  /** Full, stable-order all-state scan used for periodic recovery when update-sorted pages move. */
+  listAll(connection: Connection, cursor?: string): Promise<ChangePage>;
   get(connection: Connection, identity: PullRequestIdentity): Promise<ObservedPullRequest>;
 }

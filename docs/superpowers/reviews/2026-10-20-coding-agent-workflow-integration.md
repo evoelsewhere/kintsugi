@@ -49,7 +49,7 @@ Source availability, approval and observation availability remain distinct. A re
 | Malformed review IDs caused HTTP 500 | Validate the path parameter through the HTTP schema pipe and return 400. |
 | A missing repository context escaped the stable snapshot error contract | Convert expected repository-context conflicts to `SNAPSHOT_UNAVAILABLE`; preserve access failures. |
 | Upstream assessment metadata and its worker expectation omitted the architecture styling script | Include the existing script in the declared flow and expect its final artifact provenance to be `tool`. |
-| The future stage-decision migration reused the planned reviews migration number | Allocate the future stage-decision migration as 027; planned provider/review/gate migrations remain 024–026. |
+| The future stage-decision migration reused the planned reviews migration number | Initial allocation moved stage decisions to 027. T11 later assigned 025 to provider recovery, so the current planned sequence is provider 024–025, reviews 026, gate publication 027 and stage decisions 028. |
 | A Python subprocess output decoding warning hid incomplete captured lint output on Windows | Reproduce with thread warnings treated as errors, then make the isolated child UTF-8 mode and capture encoding explicit in the test helper. |
 
 ## Verification evidence

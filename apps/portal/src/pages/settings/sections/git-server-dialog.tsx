@@ -59,9 +59,12 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
   const [githubAppId, setGithubAppId] = useState(server?.githubApp?.appId ?? "");
   const [githubInstallationId, setGithubInstallationId] = useState(server?.githubApp?.installationId ?? "");
   const [githubAppPrivateKey, setGithubAppPrivateKey] = useState("");
+  const [githubWebhookSecret, setGithubWebhookSecret] = useState("");
+  const [removeGithubWebhookSecret, setRemoveGithubWebhookSecret] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const showGithubApp = kind === "github" || kind === "github-enterprise" || server?.githubApp !== undefined;
+  const showGithubApp = kind === "github" || kind === "github-enterprise" || server?.githubApp !== undefined || server?.hasGithubWebhookSecret === true;
+  const storedGithubWebhookSecret = server?.hasGithubWebhookSecret === true;
   const storedGithubAppKey = server?.githubApp?.hasPrivateKey === true;
   const canKeepGithubAppKey = storedGithubAppKey && githubAppId.trim() === server?.githubApp?.appId && githubInstallationId.trim() === server?.githubApp?.installationId;
 
@@ -73,6 +76,7 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
     if (!editing && id === "") return "The name needs at least one letter or digit.";
     if (!/^https?:\/\/\S+$/.test(baseUrl.trim())) return "Base URL must start with https:// (or http:// for anonymous internal servers).";
     if (authType === "token" && token === "" && !storedCredential) return "Enter the access token.";
+      if (githubWebhookSecret !== "" && githubWebhookSecret.trim().length < 32) return "Webhook secrets must be at least 32 characters.";
     if (authType === "ssh-key" && privateKey === "" && !storedCredential) return "Paste the SSH private key.";
     if (authType === "ssh-key" && knownHosts.trim() === "") return "Pin the server's SSH host keys (known_hosts lines).";
     const githubApp = githubAppInputProblem({
@@ -91,6 +95,7 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
       ...(authType === "token" && token !== "" ? { token } : {}),
       ...(authType === "ssh-key" && privateKey !== "" ? { privateKey } : {}),
       ...(authType === "ssh-key" ? { knownHosts: knownHosts.trim() } : {}),
+        ...(removeGithubWebhookSecret ? { githubWebhookSecret: null } : githubWebhookSecret.trim() !== "" ? { githubWebhookSecret } : {}),
       ...githubApp,
     };
   }
@@ -115,7 +120,7 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
       open
       size="nested"
       title={editing ? `Configure ${server.id}` : "Add Git server"}
-      description="Kintsugi clones registered repositories with the clone credential. A GitHub App can be configured separately for pull-request evidence; both credentials are encrypted and scoped to this server."
+      description="Kintsugi clones registered repositories with the clone credential. GitHub pull-request observation can use an App and an optional signed webhook secret; credentials are encrypted and never shown after saving."
       onClose={onClose}
       footer={
         <>
@@ -182,7 +187,23 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
         ) : null}
 
         {showGithubApp ? (
-          <section aria-label="GitHub App pull-request access" className="rounded-[var(--geist-radius)] bg-recessed/50 p-3">
+          <section aria-label="GitHub pull-request integration" className="rounded-[var(--geist-radius)] bg-recessed/50 p-3">
+              <Field label="Webhook secret" hint="Optional. Use a random secret with at least 32 characters and set it on a GitHub webhook targeting /api/webhooks/github/{server-id}. Kintsugi still fetches current PR state; polling works without a webhook.">
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={githubWebhookSecret}
+                maxLength={8192}
+                placeholder={storedGithubWebhookSecret ? "Stored — leave blank to keep" : "Optional webhook secret"}
+                onChange={(event) => {
+                  setGithubWebhookSecret(event.target.value);
+                  if (event.target.value !== "") setRemoveGithubWebhookSecret(false);
+                }}
+              />
+            </Field>
+            {storedGithubWebhookSecret ? (
+              <Checkbox checked={removeGithubWebhookSecret} onChange={setRemoveGithubWebhookSecret} label="Remove the stored webhook secret" />
+            ) : null}
             <div className="flex flex-col gap-1">
               <Checkbox
                 checked={githubAppEnabled}
