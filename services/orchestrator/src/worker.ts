@@ -52,6 +52,8 @@ export interface WorkerOptions {
   log?: (message: string) => void;
   /** Days the output of a failed run or write is kept (KINTSUGI_JOB_RETENTION_DAYS, default 7). */
   jobRetentionDays?: number;
+  /** Days the spans of agent jobs are kept (KINTSUGI_TELEMETRY_RETENTION_DAYS, default 30). */
+  telemetryRetentionDays?: number;
   /** Seconds between looks at pull requests awaiting review, to record a merge or a close (default 60). */
   reviewWatchSeconds?: number;
   /** Seconds between sweeps of expired job workspaces (default: hourly). */
@@ -222,6 +224,8 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
     if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
   });
+    const spans = await jobStore.pruneTelemetry(options.telemetryRetentionDays ?? 30);
+    if (spans > 0) log(`removed ${spans} expired telemetry span(s)`);
   const timers = [
     setInterval(() => void scanPending(), (options.pendingScanSeconds ?? 5) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),

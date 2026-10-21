@@ -97,6 +97,7 @@ async function main(): Promise<void> {
     storage,
     pollIntervalSeconds,
     jobRetentionDays: positive("KINTSUGI_JOB_RETENTION_DAYS", DEFAULT_JOB_RETENTION_DAYS),
+    telemetryRetentionDays: positive("KINTSUGI_TELEMETRY_RETENTION_DAYS", 30),
     jobs: { agents, interpreters, defaults: jobDefaults(), concurrency: positive("KINTSUGI_JOB_MAX_CONCURRENCY", 2) },
   });
   console.log(`[worker] git ${gitVersion}, data ${storage.root}, polling every ${pollIntervalSeconds}s; commit identity from the portal (Settings → Git)`);

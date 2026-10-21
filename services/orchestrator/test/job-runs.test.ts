@@ -13,6 +13,7 @@ import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { createChildAgentRuntime } from "@kintsugi/runtime/launcher";
 import { decryptSecret } from "@kintsugi/secrets";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { PgJobStore } from "../src/jobs/store.js";
 import { startWorker } from "../src/worker.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
 import { writingAgentRuntime } from "./support/jobs.js";
@@ -91,6 +92,16 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       expect(steps.rows[0]?.script_hash).toMatch(/^[0-9a-f]{64}$/);
       expect(steps.rows[12]?.agent).toBe("legacy-analyst@1.1.0");
 
+      // Every agent step left the spans of its attempt (ADR-0048), tied to the step and the model it ran with.
+      const spans = await db.pool.query<{ step_run_id: string; name: string; agent: string; provider: string; model: string; attempt: number }>(
+        "select step_run_id, name, agent, provider, model, attempt from monitoring.telemetry_span where job_run_id = $1",
+        [id],
+      );
+      const agentSteps = steps.rows.filter((row) => row.kind === "agent");
+      expect(spans.rows.filter((row) => row.name === "kintsugi.job").map((row) => row.step_run_id).sort()).toEqual(agentSteps.map((row) => row.id).sort());
+      expect(spans.rows.every((row) => row.provider === "mock" && row.model === "mock" && row.attempt === 1 && row.agent.includes("@"))).toBe(true);
+      expect(spans.rows.some((row) => row.name === "kintsugi.turn")).toBe(true);
+
       const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
       expect(artifacts.rows.map((row) => [row.path, row.provenance.origin])).toEqual([
         ["applications/web/assessment/ARCHITECTURE.mmd", "tool"],
@@ -154,4 +165,23 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       await worker.stop();
     }
   }, 120_000);
+
+  it("prunes spans older than the retention period and keeps the recent ones", async () => {
+    const store = new PgJobStore(db.pool);
+    const id = randomUUID();
+    await db.pool.query("insert into workflow.job_run (id, project_id, application_id, kind, name) values ($1, 'demo', 'web', 'agent', 'legacy-analyst')", [id]);
+    const span = (name: string, startedAt: string) => ({
+      runId: id,
+      projectId: "demo",
+      agent: "legacy-analyst@1.1.0",
+      provider: "mock",
+      model: "mock",
+      attempt: 1,
+      span: { id: name, name: "kintsugi.job", startedAt, durationMs: 5, status: "ok" as const, attributes: { turns: 1 } },
+    });
+    await store.addSpans([span("old", new Date(Date.now() - 40 * 86_400_000).toISOString()), span("recent", new Date().toISOString())]);
+    expect(await store.pruneTelemetry(30)).toBeGreaterThanOrEqual(1);
+    const left = await db.pool.query<{ span_id: string }>("select span_id from monitoring.telemetry_span where job_run_id = $1", [id]);
+    expect(left.rows.map((row) => row.span_id)).toEqual(["recent"]);
+  });
 });
