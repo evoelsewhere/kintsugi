@@ -66,6 +66,7 @@ export function GovernancePage(): React.JSX.Element {
               next.set("tab", id);
               next.delete("run");
               next.delete("status");
+              for (const key of ["window", "project", "agent", "show", "trace", "step", "attempt"]) next.delete(key);
               return next;
             },
             { replace: true },

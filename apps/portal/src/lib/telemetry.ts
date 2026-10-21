@@ -208,3 +208,159 @@ export function spanDetail(span: TraceSpan): string {
   if (span.status === "error" && span.error !== null) parts.push(span.error);
   return parts.join(" · ");
 }
+
+// ---------------------------------------------------------------------------
+// What needs attention, the attempts filter and the context-window chart of a trace.
+
+export type RunFilter = "all" | "failed" | "overflow" | "compacted" | "retried";
+
+export const RUN_FILTERS: ReadonlyArray<{ id: RunFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "failed", label: "Failed" },
+  { id: "overflow", label: "Ran out of context" },
+  { id: "compacted", label: "Compacted" },
+  { id: "retried", label: "Retried" },
+];
+
+type RunLike = { status: "ok" | "error"; outcome: string; compactions: number; attempt: number };
+
+export function matchesRunFilter(run: RunLike, filter: RunFilter): boolean {
+  switch (filter) {
+    case "failed":
+      return run.status === "error";
+    case "overflow":
+      return run.outcome === "context-overflow";
+    case "compacted":
+      return run.compactions > 0;
+    case "retried":
+      return run.attempt > 1;
+    default:
+      return true;
+  }
+}
+
+export const isRunFilter = (value: string | null): value is RunFilter => RUN_FILTERS.some((entry) => entry.id === value);
+
+/** The key of one attempt in a list and in a link. */
+export const runKey = (run: { runId: string; stepRunId: string | null; attempt: number }): string => `${run.runId}/${run.stepRunId ?? ""}/${run.attempt}`;
+
+export interface Attention {
+  id: string;
+  tone: "red" | "orange";
+  title: string;
+  detail: string;
+  /** What the "Show" action sets: the attempts filter, and/or an agent. */
+  show?: { filter?: RunFilter; agent?: string };
+}
+
+interface SummaryLike {
+  totals: { jobs: number; failedJobs: number; overflowFailures: number; compactions: number };
+  byAgent: ReadonlyArray<{ key: string; jobs: number; inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }>;
+  tools: ReadonlyArray<{ tool: string; calls: number; errors: number }>;
+}
+
+/** The few things worth a person's attention in a window, most serious first. */
+export function attentionOf(summary: SummaryLike): Attention[] {
+  const items: Attention[] = [];
+  const { totals } = summary;
+  if (totals.overflowFailures > 0) {
+    items.push({
+      id: "overflow",
+      tone: "red",
+      title: `${totals.overflowFailures} job${totals.overflowFailures === 1 ? "" : "s"} ran out of context`,
+      detail: "Compaction could not recover the conversation. Select fewer items per run, or bind the agent to a model with a larger window.",
+      show: { filter: "overflow" },
+    });
+  }
+  const otherFailures = totals.failedJobs - totals.overflowFailures;
+  if (otherFailures > 0) {
+    items.push({ id: "failed", tone: "orange", title: `${otherFailures} job${otherFailures === 1 ? "" : "s"} failed`, detail: "Open an attempt for its trace, and the run's log in Monitoring for the error.", show: { filter: "failed" } });
+  }
+  for (const row of summary.byAgent) {
+    const rate = cacheHitRate(row);
+    if (row.jobs >= 3 && rate !== null && rate < 0.3) {
+      items.push({
+        id: `cache:${row.key}`,
+        tone: "orange",
+        title: `${agentName(row.key)} reads only ${formatRate(rate)} of its prompt from the cache`,
+        detail: "Cache entries last about 5 minutes: if its jobs start minutes apart, set the provider's prompt cache to long (Settings → Providers).",
+        show: { agent: row.key },
+      });
+    }
+  }
+  for (const tool of summary.tools) {
+    if (tool.calls >= 5 && tool.errors / tool.calls >= 0.2) {
+      items.push({ id: `tool:${tool.tool}`, tone: "orange", title: `${tool.tool} fails in ${Math.round((tool.errors / tool.calls) * 100)}% of its calls`, detail: `${tool.errors} of ${tool.calls} calls failed. Check the server, or the allowed tools of an MCP server.` });
+    }
+  }
+  if (totals.jobs >= 5 && totals.compactions / totals.jobs >= 0.5) {
+    items.push({ id: "compacting", tone: "orange", title: "Most jobs compact their conversation", detail: "Each compaction rewrites the prompt prefix, so the next request misses the cache. Fewer items per run keeps jobs inside the window.", show: { filter: "compacted" } });
+  }
+  return items.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1));
+}
+
+export interface ContextPoint {
+  /** Milliseconds from the start of the trace, at the end of the turn. */
+  offsetMs: number;
+  turn: number;
+  percent: number;
+}
+
+export interface ContextMarker {
+  offsetMs: number;
+  reason: string;
+  tokensBefore?: number;
+  tokensAfter?: number;
+}
+
+/** How full the context window was after each turn, and where compactions happened: the data of the context chart. */
+export function contextSeries(spans: readonly TraceSpan[]): { points: ContextPoint[]; markers: ContextMarker[]; totalMs: number } {
+  if (spans.length === 0) return { points: [], markers: [], totalMs: 0 };
+  const start = Math.min(...spans.map((span) => Date.parse(span.startedAt)));
+  const totalMs = Math.max(1, ...spans.map((span) => Date.parse(span.startedAt) - start + span.durationMs));
+  const points: ContextPoint[] = [];
+  const markers: ContextMarker[] = [];
+  for (const span of spans) {
+    const offsetMs = Date.parse(span.startedAt) - start;
+    const attributes = span.attributes;
+    if (span.name === "kintsugi.turn" && typeof attributes["contextPercent"] === "number") {
+      points.push({ offsetMs: offsetMs + span.durationMs, turn: typeof attributes["turn"] === "number" ? attributes["turn"] : points.length + 1, percent: attributes["contextPercent"] });
+    } else if (span.name === "kintsugi.compaction") {
+      markers.push({
+        offsetMs,
+        reason: typeof attributes["reason"] === "string" ? attributes["reason"] : "?",
+        ...(typeof attributes["tokensBefore"] === "number" ? { tokensBefore: attributes["tokensBefore"] } : {}),
+        ...(typeof attributes["tokensAfter"] === "number" ? { tokensAfter: attributes["tokensAfter"] } : {}),
+      });
+    }
+  }
+  points.sort((a, b) => a.offsetMs - b.offsetMs);
+  return { points, markers, totalMs };
+}
+
+/** The spans that failed and every span above them, so a failure can be read in its place. */
+export function problemKeys(spans: readonly TraceSpan[]): Set<string> {
+  const byId = new Map(spans.map((span) => [span.spanId, span]));
+  const keep = new Set<string>();
+  for (const span of spans) {
+    if (span.status !== "error") continue;
+    let current: TraceSpan | undefined = span;
+    while (current !== undefined && !keep.has(current.spanId)) {
+      keep.add(current.spanId);
+      current = current.parentSpanId === null ? undefined : byId.get(current.parentSpanId);
+    }
+  }
+  return keep;
+}
+
+/** The attempt a link names: a run id, optionally narrowed by step and attempt; the first match when it names none. */
+export function pickRun<T extends { runId: string; stepRunId: string | null; attempt: number }>(runs: readonly T[], target: { runId: string; step?: string | null; attempt?: number | null }): T | undefined {
+  return runs.find(
+    (run) => run.runId === target.runId && (target.step == null || (run.stepRunId ?? "") === target.step) && (target.attempt == null || run.attempt === target.attempt),
+  );
+}
+
+/** An attribute value as a table cell shows it. */
+export function formatAttribute(value: string | number | boolean): string {
+  return typeof value === "number" ? value.toLocaleString("en-US", { maximumFractionDigits: 4 }) : String(value);
+}

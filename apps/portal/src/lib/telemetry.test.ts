@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 import type { TelemetryDay, TraceSpan } from "./api/telemetry";
-import { agentName, buildTrace, sumUsage, cacheHitRate, fillDays, flattenTrace, formatCost, formatMillis, formatRate, formatTokens, spanDetail, spanLabel, windowRange } from "./telemetry";
+import {
+  agentName,
+  attentionOf,
+  buildTrace,
+  cacheHitRate,
+  contextSeries,
+  fillDays,
+  flattenTrace,
+  formatAttribute,
+  formatCost,
+  formatMillis,
+  formatRate,
+  formatTokens,
+  isRunFilter,
+  matchesRunFilter,
+  pickRun,
+  problemKeys,
+  runKey,
+  spanDetail,
+  spanLabel,
+  sumUsage,
+  windowRange,
+} from "./telemetry";
 
 const span = (over: Partial<TraceSpan> & Pick<TraceSpan, "spanId" | "name">): TraceSpan => ({
   step: "s1",
@@ -126,5 +148,113 @@ describe("sumUsage", () => {
 
   it("is undefined when no step has usage", () => {
     expect(sumUsage([{ outputSummary: { files: 1 } }, {}])).toBeUndefined();
+  });
+});
+
+describe("attempt filters", () => {
+  const ok = { status: "ok" as const, outcome: "completed", compactions: 0, attempt: 1 };
+  it("matches each filter on the fields of an attempt", () => {
+    expect(matchesRunFilter(ok, "all")).toBe(true);
+    expect(matchesRunFilter(ok, "failed")).toBe(false);
+    expect(matchesRunFilter({ ...ok, status: "error", outcome: "context-overflow" }, "failed")).toBe(true);
+    expect(matchesRunFilter({ ...ok, status: "error", outcome: "context-overflow" }, "overflow")).toBe(true);
+    expect(matchesRunFilter({ ...ok, compactions: 2 }, "compacted")).toBe(true);
+    expect(matchesRunFilter({ ...ok, attempt: 2 }, "retried")).toBe(true);
+    expect(matchesRunFilter(ok, "retried")).toBe(false);
+  });
+
+  it("recognises a filter named in a link", () => {
+    expect(isRunFilter("failed")).toBe(true);
+    expect(isRunFilter("nope")).toBe(false);
+    expect(isRunFilter(null)).toBe(false);
+  });
+
+  it("builds a stable key and finds the attempt a link names", () => {
+    const runs = [
+      { runId: "r1", stepRunId: "s1", attempt: 1 },
+      { runId: "r1", stepRunId: "s1", attempt: 2 },
+      { runId: "r1", stepRunId: null, attempt: 1 },
+    ];
+    expect(runKey(runs[0]!)).toBe("r1/s1/1");
+    expect(runKey(runs[2]!)).toBe("r1//1");
+    expect(pickRun(runs, { runId: "r1" })).toBe(runs[0]);
+    expect(pickRun(runs, { runId: "r1", step: "s1", attempt: 2 })).toBe(runs[1]);
+    expect(pickRun(runs, { runId: "r1", step: "", attempt: 1 })).toBe(runs[2]);
+    expect(pickRun(runs, { runId: "other" })).toBeUndefined();
+  });
+});
+
+describe("attentionOf", () => {
+  const quiet = { totals: { jobs: 10, failedJobs: 0, overflowFailures: 0, compactions: 0 }, byAgent: [], tools: [] };
+
+  it("says nothing about a healthy window", () => {
+    expect(attentionOf(quiet)).toEqual([]);
+  });
+
+  it("puts a context overflow first and counts the other failures separately", () => {
+    const items = attentionOf({ ...quiet, totals: { ...quiet.totals, failedJobs: 3, overflowFailures: 1 } });
+    expect(items.map((item) => item.id)).toEqual(["overflow", "failed"]);
+    expect(items[0]).toMatchObject({ tone: "red", title: "1 job ran out of context", show: { filter: "overflow" } });
+    expect(items[1]?.title).toBe("2 jobs failed");
+  });
+
+  it("flags an agent that reads little from the cache, but only with enough jobs", () => {
+    const row = { key: "legacy-analyst@1.0.0", jobs: 5, inputTokens: 900, cacheReadTokens: 50, cacheWriteTokens: 50 };
+    const [item] = attentionOf({ ...quiet, byAgent: [row] });
+    expect(item).toMatchObject({ id: "cache:legacy-analyst@1.0.0", show: { agent: "legacy-analyst@1.0.0" } });
+    expect(attentionOf({ ...quiet, byAgent: [{ ...row, jobs: 2 }] })).toEqual([]);
+    expect(attentionOf({ ...quiet, byAgent: [{ ...row, cacheReadTokens: 900 }] })).toEqual([]);
+  });
+
+  it("flags a tool that fails often and jobs that mostly compact", () => {
+    const items = attentionOf({ ...quiet, totals: { ...quiet.totals, compactions: 6 }, tools: [{ tool: "mcp__tracker__search", calls: 10, errors: 3 }, { tool: "read", calls: 100, errors: 1 }] });
+    expect(items.map((item) => item.id)).toEqual(["tool:mcp__tracker__search", "compacting"]);
+  });
+});
+
+describe("contextSeries", () => {
+  const start = "2026-10-21T10:00:00.000Z";
+  const at = (ms: number): string => new Date(Date.parse(start) + ms).toISOString();
+
+  it("reads the window fill after each turn and the compactions between them", () => {
+    const spans = [
+      span({ spanId: "j", name: "kintsugi.job", startedAt: start, durationMs: 9000 }),
+      span({ spanId: "t2", name: "kintsugi.turn", startedAt: at(4000), durationMs: 1000, attributes: { turn: 2, contextPercent: 30 } }),
+      span({ spanId: "t1", name: "kintsugi.turn", startedAt: at(0), durationMs: 2000, attributes: { turn: 1, contextPercent: 70 } }),
+      span({ spanId: "c", name: "kintsugi.compaction", startedAt: at(3000), durationMs: 800, attributes: { reason: "threshold", tokensBefore: 90_000, tokensAfter: 20_000 } }),
+    ];
+    const series = contextSeries(spans);
+    expect(series.totalMs).toBe(9000);
+    expect(series.points).toEqual([
+      { offsetMs: 2000, turn: 1, percent: 70 },
+      { offsetMs: 5000, turn: 2, percent: 30 },
+    ]);
+    expect(series.markers).toEqual([{ offsetMs: 3000, reason: "threshold", tokensBefore: 90_000, tokensAfter: 20_000 }]);
+  });
+
+  it("is empty without spans and skips turns that report no window share", () => {
+    expect(contextSeries([])).toEqual({ points: [], markers: [], totalMs: 0 });
+    expect(contextSeries([span({ spanId: "t", name: "kintsugi.turn", attributes: { turn: 1 } })]).points).toEqual([]);
+  });
+});
+
+describe("problemKeys", () => {
+  it("keeps each failed span with its ancestors", () => {
+    const spans = [
+      span({ spanId: "job", name: "kintsugi.job", status: "error" }),
+      span({ spanId: "turn", name: "kintsugi.turn", parentSpanId: "job" }),
+      span({ spanId: "tool", name: "kintsugi.tool", parentSpanId: "turn", status: "error" }),
+      span({ spanId: "read", name: "kintsugi.tool", parentSpanId: "turn" }),
+    ];
+    expect([...problemKeys(spans)].sort()).toEqual(["job", "tool", "turn"]);
+    expect(problemKeys([span({ spanId: "a", name: "kintsugi.job" })]).size).toBe(0);
+  });
+});
+
+describe("formatAttribute", () => {
+  it("groups big numbers and keeps text as is", () => {
+    expect(formatAttribute(12345.678912)).toBe("12,345.6789");
+    expect(formatAttribute("threshold")).toBe("threshold");
+    expect(formatAttribute(true)).toBe("true");
   });
 });
