@@ -25,7 +25,6 @@ The document repo is read by people in pull requests and by AI agents as context
 | Assessment | What is the estate? | `applications/<app>/assessment/` | `inventory.md`, `topology.md`, the catalog (`catalog/index.md`, `catalog/<module>.md`), `ASSESSMENT.md` |
 | Understanding | What does it do, and what to read next? | `applications/<app>/understanding/plan.md`; per unit `understanding/` | `as-is.md`, `understanding.md`, `rules.md` (an index, one file per rule in `rules/`, [ADR-0046](0046-one-file-per-business-rule.md)), `data-objects.md`, `rules-review.md`, `findings.md`, `topology.md`, `trace.md` |
 | Modernization | What are we building? | `to-be/`, per unit `task.md`, `design/<set>/` | refined by [ADR-0044](0044-design-phase-common-basic-detail.md) and [ADR-0045](0045-design-templates-are-project-data.md) |
-| Verification | Is it equivalent? | per unit `verify/` | later phase: its JSON evidence is not converted yet |
 | Governance | Who decided? | `gates/`, per unit `reviews/` | unchanged |
 
 `units/<module>/<unit>/` is the **Unit aggregate**: `unit.md` is its root and holds its state; each context writes into its own subfolder. `generated/` holds the read models rebuilt after a merge (`BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.md`, `README.md`). `traceability.md` keeps only the totals and a row per unit; the traceability matrix the API serves is built from the units' own documents. The context map and the glossary are in [Document repo contexts](../architecture/concepts/document-repo-contexts.md).
@@ -40,7 +39,6 @@ The document repo is read by people in pull requests and by AI agents as context
 - The understand stage no longer receives the leaf-level topology: a unit's `understanding/topology.md` holds its leaves from the catalog card and its links to other items. The planning stage computes its item graph from the catalog alone, so it needs no source checkout.
 - The portal's Assessment views change with the data: the inventory view lists the hotspots (the 50 most complex files) and the roll-ups, not every file; the map view shows the largest leaves and the edges between domains.
 - `rules-review.md` is a table `Rule | Verdict | Approver | Date`; a person edits it in a pull request, and a verdict whose rule id is not in `rules.md` is still reported as orphaned.
-- The verification context (`verify/`, `VERIFICATION.json`, `cases.json`, `EQUIVALENCE.json`, `test-runs.json`, the baseline and uplift checks of the `modernize` plugin) keeps its JSON until it is redesigned in its own decision; `proof_pack.py` reads the source commit from the front matter of `inventory.md`.
 - Existing document repos need a one-time rerun of `assess` and `understand`; nothing is migrated in place.
 
 ## Alternatives considered

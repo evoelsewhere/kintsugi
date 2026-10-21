@@ -74,22 +74,6 @@ export function applicationGatePath(app: string, gate: string): string {
   return `${applicationGatesDir(app)}/${gate}.md`;
 }
 
-export function applicationCutoverDir(app: string): string {
-  return `${applicationDir(app)}/cutover`;
-}
-
-export function applicationCutoverFilePath(app: string, file: string): string {
-  return `${applicationCutoverDir(app)}/${file}`;
-}
-
-export function applicationOperateDir(app: string): string {
-  return `${applicationDir(app)}/operate`;
-}
-
-export function applicationOperateFilePath(app: string, file: string): string {
-  return `${applicationOperateDir(app)}/${file}`;
-}
-
 // ---------------------------------------------------------------------------
 // Assessment context
 // ---------------------------------------------------------------------------
@@ -390,18 +374,6 @@ export function unitGateReviewPath(app: string, module: string, unit: string, ga
   return `${unitReviewsDir(app, module, unit)}/${gate}.md`;
 }
 
-export function unitVerifyDir(app: string, module: string, unit: string): string {
-  return unitFilePath(app, module, unit, "verify");
-}
-
-export function unitGoldenDir(app: string, module: string, unit: string): string {
-  return `${unitVerifyDir(app, module, unit)}/golden`;
-}
-
-export function unitRunsDir(app: string, module: string, unit: string): string {
-  return `${unitVerifyDir(app, module, unit)}/runs`;
-}
-
 export function unitId(app: string, module: string, unit: string): string {
   return `${app}/${module}/${unit}`;
 }
@@ -409,20 +381,6 @@ export function unitId(app: string, module: string, unit: string): string {
 /** Module-scoped authored notes live beside the module's units. */
 export function transformationNotesPath(app: string, module: string): string {
   return `${unitModuleDir(app, module)}/TRANSFORMATION_NOTES.md`;
-}
-
-/** Application-level verification aggregate; per-unit evidence is under `verify/` (testing context, a later phase). */
-export function verificationReportPath(app: string, extension: "md" | "json" = "md"): string {
-  return generatedFilePath(app, `VERIFICATION.${extension}`);
-}
-
-/** Tokenised helpers for plans that run before the app and unit are known. */
-export function goldenDir(module: string): string {
-  return unitGoldenDir(DOCUMENT_PATH_TOKENS.app, module, DOCUMENT_PATH_TOKENS.unit);
-}
-
-export function runsDir(module: string, runId: string): string {
-  return `${unitRunsDir(DOCUMENT_PATH_TOKENS.app, module, DOCUMENT_PATH_TOKENS.unit)}/${runId}`;
 }
 
 function unitKeyPath(unitKey: string, file: string): string {

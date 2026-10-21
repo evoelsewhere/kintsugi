@@ -20,7 +20,7 @@ export interface GateRequest {
   id: string;
   projectId: string;
   applicationId?: string;
-  /** `G0`–`G6` or a stage gate key such as `stage:assess`. */
+  /** `G0`–`G4` or a stage gate key such as `stage:assess`. */
   gateKey: string;
   title: string;
   /** What the gate is about, e.g. the job run that reached it. */

@@ -23,9 +23,7 @@ import {
   designSetsDir,
   designTemplatePath,
   generatedDir,
-  goldenDir,
   reviewsDir,
-  runsDir,
   scratchCatalogDraftDir,
   scratchInventoryPath,
   scratchTopologyPath,
@@ -55,8 +53,6 @@ import {
   unitTopologyPath,
   unitTracePath,
   unitUnderstandingPath,
-  unitVerifyDir,
-  verificationReportPath,
 } from "../src/document-layout.js";
 
 const APP = DOCUMENT_PATH_TOKENS.app;
@@ -116,7 +112,6 @@ describe("ADR-0042 document-repo layout", () => {
     expect(unitTaskPath("billing", "payroll", "run-period")).toBe(`${base}/task.md`);
     expect(unitDesignDir("billing", "payroll", "run-period")).toBe(`${base}/design`);
     expect(unitGateReviewPath("billing", "payroll", "run-period")).toBe(`${base}/reviews/G4.md`);
-    expect(unitVerifyDir("billing", "payroll", "run-period")).toBe(`${base}/verify`);
   });
 
   it("puts a project's design sets in standards/design and a unit's design in design/<set>/", () => {
@@ -134,12 +129,9 @@ describe("ADR-0042 document-repo layout", () => {
     expect(commonComponentPath("COM-LOG-01")).toBe("architecture/common/COM-LOG-01.md");
   });
 
-  it("keeps the read models and the later-phase helpers where they were", () => {
+  it("keeps the read models and the task-pack helpers where they were", () => {
     expect(generatedDir("billing")).toBe("applications/billing/generated");
     expect(transformationNotesPath("billing", "payroll")).toBe("applications/billing/units/payroll/TRANSFORMATION_NOTES.md");
-    expect(verificationReportPath("billing")).toBe("applications/billing/generated/VERIFICATION.md");
-    expect(goldenDir("payroll")).toBe("applications/{app}/units/payroll/{unit}/verify/golden");
-    expect(runsDir("payroll", "run-01")).toBe("applications/{app}/units/payroll/{unit}/verify/runs/run-01");
     expect(taskPackPath("payroll/run-period")).toBe("applications/{app}/units/payroll/run-period/task.md");
     expect(reviewsDir("payroll/run-period")).toBe("applications/{app}/units/payroll/run-period/reviews");
   });

@@ -19,7 +19,6 @@ One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-sub
 | `design/<set>/<file>` | the unit's design: one folder per design set the project defines, one document per file of the set, from the set's template ([design templates](design-templates.md)) | the member's harness with `/kintsugi:modernize-design`, through a pull request |
 | `task.md` | the P4 task pack (transformation notes) | the `design` job; auto-committed |
 | `reviews/G4.md` | the unit's G4 gate record | the unit's reviewer, through a pull request |
-| `verify/` | P5 golden cases (`golden/`) and run evidence (`runs/<run-id>/`) | the member harness's verification plugin |
 
 Format samples for `unit.md`, `rules.md`, `rules/<rule id>.md`, `rules-review.md`, `trace.md` and `reviews/G4.md` live in `templates/document-repo/applications/billing-web/units/_example.example/`; they teach the formats and are not loaded.
 
@@ -67,7 +66,7 @@ The unit traceability record has the sections `Entry points`, `Rules applied`, `
 |---|---|
 | `Requirements` | the `REQ-…` ids of the requirements this unit implements |
 | `Pull requests` | the pull requests that migrated the unit (e.g. `#42`) |
-| `Tests` | the test evidence paths, under the unit's `verify/` |
+| `Tests` | the paths of the unit's test files in the target repository |
 
 The chain rules → requirements → trace must close: every requirement's `derivedFrom` rules are traced rules of the unit, and every requirement derived from a traced rule is listed under `Requirements`.
 

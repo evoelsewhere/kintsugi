@@ -6,8 +6,8 @@ metadata:
   audience: member
   agents: [test-engineer, architecture-critic]
   reads: [standards/, architecture/common/, applications/<app>/units/<module>/<unit>/design/, applications/<app>/units/<module>/<unit>/understanding/rules-review.md, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/inputs/INTENT.md]
-  writes: [applications/<app>/units/<module>/TRANSFORMATION_NOTES.md, applications/<app>/units/<module>/<unit>/design/, applications/<app>/units/<module>/<unit>/verify/golden/cases/, applications/<app>/units/<module>/<unit>/verify/golden/cases.json, applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/EQUIVALENCE.json]
-  gates: [implementation plan approval, approval of each accepted equivalence difference]
+  writes: [applications/<app>/units/<module>/TRANSFORMATION_NOTES.md, applications/<app>/units/<module>/<unit>/design/]
+  gates: [implementation plan approval]
 ---
 
 Implement unit **`$unit`** (`<module>/<unit>`) of `$app` in **$target_stack**, from its **detail design**, with unit tests that pin what
@@ -21,11 +21,9 @@ to the target repository: the unit's `design/` folder (the contract), its `under
 hooks refuse writes to it). Before you start, say in one line which source commit you read: the one the assessment recorded for `$app`
 (`sourceCommit` in `applications/$app/assessment/inventory.md`, and in the portal); check out exactly that commit. If you have no clone
 of the legacy repository, stop and say so: nothing can run without the code, and the fix is to clone the repositories the portal lists
-for `$app`. What you write in the document repository (`TRANSFORMATION_NOTES.md`, design corrections, the golden cases and the comparison
-report) goes on your own branch of the document repository and reaches the project through a pull request. The new side's raw outputs
-are never committed: keep them in a scratch folder outside the checkouts. Run every subagent in the foreground and wait for its result:
-never end your turn while one is still running. Stop any server or other process you started (a legacy app on a local port, a watcher)
-before you finish, and say you did. **If `$target_stack` is empty**, use the stack named in `architecture/blueprint.md` for the unit's
+for `$app`. What you write in the document repository (`TRANSFORMATION_NOTES.md` and design corrections) goes on your own branch of the document repository and reaches the project through a
+pull request. Run every subagent in the foreground and wait for its result: never end your turn while one is still running. Stop any
+server or other process you started (a watcher) before you finish, and say you did. **If `$target_stack` is empty**, use the stack named in `architecture/blueprint.md` for the unit's
 component (with none, the target in `applications/$app/inputs/INTENT.md`). Say which you picked.
 
 ## Step 0 — The design is ready; the toolchain responds; the plan (human gate)
@@ -37,17 +35,6 @@ portal; if it is not, say so and stop.
 
 **Target stack (required).** The runtime, package manager and test framework must respond (`java -version` and `mvn -v`, `node -v` and
 `npm -v`, `python3 -V` and `pytest --version`). If not, stop and say what to install: a plan gate now would only defer the failure an hour.
-
-**Legacy stack (advisory, never a blocker).** Try a syntax-only compile of the unit's source, from a scratch copy of the source clone
-(never build inside it). Legacy code often cannot build locally by nature. If it cannot, dual execution is off the table: the
-tests assert against **recorded traces and golden-master fixtures** (real production outputs, captured reports, SME-confirmed
-examples). Say so in the plan and in `TRANSFORMATION_NOTES.md` ("equivalence is trace-based; legacy was not executable here").
-
-**Run the old system only where it is safe.** Record baselines from the legacy code running on this machine, or against a test
-environment the person named. Never call a production or third-party service, register an account, or send or change real data to
-record a baseline unless the plan approved at the gate names that exact target (say which calls, and which of them write). A token,
-password or session cookie in a recorded response is a secret: replace it with a fixed fake value before anything is saved, and never
-print it.
 
 Read the detail design, the unit's rules and any verdicts on them in `applications/$app/units/<module>/<unit>/understanding/rules-review.md`
 (human-owned): a rule marked `refuted` is not pinned (use the reviewer's note for what is right), and a P0 rule marked `clarify` is a
@@ -81,37 +68,22 @@ a short comment.
 While iterating, run only this unit's tests; run the whole suite once before Step 4.
 
 1. **Run the tests** (the stack's test command in the unit's folder) and show the output. Fix and rerun until green.
-2. **Count what ran.** Report `tests executed: N`. A run that executed **zero** tests proved nothing, and a comparison test must **fail,
-   never skip,** when its oracle or fixture is missing: a suite that is green because everything skipped is not green.
+2. **Count what ran.** Report `tests executed: N`. A run that executed **zero** tests proved nothing, and a test must **fail, never skip,**
+   when a fixture it needs is missing: a suite that is green because everything skipped is not green.
 3. **Design and code agree.** The design is the contract, so if the code had to differ (the design was wrong or incomplete), correct the
    detail design in the same document repo pull request, run `python3 scripts/check_design.py $app $unit` again, and list each
    correction in the pull request and in `TRANSFORMATION_NOTES.md`. Never leave the two disagreeing.
 
-## Step 4 — Development cases, when the legacy can run here
-
-When the legacy code can run here (built and run from a scratch copy of the source clone, never inside it), run both systems on the same
-inputs: save each input and its legacy output under `applications/$app/units/<module>/<unit>/verify/golden/cases/<id>/` and each new
-output in your scratch folder, list the pairs in `applications/$app/units/<module>/<unit>/verify/golden/cases.json` (legacy paths
-relative to `.../verify/golden/`, new paths relative to the scratch folder; the schema is at the top of `scripts/compare.py`), and run,
-from the root of the document repo checkout,
-`python3 scripts/compare.py $app --source <source clone> --assessment applications/$app/assessment --target <target checkout> --cases applications/$app/units/<module>/<unit>/verify/golden/cases.json --runs <scratch folder> --out applications/$app/units/<module>/<unit>/verify/runs/<run-id>`
-(`<run-id>` is `<YYYYMMDD-HHMM>-<short target commit>`), which writes `EQUIVALENCE.json`. That script, not your judgment, decides same or
-different. Mask only fields that legitimately vary (timestamps, generated ids) and say what each mask hides. A difference you accept is
-recorded with a reason in the case's `approvedDifference`, and only a person accepts it, at a gate in the portal: list the difference
-for approval, never write the `approvedDifference` yourself. Floating-point numbers that another compiler or math library prints slightly
-differently are not a mask: give that case a `tolerance` (`rel` or `abs`, and a `why`).
-
-## Step 5 — Notes and a side-by-side
+## Step 4 — Notes and a side-by-side
 
 Write `applications/$app/units/<module>/TRANSFORMATION_NOTES.md`: the target repository, branch and commit it describes; a mapping table
 (legacy file:lines at the recorded source commit to target file:lines, per behavior); deliberate deviations from the legacy with
 rationale and the corrections made to the design; what was NOT migrated (dead code, unreachable branches) and why; the executed-test
 count; follow-ups for the next dependent unit. Show one representative behavior side by side
 (`diff -y --width=160 <(sed -n '<lines>p' <legacy file>) <target file>`). Never pick a credential-bearing range, and mask any
-credential-like literal in the notes: they are committed to the document repository. This is your own evidence:
-`/kintsugi:modernize-verify $app <module>` is the independent re-check.
+credential-like literal in the notes: they are committed to the document repository.
 
-## Step 6 — Architecture review
+## Step 5 — Architecture review
 
 Kintsugi's review stage runs the **architecture-critic** server-side on your pushed branch: if its record for this commit is in
 `reviews/` of the document repository, reuse it; otherwise spawn the **architecture-critic** subagent here to review the code against

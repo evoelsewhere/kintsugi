@@ -2,16 +2,13 @@
 // Source of truth for the concepts described in docs/methodology/delivery-pipeline.md
 // and docs/reference/data-model.md.
 
-/** Pipeline phases P0–P7. */
+/** Pipeline phases P0–P4. */
 export const PHASES = [
   "mobilize",
   "discover-assess",
   "define-to-be",
   "prepare-factory",
   "migrate",
-  "verify",
-  "cutover",
-  "hypercare-operate",
 ] as const;
 export type Phase = (typeof PHASES)[number];
 
@@ -183,17 +180,17 @@ export interface Provenance {
   reviewedBy?: string;
 }
 
-/** Quality gates G0–G6 plus per-work-item gates. */
-export type GateId = "G0" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6";
+/** Quality gates G0–G4 plus per-work-item gates. */
+export type GateId = "G0" | "G1" | "G2" | "G3" | "G4";
 
 /** The pipeline gates, in order (docs/methodology/delivery-pipeline.md). */
-export const GATE_IDS: readonly GateId[] = ["G0", "G1", "G2", "G3", "G4", "G5", "G6"];
+export const GATE_IDS: readonly GateId[] = ["G0", "G1", "G2", "G3", "G4"];
 
 /**
- * A gate key: a pipeline gate (G0–G6) or a stage gate such as `stage:assess` — lowercase,
+ * A gate key: a pipeline gate (G0–G4) or a stage gate such as `stage:assess` — lowercase,
  * starting with a letter or digit, up to 100 characters.
  */
-export const GATE_KEY_PATTERN = /^(G[0-6]|[a-z0-9][a-z0-9:._-]{0,99})$/;
+export const GATE_KEY_PATTERN = /^(G[0-4]|[a-z0-9][a-z0-9:._-]{0,99})$/;
 
 /** The state of a persisted gate: waiting for a decision, or decided. */
 export type GateStatus = "pending" | "approved" | "rejected" | "waived";

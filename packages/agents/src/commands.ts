@@ -47,7 +47,6 @@ export const COMMAND_ORDER: readonly string[] = [
   "scaffold",
   "design",
   "implement",
-  "verify",
 ];
 
 const PREFIX = "modernize-";

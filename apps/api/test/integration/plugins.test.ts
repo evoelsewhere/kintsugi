@@ -46,7 +46,7 @@ describe.skipIf(!hasDatabase)("plugins (integration)", () => {
     const file = await admin.get<{ path: string; content: string }>("/admin/plugins/reverse_engineering/file?path=agents/legacy-analyst.md");
     expect(file.status).toBe(200);
     expect(file.body.data!.content).toContain("name: legacy-analyst");
-    expect((await admin.get("/admin/plugins/reverse_engineering/file?path=commands/modernize-verify.md")).status).toBe(404);
+    expect((await admin.get("/admin/plugins/reverse_engineering/file?path=commands/modernize-design.md")).status).toBe(404);
     expect((await admin.get("/admin/plugins/missing")).status).toBe(404);
   });
 });

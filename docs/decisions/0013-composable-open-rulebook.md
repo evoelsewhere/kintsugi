@@ -33,7 +33,7 @@ The full structure was in the rulebook reference page, removed with ADR-0028.
    - Applications select packs in `kintsugi.yaml`; `defaults.packs` apply to all applications.
    - **Precedence**, lowest to highest: vendored (`extends`) → local packs, in listed order → `overrides/<application>/` → `overrides/<application>/<module>/`.
    - **Merging**: files merge by rule ID. A later layer replaces an entry with the same ID; everything else is additive.
-2. **Open capabilities.** Kintsugi defines well-known capabilities: `understand`, `conventions`, `mapping`, `convert`, `review`, `compare`, `cutover`. Rulebooks may declare custom ones. Which capabilities a stage needs is declared by the pipeline, not in code.
+2. **Open capabilities.** Kintsugi defines well-known capabilities: `understand`, `conventions`, `mapping`, `convert`, `review`, `compare`. Rulebooks may declare custom ones. Which capabilities a stage needs is declared by the pipeline, not in code.
 3. **Declarative pipelines.**
    - `pipelines/*.yaml` define phases, stages, performers (runtime agent, member role, runner), required capabilities and gates.
    - Custom phases map to a built-in phase category for reporting.

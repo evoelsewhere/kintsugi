@@ -14,14 +14,11 @@ import { TemplatesModule } from "./modules/admin/templates/templates.module.js";
 import { UsersModule } from "./modules/admin/users/users.module.js";
 import { AuthModule } from "./modules/core/auth/auth.module.js";
 import { ArchitectureViewsModule } from "./modules/delivery/architecture/architecture-views.module.js";
-import { CutoverChecklistsModule } from "./modules/delivery/cutover/cutover-checklists.module.js";
 import { FactorySetupsModule } from "./modules/delivery/factory/factory-setups.module.js";
-import { IncidentsModule } from "./modules/delivery/hypercare/incidents.module.js";
 import { CatalogModule } from "./modules/delivery/catalog/catalog.module.js";
 import { DesignModule } from "./modules/delivery/design/design.module.js";
 import { DocumentsModule } from "./modules/delivery/documents/documents.module.js";
 import { RuntimeJobsModule } from "./modules/delivery/runtime-jobs/runtime-jobs.module.js";
-import { VerificationRunsModule } from "./modules/delivery/verification/verification-runs.module.js";
 import { WorkItemsModule } from "./modules/delivery/workbench/work-items.module.js";
 import { AiMetricsModule } from "./modules/monitoring/ai-metrics/ai-metrics.module.js";
 import { CostEntriesModule } from "./modules/monitoring/cost/cost-entries.module.js";
@@ -70,9 +67,6 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     ArchitectureViewsModule,
     FactorySetupsModule,
     WorkItemsModule,
-    VerificationRunsModule,
-    CutoverChecklistsModule,
-    IncidentsModule,
     // monitoring
     OverviewModule,
     PortfolioOverviewModule,

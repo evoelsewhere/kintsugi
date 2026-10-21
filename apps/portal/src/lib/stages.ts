@@ -29,7 +29,6 @@ const STAGE_LABELS: Record<string, string> = {
   scaffold: "Skeleton",
   design: "Unit Design",
   implement: "Implementation",
-  verify: "Behavior Verification",
 };
 
 /** The name a person reads for a stage (sidebar, overview, stage header); the id stays the stable key. */

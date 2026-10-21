@@ -17,7 +17,7 @@ Decision: [ADR-0007](../../decisions/0007-git-as-source-of-truth.md).
 |---|---|---|
 | **Legacy repo** (many per application) | Legacy source code | Nobody through Kintsugi: always read-only |
 | **Target repo** (scaffolded target base) | New source code | Members, via branches/PRs |
-| **Document repo** (one per project) | Everything except code: project manifest, assessment, ADRs, AS-IS/TO-BE docs, **standards**, plugins, units, task packs, reviews, deliverables, golden cases | Members + Kintsugi (worker) |
+| **Document repo** (one per project) | Everything except code: project manifest, assessment, ADRs, AS-IS/TO-BE docs, **standards**, plugins, units, task packs, reviews, deliverables | Members + Kintsugi (worker) |
 
 Layout and conventions: [document repository reference](../../reference/document-repo.md).
 

@@ -9,7 +9,7 @@
 | **Design set** | A group of design documents written together for a unit (for example the basic design and the detail design), defined by the project as templates with checks in `standards/design/<set>/` ([design templates](design-templates.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md)) |
 | **Digital worker** | An AI work profile such as reverse design, code generation or unit-test generation. In Kintsugi it is an agent plugin plus a task-pack template, run in a member's harness, with runtime agents preparing and reviewing the work |
 | **Foundation team** | The project role that designs what every unit shares (the architecture, the common components, the skeleton) before the units are designed; a name in the pipeline, not a kind of actor |
-| **Gate** | Quality / approval checkpoint: G0–G6 per phase, plus per-unit gates |
+| **Gate** | Quality / approval checkpoint: G0–G4 per phase, plus per-unit gates |
 | **Harness** | An environment that runs an AI agent (pi, Claude Code, GitHub Copilot, Codex…) |
 | **Installation** | One self-hosted Kintsugi instance (Docker Compose), serving one organization |
 | **Kintsugi Runtime** | Kintsugi's agent environment, built on pi; runs in the worker, one job workspace per job |

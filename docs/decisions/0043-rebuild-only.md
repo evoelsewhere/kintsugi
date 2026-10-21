@@ -13,7 +13,7 @@ The product today covers the reverse engineering of the as-is system (the `asses
 ## Decision
 
 1. **Every application is rebuilt.** An application has no disposition: not in `kintsugi.yaml`, not in the database (`admin.application`), not in the API or the portal, not in the shared vocabulary of `packages/domain`.
-2. **One pipeline.** The delivery pipeline is P0–P7 for a rebuild. A project that needs another shape declares its own under `pipelines:` and names it on an application with `pipeline:`; a pipeline no longer has an `appliesTo`.
+2. **One pipeline.** The delivery pipeline is P0–P4 for a rebuild. A project that needs another shape declares its own under `pipelines:` and names it on an application with `pipeline:`; a pipeline no longer has an `appliesTo`.
 3. **The scorecard ranks, it does not choose.** Its weighted total maps to a rebuild priority (`scorecardPriority`), used for the wave plan.
 4. **The assessment states a rebuild outlook** instead of recommending a strategy: what makes the application easy or hard to rebuild, what to understand first, the main risks.
 5. **Scope.** Documentation and code describe what exists: reverse engineering. Later phases are marked as planned.

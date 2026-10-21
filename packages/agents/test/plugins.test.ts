@@ -25,13 +25,12 @@ describe("built-in plugins", () => {
       "scaffold",
       "design",
       "implement",
-      "verify",
     ]);
   });
 
   it("covers every agent, command and workflow exactly once", async () => {
     const plugins = await loadBuiltinPlugins();
-    for (const [kind, count] of [["agent", 8], ["command", 8], ["workflow", 4]] as const) {
+    for (const [kind, count] of [["agent", 8], ["command", 7], ["workflow", 4]] as const) {
       const all = plugins.flatMap((plugin) => plugin.components.filter((component) => component.kind === kind).map((component) => component.path));
       expect(all.length, kind).toBe(count);
       expect(new Set(all).size, kind).toBe(count);
@@ -55,9 +54,9 @@ describe("built-in plugins", () => {
     const plugins = await loadBuiltinPlugins();
     expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "1.0.0" });
     expect(JSON.parse((await readBuiltinPluginFile(plugins, "modernize", "kintsugi.json"))!)).toMatchObject({ audience: "member", requires: ["reverse_engineering"] });
-    expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/modernize-verify.md")).toBeUndefined();
+    expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/modernize-design.md")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "../package.json")).toBeUndefined();
-    expect(await readBuiltinPluginFile(plugins, "modernize", "commands/modernize-verify.md")).toContain("verify");
+    expect(await readBuiltinPluginFile(plugins, "modernize", "commands/modernize-design.md")).toContain("design");
   });
 });
 
@@ -83,7 +82,7 @@ describe("plugin flows", () => {
     // The plan reads what assess wrote and which items understand has finished (their understanding.md); nothing else.
     expect(understand!.pipeline.find((link) => link.to === "plan-understand" && link.from === "understand")?.via).toEqual(["applications/<app>/units/<module>/<unit>/understanding/understanding.md"]);
     expect(modernize!.pipeline.map((link) => `${link.from}>${link.to}`)).toContain("design-architecture>scaffold");
-    expect(modernize!.flows.map((entry) => entry.command)).toEqual(["design-architecture", "scaffold", "design", "implement", "verify"]);
+    expect(modernize!.flows.map((entry) => entry.command)).toEqual(["design-architecture", "scaffold", "design", "implement"]);
     // The design command runs the design-set scripts, in the order its text names them.
     const design = flow(modernize, "design");
     expect(design.steps.filter((step) => step.kind === "script").map((step) => step.name)).toEqual(["validate_design_templates", "scaffold_design", "check_design"]);

@@ -148,6 +148,6 @@ Person (gates.decide)  ─► POST …/:id/decision {approve|reject|waive, note}
 Stage plan (worker)    ─► waitForGate() polls the row ─► acts on the decision
 ```
 
-1. A gate is opened for a project (optionally an application) and a key: a pipeline gate `G0`–`G6` or a stage gate `stage:<id>`, with what it is about (for example the job run that reached it). While it is pending, asking again returns the open gate, so the worker can request it idempotently ([gates](../reference/data-model.md#gates)).
+1. A gate is opened for a project (optionally an application) and a key: a pipeline gate `G0`–`G4` or a stage gate `stage:<id>`, with what it is about (for example the job run that reached it). While it is pending, asking again returns the open gate, so the worker can request it idempotently ([gates](../reference/data-model.md#gates)).
 2. Pending gates show on the overview and in Governance → Gates. A holder of `gates.decide` approves, rejects or waives the gate; rejecting or waiving needs a note. The decision is final and audited.
 3. The worker's helpers (`services/orchestrator/src/gates.ts`) use the database only: a stage plan requests the gate, polls its state and acts on the decision. Asking again after a decision opens a new gate; the rows of one key are its history.
