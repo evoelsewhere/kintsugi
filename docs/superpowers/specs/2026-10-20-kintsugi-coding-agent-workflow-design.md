@@ -189,7 +189,7 @@ kintsugi document search --snapshot <id> --query "rounding"
 kintsugi review list --task billing/invoices/tax
 kintsugi review get <review-id> --json
 kintsugi task watch billing/invoices/tax
-kintsugi plugins setup --client claude
+kintsugi plugins setup --harness claude-code
 kintsugi doctor
 kintsugi mcp serve --profile work
 ```
