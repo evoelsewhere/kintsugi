@@ -482,6 +482,7 @@ function mapCheckRun(value: unknown): ObservedCheckRun {
   const appId = (typeof app["id"] === "number" || typeof app["id"] === "string") ? String(app["id"]) : undefined;
   const appSlug = typeof app["slug"] === "string" ? app["slug"] : undefined;
   const conclusion = typeof run["conclusion"] === "string" ? run["conclusion"] : undefined;
+  const startedAt = optionalTimestamp(run["started_at"], "check_run.started_at");
   const completedAt = optionalTimestamp(run["completed_at"], "check_run.completed_at");
   return {
     id,
@@ -489,6 +490,7 @@ function mapCheckRun(value: unknown): ObservedCheckRun {
     ...(appId === undefined ? {} : { appId }),
     ...(appSlug === undefined ? {} : { appSlug }),
     headSha: requiredSha(run["head_sha"], "check_run.head_sha"),
+    ...(startedAt === undefined ? {} : { startedAt }),
     status: requiredString(run["status"], "check_run.status"),
     ...(conclusion === undefined ? {} : { conclusion }),
     ...(completedAt === undefined ? {} : { completedAt }),

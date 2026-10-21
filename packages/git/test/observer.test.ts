@@ -128,7 +128,7 @@ describe("GitHub pull-request observation", () => {
       },
       {
         status: 200,
-        body: { total_count: 1, check_runs: [{ id: 61, name: "ci", app: { id: 91, slug: "ci-bot" }, head_sha: REVIEWED_SHA, status: "completed", conclusion: "success", completed_at: "2026-10-21T10:42:00Z" }] },
+        body: { total_count: 1, check_runs: [{ id: 61, name: "ci", app: { id: 91, slug: "ci-bot" }, head_sha: REVIEWED_SHA, status: "completed", conclusion: "success", started_at: "2026-10-21T10:41:00Z", completed_at: "2026-10-21T10:42:00Z" }] },
       },
     ]);
     const observer = new GitHubPullRequestObserver({ credentials: resolver(), fetch: fetch.fetch });
@@ -143,7 +143,7 @@ describe("GitHub pull-request observation", () => {
 
     expect(result).toMatchObject({ state: "merged", mergeCommitSha: FINAL_MERGE_SHA, mergedAt: "2026-10-21T10:45:00Z" });
     expect(result.reviews).toEqual([{ id: "51", actorId: "77", actorLogin: "reviewer", state: "APPROVED", commitSha: REVIEWED_SHA, submittedAt: "2026-10-21T10:40:00Z" }]);
-    expect(result.checks).toEqual([{ id: "61", name: "ci", appId: "91", appSlug: "ci-bot", headSha: REVIEWED_SHA, status: "completed", conclusion: "success", completedAt: "2026-10-21T10:42:00Z" }]);
+    expect(result.checks).toEqual([{ id: "61", name: "ci", appId: "91", appSlug: "ci-bot", headSha: REVIEWED_SHA, startedAt: "2026-10-21T10:41:00Z", status: "completed", conclusion: "success", completedAt: "2026-10-21T10:42:00Z" }]);
     expect(fetch.calls[2]?.url).toContain(`/commits/${HEAD_SHA}/check-runs`);
     expect(fetch.calls.every((call) => call.init?.redirect === "error")).toBe(true);
   });

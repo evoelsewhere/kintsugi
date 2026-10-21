@@ -41,6 +41,8 @@ export interface ObservedCheckRun {
   appSlug?: string;
   /** The commit the provider says this run evaluated. Keep mismatches intact for policy evaluation. */
   headSha: string;
+  /** GitHub supplies started_at rather than a check-run run_attempt number. */
+  startedAt?: string;
   status: string;
   conclusion?: string;
   completedAt?: string;

@@ -8,6 +8,6 @@ export function registerMcpCommands(program: Command, deps: CliDeps): void {
     .description("Start a read-only local stdio MCP bridge")
     .action(async function(this: Command) {
       const { client } = await apiForMcp(deps, this);
-      await deps.serveMcp(client, { reviews: false });
+      await deps.serveMcp(client, { reviews: true });
     });
 }

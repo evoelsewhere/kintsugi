@@ -67,9 +67,10 @@ export function registerTaskCommands(program: Command, deps: CliDeps): void {
     const status = await client.taskStatus({ projectId: projectId(options, profile.projectId), unitId: splitUnit(options.task) });
     emit(deps, this, status.currentReviewIds.map((reviewId) => ({ reviewId, currentness: "current" })));
   });
-  review.command("get <reviewId>").requiredOption("--project <id>", "Project id").action(async function(this: Command, reviewId: string) {
+  review.command("get <reviewId>").option("--project <id>", "Project id").action(async function(this: Command, reviewId: string) {
     const options = this.optsWithGlobals() as CommandOptions;
-    const { client, profile } = await apiFor(deps, this);
-    emit(deps, this, await client.getReview({ projectId: projectId(options, profile.projectId), reviewId }));
+    const scopedProjectId = projectId(options);
+    const { client } = await apiFor(deps, this);
+    emit(deps, this, await client.getReview({ projectId: scopedProjectId, reviewId }));
   });
 }

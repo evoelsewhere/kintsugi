@@ -272,6 +272,7 @@ export * from "./member-task.js";
 export * from "./member-association.js";
 export * from "./member-task-summary.js";
 export * from "./gate-evidence.js";
+export * from "./review-policy.js";
 export * from "./manifest.js";
 
 // Application and per-unit document-repo paths (ADR-0038), with catalog vocabulary (ADR-0033).
