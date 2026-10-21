@@ -9,6 +9,7 @@ Decision: [ADR-0009](../../decisions/0009-llm-provider-config.md). This covers L
 | **Built-in** | Every provider in the pinned pi-ai catalog, e.g. Anthropic, OpenAI, Azure OpenAI, Amazon Bedrock, Google Gemini / Vertex, Mistral, Groq, Cerebras, xAI, DeepSeek, OpenRouter, Together, Fireworks, Hugging Face, Cloudflare / Vercel gateways. The list is read from the pi catalog, so upgrading pi brings new providers |
 | **Custom** | pi `models.json` shape: `baseUrl`, `api` (wire protocol), auth, headers, `models[]` with limits, cost and compat flags. Covers vLLM, Ollama, LM Studio, LiteLLM and internal gateways |
 | **Model overrides** | pi `modelOverrides` for built-in models (sampling, prompt cache, input limits) |
+| **Prompt cache** | Per provider, `short` (about 5 minutes, renewed by every hit; the default) or `long` (about an hour, written at a higher price). Passed to the job as `PI_CACHE_RETENTION`; the prompt itself is ordered so jobs of one agent share a prefix ([ADR-0048](../../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)) |
 
 ## Binding, allowlist and budget
 

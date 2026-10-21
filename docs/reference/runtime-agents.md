@@ -19,6 +19,7 @@ Contract types: `JobSpec`, `AgentDefinition`, `JobEvent`, `JobHandle`, `AgentRun
 | `workspace.readOnly` | Directories the agent may read; the first one is its working directory |
 | `workspace.outDir` | The only directory the agent may write to |
 | `limits` | `timeoutSec` (required), `maxTurns`, `maxCostUsd` |
+| `mcp` | `{ servers }`: the MCP servers the agent names in `tools` (`name`, `url`, `headers`, `timeoutSec`, `allowedTools`), resolved by the worker with the headers decrypted; they travel on the job child's stdin only |
 | `metadata` | Opaque correlation data (e.g. project id, trigger), echoed on `job.started`; never shown to the agent |
 
 Higher layers (orchestrator) translate their concepts (projects, units, standards) into these fields. The kernel refuses a job before it starts if the agent id, instructions or task is empty, a tool is unknown, a skill name is invalid or duplicated, a deny pattern is not a valid regular expression, a workspace directory is missing, or a limit is invalid.
@@ -30,7 +31,7 @@ Higher layers (orchestrator) translate their concepts (projects, units, standard
 | `id`, `version` | Identify the agent; model bindings name agents by `id` |
 | `instructions` | The system prompt, used verbatim |
 | `skills` | Optional inline skills `{ name, content }` (`name` matches `[a-z][a-z0-9-]*`), appended to the system prompt |
-| `tools` | Optional tool allowlist by name (kernel tools below). Absent = every kernel tool (the built-in agents list none); `[]` = no tools |
+| `tools` | Optional tool allowlist by name (kernel tools below). Absent = every kernel tool, `codemode` included and MCP never (the built-in agents list none); `[]` = no tools; `mcp__<server>__*` (or one tool) names an MCP server the agent may use |
 | `denyCommandPatterns` | Optional regular expressions; a tool call whose `command` input matches is blocked before it runs |
 | `thinking` | Default thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`. pi accepts a subset per model (the portal offers only those, from the provider catalog); a level the model lacks is clamped to the nearest one it has |
 
@@ -42,12 +43,15 @@ Only tools in the agent's allowlist are created; pi registers nothing else.
 |---|---|---|
 | `read`, `ls`, `grep`, `find` | Read, confined to `workspace.readOnly` | File tools on the read-only sources (symlinks resolved); `grep` searches in-process, no `ripgrep` needed |
 | `write`, `edit` | Write, confined to `workspace.outDir` | pi's own tools: create or overwrite an output file, or change one by exact text replacement. A relative path starts at `workspace.outDir`; the read-only roots stay out of reach. The caller decides what happens to the files (the worker commits outputs, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
+| `shell`, `git` | Process tools | One `bash -c` or one `git` command per call in the job's cleared environment, with a timeout and kill-tree; results are cut to 2000 lines or 50 KB ([ADR-0040](../decisions/0040-kernel-shell-and-git-tools.md)) |
+| `codemode` | Scripts over the read tools | The model writes JavaScript that runs in pi's QuickJS sandbox and prints only what it needs. A script may call only `read`, `ls`, `grep`, `find` and read-only MCP tools, runs at most 120 s and returns at most 8,000 tokens ([ADR-0047](../decisions/0047-kernel-extensions-codemode-and-http-mcp.md)) |
+| `mcp__<server>__<tool>` | MCP tools | The tools of an HTTP MCP server an administrator registered (Settings → MCP servers), only for an agent that names the server. A tool runs when its server marks it read-only or the administrator allowed it by name; callable from codemode scripts when the agent has codemode, declared to the model otherwise |
 
 Further tools (for example knowledge-base search) are added to the kernel tool registry by code, with a review of their security boundary.
 
 ## Session lockdown
 
-- No discovery from the checkout or the host: no context files, `.pi/` resources, settings files, packages, `SYSTEM.md`, MCP, codemode or tool search.
+- No discovery from the checkout or the host: no context files, `.pi/` resources, settings files, packages, `SYSTEM.md`, `mcp.json` or tool search. MCP servers come from the JobSpec only (`mcp`, above), over HTTP; codemode and MCP are limited as [ADR-0047](../decisions/0047-kernel-extensions-codemode-and-http-mcp.md) says.
 - Provider, models and credentials are registered in memory, never written to disk.
 - Path confinement and the tool allowlist are the agent's isolation inside the job workspace; there is no OS sandbox ([security](../architecture/concepts/security.md)).
 
@@ -58,13 +62,14 @@ Further tools (for example knowledge-base search) are added to the kernel tool r
 | `job.started` | Runtime version, agent id, `metadata` |
 | `message.delta` | Streamed assistant text |
 | `tool.call` | Tool, input, `allowed` / `blocked` (with reason) |
-| `tool.result` | Success flag, summary |
+| `tool.result` | Success flag, summary, duration |
 | `output` | Path of a file written to `outDir` |
-| `usage` | Model, input/output tokens, cost |
+| `usage` | Model, input and output tokens, cost, cache read and write tokens, turns, compactions and the context peak (% of the window); summaries of compactions included. Cache tokens are not part of the input tokens |
+| `span` | One settled span of the job ([ADR-0048](../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)): `kintsugi.job`, `.turn`, `.tool`, `.codemode`, `.mcp`, `.compaction`, `.retry` with start, duration, status and scalar attributes (counts and names, never content) |
 | `job.completed` | Summary |
 | `job.failed` | `reason` and error message |
 
-`job.failed` reasons: `error` (LLM or kernel error, empty response, output token limit), `timeout` (`timeoutSec` exceeded), `max-turns`, `budget` (`maxCostUsd` exceeded), `aborted`. LLM errors, aborts, timeouts and exceeded limits never end as `job.completed`.
+`job.failed` reasons: `error` (LLM or kernel error, empty response, output token limit), `timeout` (`timeoutSec` exceeded), `max-turns`, `budget` (`maxCostUsd` exceeded, compaction summaries included), `context-overflow` (the conversation outgrew the model's window and compacting did not recover it), `aborted`. LLM errors, aborts, timeouts and exceeded limits never end as `job.completed`.
 
 ## Agent Builder
 

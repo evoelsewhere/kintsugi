@@ -44,10 +44,10 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 
 | Sub-module | Function |
 |---|---|
-| C1 Agent Observability | Runtime job traces (tool calls, tokens, cost, outputs), session replay; normalized member-harness activity |
+| C1 Agent Observability | Runtime job telemetry in Governance → Telemetry: spans per job, turn, tool call (codemode and MCP included), compaction and retry, tokens, cache hit rate and cost ([ADR-0048](../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)); live events and run usage in Monitoring; normalized member-harness activity (planned) |
 | C2 Delivery Dashboard | Progress by phase / wave / work item, burn-down, gate status |
 | C3 AI Metrics | [AI metrics](../methodology/ai-metrics.md) computed from harness activity, artifact provenance and the tracker |
-| C4 Cost & FinOps | Runtime LLM cost by project / agent / model; harness usage and licenses; to-be cloud cost |
+| C4 Cost & FinOps | Runtime LLM cost by project / agent / model (Governance → Telemetry, cache reads and compaction summaries included); harness usage and licenses; to-be cloud cost |
 
 ### D. Governance
 

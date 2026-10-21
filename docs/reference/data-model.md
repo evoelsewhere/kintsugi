@@ -21,7 +21,8 @@ User · AccessRole(core.role/core.user_role) · Permission(core.permission) · S
 LlmProvider(config, secretRef) · LlmModel · AgentModelBinding(agent → provider/model)
 Agent(custom; built-ins from the release) 1─* AgentVersion(package files) · SharedSkill(SKILL.md)   (admin.agent, admin.agent_version, admin.agent_skill)
 KbDocument(repo@commit:path) ─* KbChunk(text, embedding)          (no code graph, ADR-0014)
-Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord · AuditEvent (append-only)
+Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord (the spans of monitoring.telemetry_span) · AuditEvent (append-only)
+McpServer(url, headers as secretRef, allowedTools)  (admin.mcp_server, admin.mcp_secret)
 WorkerHeartbeat(host, pid, version, lastSeenAt, activeJobs, queues)          (workflow.worker_heartbeat)
 ```
 
@@ -107,6 +108,27 @@ Recorded actions (see [security → audit coverage](../architecture/concepts/sec
 | Governance | `gate.request`, `gate.decide`, `restricted.read` |
 
 `detail` names what changed (field names, ids, a gate's decision and note, roles or permissions added and removed), never credential, key or password values. The log is listed with `GET /api/governance/audit` (`?action=a,b&actor&subject&projectId`) and its actions with `GET /api/governance/audit/actions`; both need `audit.read` (added by migration 011, granted to `admin`).
+
+## Telemetry
+
+Spans of runtime agent jobs ([ADR-0048](../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)), migration [`020_telemetry.sql`](../../apps/api/migrations/020_telemetry.sql). Counts, sizes and names only; no prompt, tool argument or output.
+
+| Table | Key | Content |
+|---|---|---|
+| `monitoring.telemetry_span` | `id` (increasing) | `job_run_id` (the top-level run, cascade), `step_run_id` (the agent step), `project_id` (cascade), `application_id`, `agent` (`<agent>@<version>`), `provider`, `model`, `attempt` (a retry or repair run of the step is another attempt), `span_id` and `parent_span_id` (a tree within one attempt), `name` (`kintsugi.job`, `.turn`, `.tool`, `.codemode`, `.mcp`, `.compaction`, `.retry`), `started_at`, `duration_ms`, `status` (`ok`, `error`), `error`, `attributes` (jsonb of scalars: tokens, cost, tool, reason, …) |
+
+Rows are pruned after `KINTSUGI_TELEMETRY_RETENTION_DAYS` (30). Reading needs `telemetry.view` (seeded in migration 002): `GET /api/monitoring/telemetry/summary`, `…/runs` and `…/runs/:runId/trace`.
+
+## MCP servers
+
+The HTTP MCP servers the runtime may give to agents ([ADR-0047](../decisions/0047-kernel-extensions-codemode-and-http-mcp.md)), migration [`021_mcp_servers.sql`](../../apps/api/migrations/021_mcp_servers.sql).
+
+| Table | Key | Content |
+|---|---|---|
+| `admin.mcp_server` | `id` (the server's name in an agent's tools: `mcp__<id>__*`) | `url` (http or https), `description`, `enabled`, `timeout_sec`, `allowed_tools` (name patterns allowed besides the tools the server marks read-only), `headers` (header name → `{ secretId }`), `created_by`, `updated_by`, timestamps |
+| `admin.mcp_secret` | `secret_id` | `server_id` (cascade), `ciphertext`, `iv`, `auth_tag`: a header value encrypted with `KINTSUGI_SECRET_KEY`; never returned |
+
+Permission added by the migration: `mcp.manage` (every route of `/api/admin/mcp-servers`; the `choices` list also for `agents.manage`), granted to `admin`. Audit actions: `mcp-server.create`, `mcp-server.update`, `mcp-server.delete` (host and field names only).
 
 ## Gates
 
