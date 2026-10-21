@@ -38,7 +38,7 @@ export async function apiFor(deps: CliDeps, command: Command): Promise<{ client:
   const fetcher = profile.caFile === undefined ? deps.fetch : await createFetchWithPrivateCa(profile.caFile);
   const clientOptions: CodingAgentWorkflowClientOptions = {
     baseUrl: profile.baseUrl,
-    tokenProvider: async () => token,
+    tokenProvider: options.tokenStdin ? async () => token : async () => await deps.credentials.get(profile.id),
     fetch: fetcher,
     sleep: deps.sleep,
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
@@ -63,4 +63,21 @@ export function emit(deps: CliDeps, command: Command, value: unknown, markdown?:
 export function validateFormat(value: string): OutputFormat {
   if (value === "text" || value === "json" || value === "markdown") return value;
   throw new CliError("INVALID_FORMAT", "Format must be text, json, or markdown");
+}
+
+export async function apiForMcp(deps: CliDeps, command: Command): Promise<{ client: CodingAgentWorkflowPort; profile: NonNullable<Awaited<ReturnType<CliDeps["profiles"]["load"]>>["profiles"][string]> }> {
+  const { profile } = await selectedProfile(deps, command);
+  const options = command.optsWithGlobals() as CommandOptions;
+  if (options.tokenStdin) throw new CliError("MCP_TOKEN_STDIN_UNSUPPORTED", "The MCP bridge uses stdin for protocol messages; authenticate the selected profile with auth login");
+  if (options.project !== undefined) throw new CliError("MCP_PROJECT_SELECTOR_UNSUPPORTED", "MCP calls require explicit projectId arguments; --project is not a connection default");
+  const token = await deps.credentials.get(profile.id);
+  if (token === undefined || token.length === 0) throw new CliError("CREDENTIAL_REQUIRED", "No credential is stored for this profile; run auth login");
+  const fetcher = profile.caFile === undefined ? deps.fetch : await createFetchWithPrivateCa(profile.caFile);
+  return { client: createCodingAgentWorkflowClient({
+    baseUrl: profile.baseUrl,
+    tokenProvider: async () => await deps.credentials.get(profile.id),
+    fetch: fetcher,
+    sleep: deps.sleep,
+    signalProvider: () => AbortSignal.timeout(60_000),
+  }), profile };
 }

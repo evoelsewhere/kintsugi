@@ -1,6 +1,6 @@
 # Harness integration
 
-Status: T00–T07 implement the unreleased context API, shared SDK, typed HTTPS client and read-only CLI/export. The local MCP bridge, generated plugins, streaming and PR continuation remain planned. API and SDK changes must ship together; their strict version-1 schemas are still being finalized before release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
+Status: T00–T08 implement the unreleased context API, shared SDK, typed HTTPS client, read-only CLI/export and local stdio MCP bridge. Generated plugins, streaming and PR continuation remain planned. API and SDK changes must ship together; their strict version-1 schemas are still pre-release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
 
 Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
@@ -42,7 +42,7 @@ Every retry rechecks authorization. A valid historical snapshot remains readable
 
 ## CLI commands and current limits
 
-The implemented CLI commands are read-only except for local sign-in, profile selection and explicit file export. Output can be text, JSON or Markdown. The local MCP bridge and client setup are future work.
+The implemented CLI commands are read-only except for local sign-in, profile selection and explicit file export. Output can be text, JSON or Markdown. `mcp serve` exposes the same typed HTTPS context API through a local stdio process; generated client setup remains future work.
 
 | Command | Purpose |
 |---|---|
@@ -60,7 +60,7 @@ The implemented CLI commands are read-only except for local sign-in, profile sel
 | kintsugi task watch UNIT | Reserved for SSE; currently reports `UNSUPPORTED_CAPABILITY` |
 | kintsugi plugins setup --harness claude-code | Planned for a later plugin-packaging milestone |
 | kintsugi doctor | Check local installation, credential store, network and client capabilities |
-| kintsugi mcp serve --profile NAME | Planned local stdio MCP bridge |
+| kintsugi mcp serve --profile NAME | Start a local stdio bridge using the selected profile and its OS credential |
 
 The executable returns stable JSON when requested, uses stdout for results and stderr for diagnostics, and does not prompt under `--no-input`. Export refuses to overwrite an existing file. A CLI can export text for a chat without tools; it cannot inject a prompt into an arbitrary running AI conversation. Linux uses `secret-tool` with Secret Service; see the [CLI reference](coding-agent-cli.md) for secure-store and private-CA requirements.
 
@@ -75,12 +75,12 @@ The local server exposes these read-only tools when the matching backend capabil
 | task_brief | Explicit project, full unit identity and requested activity |
 | document_get | Explicit project, snapshot ID, registered source ID and section |
 | document_search | Explicit project and snapshot ID with a bounded query |
-| review_get | Explicit project and authorized review ID |
+| review_get | Explicit project and authorized review ID; advertised only when a review reader is available (currently unavailable) |
 | task_status | Explicit project and full unit identity |
 
-Document retrieval calls require the snapshot returned by task_brief. The bridge does not keep an implicit active project or task. If review capability is unavailable, review_get is not advertised. Read-only annotations communicate intent but never replace server authorization.
+The current CLI bridge advertises six tools: `project_list`, `task_list`, `task_brief`, `document_get`, `document_search` and `task_status`. `review_get` is omitted because the current review reader is unavailable. Document retrieval and search require the snapshot returned by `task_brief`; every tool call supplies its project/task selectors, and the bridge keeps no implicit active project or task. Read-only annotations communicate intent but never replace server authorization. The CLI reads its OS credential store before each API request, allowing server-side Project Access revocation to take effect on the next call.
 
-CLI JSON, MCP structured results and cited text use the same validated DTOs. REST keeps Kintsugi's standard response envelope; MCP uses the protocol's native tool results and errors.
+CLI JSON, MCP structured results and cited text use the same validated DTOs. MCP returns both structured data and equivalent JSON text, with stable safe error codes; it does not wrap JSON-RPC in REST response envelopes. Its stdin/stdout carry only protocol messages.
 
 ## Task context and readiness
 

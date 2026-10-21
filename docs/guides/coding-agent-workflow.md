@@ -1,6 +1,6 @@
 # Use a coding agent on a migration task
 
-> Implementation status: the typed client and read-only CLI are implemented in the unreleased workspace. The local MCP connection, client plugins, PR continuation and streaming in later steps remain planned. See the [CLI reference](../reference/coding-agent-cli.md) for the current supported commands and build instructions.
+> Implementation status: the typed client, read-only CLI and local stdio MCP bridge are implemented in the unreleased workspace. Generated client plugins, PR continuation and streaming in later steps remain planned. See the [CLI reference](../reference/coding-agent-cli.md) for the current commands and build instructions.
 
 You work in your chosen AI harness and keep using your existing model subscription. Kintsugi supplies the authorized task and design context, then follows your normal pull request through review and the human gate. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
 

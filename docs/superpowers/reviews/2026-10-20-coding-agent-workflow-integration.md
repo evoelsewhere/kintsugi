@@ -87,6 +87,10 @@ The other repeatable commands are `corepack pnpm exec turbo run build typecheck 
 
 ## Remaining release boundaries
 
-T07–T17 remain planned: typed client and CLI, credential-store/native-client interoperability, local MCP/plugin packaging, provider observations, trusted PR reviews, effective human gates, SSE, portal workflow and required CI/release evidence. The context API and SDK are unreleased and must ship together. Passing this review establishes the implemented foundation's integration evidence, not completion of the full task-to-PR-to-effective-gate journey.
+T09–T17 remain planned: generated client plugins and setup, provider observations, trusted PR reviews, effective human gates, SSE, portal workflow and required CI/release evidence. The context API and SDK are unreleased and must ship together. T07 established the typed client and secure read-only CLI; T08 adds the local stdio MCP bridge. These milestones do not complete the full task-to-PR-to-effective-gate journey.
 
 Docker/Linux deployment, real GitHub/GitHub Enterprise observations, model-driven reviews, browser workflow smoke and external AI-client interoperability were not exercised by this foundation audit. No remote branch was pushed, pull request opened, shared `master` merged or deployment performed.
+
+## T08 implementation follow-up
+
+On `feature/coding-agent-workflow-mcp`, the T08 implementation adds the pinned MCP server/client 2.3.1 packages, explicit-selector read-only tools, legacy and modern stdio negotiation, safe error mapping and per-request credential authorization. The compiled CLI bridge was exercised as a child process against a loopback HTTP fixture; the second call observed server-side token revocation without exposing the token. Hub tests passed 9/9, typed-client tests 12/12 and CLI tests 27/27; workspace build/typecheck/lint and host-client release probes remain separate verification gates.

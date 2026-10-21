@@ -31,6 +31,27 @@ describe("typed Coding Agent Workflow HTTP client", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("creates a fresh request timeout for every operation", async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json({ schemaVersion: "1", items: [], limit: 25 }));
+    const signals: AbortSignal[] = [];
+    const signalProvider = vi.fn(() => {
+      const signal = new AbortController().signal;
+      signals.push(signal);
+      return signal;
+    });
+    const client = createCodingAgentWorkflowClient({
+      baseUrl: "https://kintsugi.example",
+      tokenProvider: async () => "token",
+      fetch: fetcher,
+      signalProvider,
+    });
+    await client.listProjects({});
+    await client.listProjects({});
+    expect(signalProvider).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBe(signals[0]);
+    expect(fetcher.mock.calls[1]?.[1]?.signal).toBe(signals[1]);
+    expect(signals[0]).not.toBe(signals[1]);
+  });
   it("joins the API prefix correctly when the installation URL has no base path", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       expect(String(input)).toBe("https://kintsugi.example/api/member/v1/projects?limit=25");

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultCliDeps, runCli } from "../src/cli.js";
 import { formatResult } from "../src/render.js";
+import type { CodingAgentWorkflowCapabilities, CodingAgentWorkflowPort } from "@kintsugi/harness-sdk";
 
 type Config = { schemaVersion: "1"; activeProfile?: string; profiles: Record<string, { id: string; baseUrl: string; projectId?: string; caFile?: string }> };
 
@@ -28,6 +29,7 @@ function harness(fetch: typeof globalThis.fetch, options: { profile?: boolean; t
   let stderr = "";
   const deps = {
     profiles, credentials, fetch, cwd: process.cwd(), signal: undefined,
+    serveMcp: async (_access: CodingAgentWorkflowPort, _capabilities: CodingAgentWorkflowCapabilities) => undefined,
     env: {}, isTTY: false,
     promptSecret: options.promptSecret ?? vi.fn(async () => "TEST-hidden-token"),
     readStdin: options.readStdin ?? vi.fn(async () => "TEST-piped-token"),
@@ -70,6 +72,45 @@ describe("kintsugi CLI", () => {
     }
   });
 
+  it("serves MCP with the selected profile and reloads its credential for every request", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ok({ schemaVersion: "1", items: [], limit: 25 }));
+    const state = harness(fetch, { profile: true, token: "TEST-mcp-token" });
+    let receivedCapabilities: unknown;
+    let observedAccess: CodingAgentWorkflowPort | undefined;
+    state.deps.serveMcp = async (access, capabilities) => {
+      observedAccess = access;
+      receivedCapabilities = capabilities;
+      await access.listProjects({ limit: 5 });
+      state.credentials.values.delete("work");
+      await expect(access.listProjects({ limit: 5 })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    };
+    const code = await runCli(["mcp", "serve", "--profile", "work"], state.deps as never);
+    expect(code).toBe(0);
+    expect(observedAccess).toBeDefined();
+    expect(receivedCapabilities).toEqual({ reviews: false });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("authorization")).toBe("Bearer TEST-mcp-token");
+    expect(state.credentials.get).toHaveBeenCalledTimes(3);
+    expect(state.output().stdout + state.output().stderr).not.toContain("TEST-mcp-token");
+  });
+
+  it("rejects a connection-level project selector so MCP calls stay explicit", async () => {
+    const state = harness(async () => ok({ schemaVersion: "1", items: [], limit: 25 }), { profile: true, token: "TEST-token" });
+    const serveMcp = vi.fn(async (_access: CodingAgentWorkflowPort, _capabilities: CodingAgentWorkflowCapabilities) => undefined);
+    state.deps.serveMcp = serveMcp;
+    const code = await runCli(["mcp", "serve", "--project", "shop"], state.deps as never);
+    expect(code).toBe(2);
+    expect(serveMcp).not.toHaveBeenCalled();
+    expect(state.output().stderr).toContain("MCP_PROJECT_SELECTOR_UNSUPPORTED");
+  });
+  it("rejects token-stdin for MCP because stdin is the protocol channel", async () => {
+    const readStdin = vi.fn(async () => "TEST-one-shot");
+    const state = harness(async () => ok({ schemaVersion: "1", items: [], limit: 25 }), { profile: true, token: "TEST-token", readStdin });
+    const code = await runCli(["mcp", "serve", "--token-stdin"], state.deps as never);
+    expect(code).toBe(2);
+    expect(readStdin).not.toHaveBeenCalled();
+    expect(state.output().stderr).toContain("MCP_TOKEN_STDIN_UNSUPPORTED");
+  });
   it("prints parseable JSON success on stdout", async () => {
     const state = harness(async () => ok({ schemaVersion: "1", items: [{ projectId: "shop", name: "Shop" }], limit: 25 }), { profile: true, token: "TEST-token" });
     const code = await runCli(["--format", "json", "project", "list"], state.deps as never);
