@@ -4,6 +4,20 @@
 
 The design phase has levels (common design, basic design, detail design, then implementation). What each level contains differs from project to project, so Kintsugi does not fix it: the project defines **design sets** as Markdown in its document repo, and one definition does five jobs: it scaffolds the documents, instructs the agent, validates the result, is the rubric of the review, and drives the portal's conformance view.
 
+```mermaid
+flowchart LR
+  def[("standards/design/(set)/<br/>set.md and templates")]
+  def --> scaffold["scaffold<br/>first drafts of the documents"]
+  def --> agent["agent instruction<br/>the guidance of each section"]
+  def --> member["validation in the harness<br/>check_design.py"]
+  def --> review["review rubric<br/>runtime design-review (planned)"]
+  def --> portal["portal<br/>conformance of every unit"]
+  scaffold --> doc[("units/.../design/(set)/")]
+  agent --> doc
+  doc --> member
+  doc --> portal
+```
+
 ## Where things live
 
 | Path | Content |

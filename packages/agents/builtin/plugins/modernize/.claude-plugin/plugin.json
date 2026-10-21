@@ -1,7 +1,7 @@
 {
   "name": "modernize",
   "version": "1.0.0",
-  "description": "Move the understood system to its target: the common design, the basic and detail design of each unit from the project's own templates, the skeleton and the implementation, and evidence-based verification. Driven by members in their own harness; Kintsugi supplies context and ingests results.",
+  "description": "Move the understood system to its target: the common design, the basic and detail design of each unit from the project's own templates, the skeleton and the implementation with its unit tests. Driven by members in their own harness; Kintsugi supplies context and ingests results.",
   "author": {
     "name": "Kintsugi"
   },

@@ -25,10 +25,8 @@ applications/<app>/
   assessment/                  Assessment context (P1): inventory.md, topology.md, catalog/, ASSESSMENT.md, tools/
   understanding/               Understanding context: plan.md (the AI plan, advice)
   to-be/                       P2: requirements.md, design.md (this application's own design)
-  gates/                       G1.md, G2.md, G5.md, G6.md
-  units/<module>/<unit>/       the Unit aggregate (P1-P5): unit.md at the root, understanding/ for what is known, design/<set>/ for its design (see the unit file page)
-  cutover/                     P6: plan.md, runbook.md, rollback.md, go-no-go.md
-  operate/                     P7: hypercare-report.md, handover.md
+  gates/                       G1.md, G2.md
+  units/<module>/<unit>/       the Unit aggregate (P1-P4): unit.md at the root, understanding/ for what is known, design/<set>/ for its design (see the unit file page)
   generated/                   read models rebuilt after a merge
 ```
 
@@ -38,8 +36,8 @@ The JSON a run passes between its steps lives in the job workspace under `scratc
 
 - **Written by code**: the `assess` job writes `applications/<app>/assessment/` (the inventory and topology summaries, the catalog, the synthesis, the extraction script), the `plan-understand` job writes `applications/<app>/understanding/plan.md`, and the `understand` job writes the per-unit documents under `applications/<app>/units/<module>/<unit>/understanding/` (`as-is.md`, `understanding.md`, `rules.md`, `data-objects.md`, `findings.md`, `topology.md`, `trace.md`). After a merge, `rebuild_aggregates.py` rebuilds the read models under `applications/<app>/generated/` (`BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.md`, `README.md`) and commits them to the default branch; the application overview documents (`architecture.md`, `data-model.md`, `integrations.md`) are written by an on-demand Overview run.
 - **Written by members in their harness, through pull requests** ([ADR-0044](../decisions/0044-design-phase-common-basic-detail.md)): the common design in `architecture/` (including `common/`), `applications/<app>/to-be/`, and each unit's `design/<set>/`, from the project's own [design templates](design-templates.md).
-- **Written by people, through pull requests**: `program/`, `portfolio/`, `architecture/`, `standards/` (including `standards/design/`, the design sets), `plugins/`, `applications/<app>/inputs/`, `applications/<app>/cutover/`, `applications/<app>/operate/`, all gate records, and the human rule verdicts in `rules-review.md`.
-- **Planned**: the per-unit `reviews/G4.md` records and the `unit.md` gate references (P4), and the per-unit `verify/` evidence (P5).
+- **Written by people, through pull requests**: `program/`, `portfolio/`, `architecture/`, `standards/` (including `standards/design/`, the design sets), `plugins/`, `applications/<app>/inputs/`, all gate records, and the human rule verdicts in `rules-review.md`.
+- **Planned**: the per-unit `reviews/G4.md` records and the `unit.md` gate references (P4).
 
 ## Gate records
 
@@ -52,7 +50,7 @@ A gate record is a Markdown file whose body records:
 - Date:                YYYY-MM-DD
 ```
 
-Project-level records live in `gates/` (G0 bootstrap, G3 pilot exit and factory readiness); application records live in `applications/<app>/gates/` (G1 portfolio decision, G2 target architecture, G5 test exit and UAT, G6 go / no-go). A unit's G4 record lives under the unit's `reviews/` and its `unit.md` frontmatter points to it. Gate records arrive through pull requests and are never auto-committed. The format is scaffolded as placeholders only; there is no gate-record automation.
+Project-level records live in `gates/` (G0 bootstrap, G3 pilot exit and factory readiness); application records live in `applications/<app>/gates/` (G1 portfolio decision and G2 target architecture). A unit's G4 record lives under the unit's `reviews/` and its `unit.md` frontmatter points to it. Gate records arrive through pull requests and are never auto-committed. The format is scaffolded as placeholders only; there is no gate-record automation.
 
 ## Auto-commit
 
@@ -80,6 +78,6 @@ The document repo is a Git repository registered with role `document`; applicati
 
 ## Related references
 
-- [Delivery pipeline](../methodology/delivery-pipeline.md) explains P0–P7 and gates G0–G6.
+- [Delivery pipeline](../methodology/delivery-pipeline.md) explains P0–P4 and gates G0–G4.
 - [Build a project](../guides/build-project.md) describes the currently available setup flow and the planned portal scaffold behavior.
 - [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md) defines the `assess` item catalog and selected-unit `understand` stages; its layout statements are superseded by [ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md) and [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md).

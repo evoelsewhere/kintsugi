@@ -335,15 +335,3 @@ def unit_reviews_dir(app, module, unit):
 
 def unit_gate_review_path(app, module, unit, gate='G4'):
     return f'{unit_reviews_dir(app, module, unit)}/{gate}.md'
-
-
-def unit_verify_dir(app, module, unit):
-    return unit_file_path(app, module, unit, 'verify')
-
-
-def unit_golden_dir(app, module, unit):
-    return f'{unit_verify_dir(app, module, unit)}/golden'
-
-
-def unit_runs_dir(app, module, unit):
-    return f'{unit_verify_dir(app, module, unit)}/runs'

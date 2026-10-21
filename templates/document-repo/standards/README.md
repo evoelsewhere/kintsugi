@@ -1,7 +1,7 @@
 # Standards
 
 - Written by: people (the project team), through review pull requests
-- Serves: P2-P3; the factory that the migrate and verify stages run in
+- Serves: P2-P3; the factory that the migrate stage runs in
 - Auto-commit: no — changes arrive as pull requests
 
 The project's own decisions about the target, written as plain Markdown. There is no schema and no maturity: a standard applies once it is merged. Runtime agents read this folder; members and their plugins follow it; reviewers enforce it.

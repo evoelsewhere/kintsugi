@@ -1,10 +1,10 @@
--- governance domain: persisted quality gates (docs/methodology/delivery-pipeline.md, G0–G6)
+-- governance domain: persisted quality gates (docs/methodology/delivery-pipeline.md, G0–G4)
 -- and stage gates. A gate is requested (by a person, or by the worker when a stage plan reaches
 -- a gate) and stays `pending` until a holder of `gates.decide` approves, rejects or waives it,
 -- with a note. A decision is final: asking again creates a new gate row, so the rows of one
 -- key are its history. Every request and decision is also recorded in governance.audit_event.
 --
---   gate   one request for a decision: project, optional application, gate key (G0–G6 or a
+--   gate   one request for a decision: project, optional application, gate key (G0–G4 or a
 --          stage gate key such as `stage:assess`), what it is about (subject, e.g. a job run
 --          id), who asked and when, who decided, when and why
 --
@@ -18,7 +18,7 @@ create table governance.gate (
   id text primary key,
   project_id text not null references admin.project(id) on delete cascade,
   application_id text,
-  gate_key text not null check (gate_key ~ '^(G[0-6]|[a-z0-9][a-z0-9:._-]{0,99})$'),
+  gate_key text not null check (gate_key ~ '^(G[0-4]|[a-z0-9][a-z0-9:._-]{0,99})$'),
   title text not null check (length(title) between 1 and 300),
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'waived')),
   -- what the gate is about, e.g. the job run that reached it

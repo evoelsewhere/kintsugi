@@ -225,7 +225,7 @@ describe("built-in commands", () => {
       for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".md")).sort()) files.push({ name, path: join(dir, name) });
     }
     const names = files.map((file) => file.name);
-    expect(names).toHaveLength(8);
+    expect(names).toHaveLength(7);
     for (const { name, path } of files) {
       const text = await readFile(path, "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
@@ -255,7 +255,7 @@ describe("built-in commands", () => {
 
   it("load in pipeline order with their stage ids", async () => {
     const commands = await loadBuiltinCommands();
-    expect(commands).toHaveLength(8);
+    expect(commands).toHaveLength(7);
     expect(commands[0]).toMatchObject({ id: "assess", command: "modernize-assess", audience: "runtime" });
     expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand"]);
     expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "understand", "design-architecture", "design"]);

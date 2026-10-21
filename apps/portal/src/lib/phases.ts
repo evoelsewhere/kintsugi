@@ -9,9 +9,6 @@ export const PHASE_LABEL: Record<Phase, string> = {
   "define-to-be": "P2 Define To-Be",
   "prepare-factory": "P3 Prepare Factory",
   migrate: "P4 Migrate",
-  verify: "P5 Verify",
-  cutover: "P6 Cutover",
-  "hypercare-operate": "P7 Hypercare & Operate",
 };
 
 export const GATE_STATE: Record<GateStatus | "not-requested", { label: string; tone: StatusTone }> = {

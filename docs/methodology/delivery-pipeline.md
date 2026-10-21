@@ -2,7 +2,7 @@
 
 This page explains the delivery method Kintsugi supports: every application is **rebuilt** on a new architecture from what its legacy system does. How the system implements it is described in the [architecture](../architecture/README.md).
 
-> **Where Kintsugi stands today.** The built-in runtime covers reverse engineering of the as-is system: the `assess` and `understand` stages of P1. The design phases (P2–P4) are carried out by members in their own harness with the `modernize` plugin's commands (`design-architecture`, `scaffold`, `design`, `implement`), from the project's own design templates; the runtime stages that plan and review them (`plan-design`, `design-review`) and the later phases (verify, cutover, hypercare) are planned.
+> **Where Kintsugi stands today.** The built-in runtime covers reverse engineering of the as-is system: the `assess` and `understand` stages of P1. The design phases (P2–P4) are carried out by members in their own harness with the `modernize` plugin's commands (`design-architecture`, `scaffold`, `design`, `implement`), from the project's own design templates; the runtime stages that plan and review them (`plan-design`, `design-review`) are planned.
 
 ## 1. The big picture
 
@@ -10,8 +10,8 @@ An as-is → to-be migration project combines three layers:
 
 | Layer | Content | What Kintsugi does |
 |---|---|---|
-| **Factory** | Strategy & mobilization, solution enablement, operation & control, core infrastructure / automation, migration tools, verification, post-migration support, with **governance** across all of them | The module structure of the portal |
-| **Lifecycle** | Discover → Requirement / Preparation → Migrate → Refine → Test → Go-live / Hypercare | Workflow engine: phase → stage → task, with quality gates |
+| **Factory** | Strategy & mobilization, solution enablement, operation & control, core infrastructure / automation, migration tools, with **governance** across all of them | The module structure of the portal |
+| **Lifecycle** | Discover → Requirement / Preparation → Migrate | Workflow engine: phase → stage → task, with quality gates |
 | **Workforce** | Humans and AI working together: AI does the first pass, humans review and finish. New AI roles join the RACI (AI champion, AI engineer, prompt engineer, KM lead/engineer, AI practice owner) | RACI-based permissions and human-in-the-loop. The Kintsugi Runtime prepares and reviews; members implement with their own AI harnesses |
 
 The key idea: **invest first in the knowledge base and the project's rules, then run migration at scale** ("design for auto-migration").
@@ -27,18 +27,20 @@ Kintsugi is a common engine. Before a project can run the pipeline below, the te
 | **Bootstrap**: create or join the document repo, register the AS-IS (`legacy`, `legacy-data`) and TO-BE (`target`) repos, choose or declare pipelines | P0 | Gate G0 |
 | **Standards**: write `standards/` and `plugins/` | P1–P2 | The standards the pilots need are merged |
 | **Pilot**: run 1–2 pilot units per unit kind and fix the standards | P3 | Gate G3 |
-| **Evolve**: feed lessons learned back as PRs to `standards/` and `plugins/` | P4–P7 | Continuous |
+| **Evolve**: feed lessons learned back as PRs to `standards/` and `plugins/` | P4 | Continuous |
 
 Details: [document repository](../reference/document-repo.md) · how-to: [build a project](../guides/build-project.md).
 
-## 2. Standard pipeline (P0 → P7)
+## 2. Standard pipeline (P0 → P4)
 
-One pipeline takes an application from understanding the as-is system to running its rebuilt replacement.
+One pipeline takes an application from understanding the as-is system to its rebuilt replacement.
 
-```
-P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare Factory
-                                                              │
-     P7 Hypercare & Operate ◄─ P6 Cutover ◄─ P5 Verify ◄─ P4 Migrate (by wave)
+```mermaid
+flowchart LR
+  P0["P0 Mobilize"] --> P1["P1 Discover & Assess<br/>assess, understand"]
+  P1 --> P2["P2 Define To-Be<br/>common design, basic design"]
+  P2 --> P3["P3 Prepare Factory<br/>skeleton, templates, pilot"]
+  P3 --> P4["P4 Migrate, by wave<br/>detail design, implement"]
 ```
 
 ### P0 — Mobilize
@@ -65,8 +67,13 @@ P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare
 #### Reverse engineering the AS-IS system (runtime stages)
 The current built-in runtime plans perform application assessment in two stages, each delivered as a pull request to the document repo that a person reviews and merges ([ADR-0027](../decisions/0027-builtin-modernization-content.md), [ADR-0031](../decisions/0031-understand-stage-as-is-specification.md), [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md)):
 
-```
-assess (whole application) ─► item catalog ─► understand (selected catalog items; repeatable)
+```mermaid
+flowchart LR
+  assess["assess<br/>whole application"] --> catalog[("item catalog")]
+  catalog --> plan["plan-understand<br/>order of the items, advice"]
+  catalog --> understand["understand<br/>selected items, repeatable"]
+  plan -.->|"batches to select"| understand
+  understand --> units[("units: understanding/")]
 ```
 
 The previous `map`, `extract-rules` and `harden` activities are not independent built-in plan stages now; their topology, rule-extraction and security-review work is performed within `assess` and `understand`.
@@ -85,6 +92,23 @@ The previous `map`, `extract-rules` and `harden` activities are not independent 
 The security review is part of `understand`. Runtime jobs do not run a scanner; the reviewer uses the assessment and topology, and the per-unit findings record cited source files and the limits of the review. `SECURITY_FINDINGS.md` is the rebuilt application-wide view of those findings.
 
 ### P2 — Define To-Be
+
+The design phases in one view. The runtime plans and reviews (planned); members write, in their harness, from the project's own templates ([design templates](../reference/design-templates.md)).
+
+```mermaid
+flowchart LR
+  und[("understanding/<br/>rules, as-is, trace")] --> basic
+  tpl[("standards/design/<br/>the project's templates")] -.-> common
+  tpl -.-> basic
+  tpl -.-> detail
+  common["Common design<br/>foundation team<br/>architecture, COM- components"] -->|"G2: architecture approval"| skeleton["Skeleton<br/>scaffold the target repos"]
+  common --> basic["Basic design<br/>per unit, every unit in scope"]
+  basic -->|"wave plan"| detail["Detail design<br/>per unit, in its wave"]
+  skeleton --> impl
+  detail -->|"stage gate: design review"| impl["Implement<br/>code and unit tests"]
+  impl -->|"G4: per unit"| done["Unit accepted"]
+  impl -.->|"code differs: correct the design"| detail
+```
 - **Activities**:
   - TO-BE requirements;
   - **common design** by the foundation team: the target architecture (business / application / data / technology) and the **common components** every unit reuses (authentication, logging, error handling, transactions, batch framework, data access), each with a stable id (`COM-…`);
@@ -116,28 +140,6 @@ The security review is part of `understand`. Runtime jobs do not run a scanner; 
 - **Outputs**: new source code and unit tests, detail designs, migration scripts, PRs.
 - **Gate G4** (per unit): green build, static checks, AI code review, human PR approval.
 
-### P5 — Verify (refine + test)
-- **Activities**:
-  - refine against requirements;
-  - unit tests (target ≥ 80–90 % coverage);
-  - UI and functional tests;
-  - **compare tests** (as-is vs to-be);
-  - integration and E2E tests;
-  - non-functional tests (performance, security);
-  - **migration rehearsal**;
-  - UAT.
-- **Outputs**: test cases and scripts, test report, defect log, rehearsal report.
-- **Gate G5**: test exit criteria met and UAT sign-off.
-
-### P6 — Cutover & Go-live
-- **Activities**: deployment readiness checklist, cutover plan, final data sync, go / no-go, decommissioning of the legacy infrastructure.
-- **Outputs**: system in production, runbook, rollback plan.
-- **Gate G6**: go / no-go.
-
-### P7 — Hypercare & Operate
-- **Activities**: monitoring, incident management, AI-generated user manuals and training material, end-user chatbot, FinOps and carbon metrics, KB handover to the maintenance team.
-- **Outputs**: hypercare report, handed-over KB, cost and health dashboards.
-
 ## 3. Cross-cutting concerns
 
 | Area | Content | In Kintsugi |
@@ -149,7 +151,7 @@ The security review is part of `understand`. Runtime jobs do not run a scanner; 
 
 ## 4. Pipeline definitions
 
-Not every application needs every stage of P0–P7 the same way.
+Not every application needs every stage of P0–P4 the same way.
 - Each application follows a **pipeline definition**: the one Kintsugi ships for a rebuild, or one declared under `pipelines:` in `kintsugi.yaml`. It lists phases, stages, performers and gates.
 - A project that needs a different shape declares its own: add custom phases (mapped to a built-in category for reporting) or remove stages.
 - A stage may name the **design set** it produces (`produces: detail`), and the design sets are the project's own: how many there are, which documents they hold and what each must contain is defined in `standards/design/` ([design templates](../reference/design-templates.md)). The design levels above are the starter's, not the engine's.

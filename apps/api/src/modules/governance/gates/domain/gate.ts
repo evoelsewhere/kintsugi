@@ -1,5 +1,5 @@
 // Domain of quality and stage gates (governance): a request for a human decision at a pipeline
-// gate (G0–G6, docs/methodology/delivery-pipeline.md) or at a stage gate (`stage:<id>`). A gate
+// gate (G0–G4, docs/methodology/delivery-pipeline.md) or at a stage gate (`stage:<id>`). A gate
 // is `pending` until a holder of gates.decide approves, rejects or waives it with a note; the
 // decision is final. Rows of one project, application and key are its history. Pure types.
 
@@ -11,7 +11,7 @@ export interface Gate {
   id: string;
   projectId: string;
   applicationId?: string;
-  /** `G0`–`G6` or a stage gate key such as `stage:assess`. */
+  /** `G0`–`G4` or a stage gate key such as `stage:assess`. */
   gateKey: string;
   title: string;
   status: GateStatus;

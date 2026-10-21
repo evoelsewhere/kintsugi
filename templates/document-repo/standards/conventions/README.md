@@ -1,7 +1,7 @@
 # `standards/conventions/`
 
 - Written by: people (the project team), through review pull requests
-- Serves: P2-P3; the target conventions the migrate and verify stages enforce
+- Serves: P2-P3; the target conventions the migrate stage enforces
 - Auto-commit: no — changes arrive as pull requests
 
 One file per convention area (target architecture, UI kit, naming, build and CI). Extract the

@@ -15,7 +15,7 @@ Project 1─* Application 1─* WorkItem (index of applications/*/units/**) 1─
    ├─ ProjectRepository(role document, no application) → GitRepository  [exactly one] ─ GitSyncState(last seen commit per repo)
    │     └─ HarnessRendererConfig
    ├─ PipelineTemplate (phase/stage/gate) ─ GateDecision (index of unit frontmatter `gates`)
-   ├─ Gate(gateKey G0–G6 | stage:<id>, status, requested/decided by, note)        (governance.gate)
+   ├─ Gate(gateKey G0–G4 | stage:<id>, status, requested/decided by, note)        (governance.gate)
    └─ ProjectMembership(user, projectRole, harnesses[]) — planned with M0 project persistence
 User · AccessRole(core.role/core.user_role) · Permission(core.permission) · Session · AccessToken · AuthIdentity(provider: local | entra-id)
 LlmProvider(config, secretRef) · LlmModel · AgentModelBinding(agent → provider/model)
@@ -110,11 +110,11 @@ Recorded actions (see [security → audit coverage](../architecture/concepts/sec
 
 ## Gates
 
-Quality gates G0–G6 ([delivery pipeline](../methodology/delivery-pipeline.md)) and stage gates (`stage:<id>`), migration [`013_gates.sql`](../../apps/api/migrations/013_gates.sql). A gate is requested by a person (`gates.request`) or by the worker when a stage plan reaches it (`services/orchestrator/src/gates.ts`). It stays `pending` until a holder of `gates.decide` approves, rejects or waives it. A decision is final; asking again creates a new row, so the rows of one key are its history.
+Quality gates G0–G4 ([delivery pipeline](../methodology/delivery-pipeline.md)) and stage gates (`stage:<id>`), migration [`013_gates.sql`](../../apps/api/migrations/013_gates.sql). A gate is requested by a person (`gates.request`) or by the worker when a stage plan reaches it (`services/orchestrator/src/gates.ts`). It stays `pending` until a holder of `gates.decide` approves, rejects or waives it. A decision is final; asking again creates a new row, so the rows of one key are its history.
 
 | Table | Key | Content |
 |---|---|---|
-| `governance.gate` | `id` | `project_id` (cascade on project delete), `application_id` (optional), `gate_key` (`G0`–`G6` or a lowercase stage gate key), `title`, `status` (`pending`, `approved`, `rejected`, `waived`), `subject` (what it is about, e.g. a job run id), `detail` (jsonb, small context), `requested_by` + `requested_at`, `decided_by` + `decided_at`, `note` (required to reject or waive) |
+| `governance.gate` | `id` | `project_id` (cascade on project delete), `application_id` (optional), `gate_key` (`G0`–`G4` or a lowercase stage gate key), `title`, `status` (`pending`, `approved`, `rejected`, `waived`), `subject` (what it is about, e.g. a job run id), `detail` (jsonb, small context), `requested_by` + `requested_at`, `decided_by` + `decided_at`, `note` (required to reject or waive) |
 
 At most one gate is pending per project, application, key and subject (partial unique index), which makes the worker's request idempotent. Endpoints: `GET /api/governance/gates` (`?projectId&applicationId&gateKey&status=pending,approved`), `GET …/:id` and `GET …/:id/history` need a session; `POST /api/governance/gates` needs `gates.request` or `gates.decide`; `POST …/:id/decision` needs `gates.decide`. Both permissions are added by the migration and granted to `admin`. The monitoring overview counts and lists pending gates. Gate decisions in unit frontmatter (`GateDecision`, [ADR-0012](../decisions/0012-work-items-as-files-in-git.md)) remain the per-work-item record in Git.
 

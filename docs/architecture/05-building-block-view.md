@@ -11,7 +11,6 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 ┌──────────┬──────────────────────────────────────┬────────────┬────────────┐
 │ ADMIN    │ DELIVERY                             │ MONITORING │ GOVERNANCE │
 │          │ Assess · Design · Factory · Migrate  │            │            │
-│          │ · Verify · Cutover · Operate         │            │            │
 └──────────┴──────────────────────────────────────┴────────────┴────────────┘
 ┌──────────────────────────── Core platform ────────────────────────────────────────┐
 │ Workflow Orchestrator │ Knowledge Hub     │ Standards & Assets│ Kintsugi Runtime (pi) │
@@ -40,9 +39,6 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | B2 Architecture Studio | P2 | AS-IS vs TO-BE architecture, ADRs, gap list, co-existence strategy, POC plan, cost-benefit, ARB review. Supported by `to-be-analyst` |
 | B3 Factory Setup | P3 | Base source, IaC, CI/CD; select or author agent plugins and task-pack templates; configure `gate-reviewer` rules; pilot on 1–2 features |
 | B4 Migration Workbench | P4 | Board of units (index of `applications/*/units/**`) × stages; `task-planner` produces task packs; assignment / claiming; PR tracking; `gate-reviewer` review; design ↔ code sync |
-| B5 Verification | P5 | Test generation, compare tests, coverage, non-functional tests, rehearsal, UAT tracking |
-| B6 Cutover | P6 | Readiness checklist, runbook, go / no-go, decommissioning |
-| B7 Hypercare & Operate | P7 | Incidents, user manual / training generation, end-user chatbot, KB handover |
 
 ### C. Monitoring
 
@@ -52,15 +48,14 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | C2 Delivery Dashboard | Progress by phase / wave / work item, burn-down, gate status |
 | C3 AI Metrics | [AI metrics](../methodology/ai-metrics.md) computed from harness activity, artifact provenance and the tracker |
 | C4 Cost & FinOps | Runtime LLM cost by project / agent / model; harness usage and licenses; to-be cloud cost |
-| C5 Target System Health | Health and incidents of the migrated system (P6–P7) |
 
 ### D. Governance
 
 | Sub-module | Function |
 |---|---|
 | D1 Policy Engine | Runtime: model allowlist, tool permissions, network, budget. Harnesses: `HarnessPolicy` distribution. Shared: data residency, PII / secret redaction |
-| D2 Quality Gates | G0–G6 plus per-work-item gates, defined in `kintsugi.yaml` (Git) |
-| D3 Review & Approval | ARB, design review, PR approval, go / no-go, with SLAs |
+| D2 Quality Gates | G0–G4 plus per-work-item gates, defined in `kintsugi.yaml` (Git) |
+| D3 Review & Approval | ARB, design review, PR approval, with SLAs |
 | D4 Audit & Traceability | Append-only audit (hash chain); requirement → design → code → test → defect via `repo@commit:path`; AI provenance |
 | D5 Risk & Change | Risk register, change requests, decision log |
 

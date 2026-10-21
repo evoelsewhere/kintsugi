@@ -27,8 +27,6 @@ The vocabulary in `packages/domain` and the pipeline stages have no place for th
    | Detail design | member with their harness | per unit, in its wave | the unit's detail-design documents |
    | Implementation | member with their harness | per unit | code and unit tests in the target repo |
 
-   Verification (integration, system, comparison with the legacy behaviour) stays a later phase, with its own decision ([ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md)).
-
 2. **Phase mapping.** P2 holds the common design and the basic design of all units. P3 holds the skeleton, the design templates ([ADR-0045](0045-design-templates-are-project-data.md)) and the pilot: one or two units taken through basic design, detail design and code. In P4 each unit runs `detail-design` → `design-review` → `implement` → `unit-test` → `code-review`, ending in gate G4. Review points between stages use stage gates (`stage:<id>`, already valid gate keys); no new pipeline gate is added. A project that needs another shape declares its own pipeline ([ADR-0043](0043-rebuild-only.md)).
 
 3. **Where documents live** (one place per fact):
@@ -46,7 +44,6 @@ The vocabulary in `packages/domain` and the pipeline stages have no place for th
    - `modernize-brief` and the architecture part of `modernize-reimagine` become common design; the scaffolding becomes its own stage.
    - A generic `design` command writes one design set for one unit from its template; `modernize-transform` becomes `implement` (code and unit tests from the detail design).
    - The other transformation strategies of the plugin (`uplift`, `preflight`, the version-delta and uplift agents, scripts and workflows) are removed, consistent with [ADR-0043](0043-rebuild-only.md).
-   - `modernize-verify` and the verification evidence stay as they are until the verification decision.
 
 ## Consequences
 

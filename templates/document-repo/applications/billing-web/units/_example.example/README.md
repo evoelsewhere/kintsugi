@@ -1,7 +1,7 @@
 # Format samples
 
 - Written by: nobody — these are format samples
-- Serves: teach the file formats of a unit directory (P1-P5, gate G4)
+- Serves: teach the file formats of a unit directory (P1-P4, gate G4)
 - Auto-commit: no — the name contains `.example`, so nothing loads or seeds these files
 
 Copy a sample to a real unit directory (`<module>/<unit>/`) and adapt its content:

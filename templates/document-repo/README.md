@@ -20,10 +20,8 @@ applications/<app>/
   assessment/                  Assessment context (P1): inventory.md, topology.md, catalog/, ASSESSMENT.md
   understanding/               Understanding context: plan.md (the AI plan, advice)
   to-be/                       P2: requirements.md, design.md (this application's own design)
-  gates/                       application gate records (G1, G2, G5, G6)
-  units/<module>/<unit>/       the Unit aggregate, P1-P5: one directory per unit (see below)
-  cutover/                     P6: plan.md, runbook.md, rollback.md, go-no-go.md
-  operate/                     P7: hypercare-report.md, handover.md
+  gates/                       application gate records (G1, G2)
+  units/<module>/<unit>/       the Unit aggregate, P1-P4: one directory per unit (see below)
   generated/                   read models rebuilt after a merge
 ```
 
@@ -41,7 +39,6 @@ applications/<app>/units/<module>/<unit>/
   design/<set>/                P2-P4: the unit's design documents, one folder per design set of the project
   task.md                      P4 task pack
   reviews/G4.md                the unit's G4 record
-  verify/                      P5 golden cases, equivalence runs and test evidence
 ```
 
 The unit id is always the full `<app>/<module>/<unit>`; `<unit>` in a path is the last segment.
@@ -66,7 +63,7 @@ Gate records are Markdown files whose body records:
 ```
 
 Project-level records (`gates/G0.md`, `gates/G3.md`) and application records
-(`applications/<app>/gates/G1.md`, `G2.md`, `G5.md`, `G6.md`) are placeholders here; a unit's G4
+(`applications/<app>/gates/G1.md`, `G2.md`) are placeholders here; a unit's G4
 record lives under the unit's `reviews/` and `unit.md` points to it. Gate records always arrive
 through pull requests and are never auto-committed.
 

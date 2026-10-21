@@ -12,19 +12,23 @@ flowchart LR
   assessment["Assessment<br/>what is the estate?"]
   understanding["Understanding<br/>what does it do?"]
   unit(["Unit aggregate<br/>unit.md is the root"])
+  templates[("standards/design/<br/>the project's templates")]
+  common[("architecture/<br/>common design, COM- components")]
   design["Design<br/>what are we building?"]
-  verification["Verification<br/>is it equivalent?"]
+  implementation["Implementation<br/>code and unit tests"]
   governance["Governance<br/>who decided?"]
   generated[("generated/<br/>read models")]
 
   inputs --> assessment
-  assessment -- "catalog items" --> understanding
-  understanding -- "understanding/" --> unit
+  assessment -->|"catalog items"| understanding
+  understanding -->|"understanding/"| unit
   unit --> design
-  design --> verification
-  verification -- "evidence" --> governance
-  understanding -- "rebuild after merge" --> generated
-  governance -. "gate records" .-> unit
+  templates -->|"format and checks"| design
+  common -->|"reused by id"| design
+  design --> implementation
+  implementation -->|"evidence"| governance
+  understanding -->|"rebuild after merge"| generated
+  governance -.->|"gate records"| unit
 ```
 
 | Context | Folder | Owns | Written by |
@@ -34,11 +38,10 @@ flowchart LR
 | Understanding | `applications/<app>/understanding/`, `units/<module>/<unit>/understanding/` | the plan of what to read next; per unit the AS-IS specification, rules, data objects, verdicts, findings, topology, trace and the understanding record | the `plan-understand` and `understand` stages; people for `rules-review.md` |
 | Design | `architecture/` (with `common/`), `to-be/`, `units/…/design/<set>/`, `standards/design/` | the common design and its components, the application's requirements and design, each unit's design documents, and the project's templates for them ([ADR-0044](../../decisions/0044-design-phase-common-basic-detail.md), [ADR-0045](../../decisions/0045-design-templates-are-project-data.md)) | member harnesses; people for the templates |
 | Implementation | `units/…/task.md`, the target repositories | the task pack; the code and its unit tests | member harnesses |
-| Verification | `units/…/verify/` | golden cases, equivalence runs, the proof pack | member harnesses (a later phase moves them to Markdown) |
 | Governance | `gates/`, `units/…/reviews/` | gate records | people, through pull requests |
 | Read models | `applications/<app>/generated/` | aggregates rebuilt from the units after a merge | the rebuild script, auto-committed |
 
-Contexts talk through the aggregate and the catalog, never through each other's files: the planning stage reads the catalog cards, not the topology; the verification context reads only the source commit recorded in `inventory.md`.
+Contexts talk through the aggregate and the catalog, never through each other's files: the planning stage reads the catalog cards, not the topology.
 
 ## The Unit aggregate
 
