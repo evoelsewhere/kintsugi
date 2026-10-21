@@ -28,7 +28,7 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 | A3 Connectors | Git servers (any number and kind), Jira / Confluence / SharePoint, source databases (read-only), observability tools | Credentials encrypted in Postgres |
 | A4 LLM Providers & Harness Registry | Runtime LLM providers (every pi provider + custom), credentials, test connection, model binding per runtime agent id, allowlist, budget; Agent Builder: built-in and custom agents, shared skills, versions, import and export ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)); member harness registry (plugin support per harness, built-in + installation fallback renderers, transformer plugins) | [LLM configuration](concepts/llm-configuration.md) |
 | A7 Extension Allowlists | Runner image allowlist; harness transformer plugins | [Security](concepts/security.md) |
-| A5 Templates | SDLC / pipeline templates per 7R, deliverable templates, RACI templates, the document repo starter template | Shipped stack-agnostic; project specifics go into the project's document repo (`standards/`, `plugins/`) |
+| A5 Templates | SDLC / pipeline templates, deliverable templates, RACI templates, the document repo starter template | Shipped stack-agnostic; project specifics go into the project's document repo (`standards/`, `plugins/`) |
 | A6 Project Build | Create / join a document repo; register per application the AS-IS repos (`legacy`, `legacy-data`) and TO-BE repos (`target` per architecture component); choose or declare pipelines | [Build a project](../guides/build-project.md) |
 
 ### B. Delivery
@@ -36,7 +36,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 
 | Sub-module | Phase | Main functions |
 |---|---|---|
-| B1 Portfolio & Assessment | P1 | Inventory and unit files (proposed by `assessment`, confirmed by people), unit dependencies (`dependsOn`), weighted scorecard, 7R recommendation, wave planning. `assessment` and `wave-planner` draft; the architect approves |
+| B1 Portfolio & Assessment | P1 | Inventory and unit files (proposed by `assessment`, confirmed by people), unit dependencies (`dependsOn`), weighted scorecard, wave planning. `assessment` and `wave-planner` draft; the architect approves |
 | B2 Architecture Studio | P2 | AS-IS vs TO-BE architecture, ADRs, gap list, co-existence strategy, POC plan, cost-benefit, ARB review. Supported by `to-be-analyst` |
 | B3 Factory Setup | P3 | Base source, IaC, CI/CD; select or author agent plugins and task-pack templates; configure `gate-reviewer` rules; pilot on 1–2 features |
 | B4 Migration Workbench | P4 | Board of units (index of `applications/*/units/**`) × stages; `task-planner` produces task packs; assignment / claiming; PR tracking; `gate-reviewer` review; design ↔ code sync |
@@ -101,7 +101,7 @@ Shared libraries and assets:
 
 | Path | Content |
 |---|---|
-| `packages/domain` | Shared vocabulary: phases, 7R, project roles, units, provenance, Git servers / repositories, scorecard; projects, applications and repository links with their rules; the `kintsugi.yaml` model/validator (dependency-free) |
+| `packages/domain` | Shared vocabulary: phases, project roles, units, provenance, Git servers / repositories, scorecard; projects, applications and repository links with their rules; the `kintsugi.yaml` model/validator (dependency-free) |
 | `packages/manifest` | `kintsugi.yaml` as text: parse + validate, render ([manifest schema](../reference/document-repo-manifest.md)) |
 | `packages/agents` | Agent packages (Claude Code agent files + Agent Skills): parsing, validation, resolution by name across built-in and custom agents, conversion of runtime agents to `AgentDefinition`, ZIP import/export; `builtin/` holds the modernization content (agents, commands, workflows, scripts, hooks, tests) adapted from upstream ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md), [ADR-0027](../decisions/0027-builtin-modernization-content.md)) |
 | `packages/git` | Git core: system `git` CLI wrapper with per-call credentials, checkout storage layout, provider REST adapters ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |

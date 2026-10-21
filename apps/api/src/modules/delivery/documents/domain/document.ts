@@ -127,7 +127,7 @@ export interface AssessResults extends StageResultsBase {
   architecture?: string;
   highlights: {
     summary?: string;
-    recommendation?: string;
+    outlook?: string;
     /** The Technical Debt table. */
     debt: Table | null;
     /** The Security Findings section. */

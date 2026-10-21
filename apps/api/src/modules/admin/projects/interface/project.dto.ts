@@ -1,7 +1,7 @@
 // Interface layer: request schemas and HTTP-facing mapping for projects, applications and
 // their repositories (ADR-0016: Standard Schema; validated by `StandardSchemaValidationPipe`).
 
-import { APPLICATION_REPOSITORY_ROLES, DISPOSITIONS } from "@kintsugi/domain";
+import { APPLICATION_REPOSITORY_ROLES } from "@kintsugi/domain";
 import { z } from "zod";
 import { idSchema, stringField } from "#common/interface/dto.js";
 import type { CreateApplication, CreateProject, LinkRepository, UpdateApplication, UpdateProject } from "../domain/project.js";
@@ -28,15 +28,13 @@ export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export const createApplicationSchema = z.object({
   id: idSchema,
   name: stringField(false),
-  disposition: z.enum(DISPOSITIONS),
-  /** A built-in pipeline id, or the id of a pipeline declared in kintsugi.yaml. */
+  /** The id of a pipeline declared in kintsugi.yaml. */
   pipeline: idSchema.optional(),
 });
 export type CreateApplicationInput = z.infer<typeof createApplicationSchema>;
 
 export const updateApplicationSchema = z.object({
   name: stringField(false).optional(),
-  disposition: z.enum(DISPOSITIONS).optional(),
   /** null clears the pipeline. */
   pipeline: idSchema.nullable().optional(),
 });
@@ -67,13 +65,12 @@ export function toUpdateProject(input: UpdateProjectInput): UpdateProject {
 }
 
 export function toCreateApplication(input: CreateApplicationInput): CreateApplication {
-  return { id: input.id, name: input.name, disposition: input.disposition, ...(input.pipeline === undefined ? {} : { pipeline: input.pipeline }) };
+  return { id: input.id, name: input.name, ...(input.pipeline === undefined ? {} : { pipeline: input.pipeline }) };
 }
 
 export function toUpdateApplication(input: UpdateApplicationInput): UpdateApplication {
   return {
     ...(input.name === undefined ? {} : { name: input.name }),
-    ...(input.disposition === undefined ? {} : { disposition: input.disposition }),
     ...(input.pipeline === undefined ? {} : { pipeline: input.pipeline }),
   };
 }

@@ -32,11 +32,10 @@ Then **Administration → Projects → New project**: name, id and the document 
 ## Step 2 — Register the repos (P0)
 
 On the project page, **Add application** for each application in scope, then **Link** its repositories. The page groups them as they appear in `kintsugi.yaml`; for each application set:
-- `disposition` (7R);
 - `repos`, grouped by role:
   - **AS-IS**: `legacy` (code) and `legacy-data` (schemas, dumps, reference data), any number, read-only;
   - **TO-BE**: `target`, any number, each with `component:` naming the architecture component it implements. Only members write to them;
-- `pipeline`: a built-in pipeline id, or the id of a pipeline you declare under `pipelines:` in the same file (stages, performers, gates; custom phases need a `category`).
+- `pipeline` (optional): the id of a pipeline you declare under `pipelines:` in the same file (stages, performers, gates; custom phases need a `category`).
 
 The project page shows the rendered `kintsugi.yaml`. Add the project's `unitKinds` and any `pipelines` (the portal renders defaults for these), then commit it to the document repo through a PR. **Gate G0**: the document repo, the repos and the pipelines are declared.
 

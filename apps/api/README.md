@@ -123,7 +123,7 @@ Rules (enforced by review — see AGENTS.md):
   (`NotFoundException`, `ConflictException`). Storage-agnostic.
 - **`infrastructure/` owns I/O**: Postgres adapters (see `admin/llm-providers`),
   in-memory adapters for skeletons. No HTTP types here.
-- **Shared vocabulary** (Phase, Disposition, ProjectRole, `ThinkingLevel`, `RuntimeAgentId`, …)
+- **Shared vocabulary** (Phase, ProjectRole, `ThinkingLevel`, `RuntimeAgentId`, …)
   comes from `@kintsugi/domain`; provider/agent contracts from `@kintsugi/runtime-sdk`.
   Never redefine them in this app.
 

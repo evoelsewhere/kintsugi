@@ -161,7 +161,7 @@ export class PortfolioService {
               critical: security.filter((finding) => finding.severity === "Critical").length,
               high: security.filter((finding) => finding.severity === "High").length,
               securityFindings: security.length,
-              ...(assessView.highlights.recommendation === undefined ? {} : { recommendation: assessView.highlights.recommendation }),
+              ...(assessView.highlights.outlook === undefined ? {} : { outlook: assessView.highlights.outlook }),
             },
       catalog: catalog === null ? null : { total: open.length, understood, counts: catalog.counts as Partial<Record<ItemStatus, number>> },
       ...(blocked === undefined ? {} : { blocked }),

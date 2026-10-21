@@ -9,8 +9,7 @@ const minimal = {
   applications: [
     {
       id: "web",
-      disposition: "refactor",
-      pipeline: "refactor",
+      pipeline: "rebuild",
       repos: [
         { server: "github", path: "org/web-legacy", role: "legacy" },
         { server: "github", path: "org/web-api", role: "target", component: "api" },
@@ -38,7 +37,6 @@ describe("kintsugi.yaml validation", () => {
       applications: [
         {
           id: "web",
-          disposition: "lift-and-shift",
           repos: [
             { server: "github", path: "org/billing-docs", role: "legacy" },
             { server: "github", path: "org/web-api", role: "target" },
@@ -46,7 +44,7 @@ describe("kintsugi.yaml validation", () => {
             { server: "github", path: "org/x", role: "document" },
           ],
         },
-        { id: "web", disposition: "retain" },
+        { id: "web" },
       ],
       pipelines: [{ id: "custom", phases: [{ id: "harden", stages: [{ id: "do", performer: { agent: "a", member: ["dev"] } }] }] }],
       extra: true,
@@ -59,7 +57,6 @@ describe("kintsugi.yaml validation", () => {
       "project.id",
       "project.name",
       "unitKinds",
-      "applications[0].disposition",
       "applications[0].repos[0]",
       "applications[0].repos[1].component",
       "applications[0].repos[2].component",
@@ -78,7 +75,6 @@ describe("kintsugi.yaml validation", () => {
         {
           id: "web",
           name: "Web",
-          disposition: "refactor",
           repos: [
             { server: "github", path: "org/web-api", role: "target", component: "api" },
             { server: "github", path: "org/web-legacy", role: "legacy" },

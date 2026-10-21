@@ -198,7 +198,7 @@ function PortfolioTable({ applications }: { applications: PortfolioApplication[]
               <th className="px-2 py-2 text-right font-medium">Complexity</th>
               <th className="px-2 py-2 font-medium">Findings</th>
               <th className="w-40 px-2 py-2 font-medium">Understood</th>
-              <th className="px-2 py-2 font-medium">Recommended pattern</th>
+              <th className="px-2 py-2 font-medium">Rebuild outlook</th>
             </tr>
           </thead>
           <tbody>
@@ -212,7 +212,7 @@ function PortfolioTable({ applications }: { applications: PortfolioApplication[]
   );
 }
 
-/** A recommendation, kept to one line. */
+/** An outlook, kept to one line. */
 const gist = (text: string | undefined): string | undefined => {
   if (text === undefined) return undefined;
   const line = text.replace(/\s+/g, " ").trim();
@@ -223,7 +223,7 @@ function PortfolioRow({ application }: { application: PortfolioApplication }): R
   const { assess, catalog, gate } = application;
   const to = deliveryLink({ projectId: application.projectId, applicationId: application.applicationId, stage: "assess" });
   const gateState = gate === null ? undefined : GATE_STATE[gate.status];
-  const pattern = gist(assess?.recommendation);
+  const outlook = gist(assess?.outlook);
   return (
     <tr className="align-top [box-shadow:0_-1px_0_var(--color-hover)] hover:bg-hover">
       <td className="px-2 py-2.5">
@@ -278,7 +278,7 @@ function PortfolioRow({ application }: { application: PortfolioApplication }): R
         )}
       </td>
       <td className="max-w-[300px] px-2 py-2.5 text-[12px]">
-        {pattern === undefined ? <span className="text-text-muted">—</span> : <p className="truncate text-text" title={assess?.recommendation}>{pattern}</p>}
+        {outlook === undefined ? <span className="text-text-muted">—</span> : <p className="truncate text-text" title={assess?.outlook}>{outlook}</p>}
       </td>
     </tr>
   );

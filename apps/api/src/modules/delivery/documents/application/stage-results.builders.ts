@@ -112,13 +112,13 @@ export async function assessResults(source: StageSource, appDir: string): Promis
   const findings = security === undefined ? [] : tablesIn(security.body).flatMap((table) => findingsOfTable(table));
   const debtTable = debt === undefined ? null : (tablesIn(debt.body)[0] ?? null);
   const summary = section(/executive summary|summary/i);
-  const recommendation = section(/recommend/i);
+  const outlook = section(/outlook/i);
   return {
     inventory,
     ...(architecture === null ? {} : { architecture }),
     highlights: {
       ...(summary === undefined || paragraphsIn(summary.body)[0] === undefined ? {} : { summary: paragraphsIn(summary.body)[0] }),
-      ...(recommendation === undefined || paragraphsIn(recommendation.body)[0] === undefined ? {} : { recommendation: paragraphsIn(recommendation.body)[0] }),
+      ...(outlook === undefined || paragraphsIn(outlook.body)[0] === undefined ? {} : { outlook: paragraphsIn(outlook.body)[0] }),
       debt: debtTable,
       security: findings,
       gaps: [...new Set(gaps)],

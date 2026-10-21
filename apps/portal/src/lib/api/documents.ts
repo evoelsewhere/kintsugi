@@ -237,7 +237,7 @@ export interface AssessResults extends ResultsBase {
   stage: "assess";
   inventory: Inventory | null;
   architecture?: string;
-  highlights: { summary?: string; recommendation?: string; debt: Table | null; security: Finding[]; gaps: string[] };
+  highlights: { summary?: string; outlook?: string; debt: Table | null; security: Finding[]; gaps: string[] };
 }
 
 /** The strongest links between two domains, counted over the leaf-level edges. */

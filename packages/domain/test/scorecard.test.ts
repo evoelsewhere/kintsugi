@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recommendDispositions, weightedScore } from "../src/index.js";
+import { scorecardPriority, weightedScore } from "../src/index.js";
 
 describe("scorecard", () => {
   it("weights criterion scores and treats missing scores as zero", () => {
@@ -12,8 +12,8 @@ describe("scorecard", () => {
   });
 
   it("maps the total to a priority band", () => {
-    expect(recommendDispositions(8).priority).toBe("low");
-    expect(recommendDispositions(5).priority).toBe("medium");
-    expect(recommendDispositions(2).candidates).toContain("rebuild");
+    expect(scorecardPriority(8)).toBe("low");
+    expect(scorecardPriority(5)).toBe("medium");
+    expect(scorecardPriority(2)).toBe("high");
   });
 });

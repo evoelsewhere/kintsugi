@@ -15,19 +15,6 @@ export const PHASES = [
 ] as const;
 export type Phase = (typeof PHASES)[number];
 
-/** 7R transformation strategy (Retire/Retain + the classic Rs + Repurchase). */
-export const DISPOSITIONS = [
-  "retire",
-  "retain",
-  "rehost",
-  "replatform",
-  "refactor",
-  "rearchitect",
-  "rebuild",
-  "repurchase",
-] as const;
-export type Disposition = (typeof DISPOSITIONS)[number];
-
 /**
  * Project roles: RACI responsibilities named in pipelines (stage performers, gate owners).
  * Not access roles (ADR-0024). The well-known ones are those the starter document repo
@@ -216,7 +203,7 @@ export const GATE_STATUSES: readonly GateStatus[] = ["pending", "approved", "rej
 export type GateDecision = "approve" | "reject" | "waive";
 export const GATE_DECISION_STATUS: Readonly<Record<GateDecision, Exclude<GateStatus, "pending">>> = { approve: "approved", reject: "rejected", waive: "waived" };
 
-/** Transformation scorecard. Weights sum to 1. */
+/** Assessment scorecard. Weights sum to 1. */
 export interface ScorecardCriterion {
   key: string;
   group: "business" | "technical" | "feasibility" | "cost" | "risk";
@@ -228,17 +215,11 @@ export function weightedScore(criteria: ScorecardCriterion[]): number {
   return criteria.reduce((sum, c) => sum + c.weight * (c.score ?? 0), 0);
 }
 
-/** Total weighted score → priority band and candidate dispositions. */
-export function recommendDispositions(total: number): {
-  priority: "low" | "medium" | "high";
-  candidates: Disposition[];
-} {
-  if (total >= 7) return { priority: "low", candidates: ["retain", "rehost"] };
-  if (total >= 4) return { priority: "medium", candidates: ["rehost", "refactor"] };
-  return {
-    priority: "high",
-    candidates: ["retire", "rearchitect", "rebuild", "repurchase"],
-  };
+/** Total weighted score → rebuild priority band (a low total means a high priority). */
+export function scorecardPriority(total: number): "low" | "medium" | "high" {
+  if (total >= 7) return "low";
+  if (total >= 4) return "medium";
+  return "high";
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +232,6 @@ export type StagePerformer =
 
 export interface PipelineDefinition {
   id: string;
-  appliesTo?: { dispositions?: Disposition[] };
   phases: {
     id: Phase | (string & {});
     /** Required for custom phases: built-in phase used for reporting. */

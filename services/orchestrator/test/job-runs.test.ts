@@ -35,7 +35,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       await db.pool.query("insert into admin.git_repository (id, server_id, url, default_branch) values ($1, 'plain', $2, 'main')", [id, `${remote.baseUrl}/${id}.git`]);
     }
     await db.pool.query("insert into admin.project (id, name) values ('demo', 'Demo')");
-    await db.pool.query("insert into admin.application (project_id, id, name, disposition) values ('demo', 'web', 'Web', 'refactor')");
+    await db.pool.query("insert into admin.application (project_id, id, name) values ('demo', 'web', 'Web')");
     await db.pool.query("insert into admin.project_repository (project_id, repository_id, role) values ('demo', 'docs', 'document')");
     await db.pool.query("insert into admin.project_repository (project_id, application_id, repository_id, role) values ('demo', 'web', 'legacy', 'legacy')");
   });
