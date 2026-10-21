@@ -71,13 +71,13 @@ export interface SupportedModel {
   contextWindow?: number;
   maxTokens?: number;
   reasoning?: boolean;
+  /** The thinking levels pi accepts for this model, weakest first. */
+  thinkingLevels: ThinkingLevel[];
 }
 
 export interface SupportedBuiltinProvider {
   id: string;
   models: SupportedModel[];
-  /** The thinking levels pi accepts for this model, weakest first. */
-  thinkingLevels: ThinkingLevel[];
 }
 
 export interface SupportedCustomApi {
