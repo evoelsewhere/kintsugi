@@ -1,10 +1,10 @@
 # Document repository layout
 
-> Status: this page describes the ADR-0038 target layout. Paths are written by Kintsugi code, by people through pull requests, or are marked planned with the phase that will fill them.
+> Status: this page describes the layout of [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md) (it replaces the tree of ADR-0038). Paths are written by Kintsugi code, by people through pull requests, or are marked planned with the phase that will fill them. The repo holds no JSON in the contexts converted so far: every document is Markdown ([document formats](document-formats.md)).
 
-Each project has exactly one document repo. It holds everything except code ([ADR-0007](../decisions/0007-git-as-source-of-truth.md)). The layout groups content by subject (program, portfolio, architecture, application, unit) and by SDLC phase ([ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md)). The portal does not scaffold this repo from the starter template today; see [Build a project](../guides/build-project.md).
+Each project has exactly one document repo. It holds everything except code ([ADR-0007](../decisions/0007-git-as-source-of-truth.md)). The layout groups content by subject (program, portfolio, architecture, application, unit) and, inside an application, by bounded context ([ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md), the [context map](../architecture/concepts/document-repo-contexts.md)); the SDLC phases and gates follow [ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md). The portal does not scaffold this repo from the starter template today; see [Build a project](../guides/build-project.md).
 
-This page answers where artifacts live. For focused contracts, see the [manifest](document-repo-manifest.md), [item catalog](document-repo-item-catalog.md), [write path](document-repo-write-path.md), [read path and stage results](document-repo-read-path.md), [commit conventions](document-repo-commit-conventions.md), and [unit file format](document-repo-unit-files.md).
+This page answers where artifacts live. For focused contracts, see the [manifest](document-repo-manifest.md), [item catalog](document-repo-item-catalog.md), [write path](document-repo-write-path.md), [read path and stage results](document-repo-read-path.md), [commit conventions](document-repo-commit-conventions.md), [unit file format](document-repo-unit-files.md) and [document formats](document-formats.md).
 
 ## Vocabulary
 
@@ -22,19 +22,22 @@ plugins/                       P3: project-authored plugins only
 gates/                         project-level gate records: G0.md, G3.md
 applications/<app>/
   inputs/                      INTENT.md, graph/, telemetry/ attached by people
-  assessment/                  P1 assess and understand outputs
+  assessment/                  Assessment context (P1): inventory.md, topology.md, catalog/, ASSESSMENT.md, tools/
+  understanding/               Understanding context: plan.md (the AI plan, advice)
   to-be/                       P2: requirements.md, design.md
   gates/                       G1.md, G2.md, G5.md, G6.md
-  units/<module>/<unit>/       P1-P5: one directory per unit (see the unit file page)
+  units/<module>/<unit>/       the Unit aggregate (P1-P5): unit.md at the root, understanding/ for what is known (see the unit file page)
   cutover/                     P6: plan.md, runbook.md, rollback.md, go-no-go.md
   operate/                     P7: hypercare-report.md, handover.md
-  generated/                   rebuilt application aggregates
+  generated/                   read models rebuilt after a merge
 ```
+
+The JSON a run passes between its steps lives in the job workspace under `scratch/<app>/` and is never committed.
 
 ## Who writes what
 
-- **Written by code**: the `assess` job writes `applications/<app>/assessment/` (catalog, synthesis, topology and its views, extraction results) and the `understand` job writes the per-unit evidence under `applications/<app>/units/<module>/<unit>/` (`as-is.md`, `topology.json`, `rules.json`, `findings.json`, `trace.json`, `meta.json`). After a merge, `rebuild_aggregates.py` rebuilds the application aggregates under `applications/<app>/generated/` (`topology.json`, `rules_result.json`, `BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.json`, `traceability.md`, `README.md`) and commits them to the default branch; the application overview documents (`architecture.md`, `data-model.md`, `integrations.md`) are written by an on-demand Overview run.
-- **Written by people, through pull requests**: `program/`, `portfolio/`, `architecture/`, `standards/`, `plugins/`, `applications/<app>/inputs/`, `applications/<app>/cutover/`, `applications/<app>/operate/`, all gate records, and the human rule verdicts in `rules-review.json`.
+- **Written by code**: the `assess` job writes `applications/<app>/assessment/` (the inventory and topology summaries, the catalog, the synthesis, the extraction script), the `plan-understand` job writes `applications/<app>/understanding/plan.md`, and the `understand` job writes the per-unit documents under `applications/<app>/units/<module>/<unit>/understanding/` (`as-is.md`, `understanding.md`, `rules.md`, `data-objects.md`, `findings.md`, `topology.md`, `trace.md`). After a merge, `rebuild_aggregates.py` rebuilds the read models under `applications/<app>/generated/` (`BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.md`, `README.md`) and commits them to the default branch; the application overview documents (`architecture.md`, `data-model.md`, `integrations.md`) are written by an on-demand Overview run.
+- **Written by people, through pull requests**: `program/`, `portfolio/`, `architecture/`, `standards/`, `plugins/`, `applications/<app>/inputs/`, `applications/<app>/cutover/`, `applications/<app>/operate/`, all gate records, and the human rule verdicts in `rules-review.md`.
 - **Planned**: `applications/<app>/to-be/requirements.md` and `design.md` (P2 target specification; no writer is implemented yet), the per-unit `reviews/G4.md` records and the `unit.md` gate references (P4), and the per-unit `verify/` evidence (P5).
 
 ## Gate records
@@ -58,7 +61,7 @@ Straight-to-default-branch commits are limited to the default auto-commit paths:
 applications/*/units/**/unit.md
 applications/*/units/**/task.md
 applications/*/generated/**
-applications/*/assessment/understand/plan.json
+applications/*/understanding/plan.md
 ```
 
 `kintsugi.yaml` can replace the list with its `autoCommitPaths` key. Everything else arrives as a pull request from a `kintsugi/<user>/<write-id>` branch ([commit conventions](document-repo-commit-conventions.md)).
@@ -66,7 +69,6 @@ applications/*/assessment/understand/plan.json
 ## Generated and authored content
 
 - Files under `applications/<app>/generated/` are aggregates rebuilt from the merged unit files, never hand-authored sources.
-- `applications/<app>/assessment/understand/` holds run scratch (scope, shards, scan results); it is working area, not evidence.
 - The template's `plugins/` contains project-authored member plugin sources only.
 - The built-in copy `plugins/kintsugi/` and harness fallback renderings are planned outputs; the built-in plugin generator is not implemented yet.
 - `packages/harness-sdk` declares three planned marketplace output paths: `.claude-plugin/marketplace.json`, `.github/plugin/marketplace.json`, and `.agents/plugins/marketplace.json`. No current code writes these files; they are generated outputs, not authored sources or template content.
@@ -79,4 +81,4 @@ The document repo is a Git repository registered with role `document`; applicati
 
 - [Delivery pipeline](../methodology/delivery-pipeline.md) explains P0–P7 and gates G0–G6.
 - [Build a project](../guides/build-project.md) describes the currently available setup flow and the planned portal scaffold behavior.
-- [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md) defines the `assess` item catalog and selected-unit `understand` stages; its layout statements are superseded by [ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md).
+- [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md) defines the `assess` item catalog and selected-unit `understand` stages; its layout statements are superseded by [ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md) and [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md).

@@ -2,24 +2,25 @@
 
 > Defines the unit directory and the contract of each file in it.
 
-One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md)), at `applications/<app>/units/<module>/<unit>/`. The unit id is the full `<app>/<module>/<unit>`; `<unit>` in the path is only the last segment. A unit is created when a catalog item (`<module>/<item>`, see the [item catalog](document-repo-item-catalog.md)) is selected for migration. This reference uses **unit** and does not rename the legacy API `WorkItem`/`work-items` contracts.
+One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md)), at `applications/<app>/units/<module>/<unit>/`; it is the **Unit aggregate** of [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md): `unit.md` is its root and each context writes into its own subfolder (`understanding/` today). Every document is Markdown ([document formats](document-formats.md)). The unit id is the full `<app>/<module>/<unit>`; `<unit>` in the path is only the last segment. A unit is created when a catalog item (`<module>/<item>`, see the [item catalog](document-repo-item-catalog.md)) is selected for migration. This reference uses **unit** and does not rename the legacy API `WorkItem`/`work-items` contracts.
 
 | File | Content | Written by |
 |---|---|---|
 | `unit.md` | the unit state (frontmatter) and gate references | the `understand` job proposes it; state changes go through the Kintsugi API; auto-committed |
-| `as-is.md` | the P1 AS-IS specification of the unit | the `understand` job |
-| `rules.json` | the P1 machine rule extraction | the extract-rules step of `understand` |
-| `rules-review.json` | the P1 human rule verdicts | the unit's reviewer, through a pull request |
-| `findings.json` | security findings | the harden step of `understand` |
-| `topology.json` | the unit's topology fragment | the map step of `understand` |
-| `trace.json` | the unit traceability record | the `understand` job |
-| `meta.json` | run metadata (`status: understood`) | the `understand` job |
+| `understanding/as-is.md` | the P1 AS-IS specification of the unit | the `understand` job |
+| `understanding/understanding.md` | the provenance record: digest, source commit, run (`status: understood`) | the `understand` job |
+| `understanding/rules.md` | the P1 machine rule extraction: a table and a card per rule | the extract-rules step of `understand` |
+| `understanding/data-objects.md` | the data objects of the unit | the extract-rules step of `understand` |
+| `understanding/rules-review.md` | the P1 human rule verdicts (a table) | the unit's reviewer, through a pull request |
+| `understanding/findings.md` | security findings: scorecard, table, a card per finding | the security step of `understand` |
+| `understanding/topology.md` | the unit's leaves, links to other items, data stores | the scope step of `understand` |
+| `understanding/trace.md` | the unit traceability record | the `understand` job |
 | `task.md` | the P4 task pack (transformation notes) | the `design` job; auto-committed |
 | `design.md` | the P4 unit design | planned (P4) |
 | `reviews/G4.md` | the unit's G4 gate record | the unit's reviewer, through a pull request |
 | `verify/` | P5 golden cases (`golden/`) and run evidence (`runs/<run-id>/`) | the member harness's verification plugin |
 
-Format samples for `unit.md`, `rules.json`, `rules-review.json`, `trace.json` and `reviews/G4.md` live in `templates/document-repo/applications/billing-web/units/_example.example/`; they teach the formats and are not loaded.
+Format samples for `unit.md`, `rules.md`, `rules-review.md`, `trace.md` and `reviews/G4.md` live in `templates/document-repo/applications/billing-web/units/_example.example/`; they teach the formats and are not loaded.
 
 ## `unit.md` frontmatter
 
@@ -44,33 +45,29 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 
-## `rules.json` and `rules-review.json`
+## `rules.md` and `rules-review.md`
 
-`rules.json` is machine output and the extraction source of truth. Its rule ids are deterministic and citation-derived — each rule carries the source citation it was derived from — so they stay stable across re-extractions. Human rule verdicts live separately in `rules-review.json`, keyed by rule id:
+`rules.md` is machine output and the extraction source of truth: a table of the rules and one card per rule (`### RULE-<module>.<unit>-<hash>: name`, the fields of the rule card). Its rule ids are deterministic and citation-derived — each rule carries the source citation it was derived from — so they stay stable across re-extractions. Human rule verdicts live separately in `rules-review.md`, a table keyed by rule id:
 
-```json
-{
-  "RULE-invoice-amount-001": {
-    "verdict": "confirmed",
-    "approver": "dana",
-    "date": "2026-10-15"
-  }
-}
+```markdown
+| Rule | Verdict | Approver | Date |
+| --- | --- | --- | --- |
+| RULE-invoice.amount-1a2b3c4d | confirmed | dana | 2026-10-15 |
 ```
 
-A verdict is `confirmed`, `refuted` or `clarify`, with the approver and the date. A verdict whose rule id is absent from the current extraction is reported as orphaned, not silently applied.
+A verdict is `confirmed`, `refuted` or `clarify`, with the approver and the date (a `Note` column is optional). A verdict whose rule id is absent from the current extraction is reported as orphaned, not silently applied.
 
-## `trace.json`
+## `trace.md`
 
-The unit traceability record keeps the `understand` fields (`entryPoints`, `rulesApplied`, `findings`, `dependencies`, `dataObjects`, `externalSystems`, `files`, `openQuestions`) and three link arrays:
+The unit traceability record has the sections `Entry points`, `Rules applied`, `Findings`, `Dependencies` (a table `Target \| Kind \| Direction`), `Data objects`, `External systems`, `Files` and the front matter `openQuestions`, plus three sections the later phases fill in:
 
-| Field | Content |
+| Section | Content |
 |---|---|
-| `requirements` | the `REQ-…` ids of the requirements this unit implements |
-| `pullRequests` | the pull requests that migrated the unit (e.g. `#42`) |
-| `tests` | the test evidence paths, under the unit's `verify/` |
+| `Requirements` | the `REQ-…` ids of the requirements this unit implements |
+| `Pull requests` | the pull requests that migrated the unit (e.g. `#42`) |
+| `Tests` | the test evidence paths, under the unit's `verify/` |
 
-The chain rules → requirements → trace must close: every requirement's `derivedFrom` rules are traced rules of the unit, and every requirement derived from a traced rule is listed in `trace.requirements`. Trace files without the three arrays parse as legacy files.
+The chain rules → requirements → trace must close: every requirement's `derivedFrom` rules are traced rules of the unit, and every requirement derived from a traced rule is listed under `Requirements`.
 
 ## Requirements and `derivedFrom`
 
@@ -84,7 +81,7 @@ The invoice search returns amounts including tax.
 **derivedFrom:** RULE-invoice-amount-001
 ```
 
-A unit's `trace.json` links the requirement ids it implements in `trace.requirements`.
+A unit's `trace.md` links the requirement ids it implements under `Requirements`.
 
 ## Gate records
 

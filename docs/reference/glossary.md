@@ -32,7 +32,9 @@
 | **Unit file** | `applications/<app>/units/<module>/<unit>/unit.md` in the document repo; its frontmatter is the unit's state (ADR-0012, ADR-0038) |
 | **Wave** | A group of applications or units migrated together, by pattern |
 | **Work item** | Legacy API/domain term corresponding to a unit. Use **unit** in documentation; existing API/CLI names are unchanged. |
-| **Document repo** | The project's single Git repo for everything except code; see the [layout reference](document-repo.md) for current paths and planned homes |
+| **Document repo** | The project's single Git repo for everything except code; Markdown only, organised by bounded context; see the [layout reference](document-repo.md) for current paths and planned homes |
+| **Unit aggregate** | The directory `units/<module>/<unit>/` with `unit.md` as its root; each context writes into its own subfolder (`understanding/`); see [document repo contexts](../architecture/concepts/document-repo-contexts.md) |
+| **Scratch** | The JSON a run passes between its steps, under `scratch/<app>/` in the job workspace; never committed |
 | **Legacy repo** | An AS-IS repo with role `legacy` (code) or `legacy-data` (data); always read-only for Kintsugi |
 | **Standards** | The project's target conventions, mappings and review rules: plain documents in `standards/` of the document repo |
 | **Target repo** | A TO-BE repo with role `target`, implementing one architecture `component`; only members write to it |

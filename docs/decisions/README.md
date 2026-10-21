@@ -54,10 +54,11 @@ This page has two parts:
 | [0033](0033-assess-catalog-understand-selection.md) | Two runtime stages: assess builds the item catalog; understand runs on a selection | Accepted (layout statements amended by 0038) |
 | [0034](0034-understand-command-merges-map-rules-harden.md) | One understand command; map, extract-rules and harden are parts of it | Accepted |
 | [0037](0037-kernel-write-and-edit-tools-from-pi.md) | The kernel writes with pi's `write` and `edit`, not a custom `outputs_write` | Accepted (amends 0023) |
-| [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted |
+| [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted (tree superseded by 0042) |
 | [0039](0039-github-actions-ghcr-deployment.md) | Build and deploy the self-hosted package with GitHub Actions | Accepted |
 | [0040](0040-kernel-shell-and-git-tools.md) | The kernel gets `shell` and `git` tools and an `ls` tree mode | Accepted (supersedes 0037 D4 and 0029's no-shell statements) |
-| [0041](0041-ai-plan-for-understanding-order.md) | An AI plan for what to understand next, from the relationships between catalog items | Accepted |
+| [0041](0041-ai-plan-for-understanding-order.md) | An AI plan for what to understand next, from the relationships between catalog items | Accepted (paths amended by 0042) |
+| [0042](0042-markdown-only-document-repo-by-bounded-context.md) | A Markdown-only document repo, organized by bounded context | Accepted (supersedes the tree of 0038; amends 0031, 0033, 0041) |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amends 0015, 0026, 0027) |
 
@@ -118,7 +119,8 @@ This page has two parts:
 | D53 | Understand command | 🟢 | One `understand` command specifies the phase; `map`, `extract-rules` and `harden` commands and stage plans are removed (their method is its "Method reference") | M1 | ✅ [0034](0034-understand-command-merges-map-rules-harden.md) |
 | D54 | Kintsugi plugins | 🟢 | Plugins (Claude plugin format + workflows/scripts) are the catalog unit; built-in `reverse_engineering` and `modernize`; project plugins in the document repo; marketplace, file tree + code view, workflow view | M1 | 🟡 [0035](0035-kintsugi-plugins-marketplace.md) |
 | D55 | Document repository layout | 🔴 | One repo per project; root for project-wide material, `applications/<app>/` for application content and one full-id unit directory for P1–P5 evidence; generated aggregates, rule-review separation, stable citation-derived rule ids, requirement/rule/PR/test traceability and merged gate records | M1 | ✅ [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) |
-| D57 | Order of understanding | 🟢 | A `plan-understand` stage: a script computes the item graph from topology and catalog, a `legacy-analyst` job proposes batches with reasons, a script checks and measures them; `plan.json` is auto-committed advice, read by the portal with a staleness flag | M1 | ✅ [0041](0041-ai-plan-for-understanding-order.md) |
+| D57 | Order of understanding | 🟢 | A `plan-understand` stage: a script computes the item graph from topology and catalog, a `legacy-analyst` job proposes batches with reasons, a script checks and measures them; `plan.md` is auto-committed advice, read by the portal with a staleness flag | M1 | ✅ [0041](0041-ai-plan-for-understanding-order.md) |
+| D58 | Document repository format and contexts | 🟢 | The document repo holds Markdown only (front matter, tables, cards); the JSON a run passes between steps is scratch outside the layout; summaries instead of per-file and per-edge detail; bounded contexts (Assessment, Understanding, Modernization, Verification, Governance) around the Unit aggregate whose root is `unit.md`; verification evidence stays JSON until its own decision | M1 | ✅ [0042](0042-markdown-only-document-repo-by-bounded-context.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
@@ -129,7 +131,7 @@ This page has two parts:
 | Question | Proposal |
 |---|---|
 | Dedicated document repo, or a `kintsugi/` folder in an existing repo? | A dedicated repo (access and history separate from code) |
-| Do runtime results reach Git through PRs or direct commits? | PRs by default; direct commits for auto-commit paths. Current defaults: `applications/*/units/**/unit.md`, `applications/*/units/**/task.md`, `applications/*/generated/**` (ADR-0038) |
+| Do runtime results reach Git through PRs or direct commits? | PRs by default; direct commits for auto-commit paths. Current defaults: `applications/*/units/**/unit.md`, `applications/*/units/**/task.md`, `applications/*/generated/**`, `applications/*/understanding/plan.md` (ADR-0038, ADR-0042) |
 | Who authors Kintsugi's commits? | `kintsugi-bot` + trailers `Kintsugi-Job`, `Kintsugi-Agent` |
 
 ### D32 — Docker API

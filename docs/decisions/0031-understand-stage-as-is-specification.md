@@ -1,6 +1,6 @@
 # ADR-0031: understand stage: per-unit AS-IS specification closes the Understand phase
 
-- Status: Accepted (§1, §3 and §6 superseded by [ADR-0033](0033-assess-catalog-understand-selection.md))
+- Status: Accepted (document formats and paths amended by [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md)) (§1, §3 and §6 superseded by [ADR-0033](0033-assess-catalog-understand-selection.md))
 - Date: 2026-10-12
 - Decision register: D50
 
