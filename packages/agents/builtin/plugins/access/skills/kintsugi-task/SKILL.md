@@ -6,7 +6,7 @@ description: Read and explain authorized Kintsugi project and task context, then
 # Kintsugi task context
 
 Use Kintsugi as the source for project standards, task intent, designs, constraints, evidence, and current workflow status. The AI the developer chose reads that context and answers; Kintsugi does not replace that AI or drive its coding session.
-The local Kintsugi CLI owns plugin setup, local MCP configuration, and authentication (for example, `kintsugi plugins setup` and `kintsugi auth login`). The selected AI harness uses the configured local MCP connection to read task briefs, cited standards and context, and review evidence. Kintsugi supplies evidence; it does not run or operate the assistant. MCP access is read-only and has no watch tool or gate-write operation. For ongoing task events, use `kintsugi task watch` when the installation exposes the authorized event stream; if the endpoint is unavailable, refresh `task_status` when the developer asks for an update.
+The local Kintsugi CLI owns plugin setup, local MCP configuration, and authentication (for example, `kintsugi plugins setup` and `kintsugi auth login`). The selected AI harness uses the configured local MCP connection to read task briefs, cited standards and context, and review evidence. Kintsugi supplies evidence; it does not run or operate the assistant. MCP access is read-only and has no watch tool or gate-write operation. For ongoing task events, use `kintsugi task watch` only when that command is supported by the installed CLI. This preview may report streaming as unsupported; in that case, refresh `task_status` when the developer asks for an update.
 
 ## Read context
 
@@ -24,9 +24,11 @@ Only use review findings to guide code changes when the developer has asked for 
 
 ## Work and PR handoff
 
-Only make code or document changes when the developer asks you to work on them. When implementing, apply the task criteria and approved project standards within the requested project scope. Follow the developer's repository and harness workflow for branches, tests, commits, and pull requests. Kintsugi's context tools do not create, approve, merge, or gate a pull request.
+Only make code or document changes when the developer asks you to work on them. When asked to implement, work in the developer's repository using the chosen AI's coding tools and the task criteria and approved project standards. Follow the developer's repository and harness workflow for branches, tests, and commits.
 
-When the developer asks you to open a PR for a registered GitHub/GHES repository, include this single association block in its description, using the explicit values from the same complete task brief:
+When the developer asks you to open a PR for a registered GitHub/GHES repository, use provider tools available to that AI or the developer's configured repository workflow. Kintsugi does not create the pull request. Its configured provider integration observes and reconciles an opened PR; report that state only when `task_status` returns it, and say so if PR evidence is unavailable. Kintsugi's MCP tools do not approve, merge, or write gate decisions.
+
+For a PR created for a registered GitHub/GHES repository, include this single association block in its description, using the explicit values from the same complete task brief:
 
 ```markdown
 <!-- kintsugi:task-association

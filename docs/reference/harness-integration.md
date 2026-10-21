@@ -1,6 +1,6 @@
 # Harness integration
 
-Status: T00–T09 implement the unreleased context API, shared SDK, typed HTTPS client, read-only CLI/export, local stdio MCP bridge and generated client packages. Streaming and PR continuation remain planned. API and SDK changes must ship together; their strict version-1 schemas are still pre-release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
+Status: The unreleased workspace includes the typed client, read-only CLI/export, local stdio MCP bridge, generated client packages, GitHub/GHES pull-request observation, review findings and authorized task-event replay with `kintsugi task watch`. Native package setup remains version-gated. Evidence-bound gate publication and workflow continuation are still in progress. API and SDK changes must ship together; their strict version-1 schemas are still pre-release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
 
 Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
