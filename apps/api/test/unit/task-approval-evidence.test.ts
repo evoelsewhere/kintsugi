@@ -83,6 +83,6 @@ describe("verified task approval evidence", () => {
     const state = reader();
 
     await expect(state.reader.sourceApproval("shop", "applications/web/units/core/invoice/design.md", "1".repeat(40))).resolves.toBe("approved");
-    expect(query.mock.calls[0]?.[0]).toContain("required.value->>'path'");
+    expect(query.mock.calls[0]?.[0]).toContain("deliverable.value->>'path'");
   });
 });

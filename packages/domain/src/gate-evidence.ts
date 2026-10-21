@@ -1,5 +1,5 @@
 import { GATE_KEY_PATTERN, type GateId } from "./index.js";
-import { DomainValidationReader, type ValidationResult } from "./validation.js";
+import { isSafeRepositoryPath, DomainValidationReader, type ValidationResult } from "./validation.js";
 import { isFullUnitId } from "./member-task.js";
 
 const COMMIT_ID_PATTERN = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
@@ -31,6 +31,8 @@ export interface GateEvidence {
 }
 
 export interface GateDeliverableEvidence {
+  /** Approved artifact path, retained when the task moves to another deliverable set. */
+  path?: string;
   deliverableId: string;
   repositoryId: string;
   pullRequestId: string;
@@ -97,7 +99,7 @@ export function validateGateEvidence(value: unknown): ValidationResult<GateEvide
   rawDeliverables?.forEach((raw, index) => {
     const at = "deliverables[" + index + "]";
     const item = reader.object(raw, at, [
-      "deliverableId", "repositoryId", "pullRequestId", "reviewResultId", "reviewedRevision", "mergedRevision",
+      "deliverableId", "repositoryId", "pullRequestId", "reviewResultId", "reviewedRevision", "mergedRevision", "path",
     ]);
     if (item === undefined) return;
     const deliverableId = reader.string(item["deliverableId"], at + ".deliverableId", { pattern: EVIDENCE_ID_PATTERN });
@@ -106,8 +108,10 @@ export function validateGateEvidence(value: unknown): ValidationResult<GateEvide
     const reviewResultId = reader.string(item["reviewResultId"], at + ".reviewResultId", { pattern: EVIDENCE_ID_PATTERN });
     const reviewedRevision = reader.string(item["reviewedRevision"], at + ".reviewedRevision", { pattern: COMMIT_ID_PATTERN });
     const mergedRevision = reader.string(item["mergedRevision"], at + ".mergedRevision", { pattern: COMMIT_ID_PATTERN });
+    const path = reader.optionalString(item["path"], at + ".path", {maxLength:1000});
+    if (path !== undefined && !isSafeRepositoryPath(path)) reader.problem(at + ".path", "must be a safe repository path");
     if (deliverableId !== undefined && repositoryId !== undefined && pullRequestId !== undefined && reviewResultId !== undefined && reviewedRevision !== undefined && mergedRevision !== undefined) {
-      deliverables.push({ deliverableId, repositoryId, pullRequestId, reviewResultId, reviewedRevision, mergedRevision });
+      deliverables.push({ deliverableId, repositoryId, pullRequestId, reviewResultId, reviewedRevision, mergedRevision, ...(path === undefined ? {} : {path}) });
     }
   });
 

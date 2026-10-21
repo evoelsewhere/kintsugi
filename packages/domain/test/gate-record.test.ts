@@ -50,7 +50,7 @@ describe("evidence-bound gate records", () => {
         deliverableIds: ["invoice-code"],
         reason: "The code artifact is intentionally deferred under the signed exception.",
       },
-      deliverables: [{ ...evidence.deliverables[0], deliverableId: "invoice-design" }],
+      deliverables: [{ ...evidence.deliverables[0]!, deliverableId: "invoice-design" }],
     };
     const markdown = formatGateRecord(waived);
 

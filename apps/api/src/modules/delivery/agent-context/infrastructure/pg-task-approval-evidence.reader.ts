@@ -33,18 +33,13 @@ export class PgTaskApprovalEvidenceReader extends TaskApprovalEvidenceReader {
     const result = await getPool().query<GateEvidenceRow>(
       `select p.decision_id, p.project_id, p.unit_id, p.gate_id, p.decision, p.state, p.evidence,
               p.evidence_hash, p.record_path, p.record_commit, p.document_repository_id,
-              required.value->>'path' as deliverable_path,
+              deliverable.value->>'path' as deliverable_path,
               deliverable.value->>'mergedRevision' as deliverable_revision
          from workflow.gate_publication p
-         join delivery.member_task_projection task
-           on task.project_id = p.project_id and task.unit_id = p.unit_id
          cross join lateral jsonb_array_elements(p.evidence->'deliverables') deliverable(value)
-         cross join lateral jsonb_array_elements(task.work_item->'requiredDeliverables') required(value)
         where p.project_id = $1 and p.state = 'effective' and p.decision in ('approved', 'waived')
-          and required.value->>'path' = $2
-          and required.value->>'repositoryId' = task.repository_id
-          and required.value->>'repositoryId' = deliverable.value->>'repositoryId'
-          and required.value->>'id' = deliverable.value->>'deliverableId'
+          and deliverable.value->>'path' = $2
+          and deliverable.value->>'repositoryId' = p.document_repository_id
         order by p.updated_at desc, p.decision_id
         limit 20`,
       [projectId, path],

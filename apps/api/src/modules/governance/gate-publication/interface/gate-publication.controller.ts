@@ -31,7 +31,7 @@ export class GatePublicationController {
   @Get(":decisionId")
   @ApiOperation({ summary: "Get publication, merge and effective-gate status" })
   @ApiOkResponse({ description: "The evidence-bound gate publication." })
-  get(@Param("decisionId") decisionId: string): Promise<GatePublication> {
-    return this.publications.get(decisionId);
+  get(@Param("decisionId") decisionId: string, @CurrentActor() actor: Actor): Promise<GatePublication> {
+    return this.publications.get(decisionId, actor);
   }
 }

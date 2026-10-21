@@ -32,6 +32,7 @@ import { onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.
 import { triggerRebuilds } from "./aggregates.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
 import { publishGate } from "./gates/publish.js";
+import { PostgresGateReconciler } from "./gates/reconcile.js";
 import { GitSnapshotPins, pruneExpiredSnapshots, recoverStaleSnapshots, retainSnapshot } from "./git-sync/retention.js";
 import { PostgresSnapshotRetentionRepository } from "./git-sync/retention-store.js";
 import { pruneMemberEvents } from "./member-event-retention.js";
@@ -134,6 +135,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     }),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
+  const gateReconciler = new PostgresGateReconciler({ pool: options.pool, repositories: store, storage: options.storage, observer: githubObserver });
   const jobStore = new PgJobStore(options.pool);
   const deps = { store, storage: options.storage };
   const writerDeps = {
@@ -337,6 +339,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       else if (result.status === "partial") log(`provider sync ${repositoryId} resumed after ${result.pages} page(s)`);
     }
   });
+  const reconcileGates = tick("gate reconciliation", () => gateReconciler.scan(log));
   const watchReviews = tick("review watch", async () => {
     const outcome = await watchPullRequests({ ...writerDeps, log });
     if (outcome.merged.length + outcome.closed.length > 0) log(`review watch: ${outcome.merged.length} merged, ${outcome.closed.length} closed`);
@@ -433,6 +436,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void syncProviderChanges(), (options.providerSyncScanSeconds ?? 1) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),
     setInterval(() => void watchReviews(), (options.reviewWatchSeconds ?? 60) * 1000),
+    setInterval(() => void reconcileGates(), (options.reviewWatchSeconds ?? 60) * 1000),
     ...(options.jobs === undefined ? [] : [
       setInterval(() => void scheduleMemberReviews(), (options.memberReviewScanSeconds ?? 30) * 1000),
       setInterval(() => void recoverMemberReviews(), 30 * 1000),
@@ -456,6 +460,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   void pruneMemberEventLog();
   void recoverSnapshots();
   void watchReviews();
+  void reconcileGates();
 
   const heartbeat = await startHeartbeat({
     pool: options.pool,
