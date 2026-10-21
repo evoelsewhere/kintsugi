@@ -7,7 +7,7 @@ import * as hub from "../src/index.js";
 const temporary: string[] = [];
 const launcher = {
   launcherPath: process.execPath,
-  cliEntrypointPath: "C:/tools/kintsugi/dist/main.js",
+  cliEntrypointPath: join(tmpdir(), "kintsugi", "dist", "main.js"),
   profileId: "work",
   cliVersion: "0.1.0",
 };
@@ -64,7 +64,7 @@ describe("Coding Agent Workflow plugin generation", () => {
       expect(manifest.version).toBe("0.1.0");
       expect(mcp.mcpServers.kintsugi).toMatchObject({
         command: process.execPath,
-        args: ["C:/tools/kintsugi/dist/main.js", "mcp", "serve", "--profile", "work"],
+        args: [launcher.cliEntrypointPath, "mcp", "serve", "--profile", "work"],
       });
       if (target !== "claude") expect(mcp.mcpServers.kintsugi.type).toBe("stdio");
       expect(JSON.stringify(output.files)).not.toContain("TEST-SECRET");
