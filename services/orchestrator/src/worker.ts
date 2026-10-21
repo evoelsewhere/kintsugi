@@ -33,6 +33,8 @@ import { onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.
 import { triggerRebuilds } from "./aggregates.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
 import { publishGate } from "./gates/publish.js";
+import { CONTINUATION_QUEUE } from "./member-workflow/continue.js";
+import { dispatchContinuation } from "./member-workflow/dispatch.js";
 import { PostgresGateReconciler } from "./gates/reconcile.js";
 import { GitSnapshotPins, pruneExpiredSnapshots, recoverStaleSnapshots, retainSnapshot } from "./git-sync/retention.js";
 import { PostgresSnapshotRetentionRepository } from "./git-sync/retention-store.js";
@@ -397,6 +399,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
             throw new TypeError("snapshot retention outbox payload is invalid");
           }
           await boss.send(SNAPSHOT_RETENTION_QUEUE, { snapshotId: payload["snapshotId"] }, { singletonKey: operation.operationId });
+          return;
+        }
+        if (operation.queue === CONTINUATION_QUEUE) {
+          await dispatchContinuation({ pool: options.pool, current: input => gateReconciler.currentContinuation(input), recheckAuthority: (client, evidence, reviewers) => gateReconciler.recheckAuthority(client, evidence, reviewers) }, operation);
           return;
         }
         if (operation.queue === DOCUMENT_WRITE_QUEUE) {

@@ -1,3 +1,5 @@
+import { planContinuation } from "../src/member-workflow/continue.js";
+import { dispatchContinuation } from "../src/member-workflow/dispatch.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -154,9 +156,43 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     expect(results.map(result => result.status)).toEqual(["effective", "effective"]);
     const publication = (await db.pool.query("select state,record_commit from workflow.gate_publication where decision_id=$1", [evidence.decisionId])).rows[0];
     expect(publication).toEqual({ state: "effective", record_commit: recordCommit });
+    const intents = await db.pool.query("select queue,intent_key,payload from workflow.outbox where transition_key=$1", [`gate-effective:${evidence.decisionId}:${(await db.pool.query("select evidence_hash from workflow.gate_publication where decision_id=$1", [evidence.decisionId])).rows[0].evidence_hash}`]);
+    expect(intents.rows).toEqual([{queue:"workflow-next-step",intent_key:"continue-effective-gate",payload:expect.objectContaining({decisionId:evidence.decisionId,recordCommit})}]);
     expect((await db.pool.query("select count(*)::int as count from workflow.member_event where kind='gate.effective' and metadata->>'decisionId'=$1", [evidence.decisionId])).rows[0].count).toBe(1);
   });
 
+  it("EVT-03 resumes after gate commit and consume-before-ack without repeating continuation, including after event expiry",async()=>{
+    const {evidence,deps}=await seed();
+    await publish(evidence);
+    recordCommit=await remote.commit("docs",path,formatGateRecord(evidence));
+    providerState="merged";
+    await effective.reconcileGatePublication(deps,evidence.decisionId);
+    // A restarted worker can consume the committed intent with all clients disconnected.
+    const operation=(await db.pool.query("select operation_id,transition_key,project_id,queue,intent_key,payload,attempts from workflow.outbox where queue='workflow-next-step' and payload->>'decisionId'=$1",[evidence.decisionId])).rows[0];
+    const item={operationId:operation.operation_id,transitionKey:operation.transition_key,projectId:operation.project_id,queue:operation.queue,intentKey:operation.intent_key,payload:operation.payload,attempts:operation.attempts};
+    const consumer={pool:db.pool,current:async()=>({plan:{status:"unavailable" as const,code:"PIPELINE_NOT_DECLARED"},evidence,reviewers:[]}),recheckAuthority:deps.recheckAuthority};
+    const outcomes=await Promise.all([dispatchContinuation(consumer,item),dispatchContinuation(consumer,item)]);
+    expect(outcomes.map(result=>result.created).sort()).toEqual([false,true]);
+    expect((await db.pool.query("select count(*)::int as count from workflow.member_transition where transition_key=$1",[`gate-continuation:${evidence.decisionId}:${operation.payload.evidenceHash}`])).rows[0].count).toBe(1);
+    const event=(await db.pool.query("select metadata from workflow.member_event where transition_key=$1",[`gate-continuation:${evidence.decisionId}:${operation.payload.evidenceHash}`])).rows[0];
+    expect(event.metadata).toMatchObject({schemaVersion:"1",status:"blocked",code:"PIPELINE_NOT_DECLARED",decisionId:evidence.decisionId,recordCommit});
+    // Simulate a crash before outbox acknowledgement, then retention cleanup before replay.
+    await db.pool.query("delete from workflow.member_event where transition_key=$1",[`gate-continuation:${evidence.decisionId}:${operation.payload.evidenceHash}`]);
+    await expect(dispatchContinuation({...consumer,current:async()=>{throw new Error("offline on replay");}},item)).resolves.toMatchObject({created:false});
+    expect((await db.pool.query("select count(*)::int as count from workflow.member_event where transition_key=$1",[`gate-continuation:${evidence.decisionId}:${operation.payload.evidenceHash}`])).rows[0].count).toBe(0);
+  });
+
+  it("does not emit continuation when effective evidence is stale",async()=>{
+    const {evidence,deps}=await seed();
+    await publish(evidence);
+    recordCommit=await remote.commit("docs",path,formatGateRecord(evidence));
+    providerState="merged";
+    await effective.reconcileGatePublication(deps,evidence.decisionId);
+    const operation=(await db.pool.query("select * from workflow.outbox where queue='workflow-next-step' and payload->>'decisionId'=$1",[evidence.decisionId])).rows[0];
+    const consumer={pool:db.pool,current:async()=>undefined,recheckAuthority:deps.recheckAuthority};
+    await expect(dispatchContinuation(consumer,{operationId:operation.operation_id,transitionKey:operation.transition_key,projectId:operation.project_id,queue:operation.queue,intentKey:operation.intent_key,payload:operation.payload,attempts:1})).rejects.toThrow("no longer current");
+    expect((await db.pool.query("select count(*)::int as count from workflow.member_event where kind='task.continuation' and metadata->>'decisionId'=$1",[evidence.decisionId])).rows[0].count).toBe(0);
+  });
   it("GATE-03 rejects a record that replaces the immutable decision evidence", async () => {
     const { evidence, deps } = await seed();
     await publish(evidence);
@@ -184,6 +220,18 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     await expect(effective.reconcileGatePublication(deps, evidence.decisionId)).resolves.toMatchObject({ status: "effective" });
   });
 
+  it("rolls projection and event back when continuation intent persistence fails", async () => {
+    const { evidence, deps } = await seed();
+    await publish(evidence);
+    recordCommit = await remote.commit("docs", path, formatGateRecord(evidence));
+    providerState = "merged";
+    await db.pool.query("create function public.fail_continuation_intent() returns trigger language plpgsql as $$ begin if new.queue='workflow-next-step' then raise exception 'intent crash'; end if; return new; end $$; create trigger fail_continuation_intent before insert on workflow.outbox for each row execute function public.fail_continuation_intent()");
+    try { await expect(effective.reconcileGatePublication(deps, evidence.decisionId)).rejects.toThrow("intent crash"); }
+    finally { await db.pool.query("drop trigger fail_continuation_intent on workflow.outbox; drop function public.fail_continuation_intent()"); }
+    expect((await db.pool.query("select state,record_commit from workflow.gate_publication where decision_id=$1", [evidence.decisionId])).rows[0]).toEqual({state:"pending-publication",record_commit:null});
+    expect((await db.pool.query("select count(*)::int as count from workflow.member_event where kind='gate.effective' and metadata->>'decisionId'=$1", [evidence.decisionId])).rows[0].count).toBe(0);
+    await expect(effective.reconcileGatePublication(deps, evidence.decisionId)).resolves.toMatchObject({status:"effective"});
+  });
   it("does not record effective state when reviewer access is revoked during provider observation", async () => {
     const { evidence } = await seed();
     const reviewerId = `reviewer-${number}`;
@@ -226,6 +274,7 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     });
     const unitPath = "applications/web/units/core/invoice/unit.md";
     const unitText = "---\nid: web/core/invoice\napplication: web\nmodule: core\nkind: module\ntitle: Invoice\nphase: migrate\nstatus: in-progress\nrequiredDeliverables:\n  - {id: code, repositoryId: docs, path: result.md}\n---\n";
+    await remote.commit("docs", "kintsugi.yaml", "schemaVersion: 1\nproject: {id: shop, name: Shop}\ndocument: {server: github, path: org/docs}\nunitKinds: [module]\napplications:\n  - {id: web, disposition: refactor, pipeline: prepared, repos: []}\npipelines:\n  - id: prepared\n    phases:\n      - id: migrate\n        perUnit: true\n        stages:\n          - {id: approve, performer: {member: [core-team]}, gate: G4}\n      - id: verify\n        perUnit: true\n        stages:\n          - {id: test, performer: {member: [qc]}}\n");
     const unitCommit = await remote.commit("docs", unitPath, unitText);
     const inputId=evidence.decisionId;
     await db.pool.query("insert into admin.project_access (project_id,user_id,granted_by) values ('shop','human','human') on conflict do nothing");
@@ -253,6 +302,10 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     approvalState = "APPROVED";
     await expect(effective.reconcileGatePublication(live, inputId)).resolves.toMatchObject({ status: "effective" });
     expect((await db.pool.query("select record_commit from workflow.gate_publication where decision_id=$1", [inputId])).rows[0].record_commit).toBe(gateMerge);
+    const continuationFacts={projectId:"shop",unitId:evidence.unitId,gateId:evidence.gateId,decisionId:evidence.decisionId,evidenceHash,recordCommit:gateMerge};
+    const continuation=await adapter.currentContinuation(continuationFacts);
+    expect(continuation).toBeDefined();
+    expect(planContinuation(continuationFacts,continuation!.plan)[0]).toMatchObject({status:"member-action",phase:"verify",stage:"test"});
     await remote.commit("docs", unitPath, unitText + "Changed relevant instructions.\n");
     expect(await adapter.verification.currentContext("shop", "web/core/invoice")).toBeUndefined();
   });
