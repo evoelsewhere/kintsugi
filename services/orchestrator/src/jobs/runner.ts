@@ -33,7 +33,6 @@ import { maskJobOutput, runJobOutputHook } from "./hook.js";
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
-  DEFAULT_GATE_DECIDER,
   type GateDecider,
   type JobEventKind,
   JobFailure,
@@ -83,8 +82,8 @@ export interface JobRunnerDeps {
   scriptsDir?: string;
   workflowsDir?: string;
   hookFile?: string;
-  /** Decides the gates of stage plans; default: the documented default, recorded as defaulted. */
-  gates?: GateDecider;
+  /** Every registered runner must explicitly choose how stage decisions are persisted. */
+  gates: GateDecider;
   /**
    * Fill in what a mock agent job would have written (expected files, structured results);
    * default: when the agent runtime is the mock backend.
@@ -730,7 +729,7 @@ export class JobRunner {
         values: { app: run.applicationId, repo: run.sourceRepositoryId, commit: ws.commit },
         dirs: { root: ws.root, in: ws.in, work, out: ws.out },
         limits: this.#defaults.stage,
-        gates: this.#deps.gates ?? DEFAULT_GATE_DECIDER,
+        gates: this.#deps.gates,
         runLeaf,
         log: (line, data) => {
           this.#log(`stage ${run.name} (${run.id}): ${line}`);
