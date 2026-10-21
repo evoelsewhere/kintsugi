@@ -1,84 +1,118 @@
-// Local, model-free integration smoke. Build the workspace before running.
+// Local, model-free public-process smoke. Build the workspace before running.
 // Requires KINTSUGI_TEST_DATABASE_URL on a loopback Postgres server; creates its own DB.
 import assert from "node:assert/strict";
-import { fork } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { attemptPublicProcessCleanup, createPublicProcessSpec, redactPublicProcessDiagnostics } from "./e2e/public-process.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const apiRequire = createRequire(join(repoRoot, "apps/api/package.json"));
 const { Pool, Client } = apiRequire("pg");
 const compiled = (path) => import(pathToFileURL(join(repoRoot, path)).href);
+const diagnosticSecrets = [];
 
-async function child(kind) {
-  let close;
-  if (kind === "api") {
-    apiRequire("reflect-metadata");
-    const { NestFactory } = apiRequire("@nestjs/core");
-    const { StandardSchemaValidationPipe } = apiRequire("@nestjs/common");
-    const { AppModule } = await compiled("apps/api/dist/app.module.js");
-    const { ensureSchema, closePool } = await compiled("apps/api/dist/common/db/pool.js");
-    const { HttpExceptionFilter } = await compiled("apps/api/dist/common/filters/http-exception.filter.js");
-    const { ResponseInterceptor } = await compiled("apps/api/dist/common/interface/response.js");
-    const app = await NestFactory.create(AppModule, { logger: false });
-    await ensureSchema();
-    app.setGlobalPrefix("api");
-    app.useGlobalFilters(new HttpExceptionFilter());
-    app.useGlobalInterceptors(new ResponseInterceptor());
-    app.useGlobalPipes(new StandardSchemaValidationPipe());
-    await app.listen(0, "127.0.0.1");
-    close = async () => { await app.close(); await closePool(); };
-    process.send({ type: "ready", port: app.getHttpServer().address().port });
-  } else {
-    const { CheckoutStorage } = await compiled("packages/git/dist/index.js");
-    const { startWorker } = await compiled("services/orchestrator/dist/worker.js");
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
-    const worker = await startWorker({
-      databaseUrl: process.env.DATABASE_URL, pool,
-      storage: new CheckoutStorage(process.env.KINTSUGI_DATA_DIR),
-      pollIntervalSeconds: 3600, pendingScanSeconds: 1, heartbeatSeconds: 1,
-      outboxScanSeconds: 0.2, log: () => undefined,
-    });
-    process.on("message", (message) => {
-      if (message.type === "sync") void worker.requestSync(message.repositoryId).catch(() => process.exit(1));
-    });
-    close = async () => { await worker.stop(); await pool.end(); };
-    process.send({ type: "ready" });
-  }
-  process.on("message", async (message) => {
-    if (message.type === "shutdown") { await close(); process.exit(0); }
-  });
+function safeError(error) {
+  const value = error instanceof Error ? error.stack ?? error.message : String(error);
+  return redactPublicProcessDiagnostics(value, diagnosticSecrets);
 }
 
-async function start(kind, env, processes) {
-  const processHandle = fork(fileURLToPath(import.meta.url), [kind], {
-    cwd: repoRoot, env, stdio: ["ignore", "pipe", "pipe", "ipc"],
-  });
-  processes.push(processHandle);
-  let diagnostics = "";
-  for (const stream of [processHandle.stdout, processHandle.stderr]) {
-    stream.on("data", (chunk) => { diagnostics = (diagnostics + chunk).slice(-4000); });
-  }
-  return await new Promise((accept, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${kind} startup timed out`)), 45_000);
-    processHandle.once("message", (message) => { clearTimeout(timer); accept({ processHandle, ...message }); });
-    processHandle.once("exit", (code) => {
+function isExited(processHandle) {
+  return processHandle.exitCode !== null || processHandle.signalCode !== null;
+}
+
+function waitForExit(processHandle, timeoutMs) {
+  if (isExited(processHandle)) return Promise.resolve(true);
+  return new Promise((accept) => {
+    let timer;
+    const finish = (exited) => {
       clearTimeout(timer);
-      reject(new Error(`${kind} exited before ready (${code}): ${diagnostics}`));
-    });
-    processHandle.once("error", (error) => { clearTimeout(timer); reject(error); });
+      processHandle.off("exit", onExit);
+      accept(exited);
+    };
+    const onExit = () => finish(true);
+    processHandle.once("exit", onExit);
+    timer = setTimeout(() => finish(false), timeoutMs);
+    if (isExited(processHandle)) finish(true);
   });
 }
 
-async function eventually(check, label) {
+function start(kind, options, processes) {
+  const spec = createPublicProcessSpec(kind, options);
+  const processHandle = spawn(spec.command, spec.args, {
+    cwd: spec.cwd,
+    env: spec.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const record = { kind, processHandle, diagnostics: "", startError: undefined };
+  processes.push(record);
+  for (const stream of [processHandle.stdout, processHandle.stderr]) {
+    stream.setEncoding("utf8").on("data", (chunk) => { record.diagnostics = (record.diagnostics + chunk).slice(-8_000); });
+  }
+  processHandle.once("error", (error) => { record.startError = error; });
+  return record;
+}
+
+function safeDiagnostics(record) {
+  return redactPublicProcessDiagnostics(record.diagnostics, diagnosticSecrets);
+}
+
+function ensureRunning(record, label) {
+  if (record.startError !== undefined) throw new Error(`${label} failed to start: ${safeError(record.startError)}`);
+  if (isExited(record.processHandle)) {
+    throw new Error(`${label} exited before ready (${record.processHandle.exitCode ?? record.processHandle.signalCode}): ${safeDiagnostics(record)}`);
+  }
+}
+
+async function stop(record) {
+  if (isExited(record.processHandle)) return { stopped: true, forced: false };
+
+  let signalError;
+  try {
+    record.processHandle.kill("SIGTERM");
+  } catch (error) {
+    signalError = error;
+  }
+  if (await waitForExit(record.processHandle, 15_000)) return { stopped: true, forced: false };
+
+  let forcedError;
+  try {
+    record.processHandle.kill("SIGKILL");
+  } catch (error) {
+    forcedError = error;
+  }
+  const stopped = await waitForExit(record.processHandle, 5_000);
+  if (!stopped) {
+    const details = [signalError, forcedError].filter(Boolean).map(safeError).join("; ");
+    throw new Error(`could not stop ${record.kind} process${details ? `: ${details}` : ""}`);
+  }
+  return { stopped: true, forced: true };
+}
+
+async function reservePort() {
+  const server = createServer();
+  await new Promise((accept, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", accept);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("could not allocate the API smoke port");
+  const { port } = address;
+  await new Promise((accept, reject) => server.close((error) => error ? reject(error) : accept()));
+  return port;
+}
+
+async function eventually(check, label, records = []) {
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
     if (await check()) return;
+    for (const record of records) ensureRunning(record, label);
     await delay(200);
   }
   throw new Error(`${label} timed out`);
@@ -94,35 +128,73 @@ async function smoke() {
   server.pathname = "/postgres";
   const maintenance = new Client({ connectionString: server.toString() });
   const processes = [];
-  let pool, remote, dataDir, created = false;
+  const cleanupErrors = [];
+  let pool, poolError, remote, dataDir, created = false;
+  let smokeError;
   let passed = false;
   let forcedStop = false;
+  let processOptions;
+  let apiProcess;
+  let workerProcess;
+
   try {
     await maintenance.connect();
     await maintenance.query(`create database ${name}`);
     created = true;
     server.pathname = `/${name}`;
-    pool = new Pool({ connectionString: server.toString(), max: 2 });
+    const databaseUrl = server.toString();
+    pool = new Pool({ connectionString: databaseUrl, max: 2 });
+    pool.on("error", (error) => { poolError ??= error; });
     dataDir = await mkdtemp(join(tmpdir(), "kintsugi-context-smoke-"));
     const password = randomBytes(20).toString("hex");
-    const env = { ...process.env, DATABASE_URL: server.toString(), KINTSUGI_DATA_DIR: dataDir,
-      KINTSUGI_SECRET_KEY: randomBytes(32).toString("base64"),
-      KINTSUGI_BOOTSTRAP_ADMIN_USER: "smoke-admin", KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD: password };
-    const api = await start("api", env, processes);
-    const base = `http://127.0.0.1:${api.port}/api`;
+    const secretKey = randomBytes(32).toString("base64");
+    diagnosticSecrets.push(password, secretKey);
+    processOptions = {
+      repoRoot,
+      cwd: dataDir,
+      databaseUrl,
+      dataDir,
+      secretKey,
+      adminUser: "smoke-admin",
+      adminPassword: password,
+      port: await reservePort(),
+    };
+    const base = `http://127.0.0.1:${processOptions.port}/api`;
+
+    async function startApiProcess() {
+      apiProcess = start("api", processOptions, processes);
+      await eventually(async () => {
+        try {
+          const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(1_000) });
+          return response.status === 200;
+        } catch {
+          return false;
+        }
+      }, "API public process", [apiProcess]);
+    }
+
+    await startApiProcess();
     let cookie;
     async function request(method, path, body, token) {
       const headers = { "x-kintsugi-csrf": "1" };
       if (body !== undefined) headers["content-type"] = "application/json";
       if (token !== undefined) headers.authorization = `Bearer ${token}`;
       else if (cookie !== undefined) headers.cookie = cookie;
-      const response = await fetch(base + path, { method, headers,
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(45_000) });
+      const response = await fetch(base + path, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: AbortSignal.timeout(45_000),
+      });
       const session = response.headers.getSetCookie().find((value) => value.startsWith("kintsugi_session="));
-      if (session !== undefined) cookie = session.split(";")[0];
+      if (session !== undefined) {
+        cookie = session.split(";")[0];
+        diagnosticSecrets.push(cookie);
+      }
       const text = await response.text();
       return { status: response.status, body: text ? JSON.parse(text) : undefined };
     }
+
     assert.equal((await request("GET", "/health")).status, 200);
     assert.equal((await request("POST", "/auth/login", { username: "smoke-admin", password })).status, 200);
     const me = (await request("GET", "/auth/me")).body.data;
@@ -147,8 +219,17 @@ async function smoke() {
     const issued = await request("POST", "/auth/member-tokens", { name: "Smoke", projectIds: ["smoke"], expiresAt: new Date(Date.now() + 300_000).toISOString() });
     assert.equal(issued.status, 201);
     const token = issued.body.data.token;
-    const worker = await start("worker", env, processes);
-    await eventually(async () => (await pool.query("select last_commit from admin.git_repository where id='smoke-docs'")).rows[0]?.last_commit === commitA, "worker Git sync");
+    diagnosticSecrets.push(token);
+
+    workerProcess = start("worker", processOptions, processes);
+    assert(workerProcess.processHandle.pid !== undefined);
+    await eventually(async () => {
+      const heartbeat = await pool.query("select 1 from workflow.worker_heartbeat where pid = $1 and stopped_at is null", [workerProcess.processHandle.pid]);
+      return heartbeat.rows.length > 0;
+    }, "worker public process startup", [workerProcess]);
+    await eventually(async () => (await pool.query("select last_commit from admin.git_repository where id='smoke-docs'")).rows[0]?.last_commit === commitA,
+      "worker Git sync A", [workerProcess]);
+
     const selector = (path, query) => path + "?" + new URLSearchParams(query);
     assert.equal((await request("GET", "/member/v1/projects", undefined, token)).body.data.items.length, 1);
     const tasks = await request("GET", selector("/member/v1/tasks", { projectId: "smoke", mine: "true" }), undefined, token);
@@ -168,13 +249,20 @@ async function smoke() {
     assert.equal(doc.status, 200);
     assert.match(doc.body.data.text, /revision A/);
     const search = await request("GET", selector("/member/v1/search", { ...documentQuery, query: "invoice" }), undefined, token);
-    // Search has no source selector; strict schemas must reject unrelated selectors.
-    assert.equal(search.status, 400);
+    assert.equal(search.status, 400, "search must reject a source selector it does not support");
     const searchQuery = { projectId: "smoke", unitId: query.unitId, snapshotId: brief.snapshotId, query: "invoice" };
     assert((await request("GET", selector("/member/v1/search", searchQuery), undefined, token)).body.data.items.length > 0);
+
     const commitB = await remote.commit("docs", sourcePath, "# Evidence\nSmoke invoice evidence revision B.\n");
-    worker.processHandle.send({ type: "sync", repositoryId: "smoke-docs" });
-    await eventually(async () => (await pool.query("select last_commit from admin.git_repository where id='smoke-docs'")).rows[0]?.last_commit === commitB, "worker Git advance");
+    await eventually(async () => (await pool.query("select last_commit from admin.git_repository where id='smoke-docs'")).rows[0]?.last_commit === commitB,
+      "worker Git sync B", [workerProcess]);
+    const apiStop = await stop(apiProcess);
+    forcedStop ||= apiStop.forced;
+    assert.equal(apiStop.stopped, true, "API process must stop before the restart check");
+    cookie = undefined;
+    await startApiProcess();
+    assert.equal((await request("POST", "/auth/login", { username: "smoke-admin", password })).status, 200);
+    assert.equal((await request("GET", "/auth/me")).status, 200);
     assert.match((await request("GET", selector("/member/v1/documents", documentQuery), undefined, token)).body.data.text, /revision A/);
     const oldBrief = await request("GET", selector("/member/v1/task-brief", { ...query, snapshotId: brief.snapshotId }), undefined, token);
     assert.equal(oldBrief.status, 200);
@@ -184,36 +272,52 @@ async function smoke() {
     assert.equal(await resolveCommit(new CheckoutStorage(dataDir).mirror("local", "smoke-docs"), snapshotPinRef(brief.snapshotId, "smoke-docs")), commitA);
     assert.equal((await request("GET", "/auth/me", undefined, token)).status, 403);
     assert.equal((await request("POST", "/admin/projects", { id: "forbidden", name: "Forbidden" }, token)).status, 403);
-    assert.equal((await request("GET", selector("/member/v1/reviews/review-smoke", { projectId: "smoke" }), undefined, token)).status, 501);
+    const unknownReview = await request("GET", selector("/member/v1/reviews/review-smoke", { projectId: "smoke" }), undefined, token);
+    assert.equal(unknownReview.status, 404);
+    assert.equal(unknownReview.body.success, false);
     assert.equal((await request("DELETE", `/admin/project-access/smoke/${me.id}`)).status, 204);
     assert.equal((await request("GET", selector("/member/v1/documents", documentQuery), undefined, token)).status, 403);
     passed = true;
-  } finally {
-    for (const handle of processes.reverse()) {
-      if (handle.exitCode !== null || handle.signalCode !== null) continue;
-      handle.send({ type: "shutdown" });
-      await Promise.race([new Promise((done) => handle.once("exit", done)), delay(5000)]);
-      if (handle.exitCode === null) { forcedStop = true; handle.kill(); await new Promise((done) => handle.once("exit", done)); }
-    }
-    await remote?.close();
-    await pool?.end();
-    if (created) await maintenance.query(`drop database ${name} with (force)`);
-    await maintenance.end();
-    if (dataDir !== undefined) {
+  } catch (error) {
+    smokeError = error;
+  }
+
+  const cleanupSteps = [...processes].reverse().map((record) => ({
+    label: `stop ${record.kind} process`,
+    cleanup: async () => {
+      const result = await stop(record);
+      forcedStop ||= result.forced;
+      if (!result.stopped) throw new Error(`${record.kind} process did not stop`);
+    },
+  }));
+  cleanupSteps.push(
+    { label: "close synthetic Git server", cleanup: async () => remote?.close() },
+    { label: "close smoke database pool", cleanup: async () => pool?.end() },
+    { label: "check smoke database pool", cleanup: async () => { if (poolError !== undefined) throw poolError; } },
+  );
+  if (created) cleanupSteps.push({ label: "drop generated test database", cleanup: async () => maintenance.query(`drop database ${name} with (force)`) });
+  cleanupSteps.push({ label: "close maintenance database client", cleanup: async () => maintenance.end() });
+  if (dataDir !== undefined) {
+    cleanupSteps.push({ label: "remove temporary data directory", cleanup: async () => {
       const cleanupTarget = resolve(dataDir);
       assert.equal(dirname(cleanupTarget), resolve(tmpdir()), "Smoke cleanup must stay inside the temporary directory");
       assert(basename(cleanupTarget).startsWith("kintsugi-context-smoke-"));
       await rm(cleanupTarget, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    }
+    } });
   }
-  assert.equal(forcedStop, false, "Smoke children must shut down gracefully without a forced kill");
-  if (passed) console.log("PASS: compiled API + worker, migrations, Git sync A/B, scoped token, task/deliverables, pinned brief/document/search, stale freshness, legacy/write denial, unavailable review, live access revocation, graceful shutdown");
+  cleanupErrors.push(...await attemptPublicProcessCleanup(cleanupSteps, diagnosticSecrets));
+  if (forcedStop) cleanupErrors.push("one or more smoke child processes required a forced shutdown");
+
+  const failures = [];
+  if (smokeError !== undefined) failures.push(`Smoke failed: ${safeError(smokeError)}`);
+  failures.push(...cleanupErrors);
+  if (failures.length > 0) throw new Error(failures.join("\n"));
+  if (passed) console.log("PASS: deployed API + worker entrypoints, migrations, Git sync A/B, API restart, scoped token, task/deliverables, pinned brief/document/search, stale freshness, legacy/write denial, unknown review lookup, live access revocation, process shutdown");
 }
 
 try {
-  if (["api", "worker"].includes(process.argv[2])) await child(process.argv[2]);
-  else await smoke();
+  await smoke();
 } catch (error) {
-  console.error(error instanceof Error ? error.stack : "Smoke failed");
+  console.error(redactPublicProcessDiagnostics(error instanceof Error ? error.stack ?? error.message : "Smoke failed", diagnosticSecrets));
   process.exitCode = 1;
 }
