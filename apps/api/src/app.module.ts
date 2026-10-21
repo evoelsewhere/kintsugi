@@ -34,6 +34,7 @@ import { HealthChecksModule } from "./modules/monitoring/target-health/health-ch
 import { AuditEntriesModule } from "./modules/governance/audit/audit-entries.module.js";
 import { GatesModule } from "./modules/governance/gates/gates.module.js";
 import { GatePublicationModule } from "./modules/governance/gate-publication/index.js";
+import { StageDecisionsModule } from "./modules/governance/stage-decisions/index.js";
 import { PoliciesModule } from "./modules/governance/policies/policies.module.js";
 import { ReviewsModule } from "./modules/governance/reviews/reviews.module.js";
 import { RisksModule } from "./modules/governance/risks/risks.module.js";
@@ -88,6 +89,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     PoliciesModule,
     GatesModule,
     GatePublicationModule,
+    StageDecisionsModule,
     ReviewsModule,
     AuditEntriesModule,
     RisksModule,

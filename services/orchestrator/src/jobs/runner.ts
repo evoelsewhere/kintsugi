@@ -110,7 +110,6 @@ interface StepWorkspace {
 interface ResumeState {
   from: string;
   completed: Set<string>;
-  gateChoices: Map<string, string>;
 }
 
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
@@ -298,12 +297,10 @@ export class JobRunner {
     const summary = from.outputSummary ?? {};
     const steps = Array.isArray(summary["steps"]) ? (summary["steps"] as unknown[]).filter((step): step is StepRecord => isRecord(step) && typeof step["id"] === "string") : [];
     const completed = new Set(steps.filter((step) => step.status === "succeeded" && (step.kind === "agent" || step.kind === "workflow")).map((step) => stepKey(step)));
-    const gates = Array.isArray(summary["gates"]) ? (summary["gates"] as unknown[]) : [];
-    const gateChoices = new Map(gates.flatMap((gate) => (isRecord(gate) && typeof gate["id"] === "string" && typeof gate["choice"] === "string" ? [[gate["id"], gate["choice"]] as [string, string]] : [])));
     const pinned = summary["documentsCommit"];
     if (ws.documentsCommit === undefined && typeof pinned === "string" && COMMIT.test(pinned)) ws.documentsCommit = pinned;
     await this.#event(ws, undefined, "log", `resuming run ${fromId}: ${completed.size} agent or workflow step(s) are not run again`, { resumeOf: fromId, reused: completed.size });
-    return { from: fromId, completed, gateChoices };
+    return { from: fromId, completed };
   }
 
   /** Appends to the top-level run's live record (best effort; texts are redacted). */
@@ -741,7 +738,7 @@ export class JobRunner {
         },
         ...(signal === undefined ? {} : { signal }),
         ...(scope === undefined ? {} : { scope }),
-        ...(resume === undefined ? {} : { completed: resume.completed, gateChoices: resume.gateChoices }),
+        ...(resume === undefined ? {} : { completed: resume.completed, resumeOf: resume.from }),
       });
       const outcome = await executor.run();
       // work/ goes only when the stage succeeds: a failed run keeps it beside out/ for a resume

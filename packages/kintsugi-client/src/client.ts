@@ -283,8 +283,11 @@ export function createCodingAgentWorkflowClient(options: CodingAgentWorkflowClie
                 throw new CodingAgentClientError({ code: "INVALID_RESPONSE", message: "Kintsugi returned an invalid stream error" });
               }
               const code = data.code.split(token).join("[redacted]");
+              const status = code === "FORBIDDEN" || code === "MEMBER_EVENT_ACCESS_REVOKED" ? 403
+                : code === "UNAUTHENTICATED" || code === "MEMBER_EVENT_UNAUTHENTICATED" ? 401
+                : undefined;
               throw new CodingAgentClientError({ code, message: data.message.split(token).join("[redacted]"),
-                ...(code === "FORBIDDEN" ? { status: 403 } : code === "UNAUTHENTICATED" ? { status: 401 } : {}) });
+                ...(status === undefined ? {} : { status }) });
             }
             const value = parseBody(taskEventSchema, data, token);
             if (frame.id !== value.id || value.projectId !== parsed.projectId || value.unitId !== parsed.unitId) {

@@ -70,8 +70,8 @@ export interface ExecutorDeps {
    * not run again. Script steps always run again.
    */
   completed?: ReadonlySet<string>;
-  /** Resume: the gate choices the failed run recorded, replayed instead of asking again. */
-  gateChoices?: ReadonlyMap<string, string>;
+  /** Resume: gate decisions are re-read from the original run's durable stage-decision record. */
+  resumeOf?: string;
 }
 
 /** The key of a leaf run in a resume's `completed` set: `<step id>[#<forEach key>][@<round>]`. */
@@ -463,12 +463,18 @@ export class StagePlanExecutor {
   async #gate(step: GateStep): Promise<void> {
     const question = await this.#resolve(step.question);
     const { run, plan, gates, signal } = this.#deps;
-    const replayed = this.#deps.gateChoices?.get(step.id);
-    const decision = replayed !== undefined && step.options.includes(replayed) ? { choice: replayed, defaulted: false, by: "resume" } : await gates.decide(
-      { runId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }), stage: plan.id, gate: step.id, question, options: step.options, default: step.default },
+    const decision = await gates.decide(
+      { runId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }), stage: plan.id, gate: step.id, question, options: step.options, default: step.default, decisionMode: step.decisionMode, ...(this.#deps.resumeOf === undefined ? {} : { resumeOf: this.#deps.resumeOf }) },
       signal,
     );
-    const choice = step.options.includes(decision.choice) ? decision.choice : step.default;
+    if (!step.options.includes(decision.choice)) throw new JobFailure(`Gate ${step.id} returned a choice outside its allowed options`);
+    if (step.decisionMode === "required-human" && (decision.defaulted || decision.by === undefined || decision.by.trim() === "")) {
+      throw new JobFailure(`Gate ${step.id} requires a decision from an authenticated human`);
+    }
+    if (step.decisionMode === "default" && (!decision.defaulted || decision.choice !== step.default)) {
+      throw new JobFailure(`Gate ${step.id} must use its documented default`);
+    }
+    const choice = decision.choice;
     this.#gates.set(step.id, { id: step.id, question, choice, defaulted: decision.defaulted, ...(decision.by === undefined ? {} : { by: decision.by }) });
     await this.#deps.log(decision.defaulted ? `gate defaulted: ${step.id} — ${question} → ${choice}` : `gate decided: ${step.id} → ${choice}${decision.by === undefined ? "" : ` by ${decision.by}`}`, {
       gate: step.id,
