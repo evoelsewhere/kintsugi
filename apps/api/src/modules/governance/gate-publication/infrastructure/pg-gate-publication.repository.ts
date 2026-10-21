@@ -7,6 +7,7 @@ import { AuditTrail } from "#common/audit/audit-trail.js";
 import { getPool, withTransaction, type Queryable } from "#common/db/pool.js";
 import { GatePublicationRepository } from "../domain/gate-publication.repository.js";
 import type { CreateGatePublication, GatePublication, GatePublicationState } from "../domain/gate-publication.js";
+import type { GatePublicationPage } from "../domain/gate-publication.repository.js";
 
 interface GatePublicationRow {
   decision_id: string;
@@ -129,6 +130,15 @@ export class PgGatePublicationRepository extends GatePublicationRepository {
 
   async get(decisionId: string): Promise<GatePublication | undefined> {
     return this.#find(getPool(), decisionId);
+  }
+
+  async listByProject(projectId: string, limit: number, offset: number): Promise<GatePublicationPage> {
+    const db = getPool();
+    const [count, result] = await Promise.all([
+      db.query<{ total: string }>("select count(*)::text as total from workflow.gate_publication where project_id = $1", [projectId]),
+      db.query<GatePublicationRow>(SELECT + " where p.project_id = $1 order by p.updated_at desc, p.decision_id desc limit $2 offset $3", [projectId, limit, offset]),
+    ]);
+    return { items: result.rows.map(toPublication), total: Number(count.rows[0]?.total ?? 0), limit, offset };
   }
 
   async #find(db: Queryable | Pick<Pool, "query"> | Pick<PoolClient, "query">, decisionId: string): Promise<GatePublication | undefined> {

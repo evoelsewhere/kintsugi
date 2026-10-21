@@ -78,6 +78,15 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
 
     expect(first).toMatchObject({ state: "pending-publication", documentWriteStatus: "queued", recordPath: input.recordPath });
     expect(retry).toMatchObject({ decisionId: first.decisionId, evidenceHash: input.evidenceHash });
+    const publicationPage = await repository.listByProject("shop", 10, 0);
+    expect(publicationPage).toMatchObject({ total: 1, limit: 10, offset: 0 });
+    expect(publicationPage.items[0]).toMatchObject({ decisionId: first.decisionId, state: "pending-publication" });
+    const portal = await adminClient(app);
+    expect((await portal.request("PUT", `/admin/project-access/shop/${adminId}`, { body: {} })).status).toBe(204);
+    const response = await portal.get<{ items: Array<{ decisionId: string; state: string }>; total: number }>("/governance/gate-publications?projectId=shop");
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ total: 1, items: [expect.objectContaining({ decisionId: first.decisionId, state: "pending-publication" })] });
+    expect((await portal.get("/governance/gate-publications?projectId=other")).status).toBe(403);
     const counts = await app.db.query<{ audits: number; writes: number; transitions: number; events: number; outbox: number }>(
       `select
          (select count(*)::int from governance.audit_event where subject = $1 and action = 'gate.decision.request') as audits,

@@ -18,6 +18,7 @@ import { MonitoringPage } from "./pages/monitoring";
 import { OverviewPage } from "./pages/overview";
 import { MembersPermissionsPage } from "./pages/members-permissions";
 import { ProjectDetailPage } from "./pages/projects/project-detail-page";
+import { MemberTaskPage } from "./pages/agent-context/member-task";
 import { ProjectsPage } from "./pages/projects/projects-page";
 
 function RequireAuth({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -55,6 +56,7 @@ export function App(): React.JSX.Element {
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="governance" element={<GovernancePage />} />
             <Route path="projects" element={<ProjectsPage />} />
+            <Route path="projects/:projectId/coding-agent" element={<MemberTaskPage />} />
             <Route path="projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="plugins" element={<PluginsPage />} />
             <Route path="plugins/builder" element={<AgentsPage />} />
