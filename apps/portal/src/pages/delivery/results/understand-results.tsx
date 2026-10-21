@@ -118,7 +118,7 @@ export function UnderstandResultsView({ results, compare, projectId }: { results
       />
 
       {results.matrix === null && (tab === "units" || tab === "matrix" || tab === "graph") ? (
-        <EmptyState title="No traceability.json at this ref" description="merge_traceability.py writes it after the specification jobs; pick another ref above or run understand again." />
+        <EmptyState title="Nothing understood at this ref" description="The understand stage writes a trace document per item after its specification job; pick another ref above or run understand again." />
       ) : null}
       {tab === "overview" ? <UnderstandOverview results={results} onOpen={setDetail} onMatrix={() => setTab("matrix")} /> : null}
       {tab === "units" && results.matrix !== null ? <UnitsTab units={results.units} modules={modules} onOpen={setDetail} /> : null}

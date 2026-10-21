@@ -17,31 +17,34 @@ plugins/                       P3: project-authored plugins only
 gates/                         project-level gate records (G0, G3)
 applications/<app>/
   inputs/                      INTENT.md and the graphs and telemetry people attach
-  assessment/                  P1: assess and understand outputs (catalog, reports, extraction)
+  assessment/                  Assessment context (P1): inventory.md, topology.md, catalog/, ASSESSMENT.md
+  understanding/               Understanding context: plan.md (the AI plan, advice)
   to-be/                       P2: requirements.md, design.md
   gates/                       application gate records (G1, G2, G5, G6)
-  units/<module>/<unit>/       P1-P5: one directory per unit (see below)
+  units/<module>/<unit>/       the Unit aggregate, P1-P5: one directory per unit (see below)
   cutover/                     P6: plan.md, runbook.md, rollback.md, go-no-go.md
   operate/                     P7: hypercare-report.md, handover.md
-  generated/                   rebuilt application aggregates
+  generated/                   read models rebuilt after a merge
 ```
 
-A unit is the thing being migrated; its directory holds its own evidence:
+Every committed document is Markdown (front matter, tables, cards). A unit is the thing being migrated; its directory is its aggregate, `unit.md` is the root, and each context writes into its own subfolder:
 
 ```text
 applications/<app>/units/<module>/<unit>/
   unit.md                      unit state and gate references
-  as-is.md                     P1 AS-IS specification
-  rules.json                   P1 machine rule extraction
-  rules-review.json            P1 human rule verdicts
-  findings.json topology.json trace.json meta.json
+  understanding/               P1: what is known about the unit
+    as-is.md                   AS-IS specification
+    understanding.md           provenance: digest, commit, run (marks the unit understood)
+    rules.md data-objects.md   machine rule extraction
+    rules-review.md            human rule verdicts (a table)
+    findings.md topology.md trace.md
   task.md design.md            P4 task pack and design
   reviews/G4.md                the unit's G4 record
   verify/                      P5 golden cases, equivalence runs and test evidence
 ```
 
 The unit id is always the full `<app>/<module>/<unit>`; `<unit>` in a path is the last segment.
-An entry in `assessment/catalog.json` is a catalog **item** (`<module>/<item>`); once selected for
+An entry in `assessment/catalog/` is a catalog **item** (`<module>/<item>`); once selected for
 migration it becomes a **unit**. Use "unit" for the thing and "item" only for a catalog entry.
 
 ## Folder READMEs
@@ -74,7 +77,7 @@ By default Kintsugi commits straight to the default branch only:
 applications/*/units/**/unit.md
 applications/*/units/**/task.md
 applications/*/generated/**
-applications/*/assessment/understand/plan.json
+applications/*/understanding/plan.md
 ```
 
 `kintsugi.yaml` can replace the list with its `autoCommitPaths` key. Everything else arrives as

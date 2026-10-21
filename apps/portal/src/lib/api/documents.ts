@@ -44,6 +44,7 @@ export interface InventoryLanguage {
   complexity: number;
 }
 
+/** One of the most complex files; the committed inventory lists these, not every file. */
 export interface InventoryFile {
   path: string;
   language: string;
@@ -51,6 +52,25 @@ export interface InventoryFile {
   sloc: number;
   complexity: number;
   bytes: number;
+}
+
+export interface InventoryDirectory {
+  path: string;
+  files: number;
+  sloc: number;
+  complexity: number;
+}
+
+export interface InventorySignals {
+  /** Source files with code: the denominator of the file statistics. */
+  codeFiles: number;
+  medianSloc: number;
+  /** How many files hold half of all the complexity. */
+  halfComplexityFiles: number;
+  /** Share of the complexity in the ten most complex files, 0..1. */
+  topTenShare: number;
+  /** Files above 1,000 SLOC. */
+  oversized: number;
 }
 
 export interface Inventory {
@@ -69,7 +89,13 @@ export interface Inventory {
   complexityIndex: number;
   complexityPerKsloc?: number;
   languages: InventoryLanguage[];
+  /** The most complex files (the document lists the top fifty). */
   files: InventoryFile[];
+  /** SLOC and complexity per directory, at `directoryDepth` levels. */
+  directories: InventoryDirectory[];
+  directoryDepth: number;
+  sizeDistribution: Array<{ label: string; files: number }>;
+  signals: InventorySignals;
 }
 
 export type Severity = "Critical" | "High" | "Medium" | "Low" | "Info";
@@ -214,11 +240,28 @@ export interface AssessResults extends ResultsBase {
   highlights: { summary?: string; recommendation?: string; debt: Table | null; security: Finding[]; gaps: string[] };
 }
 
+/** The strongest links between two domains, counted over the leaf-level edges. */
+export interface TopoDomainEdge {
+  from: string;
+  to: string;
+  kinds: string[];
+  edges: number;
+}
+
 export interface MapResults extends ResultsBase {
   stage: "map";
-  topology: { system: string; nodes: MapNode[]; edges: TopoEdge[]; flows: TopoFlow[]; observations: string[]; domains: string[] } | null;
+  topology: {
+    system: string;
+    nodes: MapNode[];
+    edges: TopoEdge[];
+    flows: TopoFlow[];
+    observations: string[];
+    domains: string[];
+    domainEdges: TopoDomainEdge[];
+    /** Totals of the whole topology, which the lists above may be a part of. */
+    totals: { leaves: number; dataStores: number; edges: number; entryPoints: number; deadEnds: number; truncated: boolean };
+  } | null;
   diagrams: MapDiagram[];
-  summary?: string;
 }
 
 export interface RulesResults extends ResultsBase {
@@ -227,7 +270,7 @@ export interface RulesResults extends ResultsBase {
   dataObjects: DataObject[];
   stats: Record<string, number>;
   coverageGaps: string[];
-  source: "result" | "markdown" | "none";
+  source: "markdown" | "none";
 }
 
 export interface HardenResults extends ResultsBase {
@@ -238,7 +281,7 @@ export interface HardenResults extends ResultsBase {
   runId?: string;
 }
 
-/** A unit of the understand stage: its row of traceability.json and its work item at the ref. */
+/** A unit of the understand stage: its row of the traceability matrix and its work item at the ref. */
 export interface UnderstandUnit {
   id: string;
   /** `<module>/<unit>`. */
@@ -298,9 +341,7 @@ export interface DocumentFile {
   commit: string;
   path: string;
   size: number;
-  format: "text" | "json";
   content: string;
-  json?: unknown;
 }
 
 export interface StageHeadline {

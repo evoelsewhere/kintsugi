@@ -6,7 +6,7 @@ metadata:
   audience: member
   upstream: commands/modernize-uplift.md
   agents: [test-engineer, uplift-migrator, version-delta-analyst, architecture-critic]
-  reads: [applications/<app>/to-be/modernization-brief.md, applications/<app>/inputs/INTENT.md, applications/<app>/assessment/PREFLIGHT.md, applications/<app>/assessment/topology.json, applications/<app>/assessment/DELTA_CATALOG.md, applications/<app>/assessment/PLAYBOOK.md, applications/<app>/assessment/BASELINE.md]
+  reads: [applications/<app>/to-be/modernization-brief.md, applications/<app>/inputs/INTENT.md, applications/<app>/assessment/PREFLIGHT.md, applications/<app>/assessment/topology.md, applications/<app>/assessment/DELTA_CATALOG.md, applications/<app>/assessment/PLAYBOOK.md, applications/<app>/assessment/BASELINE.md]
   writes: [applications/<app>/assessment/DELTA_CATALOG.md, applications/<app>/assessment/BASELINE.md, applications/<app>/assessment/baseline/, applications/<app>/assessment/PLAYBOOK.md, applications/<app>/units/<module>/UPLIFT_NOTES.md, applications/<app>/to-be/modernization-brief.md]
   gates: [uplift plan approval, pilot and playbook approval before fan-out, decision on a shared node with consumers outside the scope, approval of each result difference]
 ---
@@ -97,7 +97,7 @@ Copying the whole solution keeps the relative references intact and makes the re
 against the seeded commit. If the target repository was already seeded (for example by an earlier hop), branch
 from it instead; for a large solution, a `git worktree add` of the target repository saves a second clone.
 
-**Graph and order.** Reuse `applications/$app/assessment/topology.json` if it exists, else build a quick
+**Graph and order.** Reuse `applications/$app/assessment/topology.md` if it exists, else build a quick
 project graph (`.csproj` and `.sln` references, Maven modules, package imports); a cycle needs a manual
 cut. Default order is **leaf-first**, with these overrides, called out in the plan:
 

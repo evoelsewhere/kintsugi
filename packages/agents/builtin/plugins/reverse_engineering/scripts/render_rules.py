@@ -19,6 +19,10 @@ import os
 import re
 import sys
 
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import docmd  # noqa: E402
+
 MAX_RESULT_BYTES = 5_000_000
 MAX_RECORDS = 10_000
 
@@ -156,6 +160,61 @@ def validate_result(result):
         if stats.get(field) is not None and not isinstance(stats[field], list):
             raise DataError(f'stats.{field} must be an array')
     return result
+
+
+def render_unit_rules(app, item_id, rules):
+    """The rules.md of one unit (ADR-0042): front matter, the table of its rules and one card per rule,
+    grouped by category. Same cards as BUSINESS_RULES.md, under the unit's stable ids."""
+    ordered = sorted(rules, key=lambda r: (CATEGORIES.index(r['category']) if r.get('category') in CATEGORIES else 9, str(r.get('name')), str(r.get('source'))))
+    doc = [docmd.front_matter({'app': app, 'item': item_id, 'generatedBy': 'split_rules.py', 'rules': len(ordered), 'p0': sum(1 for r in ordered if r.get('priority') == 'P0')}),
+           f'# Business rules - {one_line(item_id, 100)}', '',
+           '| ID | Name | Category | Priority | Source | Confidence |', '|---|---|---|---|---|---|']
+    for rule in ordered:
+        doc.append(f"| {rule['id']} | {one_line(rule.get('name'), 80)} | {one_line(rule.get('category'), 20)} | {one_line(rule.get('priority'), 4)} | "
+                   f"`{split_citation(rule.get('source'))[0][:80].replace(chr(39), '')}` | {one_line(rule.get('confidence'), 10)} |")
+    doc.append('')
+    if not ordered:
+        doc += [NO_RULES_MARKER, '']
+    for category in CATEGORIES + [None]:
+        group = [r for r in ordered if (r.get('category') if r.get('category') in CATEGORIES else None) == category]
+        if not group:
+            continue
+        doc += [f"## {category or 'Other'}", '']
+        for rule in group:
+            doc += [render_rule(0, rule, rid=rule['id'])[1], '']
+    return '\n'.join(doc).rstrip() + '\n'
+
+
+def render_unit_data_objects(app, item_id, objects):
+    """The data-objects.md of one unit: front matter and one section per object, as DATA_OBJECTS.md has them."""
+    doc = [docmd.front_matter({'app': app, 'item': item_id, 'generatedBy': 'split_rules.py', 'dataObjects': len(objects)}), f'# Data objects - {one_line(item_id, 100)}', '']
+    if not objects:
+        doc.append('No data objects were cataloged.')
+    for obj in sorted(objects, key=lambda o: str(o.get('name'))):
+        doc += [f"## {one_line(obj.get('name'), 100)}", f"Source: `{one_line(obj.get('source'), 160).replace(chr(39), '')}`", '', '| Field | Type | Note |', '|---|---|---|']
+        for field in obj.get('fields') or []:
+            if isinstance(field, dict):
+                doc.append(f"| {one_line(field.get('name'), 80)} | {one_line(field.get('type'), 60)} | {one_line(field.get('note'), 160)} |")
+        used = obj.get('consumedBy') or []
+        if used:
+            doc += ['', 'Used by: ' + ', '.join(one_line(u, 80) for u in used)]
+        doc.append('')
+    return '\n'.join(doc).rstrip() + '\n'
+
+
+def unit_rule_rows(text):
+    """The table rows of a unit's rules.md as dicts keyed by the lower-cased header."""
+    return docmd.records_in(docmd.split_front_matter(text)[1])
+
+
+def unit_rule_cards(text):
+    """[(rule id, card text)] of a unit's rules.md: every `### RULE-...` section with its heading."""
+    cards = []
+    for title, body in docmd.sections(docmd.split_front_matter(text)[1], 3):
+        rule_id = title.split(': ', 1)[0].strip()
+        if rule_id.startswith('RULE-'):
+            cards.append((rule_id, f'### {title}\n{body}'.rstrip()))
+    return cards
 
 
 def write_text(root, name, text):

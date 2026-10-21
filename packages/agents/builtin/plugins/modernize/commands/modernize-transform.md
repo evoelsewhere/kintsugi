@@ -6,7 +6,7 @@ metadata:
   audience: member
   upstream: commands/modernize-transform.md
   agents: [test-engineer, architecture-critic]
-  reads: [standards/, applications/<app>/to-be/modernization-brief.md, applications/<app>/inputs/INTENT.md, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/units/<module>/<unit>/rules-review.json, applications/<app>/assessment/PREFLIGHT.md]
+  reads: [standards/, applications/<app>/to-be/modernization-brief.md, applications/<app>/inputs/INTENT.md, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/units/<module>/<unit>/understanding/rules-review.md, applications/<app>/assessment/PREFLIGHT.md]
   writes: [applications/<app>/units/<module>/TRANSFORMATION_NOTES.md, applications/<app>/units/<module>/<unit>/verify/golden/cases/, applications/<app>/units/<module>/<unit>/verify/golden/cases.json, applications/<app>/units/<module>/<unit>/verify/runs/<run-id>/EQUIVALENCE.json]
   gates: [transform plan approval, approval of each accepted equivalence difference]
 ---
@@ -60,7 +60,7 @@ one and whose `Modules:` include `$module`, and treat its scope, entry criteria,
 edits people made as binding. An unmet entry criterion is the next step: meet it, never re-plan
 around it. If no phase covers `$module`, stop and ask which phase this is.
 
-Read the module's source and the rules in `BUSINESS_RULES.md` that reference it, and any verdicts on them in `applications/$app/units/$module/$unit/rules-review.json` (human-owned; the `RULE_REVIEWS.json`/`.md` files are retired): a rule marked `refuted` is not pinned as the oracle (use the reviewer's note for what is right, and if the note does not say, ask for it through the rule review in the portal), and a P0 rule marked `clarify` is a question to settle at this plan gate before any code. Then prepare the
+Read the module's source and the rules in `BUSINESS_RULES.md` that reference it, and any verdicts on them in `applications/$app/units/$module/$unit/understanding/rules-review.md` (human-owned): a rule marked `refuted` is not pinned as the oracle (use the reviewer's note for what is right, and if the note does not say, ask for it through the rule review in the portal), and a P0 rule marked `clarify` is a question to settle at this plan gate before any code. Then prepare the
 plan and **stop: write no code until the plan is approved** (plan mode if available): which
 source files are in scope, the target structure, which rules and behaviors it implements, how you will
 prove equivalence, and anything ambiguous that needs a human decision now. Tell the user to request the

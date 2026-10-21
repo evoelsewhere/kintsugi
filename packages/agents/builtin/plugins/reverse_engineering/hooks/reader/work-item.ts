@@ -3,7 +3,7 @@ import { linesOf } from './text.js'
 /**
  * Unit state files (ADR-0012), read from the path returned by `unitStatePath`: YAML frontmatter that is the unit's
  * state, then a body. This reader understands the subset the unit files use — `key: value` lines
- * whose value is a JSON scalar or list (what write_work_items.py writes) or a plain word, and one
+ * whose value is a JSON scalar or list (what finish_items.py writes) or a plain word, and one
  * level of nesting (`links:` with indented `key: value` lines, `source:` with `- ` items) — and
  * keeps whatever else as text. Nothing here throws on a malformed file.
  */

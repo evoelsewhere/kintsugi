@@ -4,24 +4,21 @@
 // merged), else the default branch. Also the headline numbers of every stage for the overview.
 
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { parseItemCatalog } from "@kintsugi/agents/reader";
 import {
   CATALOG_ITEM_ID_PATTERN,
-  catalogPath,
+  assessmentCatalogModulePath,
+  assessmentDir,
   generatedDir,
-  knowledgeAsIsDir,
-  knowledgeAsIsGeneratedDir,
-  unitAsIsPath,
-  unitDir,
+  unitDataObjectsPath,
   unitFindingsPath,
   unitRulesPath,
-  unitTracePath,
+  unitUnderstandingDir,
+  unitUnderstandingPath,
 } from "@kintsugi/domain";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { type DocumentRef, MAX_DOCUMENT_BYTES, RESULT_STAGES, type ResultStage, type StageFile, type StageHeadline, type StageResults } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 import { type DocumentContext, DocumentsService } from "./documents.service.js";
-import { itemFindingsMarkdown, itemRulesResult, itemTraceability } from "./item-results.js";
 import {
   STAGE_OUTPUTS,
   type StageSource,
@@ -112,8 +109,8 @@ export class StageResultsService {
   /**
    * The results of the understand stage (ADR-0033) as one of the result views — `map` (topology),
    * `extract-rules` (rules), `harden` (security findings), `understand` (traceability) — for the
-   * whole application (the generated views under generated/) or one catalog item (its per-item
-   * files), at a ref (default: the default branch; a run's branch shows that run's items).
+   * whole application (the generated views under generated/) or one catalog item (the documents of its
+   * understanding folder), at a ref (default: the default branch; a run's branch shows that run's items).
    */
   async understandResults(projectId: string, applicationId: string, view: string, item: string | undefined, ref: string | undefined): Promise<StageResults & { scope: { item?: string } }> {
     if (view === "assess" || !isResultStage(view)) throw new BadRequestException(`View "${view}" is not an understand result (available: map, extract-rules, harden, understand)`);
@@ -124,24 +121,27 @@ export class StageResultsService {
     const overrides = new Map<string, string | null>();
     let dir: string;
     if (item === undefined) {
-      dir = view === "understand" ? knowledgeAsIsGeneratedDir(applicationId) : generatedDir(applicationId);
+      // The topology of the application is an assessment document; the other views are read models under generated/.
+      dir = view === "map" ? assessmentDir(applicationId) : generatedDir(applicationId);
     } else {
       const [module = "", unit = ""] = item.split("/");
-      dir = unitDir(applicationId, module, unit);
+      // The unit's understanding folder holds the documents; the views read them under the names of the aggregates.
+      dir = unitUnderstandingDir(applicationId, module, unit);
       const readAt = (path: string): Promise<string | undefined> => this.documents.readText(context, selected.commit, path);
-      if (view === "extract-rules") overrides.set("rules_result.json", itemRulesResult((await readAt(unitRulesPath(applicationId, module, unit))) ?? null));
-      if (view === "harden") overrides.set("SECURITY_FINDINGS.md", itemFindingsMarkdown(item, (await readAt(unitFindingsPath(applicationId, module, unit))) ?? null));
+      if (view === "extract-rules") {
+        overrides.set("BUSINESS_RULES.md", (await readAt(unitRulesPath(applicationId, module, unit))) ?? null);
+        overrides.set("DATA_OBJECTS.md", (await readAt(unitDataObjectsPath(applicationId, module, unit))) ?? null);
+      }
+      if (view === "harden") overrides.set("SECURITY_FINDINGS.md", (await readAt(unitFindingsPath(applicationId, module, unit))) ?? null);
       if (view === "understand") {
-        const catalogText = await readAt(catalogPath(applicationId));
-        const entry = catalogText === undefined ? undefined : parseItemCatalog(catalogText)?.items.find((candidate) => candidate.id === item);
-        if (entry === undefined) throw new NotFoundException(`${item} is not in the catalog of ${applicationId} at ${selected.ref}`);
-        const trace = await readAt(unitTracePath(applicationId, module, unit));
-        const specified = (await readAt(unitAsIsPath(applicationId, module, unit))) !== undefined;
-        overrides.set("traceability.json", trace === undefined && !specified ? null : itemTraceability(applicationId, entry, trace ?? null, specified));
+        const moduleDocument = await readAt(assessmentCatalogModulePath(applicationId, module));
+        if (moduleDocument === undefined || !moduleDocument.includes(`\n## ${item}: `)) throw new NotFoundException(`${item} is not in the catalog of ${applicationId} at ${selected.ref}`);
+        // The understanding record marks the unit understood; it stands in for the totals file the aggregate view counts from.
+        overrides.set("traceability.md", (await readAt(unitUnderstandingPath(applicationId, module, unit))) ?? null);
       }
     }
     const source = await this.sourceAt(context, dir, STAGE_OUTPUTS[view].files, selected.commit, overrides, true);
-    const appDir = view === "understand" ? knowledgeAsIsDir(applicationId) : dir;
+    const appDir = dir;
     const empty = !(await Promise.all(STAGE_OUTPUTS[view].countsFrom.map((name) => source.read(name)))).some((text) => text !== null);
     const common = { applicationId, ref: selected, files: source.files, empty, scope: item === undefined ? {} : { item } };
     switch (view) {
@@ -152,7 +152,7 @@ export class StageResultsService {
       case "harden":
         return { stage: view, ...common, ...(await hardenResults(source, appDir)), restrictedRecords: 0 };
       case "understand":
-        return { stage: view, ...common, ...(await understandResults(source, appDir, applicationId, [])) };
+        return { stage: view, ...common, ...(await understandResults(source, appDir, applicationId, [], undefined, item)) };
       default:
         throw new BadRequestException(`View "${view}" is not an understand result`);
     }

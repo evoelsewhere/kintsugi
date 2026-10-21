@@ -1,11 +1,14 @@
-"""The document-repo path layout (ADR-0038), mirroring packages/domain/src/document-layout.ts.
+"""The document-repo path layout (ADR-0042), mirroring packages/domain/src/document-layout.ts.
 
 Every script of this plugin builds document-repository paths through this module only, so a layout
 change lands here instead of in scattered path literals. Paths are repository-relative with `/`
-separators. `unit key` (or `item id`) is the catalog key `<module>/<unit>`. Standard library only.
+separators. `unit key` (or `item id`) is the catalog key `<module>/<unit>`. The document repository
+holds no JSON: committed files are Markdown, and the JSON a run passes between its steps lives under
+the scratch directory, which is never committed. Standard library only.
 """
 
 APPLICATIONS_ROOT = 'applications'
+SCRATCH_ROOT = 'scratch'
 
 
 def split_unit_key(unit_key):
@@ -30,10 +33,6 @@ def application_input_path(app, file):
     return f'{application_inputs_dir(app)}/{file}'
 
 
-def application_assessment_dir(app):
-    return f'{application_dir(app)}/assessment'
-
-
 def application_to_be_dir(app):
     return f'{application_dir(app)}/to-be'
 
@@ -46,8 +45,12 @@ def application_design_path(app):
     return f'{application_to_be_dir(app)}/design.md'
 
 
+# ---------------------------------------------------------------------------
+# Assessment context
+# ---------------------------------------------------------------------------
+
 def assessment_dir(app):
-    return application_assessment_dir(app)
+    return f'{application_dir(app)}/assessment'
 
 
 def assessment_file_path(app, file):
@@ -55,23 +58,28 @@ def assessment_file_path(app, file):
 
 
 def assessment_inventory_path(app):
-    return assessment_file_path(app, 'inventory.json')
+    return assessment_file_path(app, 'inventory.md')
 
 
 def assessment_topology_path(app):
-    return assessment_file_path(app, 'topology.json')
+    return assessment_file_path(app, 'topology.md')
+
+
+def assessment_catalog_dir(app):
+    return assessment_file_path(app, 'catalog')
 
 
 def assessment_catalog_path(app):
-    return assessment_file_path(app, 'catalog.json')
+    """The catalog's index: its modules and items, one table row each."""
+    return f'{assessment_catalog_dir(app)}/index.md'
+
+
+def assessment_catalog_module_path(app, module):
+    return f'{assessment_catalog_dir(app)}/{module}.md'
 
 
 def assessment_analysis_dir(app):
     return assessment_file_path(app, 'analysis')
-
-
-def assessment_catalog_draft_dir(app):
-    return assessment_file_path(app, 'catalog-draft')
 
 
 def assessment_tools_dir(app):
@@ -82,29 +90,48 @@ def topology_extractor_path(app):
     return f'{assessment_tools_dir(app)}/extract_topology.py'
 
 
-def assessment_items_dir(app):
-    """Compatibility name: unit documents live with their subject, not under assessment."""
-    return units_dir(app)
+# ---------------------------------------------------------------------------
+# Understanding context
+# ---------------------------------------------------------------------------
+
+def application_understanding_dir(app):
+    return f'{application_dir(app)}/understanding'
 
 
-def assessment_item_dir(app, item_id):
-    return f'{assessment_items_dir(app)}/{item_id}'
+def understand_plan_path(app):
+    return f'{application_understanding_dir(app)}/plan.md'
 
 
-def assessment_item_file_path(app, item_id, file):
-    return f'{assessment_item_dir(app, item_id)}/{file}'
+# ---------------------------------------------------------------------------
+# Scratch: job-to-job data of one run (JSON, never committed, not part of the layout)
+# ---------------------------------------------------------------------------
+
+def scratch_dir(app):
+    return f'{SCRATCH_ROOT}/{app}'
 
 
-def assessment_briefs_dir(app):
-    return f'{understand_run_dir(app)}/briefs'
+def scratch_file_path(app, file):
+    return f'{scratch_dir(app)}/{file}'
 
 
-def assessment_brief_path(app, unit_key):
-    return f'{assessment_briefs_dir(app)}/{unit_key}.json'
+def scratch_inventory_path(app):
+    return scratch_file_path(app, 'inventory.json')
+
+
+def scratch_topology_path(app):
+    return scratch_file_path(app, 'topology.json')
+
+
+def scratch_catalog_draft_dir(app):
+    return scratch_file_path(app, 'catalog-draft')
+
+
+def scratch_catalog_path(app):
+    return scratch_file_path(app, 'catalog.json')
 
 
 def understand_run_dir(app):
-    return f'{assessment_dir(app)}/understand'
+    return scratch_file_path(app, 'understand')
 
 
 def understand_run_file_path(app, file):
@@ -123,10 +150,6 @@ def understand_plan_draft_path(app):
     return understand_run_file_path(app, 'plan-draft.json')
 
 
-def understand_plan_path(app):
-    return understand_run_file_path(app, 'plan.json')
-
-
 def understand_shards_path(app):
     return understand_run_file_path(app, 'shards.json')
 
@@ -139,6 +162,22 @@ def understand_rules_result_path(app):
     return understand_run_file_path(app, 'rules_result.json')
 
 
+def assessment_briefs_dir(app):
+    return f'{understand_run_dir(app)}/briefs'
+
+
+def assessment_brief_path(app, unit_key):
+    return f'{assessment_briefs_dir(app)}/{unit_key}.json'
+
+
+def understand_trace_draft_path(app, unit_key):
+    return understand_run_file_path(app, f'trace/{unit_key}.json')
+
+
+# ---------------------------------------------------------------------------
+# Generated read models
+# ---------------------------------------------------------------------------
+
 def generated_dir(app):
     return f'{application_dir(app)}/generated'
 
@@ -147,35 +186,9 @@ def generated_file_path(app, file):
     return f'{generated_dir(app)}/{file}'
 
 
-def knowledge_as_is_dir(app):
-    """Compatibility name: unit AS-IS documents now live in their unit folder."""
-    return units_dir(app)
-
-
-def knowledge_as_is_items_dir(app):
-    return units_dir(app)
-
-
-def knowledge_as_is_item_dir(app, item_id):
-    return assessment_item_dir(app, item_id)
-
-
-def knowledge_as_is_item_file_path(app, item_id, file):
-    return assessment_item_file_path(app, item_id, file)
-
-
-def knowledge_as_is_unit_path(app, unit_key):
-    """Compatibility name for the per-unit AS-IS document."""
-    return unit_key_path(app, unit_key, 'as-is.md')
-
-
-def knowledge_as_is_generated_dir(app):
-    return generated_dir(app)
-
-
-def knowledge_as_is_generated_file_path(app, file):
-    return generated_file_path(app, file)
-
+# ---------------------------------------------------------------------------
+# The Unit aggregate
+# ---------------------------------------------------------------------------
 
 def units_dir(app):
     return f'{application_dir(app)}/units'
@@ -207,32 +220,54 @@ def unit_state_path(app, module, unit):
     return unit_file_path(app, module, unit, 'unit.md')
 
 
+def unit_understanding_dir(app, module, unit):
+    return unit_file_path(app, module, unit, 'understanding')
+
+
+def unit_understanding_file_path(app, module, unit, file):
+    return f'{unit_understanding_dir(app, module, unit)}/{file}'
+
+
+def unit_key_understanding_path(app, unit_key, file):
+    module, unit = split_unit_key(unit_key)
+    return unit_understanding_file_path(app, module, unit, file)
+
+
 def unit_as_is_path(app, module, unit):
-    return unit_file_path(app, module, unit, 'as-is.md')
+    return unit_understanding_file_path(app, module, unit, 'as-is.md')
+
+
+def unit_key_as_is_path(app, unit_key):
+    return unit_key_understanding_path(app, unit_key, 'as-is.md')
+
+
+def unit_understanding_path(app, module, unit):
+    """The unit's provenance record; its presence on the default branch means "understood"."""
+    return unit_understanding_file_path(app, module, unit, 'understanding.md')
 
 
 def unit_rules_path(app, module, unit):
-    return unit_file_path(app, module, unit, 'rules.json')
+    return unit_understanding_file_path(app, module, unit, 'rules.md')
+
+
+def unit_data_objects_path(app, module, unit):
+    return unit_understanding_file_path(app, module, unit, 'data-objects.md')
 
 
 def unit_rules_review_path(app, module, unit):
-    return unit_file_path(app, module, unit, 'rules-review.json')
+    return unit_understanding_file_path(app, module, unit, 'rules-review.md')
 
 
 def unit_findings_path(app, module, unit):
-    return unit_file_path(app, module, unit, 'findings.json')
+    return unit_understanding_file_path(app, module, unit, 'findings.md')
 
 
 def unit_topology_path(app, module, unit):
-    return unit_file_path(app, module, unit, 'topology.json')
+    return unit_understanding_file_path(app, module, unit, 'topology.md')
 
 
 def unit_trace_path(app, module, unit):
-    return unit_file_path(app, module, unit, 'trace.json')
-
-
-def unit_meta_path(app, module, unit):
-    return unit_file_path(app, module, unit, 'meta.json')
+    return unit_understanding_file_path(app, module, unit, 'trace.md')
 
 
 def unit_task_path(app, module, unit):

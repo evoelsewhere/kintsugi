@@ -12,6 +12,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import docmd  # noqa: E402
+
 MAX_FILE_BYTES = 5_000_000
 MAX_TOTAL_BYTES = 100_000_000
 MAX_FILES = 25_000
@@ -273,24 +276,135 @@ def inventory(source, app, source_repository=None, pinned_commit=None):
     }
 
 
-def write_json(out, data, source_root):
-    if within(source_root, out):
-        raise DataError('--out must be outside the read-only --source checkout')
-    if os.path.islink(out):
-        raise DataError(f'refusing to write through a symbolic link: {out}')
-    os.makedirs(out, exist_ok=True)
-    root = os.path.realpath(out)
-    path = os.path.join(root, 'inventory.json')
-    temporary = path + '.tmp'
-    if not within(root, path) or os.path.islink(path) or os.path.islink(temporary):
-        raise DataError(f'refusing to write outside --out or through a symbolic link: {path}')
-    encoded = json.dumps(data, ensure_ascii=False, indent=2) + '\n'
+SIZE_BUCKETS = (('<50', 50), ('50-99', 100), ('100-249', 250), ('250-499', 500), ('500-999', 1000), ('1k-2.5k', 2500), ('2.5k+', float('inf')))
+MAX_DIRECTORIES_LISTED = 60
+MOST_COMPLEX = 50
+
+
+def directory_of(path, depth):
+    parts = path.split('/')[:-1]
+    return '(root)' if not parts else '/'.join(parts[:depth])
+
+
+def directory_rollup(code):
+    """SLOC and complexity per directory; goes deeper (up to 4 levels) while one directory holds most of the code."""
+    total = sum(item['sloc'] for item in code)
+    rows, depth = [], 1
+    while depth <= 4:
+        groups = {}
+        for item in code:
+            name = directory_of(item['path'], depth)
+            stat = groups.setdefault(name, {'path': name, 'files': 0, 'sloc': 0, 'complexity': 0})
+            stat['files'] += 1
+            stat['sloc'] += item['sloc']
+            stat['complexity'] += item['cyclomaticComplexity']
+        rows = sorted(groups.values(), key=lambda stat: (-stat['sloc'], stat['path']))
+        if total == 0 or rows[0]['sloc'] / total < 0.6 or len(rows) > 40:
+            break
+        depth += 1
+    return min(depth, 4), rows
+
+
+def summarize(data):
+    """What the committed inventory keeps of the per-file records: roll-ups, a distribution, the signals
+    and the most complex files. The per-file records themselves stay in the run's scratch."""
+    code = [item for item in data['files'] if item.get('language') != 'Other' and item.get('sloc', 0) > 0]
+    depth, rows = directory_rollup(code)
+    buckets = [0] * len(SIZE_BUCKETS)
+    for item in code:
+        buckets[next(index for index, (_, below) in enumerate(SIZE_BUCKETS) if item['sloc'] < below)] += 1
+    by_complexity = sorted(code, key=lambda item: (-item['cyclomaticComplexity'], item['path']))
+    total = sum(item['cyclomaticComplexity'] for item in by_complexity)
+    running, half = 0, 0
+    for item in by_complexity:
+        running += item['cyclomaticComplexity']
+        half += 1
+        if running >= total / 2:
+            break
+    sizes = sorted(item['sloc'] for item in code)
+    middle = len(sizes) // 2
+    median = 0 if not sizes else sizes[middle] if len(sizes) % 2 else (sizes[middle - 1] + sizes[middle]) / 2
+    return {
+        'directoryDepth': depth,
+        'directories': rows[:MAX_DIRECTORIES_LISTED],
+        'sizeDistribution': [(label, buckets[index]) for index, (label, _) in enumerate(SIZE_BUCKETS)],
+        'codeFiles': len(code),
+        'medianSloc': median,
+        'halfComplexityFiles': half if total else 0,
+        'topTenShare': round(sum(item['cyclomaticComplexity'] for item in by_complexity[:10]) / total, 4) if total else 0,
+        'oversized': sum(1 for item in code if item['sloc'] >= 1000),
+        'mostComplex': by_complexity[:MOST_COMPLEX],
+    }
+
+
+def render_markdown(data, summary):
+    """inventory.md: front matter with the figures of record, then Languages, Directories, Size distribution
+    and the most complex files, as tables."""
+    fields = {
+        'app': data['app'],
+        'sourceRepository': data['sourceRepository'],
+        'sourceCommit': data['sourceCommit'],
+        'method': data['method'],
+        'complexityIndexFormula': data['complexityIndexFormula'],
+        'fileCount': data['fileCount'],
+        'sourceFileCount': data['sourceFileCount'],
+        'totalBytes': data['totalBytes'],
+        'totalLines': data['totalLines'],
+        'sloc': data['sloc'],
+        'ksloc': data['ksloc'],
+        'complexity': data['complexity'],
+        'complexityPerKsloc': data['complexityPerKsloc'],
+        'complexityIndex': data['complexityIndex'],
+        'directoryDepth': summary['directoryDepth'],
+        'codeFiles': summary['codeFiles'],
+        'medianSloc': summary['medianSloc'],
+        'halfComplexityFiles': summary['halfComplexityFiles'],
+        'topTenShare': summary['topTenShare'],
+        'oversized': summary['oversized'],
+    }
+    languages = [
+        [language, metrics['files'], metrics['lines'], metrics['sloc'], metrics['complexity']]
+        for language, metrics in sorted(data['languageMetrics'].items(), key=lambda entry: (-entry[1]['sloc'], -entry[1]['files'], entry[0]))
+    ]
+    return '\n'.join([
+        docmd.front_matter(fields),
+        f'# Inventory of {data["app"]}',
+        '',
+        f'Measured at `{data["sourceCommit"]}` of {data["sourceRepository"]}: {data["sourceFileCount"]:,} source files, {data["sloc"]:,} lines of code. '
+        'The per-file records stay in the run; this document keeps the figures of record and their roll-ups.',
+        '',
+        '## Languages',
+        '',
+        docmd.table(['Language', 'Files', 'Lines', 'SLOC', 'Complexity'], languages),
+        '## Directories',
+        '',
+        docmd.table(['Path', 'Files', 'SLOC', 'Complexity'], [[row['path'], row['files'], row['sloc'], row['complexity']] for row in summary['directories']]),
+        '## Size distribution',
+        '',
+        docmd.table(['SLOC per file', 'Files'], summary['sizeDistribution']),
+        '## Most complex files',
+        '',
+        docmd.table(
+            ['Path', 'Language', 'Lines', 'SLOC', 'Complexity'],
+            [[item['path'], item['language'], item['lines'], item['sloc'], item['cyclomaticComplexity']] for item in summary['mostComplex']],
+        ),
+    ])
+
+
+def write_outputs(out, scratch, data, source_root):
+    """inventory.md into --out and the per-file inventory.json into --scratch (never committed)."""
+    for folder in (out, scratch):
+        if within(source_root, folder):
+            raise DataError('--out and --scratch must be outside the read-only --source checkout')
+        if os.path.islink(folder):
+            raise DataError(f'refusing to write through a symbolic link: {folder}')
+    encoded = json.dumps(data, ensure_ascii=False, indent=1)
     if len(encoded.encode('utf-8')) > MAX_OUTPUT_BYTES:
         raise DataError(f'inventory output exceeds the {MAX_OUTPUT_BYTES}-byte limit')
-    with open(temporary, 'w', encoding='utf-8', newline='\n') as handle:
-        handle.write(encoded)
-    os.replace(temporary, path)
-    return path
+    document = os.path.join(os.path.realpath(out), 'inventory.md')
+    docmd.write_text(document, render_markdown(data, summarize(data)))
+    docmd.write_text(os.path.join(os.path.realpath(scratch), 'inventory.json'), encoded)
+    return document
 
 
 def main(argv=None):
@@ -299,18 +413,19 @@ def main(argv=None):
     parser.add_argument('--source-commit', type=valid_commit, help='pinned source commit (40-64 hexadecimal characters)')
     parser.add_argument('--source-repo', help='source repository identity label')
     parser.add_argument('--source', required=True, help='read-only source checkout')
-    parser.add_argument('--out', required=True, help='folder where inventory.json is written')
+    parser.add_argument('--out', required=True, help='folder where inventory.md is written')
+    parser.add_argument('--scratch', required=True, help='folder where the per-file inventory.json is written (not committed)')
     args = parser.parse_args(argv[1:] if argv is not None else None)
     try:
-        if not args.out.strip():
-            raise DataError('--out must be a non-empty explicit output folder')
+        if not args.out.strip() or not args.scratch.strip():
+            raise DataError('--out and --scratch must be non-empty explicit output folders')
         data = inventory(args.source, args.app, args.source_repo, args.source_commit)
         source_root = os.path.realpath(os.path.expanduser(args.source))
-        path = write_json(os.path.abspath(os.path.expanduser(args.out)), data, source_root)
+        path = write_outputs(os.path.abspath(os.path.expanduser(args.out)), os.path.abspath(os.path.expanduser(args.scratch)), data, source_root)
     except (DataError, OSError, RecursionError) as error:
         print(f'inventory.py: {error}', file=sys.stderr)
         return 1
-    print(f'inventory.json: {data["sourceFileCount"]} source files, {data["codeLines"]} code lines -> {path}')
+    print(f'inventory.md: {data["sourceFileCount"]} source files, {data["codeLines"]} code lines -> {path}')
     return 0
 
 

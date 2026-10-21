@@ -1,16 +1,21 @@
+import { cardsOf, countOf, documentOf, fieldText, firstRecords, recordsOf, textOf, itemsOf } from './document.js'
+import { sectionsOf, tablesIn } from './markdown.js'
 import { baseName, norm } from './paths.js'
 
 /**
- * the topology file returned by `assessmentTopologyPath`, read into the few shapes the portal progress panel uses.
+ * A topology document: the application's `assessmentTopologyPath` (written by `scripts/render_topology.py` from
+ * the extraction script's output) or one unit's `understanding/topology.md` (`scripts/scope_items.py`). Front
+ * matter with the counts, then the domains, the edges between them, the largest leaves with their entry
+ * points and dead ends, the edges between those, the observations and the flows.
  *
- * The file is written by an agent, so every field is treated as optional and
- * of unknown shape: anything that does not fit is dropped, never thrown on.
+ * The file is written by a script from a model-written one, so every field is still read as optional and of
+ * unknown shape: anything that does not fit is dropped, never thrown on.
  */
 
 export type TopoNode = {
   id: string
   name: string
-  /** `module`, `datastore`, `screen`, or whatever the map stage wrote. */
+  /** `module`, `datastore`, `screen`, or whatever the extraction wrote. */
   kind: string
   /** Lines of code; 0 when the map gave none. */
   loc: number
@@ -20,7 +25,7 @@ export type TopoNode = {
   domain?: string
   /** The language the map recorded for it, as written (`cobol`, `java`, `php`). */
   language?: string
-  /** The node's plain-language paragraph, when the describe step accepted one. */
+  /** The node's plain-language paragraph, when one was written. */
   description?: string
 }
 
@@ -33,96 +38,60 @@ export type TopoFlow = {
   steps: { label: string; nodes: string[] }[]
 }
 
+/** The strongest links between two domains, counted over the leaf-level edges. */
+export type TopoDomainEdge = { from: string; to: string; kinds: string[]; edges: number }
+
 export type Topology = {
   system: string
   nodes: TopoNode[]
   /** Nodes that are code (`kind: module`, or any leaf with a file and loc). */
   modules: TopoNode[]
   domains: { name: string; modules: TopoNode[] }[]
+  /** The edges between the listed leaves (the document caps them). */
   edges: TopoEdge[]
+  domainEdges: TopoDomainEdge[]
   entryPoints: Set<string>
   deadEnds: Set<string>
   flows: TopoFlow[]
-  /** The architect observations the flows job wrote. */
   observations: string[]
+  /** Totals of the whole topology, which the lists above may be a part of. */
+  totals: { leaves: number; dataStores: number; edges: number; entryPoints: number; deadEnds: number; truncated: boolean }
   byId: Map<string, TopoNode>
   /** Lower-cased base name of a node's file, to the nodes that have it. */
   byFileBase: Map<string, TopoNode[]>
 }
 
-const str = (value: unknown): string | undefined =>
-  typeof value === 'string' && value !== '' ? value : undefined
+const named = (value: string | undefined): string | undefined => (value === undefined || value === '' ? undefined : value)
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
-const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
-
-function walk(
-  raw: unknown,
-  domain: string | undefined,
-  out: TopoNode[],
-  depth: number,
-): void {
-  if (!isRecord(raw) || depth > 12) {
-    return
-  }
-
-  const id = str(raw.id) ?? str(raw.name)
-
-  if (id === undefined) {
-    return
-  }
-
-  const kind = str(raw.kind) ?? 'node'
-  const name = str(raw.name) ?? id
-  const children = list(raw.children)
-  const here = kind === 'domain' ? name : domain
-  const loc = typeof raw.loc === 'number' && raw.loc > 0 ? raw.loc : 0
-  const file = str(raw.file)
-  const language = str(raw.language)
-  const description = str(raw.description)
-
-  if (children.length === 0 || kind === 'module') {
-    out.push({
-      id,
-      name,
-      kind,
-      loc,
-      ...(file !== undefined && { file: norm(file) }),
-      ...(here !== undefined && { domain: here }),
-      ...(language !== undefined && { language }),
-      ...(description !== undefined && { description }),
-    })
-  }
-
-  for (const child of children) {
-    walk(child, here, out, depth + 1)
-  }
-}
-
-/** Parses topology.json; null when the text is not a usable topology. */
+/** Parses a topology document; null when the text is not a usable topology. */
 export function parseTopology(text: string): Topology | null {
-  let raw: unknown
+  const { data, body } = documentOf(text)
+  const sections = sectionsOf(body)
+  const under = (title: string): string => sections.find(section => section.level === 2 && section.title === title)?.body ?? ''
 
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    return null
-  }
-
-  if (!isRecord(raw)) {
-    return null
-  }
-
+  const entryPoints = new Set<string>()
+  const deadEnds = new Set<string>()
   const nodes: TopoNode[] = []
 
-  if (isRecord(raw.root)) {
-    walk(raw.root, undefined, nodes, 0)
-  }
+  for (const row of firstRecords(under('Leaves'))) {
+    const id = named(row.leaf)
 
-  for (const flat of list(raw.nodes)) {
-    walk(flat, undefined, nodes, 0)
+    if (id === undefined) continue
+
+    const file = named(row.file)
+    const domain = named(row.domain)
+
+    nodes.push({
+      id,
+      name: named(row.name) ?? id,
+      kind: named(row.kind) ?? 'module',
+      loc: countOf(row.loc),
+      ...(file !== undefined && { file: norm(file) }),
+      ...(domain !== undefined && { domain }),
+    })
+
+    if (row['entry point']?.toLowerCase() === 'yes') entryPoints.add(id)
+    if (row['dead end']?.toLowerCase() === 'yes') deadEnds.add(id)
   }
 
   if (nodes.length === 0) {
@@ -132,108 +101,78 @@ export function parseTopology(text: string): Topology | null {
   const byId = new Map<string, TopoNode>()
 
   for (const node of nodes) {
-    if (!byId.has(node.id)) {
-      byId.set(node.id, node)
-    }
+    if (!byId.has(node.id)) byId.set(node.id, node)
   }
 
   const unique = [...byId.values()]
-
-  const modules = unique.filter(
-    node =>
-      node.kind === 'module' ||
-      (node.file !== undefined && node.loc > 0 && node.kind !== 'datastore'),
-  )
-
+  const modules = unique.filter(node => node.kind === 'module' || (node.file !== undefined && node.loc > 0 && node.kind !== 'datastore'))
   const byDomain = new Map<string, TopoNode[]>()
 
   for (const node of modules) {
     const key = node.domain ?? 'Other'
-    const bucket = byDomain.get(key) ?? []
-
-    bucket.push(node)
-    byDomain.set(key, bucket)
+    byDomain.set(key, [...(byDomain.get(key) ?? []), node])
   }
 
   const byFileBase = new Map<string, TopoNode[]>()
 
   for (const node of unique) {
-    if (node.file === undefined) {
-      continue
-    }
+    if (node.file === undefined) continue
 
     const key = baseName(node.file).toLowerCase()
-    const bucket = byFileBase.get(key) ?? []
 
-    bucket.push(node)
-    byFileBase.set(key, bucket)
+    byFileBase.set(key, [...(byFileBase.get(key) ?? []), node])
   }
 
-  const edges: TopoEdge[] = []
+  const edges: TopoEdge[] = recordsOf(tablesIn(under('Edges'))[0]).flatMap(row =>
+    row.source && row.target ? [{ source: row.source, target: row.target, kind: row.kind || 'uses' }] : [],
+  )
 
-  for (const edge of list(raw.edges)) {
-    if (!isRecord(edge)) {
-      continue
-    }
-
-    const source = str(edge.source) ?? str(edge.from)
-    const target = str(edge.target) ?? str(edge.to)
-
-    if (source !== undefined && target !== undefined) {
-      edges.push({ source, target, kind: str(edge.kind) ?? 'uses' })
-    }
-  }
-
-  const flows: TopoFlow[] = []
-
-  for (const flow of list(raw.flows)) {
-    if (!isRecord(flow)) {
-      continue
-    }
-
-    const name = str(flow.name)
-
-    if (name === undefined) {
-      continue
-    }
-
-    const persona = str(flow.persona)
-    const description = str(flow.description)
-
-    flows.push({
-      name,
-      ...(persona !== undefined && { persona }),
-      ...(description !== undefined && { description }),
-      steps: list(flow.steps)
-        .filter(isRecord)
-        .map(step => ({
-          label: str(step.label) ?? '',
-          nodes: list(step.nodes).filter(
-            (node): node is string => typeof node === 'string',
-          ),
-        })),
-    })
-  }
-
-  const ids = (value: unknown) =>
-    new Set(list(value).filter((id): id is string => typeof id === 'string'))
+  const domainEdges: TopoDomainEdge[] = recordsOf(tablesIn(under('Edges between domains'))[0]).flatMap(row =>
+    row.from && row.to ? [{ from: row.from, to: row.to, kinds: (row.kinds ?? '').split(',').map(kind => kind.trim()).filter(Boolean), edges: countOf(row.edges) || 1 }] : [],
+  )
 
   return {
-    system: str(raw.system) ?? '',
+    system: textOf(data.system) ?? '',
     nodes: unique,
     modules,
-    domains: [...byDomain.entries()].map(([name, members]) => ({
-      name,
-      modules: members,
-    })),
+    domains: [...byDomain.entries()].map(([name, members]) => ({ name, modules: members })),
     edges,
-    entryPoints: ids(raw.entryPoints),
-    deadEnds: ids(raw.deadEnds),
-    flows,
-    observations: list(raw.observations).filter((line): line is string => typeof line === 'string' && line !== ''),
+    domainEdges,
+    entryPoints,
+    deadEnds,
+    flows: flowsOf(under('Flows')) ?? [],
+    observations: itemsOf(under('Observations')),
+    totals: {
+      leaves: countOf(data.leaves),
+      dataStores: countOf(data.dataStores),
+      edges: countOf(data.edges),
+      entryPoints: countOf(data.entryPoints),
+      deadEnds: countOf(data.deadEnds),
+      truncated: data.truncated === true,
+    },
     byId,
     byFileBase,
   }
+}
+
+/** The flows section: a `### name` per flow with persona and description fields, then its steps table. */
+function flowsOf(body: string): TopoFlow[] | undefined {
+  const parts = sectionsOf(body)
+    .filter(section => section.level === 3)
+    .map(section => {
+      const card = cardsOf(`### ${section.title}\n${section.body}`, 3)[0]
+      const persona = card === undefined ? undefined : fieldText(card, 'persona')
+      const description = card === undefined ? undefined : fieldText(card, 'description', 400)
+
+      return {
+        name: section.title,
+        ...(persona !== undefined && { persona }),
+        ...(description !== undefined && { description }),
+        steps: recordsOf(tablesIn(section.body)[0]).map(row => ({ label: row.step ?? '', nodes: (row.nodes ?? '').split(',').map(node => node.trim()).filter(Boolean) })),
+      }
+    })
+
+  return parts.length === 0 ? undefined : parts
 }
 
 /**

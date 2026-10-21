@@ -263,7 +263,7 @@ describe("built-in commands", () => {
       command: "modernize-understand",
       audience: "runtime",
       agents: ["legacy-analyst", "security-auditor", "business-rules-extractor"],
-      writes: expect.arrayContaining(["applications/<app>/units/<module>/<unit>/as-is.md", "applications/<app>/units/<module>/<unit>/meta.json", "applications/<app>/units/<module>/<unit>/unit.md"]),
+      writes: expect.arrayContaining(["applications/<app>/units/<module>/<unit>/understanding/as-is.md", "applications/<app>/units/<module>/<unit>/understanding/understanding.md", "applications/<app>/units/<module>/<unit>/unit.md"]),
     });
   });
 });

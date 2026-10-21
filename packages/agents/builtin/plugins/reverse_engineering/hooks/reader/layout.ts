@@ -1,7 +1,7 @@
 import { isAppName } from './text.js'
 
 /**
- * The document-repository locations of one application (ADR-0038) and the workspace namespaces
+ * The document-repository locations of one application (ADR-0042) and the workspace namespaces
  * beside them, as the portal reader resolves them. Every path the reader touches is built here.
  */
 export type WorkspaceLayout = {
@@ -63,9 +63,13 @@ export const modulePath = (app: string, module: string, layout = DEFAULT_WORKSPA
 export const unitPath = (app: string, module: string, unit: string, layout = DEFAULT_WORKSPACE_LAYOUT): string =>
   `${modulePath(app, module, layout)}/${segment(unit, 'unit')}`
 
+/** What the understanding context knows about one unit of work: its AS-IS specification, rules, findings, trace. */
+export const understandingPath = (app: string, module: string, unit: string, layout = DEFAULT_WORKSPACE_LAYOUT): string =>
+  `${unitPath(app, module, unit, layout)}/understanding`
+
 /** The human rule verdicts of one unit of work. */
 export const rulesReviewPath = (app: string, module: string, unit: string, layout = DEFAULT_WORKSPACE_LAYOUT): string =>
-  `${unitPath(app, module, unit, layout)}/rules-review.json`
+  `${understandingPath(app, module, unit, layout)}/rules-review.md`
 
 /** Golden fixtures are versioned per unit of work in the document repository. */
 export const goldenPath = (app: string, module: string, unit: string, layout = DEFAULT_WORKSPACE_LAYOUT): string =>

@@ -7,7 +7,7 @@ metadata:
   upstream: commands/modernize-reimagine.md
   agents: [scaffolder, business-rules-extractor, legacy-analyst, architecture-critic]
   skills: [mermaid-diagrams]
-  reads: [applications/<app>/to-be/modernization-brief.md, applications/<app>/inputs/INTENT.md, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/units/<module>/<unit>/rules-review.json, applications/<app>/generated/DATA_OBJECTS.md, applications/<app>/assessment/topology.json, applications/<app>/assessment/ASSESSMENT.md, applications/<app>/units/<module>/AI_NATIVE_SPEC.md, applications/<app>/units/<module>/REIMAGINED_ARCHITECTURE.md]
+  reads: [applications/<app>/to-be/modernization-brief.md, applications/<app>/inputs/INTENT.md, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/units/<module>/<unit>/understanding/rules-review.md, applications/<app>/generated/DATA_OBJECTS.md, applications/<app>/assessment/topology.md, applications/<app>/assessment/ASSESSMENT.md, applications/<app>/units/<module>/AI_NATIVE_SPEC.md, applications/<app>/units/<module>/REIMAGINED_ARCHITECTURE.md]
   writes: [applications/<app>/units/<module>/AI_NATIVE_SPEC.md, applications/<app>/units/<module>/REIMAGINED_ARCHITECTURE.md]
   gates: ["P0 capabilities and deliberate drops (checkpoint 1)", "architecture approval before scaffolding (checkpoint 2)"]
 ---
@@ -41,7 +41,7 @@ around it. If no phase matches, stop and ask which phase this is.
 
 ## Phase A — Specification mining
 
-Reuse what discovery already produced in Kintsugi's understanding stages (honoring each unit's `rules-review.json`: a rule marked `refuted` is not part of the spec as written, and a P0 rule marked `clarify` is a question for the architecture checkpoint): `BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `topology.json` and
+Reuse what discovery already produced in Kintsugi's understanding stages (honoring each unit's `rules-review.md`: a rule marked `refuted` is not part of the spec as written, and a P0 rule marked `clarify` is a question for the architecture checkpoint): `BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `topology.md` and
 `ASSESSMENT.md` in `applications/$app/assessment/`, and any interface catalog the legacy-analyst runtime jobs of the `assess` or `map`
 stage wrote there. Spawn concurrently (and tell the user all are running) only the
 agents whose input is missing:
@@ -52,7 +52,7 @@ agents whose input is missing:
 2. **legacy-analyst**, only if no interface catalog exists yet — "Catalog every external interface of the legacy repository
    of $app: inbound (screens, APIs, batch triggers, queues) and outbound (reports, files, downstream calls, DB writes), each
    with name, direction, payload shape, and frequency or SLA if discernible. Mask credentials in endpoints and payload examples."
-3. **legacy-analyst**, only if there is no `topology.json` or `DATA_OBJECTS.md` — "Identify the core domain
+3. **legacy-analyst**, only if there is no `topology.md` or `DATA_OBJECTS.md` — "Identify the core domain
    entities of the legacy repository of $app and their relationships: an entity list and a Mermaid erDiagram
    (keys marked PK/FK, every relationship labelled, per the mermaid-diagrams skill)."
 

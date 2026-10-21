@@ -4,8 +4,8 @@
     python3 check_plan.py <app> --draft FILE --graph FILE --out DIR [--max-batch 12] [--max-batches 8]
 
 --draft is the planning agent's structured answer ({strategy, batches: [{title, items, rationale, risk}],
-leftOut: [{item, reason}]}); --graph the plan_graph.py output; --out the document-repository root the
-plan is written under (applications/<app>/assessment/understand/plan.json).
+leftOut: [{item, reason}]}); --graph the plan_graph.py output (both scratch JSON of the run); --out the
+document-repository root the plan is written under (applications/<app>/understanding/plan.md).
 
 The agent proposes, this script decides what stands: an item that is not in the catalog, is understood
 already, is test or generated code, or is named in an earlier batch is dropped (with the reason, in
@@ -22,6 +22,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import docmd  # noqa: E402
 import paths  # noqa: E402
 
 RISKS = ('high', 'medium', 'low')
@@ -115,6 +116,50 @@ def check(app, draft, graph, max_batch, max_batches):
     }
 
 
+def render_plan(plan):
+    """plan.md: front matter with the totals, the strategy, one section per batch, what was left out and dropped."""
+    summary = plan['summary']
+    out = [
+        docmd.front_matter({
+            'version': plan['version'],
+            'app': plan['app'],
+            'generatedBy': plan['generatedBy'],
+            'catalogCommit': plan['catalog'].get('commit') or '',
+            'items': plan['catalog']['items'],
+            'open': plan['catalog']['open'],
+            'batches': summary['batches'],
+            'planned': summary['planned'],
+        }),
+        f'# Plan to understand {plan["app"]}',
+        '',
+        plan['strategy'] or 'No strategy was given.',
+        '',
+    ]
+    for batch in plan['batches']:
+        out += [
+            docmd.heading(2, f'Batch {batch["n"]}', batch['title']),
+            '',
+            batch['rationale'] or 'No rationale was given.',
+            '',
+            docmd.field_lines({
+                'risk': batch['risk'],
+                'loc': batch['loc'],
+                'high complexity': batch['high'],
+                'cohesion': '' if batch['cohesion'] is None else batch['cohesion'],
+            }),
+            '### Items',
+            '',
+            docmd.bullet_list(batch['items']),
+        ]
+        if batch['dependsOutside']:
+            out += ['### Depends on outside', '', docmd.table(['Item', 'Used by'], [[dep['item'], ', '.join(dep['usedBy'])] for dep in batch['dependsOutside']])]
+    if plan['leftOut']:
+        out += ['## Left out', '', docmd.table(['Item', 'Reason'], [[entry['item'], entry['reason']] for entry in plan['leftOut']])]
+    if plan['dropped']:
+        out += ['## Dropped', '', 'Named by the planner and refused by the check.', '', docmd.table(['Item', 'Reason'], [[entry['item'], entry['reason']] for entry in plan['dropped']])]
+    return '\n'.join(out).rstrip() + '\n'
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description='Check the planner\'s draft against the item graph and write the plan.')
     ap.add_argument('app')
@@ -131,7 +176,7 @@ def main(argv):
         if not isinstance(graph, dict) or not isinstance(graph.get('items'), list):
             raise cc.DataError('graph.json must be an object with an items list')
         plan = check(args.app, cc.read_json(args.draft, 'the draft'), graph, args.max_batch, args.max_batches)
-        cc.write_json(os.path.join(os.path.abspath(args.out), *paths.understand_plan_path(args.app).split('/')), plan)
+        docmd.write_text(os.path.join(os.path.abspath(args.out), *paths.understand_plan_path(args.app).split('/')), render_plan(plan))
     except (cc.DataError, OSError) as error:
         print(f'check_plan.py: {error}', file=sys.stderr)
         return 1

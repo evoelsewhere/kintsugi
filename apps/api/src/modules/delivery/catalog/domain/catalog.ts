@@ -1,11 +1,11 @@
-// Domain of the item catalog (ADR-0033): `assess` writes the catalog through assessmentCatalogPath,
+// Domain of the item catalog (ADR-0033, ADR-0042): `assess` writes the catalog Markdown under assessmentCatalogDir,
 // with a status per catalog item derived — never stored — from `understand` runs and the default-branch evidence.
 // Pure types and the derivation; reading the files and the runs is the application layer's job.
 
-import type { ItemCatalog, ItemCatalogItem } from "@kintsugi/agents/reader";
+import type { ItemCatalog, ItemCatalogItem, PlanBatch, UnderstandPlan } from "@kintsugi/agents/reader";
 import type { ItemAssetClass, ItemStatus } from "@kintsugi/domain";
 
-/** Per-unit metadata written by `understand` for each specified catalog entry. */
+/** The provenance record (`understanding/understanding.md`) `understand` writes for each specified catalog entry. */
 export interface ItemMeta {
   digest?: string;
   /** Source commit the item was understood at. */
@@ -74,31 +74,8 @@ export function deriveItemStatus(item: ItemCatalogItem, meta: ItemMeta | undefin
 /** Items a new understand run may not take: running, or in an open pull request nobody abandoned. */
 export const isBlocked = (view: Pick<CatalogItemView, "status">): boolean => view.status === "running" || view.status === "in-pr";
 
-/** One batch of the AI plan (ADR-0041), as the planning run checked and wrote it. */
-export interface PlanBatch {
-  n: number;
-  title: string;
-  rationale: string;
-  risk: "high" | "medium" | "low";
-  items: string[];
-  loc: number;
-  high: number;
-  /** Calls inside the batch over all calls its items make to other items; null when they call none. */
-  cohesion: number | null;
-  /** Items outside the batch, not understood and not in an earlier batch, that its items depend on. */
-  dependsOutside: Array<{ item: string; usedBy: string[] }>;
-}
-
-export interface UnderstandPlan {
-  version: number;
-  app: string;
-  strategy: string;
-  catalog: { commit?: string; items: number; open: number };
-  batches: PlanBatch[];
-  leftOut: Array<{ item: string; reason: string }>;
-  dropped: Array<{ item: string; reason: string }>;
-  summary: { batches: number; planned: number; open: number };
-}
+/** The AI plan (ADR-0041) as the planning run checked and wrote it (`understanding/plan.md`): the reader's types. */
+export type { PlanBatch, UnderstandPlan };
 
 /** The plan with what the catalog says now: whether the plan still fits and where its items stand. */
 export interface UnderstandPlanView {

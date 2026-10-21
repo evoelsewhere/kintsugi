@@ -193,7 +193,7 @@ export class DocumentsService {
     };
   }
 
-  /** A text file at a ref (at most MAX_DOCUMENT_BYTES); `.json` files are parsed too. */
+  /** A text file at a ref (at most MAX_DOCUMENT_BYTES). */
   async file(projectId: string, ref: string | undefined, path: string): Promise<DocumentFile> {
     const file = servablePath(path, false);
     const context = await this.context(projectId);
@@ -209,14 +209,6 @@ export class DocumentsService {
       case "binary":
         throw new UnsupportedMediaTypeException(`${file} is not a text file`);
     }
-    let json: unknown;
-    if (file.toLowerCase().endsWith(".json")) {
-      try {
-        json = JSON.parse(read.content);
-      } catch {
-        json = undefined;
-      }
-    }
-    return { ...resolved, path: file, size: read.size, format: json === undefined ? "text" : "json", content: read.content, ...(json === undefined ? {} : { json }) };
+    return { ...resolved, path: file, size: read.size, content: read.content };
   }
 }

@@ -3,7 +3,7 @@
 // results of a stage built from the files it wrote. Never read from anywhere but the mirror;
 // never `restricted/` (restricted records are not committed, ADR-0029) or `.git`. Pure types.
 
-import type { CatalogRule, DataObject, Finding, Inventory, SecurityReport, Table, TopoEdge, TopoFlow, TraceUnit } from "@kintsugi/agents/reader";
+import type { CatalogRule, DataObject, Finding, Inventory, SecurityReport, Table, TopoDomainEdge, TopoEdge, TopoFlow, TraceUnit } from "@kintsugi/agents/reader";
 import type { RuleId, RulesReviewRecord } from "@kintsugi/domain";
 
 /** The mirror of a project's document repository (ADR-0025). */
@@ -74,10 +74,8 @@ export interface DocumentFile {
   commit: string;
   path: string;
   size: number;
-  /** `json` when the path ends in .json and parses. */
-  format: "text" | "json";
+  /** The file's text. The document repository holds Markdown (ADR-0042); front matter is part of it. */
   content: string;
-  json?: unknown;
 }
 
 /** What reading a file at a commit found. */
@@ -170,20 +168,23 @@ export interface MapResults extends StageResultsBase {
     flows: TopoFlow[];
     observations: string[];
     domains: string[];
+    /** The strongest links between two domains. */
+    domainEdges: TopoDomainEdge[];
+    /** Totals of the whole topology, which the lists above may be a part of. */
+    totals: { leaves: number; dataStores: number; edges: number; entryPoints: number; deadEnds: number; truncated: boolean };
   } | null;
   diagrams: MapDiagram[];
-  /** topology.summary.txt. */
-  summary?: string;
 }
 
 export interface RulesResults extends StageResultsBase {
   stage: "extract-rules";
   rules: CatalogRule[];
   dataObjects: DataObject[];
+  /** Counts over the rule cards (confirmed, by priority, to review, possible duplicates). */
   stats: Record<string, number>;
-  /** Parts of the code that were not fully mined (Coverage gaps of BUSINESS_RULES.md, skipped phases). */
+  /** Parts of the code that were not fully mined (Coverage gaps of BUSINESS_RULES.md). */
   coverageGaps: string[];
-  source: "result" | "markdown" | "none";
+  source: "markdown" | "none";
 }
 
 export interface HardenResults extends StageResultsBase {
@@ -203,13 +204,13 @@ export interface UnderstandUnit extends TraceUnit {
    * the run's pull request, `statusFrom: "ref"`). At the default branch it is the item's own status.
    */
   workItem?: { path: string; status: string; complexity?: string; statusFrom?: "default-branch" | "ref" };
-  /** The unit's trace links (trace.json): what it derives from and what evidences it. */
+  /** The unit's trace links (understanding/trace.md): what it derives from and what evidences it. */
   trace?: { requirements: string[]; pullRequests: string[]; tests: string[] };
-  /** The verdicts of rules-review.json, and the verdict ids whose rule left rules.json. */
+  /** The verdicts of rules-review.md, and the verdict ids whose rule left rules.md. */
   rulesReview?: { verdicts: RulesReviewRecord; orphaned: RuleId[] };
 }
 
-/** A synthesis document of the understand stage (under the path returned by knowledgeAsIsDir). */
+/** A synthesis document of the understand stage (under the generated views, `generatedDir`). */
 export interface AsIsDocument {
   id: "readme" | "architecture" | "data-model" | "integrations";
   title: string;
@@ -219,9 +220,9 @@ export interface AsIsDocument {
 
 export interface UnderstandResults extends StageResultsBase {
   stage: "understand";
-  /** The units of traceability.json, each with its work item's status. */
+  /** The understood units (built from their trace documents and the catalog), each with its work item's status. */
   units: UnderstandUnit[];
-  /** What the matrix says beyond the units; null without traceability.json. */
+  /** What the matrix says beyond the units; null without understood units. */
   matrix: {
     path: string;
     inputs: { businessRules: boolean; securityFindings: boolean };

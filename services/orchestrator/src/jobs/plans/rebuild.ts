@@ -2,7 +2,7 @@
 // from merged per-unit files. The domain layout module owns both generated paths; the writer
 // commits them directly after merge, while per-unit files arrive in their own pull request. Started
 // by the worker after a merge that touches an application's items, and by the portal's Rebuild action.
-import { DOCUMENT_PATH_TOKENS, assessmentCatalogPath, assessmentDir, generatedDir, generatedFilePath, knowledgeAsIsGeneratedFilePath, unitsDir } from "@kintsugi/domain";
+import { DOCUMENT_PATH_TOKENS, assessmentCatalogDir, assessmentCatalogPath, generatedDir, generatedFilePath, unitsDir } from "@kintsugi/domain";
 import type { StagePlan } from "../plan.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
@@ -10,7 +10,7 @@ const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
 export const REBUILD: StagePlan = {
   id: "rebuild",
   message: (app) => `Rebuild the generated views of ${app} from its understood units`,
-  documents: [`${assessmentDir(APP_TOKEN)}/`, `${unitsDir(APP_TOKEN)}/`, `${generatedDir(APP_TOKEN)}/`],
+  documents: [`${assessmentCatalogDir(APP_TOKEN)}/`, `${unitsDir(APP_TOKEN)}/`, `${generatedDir(APP_TOKEN)}/`],
   requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   steps: [
     {
@@ -18,7 +18,7 @@ export const REBUILD: StagePlan = {
       kind: "script",
       script: "rebuild_aggregates.py",
       args: ["{app}", "--docs", "{in}", "--out", "{out}"],
-      expects: [generatedFilePath(APP_TOKEN, "topology.json"), knowledgeAsIsGeneratedFilePath(APP_TOKEN, "traceability.json")],
+      expects: [generatedFilePath(APP_TOKEN, "BUSINESS_RULES.md"), generatedFilePath(APP_TOKEN, "traceability.md")],
     },
   ],
 };

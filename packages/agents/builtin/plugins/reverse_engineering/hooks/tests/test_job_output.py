@@ -11,17 +11,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[7]
 HOOK = ROOT / "packages" / "agents" / "builtin" / "plugins" / "reverse_engineering" / "hooks" / "job_output.py"
 
-VALID_TOPOLOGY = {
-    "system": "Example app",
-    "root": {"id": "root", "name": "root", "kind": "group", "children": []},
-    "edges": [],
-    "entryPoints": [],
-    "deadEnds": [],
-    "observations": ["Example observation"],
-    "flows": [
-        {"name": "Example flow", "steps": [{"label": "Start", "nodes": ["root"]}]}
-    ],
-}
+VALID_TOPOLOGY = (
+    '---\napp: "example"\nsystem: "Example app"\ndomains: 1\n---\n# Topology of Example app\n\n'
+    "## Domains\n\n| Domain | Leaves | Data stores | LOC |\n| --- | --- | --- | --- |\n| Core | 1 | 0 | 10 |\n"
+)
 
 
 def run_hook(output_dir: Path, *extra: str) -> subprocess.CompletedProcess[str]:
@@ -43,8 +36,8 @@ def report(result: subprocess.CompletedProcess[str]) -> dict[str, Any]:
 
 def test_clean_output_validates_topology_and_rule_headings(tmp_path: Path) -> None:
     (tmp_path / "assessment" / "sample-app").mkdir(parents=True)
-    topology = tmp_path / "assessment" / "sample-app" / "topology.json"
-    topology.write_text(json.dumps(VALID_TOPOLOGY), encoding="utf-8")
+    topology = tmp_path / "assessment" / "sample-app" / "topology.md"
+    topology.write_text(VALID_TOPOLOGY, encoding="utf-8")
     rules = tmp_path / "assessment" / "sample-app" / "BUSINESS_RULES.md"
     rules.write_text("### RULE-001: Calculate the total\n\nRule body.\n", encoding="utf-8")
 
@@ -138,7 +131,7 @@ def test_private_key_header_is_detected_without_echoing_body(tmp_path: Path) -> 
 
 
 def test_invalid_topology_and_rule_headings_have_malformed_exit_code(tmp_path: Path) -> None:
-    (tmp_path / "topology.json").write_text('{"system":"sample"}', encoding="utf-8")
+    (tmp_path / "topology.md").write_text("# Topology without front matter\n", encoding="utf-8")
     (tmp_path / "BUSINESS_RULES.md").write_text("### RULE-1: Missing zero padding\n", encoding="utf-8")
 
     result = run_hook(tmp_path)
@@ -146,7 +139,7 @@ def test_invalid_topology_and_rule_headings_have_malformed_exit_code(tmp_path: P
 
     assert result.returncode == 3
     assert {item["rule"] for item in data["findings"]} == {
-        "invalid_topology_schema",
+        "invalid_topology_document",
         "invalid_rule_heading",
     }
 
@@ -163,7 +156,7 @@ def test_an_empty_rule_catalog_needs_the_explicit_marker(tmp_path: Path) -> None
 
 
 def test_credentials_and_malformed_artifacts_have_combined_exit_code(tmp_path: Path) -> None:
-    (tmp_path / "topology.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "topology.md").write_text("{}", encoding="utf-8")
     (tmp_path / "settings.txt").write_text("password: TEST_ONLY_SECRET_12345\n", encoding="utf-8")
 
     result = run_hook(tmp_path)
@@ -176,15 +169,21 @@ def test_credentials_and_malformed_artifacts_have_combined_exit_code(tmp_path: P
     assert "TEST_ONLY_SECRET_12345" not in result.stdout + result.stderr
 
 
-def test_duplicate_json_keys_are_malformed(tmp_path: Path) -> None:
-    (tmp_path / "topology.json").write_text(
-        '{"system":"first","system":"second"}', encoding="utf-8"
-    )
+def test_a_topology_without_a_domains_table_is_malformed(tmp_path: Path) -> None:
+    (tmp_path / "topology.md").write_text('---\nsystem: "Example"\n---\n# Topology\n', encoding="utf-8")
 
     result = run_hook(tmp_path)
 
     assert result.returncode == 3
-    assert report(result)["findings"][0]["rule"] == "invalid_topology_schema"
+    assert report(result)["findings"][0]["rule"] == "invalid_topology_document"
+
+
+def test_a_units_rules_document_is_checked_like_the_rule_catalog(tmp_path: Path) -> None:
+    (tmp_path / "understanding").mkdir()
+    (tmp_path / "understanding" / "rules.md").write_text("### RULE-tax.calc-1a2b3c4d: Round\n\nBody.\n", encoding="utf-8")
+    assert run_hook(tmp_path).returncode == 0
+    (tmp_path / "understanding" / "rules.md").write_text("### RULE-1: Bad id\n", encoding="utf-8")
+    assert report(run_hook(tmp_path))["findings"][0]["rule"] == "invalid_rule_heading"
 
 
 def test_oversized_file_fails_closed_with_bounded_error_report(tmp_path: Path) -> None:

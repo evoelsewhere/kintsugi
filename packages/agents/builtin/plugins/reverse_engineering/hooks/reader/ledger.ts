@@ -1,19 +1,17 @@
 import { plain } from './text.js'
+import { recordsOf } from './document.js'
+import { tablesIn } from './markdown.js'
 import type { ReviewLedger, ReviewVerdict } from './progress.js'
 
 /**
- * The per-unit `rules-review.json` (`units/<module>/<unit>/`), read without trusting it. Each entry is `{ verdict, approver, date }`
- * keyed by rule id; `approver` becomes the verdict's title and `date` its `at`, so the panel keeps rendering. The retired
- * `RULE_REVIEWS.json` envelope of `{ reviews: { ... { verdict, at, title?, note? } } }` entries still parses, its `wrong` and
- * `discuss` verdicts renamed to `refuted` and `clarify`. The file sits in a workspace anyone may have edited, and a model may have
- * written it, so every value is checked: a verdict is one of three exact words, a rule id is one plain token, a title or a note is
- * cut to one short plain line, and anything else in an entry is dropped.
+ * The per-unit `rules-review.md` (`units/<module>/<unit>/understanding/`), read without trusting it: a table
+ * `Rule | Verdict | Approver | Date` (and an optional `Note`) keyed by rule id; `approver` becomes the verdict's title
+ * and `date` its `at`, so the panel keeps rendering. The file sits in a workspace anyone may have edited, and a model
+ * may have written it, so every value is checked: a verdict is one of three exact words, a rule id is one plain token, a
+ * title or a note is cut to one short plain line, and anything else in a row is dropped.
  */
 
 const VERDICTS: readonly string[] = ['confirmed', 'refuted', 'clarify']
-
-/** The verdict words a legacy envelope used, renamed to today's words. */
-const LEGACY_VERDICTS: Record<string, ReviewVerdict> = { wrong: 'refuted', discuss: 'clarify' }
 
 /** What a note may hold: a reviewer's sentence or two, not a document. */
 export const MAX_NOTE = 500
@@ -22,15 +20,7 @@ const MAX_ENTRIES = 5_000
 const RULE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/
 const FORBIDDEN_ID = new Set(['__proto__', 'constructor', 'prototype'])
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-
-const verdictOf = (value: unknown): ReviewVerdict | null => {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  return (VERDICTS.includes(value) ? value : LEGACY_VERDICTS[value]) as ReviewVerdict | undefined ?? null
-}
+const verdictOf = (value: string): ReviewVerdict | null => (VERDICTS.includes(value.toLowerCase()) ? (value.toLowerCase() as ReviewVerdict) : null)
 
 /** The ledger one rules review holds; empty when it is not one. */
 export function parseLedger(text: string | null): ReviewLedger {
@@ -38,43 +28,36 @@ export function parseLedger(text: string | null): ReviewLedger {
     return {}
   }
 
-  let raw: unknown
-
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    return {}
-  }
-
-  if (!isRecord(raw)) {
-    return {}
-  }
-
-  // The retired `RULE_REVIEWS.json` wrapped its entries in `reviews`; a per-unit file is the entries themselves.
-  const entries = isRecord(raw.reviews) ? raw.reviews : raw
   const ledger: ReviewLedger = {}
 
-  for (const [id, item] of Object.entries(entries).slice(0, MAX_ENTRIES)) {
-    if (!RULE_ID.test(id) || FORBIDDEN_ID.has(id) || !isRecord(item)) {
+  for (const row of recordsOf(tablesIn(text.replace(/\r\n/g, '\n'))[0]).slice(0, MAX_ENTRIES)) {
+    const id = (row.rule ?? '').replace(/`/g, '').trim()
+    const verdict = verdictOf((row.verdict ?? '').trim())
+
+    if (!RULE_ID.test(id) || FORBIDDEN_ID.has(id) || verdict === null) {
       continue
     }
 
-    const verdict = verdictOf(item.verdict)
-
-    if (verdict === null) {
-      continue
-    }
-
-    const title = typeof item.title === 'string' ? plain(item.title, MAX_TITLE) : typeof item.approver === 'string' ? plain(item.approver, MAX_TITLE) : ''
-    const note = typeof item.note === 'string' ? plain(item.note, MAX_NOTE) : ''
-    // A time is kept only when it is one: the page shows its date. A per-unit file calls it `date`.
-    const rawAt = typeof item.at === 'string' ? item.at : typeof item.date === 'string' ? item.date : ''
+    const title = plain(row.approver ?? '', MAX_TITLE)
+    const note = plain(row.note ?? '', MAX_NOTE)
+    // A time is kept only when it is one: the page shows its date.
+    const rawAt = row.date ?? ''
     const at = /^\d{4}-\d{2}-\d{2}/.test(rawAt) ? rawAt.slice(0, 40) : ''
 
     ledger[id] = { verdict, at, ...(title !== '' && { title }), ...(note !== '' && { note }) }
   }
 
   return ledger
+}
+
+/** The ledger as the `rules-review.md` table: `Rule | Verdict | Approver | Date | Note`, rules in id order. */
+export function renderLedger(ledger: ReviewLedger): string {
+  const cell = (value: string | undefined): string => (value ?? '').replace(/[\r\n]+/g, ' ').replace(/\|/g, '\\|').trim()
+  const rows = Object.entries(ledger)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, entry]) => `| ${id} | ${entry.verdict} | ${cell(entry.title)} | ${entry.at.slice(0, 10)} | ${cell(entry.note)} |`)
+
+  return ['# Rule verdicts', '', '| Rule | Verdict | Approver | Date | Note |', '| --- | --- | --- | --- | --- |', ...rows, ''].join('\n')
 }
 
 /**

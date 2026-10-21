@@ -1,0 +1,47 @@
+---
+app: "billing-web"
+item: "invoices/invoice-search"
+generatedBy: "finish_items.py"
+openQuestions: 0
+---
+# Traceability - invoices/invoice-search
+
+## Entry points
+
+- `src/INVOICE.cbl:12`
+
+## Rules applied
+
+- `RULE-invoices.invoice-search-1a2b3c4d`
+
+## Findings
+
+## Dependencies
+
+| Target | Kind | Direction |
+| --- | --- | --- |
+| ds:INVOICE-RECORD | read | outbound |
+
+## Data objects
+
+- INVOICE-RECORD
+
+## External systems
+
+- tax-service
+
+## Files
+
+- `src/INVOICE.cbl`
+
+## Requirements
+
+- `REQ-INV-001`
+
+## Pull requests
+
+- `#42`
+
+## Tests
+
+- `tests/invoice_gross_amount.test.ts`

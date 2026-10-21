@@ -1,7 +1,11 @@
+import { countOf, documentOf, numberOf, recordsOf, textOf } from './document.js'
+import { sectionsOf, tablesIn } from './markdown.js'
+
 /**
- * the file returned by `assessmentInventoryPath`, written by the assess stage's inventory script: the figures
- * of record (files, lines, SLOC, complexity) per language and per file. Every field is treated
- * as optional; anything that does not fit is dropped, never thrown on.
+ * The file returned by `assessmentInventoryPath`, written by the assess stage's inventory script
+ * (`scripts/inventory.py`): the figures of record in the front matter, then the languages, the directories,
+ * the size distribution and the most complex files as tables. The per-file records stay in the run.
+ * Every field is treated as optional; anything that does not fit is dropped, never thrown on.
  */
 
 export type InventoryLanguage = {
@@ -12,6 +16,7 @@ export type InventoryLanguage = {
   complexity: number
 }
 
+/** One of the most complex files; the committed inventory lists these, not every file. */
 export type InventoryFile = {
   path: string
   language: string
@@ -19,6 +24,22 @@ export type InventoryFile = {
   sloc: number
   complexity: number
   bytes: number
+}
+
+export type InventoryDirectory = { path: string; files: number; sloc: number; complexity: number }
+
+export type InventoryBucket = { label: string; files: number }
+
+export type InventorySignals = {
+  /** Source files with code: the denominator of the file statistics. */
+  codeFiles: number
+  medianSloc: number
+  /** How many files hold half of all the complexity. */
+  halfComplexityFiles: number
+  /** Share of the complexity in the ten most complex files, 0..1. */
+  topTenShare: number
+  /** Files above 1,000 SLOC. */
+  oversized: number
 }
 
 export type Inventory = {
@@ -37,107 +58,78 @@ export type Inventory = {
   complexityIndex: number
   complexityPerKsloc?: number
   languages: InventoryLanguage[]
+  /** The most complex files (the document lists the top fifty). */
   files: InventoryFile[]
+  /** SLOC and complexity per directory, at `directoryDepth` levels. */
+  directories: InventoryDirectory[]
+  directoryDepth: number
+  sizeDistribution: InventoryBucket[]
+  signals: InventorySignals
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
+const num = (value: unknown): number => numberOf(value) ?? 0
 
-const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+const tableUnder = (sections: ReturnType<typeof sectionsOf>, title: string) => tablesIn(sections.find(section => section.level === 2 && section.title === title)?.body ?? '')[0]
 
-const optNum = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
-
-const str = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
-
-/** Parses inventory.json; null when the text is not an inventory. */
+/** Parses inventory.md; null when the text is not an inventory. */
 export function parseInventory(text: string): Inventory | null {
-  let raw: unknown
+  const { data, body } = documentOf(text)
+  const sections = sectionsOf(body)
 
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    return null
-  }
+  const languages = recordsOf(tableUnder(sections, 'Languages'))
+    .map(row => ({ language: row.language ?? '', files: num(row.files), lines: num(row.lines), sloc: num(row.sloc), complexity: num(row.complexity) }))
+    .filter(row => row.language !== '')
+    .sort((a, b) => b.sloc - a.sloc || b.files - a.files)
 
-  if (!isRecord(raw)) {
-    return null
-  }
-
-  const files: InventoryFile[] = []
-
-  for (const entry of Array.isArray(raw.files) ? raw.files : []) {
-    const path = isRecord(entry) ? str(entry.path) : undefined
-
+  const files = recordsOf(tableUnder(sections, 'Most complex files'))
+    .map(row => ({ path: row.path ?? '', language: row.language || 'Other', lines: num(row.lines), sloc: num(row.sloc), complexity: num(row.complexity), bytes: 0 }))
     // `.git` is a worktree pointer, not part of the code.
-    if (!isRecord(entry) || path === undefined || path === '.git' || path.startsWith('.git/')) {
-      continue
-    }
+    .filter(row => row.path !== '' && row.path !== '.git' && !row.path.startsWith('.git/'))
 
-    files.push({
-      path,
-      language: str(entry.language) ?? 'Other',
-      lines: num(entry.lines),
-      sloc: num(entry.sloc ?? entry.codeLines),
-      complexity: num(entry.cyclomaticComplexity ?? entry.complexity),
-      bytes: num(entry.bytes),
-    })
-  }
+  const directories = recordsOf(tableUnder(sections, 'Directories'))
+    .map(row => ({ path: row.path ?? '', files: num(row.files), sloc: num(row.sloc), complexity: num(row.complexity) }))
+    .filter(row => row.path !== '')
 
-  const languages: InventoryLanguage[] = []
-  const metrics = isRecord(raw.languageMetrics) ? raw.languageMetrics : {}
-  const counts = isRecord(raw.languages) ? raw.languages : {}
+  const sizeDistribution = recordsOf(tableUnder(sections, 'Size distribution'))
+    .map(row => ({ label: row['sloc per file'] ?? '', files: num(row.files) }))
+    .filter(row => row.label !== '')
 
-  for (const language of new Set([...Object.keys(metrics), ...Object.keys(counts)])) {
-    const metric = metrics[language]
-    const own = files.filter(file => file.language === language)
-
-    languages.push(
-      isRecord(metric)
-        ? {
-            language,
-            files: num(metric.files),
-            lines: num(metric.lines),
-            sloc: num(metric.sloc ?? metric.codeLines),
-            complexity: num(metric.complexity),
-          }
-        : {
-            language,
-            files: num(counts[language]) || own.length,
-            lines: own.reduce((sum, file) => sum + file.lines, 0),
-            sloc: own.reduce((sum, file) => sum + file.sloc, 0),
-            complexity: own.reduce((sum, file) => sum + file.complexity, 0),
-          },
-    )
-  }
-
-  languages.sort((a, b) => b.sloc - a.sloc || b.files - a.files)
-
-  const sloc = num(raw.sloc ?? raw.codeLines)
+  const sloc = countOf(data.sloc)
 
   if (files.length === 0 && languages.length === 0 && sloc === 0) {
     return null
   }
 
   const optional = {
-    app: str(raw.app),
-    sourceRepository: str(raw.sourceRepository),
-    sourceCommit: str(raw.sourceCommit),
-    method: str(raw.method),
-    complexityIndexFormula: str(raw.complexityIndexFormula),
-    complexityPerKsloc: optNum(raw.complexityPerKsloc),
+    app: textOf(data.app),
+    sourceRepository: textOf(data.sourceRepository),
+    sourceCommit: textOf(data.sourceCommit),
+    method: textOf(data.method, 500),
+    complexityIndexFormula: textOf(data.complexityIndexFormula),
+    complexityPerKsloc: numberOf(data.complexityPerKsloc),
   }
 
   return {
     ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== undefined)),
-    fileCount: num(raw.fileCount) || files.length,
-    sourceFileCount: num(raw.sourceFileCount) || files.length,
-    totalLines: num(raw.totalLines),
+    fileCount: countOf(data.fileCount) || files.length,
+    sourceFileCount: countOf(data.sourceFileCount) || files.length,
+    totalLines: countOf(data.totalLines),
     sloc,
-    ksloc: num(raw.ksloc) || Math.round(sloc) / 1000,
-    totalBytes: num(raw.totalBytes),
-    complexity: num(raw.complexity),
-    complexityIndex: num(raw.complexityIndex),
+    ksloc: numberOf(data.ksloc) ?? Math.round(sloc) / 1000,
+    totalBytes: countOf(data.totalBytes),
+    complexity: countOf(data.complexity),
+    complexityIndex: num(data.complexityIndex),
     languages,
     files,
+    directories,
+    directoryDepth: countOf(data.directoryDepth) || 1,
+    sizeDistribution,
+    signals: {
+      codeFiles: countOf(data.codeFiles),
+      medianSloc: num(data.medianSloc),
+      halfComplexityFiles: countOf(data.halfComplexityFiles),
+      topTenShare: num(data.topTenShare),
+      oversized: countOf(data.oversized),
+    },
   }
 }

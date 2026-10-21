@@ -72,7 +72,7 @@ describe("plugin flows", () => {
     const assess = flow(understand, "assess");
     expect(assess.steps.map((step) => step.name)).toEqual(expect.arrayContaining(["inventory", "legacy-analyst", "catalog_from_topology"]));
     expect(assess.steps.find((step) => step.name === "inventory")).toMatchObject({ kind: "script" });
-    expect(assess.writes).toEqual(expect.arrayContaining(["applications/<app>/assessment/catalog.json"]));
+    expect(assess.writes).toEqual(expect.arrayContaining(["applications/<app>/assessment/catalog/"]));
 
     const understandFlow = flow(understand, "understand");
     const rules = understandFlow.steps.find((step) => step.name === "extract-rules");
@@ -80,9 +80,9 @@ describe("plugin flows", () => {
     expect(understandFlow.steps.find((step) => step.name === "harden-scan")?.agents).toEqual(["security-auditor"]);
     expect(understandFlow.gates.length).toBeGreaterThan(0);
 
-    expect(understand!.pipeline).toEqual(expect.arrayContaining([{ from: "assess", to: "understand", via: expect.arrayContaining(["applications/<app>/assessment/catalog.json"]) }]));
-    // The plan reads what assess wrote and which items understand has finished (their meta.json); nothing else.
-    expect(understand!.pipeline.find((link) => link.to === "plan-understand" && link.from === "understand")?.via).toEqual(["applications/<app>/units/<module>/<unit>/meta.json"]);
+    expect(understand!.pipeline).toEqual(expect.arrayContaining([{ from: "assess", to: "understand", via: expect.arrayContaining(["applications/<app>/assessment/catalog/"]) }]));
+    // The plan reads what assess wrote and which items understand has finished (their understanding.md); nothing else.
+    expect(understand!.pipeline.find((link) => link.to === "plan-understand" && link.from === "understand")?.via).toEqual(["applications/<app>/units/<module>/<unit>/understanding/understanding.md"]);
     expect(modernize!.pipeline.map((link) => `${link.from}>${link.to}`)).not.toContain("preflight>transform");
     expect(modernize!.flows.map((entry) => entry.command)).toEqual(["preflight", "brief", "transform", "uplift", "reimagine", "verify"]);
   });

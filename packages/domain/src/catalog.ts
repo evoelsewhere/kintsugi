@@ -1,7 +1,8 @@
-import { assessmentCatalogPath, knowledgeAsIsItemFilePath } from "./document-layout.js";
+import { assessmentCatalogPath, unitUnderstandingPath } from "./document-layout.js";
 
 // The item catalog of an application (ADR-0033), written by the assess stage
-// (scripts catalog_from_topology.py → apply_catalog_edits.py → reconcile_catalog.py).
+// (scripts catalog_from_topology.py → apply_catalog_edits.py → reconcile_catalog.py → render_catalog.py)
+// as Markdown: assessment/catalog/index.md and one file per module (ADR-0042).
 // Module → item; a catalog item represents a unit whose full id is `<app>/<module>/<unit>`.
 // Item status is derived (API), never stored in the catalog.
 
@@ -10,8 +11,6 @@ export const ITEM_SEGMENT_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 /** A catalog item id: `<module>/<item>` (the unit key of ADR-0031). */
 export const CATALOG_ITEM_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}\/[a-z0-9][a-z0-9-]{0,62}$/;
-
-export const CATALOG_SCHEMA_VERSION = 1;
 
 /** Whether an item still exists in the application (`retired` items are kept, never deleted). */
 export const CATALOG_ITEM_STATES = ["active", "retired"] as const;
@@ -61,7 +60,6 @@ export interface CatalogItem {
 }
 
 export interface Catalog {
-  schemaVersion: number;
   app: string;
   generatedBy?: string;
   source: { repo?: string; commit?: string };
@@ -83,9 +81,12 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number];
 /** The work item / unit id of a catalog item. */
 export const workItemIdOf = (app: string, itemId: string): string => `${app}/${itemId}`;
 
-/** Document-repo paths of the catalog and of an item's per-item files. */
+/** Document-repo paths of the catalog's index and of an item's provenance record. */
 export const catalogPath = (app: string): string => assessmentCatalogPath(app);
-export const itemMetaPath = (app: string, itemId: string): string => knowledgeAsIsItemFilePath(app, itemId, "meta.json");
+export const itemUnderstandingPath = (app: string, itemId: string): string => {
+  const [module = "", unit = ""] = itemId.split("/");
+  return unitUnderstandingPath(app, module, unit);
+};
 
 /**
  * What an item is made of: `test` (every file is a test), `generated` (every file is build output,

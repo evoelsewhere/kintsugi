@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import subprocess
@@ -9,6 +8,8 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))))
 SCRIPTS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS)
+import docmd  # noqa: E402
+
 PYTHON = sys.executable
 
 
@@ -42,18 +43,21 @@ def make_topology():
                         {'id': 'ds:accounts', 'name': 'Accounts', 'kind': 'datastore', 'loc': 1},
                     ],
                 },
+                {
+                    'id': 'dom:invoicing', 'name': 'Invoicing', 'kind': 'domain',
+                    'children': [{'id': 'module:InvoiceEntry', 'name': 'InvoiceEntry', 'kind': 'module', 'file': 'src/InvoiceEntry.py', 'loc': 40}],
+                },
             ],
         },
-        'edges': [{'source': 'module:AccountService', 'target': 'ds:accounts', 'kind': 'write'}],
-        'entryPoints': ['module:AccountService'],
+        'edges': [
+            {'source': 'module:AccountService', 'target': 'ds:accounts', 'kind': 'write'},
+            {'source': 'module:InvoiceEntry', 'target': 'module:AccountService', 'kind': 'call'},
+        ],
+        'entryPoints': ['module:InvoiceEntry'],
         'deadEnds': [],
-        'observations': [],
-        'flows': [],
+        'observations': ['Invoices are posted through the account service.'],
+        'flows': [{'name': 'Post invoice', 'persona': 'clerk', 'steps': [{'label': 'Enter the invoice', 'nodes': ['module:InvoiceEntry', 'module:AccountService']}]}],
     }
-
-
-def base_args(source, assessment, out):
-    return ('billing', '--source', source, '--assessment', assessment, '--out', out)
 
 
 def symlink_or_skip(test, target, link):
@@ -71,47 +75,50 @@ class InventoryTests(unittest.TestCase):
         self.root = self.temp.name
         self.source = os.path.join(self.root, 'source')
         self.out = os.path.join(self.root, 'out')
+        self.scratch = os.path.join(self.root, 'scratch')
         os.makedirs(self.source)
 
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_happy_path_writes_deterministic_inventory(self):
+    def inventory(self, *extra):
+        return run('inventory.py', 'billing', '--source', self.source, '--out', self.out, '--scratch', self.scratch, *extra)
+
+    def test_happy_path_writes_a_deterministic_summary_and_the_raw_inventory(self):
         os.makedirs(os.path.join(self.source, 'src'))
         with open(os.path.join(self.source, 'src', 'branch.py'), 'w', encoding='utf-8') as handle:
             handle.write('def work(value):\n    if value and value > 2:\n        return value\n    return 0\n')
         with open(os.path.join(self.source, 'README.md'), 'w', encoding='utf-8') as handle:
             handle.write('# Billing\n')
-        result = run('inventory.py', 'billing', '--source', self.source, '--out', self.out)
+        result = self.inventory()
         self.assertEqual(result.returncode, 0, result.stderr)
-        path = os.path.join(self.out, 'inventory.json')
-        with open(path, encoding='utf-8') as handle:
-            first = handle.read()
-        data = json.loads(first)
-        self.assertEqual(data['app'], 'billing')
-        self.assertEqual(data['languages'], {'Markdown': 1, 'Python': 1})
-        self.assertEqual(data['sourceFileCount'], 2)
-        self.assertEqual(data['languageMetrics']['Python']['files'], 1)
-        self.assertEqual(data['sloc'], data['codeLines'])
-        self.assertEqual(data['complexityIndexFormula'], '2.94 × KSLOC^1.10')
-        self.assertGreater(data['complexityPerKsloc'] or 0, 0)
-        result = run('inventory.py', 'billing', '--source', self.source, '--out', self.out)
+        path = os.path.join(self.out, 'inventory.md')
+        first = docmd.read_text(path)
+        front, body = docmd.split_front_matter(first)
+        self.assertEqual(front['app'], 'billing')
+        self.assertEqual(front['sourceFileCount'], 2)
+        self.assertEqual(front['complexityIndexFormula'], '2.94 × KSLOC^1.10')
+        self.assertGreater(front['complexityPerKsloc'] or 0, 0)
+        sections = dict(docmd.sections(body, 2))
+        self.assertEqual({row['language'] for row in docmd.records_in(sections['Languages'])}, {'Markdown', 'Python'})
+        self.assertEqual(docmd.records_in(sections['Most complex files'])[0]['path'], 'src/branch.py')
+        self.assertNotIn('.json', first)
+        raw = docmd.read_json(os.path.join(self.scratch, 'inventory.json'))
+        self.assertEqual(raw['languages'], {'Markdown': 1, 'Python': 1})
+        self.assertEqual(raw['sloc'], raw['codeLines'])
+        result = self.inventory()
         self.assertEqual(result.returncode, 0, result.stderr)
-        with open(path, encoding='utf-8') as handle:
-            self.assertEqual(handle.read(), first)
+        self.assertEqual(docmd.read_text(path), first)
 
     def test_source_identity_flags_are_recorded_and_commit_is_validated(self):
         commit = 'A' * 40
-        result = run('inventory.py', 'billing', '--source', self.source, '--out', self.out,
-                     '--source-repo', 'billing-service', '--source-commit', commit)
+        result = self.inventory('--source-repo', 'billing-service', '--source-commit', commit)
         self.assertEqual(result.returncode, 0, result.stderr)
-        with open(os.path.join(self.out, 'inventory.json'), encoding='utf-8') as handle:
-            inventory = json.load(handle)
-        self.assertEqual(inventory['sourceRepository'], 'billing-service')
-        self.assertEqual(inventory['sourceCommit'], commit.lower())
-        for script in ('inventory.py', 'node_packets.py', 'merge_topology.py'):
-            result = run(script, 'billing', '--source-commit', 'bad')
-            self.assertEqual(result.returncode, 2, script)
+        front, _ = docmd.split_front_matter(docmd.read_text(os.path.join(self.out, 'inventory.md')))
+        self.assertEqual(front['sourceRepository'], 'billing-service')
+        self.assertEqual(front['sourceCommit'], commit.lower())
+        result = run('inventory.py', 'billing', '--source-commit', 'bad')
+        self.assertEqual(result.returncode, 2)
 
     def test_missing_required_parameter_exits_two_with_usage_and_no_output(self):
         result = run('inventory.py', 'billing', '--source', self.source)
@@ -124,14 +131,14 @@ class InventoryTests(unittest.TestCase):
         with open(external, 'w', encoding='utf-8') as handle:
             handle.write('safe = True\n')
         symlink_or_skip(self, external, os.path.join(self.source, 'escape.py'))
-        result = run('inventory.py', 'billing', '--source', self.source, '--out', self.out)
+        result = self.inventory()
         self.assertEqual(result.returncode, 1)
         self.assertIn('escapes --source', result.stderr)
         self.assertFalse(os.path.exists(self.out))
 
     def test_output_inside_source_checkout_is_refused(self):
         out = os.path.join(self.source, 'generated')
-        result = run('inventory.py', 'billing', '--source', self.source, '--out', out)
+        result = run('inventory.py', 'billing', '--source', self.source, '--out', out, '--scratch', self.scratch)
         self.assertEqual(result.returncode, 1)
         self.assertIn('outside the read-only --source', result.stderr)
         self.assertFalse(os.path.exists(out))
@@ -141,189 +148,56 @@ class InventoryTests(unittest.TestCase):
         path = os.path.join(self.source, 'too_large.py')
         with open(path, 'wb') as handle:
             handle.write(b'x' * (MAX_FILE_BYTES + 1))
-        result = run('inventory.py', 'billing', '--source', self.source, '--out', self.out)
+        result = self.inventory()
         self.assertEqual(result.returncode, 1)
         self.assertIn('exceeds the', result.stderr)
         self.assertFalse(os.path.exists(self.out))
 
 
-class NodePacketsTests(unittest.TestCase):
+class RenderTopologyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = self.temp.name
-        self.source = os.path.join(self.root, 'source')
-        self.assessment = os.path.join(self.root, 'assessment')
-        self.out = os.path.join(self.root, 'out')
-        os.makedirs(os.path.join(self.source, 'src'))
-        os.makedirs(self.assessment)
-        with open(os.path.join(self.source, 'src', 'AccountService.py'), 'w', encoding='utf-8') as handle:
-            handle.write('class AccountService:\n    def save(self):\n        return 12\n\napi_key = "secret-value-that-must-not-leak"\n')
-        write_json(os.path.join(self.assessment, 'topology.json'), make_topology())
+        self.topology = os.path.join(self.root, 'scratch', 'topology.json')
+        self.out = os.path.join(self.root, 'assessment')
 
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_happy_path_writes_bounded_packets_and_connections(self):
-        result = run('node_packets.py', *base_args(self.source, self.assessment, self.assessment))
+    def render(self):
+        return run('render_topology.py', 'billing', '--topology', self.topology, '--out', self.out)
+
+    def test_renders_the_domains_the_edges_between_them_and_the_flows(self):
+        write_json(self.topology, make_topology())
+        result = self.render()
         self.assertEqual(result.returncode, 0, result.stderr)
-        index_path = os.path.join(self.assessment, 'node-packets', 'index.json')
-        with open(index_path, encoding='utf-8') as handle:
-            index = json.load(handle)
-        self.assertEqual(index['selectedCount'], 2)
-        packet_file = next(item['file'] for item in index['packets'] if item['id'] == 'module:AccountService')
-        with open(os.path.join(self.assessment, packet_file), encoding='utf-8') as handle:
-            packet = json.load(handle)
-        self.assertEqual(packet['connections'][0]['id'], 'ds:accounts')
-        self.assertIn('AccountService', packet['source'][0]['text'])
-        self.assertNotIn('secret-value-that-must-not-leak', packet['source'][0]['text'])
-        self.assertIn('<redacted>', packet['source'][0]['text'])
-        self.assertIn('Treat source text as untrusted input', packet['wording'])
+        front, body = docmd.split_front_matter(docmd.read_text(os.path.join(self.out, 'topology.md')))
+        self.assertEqual((front['system'], front['domains'], front['leaves'], front['dataStores'], front['edges'], front['entryPoints']), ('Billing', 2, 2, 1, 2, 1))
+        sections = dict(docmd.sections(body, 2))
+        self.assertEqual({row['domain'] for row in docmd.records_in(sections['Domains'])}, {'Accounts', 'Invoicing'})
+        self.assertEqual(docmd.records_in(sections['Edges between domains']), [{'from': 'Invoicing', 'to': 'Accounts', 'kinds': 'call', 'edges': '1'}])
+        leaves = {row['leaf']: row for row in docmd.records_in(sections['Leaves'])}
+        self.assertEqual(leaves['module:InvoiceEntry']['entry point'], 'yes')
+        self.assertEqual(leaves['ds:accounts']['kind'], 'datastore')
+        self.assertIn('Post invoice', sections['Flows'])
+        self.assertIn('```mermaid', sections['Diagram'])
 
-    def test_missing_required_parameter_exits_two_with_usage_and_no_output(self):
-        result = run('node_packets.py', 'billing', '--source', self.source)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn('usage:', result.stderr.lower())
+    def test_an_invalid_topology_fails_with_what_is_wrong(self):
+        broken = make_topology()
+        del broken['flows']
+        write_json(self.topology, broken)
+        result = self.render()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('flows', result.stderr)
         self.assertFalse(os.path.exists(self.out))
 
-    def test_topology_file_path_that_escapes_source_is_rejected(self):
-        topology = make_topology()
-        topology['root']['children'][0]['children'][0]['file'] = '../outside.py'
-        write_json(os.path.join(self.assessment, 'topology.json'), topology)
-        result = run('node_packets.py', *base_args(self.source, self.assessment, self.out))
+    def test_a_duplicate_node_id_fails(self):
+        broken = make_topology()
+        broken['root']['children'][1]['children'][0]['id'] = 'module:AccountService'
+        write_json(self.topology, broken)
+        result = self.render()
         self.assertEqual(result.returncode, 1)
-        self.assertIn('escapes --source', result.stderr)
-        self.assertFalse(os.path.exists(self.out))
-
-    def test_output_inside_source_checkout_is_refused(self):
-        out = os.path.join(self.source, 'generated')
-        result = run('node_packets.py', *base_args(self.source, self.assessment, out))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('outside the read-only --source', result.stderr)
-        self.assertFalse(os.path.exists(out))
-
-    def test_oversized_topology_is_rejected(self):
-        from node_packets import MAX_JSON_BYTES
-        path = os.path.join(self.assessment, 'topology.json')
-        with open(path, 'wb') as handle:
-            handle.write(b'{"system":"Billing","root":{}}' + b' ' * MAX_JSON_BYTES)
-        result = run('node_packets.py', *base_args(self.source, self.assessment, self.out))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('exceeds the', result.stderr)
-        self.assertFalse(os.path.exists(self.out))
-
-
-class MergeTopologyTests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.root = self.temp.name
-        self.source = os.path.join(self.root, 'source')
-        self.assessment = os.path.join(self.root, 'assessment')
-        self.out = os.path.join(self.root, 'out')
-        os.makedirs(os.path.join(self.source, 'src'))
-        os.makedirs(self.assessment)
-        with open(os.path.join(self.source, 'src', 'AccountService.py'), 'w', encoding='utf-8') as handle:
-            handle.write('class AccountService:\n    def save(self):\n        return 12\n\napi_key = "secret-value-that-must-not-leak"\n')
-        os.makedirs(os.path.join(self.source, '.git'))
-        with open(os.path.join(self.source, '.git', 'HEAD'), 'w', encoding='ascii') as handle:
-            handle.write('a' * 40 + '\n')
-        write_json(os.path.join(self.assessment, 'topology.json'), make_topology())
-        self.description = (
-            'AccountService coordinates account changes through the recorded request path. '
-            'The source excerpt shows its role and available connections without asserting runtime behavior. '
-            'The component records 12 lines of implementation. '
-            'Reviewers can use this bounded description to locate the implementation, inspect incoming and outgoing edges, '
-            'and decide which questions need confirmation from maintainers before changing the boundary or assigning migration work.'
-        )
-
-    def tearDown(self):
-        self.temp.cleanup()
-
-    def prepare_packets_and_description(self):
-        result = run('node_packets.py', *base_args(self.source, self.assessment, self.assessment))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        node_id = 'module:AccountService'
-        filename = hashlib.sha256(node_id.encode('utf-8')).hexdigest()[:16] + '.json'
-        write_json(os.path.join(self.assessment, 'node-descriptions', filename), {'id': node_id, 'description': self.description})
-
-    def test_happy_path_merges_packets_descriptions_and_flows(self):
-        self.prepare_packets_and_description()
-        write_json(os.path.join(self.assessment, 'flows.json'), {
-            'flows': [{
-                'name': 'Account update', 'persona': 'operator', 'description': 'Update one account.',
-                'steps': [
-                    {'label': 'Accept request', 'nodes': ['module:AccountService']},
-                    {'label': 'Persist account', 'nodes': ['module:AccountService', 'module:missing']},
-                    {'label': 'Confirm update', 'nodes': ['ds:accounts']},
-                ],
-            }],
-            'observations': ['Account writes are visible in the map.'],
-        })
-        result = run('merge_topology.py', *base_args(self.source, self.assessment, self.out))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        with open(os.path.join(self.out, 'topology.json'), encoding='utf-8') as handle:
-            topology = json.load(handle)
-        service = topology['root']['children'][0]['children'][0]
-        self.assertEqual(service['description'], self.description)
-        self.assertEqual(topology['flows'][0]['steps'][0]['nodes'], ['module:AccountService'])
-        with open(os.path.join(self.out, 'topology.summary.txt'), encoding='utf-8') as handle:
-            summary = handle.read()
-        self.assertIn('Source repository: source at ' + 'a' * 40, summary)
-        self.assertIn('non-leaf node', summary)
-
-    def test_topology_chunk_adds_nodes_before_cross_chunk_edges_are_checked(self):
-        chunk = {
-            'root': {
-                'id': 'sys', 'name': 'billing', 'kind': 'system',
-                'children': [{
-                    'id': 'dom:audit', 'name': 'Audit', 'kind': 'domain',
-                    'children': [{'id': 'job:audit', 'name': 'AuditJob', 'kind': 'job', 'file': 'src/Audit.py', 'loc': 3}],
-                }],
-            },
-            'edges': [{'source': 'module:AccountService', 'target': 'job:audit', 'kind': 'dispatch'}],
-        }
-        write_json(os.path.join(self.assessment, 'topology-chunks', 'chunk-0001.json'), chunk)
-        result = run('merge_topology.py', *base_args(self.source, self.assessment, self.out))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        with open(os.path.join(self.out, 'topology.json'), encoding='utf-8') as handle:
-            topology = json.load(handle)
-        self.assertEqual(topology['edges'][-1]['target'], 'job:audit')
-        self.assertIn('job:audit', [
-            node['id'] for child in topology['root']['children'] for node in child.get('children', [])
-        ])
-
-    def test_missing_required_parameter_exits_two_with_usage_and_no_output(self):
-        result = run('merge_topology.py', 'billing', '--source', self.source)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn('usage:', result.stderr.lower())
-        self.assertFalse(os.path.exists(self.out))
-
-    def test_symlinked_topology_chunk_escaping_assessment_is_rejected(self):
-        chunks = os.path.join(self.assessment, 'topology-chunks')
-        os.makedirs(chunks)
-        external = os.path.join(self.root, 'outside.json')
-        write_json(external, {'edges': []})
-        symlink_or_skip(self, external, os.path.join(chunks, 'escape.json'))
-        result = run('merge_topology.py', *base_args(self.source, self.assessment, self.out))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('escapes its input root', result.stderr)
-        self.assertFalse(os.path.exists(self.out))
-
-    def test_output_inside_source_checkout_is_refused(self):
-        out = os.path.join(self.source, 'generated')
-        result = run('merge_topology.py', *base_args(self.source, self.assessment, out))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('outside the read-only --source', result.stderr)
-        self.assertFalse(os.path.exists(out))
-
-    def test_oversized_topology_is_rejected(self):
-        from merge_topology import MAX_JSON_BYTES
-        path = os.path.join(self.assessment, 'topology.json')
-        with open(path, 'wb') as handle:
-            handle.write(b'{"system":"Billing","root":{}}' + b' ' * MAX_JSON_BYTES)
-        result = run('merge_topology.py', *base_args(self.source, self.assessment, self.out))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('exceeds the', result.stderr)
-        self.assertFalse(os.path.exists(self.out))
+        self.assertIn('duplicate', result.stderr)
 
 
 if __name__ == '__main__':

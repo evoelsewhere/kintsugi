@@ -1,4 +1,4 @@
-// Builds a Mermaid flowchart from topology.json: one subgraph per domain, node shapes by kind
+// Builds a Mermaid flowchart from the topology document: one subgraph per domain, node shapes by kind
 // (module, data store, job, screen), domain colours, entry points and dead-end candidates as
 // classes, and edges labelled by type. Large topologies are cut to a readable view: filter by
 // domain, focus a node with a depth, and at most MAX_NODES nodes (the largest by lines of code).

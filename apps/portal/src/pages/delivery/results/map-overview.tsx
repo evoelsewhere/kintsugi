@@ -1,6 +1,6 @@
 // The Overview of map results: how the modules split by domain and kind, the edge mix, the
 // most depended-on and most dependent nodes, lines of code per domain, and the architect's
-// observations. Figures come from topology.json only.
+// observations. Figures come from the topology document only (a long topology lists its largest leaves).
 
 import { BarList, Donut, ShareBar } from "@/components/results/charts";
 import { CHART_COLOR } from "@/components/results/chart-colors";
