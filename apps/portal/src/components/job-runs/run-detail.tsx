@@ -98,7 +98,11 @@ function RunConsole({ run, events, live, version }: { run: JobRunDetail; events:
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,4fr)_minmax(0,7fr)]">
         <section className="flex min-w-0 flex-col gap-1.5">
           <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">Steps</h5>
-          {run.steps.length === 0 ? <p className="text-[12px] text-text-muted">{active ? "Waiting for the first step…" : "No steps recorded."}</p> : <StepList steps={run.steps} context={context} />}
+          {run.steps.length === 0 ? <p className="text-[12px] text-text-muted">{active ? "Waiting for the first step…" : "No steps recorded."}</p> : (
+            <div className="max-h-[540px] min-h-32 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+              <StepList steps={run.steps} context={context} />
+            </div>
+          )}
         </section>
         <RunLog
           events={events}
