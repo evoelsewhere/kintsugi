@@ -323,6 +323,39 @@ describe("review retrieval contract", () => {
     expect(JSON.parse(state.output().stderr)).toMatchObject({ success: false, error: { code: errorCode, status, details: { reviewId: "review_current" } } });
   });
 
+  it.each(["text", "markdown", "json"] as const)("preserves current PR, review, and gate status in %s task output", async (format) => {
+    const status = {
+      schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", status: "awaiting-review",
+      evidenceAvailability: { pullRequests: "available", reviews: "available" },
+      pullRequests: [{ repositoryId: "repo_shop", pullRequestId: "pr_42", state: "open", headRevision: "a".repeat(40), updatedAt: "2026-10-21T00:00:00Z" }],
+      currentReviewIds: ["review_current"],
+      gates: [{ unitId: "web/core/invoice", gateId: "G2", status: "pending", publication: "awaiting-merge" }],
+      nextAction: "Read findings and update the PR.",
+    };
+    const state = harness(async () => ok(status), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "status", "web/core/invoice", "--format", format], state.deps as never)).toBe(0);
+    expect(state.output().stderr).toBe("");
+    if (format === "json") expect(JSON.parse(state.output().stdout)).toEqual(status);
+    else for (const value of ["pr_42", "open", "review_current", "G2", "awaiting-merge", status.nextAction]) expect(state.output().stdout).toContain(value);
+  });
+
+  it("renders empty task evidence explicitly in Markdown", async () => {
+    const status = {
+      schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", status: "pending",
+      evidenceAvailability: { pullRequests: "available", reviews: "available" },
+      pullRequests: [], currentReviewIds: [], gates: [],
+      nextAction: "Implement the task, then create a pull request.",
+    };
+    const state = harness(async () => ok(status), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "status", "web/core/invoice", "--format", "markdown"], state.deps as never)).toBe(0);
+    const output = state.output().stdout;
+    for (const emptyState of ["No pull requests reported.", "No current review reports.", "No gate status reported."]) {
+      expect(output).toContain(emptyState);
+    }
+    expect(output).not.toContain("undefined");
+  });
   it.each([undefined, "payments"])("lists only task-status review references with project selector %s", async (project) => {
     const fetch = vi.fn(async (_input: RequestInfo | URL) => ok({ schemaVersion: "1", projectId: project ?? "shop", unitId: "web/core/invoice", status: "pending",
       evidenceAvailability: { pullRequests: "available", reviews: "available" }, pullRequests: [], currentReviewIds: ["review_authorized"], gates: [], nextAction: "Read findings." }));

@@ -1,6 +1,6 @@
 import { open, unlink } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { reviewReportSchema, type ReviewReport, type TaskEvent, type TaskBrief } from "@kintsugi/harness-sdk";
+import { reviewReportSchema, taskStatusSchema, type ReviewReport, type TaskEvent, type TaskBrief } from "@kintsugi/harness-sdk";
 import { CliError } from "./profile.js";
 
 function citation(sourceId: string, path: string, startLine?: number, endLine?: number): string {
@@ -174,6 +174,38 @@ function renderReviewReport(report: ReviewReport, markdown: boolean): string {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+function renderTaskStatusMarkdown(status: ReturnType<typeof taskStatusSchema.parse>): string {
+  const lines = [
+    "# Task status",
+    "",
+    `- Task: \`${status.projectId}/${status.unitId}\``,
+    `- Status: ${status.status}`,
+    `- Pull request evidence: ${status.evidenceAvailability.pullRequests}`,
+    `- Review evidence: ${status.evidenceAvailability.reviews}`,
+    "",
+    "## Pull requests",
+    "",
+    ...(status.pullRequests.length === 0 ? ["No pull requests reported."] : status.pullRequests.flatMap((pullRequest) => [
+      `- \`${pullRequest.pullRequestId}\` (${pullRequest.repositoryId}) — ${pullRequest.state}`,
+      `  - Head: \`${pullRequest.headRevision}\``,
+      ...(pullRequest.updatedAt === undefined ? [] : [`  - Updated: ${pullRequest.updatedAt}`]),
+    ])),
+    "",
+    "## Current reviews",
+    "",
+    ...(status.currentReviewIds.length === 0 ? ["No current review reports."] : status.currentReviewIds.map((reviewId) => `- \`${reviewId}\``)),
+    "",
+    "## Gates",
+    "",
+    ...(status.gates.length === 0 ? ["No gate status reported."] : status.gates.map((gate) => `- \`${gate.unitId}\` · ${gate.gateId}: ${gate.status} (${gate.publication})`)),
+    "",
+    "## Next action",
+    "",
+    status.nextAction,
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
 export function renderTaskEvent(event: TaskEvent, format: "text" | "json" | "markdown"): string {
   if (format === "json") return `${JSON.stringify(event)}\n`;
   return [
@@ -196,6 +228,8 @@ export function formatResult(value: unknown, format: "text" | "json" | "markdown
     if (value !== null && typeof value === "object" && !Array.isArray(value) && typeof (value as { text?: unknown }).text === "string") {
       return renderDocumentPage(value as Record<string, unknown>, true);
     }
+    const taskStatus = taskStatusSchema.safeParse(value);
+    if (taskStatus.success) return renderTaskStatusMarkdown(taskStatus.data);
     const rows = values.flatMap((item) => itemLines(item, true));
     if (values.length === 0) rows.push("No results.");
     return `${rows.join("\n")}\n`;
