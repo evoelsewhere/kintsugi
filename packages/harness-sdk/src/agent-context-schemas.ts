@@ -281,9 +281,20 @@ export const reviewReportSchema = z.object({
   }
 });
 
+const metadataValueSchema = z.union([z.string().max(1000), z.number().finite(), z.boolean(), z.null()]);
+export const taskEventSchema = z.object({
+  ...identityShape,
+  id: opaqueIdSchema,
+  kind: z.string().min(1).max(100),
+  occurredAt: timestampSchema,
+  metadata: z.record(z.string().max(100), metadataValueSchema),
+}).strict();
+export const taskContinuationEventSchema = taskEventSchema.extend({ kind: z.literal("task.continuation") });
+
 export const taskStatusSchema = z.object({
   ...identityShape,
   status: z.enum(WORK_ITEM_STATUSES),
+  latestContinuation: taskContinuationEventSchema.optional(),
   evidenceAvailability: z.object({
     pullRequests: z.enum(["available", "unavailable"]),
     reviews: z.enum(["available", "unavailable"]),
@@ -303,16 +314,12 @@ export const taskStatusSchema = z.object({
     publication: z.enum(TASK_GATE_PUBLICATION_STATUSES),
   }).strict()).max(20),
   nextAction: z.string().min(1).max(1000),
-}).strict();
-
-const metadataValueSchema = z.union([z.string().max(1000), z.number().finite(), z.boolean(), z.null()]);
-export const taskEventSchema = z.object({
-  ...identityShape,
-  id: opaqueIdSchema,
-  kind: z.string().min(1).max(100),
-  occurredAt: timestampSchema,
-  metadata: z.record(z.string().max(100), metadataValueSchema),
-}).strict();
+}).strict().superRefine((status, context) => {
+  const event = status.latestContinuation;
+  if (event !== undefined && (event.projectId !== status.projectId || event.unitId !== status.unitId)) {
+    context.addIssue({ code: "custom", path: ["latestContinuation"], message: "latestContinuation must match task identity" });
+  }
+});
 
 export const listResultSchema = <T extends z.ZodType>(item: T) => z.object({
   schemaVersion: z.literal(MEMBER_SCHEMA_VERSION),

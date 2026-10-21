@@ -42,4 +42,27 @@ describe("PgMemberEventReader", () => {
     expect(query.mock.calls[0]?.[0]).toContain("created_at >= now() - interval '7 days'");
     expect(query.mock.calls[0]?.[1]).toEqual(["shop", "web/core/invoice", "9", 5]);
   });
+
+  it("returns only the newest retained continuation for a task", async () => {
+    query.mockResolvedValue({ rows: [{
+      id: "00000000-0000-4000-8000-000000000002",
+      project_id: "shop",
+      sequence: "11",
+      unit_id: "web/core/invoice",
+      kind: "task.continuation",
+      metadata: { status: "member-action", code: "MEMBER_STAGE_AVAILABLE", nextAction: "Refresh context." },
+      created_at: new Date("2026-10-21T01:00:00.000Z"),
+    }] });
+    const reader = new PgMemberEventReader();
+
+    await expect(reader.latestContinuation("shop", "web/core/invoice")).resolves.toEqual({
+      schemaVersion: "1", id: "00000000-0000-4000-8000-000000000002", projectId: "shop", unitId: "web/core/invoice",
+      kind: "task.continuation", occurredAt: "2026-10-21T01:00:00.000Z",
+      metadata: { status: "member-action", code: "MEMBER_STAGE_AVAILABLE", nextAction: "Refresh context." },
+    });
+    expect(query.mock.calls[0]?.[0]).toContain("kind = 'task.continuation'");
+    expect(query.mock.calls[0]?.[0]).toContain("created_at >= now() - interval '7 days'");
+    expect(query.mock.calls[0]?.[0]).toContain("order by sequence desc");
+    expect(query.mock.calls[0]?.[1]).toEqual(["shop", "web/core/invoice"]);
+  });
 });

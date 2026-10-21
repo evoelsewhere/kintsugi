@@ -1,6 +1,6 @@
 # Harness integration
 
-Status: The unreleased workspace includes the typed client, read-only CLI/export, local stdio MCP bridge, generated client packages, GitHub/GHES pull-request observation, review findings, authorized task-event replay with `kintsugi task watch`, and evidence-bound gate publication. Effective workflow continuation remains in progress. Native package setup remains version-gated. API and SDK changes must ship together; their strict version-1 schemas are still pre-release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
+Status: The unreleased workspace includes the typed client, read-only CLI/export, local stdio MCP bridge, generated client packages, GitHub/GHES pull-request observation, review findings, authorized task-event replay with `kintsugi task watch`, evidence-bound gate publication, and durable effective-gate continuation guidance. Native package setup remains version-gated. API and SDK changes must ship together; their strict version-1 schemas are still pre-release, and `latestContinuation` is part of that contract before its first release. After v1 ships, closed-schema response additions require a versioned or capability-negotiated contract. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
 
 Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
@@ -23,12 +23,14 @@ All routes below use Kintsugi's normal response envelope and require the catalog
 | `/task-brief?projectId=…&unitId=…&activity=…` | Bounded, cited context and immutable snapshot handle |
 | `/documents?projectId=…&unitId=…&snapshotId=…&sourceId=…` | One registered source/section at the snapshot revision |
 | `/search?projectId=…&unitId=…&snapshotId=…&query=…` | Bounded keyword matches with citations |
-| `/task-status?projectId=…&unitId=…` | Work-item status, next action and observation availability |
+| `/task-status?projectId=…&unitId=…` | Work-item status, next action, observation availability and optional latest continuation guidance |
 | `/reviews/:reviewId?projectId=…` | Authorized current review findings and evidence |
 
 Use the full `application/module/unit` identity in `unitId`, encoded as a query value. Documents accept registered source IDs rather than arbitrary paths or URLs. Read tokens cannot issue tokens, change Project Access, claim tasks or call legacy session routes.
 
 Current `TaskStatus.evidenceAvailability` reports both pull-request and review readers as `available`; empty arrays mean no matching confirmed PR or current review was returned. Each gate status carries its authoritative `unitId` and `gateId`, with publication states kept separate from the decision result. A missing publication remains `unknown`; source approval is fail-closed until trustworthy evidence readers exist.
+
+When a `task.continuation` event remains within the seven-day retention window, `TaskStatus.latestContinuation` returns the newest event for that exact task. It is a historical workflow notification: `TaskStatus.status` and `TaskStatus.nextAction` provide current workflow status; the task brief provides cited context. Clients should identify the event time and ask the developer to refresh task context before acting; continuation guidance never grants approval or creates a task.
 
 Snapshot failures put a stable code and `snapshotId` in the error envelope's `details`:
 

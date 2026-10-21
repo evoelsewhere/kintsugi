@@ -32,6 +32,7 @@ import { DocumentQueryService } from "./document-query.service.js";
 import { SnapshotService } from "./snapshot.service.js";
 import { TaskQueryService } from "./task-query.service.js";
 import { ProjectAccessPort } from "../domain/project-access.ports.js";
+import { MemberEventReader } from "../domain/member-event.port.js";
 import { ReviewReader } from "../domain/review-reader.port.js";
 
 const MAX_PROJECTS_PER_TOKEN = 100;
@@ -55,6 +56,7 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
     // Avoid an eager design:paramtypes read of this cyclic ESM binding.
     @Inject(forwardRef(() => GatePublicationStatusQueryService))
     private readonly gatePublications: Pick<GatePublicationStatusQueryService, "listForTask">,
+    private readonly memberEvents: MemberEventReader,
   ) {}
 
   async listProjects(principal: MemberPrincipal, query: ProjectQuery): Promise<ListResult<ProjectSummary>> {
@@ -116,10 +118,11 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
       const gateIdentity = { unitId: gate.unitId ?? identity.unitId, gateId: gate.gateId };
       return [gateIdentityKey(gateIdentity.unitId, gateIdentity.gateId), gateIdentity] as const;
     })).values()];
-    const [currentReviewIds, pullRequests, publications] = await Promise.all([
+    const [currentReviewIds, pullRequests, publications, latestContinuation] = await Promise.all([
       this.reviews.listCurrentIds(principal, identity),
       this.pullRequests.listForTask(principal, identity),
       this.gatePublications.listForTask(principal, identity, gateIdentities),
+      this.memberEvents.latestContinuation(identity.projectId, identity.unitId),
     ]);
     const publicationsByGate = new Map(publications.map((publication) => [gateIdentityKey(publication.unitId, publication.gateId), publication]));
     const result: TaskStatus = {
@@ -127,6 +130,7 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
       projectId: task.projectId,
       unitId: task.unitId,
       status: task.workItem.status,
+      ...(latestContinuation === undefined ? {} : { latestContinuation }),
       evidenceAvailability: { pullRequests: "available", reviews: "available" },
       pullRequests,
       currentReviewIds,

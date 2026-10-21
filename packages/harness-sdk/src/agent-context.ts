@@ -217,6 +217,8 @@ export interface TaskGateStatus {
 export interface TaskStatus extends TaskIdentity {
   schemaVersion: CodingAgentWorkflowSchemaVersion;
   status: WorkItemStatus;
+  /** Most recent retained continuation event; guidance is historical and does not replace current task status. */
+  latestContinuation?: TaskContinuationEvent;
   /** When unavailable, an empty PR/review array does not mean no evidence exists. */
   evidenceAvailability: {
     pullRequests: "available" | "unavailable";
@@ -233,6 +235,10 @@ export interface TaskEvent extends TaskIdentity {
   kind: string;
   occurredAt: string;
   metadata: Record<string, string | number | boolean | null>;
+}
+
+export interface TaskContinuationEvent extends TaskEvent {
+  kind: "task.continuation";
 }
 
 /** Shared member operations used by the CLI, local MCP adapter and API composition. */
