@@ -47,6 +47,33 @@ const CurrentMemberPrincipal = createParamDecorator((_data: unknown, context: Ex
   return principal;
 });
 
+/**
+ * Allows the authenticated portal to reuse the exact read use cases without creating a
+ * persistent member token. @AllowMemberRead on each route enforces member.read and current
+ * Project Access before this request-scoped principal reaches the use case.
+ */
+export function memberReadPrincipalForRequest(
+  request: Pick<AuthenticatedRequest, "memberPrincipal" | "sessionUser" | "query">,
+): MemberPrincipal {
+  if (request.memberPrincipal !== undefined) return request.memberPrincipal;
+  const user = request.sessionUser;
+  if (user === undefined) throw new UnauthorizedException("A Coding Agent Workflow credential is required");
+  const projectId = request.query["projectId"];
+  if (typeof projectId !== "string" || projectId.length === 0) {
+    throw new ForbiddenException("Project scope is required");
+  }
+  return Object.freeze({
+    userId: user.id,
+    tokenId: "session-read:" + user.id,
+    projectIds: Object.freeze([projectId]),
+    credentialKind: "coding-agent-read" as const,
+  });
+}
+
+const CurrentMemberReadPrincipal = createParamDecorator((_data: unknown, context: ExecutionContext): MemberPrincipal =>
+  memberReadPrincipalForRequest(context.switchToHttp().getRequest<AuthenticatedRequest>())
+);
+
 @ApiTags("Coding Agent Workflow")
 @Controller("member/v1")
 export class AgentContextController {
@@ -71,7 +98,7 @@ export class AgentContextController {
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "List indexed tasks and readiness for an authorized project" })
   tasks(
-    @CurrentMemberPrincipal() principal: MemberPrincipal,
+    @CurrentMemberReadPrincipal() principal: MemberPrincipal,
     @Query({ schema: taskQuerySchema }) query: TaskQuery,
   ) {
     return this.context.listTasks(principal, query);
@@ -82,7 +109,7 @@ export class AgentContextController {
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "Prepare an immutable, cited task brief" })
   taskBrief(
-    @CurrentMemberPrincipal() principal: MemberPrincipal,
+    @CurrentMemberReadPrincipal() principal: MemberPrincipal,
     @Query({ schema: taskBriefQuerySchema }) query: TaskBriefQuery,
   ) {
     return this.context.briefTask(principal, query);
@@ -93,7 +120,7 @@ export class AgentContextController {
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "Read a page from an authorized immutable task snapshot" })
   document(
-    @CurrentMemberPrincipal() principal: MemberPrincipal,
+    @CurrentMemberReadPrincipal() principal: MemberPrincipal,
     @Query({ schema: documentQuerySchema }) query: DocumentQuery,
   ) {
     return this.context.getDocument(principal, query);
@@ -104,7 +131,7 @@ export class AgentContextController {
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "Search sources in an authorized immutable task snapshot" })
   search(
-    @CurrentMemberPrincipal() principal: MemberPrincipal,
+    @CurrentMemberReadPrincipal() principal: MemberPrincipal,
     @Query({ schema: documentSearchQuerySchema }) query: DocumentSearchQuery,
   ) {
     return this.context.searchDocuments(principal, query);
@@ -115,7 +142,7 @@ export class AgentContextController {
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "Read workflow status and known gates for a task" })
   taskStatus(
-    @CurrentMemberPrincipal() principal: MemberPrincipal,
+    @CurrentMemberReadPrincipal() principal: MemberPrincipal,
     @Query({ schema: taskStatusQuerySchema }) query: TaskIdentity,
   ) {
     return this.context.taskStatus(principal, query);
@@ -155,7 +182,7 @@ export class AgentContextController {
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "Read a review report when review evidence is configured" })
   review(
-    @CurrentMemberPrincipal() principal: MemberPrincipal,
+    @CurrentMemberReadPrincipal() principal: MemberPrincipal,
     @Param("reviewId", { schema: reviewQuerySchema.shape.reviewId }) reviewId: string,
     @Query({ schema: reviewQuerySchema.omit({ reviewId: true }).strict() }) query: Omit<ReviewQuery, "reviewId">,
   ) {

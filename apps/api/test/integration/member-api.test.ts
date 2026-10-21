@@ -253,6 +253,30 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     }
   }, 60_000);
 
+  it("serves the same project-scoped read use cases to the authenticated portal session", async () => {
+    const portalSession = await adminClient(app);
+    const tasks = await portalSession.get(withQuery("/member/v1/tasks", { projectId: "shop", limit: "25" }));
+    expect(tasks.status).toBe(200);
+    expect(taskListResultSchema.parse(tasks.body.data).items.map((task) => task.unitId)).toEqual(["web/core/invoice"]);
+
+    const brief = await portalSession.get(withQuery("/member/v1/task-brief", {
+      projectId: "shop", unitId: "web/core/invoice", activity: "implementation",
+    }));
+    expect(brief.status).toBe(200);
+    expect(taskBriefSchema.parse(brief.body.data)).toMatchObject({
+      projectId: "shop",
+      unitId: "web/core/invoice",
+      sections: expect.arrayContaining([expect.objectContaining({
+        citation: expect.objectContaining({ path: expect.stringContaining("applications/web/units/core/invoice/task.md") }),
+      })]),
+    });
+
+    const missingProjectScope = await portalSession.get("/member/v1/tasks");
+    expect(missingProjectScope.status).toBe(403);
+    const revokedScope = await portalSession.get(withQuery("/member/v1/tasks", { projectId: "not-granted" }));
+    expect(revokedScope.status).toBe(403);
+  }, 60_000);
+
   it("validates encoded unit slashes and rejects malformed query values and source URLs", async () => {
     const client = member();
     const encodedSlash = withQuery("/member/v1/task-brief", { projectId: "shop", unitId: "web/core/invoice", activity: "implementation" });

@@ -141,6 +141,9 @@ importers:
       '@kintsugi/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@kintsugi/harness-sdk':
+        specifier: workspace:*
+        version: link:../../packages/harness-sdk
       '@lezer/highlight':
         specifier: ^1.2.5
         version: 1.2.5

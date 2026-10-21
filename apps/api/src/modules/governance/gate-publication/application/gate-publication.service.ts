@@ -8,6 +8,7 @@ import { SnapshotService } from "#modules/delivery/agent-context/index.js";
 import { GateDecisionEvidenceReader } from "../domain/gate-decision-evidence.reader.js";
 import { GatePublicationRepository } from "../domain/gate-publication.repository.js";
 import type { GateDecisionResult, GatePublication, RequestGateDecision } from "../domain/gate-publication.js";
+import type { GatePublicationPage } from "../domain/gate-publication.repository.js";
 
 const SESSION_AUTHORIZATION_PATTERN = /^session:[a-f0-9]{64}$/;
 
@@ -156,5 +157,10 @@ export class GatePublicationService {
     if (publication === undefined) throw new NotFoundException("Gate publication not found");
     await this.projectAccess.requireRead(actor.id, publication.projectId);
     return publication;
+  }
+
+  async list(projectId: string, actor: Actor, limit: number, offset: number): Promise<GatePublicationPage> {
+    await this.projectAccess.requireRead(actor.id, projectId);
+    return this.publications.listByProject(projectId, limit, offset);
   }
 }

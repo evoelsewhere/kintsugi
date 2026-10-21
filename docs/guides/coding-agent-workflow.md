@@ -2,14 +2,14 @@
 
 See the [CLI and MCP flow diagram](coding-agent-workflow-flow.html) for the local bridge, read-only context path, PR observation and separate SSE watch channel.
 
-> Implementation status: the typed client, read-only CLI, local stdio MCP bridge, generated Coding Agent Workflow packages, GitHub/GHES PR observation, review findings and server-side event replay are implemented in the unreleased workspace. Native package setup is version-gated. Evidence-bound gate publication and workflow continuation remain in progress. See the [CLI reference](../reference/coding-agent-cli.md) for exact setup behavior.
+> Implementation status: the typed client, read-only CLI, local stdio MCP bridge, generated Coding Agent Workflow packages, GitHub/GHES PR observation, review findings, event replay, evidence-bound gate publication and workflow continuation are implemented in the unreleased feature branch. The portal now includes task handoff, one-time token setup, Project Access controls and durable gate-publication status. Mandatory API/worker CI scaffolding is present but has not completed a remote run; database, browser, native-client, real-provider and real-model pilots remain release gates. See the [CLI reference](../reference/coding-agent-cli.md) for exact setup behavior.
 
 You work in your chosen AI harness and keep using your existing model subscription. Kintsugi supplies the authorized task and design context, then follows your normal pull request through review and the human gate. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
 
 ## Connect once
 
 1. Install the Kintsugi CLI using the release instructions for your operating system.
-2. Sign in to your Kintsugi installation. The token is entered privately and stored in the operating system's credential manager.
+2. Open the project's **Work in your AI** page and create a project-scoped token. Copy it once, then sign in to your Kintsugi installation. The CLI asks for it privately and stores it in the operating system credential manager. Tokens expire after seven days in the portal flow and can be revoked from that project page.
 
    ~~~sh
    kintsugi auth login --url https://kintsugi.example.internal --profile work
@@ -64,7 +64,7 @@ You work in your chosen AI harness and keep using your existing model subscripti
 
 6. Complete provider-required human reviews and merge each required code and document deliverable. The unit's effective gate is recorded separately: an authorized human decision is published as a gate-record PR that must merge and validate against the exact delivered revisions. Kintsugi continues the workflow only after that evidence is effective.
 
-The CLI and API stream task events over authorized SSE and resume from the last delivered event ID. The server retains seven days of replay; an older or invalid cursor asks the AI to fetch current task status and start a new watch. The event stream is a view of workflow progress and does not trigger provider reconciliation or continuation. PR ingestion and continuation are still being completed.
+The CLI and API stream task events over authorized SSE and resume from the last delivered event ID. The server retains seven days of replay; an older or invalid cursor asks the AI to fetch current task status and start a new watch. The event stream is a view of workflow progress; it does not trigger provider reconciliation or continuation. Kintsugi observes provider pull requests through webhooks and polling, then continues only after the required evidence and human gate become effective.
 
 ~~~sh
 kintsugi task status billing/invoices/tax --profile work
