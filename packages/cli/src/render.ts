@@ -206,39 +206,50 @@ function renderTaskStatusMarkdown(status: ReturnType<typeof taskStatusSchema.par
   return `${lines.join("\n")}\n`;
 }
 
-function escapeTerminalControls(value: string): string {
-  return [...value].map((character) => {
+function escapeEventValue(value: string, preserveBackslashes = false): string {
+  let escaped = "";
+  for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0;
-    const isBidiControl = codePoint === 0x061c || codePoint === 0x200e || codePoint === 0x200f
-      || (codePoint >= 0x202a && codePoint <= 0x202e) || (codePoint >= 0x2066 && codePoint <= 0x2069);
-    if (codePoint > 0x1f && !(codePoint >= 0x7f && codePoint <= 0x9f) && codePoint !== 0x2028 && codePoint !== 0x2029 && !isBidiControl) return character;
-    if (character === "\n") return "\\n";
-    if (character === "\r") return "\\r";
-    if (character === "\t") return "\\t";
-    return `\\u${codePoint.toString(16).toUpperCase().padStart(4, "0")}`;
-  }).join("");
+    if (character === "\\") escaped += preserveBackslashes ? "\\" : "\\\\";
+    else if (character === "\n") escaped += "\\n";
+    else if (character === "\r") escaped += "\\r";
+    else if (character === "\t") escaped += "\\t";
+    else if (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)
+      || codePoint === 0x2028 || codePoint === 0x2029 || codePoint === 0x061c || codePoint === 0x200e || codePoint === 0x200f
+      || (codePoint >= 0x202a && codePoint <= 0x202e) || (codePoint >= 0x2066 && codePoint <= 0x2069)) {
+      escaped += "\\u" + codePoint.toString(16).toUpperCase().padStart(4, "0");
+    } else escaped += character;
+  }
+  return escaped.replace(/\\u([0-9a-f]{4})/gi, (_match, hex: string) => "\\u" + hex.toUpperCase());
 }
 
-function renderEventValue(value: string, markdown: boolean): string {
-  const safe = escapeTerminalControls(value);
-  if (!markdown) return safe;
-  let longestBacktickRun = 0;
-  for (const match of safe.matchAll(/`+/g)) longestBacktickRun = Math.max(longestBacktickRun, match[0].length);
-  const delimiter = "`".repeat(longestBacktickRun + 1);
-  const padding = safe.startsWith("`") || safe.endsWith("`") || (safe.startsWith(" ") && safe.endsWith(" ") && /[^ ]/.test(safe)) ? " " : "";
-  return `${delimiter}${padding}${safe}${padding}${delimiter}`;
+function markdownCode(value: string): string {
+  const longestRun = Math.max(0, ...Array.from(value.matchAll(/\x60+/g), (match) => match[0].length));
+  const fence = "\x60".repeat(longestRun + 1);
+  const content = /^[ \x60]|[ \x60]$/.test(value) ? " " + value + " " : value;
+  return fence + content + fence;
+}
+
+function renderEventValue(value: string, markdown: boolean, preserveBackslashes = false): string {
+  const safe = escapeEventValue(value, preserveBackslashes);
+  return markdown ? markdownCode(safe) : safe;
 }
 
 function renderTaskContinuationEvent(event: TaskEvent, markdown: boolean): string {
   const metadata = event.metadata;
   const prefix = markdown ? "- " : "";
-  const field = (label: string, value: unknown) => `${prefix}${label}: ${renderEventValue(String(value), markdown)}`;
+  const field = (label: string, value: unknown, dynamicLabel = false) => {
+    const safeLabel = dynamicLabel ? renderEventValue(label, markdown) : label;
+    const text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+    return prefix + safeLabel + ": " + renderEventValue(text, markdown);
+  };
   const rows = [
     markdown ? "### Task continuation guidance/evidence" : "Task continuation guidance/evidence",
     ...(markdown ? [""] : []),
     field("Event", event.id),
     field("Time", event.occurredAt),
-    field("Task", `${event.projectId}/${event.unitId}`),
+    field("Task", event.projectId + "/" + event.unitId),
+    field("Schema version", metadata.schemaVersion),
     field("Status", metadata.status),
     field("Code", metadata.code),
     field("Decision", metadata.decisionId),
@@ -250,21 +261,30 @@ function renderTaskContinuationEvent(event: TaskEvent, markdown: boolean): strin
     const value = metadata[key];
     if (value !== null && value !== undefined) rows.push(field(label, value));
   }
-  rows.push(field("Next action", metadata.nextAction), "", "");
-  return `${rows.join("\n")}\n`;
+  const knownFields = new Set(["schemaVersion", "status", "code", "decisionId", "gateId", "evidenceHash", "recordCommit", "phase", "stage", "sourceCommit", "nextAction"]);
+  for (const [key, value] of Object.entries(metadata)) {
+    if (knownFields.has(key)) continue;
+    rows.push(field(key, value, true));
+  }
+  rows.push(field("Next action", metadata.nextAction), "", "Continuation is advisory only.", "Fetch current task status before taking action.", "");
+  return rows.join("\n") + "\n";
 }
 
 export function renderTaskEvent(event: TaskEvent, format: "text" | "json" | "markdown"): string {
-  if (format === "json") return `${JSON.stringify(event)}\n`;
+  if (format === "json") return JSON.stringify(event) + "\n";
   if (event.kind === "task.continuation") return renderTaskContinuationEvent(event, format === "markdown");
   const markdown = format === "markdown";
-  return [
-    `${markdown ? "### " : ""}${renderEventValue(event.kind, markdown)} (${renderEventValue(event.id, markdown)})`,
-    `Time: ${renderEventValue(event.occurredAt, markdown)}`,
-    `Task: ${renderEventValue(`${event.projectId}/${event.unitId}`, markdown)}`,
-    ...Object.entries(event.metadata).map(([key, value]) => `${renderEventValue(key, markdown)}: ${renderEventValue(JSON.stringify(value) ?? String(value), markdown)}`),
-    "", "",
-  ].join("\n");
+  const jsonValue = (value: unknown) => {
+    const encoded = escapeEventValue(JSON.stringify(value) ?? "null", true);
+    return markdown ? markdownCode(encoded) : encoded;
+  };
+  const lines = [
+    (markdown ? "### " : "") + renderEventValue(event.kind, markdown) + " (" + renderEventValue(event.id, markdown) + ")",
+    "Time: " + renderEventValue(event.occurredAt, markdown),
+    "Task: " + renderEventValue(event.projectId + "/" + event.unitId, markdown),
+    ...Object.entries(event.metadata).map(([key, value]) => "Metadata " + renderEventValue(key, markdown) + ": " + jsonValue(value)),
+  ];
+  return lines.join("\n") + "\n\n";
 }
 export function formatResult(value: unknown, format: "text" | "json" | "markdown"): string {
   if (format === "json") return `${JSON.stringify(value, null, 2)}\n`;

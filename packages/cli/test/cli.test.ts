@@ -72,6 +72,17 @@ describe("kintsugi CLI", () => {
     }
   });
 
+  it("preserves latestContinuation unchanged in JSON status output", () => {
+    const status = {
+      schemaVersion: "1",
+      projectId: "shop",
+      unitId: "web/core/invoice",
+      latestContinuation: { status: "member-action", nextAction: "Refresh task status before acting." },
+    };
+
+    expect(formatResult(status, "json")).toBe(`${JSON.stringify(status, null, 2)}\n`);
+  });
+
   it("serves MCP with the selected profile and reloads its credential for every request", async () => {
     const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ok({ schemaVersion: "1", items: [], limit: 25 }));
     const state = harness(fetch, { profile: true, token: "TEST-mcp-token" });
@@ -551,6 +562,71 @@ describe("task watch CLI", () => {
     expect(output).not.toContain("\u202e");
     expect(output).not.toContain("\u2066");
     expect(output).not.toContain("\u2069");
+  });
+
+  it("preserves latestContinuation in JSON and marks continuation events advisory in text and Markdown", async () => {
+    const value = {
+      ...event("evt_continuation"),
+      kind: "task.continuation",
+      metadata: {
+        schemaVersion: "1",
+        decisionId: "decision_42",
+        gateId: "G2",
+        evidenceHash: "evidence_42",
+        recordCommit: "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+        sourceCommit: "a9993e364706816aba3e25717850c26c9cd0d89d",
+        status: "member-action",
+        code: "MEMBER_STAGE_AVAILABLE",
+        phase: "verify",
+        stage: "test",
+        nextAction: "Continue the declared member stage test in phase verify.",
+        latestContinuation: "The suggested next activity is verification.",
+      },
+    };
+    const responseFrame = `event: task-event\nid: ${value.id}\ndata: ${JSON.stringify(value)}\n\n`;
+    const jsonState = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--json"], jsonState.deps as never)).toBe(0);
+    expect(jsonState.output().stdout).toBe(`${JSON.stringify(value)}\n`);
+
+    for (const format of ["text", "markdown"] as const) {
+      const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+      expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", format], state.deps as never)).toBe(0);
+      const output = state.output().stdout;
+      expect(output).toContain("Continuation is advisory only.");
+      expect(output).toContain("Fetch current task status before taking action.");
+      expect(output).toContain("latestContinuation");
+      expect(output).toContain("The suggested next activity is verification.");
+    }
+  });
+
+  it.each(["text", "markdown"] as const)("safely renders dynamic event values in %s", async (format) => {
+    const hostile = "safe\n### forged header\rStatus: forged\u001b[31m**bold** [link](https://example.test)\u2028\u202e";
+    const value = {
+      ...event("evt_hostile"),
+      kind: "future.event\n### forged kind",
+      metadata: { "## Forged header\nFake field": hostile },
+    };
+    const responseFrame = `event: task-event\nid: evt_hostile\ndata: ${JSON.stringify(value)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", format], state.deps as never)).toBe(0);
+    const output = state.output().stdout;
+    const controls = [...output.replaceAll("\n", "")].filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f) || codePoint === 0x2028 || codePoint === 0x2029
+        || codePoint === 0x061c || codePoint === 0x200e || codePoint === 0x200f
+        || (codePoint >= 0x202a && codePoint <= 0x202e) || (codePoint >= 0x2066 && codePoint <= 0x2069);
+    });
+    expect(controls).toHaveLength(0);
+    expect(output).not.toMatch(/\n(?:#{1,6}\s+forged|Status: forged|Fake field:)/i);
+    expect(output).toContain("\\n");
+    expect(output).toContain("\\u001B[31m");
+    expect(output).toContain("\\u202E");
+    if (format === "markdown") {
+      expect(output).toContain("### `future.event\\n### forged kind`");
+      expect(output).toContain('`## Forged header\\nFake field`: `"safe\\n### forged header\\rStatus: forged\\u001B[31m**bold** [link](https://example.test)\\u2028\\u202E"`');
+    }
   });
 
   it.each(["0", "1001", "1.5", "nope"])("rejects invalid event limit %s without fetching", async (limit) => {

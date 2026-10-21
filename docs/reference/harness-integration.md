@@ -58,7 +58,7 @@ The implemented CLI commands are read-only except for local sign-in, profile sel
 | kintsugi review list --task UNIT / review get ID | Find current authorized review references and retrieve actionable findings |
 | kintsugi task status UNIT | Read current task and relevant PR/gate state |
 | kintsugi task watch UNIT | Stream and resume authorized task events over seven-day SSE replay |
-| kintsugi plugins setup --client claude --profile NAME | Generate a package and print native install/removal commands; exact-version gated |
+| kintsugi plugins setup --harness claude-code --profile NAME | Generate a package and print native install/rollback commands; exact-version gated |
 | kintsugi doctor | Check local installation, credential store, network and client capabilities |
 | kintsugi mcp serve --profile NAME | Start a local stdio bridge using the selected profile and its OS credential |
 
