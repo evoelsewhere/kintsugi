@@ -42,7 +42,7 @@ autoCommitPaths:
   - applications/*/units/**/unit.md    # unit state changes, committed by kintsugi-bot
   - applications/*/units/**/task.md    # task packs
   - applications/*/generated/**        # application views rebuilt after a merge (ADR-0033, ADR-0038)
-  - applications/*/assessment/understand/plan.json   # the AI plan of what to understand next (ADR-0041)
+  - applications/*/understanding/plan.md   # the AI plan of what to understand next (ADR-0041)
 policy:
   harnesses: [copilot, claude-code]
   requireCommitTrailer: true
@@ -59,7 +59,7 @@ Schema (`validateManifest` in `packages/domain`, `parseKintsugiYaml` in `package
 | `applications` | yes | List (may be empty). Each: `id` (kebab-case, unique), optional `name`, `disposition` (7R), optional `pipeline` (id), `repos` |
 | `applications[].repos` | no | Each: `server`, `path`, `role` (`legacy`, `legacy-data` or `target`; `document` is not allowed here), `component` (required for `target`, unique per application, forbidden otherwise). A `server` + `path` pair appears once in the file, the document repo included |
 | `pipelines` | no (default `[]`) | Each: `id` (unique), optional `appliesTo.dispositions`, non-empty `phases` (`id`; `category` required for a custom phase; optional `perUnit`; non-empty `stages` with `id`, `performer` = `{agent: <id>}` or `{member: [<roles>]}`, optional `gate`), optional `gates` |
-| `autoCommitPaths` | no | Globs (`**` spans folders; `*` and `?` stay within one segment); default `applications/*/units/**/unit.md`, `applications/*/units/**/task.md`, `applications/*/generated/**` (the ADR-0033 aggregate rebuild into the ADR-0038 application `generated/` area) and `applications/*/assessment/understand/plan.json` (the planning run of ADR-0041, advice that every run replaces). An explicit list replaces the default rather than extending it. The writer reads it from `kintsugi.yaml` on the default branch, and uses the defaults when the file is missing or invalid |
+| `autoCommitPaths` | no | Globs (`**` spans folders; `*` and `?` stay within one segment); default `applications/*/units/**/unit.md`, `applications/*/units/**/task.md`, `applications/*/generated/**` (the ADR-0033 aggregate rebuild into the ADR-0038 application `generated/` area) and `applications/*/understanding/plan.md` (the planning run of ADR-0041, advice that every run replaces). An explicit list replaces the default rather than extending it. The writer reads it from `kintsugi.yaml` on the default branch, and uses the defaults when the file is missing or invalid |
 | `policy` | no | `harnesses` (default: the built-in member harnesses), `requireCommitTrailer` (default `true`) |
 
 `path` is the repository's clone URL path relative to its server's base URL, without `.git`: `https://dev.azure.com/acme/Billing/_git/web` on a server with base URL `https://dev.azure.com/acme` gives `Billing/_git/web`; `git@github.com:org/app.git` gives `org/app`. Pipeline ids are not yet checked against the built-in pipelines (their list is an open follow-up of ADR-0028).

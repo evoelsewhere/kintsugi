@@ -1,6 +1,6 @@
 # ADR-0041: An AI plan for what to understand next, from the relationships between catalog items
 
-- Status: Accepted
+- Status: Accepted (the plan is `understanding/plan.md` and the item graph is computed from the catalog: [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md))
 - Date: 2026-10-20
 - Decision register: D57
 
