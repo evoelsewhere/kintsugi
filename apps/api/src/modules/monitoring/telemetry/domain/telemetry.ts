@@ -95,6 +95,8 @@ export interface TelemetryRun {
 export interface TelemetryRunsFilter extends TelemetryFilter {
   /** `ok` or `error`. */
   status?: "ok" | "error";
+  /** Only the attempts of this top-level run. */
+  runId?: string;
   limit: number;
   offset: number;
 }

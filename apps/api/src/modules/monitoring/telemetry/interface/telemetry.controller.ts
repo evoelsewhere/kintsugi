@@ -41,7 +41,7 @@ export class TelemetryController {
   @ApiOperation({ summary: "Attempts of agent jobs in a window, newest first, with their usage" })
   @ApiOkResponse({ description: "A page of attempts." })
   runs(@Query({ schema: telemetryRunsQuerySchema }) query: TelemetryRunsQueryInput): Promise<Page<TelemetryRun>> {
-    return this.telemetry.runs(window(defined(query)) as ReturnType<typeof window> & { status?: "ok" | "error"; limit: number; offset: number });
+    return this.telemetry.runs(window(defined(query)) as ReturnType<typeof window> & { status?: "ok" | "error"; runId?: string; limit: number; offset: number });
   }
 
   @Get("runs/:runId/trace")

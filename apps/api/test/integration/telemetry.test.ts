@@ -158,6 +158,9 @@ describe.skipIf(!hasDatabase)("runtime telemetry (integration)", () => {
       ["run-1", 1, "completed"],
     ]);
     expect(all.body.data!.items[2]).toMatchObject({ stepRunId: "s1", inputTokens: 1000, cacheReadTokens: 3000, compactions: 1, contextPeakPercent: 81.5 });
+    const one = await admin.get<Page<Run>>("/monitoring/telemetry/runs?runId=run-2");
+    expect(one.body.data!.items.map((run) => [run.runId, run.attempt])).toEqual([["run-2", 2], ["run-2", 1]]);
+    expect((await admin.get<Page<Run>>("/monitoring/telemetry/runs?runId=nope")).body.data!.total).toBe(0);
     const failed = await admin.get<Page<Run>>("/monitoring/telemetry/runs?projectId=alpha&status=error&limit=1");
     expect(failed.body.data).toMatchObject({ total: 1, limit: 1 });
     expect(failed.body.data!.items[0]).toMatchObject({ runId: "run-2", attempt: 1, status: "error" });

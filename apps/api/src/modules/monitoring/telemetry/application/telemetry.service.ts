@@ -25,8 +25,14 @@ export class TelemetryService {
     return this.reads.summary(this.#filter(query));
   }
 
-  runs(query: TelemetryQuery & { status?: "ok" | "error"; limit: number; offset: number }): Promise<Page<TelemetryRun>> {
-    const filter: TelemetryRunsFilter = { ...this.#filter(query), limit: query.limit, offset: query.offset, ...(query.status === undefined ? {} : { status: query.status }) };
+  runs(query: TelemetryQuery & { status?: "ok" | "error"; runId?: string; limit: number; offset: number }): Promise<Page<TelemetryRun>> {
+    const filter: TelemetryRunsFilter = {
+      ...this.#filter(query),
+      limit: query.limit,
+      offset: query.offset,
+      ...(query.status === undefined ? {} : { status: query.status }),
+      ...(query.runId === undefined ? {} : { runId: query.runId }),
+    };
     return this.reads.runs(filter);
   }
 
