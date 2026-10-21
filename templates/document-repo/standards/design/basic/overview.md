@@ -13,7 +13,7 @@ check: max-length(1500)
 required
 table: Rule | Function | Notes
 seed: rules
-guidance: Every business rule of the unit appears once; name the function (F-nnn, from functions.md) that handles it.
+guidance: Every business rule of the unit appears once; name the function (F-nnn, from functions.md) that handles it. A unit with no rules gets one row with - in each cell.
 check: covers-rules(Rule)
 check: no-placeholder
 -->

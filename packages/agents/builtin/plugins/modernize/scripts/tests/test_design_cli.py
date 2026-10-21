@@ -130,6 +130,15 @@ class Scaffold(Repo):
         code, out, _ = self.scaffold('--file', 'functions.md')
         self.assertIn('created applications/billing/units/payroll/run-period/design/basic/functions.md', out)
 
+    def test_optional_documents_are_written_only_when_asked_for(self):
+        self.put(os.path.join(self.unit, 'unit.md'), UNIT_MD.replace('"screen"', '"api"'))
+        code, out, _ = run(sd.main, ['billing', 'payroll/run-period', 'detail', '--root', self.root])
+        self.assertEqual(code, 0)
+        self.assertIn('design/detail/logic.md', out)
+        self.assertNotIn('sql.md', out)
+        code, out, _ = run(sd.main, ['billing', 'payroll/run-period', 'detail', '--all', '--root', self.root])
+        self.assertIn('created applications/billing/units/payroll/run-period/design/detail/sql.md', out)
+
     def test_a_set_that_needs_another_says_so_and_input_that_cannot_be_used_exits_two(self):
         code, out, _ = run(sd.main, ['billing', 'payroll/run-period', 'detail', '--root', self.root])
         self.assertEqual(code, 0)

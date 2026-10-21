@@ -2,7 +2,7 @@
 id: detail
 title: Detail design
 version: 1
-appliesTo: ["module"]
+appliesTo: []
 needs: ["basic"]
 stage: detail-design
 ---

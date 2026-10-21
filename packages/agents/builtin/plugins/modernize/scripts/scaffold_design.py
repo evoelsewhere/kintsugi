@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Create the first draft of a unit's design documents from the project's template (ADR-0045).
 
-    python3 scaffold_design.py <app> <module/unit> <set> [--file PATH] [--root DIR]
+    python3 scaffold_design.py <app> <module/unit> <set> [--file PATH | --all] [--root DIR]
 
 Run from the root of the document repository checkout (or name it with --root). For each document the set lists for the
-unit's kind (all of them, or the one named by --file), this writes
+unit's kind (the required ones, all of them with --all, or the one named by --file), this writes
 `applications/<app>/units/<module>/<unit>/design/<set>/<path>` from the document's template: the front matter names the
 template and its version, the variables ({{unit.id}}, {{unit.title}}, {{app.id}}, {{kind}}, {{set.id}}, {{set.version}})
 are filled in, a section that lists the unit's rules is seeded from its `understanding/rules.md`, and every section the
@@ -28,7 +28,7 @@ import paths  # noqa: E402
 APP = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
 
 
-def scaffold(root, app, unit_key, set_id, only_file=None):
+def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False):
     """([created paths], [notes]) for one unit and one set; raises DataError on unusable input."""
     unit = dl.read_unit(root, app, unit_key)
     sets, problems = check_design.load(root)
@@ -46,6 +46,8 @@ def scaffold(root, app, unit_key, set_id, only_file=None):
         files = [file for file in files if file['path'] == only_file]
         if not files:
             raise docmd.DataError(f'the design set "{set_id}" has no file "{only_file}" for a unit of kind "{unit["kind"]}"')
+    elif not include_optional:
+        files = [file for file in files if file['required']]
     module, unit_name = paths.split_unit_key(unit_key)
     rules = dl.rules_of(root, app, unit_key)
     created, notes = [], []
@@ -74,7 +76,8 @@ def main(argv=None):
     parser.add_argument('app', help='application id (kebab-case)')
     parser.add_argument('unit', help='the unit, as <module>/<unit>')
     parser.add_argument('set', help='the design set to write')
-    parser.add_argument('--file', dest='only_file', metavar='PATH', help='write one document of the set only')
+    parser.add_argument('--file', dest='only_file', metavar='PATH', help='write one document of the set only (an optional one included)')
+    parser.add_argument('--all', dest='include_optional', action='store_true', help='write the optional documents of the set too')
     parser.add_argument('--root', default='.', metavar='DIR', help='the document repository checkout (default: the working directory)')
     args = parser.parse_args(argv)
     if not APP.match(args.app):
@@ -85,7 +88,7 @@ def main(argv=None):
         print('scaffold_design.py: --root must be an existing directory', file=sys.stderr)
         return 2
     try:
-        created, notes = scaffold(root, args.app, args.unit, args.set, args.only_file)
+        created, notes = scaffold(root, args.app, args.unit, args.set, args.only_file, args.include_optional)
     except (docmd.DataError, OSError) as error:
         print(f'scaffold_design.py: {error}', file=sys.stderr)
         return 2
