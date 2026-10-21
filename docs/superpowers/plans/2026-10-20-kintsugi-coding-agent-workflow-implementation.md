@@ -239,7 +239,8 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 - [x] Persist stable provider actor mappings and maintainer-confirmed task associations as operational metadata; auto-link only when author identity is verified, otherwise expose an association-needed result. Contributor identity is not inferred from display names or a check event's PR array.
 - [x] Run targeted API/orchestrator unit tests and typechecks to preserve credential binding and worker access. API: 3 unit passed, 13 PostgreSQL integration cases skipped; orchestrator: 2 unit passed, 6 PostgreSQL integration cases skipped.
 - [ ] Run migration/API/orchestrator integration tests against an explicitly configured disposable PostgreSQL server; no such server is available in this environment, so FK, CHECK, encrypted-key persistence and secret-rotation behavior remain unverified at runtime.
-- [ ] Record a live GitHub.com/GHES compatibility probe only in disposable repositories and supported versions. No provider credentials or disposable remote are configured in this environment; GHES remains unverified. Commit `feat(git): add GitHub pull request observation capabilities` after repository-wide verification; retain database and live-provider validation as release checks.
+- [ ] Record a live GitHub.com/GHES compatibility probe only in disposable repositories and supported versions. No provider credentials or disposable remote are configured in this environment; GHES remains unverified.
+- [x] Commit `feat(git): add GitHub pull request observation capabilities` after repository-wide lint, typecheck and build passed. Retain PostgreSQL integration and live-provider validation as release checks.
 
 ### Task 11 (T11) — Durable webhook inbox and all-state reconciliation
 
