@@ -3,7 +3,7 @@
 // Git call. Writes only the sync columns the API shows (sync_status, last_*).
 
 import { decryptSecret } from "@kintsugi/secrets";
-import type { GitCredential } from "@kintsugi/git";
+import { githubRepositoryPathFromRemote, type GitCredential, type GitHubAppConnection, type GitHubObservationConnection, type GitHubTokenConnection } from "@kintsugi/git";
 import type { Pool } from "pg";
 
 export type SyncStatus = "pending" | "cloning" | "ready" | "error";
@@ -27,6 +27,21 @@ interface TargetRow {
   username: string | null;
   known_hosts: string | null;
 }
+
+interface GitHubAppConnectionRow {
+  id: string;
+  server_id: string;
+  url: string;
+  kind: "github" | "github-enterprise" | string;
+  base_url: string;
+  github_app_id: string | null;
+  github_installation_id: string | null;
+  auth_type: "none" | "token" | "ssh-key";
+}
+
+const tokenSecretId = (serverId: string): string => `git-server:${serverId}:token`;
+const sshKeySecretId = (serverId: string): string => `git-server:${serverId}:ssh-key`;
+const githubAppKeySecretId = (serverId: string): string => `git-server:${serverId}:github-app-private-key`;
 
 const MAX_ERROR_LENGTH = 2000;
 
@@ -68,6 +83,43 @@ export class RepositoryStore {
     };
   }
 
+  /** The App credential for one registered GitHub repository; plaintext stays in worker memory. */
+  async githubProviderConnection(repositoryId: string): Promise<GitHubObservationConnection | undefined> {
+    const result = await this.pool.query<GitHubAppConnectionRow>(
+      `select r.id, r.server_id, r.url, s.kind, s.base_url, s.github_app_id, s.github_installation_id, s.auth_type
+         from admin.git_repository r join admin.git_server s on s.id = r.server_id
+        where r.id = $1`,
+      [repositoryId],
+    );
+    const row = result.rows[0];
+    if (row === undefined || (row.kind !== "github" && row.kind !== "github-enterprise")) return undefined;
+    const repositoryPath = githubRepositoryPathFromRemote(row.url, row.kind, row.base_url);
+    if (row.github_app_id !== null || row.github_installation_id !== null) {
+      if (row.github_app_id === null || row.github_installation_id === null) {
+        throw new Error(`GitHub App configuration for repository ${repositoryId} is incomplete`);
+      }
+      const secret = await this.#readSecret(row.server_id, githubAppKeySecretId(row.server_id));
+      if (secret === undefined) throw new Error(`GitHub App private key for repository ${repositoryId} is not configured`);
+      return {
+        kind: row.kind,
+        baseUrl: row.base_url,
+        appId: row.github_app_id,
+        installationId: row.github_installation_id,
+        privateKey: decryptSecret(secret),
+        repositoryPath,
+      } satisfies GitHubAppConnection;
+    }
+    if (row.auth_type !== "token") return undefined;
+    const secret = await this.#readSecret(row.server_id, tokenSecretId(row.server_id));
+    if (secret === undefined) throw new Error(`GitHub server token for repository ${repositoryId} is not configured`);
+    return {
+      kind: row.kind,
+      baseUrl: row.base_url,
+      token: decryptSecret(secret),
+      repositoryPath,
+    } satisfies GitHubTokenConnection;
+  }
+
   async markCloning(id: string): Promise<void> {
     await this.pool.query("update admin.git_repository set sync_status = 'cloning', updated_at = now() where id = $1", [id]);
   }
@@ -90,15 +142,21 @@ export class RepositoryStore {
   /** A server stores at most one secret: the token or the SSH key of its auth type. */
   async #credential(row: TargetRow): Promise<GitCredential> {
     if (row.auth_type === "none") return { kind: "none" };
-    const result = await this.pool.query<{ ciphertext: string; iv: string; auth_tag: string }>(
-      "select ciphertext, iv, auth_tag from admin.git_secret where server_id = $1 limit 1",
-      [row.server_id],
-    );
-    const secret = result.rows[0];
+    const secretId = row.auth_type === "token" ? tokenSecretId(row.server_id) : sshKeySecretId(row.server_id);
+    const secret = await this.#readSecret(row.server_id, secretId);
     if (secret === undefined) throw new Error(`Git server ${row.server_id} has no stored credential`);
-    const plaintext = decryptSecret({ ciphertext: secret.ciphertext, iv: secret.iv, authTag: secret.auth_tag });
+    const plaintext = decryptSecret(secret);
     return row.auth_type === "token"
       ? { kind: "token", token: plaintext, ...(row.username === null ? {} : { username: row.username }) }
       : { kind: "ssh-key", privateKey: plaintext };
+  }
+
+  async #readSecret(serverId: string, secretId: string): Promise<{ ciphertext: string; iv: string; authTag: string } | undefined> {
+    const result = await this.pool.query<{ ciphertext: string; iv: string; auth_tag: string }>(
+      "select ciphertext, iv, auth_tag from admin.git_secret where secret_id = $1 and server_id = $2",
+      [secretId, serverId],
+    );
+    const secret = result.rows[0];
+    return secret === undefined ? undefined : { ciphertext: secret.ciphertext, iv: secret.iv, authTag: secret.auth_tag };
   }
 }
