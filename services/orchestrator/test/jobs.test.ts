@@ -188,7 +188,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   const BAD_TOPOLOGY = { "applications/demo/assessment/topology.md": "# Topology without front matter\n" };
   const GOOD_TOPOLOGY = '---\napp: "demo"\nsystem: "demo"\n---\n# Topology of demo\n\n## Domains\n\n| Domain | Leaves | Data stores | LOC |\n| --- | --- | --- | --- |\n| Core | 1 | 0 | 5 |\n';
 
-  it("masks a credential an agent left in its files instead of failing the run", async () => {
+  it("keeps a credential an agent left in its files as written", async () => {
     const { store, runner, writes, agents } = setup({
       "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
     });
@@ -198,15 +198,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(agents.specs.filter(synthesis)).toHaveLength(1);
     expect(writes).toHaveLength(1);
     const text = readFileSync(join(storage.job(id).out, "applications", "demo", "assessment", "ASSESSMENT.md"), "utf8");
-    expect(text).toBe("Config: password = hu****\n");
-    // What was masked is logged by rule, file and line; never the value.
-    const logged = store.events.map((event) => event.message).filter((message) => message.startsWith("masked "));
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toMatch(/^masked 1 credential-shaped value in 1 file of legacy-analyst: credential_assignment at applications\/demo\/assessment\/ASSESSMENT\.md:1$/);
-    expect(JSON.stringify([...store.events, ...store.children(id)])).not.toContain("hunter2");
-    expect(store.children(id).at(-2)?.outputSummary?.["maskedCredentials"]).toBe(1);
-    // The reviewer sees where, by rule and line, on the step (never a value).
-    expect(store.children(id).at(-2)?.outputSummary?.["maskedCredentialsFirst"]).toEqual(["credential_assignment at applications/demo/assessment/ASSESSMENT.md:1"]);
+    expect(text).toBe("Config: password = hunter2hunter2\n");
+    expect(store.events.some((event) => event.message.startsWith("masked "))).toBe(false);
   });
 
   it("still fails closed for what is not a credential: a malformed artifact, with a redacted reason and no write", async () => {

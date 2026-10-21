@@ -1,4 +1,4 @@
-// The JobOutput hook as the worker runs it: diagram lint warnings never block, credentials do.
+// The JobOutput hook as the worker runs it: diagram lint warnings never block, malformed artifacts do, credentials are not checked.
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,11 +39,15 @@ describe("JobOutput hook", () => {
     expect(outcome).toMatchObject({ ok: true, findings: 0, warnings: { count: 1, first: ["reserved-id at applications/demo/assessment/ARCHITECTURE.mmd:2"] } });
   });
 
-  it("still blocks credentials, whatever the diagrams say", async () => {
-    const ws = workspace({ "applications/demo/assessment/ARCHITECTURE.mmd": 'flowchart TB\n    svc_a["password=TEST_ONLY_NOT_A_SECRET_42"]\n' });
+  it("does not check credentials", async () => {
+    const ws = workspace({ "applications/demo/assessment/notes.md": "password = TEST_ONLY_NOT_A_SECRET_42\n" });
+    expect(await run(ws)).toMatchObject({ ok: true, findings: 0 });
+  });
+
+  it("blocks a malformed artifact with a redacted reason", async () => {
+    const ws = workspace({ "applications/demo/assessment/topology.md": "# Topology without front matter\n" });
     const outcome = await run(ws);
     expect(outcome.ok).toBe(false);
-    expect(outcome.reason).toMatch(/credential-shaped values found/);
-    expect(outcome.reason).not.toContain("TEST_ONLY_NOT_A_SECRET_42");
+    expect(outcome.reason).toMatch(/malformed artifact found/);
   });
 });

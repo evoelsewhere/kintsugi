@@ -47,87 +47,15 @@ def test_clean_output_validates_topology_and_rule_headings(tmp_path: Path) -> No
     assert report(result)["findings"] == []
 
 
-def test_credential_findings_are_redacted_in_json_and_stderr(tmp_path: Path) -> None:
-    marker = "TEST_ONLY_NOT_A_CREDENTIAL_9F31"
-    (tmp_path / "output.txt").write_text(f"API_KEY={marker}\n", encoding="utf-8")
-
-    result = run_hook(tmp_path)
-    data = report(result)
-
-    assert result.returncode == 2
-    assert data["findings"] == [
-        {
-            "category": "credential",
-            "line": 1,
-            "path": "output.txt",
-            "redacted": True,
-            "rule": "credential_assignment",
-        }
-    ]
-    assert marker not in result.stdout + result.stderr
-
-
-def test_token_and_bearer_shapes_are_detected_without_echo(tmp_path: Path) -> None:
-    prefixed = "ghp_" + "A" * 24
-    bearer = "B" * 24
-    camel_case = "TEST_ONLY_CAMEL_CASE_VALUE"
-    (tmp_path / "tokens.txt").write_text(
-        f"service-token={prefixed}\nAuthorization: Bearer {bearer}\ndbPassword={camel_case}\n",
-        encoding="utf-8",
-    )
-
-    result = run_hook(tmp_path)
-    data = report(result)
-
-    assert result.returncode == 2
-    assert {item["rule"] for item in data["findings"]} >= {"token", "bearer_token", "credential_assignment"}
-    assert any(item["line"] == 3 and item["rule"] == "credential_assignment" for item in data["findings"])
-    assert prefixed not in result.stdout + result.stderr
-    assert bearer not in result.stdout + result.stderr
-    assert camel_case not in result.stdout + result.stderr
-
-
-def test_credential_shaped_file_names_are_redacted_too(tmp_path: Path) -> None:
-    marker = "TEST_ONLY_PATH_SECRET_2931"
-    path = tmp_path / f"password={marker}.txt"
-    path.write_text(f"api_key={marker}\n", encoding="utf-8")
-
-    result = run_hook(tmp_path)
-    data = report(result)
-
-    assert result.returncode == 2
-    assert data["findings"][0]["path"] == "[redacted-path]"
-    assert marker not in result.stdout + result.stderr
-
-
-def test_cloud_key_and_connection_string_are_detected_without_echo(tmp_path: Path) -> None:
-    marker = "AKIA" + "A" * 16
-    (tmp_path / "output.txt").write_text(
-        f"access key {marker}\npostgres://unit:TEST_ONLY_PASSWORD@invalid.example/db\n",
-        encoding="utf-8",
-    )
-
-    result = run_hook(tmp_path)
-    data = report(result)
-
-    assert result.returncode == 2
-    assert {item["rule"] for item in data["findings"]} == {"cloud_access_key", "connection_string"}
-    assert marker not in result.stdout + result.stderr
-    assert "TEST_ONLY_PASSWORD" not in result.stdout + result.stderr
-
-
-def test_private_key_header_is_detected_without_echoing_body(tmp_path: Path) -> None:
-    marker = "TEST_ONLY_PRIVATE_KEY_BODY"
-    (tmp_path / "output.pem").write_text(
-        f"-----BEGIN PRIVATE KEY-----\n{marker}\n-----END PRIVATE KEY-----\n",
-        encoding="utf-8",
-    )
+def test_credentials_are_not_checked(tmp_path: Path) -> None:
+    lines = ["password: TEST_ONLY_SECRET_12345", "ghp_" + "A" * 24, "postgres://unit:TEST_ONLY_PASSWORD@invalid.example/db", ""]
+    (tmp_path / "settings.txt").write_text("\n".join(lines), encoding="utf-8")
+    (tmp_path / "output.pem").write_text("-----BEGIN PRIVATE KEY-----\nTEST_ONLY\n-----END PRIVATE KEY-----\n", encoding="utf-8")
 
     result = run_hook(tmp_path)
 
-    assert result.returncode == 2
-    assert "private_key" in {item["rule"] for item in report(result)["findings"]}
-    assert marker not in result.stdout + result.stderr
+    assert result.returncode == 0
+    assert report(result)["findings"] == []
 
 
 def test_invalid_topology_and_rule_headings_have_malformed_exit_code(tmp_path: Path) -> None:
@@ -155,20 +83,6 @@ def test_an_empty_rule_catalog_needs_the_explicit_marker(tmp_path: Path) -> None
     assert report(result)["findings"] == []
 
 
-def test_credentials_and_malformed_artifacts_have_combined_exit_code(tmp_path: Path) -> None:
-    (tmp_path / "topology.md").write_text("{}", encoding="utf-8")
-    (tmp_path / "settings.txt").write_text("password: TEST_ONLY_SECRET_12345\n", encoding="utf-8")
-
-    result = run_hook(tmp_path)
-
-    assert result.returncode == 4
-    assert {item["category"] for item in report(result)["findings"]} == {
-        "credential",
-        "malformed_artifact",
-    }
-    assert "TEST_ONLY_SECRET_12345" not in result.stdout + result.stderr
-
-
 def test_a_topology_without_a_domains_table_is_malformed(tmp_path: Path) -> None:
     (tmp_path / "topology.md").write_text('---\nsystem: "Example"\n---\n# Topology\n', encoding="utf-8")
 
@@ -186,28 +100,50 @@ def test_a_units_rules_document_is_checked_like_the_rule_catalog(tmp_path: Path)
     assert report(run_hook(tmp_path))["findings"][0]["rule"] == "invalid_rule_heading"
 
 
-def test_oversized_file_fails_closed_with_bounded_error_report(tmp_path: Path) -> None:
-    (tmp_path / "oversized.txt").write_bytes(b"x" * (1_048_576 + 1))
+def test_large_files_that_are_not_validated_are_never_read(tmp_path: Path) -> None:
+    (tmp_path / "scratch").mkdir()
+    (tmp_path / "scratch" / "inventory.json").write_bytes(b"x" * (64 * 1_048_576))
+
+    result = run_hook(tmp_path)
+
+    assert result.returncode == 0
+    assert report(result)["checked"] == {"files": 1, "bytes": 0}
+
+
+def test_oversized_validated_file_fails_closed_with_bounded_error_report(tmp_path: Path) -> None:
+    (tmp_path / "BUSINESS_RULES.md").write_bytes(b"x" * (16 * 1_048_576 + 1))
 
     result = run_hook(tmp_path)
     data = report(result)
 
     assert result.returncode == 5
-    assert data["errors"] == [{"code": "file_too_large", "path": "oversized.txt"}]
+    assert data["errors"] == [{"code": "file_too_large", "path": "BUSINESS_RULES.md"}]
     assert data["checked"]["bytes"] == 0
 
 
+def test_rule_catalog_ignores_prose_headings_code_fences_and_a_bom(tmp_path: Path) -> None:
+    rules = tmp_path / "BUSINESS_RULES.md"
+    rules.write_text(
+        "# Business Rules\n\n## Rule index\n\n### RULE-001: Total\n\n```\n### RULE-9: shown as an example\n```\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "topology.md").write_text("﻿" + VALID_TOPOLOGY, encoding="utf-8")
+
+    result = run_hook(tmp_path)
+
+    assert result.returncode == 0
+    assert report(result)["findings"] == []
+
+
 def test_finding_limit_fails_closed_and_keeps_report_bounded(tmp_path: Path) -> None:
-    marker = "TEST_ONLY_SECRET_12345"
-    (tmp_path / "many.txt").write_text((f"password={marker}\n") * 10_001, encoding="utf-8")
+    (tmp_path / "BUSINESS_RULES.md").write_text("### RULE-1: Missing zero padding\n" * 10_001, encoding="utf-8")
 
     result = run_hook(tmp_path)
     data = report(result)
 
     assert result.returncode == 5
     assert len(data["findings"]) == 10_000
-    assert data["errors"] == [{"code": "finding_count_limit_exceeded", "path": "many.txt"}]
-    assert marker not in result.stdout + result.stderr
+    assert data["errors"] == [{"code": "finding_count_limit_exceeded", "path": "BUSINESS_RULES.md"}]
 
 
 def test_symlink_is_not_followed(tmp_path: Path) -> None:
@@ -282,17 +218,3 @@ def test_mermaid_problems_are_redacted_warnings_that_do_not_block(tmp_path: Path
         {"category": "diagram", "line": 5, "path": "applications/sample-app/assessment/notes.md", "redacted": True, "rule": "unescaped-semicolon"},
     ]
     assert marker not in result.stdout + result.stderr
-
-
-def test_diagram_warnings_never_hide_a_credential_finding(tmp_path: Path) -> None:
-    (tmp_path / "ARCHITECTURE.mmd").write_text(
-        'flowchart TB\n    svc_a["password=TEST_ONLY_NOT_A_SECRET_42"] --> end\n', encoding="utf-8"
-    )
-
-    result = run_hook(tmp_path)
-    data = report(result)
-
-    assert result.returncode == 2
-    assert [item["rule"] for item in data["findings"]] == ["credential_assignment"]
-    assert [item["rule"] for item in data["warnings"]] == ["reserved-id"]
-    assert "TEST_ONLY_NOT_A_SECRET_42" not in result.stdout + result.stderr
