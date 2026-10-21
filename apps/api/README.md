@@ -57,6 +57,11 @@ Responsibilities beyond the feature modules below:
   (`#common/audit/audit-trail.js`, bound globally by the audit module) — never in controllers.
   `GET /api/governance/audit` (`?action=a,b&actor&subject&projectId`) and
   `GET /api/governance/audit/actions` need `audit.read`.
+- Governance → telemetry (ADR-0048): `GET /api/monitoring/telemetry/summary`, `…/runs` and `…/runs/:runId/trace` (module `monitoring/telemetry`, read model over
+  `monitoring.telemetry_span`, migration `020_telemetry.sql`) need `telemetry.view`; filters `projectId`, `agent`, `from`, `to` (ISO instants, at most 90 days).
+- Settings → MCP servers (ADR-0047): `/api/admin/mcp-servers` (module `admin/mcp-servers`, migration `021_mcp_servers.sql`) needs `mcp.manage`; header values are
+  encrypted like LLM keys and never returned; `POST …/:id/test` lists a server's tools through the runtime's MCP client; `GET …/choices` (also `agents.manage`)
+  gives an agent builder the server ids without addresses or headers.
 - Governance → restricted records: `GET /api/governance/restricted-records` (`restricted.read`)
   lists record metadata only (run, step, path, size), never content, so it is not audited;
   reading a record stays the audited per-run read above.
