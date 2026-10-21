@@ -21,18 +21,17 @@ describe("built-in plugins", () => {
       expect.arrayContaining([PLUGIN_MANIFEST_FILE, "skills/mermaid-diagrams/references/c4.md", "hooks/job_output.py", "scripts/inventory.py"]),
     );
     expect(plugins[1]!.components.filter((component) => component.kind === "command").map((component) => component.name)).toEqual([
-      "preflight",
-      "brief",
-      "transform",
-      "uplift",
-      "reimagine",
+      "design-architecture",
+      "scaffold",
+      "design",
+      "implement",
       "verify",
     ]);
   });
 
   it("covers every agent, command and workflow exactly once", async () => {
     const plugins = await loadBuiltinPlugins();
-    for (const [kind, count] of [["agent", 9], ["command", 9], ["workflow", 6]] as const) {
+    for (const [kind, count] of [["agent", 8], ["command", 8], ["workflow", 4]] as const) {
       const all = plugins.flatMap((plugin) => plugin.components.filter((component) => component.kind === kind).map((component) => component.path));
       expect(all.length, kind).toBe(count);
       expect(new Set(all).size, kind).toBe(count);
@@ -45,7 +44,7 @@ describe("built-in plugins", () => {
       ["reverse_engineering", []],
       ["modernize", ["reverse_engineering"]],
     ]);
-    for (const path of ["scripts/paths.py", "scripts/mermaid_lint.py", "skills/mermaid-diagrams/SKILL.md", "skills/mermaid-diagrams/references/c4.md"]) {
+    for (const path of ["scripts/paths.py", "scripts/docmd.py", "scripts/mermaid_lint.py", "skills/mermaid-diagrams/SKILL.md", "skills/mermaid-diagrams/references/c4.md"]) {
       const [first, second] = await Promise.all(plugins.map((plugin) => readBuiltinPluginFile(plugins, plugin.name, path)));
       expect(first, path).toBeDefined();
       expect(second, path).toBe(first);
@@ -83,7 +82,10 @@ describe("plugin flows", () => {
     expect(understand!.pipeline).toEqual(expect.arrayContaining([{ from: "assess", to: "understand", via: expect.arrayContaining(["applications/<app>/assessment/catalog/"]) }]));
     // The plan reads what assess wrote and which items understand has finished (their understanding.md); nothing else.
     expect(understand!.pipeline.find((link) => link.to === "plan-understand" && link.from === "understand")?.via).toEqual(["applications/<app>/units/<module>/<unit>/understanding/understanding.md"]);
-    expect(modernize!.pipeline.map((link) => `${link.from}>${link.to}`)).not.toContain("preflight>transform");
-    expect(modernize!.flows.map((entry) => entry.command)).toEqual(["preflight", "brief", "transform", "uplift", "reimagine", "verify"]);
+    expect(modernize!.pipeline.map((link) => `${link.from}>${link.to}`)).toContain("design-architecture>scaffold");
+    expect(modernize!.flows.map((entry) => entry.command)).toEqual(["design-architecture", "scaffold", "design", "implement", "verify"]);
+    // The design command runs the design-set scripts, in the order its text names them.
+    const design = flow(modernize, "design");
+    expect(design.steps.filter((step) => step.kind === "script").map((step) => step.name)).toEqual(["validate_design_templates", "scaffold_design", "check_design"]);
   });
 });

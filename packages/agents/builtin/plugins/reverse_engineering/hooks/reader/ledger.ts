@@ -1,7 +1,12 @@
 import { plain } from './text.js'
 import { recordsOf } from './document.js'
 import { tablesIn } from './markdown.js'
-import type { ReviewLedger, ReviewVerdict } from './progress.js'
+export type ReviewVerdict = 'confirmed' | 'refuted' | 'clarify'
+
+export type ReviewLedger = Record<
+  string,
+  { verdict: ReviewVerdict; at: string; title?: string; /** The reviewer's own words, when they gave any. */ note?: string }
+>
 
 /**
  * The per-unit `rules-review.md` (`units/<module>/<unit>/understanding/`), read without trusting it: a table

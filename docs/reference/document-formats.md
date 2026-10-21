@@ -15,6 +15,8 @@ One reader and one writer implement this page: `packages/agents/builtin/plugins/
 
 Anything unbounded is a list or a table inside a section, never front matter. Ids and paths are written in backticks.
 
+One more shape is read only by the design-set tools: a **directive comment** under a heading of a design template (`<!-- required`, `table: …`, `check: …`, `-->`), which holds that section's contract and is invisible when rendered. See [Design templates](design-templates.md).
+
 ## Documents
 
 | Path (`applications/<app>/…`) | Written by | Content |
@@ -32,6 +34,8 @@ Anything unbounded is a list or a table inside a section, never front matter. Id
 | `…/understanding/findings.md` | `split_findings.py` | Scorecard table; table `Findings by severity`; a `### SEC-…` card per finding for the fix and the masked evidence; `Tools not run`, `Files reviewed` |
 | `…/understanding/topology.md` | `scope_items.py` | The topology document of one item: its leaves, `Depends on`, `Used by`, `Data stores` |
 | `…/understanding/trace.md` | `finish_items.py` | Front matter (`openQuestions`); sections `Entry points`, `Rules applied`, `Findings`, `Dependencies` (table), `Data objects`, `External systems`, `Files`, `Requirements`, `Pull requests`, `Tests` |
+| `standards/design/<set>/set.md`, `<template>.md` | people | A design set: front matter (`id`, `title`, `version`, `appliesTo`, `needs`, `stage`) and a files table; templates with directive comments ([design templates](design-templates.md)) |
+| `units/<module>/<unit>/design/<set>/<file>` | `scaffold_design.py`, then the member's harness | A design document: front matter `template: "<set>@<version>"` and `unit`, then the sections and tables the template names |
 | `generated/traceability.md` | `rebuild_aggregates.py` | Front matter with the totals the headlines read; one row per understood unit |
 | `generated/BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `README.md` | `rebuild_aggregates.py` | The units' rules, objects and findings joined; the index of the specifications |
 

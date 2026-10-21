@@ -58,11 +58,13 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Document reads and stage results](reference/document-repo-read-path.md): file APIs and result views
 - [Commit conventions](reference/document-repo-commit-conventions.md): identity, trailers and auto-commit defaults
 - [Unit files](reference/document-repo-unit-files.md): the unit directory, unit state, rule verdicts and traceability
+- [Design templates](reference/design-templates.md): design sets, template directives, checks, conformance (ADR-0044, ADR-0045)
 - [Configuration](reference/configuration.md): installation environment variables
 
 **Guides**
 - [Install Kintsugi](guides/installation.md)
 - [Build a project (register repos, write standards)](guides/build-project.md)
+- [Define a project's design templates](guides/define-design-templates.md)
 - [Configure LLM providers for the runtime](guides/configure-llm-providers.md)
 - [Work on a migration task as a member](guides/member-workflow.md)
 

@@ -4,7 +4,8 @@
     python3 trace_rules.py <app> --source <checkout> --assessment <applications/app/assessment> \\
         --target <checkout> --out <folder> [--module NAME] [--runs <run-folder> ...]
 
-Reads applications/<app>/generated/BUSINESS_RULES.md (rule cards: "### RULE-NNN: name" with **Priority:**,
+Reads applications/<app>/generated/BUSINESS_RULES.md (the rules index: one row per rule with its name,
+priority, confidence and source, or the older rule cards "### RULE-NNN: name" with **Priority:**,
 **Confidence:** and **Source:** lines), then scans the read-only target checkout (never build output:
 target/, build/, dist/, node_modules/, bin/, obj/, __pycache__/, or any folder starting with a dot) for
 mentions of each rule id, and sorts every file into "test" or "main" code. One row per rule.
@@ -18,7 +19,7 @@ Evidence, strongest first:
   named, not run  a test file names it, but nothing that ran backs it: the test is skipped, pending or failing,
                   its class never ran, or no per-test results were given
   code only       only main code names it
-  claimed only    only the mapping table in TRANSFORMATION_NOTES.md or UPLIFT_NOTES.md names it, on a
+  claimed only    only the mapping table in TRANSFORMATION_NOTES.md names it, on a
                   row that also names a file that exists in the module
   none            nothing names it
 
@@ -55,8 +56,8 @@ SKIP_DIRS = {"target", "build", "dist", "node_modules", "bin", "obj", "__pycache
 DOC_EXT = {".md", ".markdown", ".rst", ".txt", ".adoc"}
 TEST_DIRS = {"test", "tests", "__tests__", "spec", "specs"}
 TEST_NAME = re.compile(r"^test_|_tests?\.[^.]+$|\.(?:spec|test)\.[^.]+$|(?:Test|Tests|TestCase|IT)\.[^.]+$|^Test[A-Z0-9_]")
-NOTES_NAMES = ("TRANSFORMATION_NOTES.md", "UPLIFT_NOTES.md")
-TRACKS = (("rewrite", ""), ("uplift", "-uplifted"), ("reimagine", "-reimagined"))
+NOTES_NAMES = ("TRANSFORMATION_NOTES.md",)
+TRACKS = (("rewrite", ""), ("reimagine", "-reimagined"))
 FILE_CAP, RULES_CAP, NOTES_CAP, LINE_CAP, MAX_FILES, SAMPLES = 2 << 20, 8 << 20, 1 << 20, 4000, 200000, 3
 MENTION = [re.compile(r"(?<![A-Za-z0-9])rule[-_](\d{1,6})(?!\d)", re.I),
            re.compile(r"(?<![A-Za-z0-9])rule(\d{3,6})(?!\d)", re.I),
@@ -122,7 +123,7 @@ def class_keys(name):
 
 
 def run_evidence(results):
-    """What ran for one module, from its parsed results (baseline_diff.read_results, one per suite): {"known", "ids", "keys"}.
+    """What ran for one module, from its parsed results (run_results.read_results, one per suite): {"known", "ids", "keys"}.
     known: some result lists its tests one by one (a count, or a summary line of a log, names no test).
     ids: the rule numbers named by the test name or class name of a test that ran and passed.
     keys: class_keys of every class that has a test that ran and passed."""
@@ -177,13 +178,24 @@ def parse_rules(text):
     fence = ""
     rows: dict[int, dict[str, str]] = {}
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    header: list[str] | None = None
     for line in lines:
-        if line.lstrip().startswith("|"):
-            cells = [re.sub(r"[*`]", "", c).strip() for c in line[:LINE_CAP].strip().strip("|").split("|")]
-            ids = [int(m.group(1)) for c in cells for m in [re.fullmatch(r"RULE[-_](\d{1,6})", c, re.I)] if m]
-            if ids:
-                rows.setdefault(ids[0], {"p": next((c for c in cells if re.fullmatch(r"P\d", c)), ""),
-                                         "c": next((c for c in cells if re.match(r"(?i)(high|medium|low)\b", c)), "")})
+        if not line.lstrip().startswith("|"):
+            header = None
+            continue
+        cells = [re.sub(r"[*`]", "", c).strip() for c in line[:LINE_CAP].strip().strip("|").split("|")]
+        lowered = [c.lower() for c in cells]
+        if "id" in lowered and "name" in lowered:
+            header = lowered
+            continue
+        ids = [int(m.group(1)) for c in cells for m in [re.fullmatch(r"RULE[-_](\d{1,6})", c, re.I)] if m]
+        if ids:
+            info = {"p": next((c for c in cells if re.fullmatch(r"P\d", c)), ""),
+                    "c": next((c for c in cells if re.match(r"(?i)(high|medium|low)\b", c)), "")}
+            if header:
+                # The rules index: one row per rule, the rule's own file holds the card (rule_docs.py).
+                info.update({key: cells[header.index(column)] for key, column in (("name", "name"), ("source", "source")) if column in header and header.index(column) < len(cells)})
+            rows.setdefault(ids[0], info)
     for line in lines:
         f = FENCE.match(line)
         if fence:
@@ -217,6 +229,13 @@ def parse_rules(text):
         r.update({"priority": prio.group(0) if prio else row.get("p", ""),
                   "confidence": conf.group(1).capitalize() if conf else row.get("c", "").capitalize()[:10],
                   "source": clean(source, 160), "sourceFile": os.path.basename(first.group(0)) if first else ""})
+    for n, info in rows.items():
+        if n in seen or not info.get("name"):
+            continue
+        seen.add(n)
+        first = PATH.search(info.get("source", ""))
+        rules.append({"n": n, "id": "RULE-%03d" % n, "name": clean(info["name"], 160), "priority": info.get("p", ""), "confidence": info.get("c", "").capitalize()[:10],
+                      "source": clean(info.get("source", ""), 160), "sourceFile": os.path.basename(first.group(0)) if first else ""})
     return rules, notes
 
 
@@ -271,9 +290,6 @@ def discover_modules(workspace, system, target_root=None, module_name=None):
         if not is_real_dir(root):
             continue
         rel = "modernized/" + system + suffix
-        if track == "uplift":
-            out.append({"name": system + suffix, "track": track, "path": root, "rel": rel})
-            continue
         try:
             subs = sorted(d for d in os.listdir(root) if not d.startswith(".") and d not in SKIP_DIRS and is_real_dir(os.path.join(root, d)))
         except OSError:
@@ -450,7 +466,7 @@ def trace(workspace, system, ran: dict[str, dict[str, Any]] | None = None, asses
     if scan["linksSkipped"]:
         notes.append("%d symbolic link(s) were not followed." % scan["linksSkipped"])
     if not modules:
-        notes.append("No built code was found in the target checkout." if target_dir else "No built code was found under modernized/%s, %s-uplifted or %s-reimagined." % (system, system, system))
+        notes.append("No built code was found in the target checkout." if target_dir else "No built code was found under modernized/%s or %s-reimagined." % (system, system))
     rules_file = paths.generated_file_path(system, "BUSINESS_RULES.md")
     return {"system": clean(system, 100), "rulesFile": rules_file, "modules": modules, "rules": out,
             "totals": totals(out), "p0NoTests": [r["id"] for r in out if r["priority"] == "P0" and r["status"] != "tested"],
@@ -475,14 +491,13 @@ def module_row(r, slot):
 
 def module_view(result, rel):
     """The rules one module answers for, each with the module's own status. A rewrite answers for the rules its code,
-    tests or notes name, that a test of its run names, or whose legacy file its notes name; an uplift keeps the whole
-    code, so it answers for all. When nothing ties any rule to the module, every rule counts (`tied` is then False):
+    tests or notes name, that a test of its run names, or whose legacy file its notes name. When nothing ties any rule to the module, every rule counts (`tied` is then False):
     an empty list must never pass. `p0NoTests` lists the P0 rules that are not "tested": no executed test backs them."""
     mod = next((m for m in result["modules"] if m["path"] == rel), None)
     rows, tied = [], True
     for r in result["rules"]:
         slot = r["perModule"].get(rel) or blank()
-        if mod and (mod["track"] == "uplift" or slot["main"] or slot["tests"] or slot["claimed"] or slot["named"] or slot["by"]):
+        if mod and (slot["main"] or slot["tests"] or slot["claimed"] or slot["named"] or slot["by"]):
             rows.append(module_row(r, slot))
     if mod and not rows and result["rules"]:
         tied = False
@@ -587,8 +602,8 @@ def main(argv=None):
     ran, read_notes = None, []
     if args.runs:
         sys.dont_write_bytecode = True
-        import baseline_diff
-        res = baseline_diff.read_results(args.runs)
+        import run_results
+        res = run_results.read_results(args.runs)
         ran = {run_key: run_evidence([res])}
         read_notes = ["%d result file(s) read: %d test(s), %d passed." % (res["files"], len(res["tests"]), sum(1 for status in res["tests"].values() if status == "PASS"))]
         read_notes += ["result file not used: " + u for u in res["unreadable"][:3]] + [clean(p, 200) for p in res["problems"][:3]]

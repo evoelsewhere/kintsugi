@@ -4,7 +4,7 @@
 
 Each project has exactly one document repo. It holds everything except code ([ADR-0007](../decisions/0007-git-as-source-of-truth.md)). The layout groups content by subject (program, portfolio, architecture, application, unit) and, inside an application, by bounded context ([ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md), the [context map](../architecture/concepts/document-repo-contexts.md)); the SDLC phases and gates follow [ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md). The portal does not scaffold this repo from the starter template today; see [Build a project](../guides/build-project.md).
 
-This page answers where artifacts live. For focused contracts, see the [manifest](document-repo-manifest.md), [item catalog](document-repo-item-catalog.md), [write path](document-repo-write-path.md), [read path and stage results](document-repo-read-path.md), [commit conventions](document-repo-commit-conventions.md), [unit file format](document-repo-unit-files.md) and [document formats](document-formats.md).
+This page answers where artifacts live. For focused contracts, see the [manifest](document-repo-manifest.md), [item catalog](document-repo-item-catalog.md), [write path](document-repo-write-path.md), [read path and stage results](document-repo-read-path.md), [commit conventions](document-repo-commit-conventions.md), [unit file format](document-repo-unit-files.md), [design templates](design-templates.md) and [document formats](document-formats.md).
 
 ## Vocabulary
 
@@ -16,17 +16,17 @@ A **unit** is the thing being migrated. Its id is always the full `<app>/<module
 kintsugi.yaml                  project manifest (written by the portal's publish, arrives as a pull request)
 program/                       P0: charter.md, raci.md, ai-strategy.md, kpi-baseline.md, ai-usage-policy.md
 portfolio/                     P1: scorecard.md, wave-plan.md
-architecture/                  P2: blueprint.md, coexistence.md, data-migration.md, poc-plan.md, adr/
-standards/                     P2-P3: conventions/, mappings/, review-rules.md
+architecture/                  P2: blueprint.md, common/ (the common components), coexistence.md, data-migration.md, poc-plan.md, adr/
+standards/                     P2-P3: conventions/, mappings/, design/ (the design sets), review-rules.md
 plugins/                       P3: project-authored plugins only
 gates/                         project-level gate records: G0.md, G3.md
 applications/<app>/
   inputs/                      INTENT.md, graph/, telemetry/ attached by people
   assessment/                  Assessment context (P1): inventory.md, topology.md, catalog/, ASSESSMENT.md, tools/
   understanding/               Understanding context: plan.md (the AI plan, advice)
-  to-be/                       P2: requirements.md, design.md
+  to-be/                       P2: requirements.md, design.md (this application's own design)
   gates/                       G1.md, G2.md, G5.md, G6.md
-  units/<module>/<unit>/       the Unit aggregate (P1-P5): unit.md at the root, understanding/ for what is known (see the unit file page)
+  units/<module>/<unit>/       the Unit aggregate (P1-P5): unit.md at the root, understanding/ for what is known, design/<set>/ for its design (see the unit file page)
   cutover/                     P6: plan.md, runbook.md, rollback.md, go-no-go.md
   operate/                     P7: hypercare-report.md, handover.md
   generated/                   read models rebuilt after a merge
@@ -37,8 +37,9 @@ The JSON a run passes between its steps lives in the job workspace under `scratc
 ## Who writes what
 
 - **Written by code**: the `assess` job writes `applications/<app>/assessment/` (the inventory and topology summaries, the catalog, the synthesis, the extraction script), the `plan-understand` job writes `applications/<app>/understanding/plan.md`, and the `understand` job writes the per-unit documents under `applications/<app>/units/<module>/<unit>/understanding/` (`as-is.md`, `understanding.md`, `rules.md`, `data-objects.md`, `findings.md`, `topology.md`, `trace.md`). After a merge, `rebuild_aggregates.py` rebuilds the read models under `applications/<app>/generated/` (`BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.md`, `README.md`) and commits them to the default branch; the application overview documents (`architecture.md`, `data-model.md`, `integrations.md`) are written by an on-demand Overview run.
-- **Written by people, through pull requests**: `program/`, `portfolio/`, `architecture/`, `standards/`, `plugins/`, `applications/<app>/inputs/`, `applications/<app>/cutover/`, `applications/<app>/operate/`, all gate records, and the human rule verdicts in `rules-review.md`.
-- **Planned**: `applications/<app>/to-be/requirements.md` and `design.md` (P2 target specification; no writer is implemented yet), the per-unit `reviews/G4.md` records and the `unit.md` gate references (P4), and the per-unit `verify/` evidence (P5).
+- **Written by members in their harness, through pull requests** ([ADR-0044](../decisions/0044-design-phase-common-basic-detail.md)): the common design in `architecture/` (including `common/`), `applications/<app>/to-be/`, and each unit's `design/<set>/`, from the project's own [design templates](design-templates.md).
+- **Written by people, through pull requests**: `program/`, `portfolio/`, `architecture/`, `standards/` (including `standards/design/`, the design sets), `plugins/`, `applications/<app>/inputs/`, `applications/<app>/cutover/`, `applications/<app>/operate/`, all gate records, and the human rule verdicts in `rules-review.md`.
+- **Planned**: the per-unit `reviews/G4.md` records and the `unit.md` gate references (P4), and the per-unit `verify/` evidence (P5).
 
 ## Gate records
 

@@ -5,7 +5,10 @@
 | **Access role** | Installation-wide permission bundle, such as `admin`, `contribute`, `user`, or an admin-defined access sub-role; managed in Admin → Members & Permissions |
 | **AS-IS / TO-BE KB** | Knowledge base of the current / target system. Sources are in Git; the index (vector + graph) is in Postgres |
 | **Code repo** | Umbrella term for source and target repos. A project usually has many, possibly on different Git servers |
+| **Common component** | Something every unit reuses, designed once by the foundation team: a document `architecture/common/COM-<AREA>-<NN>.md`; unit designs refer to it by id ([ADR-0044](../decisions/0044-design-phase-common-basic-detail.md)) |
+| **Design set** | A group of design documents written together for a unit (for example the basic design and the detail design), defined by the project as templates with checks in `standards/design/<set>/` ([design templates](design-templates.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md)) |
 | **Digital worker** | An AI work profile such as reverse design, code generation or unit-test generation. In Kintsugi it is an agent plugin plus a task-pack template, run in a member's harness, with runtime agents preparing and reviewing the work |
+| **Foundation team** | The project role that designs what every unit shares (the architecture, the common components, the skeleton) before the units are designed; a name in the pipeline, not a kind of actor |
 | **Gate** | Quality / approval checkpoint: G0–G6 per phase, plus per-unit gates |
 | **Harness** | An environment that runs an AI agent (pi, Claude Code, GitHub Copilot, Codex…) |
 | **Installation** | One self-hosted Kintsugi instance (Docker Compose), serving one organization |
@@ -18,7 +21,7 @@
 | **Project role** | RACI responsibility from `@kintsugi/domain`, such as `pm`, `architect`, `dev`, `qc` or `ai-champion`; pipelines may name their own; assignment per project membership is planned with M0 project persistence |
 | **PAT** | Personal Access Token, used by the CLI and MCP clients |
 | **Rebuild** | What Kintsugi does with every application: it is re-created on a new architecture from what its legacy system does (reverse engineering first, then the later phases). There is no per-application choice of strategy |
-| **Runtime agent** | A platform agent executed by the runtime kernel: an agent definition (instructions, skills, tool allowlist) supplied with each job. Built-in agents cover the understanding phases (legacy-analyst, business-rules-extractor, version-delta-analyst, architecture-critic, security-auditor); admins create more in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
+| **Runtime agent** | A platform agent executed by the runtime kernel: an agent definition (instructions, skills, tool allowlist) supplied with each job. Built-in agents cover the understanding phases (legacy-analyst, business-rules-extractor, architecture-critic, security-auditor); admins create more in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
 | **Scorecard** | Weighted assessment of an application across business, technical, feasibility, cost and risk criteria |
 | **Legacy repo** | A legacy code repo; always read-only for the runtime |
 | **Agent plugin** | A package in the Claude Code plugin format (`.claude-plugin/plugin.json` + skills, agents, commands, hooks, MCP) installed into member harnesses; the built-in one is `kintsugi` |

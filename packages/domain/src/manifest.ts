@@ -298,12 +298,15 @@ function readPipeline(read: Reader, value: unknown, path: string): PipelineDefin
     const stages: PipelineDefinition["phases"][number]["stages"] = [];
     read.array(phase["stages"], `${at}.stages`, { nonEmpty: true })?.forEach((stageEntry, stageIndex) => {
       const stageAt = `${at}.stages[${stageIndex}]`;
-      const stage = read.object(stageEntry, stageAt, ["id", "performer", "gate"]);
+      const stage = read.object(stageEntry, stageAt, ["id", "performer", "gate", "produces"]);
       if (stage === undefined) return;
       const stageId = read.id(stage["id"], `${stageAt}.id`);
       const performer = readPerformer(read, stage["performer"], `${stageAt}.performer`);
       const gate = stage["gate"] === undefined ? undefined : read.string(stage["gate"], `${stageAt}.gate`);
-      if (stageId !== undefined && performer !== undefined) stages.push({ id: stageId, performer, ...(gate === undefined ? {} : { gate }) });
+      const produces = stage["produces"] === undefined ? undefined : read.id(stage["produces"], `${stageAt}.produces`);
+      if (stageId !== undefined && performer !== undefined) {
+        stages.push({ id: stageId, performer, ...(gate === undefined ? {} : { gate }), ...(produces === undefined ? {} : { produces }) });
+      }
     });
     if (phaseId !== undefined) {
       phases.push({ id: phaseId, ...(category === undefined ? {} : { category }), ...(perUnit === undefined ? {} : { perUnit }), stages });

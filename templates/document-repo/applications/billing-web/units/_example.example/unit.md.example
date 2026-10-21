@@ -25,6 +25,9 @@ links:
   pullRequests: []
 gates:
   G4: {status: pending, review: reviews/G4.md}
+# Design files this unit does not need, one entry per file, written by a person:
+waived:
+  - "detail/data-access.md: no data store"
 ---
 
 Search invoices by customer, date range and status; results grid with paging and export.

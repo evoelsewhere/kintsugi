@@ -1,6 +1,6 @@
 # ADR-0042: A Markdown-only document repo, organized by bounded context
 
-- Status: Accepted
+- Status: Accepted (Modernization context refined by 0044 and 0045)
 - Date: 2026-10-21
 - Decision register: D58
 
@@ -23,8 +23,8 @@ The document repo is read by people in pull requests and by AI agents as context
 | Context | Question it answers | Where | Aggregate / documents |
 |---|---|---|---|
 | Assessment | What is the estate? | `applications/<app>/assessment/` | `inventory.md`, `topology.md`, the catalog (`catalog/index.md`, `catalog/<module>.md`), `ASSESSMENT.md` |
-| Understanding | What does it do, and what to read next? | `applications/<app>/understanding/plan.md`; per unit `understanding/` | `as-is.md`, `understanding.md`, `rules.md`, `data-objects.md`, `rules-review.md`, `findings.md`, `topology.md`, `trace.md` |
-| Modernization | What are we building? | `to-be/`, per unit `task.md`, `design.md` | unchanged by this decision |
+| Understanding | What does it do, and what to read next? | `applications/<app>/understanding/plan.md`; per unit `understanding/` | `as-is.md`, `understanding.md`, `rules.md` (an index, one file per rule in `rules/`, [ADR-0046](0046-one-file-per-business-rule.md)), `data-objects.md`, `rules-review.md`, `findings.md`, `topology.md`, `trace.md` |
+| Modernization | What are we building? | `to-be/`, per unit `task.md`, `design/<set>/` | refined by [ADR-0044](0044-design-phase-common-basic-detail.md) and [ADR-0045](0045-design-templates-are-project-data.md) |
 | Verification | Is it equivalent? | per unit `verify/` | later phase: its JSON evidence is not converted yet |
 | Governance | Who decided? | `gates/`, per unit `reviews/` | unchanged |
 

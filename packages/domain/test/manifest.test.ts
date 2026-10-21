@@ -28,6 +28,19 @@ describe("kintsugi.yaml validation", () => {
     expect(result.manifest.policy.requireCommitTrailer).toBe(true);
   });
 
+  it("keeps the design set a pipeline stage produces", () => {
+    const stage = { id: "detail-design", performer: { member: ["dev"] }, produces: "detail" };
+    const result = validateManifest({ ...minimal, pipelines: [{ id: "payroll-rebuild", phases: [{ id: "migrate", perUnit: true, stages: [stage, { id: "review", performer: { agent: "gate-reviewer" } }] }] }] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const stages = result.manifest.pipelines[0]!.phases[0]!.stages;
+    expect(stages[0]).toEqual(stage);
+    expect(stages[1]).not.toHaveProperty("produces");
+    const bad = validateManifest({ ...minimal, pipelines: [{ id: "p", phases: [{ id: "migrate", stages: [{ ...stage, produces: "Detail Design" }] }] }] });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.problems.map((problem) => problem.path)).toEqual(["pipelines[0].phases[0].stages[0].produces"]);
+  });
+
   it("reports every problem with its path", () => {
     const result = validateManifest({
       schemaVersion: 2,

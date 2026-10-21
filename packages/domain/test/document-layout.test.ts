@@ -8,6 +8,7 @@ import {
   applicationGatePath,
   applicationInputsDir,
   applicationRequirementsPath,
+  architectureDir,
   assessmentAnalysisDir,
   assessmentBriefPath,
   assessmentCatalogModulePath,
@@ -15,9 +16,14 @@ import {
   assessmentDir,
   assessmentInventoryPath,
   assessmentTopologyPath,
+  commonComponentPath,
+  commonComponentsDir,
+  designSetDir,
+  designSetPath,
+  designSetsDir,
+  designTemplatePath,
   generatedDir,
   goldenDir,
-  modernizationBriefPath,
   reviewsDir,
   runsDir,
   scratchCatalogDraftDir,
@@ -31,13 +37,17 @@ import {
   understandScopePath,
   understandTraceDraftPath,
   unitAsIsPath,
-  unitDesignPath,
+  unitDesignDir,
+  unitDesignFilePath,
+  unitDesignSetDir,
   unitDir,
   unitFindingsPath,
   unitGateReviewPath,
   unitId,
   unitKeyAsIsPath,
   unitKeyUnderstandingPath,
+  unitRuleFilePath,
+  unitRulesDir,
   unitRulesPath,
   unitRulesReviewPath,
   unitStatePath,
@@ -96,20 +106,36 @@ describe("ADR-0042 document-repo layout", () => {
     expect(unitKeyAsIsPath("billing", "payroll/run-period")).toBe(`${base}/understanding/as-is.md`);
     expect(unitUnderstandingPath("billing", "payroll", "run-period")).toBe(`${base}/understanding/understanding.md`);
     expect(unitRulesPath("billing", "payroll", "run-period")).toBe(`${base}/understanding/rules.md`);
+    expect(unitRulesDir("billing", "payroll", "run-period")).toBe(`${base}/understanding/rules`);
+    expect(unitRuleFilePath("billing", "payroll", "run-period", "RULE-payroll.run-period-1a2b3c4d")).toBe(`${base}/understanding/rules/RULE-payroll.run-period-1a2b3c4d.md`);
     expect(unitRulesReviewPath("billing", "payroll", "run-period")).toBe(`${base}/understanding/rules-review.md`);
     expect(unitFindingsPath("billing", "payroll", "run-period")).toBe(`${base}/understanding/findings.md`);
     expect(unitTopologyPath("billing", "payroll", "run-period")).toBe(`${base}/understanding/topology.md`);
     expect(unitTracePath("billing", "payroll", "run-period")).toBe(`${base}/understanding/trace.md`);
     expect(unitKeyUnderstandingPath("billing", "payroll/run-period", "trace.md")).toBe(`${base}/understanding/trace.md`);
     expect(unitTaskPath("billing", "payroll", "run-period")).toBe(`${base}/task.md`);
-    expect(unitDesignPath("billing", "payroll", "run-period")).toBe(`${base}/design.md`);
+    expect(unitDesignDir("billing", "payroll", "run-period")).toBe(`${base}/design`);
     expect(unitGateReviewPath("billing", "payroll", "run-period")).toBe(`${base}/reviews/G4.md`);
     expect(unitVerifyDir("billing", "payroll", "run-period")).toBe(`${base}/verify`);
   });
 
+  it("puts a project's design sets in standards/design and a unit's design in design/<set>/", () => {
+    expect(designSetsDir()).toBe("standards/design");
+    expect(designSetDir("detail")).toBe("standards/design/detail");
+    expect(designSetPath("detail")).toBe("standards/design/detail/set.md");
+    expect(designTemplatePath("detail", "logic.md")).toBe("standards/design/detail/logic.md");
+    expect(unitDesignSetDir("billing", "payroll", "run-period", "detail")).toBe("applications/billing/units/payroll/run-period/design/detail");
+    expect(unitDesignFilePath("billing", "payroll", "run-period", "detail", "logic.md")).toBe("applications/billing/units/payroll/run-period/design/detail/logic.md");
+  });
+
+  it("puts the common design at project level", () => {
+    expect(architectureDir()).toBe("architecture");
+    expect(commonComponentsDir()).toBe("architecture/common");
+    expect(commonComponentPath("COM-LOG-01")).toBe("architecture/common/COM-LOG-01.md");
+  });
+
   it("keeps the read models and the later-phase helpers where they were", () => {
     expect(generatedDir("billing")).toBe("applications/billing/generated");
-    expect(modernizationBriefPath("billing")).toBe("applications/billing/to-be/modernization-brief.md");
     expect(transformationNotesPath("billing", "payroll")).toBe("applications/billing/units/payroll/TRANSFORMATION_NOTES.md");
     expect(verificationReportPath("billing")).toBe("applications/billing/generated/VERIFICATION.md");
     expect(goldenDir("payroll")).toBe("applications/{app}/units/payroll/{unit}/verify/golden");
@@ -137,6 +163,7 @@ describe("ADR-0042 document-repo layout", () => {
       layout.understandPlanPath(app),
       layout.unitUnderstandingPath(app, "invoicing", "entry"),
       layout.unitRulesPath(app, "invoicing", "entry"),
+      layout.unitRuleFilePath(app, "invoicing", "entry", "RULE-invoicing.entry-1a2b3c4d"),
       layout.unitRulesReviewPath(app, "invoicing", "entry"),
       layout.unitFindingsPath(app, "invoicing", "entry"),
       layout.unitTopologyPath(app, "invoicing", "entry"),

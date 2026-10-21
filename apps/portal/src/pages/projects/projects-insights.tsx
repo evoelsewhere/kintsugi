@@ -12,7 +12,7 @@ import { formatRelative } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
 import { percent, successRate } from "@/lib/run-stats";
 import { isActiveStatus } from "@/lib/status";
-import { latestRun, pipelineStages, stageLabel } from "@/lib/stages";
+import { latestRun, runtimePipelineStages, stageLabel } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { ActivityChart, PipelineProgress } from "../delivery/overview-parts";
 import { countBy, formatCount, segmentsOf } from "../delivery/results/results-format";
@@ -68,7 +68,7 @@ export function ProjectInsights({ project }: { project: ProjectDetail }): React.
   });
   if (runs.data === undefined || stages.data === undefined) return null;
   const top = runs.data.filter((run) => run.kind === "stage");
-  const pipeline = pipelineStages(stages.data);
+  const pipeline = runtimePipelineStages(stages.data);
   const repositories = repositoriesOf(project);
   const newest = top[0];
   if (project.applications.length === 0 && top.length === 0) return null;

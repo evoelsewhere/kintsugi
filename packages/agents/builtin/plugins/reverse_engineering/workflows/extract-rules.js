@@ -268,6 +268,31 @@ const RULES_SCHEMA = {
           suspectedDefect: { type: 'string', description: 'Legacy behavior that looks wrong, if any' },
           confidence: { type: 'string', enum: ['High', 'Medium', 'Low'] },
           smeQuestion: { type: 'string', description: 'Required when confidence is not High: the exact question for a human' },
+          // Optional detail for the rule's own file. Fill one only from what the cited code shows; leave it out otherwise, never guess.
+          inputs: { type: 'array', items: { type: 'string' }, description: 'What the rule takes in: request fields, parameters, messages' },
+          reads: { type: 'array', items: { type: 'string' }, description: 'Tables, columns, files or settings the rule reads' },
+          writes: { type: 'array', items: { type: 'string' }, description: 'Tables, columns, files or messages the rule writes' },
+          outputs: { type: 'array', items: { type: 'string' }, description: 'What a successful outcome returns or produces' },
+          errors: { type: 'array', items: { type: 'string' }, description: 'What a failing outcome returns (status, error code, message)' },
+          dataObjects: { type: 'array', items: { type: 'string' }, description: 'Names of the data objects the rule uses' },
+          config: { type: 'array', items: { type: 'string' }, description: 'Setting names that change the rule, names only, never values that could be credentials' },
+          tags: { type: 'array', items: { type: 'string' } },
+          decisionTable: {
+            type: 'object',
+            description: 'For a rule that branches on several conditions: one row per outcome',
+            required: ['headers', 'rows'],
+            properties: { headers: { type: 'array', items: { type: 'string' } }, rows: { type: 'array', items: { type: 'array', items: { type: 'string' } } } },
+          },
+          evidence: {
+            type: 'array',
+            description: 'More lines that show the rule, beyond `source`',
+            items: { type: 'object', required: ['file', 'lines', 'shows'], properties: { file: { type: 'string' }, lines: { type: 'string' }, shows: { type: 'string' } } },
+          },
+          acceptance: {
+            type: 'array',
+            description: 'Concrete scenarios a test could check',
+            items: { type: 'object', required: ['given', 'when', 'then'], properties: { given: { type: 'string' }, when: { type: 'string' }, then: { type: 'string' } } },
+          },
         },
       },
     },
@@ -820,7 +845,7 @@ ${UNTRUSTED}`,
 // Every shard with a coverage gap — never attempted, extractor died, or owning
 // a file an unverified rule cites — as {name, domain, files, loc} entries in
 // the original list order, so the caller can pass it straight back as the
-// follow-up invocation's `modules` (uplift-migrate's re-passable-list pattern).
+// follow-up invocation's `modules`.
 const gapNames = new Set([...skippedModules, ...failedModules])
 for (const r of unverified) {
   const file = (r.source || '').split(':')[0]

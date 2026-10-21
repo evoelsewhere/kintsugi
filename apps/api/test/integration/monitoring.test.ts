@@ -305,8 +305,9 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     const response = await client.get<Array<{ id: string; command: string; audience: string; agents: string[]; writes: string[]; gates: string[]; runnable: boolean }>>("/stages");
     expect(response.status).toBe(200);
     const stages = response.body.data!;
-    expect(stages).toHaveLength(9);
-    expect(stages[0]).toMatchObject({ id: "preflight", command: "modernize-preflight", audience: "member", runnable: false });
+    expect(stages).toHaveLength(8);
+    expect(stages.map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design-architecture", "scaffold", "design", "implement", "verify"]);
+    expect(stages.find((stage) => stage.id === "design")).toMatchObject({ command: "modernize-design", audience: "member", runnable: false });
     expect(stages.filter((stage) => stage.audience === "runtime").map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand"]);
     expect(stages.find((stage) => stage.id === "assess")).toMatchObject({ command: "modernize-assess", runnable: true, agents: ["legacy-analyst", "security-auditor"] });
     expect(stages.filter((stage) => stage.runnable).map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand"]);

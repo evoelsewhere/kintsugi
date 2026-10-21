@@ -11,15 +11,15 @@ it into the end-to-end environment's document repository.
 kintsugi.yaml                  project manifest (repositories, unit kinds, pipelines, policy)
 program/                       P0: charter, RACI, AI strategy, KPI baseline, AI usage policy
 portfolio/                     P1: scorecard, wave plan
-architecture/                  P2: blueprint, coexistence, data migration plan, PoC plan, ADRs
-standards/                     P2-P3: conventions/, mappings/, review-rules.md
+architecture/                  P2: blueprint, common/ components, coexistence, data migration plan, PoC plan, ADRs
+standards/                     P2-P3: conventions/, mappings/, design/ (design sets), review-rules.md
 plugins/                       P3: project-authored plugins only
 gates/                         project-level gate records (G0, G3)
 applications/<app>/
   inputs/                      INTENT.md and the graphs and telemetry people attach
   assessment/                  Assessment context (P1): inventory.md, topology.md, catalog/, ASSESSMENT.md
   understanding/               Understanding context: plan.md (the AI plan, advice)
-  to-be/                       P2: requirements.md, design.md
+  to-be/                       P2: requirements.md, design.md (this application's own design)
   gates/                       application gate records (G1, G2, G5, G6)
   units/<module>/<unit>/       the Unit aggregate, P1-P5: one directory per unit (see below)
   cutover/                     P6: plan.md, runbook.md, rollback.md, go-no-go.md
@@ -35,10 +35,11 @@ applications/<app>/units/<module>/<unit>/
   understanding/               P1: what is known about the unit
     as-is.md                   AS-IS specification
     understanding.md           provenance: digest, commit, run (marks the unit understood)
-    rules.md data-objects.md   machine rule extraction
+    rules.md rules/ data-objects.md   machine rule extraction (an index and a file per rule)
     rules-review.md            human rule verdicts (a table)
     findings.md topology.md trace.md
-  task.md design.md            P4 task pack and design
+  design/<set>/                P2-P4: the unit's design documents, one folder per design set of the project
+  task.md                      P4 task pack
   reviews/G4.md                the unit's G4 record
   verify/                      P5 golden cases, equivalence runs and test evidence
 ```
