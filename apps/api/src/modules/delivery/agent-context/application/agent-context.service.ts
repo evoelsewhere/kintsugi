@@ -1,6 +1,6 @@
 // Composes authorized feature use cases into the shared Coding Agent Workflow contract.
 
-import { BadRequestException, ForbiddenException, Injectable, PayloadTooLargeException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, PayloadTooLargeException, forwardRef } from "@nestjs/common";
 import {
   DEFAULT_LIST_LIMIT,
   documentPageSchema,
@@ -52,7 +52,9 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
     private readonly documents: DocumentQueryService,
     private readonly reviews: ReviewReader,
     private readonly pullRequests: TaskPullRequestQueryService,
-    private readonly gatePublications: GatePublicationStatusQueryService,
+    // Avoid an eager design:paramtypes read of this cyclic ESM binding.
+    @Inject(forwardRef(() => GatePublicationStatusQueryService))
+    private readonly gatePublications: Pick<GatePublicationStatusQueryService, "listForTask">,
   ) {}
 
   async listProjects(principal: MemberPrincipal, query: ProjectQuery): Promise<ListResult<ProjectSummary>> {
