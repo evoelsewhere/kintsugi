@@ -5,8 +5,62 @@ const ENTRYPOINTS = {
   worker: "services/orchestrator/dist/main.js",
 };
 
+const LOOPBACK_POSTGRES_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const POSTGRES_TARGET_QUERY_KEYS = new Set(["host", "hostaddr", "port", "service", "servicefile"]);
 const WINDOWS_RUNTIME_ENV = ["PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "PATHEXT", "COMSPEC"];
 const POSIX_RUNTIME_ENV = ["PATH", "TMPDIR"];
+
+export function resolveSmokeDatabaseConfig(connectionString, parseIntoClientConfig) {
+  if (typeof connectionString !== "string" || connectionString.trim() === "") {
+    throw new TypeError("KINTSUGI_TEST_DATABASE_URL must be a PostgreSQL URL");
+  }
+  if (typeof parseIntoClientConfig !== "function") {
+    throw new TypeError("the installed PostgreSQL connection-string parser is required");
+  }
+
+  let url;
+  try {
+    url = new URL(connectionString);
+  } catch {
+    throw new TypeError("KINTSUGI_TEST_DATABASE_URL must be a valid PostgreSQL URL");
+  }
+  if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
+    throw new TypeError("KINTSUGI_TEST_DATABASE_URL must use PostgreSQL URL syntax");
+  }
+
+  const targetOverrides = [...url.searchParams.keys()].filter((key) => POSTGRES_TARGET_QUERY_KEYS.has(key.toLowerCase()));
+  if (targetOverrides.length > 0) {
+    throw new TypeError("PostgreSQL connection target overrides are not permitted in KINTSUGI_TEST_DATABASE_URL");
+  }
+
+  let config;
+  try {
+    config = parseIntoClientConfig(connectionString);
+  } catch {
+    throw new TypeError("KINTSUGI_TEST_DATABASE_URL could not be parsed as a PostgreSQL URL");
+  }
+  const host = typeof config.host === "string" ? config.host.replace(/^\[(.+)\]$/, "$1").toLowerCase() : "";
+  if (!LOOPBACK_POSTGRES_HOSTS.has(host)) {
+    throw new TypeError("Smoke requires a loopback PostgreSQL server");
+  }
+
+  const port = config.port ?? 5432;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new TypeError("KINTSUGI_TEST_DATABASE_URL must contain a valid PostgreSQL port");
+  }
+
+  // Supplying these explicitly prevents PGHOST/PGPORT from redirecting a URL
+  // whose authority omitted a value. The child processes also use an allowlist.
+  return { ...config, host, port };
+}
+
+export function capturePublicProcessClientError(client) {
+  let firstError;
+  client.on("error", (error) => { firstError ??= error; });
+  return () => {
+    if (firstError !== undefined) throw firstError;
+  };
+}
 
 export function redactPublicProcessDiagnostics(value, secrets = []) {
   let safe = String(value ?? "").replace(/\bpostgres(?:ql)?:\/\/[^\s"'<>]+/gi, "[redacted database URL]");
