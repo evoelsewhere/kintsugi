@@ -93,12 +93,12 @@ test("rejects unknown processes and incomplete isolated startup settings", () =>
 
 test("resolves only a loopback PostgreSQL target using the installed pg parser", () => {
   const validUrl = "postgresql://smoke:secret@127.0.0.1:34756/postgres";
-  const valid = resolveSmokeDatabaseConfig(validUrl, pgConnectionString.parseIntoClientConfig);
+  const valid = resolveSmokeDatabaseConfig(validUrl, pgConnectionString.parseIntoClientConfig, "postgres");
   assert.equal(valid.host, "127.0.0.1");
   assert.equal(valid.port, 34756);
   assert.equal(valid.database, "postgres");
 
-  const noPort = resolveSmokeDatabaseConfig("postgresql://smoke:secret@localhost/postgres", pgConnectionString.parseIntoClientConfig);
+  const noPort = resolveSmokeDatabaseConfig("postgresql://smoke:secret@localhost/postgres", pgConnectionString.parseIntoClientConfig, "postgres");
   assert.equal(noPort.host, "localhost");
   assert.equal(noPort.port, 5432, "ambient PGPORT must not redirect a URL without an explicit port");
 
@@ -114,11 +114,45 @@ test("resolves only a loopback PostgreSQL target using the installed pg parser",
     "postgresql://smoke:secret@127.0.0.1:34756/postgres?HOST=remote.invalid",
     "postgresql://smoke:secret@127.0.0.1:34756/postgres?HoStAdDr=203.0.113.10",
     "postgresql://smoke:secret@127.0.0.1:34756/postgres?PORT=34757",
+    "postgresql://smoke:secret@127.0.0.1:34756/postgres?database=unrelated",
+    "postgresql://smoke:secret@127.0.0.1:34756/postgres?DB=unrelated",
     "postgresql://smoke:secret@127.0.0.1:34756/postgres?service=remote",
     "postgresql://smoke:secret@remote.invalid:34756/postgres",
   ]) {
-    assert.throws(() => resolveSmokeDatabaseConfig(url, pgConnectionString.parseIntoClientConfig), /loopback|connection target override/i);
+    assert.throws(() => resolveSmokeDatabaseConfig(url, pgConnectionString.parseIntoClientConfig, "kintsugi_smoke_test_0123456789ab"), /loopback|connection target override/i);
   }
+});
+
+test("rejects nested connection strings and pins a safe client config to the generated database", () => {
+  const generatedDatabase = "kintsugi_smoke_test_0123456789ab";
+  const nestedConnectionString = "postgresql://nested:secret@remote.invalid/unrelated";
+  const nestedUrl = `postgresql://outer:secret@127.0.0.1:34756/postgres?connectionString=${encodeURIComponent(nestedConnectionString)}`;
+  const parserConfig = pgConnectionString.parseIntoClientConfig(nestedUrl);
+  assert.equal(parserConfig.connectionString, nestedConnectionString);
+
+  const vulnerableClient = new Client(parserConfig);
+  assert.equal(vulnerableClient.connectionParameters.host, "remote.invalid");
+  assert.equal(vulnerableClient.connectionParameters.database, "unrelated");
+  assert.throws(
+    () => resolveSmokeDatabaseConfig(nestedUrl, pgConnectionString.parseIntoClientConfig, generatedDatabase),
+    /connection target override/i,
+  );
+  const upperNestedUrl = `postgresql://outer:secret@127.0.0.1:34756/postgres?CONNECTIONSTRING=${encodeURIComponent(nestedConnectionString)}`;
+  assert.throws(
+    () => resolveSmokeDatabaseConfig(upperNestedUrl, pgConnectionString.parseIntoClientConfig, generatedDatabase),
+    /connection target override/i,
+  );
+
+  const unknownOptionUrl = "postgresql://outer:secret@127.0.0.1:34756/ignored?application_name=untrusted";
+  const parsed = pgConnectionString.parseIntoClientConfig(unknownOptionUrl);
+  assert.equal(parsed.application_name, "untrusted");
+  const safe = resolveSmokeDatabaseConfig(unknownOptionUrl, pgConnectionString.parseIntoClientConfig, generatedDatabase);
+  assert.equal(Object.hasOwn(safe, "connectionString"), false);
+  assert.equal(Object.hasOwn(safe, "application_name"), false);
+  const effective = new Client(safe).connectionParameters;
+  assert.equal(effective.host, "127.0.0.1");
+  assert.equal(effective.port, 34756);
+  assert.equal(effective.database, generatedDatabase);
 });
 
 test("redacts exact diagnostic secrets and unknown PostgreSQL URLs", () => {
