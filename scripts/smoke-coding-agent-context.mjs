@@ -10,11 +10,19 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { attemptPublicProcessCleanup, createPublicProcessSpec, redactPublicProcessDiagnostics } from "./e2e/public-process.mjs";
+import {
+  attemptPublicProcessCleanup,
+  capturePublicProcessClientError,
+  createPublicProcessSpec,
+  redactPublicProcessDiagnostics,
+  resolveSmokeDatabaseConfig,
+} from "./e2e/public-process.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const apiRequire = createRequire(join(repoRoot, "apps/api/package.json"));
 const { Pool, Client } = apiRequire("pg");
+const pgRequire = createRequire(apiRequire.resolve("pg/package.json"));
+const { parseIntoClientConfig } = pgRequire("pg-connection-string");
 const compiled = (path) => import(pathToFileURL(join(repoRoot, path)).href);
 const diagnosticSecrets = [];
 
@@ -122,11 +130,12 @@ async function smoke() {
   const raw = process.env.KINTSUGI_TEST_DATABASE_URL;
   assert(raw, "KINTSUGI_TEST_DATABASE_URL is required; no .env fallback");
   const server = new URL(raw);
-  assert(["localhost", "127.0.0.1", "[::1]", "::1"].includes(server.hostname), "Smoke requires a loopback Postgres server");
+  resolveSmokeDatabaseConfig(raw, parseIntoClientConfig);
   const name = `kintsugi_smoke_test_${randomBytes(6).toString("hex")}`;
   assert(/^kintsugi_smoke_test_[a-f0-9]{12}$/.test(name));
   server.pathname = "/postgres";
-  const maintenance = new Client({ connectionString: server.toString() });
+  const maintenance = new Client(resolveSmokeDatabaseConfig(server.toString(), parseIntoClientConfig));
+  const assertMaintenanceHealthy = capturePublicProcessClientError(maintenance);
   const processes = [];
   const cleanupErrors = [];
   let pool, poolError, remote, dataDir, created = false;
@@ -143,7 +152,7 @@ async function smoke() {
     created = true;
     server.pathname = `/${name}`;
     const databaseUrl = server.toString();
-    pool = new Pool({ connectionString: databaseUrl, max: 2 });
+    pool = new Pool({ ...resolveSmokeDatabaseConfig(databaseUrl, parseIntoClientConfig), max: 2 });
     pool.on("error", (error) => { poolError ??= error; });
     dataDir = await mkdtemp(join(tmpdir(), "kintsugi-context-smoke-"));
     const password = randomBytes(20).toString("hex");
@@ -297,6 +306,7 @@ async function smoke() {
   );
   if (created) cleanupSteps.push({ label: "drop generated test database", cleanup: async () => maintenance.query(`drop database ${name} with (force)`) });
   cleanupSteps.push({ label: "close maintenance database client", cleanup: async () => maintenance.end() });
+  cleanupSteps.push({ label: "check smoke maintenance database client", cleanup: async () => assertMaintenanceHealthy() });
   if (dataDir !== undefined) {
     cleanupSteps.push({ label: "remove temporary data directory", cleanup: async () => {
       const cleanupTarget = resolve(dataDir);

@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { attemptPublicProcessCleanup, createPublicProcessSpec, redactPublicProcessDiagnostics } from "./public-process.mjs";
+import {
+  attemptPublicProcessCleanup,
+  capturePublicProcessClientError,
+  createPublicProcessSpec,
+  redactPublicProcessDiagnostics,
+  resolveSmokeDatabaseConfig,
+} from "./public-process.mjs";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const apiRequire = createRequire(join(repoRoot, "apps/api/package.json"));
+const pgRequire = createRequire(apiRequire.resolve("pg/package.json"));
+const { Client } = apiRequire("pg");
+const pgConnectionString = pgRequire("pg-connection-string");
 
 const options = {
   repoRoot: "D:/kintsugi",
@@ -77,6 +91,36 @@ test("rejects unknown processes and incomplete isolated startup settings", () =>
   assert.throws(() => createPublicProcessSpec("api", { ...options, port: undefined }), /valid API port is required/);
 });
 
+test("resolves only a loopback PostgreSQL target using the installed pg parser", () => {
+  const validUrl = "postgresql://smoke:secret@127.0.0.1:34756/postgres";
+  const valid = resolveSmokeDatabaseConfig(validUrl, pgConnectionString.parseIntoClientConfig);
+  assert.equal(valid.host, "127.0.0.1");
+  assert.equal(valid.port, 34756);
+  assert.equal(valid.database, "postgres");
+
+  const noPort = resolveSmokeDatabaseConfig("postgresql://smoke:secret@localhost/postgres", pgConnectionString.parseIntoClientConfig);
+  assert.equal(noPort.host, "localhost");
+  assert.equal(noPort.port, 5432, "ambient PGPORT must not redirect a URL without an explicit port");
+
+  const remoteHostOverride = "postgresql://smoke:secret@127.0.0.1:34756/postgres?host=remote.invalid";
+  assert.equal(pgConnectionString.parse(remoteHostOverride).host, "remote.invalid", "the installed parser honors the query override");
+  const hostAddressOverride = "postgresql://smoke:secret@127.0.0.1:34756/postgres?hostaddr=203.0.113.10";
+  const parsedHostAddressOverride = pgConnectionString.parse(hostAddressOverride);
+  assert.equal(parsedHostAddressOverride.host, "127.0.0.1");
+  assert.equal(parsedHostAddressOverride.hostaddr, "203.0.113.10", "the installed parser preserves the host-address override");
+  for (const url of [
+    remoteHostOverride,
+    hostAddressOverride,
+    "postgresql://smoke:secret@127.0.0.1:34756/postgres?HOST=remote.invalid",
+    "postgresql://smoke:secret@127.0.0.1:34756/postgres?HoStAdDr=203.0.113.10",
+    "postgresql://smoke:secret@127.0.0.1:34756/postgres?PORT=34757",
+    "postgresql://smoke:secret@127.0.0.1:34756/postgres?service=remote",
+    "postgresql://smoke:secret@remote.invalid:34756/postgres",
+  ]) {
+    assert.throws(() => resolveSmokeDatabaseConfig(url, pgConnectionString.parseIntoClientConfig), /loopback|connection target override/i);
+  }
+});
+
 test("redacts exact diagnostic secrets and unknown PostgreSQL URLs", () => {
   const sessionCookie = "kintsugi_session=session.cookie+secret";
   const memberToken = "kmt_member.token[secret]+value";
@@ -102,4 +146,22 @@ test("cleanup continues after a failed resource and redacts its diagnostic", asy
   assert.deepEqual(attempted, ["first", "second"]);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /^first resource: \[redacted secret\] \[redacted database URL\]$/);
+});
+
+test("captures an idle pg client error and still attempts later cleanup", async () => {
+  const client = new Client({ connectionString: "postgresql://smoke:secret@127.0.0.1:34756/postgres" });
+  const assertClientHealthy = capturePublicProcessClientError(client);
+  const laterCleanup = [];
+  const idleError = new Error("idle maintenance connection failed");
+
+  client.emit("error", idleError);
+  const errors = await attemptPublicProcessCleanup([
+    { label: "check maintenance client", cleanup: async () => assertClientHealthy() },
+    { label: "close maintenance client", cleanup: async () => client.end() },
+    { label: "later cleanup", cleanup: async () => laterCleanup.push("attempted") },
+  ]);
+
+  assert.deepEqual(laterCleanup, ["attempted"]);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^check maintenance client: idle maintenance connection failed$/);
 });
