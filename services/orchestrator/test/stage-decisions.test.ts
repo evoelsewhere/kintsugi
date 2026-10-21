@@ -5,7 +5,12 @@ import * as publicOrchestrator from "../src/index.js";
 import type { GateRequest } from "../src/jobs/model.js";
 import { StagePlanExecutor } from "../src/jobs/executor.js";
 import type { GateStep } from "../src/jobs/plan.js";
+import type { JobRunnerDeps } from "../src/jobs/runner.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
+
+type JobRunnerGateDeciderIsRequired = Record<never, never> extends Pick<JobRunnerDeps, "gates"> ? false : true;
+const jobRunnerGateDeciderIsRequired: JobRunnerGateDeciderIsRequired = true;
+void jobRunnerGateDeciderIsRequired;
 
 interface StageDecisionContract {
   createPersistedGateDecider(deps: { db: Pick<Pool, "query">; pollIntervalMs?: number }): {

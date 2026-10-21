@@ -25,6 +25,7 @@ import { RepositoryStore } from "./git-sync/repositories.js";
 import { installedAgents } from "./jobs/agents.js";
 import { DEFAULT_JOB_RETENTION_DAYS, pruneJobWorkspaces, removeJobWorkspace } from "./jobs/cleanup.js";
 import { MirrorCheckouts } from "./jobs/checkouts.js";
+import { createPersistedGateDecider } from "./jobs/persisted-gate-decider.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
 import { JobCancelled } from "./jobs/model.js";
 import { PgJobStore } from "./jobs/store.js";
@@ -258,6 +259,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       store: jobStore,
       storage: options.storage,
       checkouts: new MirrorCheckouts({ repositories: store, storage: options.storage }),
+      gates: createPersistedGateDecider({ db: options.pool }),
       agents: options.jobs.agents,
       agentDefinitions,
       interpreters: options.jobs.interpreters ?? interpretersFromEnv(),

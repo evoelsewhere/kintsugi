@@ -14,7 +14,7 @@ import { createChildAgentRuntime, interpretersFromEnv } from "@kintsugi/runtime/
 import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
-import { JobCancelled } from "../src/jobs/model.js";
+import { DEFAULT_GATE_DECIDER, JobCancelled } from "../src/jobs/model.js";
 import { JobRunner, summarizeToolCall } from "../src/jobs/runner.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
 import { type AgentFiles, LocalCheckouts, MemoryJobStore, fixtureRepository, writingAgentRuntime } from "./support/jobs.js";
@@ -55,6 +55,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const agents = writingAgentRuntime(files);
     const runner = new JobRunner({
       store,
+      gates: DEFAULT_GATE_DECIDER,
       storage,
       checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
       agents,
@@ -294,6 +295,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const { store, writes } = setup({});
     const runner = new JobRunner({
       store,
+      gates: DEFAULT_GATE_DECIDER,
       storage,
       checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
       agents: { engine: "pi@test", startJob: () => Promise.reject(new Error("must not start")) },
@@ -370,6 +372,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     };
     const runner = new JobRunner({
       store,
+      gates: DEFAULT_GATE_DECIDER,
       storage,
       checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
       agents: stalled,
@@ -399,6 +402,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       const { store, agents } = setup(files);
       const runner = new JobRunner({
         store,
+        gates: DEFAULT_GATE_DECIDER,
         storage,
         checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
         agents,
@@ -462,6 +466,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     try {
       const runnerWithDocs = new JobRunner({
         store,
+        gates: DEFAULT_GATE_DECIDER,
         storage,
         checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: scriptRepo.bare }),
         agents: writingAgentRuntime({}),
@@ -567,6 +572,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const writes: DocumentWriteRequest[] = [];
     const runner = new JobRunner({
       store,
+      gates: DEFAULT_GATE_DECIDER,
       storage,
       checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
       agents: createChildAgentRuntime({ mode: "mock", entry: hang }),
