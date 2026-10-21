@@ -209,6 +209,10 @@ export class PgTelemetryReadModel extends TelemetryReadModel {
       params.push(filter.status);
       where += ` and status = $${params.length}`;
     }
+    if (filter.runId !== undefined) {
+      params.push(filter.runId);
+      where += ` and job_run_id = $${params.length}`;
+    }
     const [rows, count] = await Promise.all([
       this.#pool.query<RunRow>(
         `select job_run_id, step_run_id, project_id, application_id, agent, provider, model, attempt, started_at, duration_ms, status, error, attributes

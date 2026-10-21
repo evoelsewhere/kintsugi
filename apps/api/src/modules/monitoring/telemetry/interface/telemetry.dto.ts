@@ -11,8 +11,8 @@ const instant = z.string().datetime({ offset: true }).optional();
 export const telemetryQuerySchema = z.object({ projectId: filter, agent: filter, from: instant, to: instant });
 export type TelemetryQueryInput = z.infer<typeof telemetryQuerySchema>;
 
-/** The same filters plus `status` and a page. */
-export const telemetryRunsQuerySchema = pageQuerySchema.extend({ ...telemetryQuerySchema.shape, status: z.enum(["ok", "error"]).optional() });
+/** The same filters plus `status`, the top-level `runId` (a link to one run) and a page. */
+export const telemetryRunsQuerySchema = pageQuerySchema.extend({ ...telemetryQuerySchema.shape, status: z.enum(["ok", "error"]).optional(), runId: filter });
 export type TelemetryRunsQueryInput = z.infer<typeof telemetryRunsQuerySchema>;
 
 /** `?step&attempt`: narrows a trace to one agent step and one attempt of it. */
