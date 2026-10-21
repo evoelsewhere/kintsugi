@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { parseUnitDocument } from "@kintsugi/agents";
-import { MEMBER_CONTEXT_POLICY_REVISION, evaluateReviewEvidence, type GateDeliverableEvidence, type GitLocation } from "@kintsugi/domain";
+import { MEMBER_CONTEXT_POLICY_REVISION, evaluateReviewEvidence, type GateDeliverableEvidence, type GateEvidence, type GitLocation } from "@kintsugi/domain";
 import { assertSafeRepoPath, runGit, type CheckoutStorage, type GitHubObservationConnection, type ObservedPullRequest, type PullRequestObserver } from "@kintsugi/git";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type { RepositoryStore } from "../git-sync/repositories.js";
 import { syncRepository } from "../git-sync/sync.js";
-import { reconcileGatePublication, type GateAuditProof, type GateDeliverableFact, type GateEffectiveDependencies, type GatePublicationCandidate } from "./effective.js";
+import { reconcileGatePublication, type GateAuditProof, type GateDeliverableFact, type GateEffectiveDependencies, type GateMappedReviewer, type GatePublicationCandidate } from "./effective.js";
 
 interface Dependencies {
   pool: Pool;
@@ -51,13 +51,38 @@ export class PostgresGateReconciler {
         where state in ('pending-publication','awaiting-merge') order by updated_at,decision_id limit 100`,
     );
     for (const candidate of candidates.rows) {
-      try { await reconcileGatePublication({ pool: this.deps.pool, verification: this.verification, mergedRecord: row => this.mergedRecord(row) }, candidate.decision_id); }
+      try { await reconcileGatePublication({ pool: this.deps.pool, verification: this.verification, mergedRecord: row => this.mergedRecord(row), recheckAuthority: (client, evidence, reviewers) => this.recheckAuthority(client, evidence, reviewers) }, candidate.decision_id); }
       catch { log(`gate reconciliation ${candidate.decision_id}: retry pending`); }
       finally {
         // Rotate even blocked attempts; a pending publication must not starve the next batch.
         await this.deps.pool.query("update workflow.gate_publication set updated_at=clock_timestamp() where decision_id=$1 and state in ('pending-publication','awaiting-merge')",[candidate.decision_id]);
       }
     }
+  }
+
+  async recheckAuthority(client: PoolClient, evidence: GateEvidence, reviewers: readonly GateMappedReviewer[]): Promise<boolean> {
+    const actor = await client.query<{ id: string }>(
+      `select account.id from core.app_user account
+         join admin.project_access access on access.project_id=$1 and access.user_id=account.id
+         join core.user_role user_role on user_role.user_id=account.id
+         join core.role_permission role_permission on role_permission.role_id=user_role.role_id and role_permission.permission_code='gates.decide'
+        where account.id=$2 and account.enabled=true
+        for share of account, access, user_role, role_permission`,
+      [evidence.projectId, evidence.actor.userId],
+    );
+    if (actor.rows.length === 0) return false;
+    for (const reviewer of reviewers) {
+      const mapped = await client.query<{ user_id: string }>(
+        `select mapping.user_id from workflow.member_provider_actor_mapping mapping
+           join admin.project_access access on access.project_id=mapping.project_id and access.user_id=mapping.user_id
+           join core.app_user account on account.id=mapping.user_id and account.enabled=true
+          where mapping.project_id=$1 and mapping.server_id=$2 and mapping.provider_actor_id=$3 and mapping.user_id=$4
+          for share of mapping, access, account`,
+        [evidence.projectId, reviewer.serverId, reviewer.providerActorId, reviewer.reviewerId],
+      );
+      if (mapped.rows.length === 0) return false;
+    }
+    return true;
   }
 
   async mergedRecord(publication: GatePublicationCandidate): Promise<{ status: "merged"; location: GitLocation } | { status: "open" | "closed" | "unavailable" }> {
@@ -202,7 +227,7 @@ export class PostgresGateReconciler {
       if (mergedAt !== undefined && (!Number.isFinite(latestReviewAt) || latestReviewAt > mergedAt)) continue;
       const policy = evaluateReviewEvidence(
         { contextRevision, observedHeadSha: observed.headSha, evaluatedRevision: observed.headSha, coverage: "complete", observationComplete: true, checks: [], reviews: observed.reviews.map(review => ({ ...review, ...(review.actorId === undefined ? {} : { reviewerId: review.actorId }) })) }, { contextRevision, expectedHeadSha: observed.headSha, evaluatedRevision: observed.headSha, requiredChecks: [], requiredApprovals: 1, authorizedReviewerIds: [mapping.provider_actor_id], latestReviewablePush: true });
-      if (policy.status === "satisfied") return { reviewerId: mapping.user_id, providerActorId: mapping.provider_actor_id, reviewedHead: observed.headSha, state: "APPROVED", hasProjectAccess: true };
+      if (policy.status === "satisfied") return { reviewerId: mapping.user_id, providerActorId: mapping.provider_actor_id, serverId, reviewedHead: observed.headSha, state: "APPROVED", hasProjectAccess: true };
     }
     return undefined;
   }

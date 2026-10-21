@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { PoolClient } from "pg";
 import { gateEvidenceCanonicalJson, parseGateRecord, validateGateEvidence, type GateDeliverableEvidence, type GateEvidence, type GateRecordParseResult, type GitLocation } from "@kintsugi/domain";
 
 import { recordTransition } from "../outbox/store.js";
@@ -32,10 +33,17 @@ export interface GateDeliverableFact {
   authorizedHumanApproval?: {
     reviewerId: string;
     providerActorId: string;
+    serverId: string;
     reviewedHead: string;
     state: string;
     hasProjectAccess: boolean;
   };
+}
+
+export interface GateMappedReviewer {
+  reviewerId: string;
+  providerActorId: string;
+  serverId: string;
 }
 
 export interface GateEffectiveDependencies {
@@ -50,7 +58,7 @@ export interface GateEffectiveDependencies {
 }
 
 export type EffectiveGateResult =
-  | { status: "effective"; evidence: GateEvidence }
+  | { status: "effective"; evidence: GateEvidence; reviewers: GateMappedReviewer[] }
   | { status: "awaiting-evidence"; code: "GATE_AUDIT_MISSING" | "DELIVERABLE_UNAVAILABLE" | "DELIVERABLE_NOT_MERGED" | "HUMAN_APPROVAL_MISSING" }
   | { status: "stale"; code: "CONTEXT_CHANGED" | "DELIVERABLE_SET_CHANGED" | "DELIVERABLE_HEAD_CHANGED" | "MERGED_REVISION_CHANGED" }
   | { status: "invalid"; code: string }
@@ -94,6 +102,7 @@ export async function verifyEffectiveGate(deps: GateEffectiveDependencies, locat
     return { status: "stale", code: "DELIVERABLE_SET_CHANGED" };
   }
 
+  const reviewers: GateMappedReviewer[] = [];
   for (const item of evidence.deliverables) {
     const fact = await deps.deliverable(item);
     if (fact === undefined) return { status: "awaiting-evidence", code: "DELIVERABLE_UNAVAILABLE" };
@@ -117,8 +126,13 @@ export async function verifyEffectiveGate(deps: GateEffectiveDependencies, locat
       fact.authorizedHumanApproval.reviewedHead !== item.reviewedRevision) {
       return { status: "awaiting-evidence", code: "HUMAN_APPROVAL_MISSING" };
     }
+    reviewers.push({
+      reviewerId: fact.authorizedHumanApproval.reviewerId,
+      providerActorId: fact.authorizedHumanApproval.providerActorId,
+      serverId: fact.authorizedHumanApproval.serverId,
+    });
   }
-  return { status: "effective", evidence };
+  return { status: "effective", evidence, reviewers };
 }
 
 export interface GatePublicationCandidate {
@@ -144,6 +158,8 @@ export interface GateReconciliationDependencies {
   mergedRecord(publication: GatePublicationCandidate): Promise<
     { status: "merged"; location: GitLocation } | { status: "open" | "closed" | "unavailable" }
   >;
+  /** Recheck and lock the decision actor's and mapped reviewers' current authority in the publication transaction. */
+  recheckAuthority(client: PoolClient, evidence: GateEvidence, reviewers: readonly GateMappedReviewer[]): Promise<boolean>;
 }
 
 export type GateReconciliationResult = {
@@ -171,6 +187,7 @@ export async function reconcileGatePublication(deps: GateReconciliationDependenc
   if (merged.status === "unavailable") return { status: "awaiting-merge", code: "GATE_PROVIDER_UNAVAILABLE" };
   let result: GateReconciliationResult;
   let recordCommit: string | null = null;
+  let authorizedReviewers: GateMappedReviewer[] = [];
   if (merged.status === "closed") result = { status: "failed", code: "GATE_RECORD_CLOSED" };
   else if (merged.status === "open") result = { status: "awaiting-merge" };
   else if (merged.status === "merged") {
@@ -191,6 +208,7 @@ export async function reconcileGatePublication(deps: GateReconciliationDependenc
       const verified = await verifyEffectiveGate({ ...deps.verification, readRecord: async () => text }, location);
       if (verified.status === "effective" || verified.status === "rejected") {
         result = { status: verified.status };
+        if (verified.status === "effective") authorizedReviewers = verified.reviewers;
         recordCommit = location.commit;
       } else if (verified.status === "awaiting-evidence") result = { status: "awaiting-merge", code: verified.code };
       else result = { status: verified.status === "invalid" ? "failed" : "stale", code: verified.code };
@@ -205,6 +223,11 @@ export async function reconcileGatePublication(deps: GateReconciliationDependenc
     if (state === "effective" || state === "stale" || state === "failed" || state === "rejected") {
       await tx.query("commit");
       return { status: state };
+    }
+    if ((result.status === "effective" || result.status === "rejected") &&
+      !await deps.recheckAuthority(tx, publication.evidence, authorizedReviewers)) {
+      await tx.query("commit");
+      return { status: "awaiting-merge", code: "GATE_AUTHORITY_REVOKED" };
     }
     const apply = async () => {
       await tx.query("update workflow.gate_publication set state=$2, record_commit=$3, pr_url=$4, updated_at=now() where decision_id=$1", [decisionId, result.status, recordCommit, publication.pr_url]);

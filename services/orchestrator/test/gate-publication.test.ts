@@ -64,14 +64,62 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     const deps = {
       pool: db.pool,
       async mergedRecord() { return providerState === "merged" ? { status: "merged" as const, location: { repo: "docs", commit: recordCommit, path } } : { status: providerState }; },
+      async recheckAuthority() { return true; },
       verification: {
         async readRecord() { return remote.git("docs", "show", `${recordCommit}:${path}`); },
         async auditEvent() { return { ...audit, id: evidence.auditEventId }; },
         async currentContext() { return { contextRevision: evidence.contextRevision, policyRevision: evidence.policyRevision, requiredDeliverableIds: ["code"] }; },
-        async deliverable() { return { deliverableId: "code", repositoryId: "target", pullRequestId: "7", state: "merged" as const, headSha: sha("c"), mergeCommitSha: sha("d"), authorProviderActorId: "bot", review: { reviewId: "review-7", currentness: "current" as const, verdict: "pass" as const, coverage: "complete" as const, reviewedHead: sha("c"), contextRevision: evidence.contextRevision, policyRevision: evidence.policyRevision }, authorizedHumanApproval: { reviewerId: "human", providerActorId: "100", reviewedHead: sha("c"), state: "APPROVED", hasProjectAccess: true } }; },
+        async deliverable() { return { deliverableId: "code", repositoryId: "target", pullRequestId: "7", state: "merged" as const, headSha: sha("c"), mergeCommitSha: sha("d"), authorProviderActorId: "bot", review: { reviewId: "review-7", currentness: "current" as const, verdict: "pass" as const, coverage: "complete" as const, reviewedHead: sha("c"), contextRevision: evidence.contextRevision, policyRevision: evidence.policyRevision }, authorizedHumanApproval: { reviewerId: "human", providerActorId: "100", serverId: "github", reviewedHead: sha("c"), state: "APPROVED", hasProjectAccess: true } }; },
       },
     };
     return { evidence, evidenceHash, deps };
+  }
+
+  async function grantGateAuthority(reviewerId: string, providerActorId = "100") {
+    await db.pool.query("update core.app_user set enabled=true where id='human'");
+    await db.pool.query("insert into core.app_user (id,username,password_hash,password_salt) values ($1,$1,'test','test') on conflict do nothing", [reviewerId]);
+    await db.pool.query("insert into admin.project_access (project_id,user_id,granted_by) values ('shop','human','human'),('shop',$1,'human') on conflict do nothing", [reviewerId]);
+    await db.pool.query("insert into core.user_role (user_id,role_id) values ('human','admin') on conflict do nothing");
+    await db.pool.query("insert into workflow.member_provider_actor_mapping (project_id,server_id,provider_actor_id,user_id,confirmed_by) values ('shop','github',$1,$2,'human') on conflict do nothing", [providerActorId, reviewerId]);
+  }
+
+  async function reconcileWhileProviderObservationIsBlocked(evidence: GateEvidence, reviewerId: string, providerActorId: string, revoke: () => Promise<unknown>) {
+    await grantGateAuthority(reviewerId, providerActorId);
+    await db.pool.query("update workflow.document_write set status='pr-opened',pr_url='https://github.example.invalid/org/docs/pull/99' where id=$1", [evidence.decisionId]);
+    let enteredObservation!: () => void;
+    let releaseObservation!: () => void;
+    const observationEntered = new Promise<void>(resolve => { enteredObservation = resolve; });
+    const observationReleased = new Promise<void>(resolve => { releaseObservation = resolve; });
+    const adapter = new PostgresGateReconciler({
+      pool: db.pool,
+      repositories: repositories(),
+      storage,
+      observer: { async get() { throw new Error("verification supplies the blocked observation"); } },
+    });
+    const deps = {
+      pool: db.pool,
+      mergedRecord: async () => ({ status: "merged" as const, location: { repo: "docs", commit: recordCommit, path } }),
+      recheckAuthority: adapter.recheckAuthority.bind(adapter),
+      verification: {
+        ...adapter.verification,
+        async readRecord() { return formatGateRecord(evidence); },
+        async currentContext() { return { contextRevision: evidence.contextRevision, policyRevision: evidence.policyRevision, requiredDeliverableIds: ["code"] }; },
+        async deliverable() {
+          enteredObservation();
+          await observationReleased;
+          return {
+            deliverableId: "code", repositoryId: "target", pullRequestId: "7", state: "merged" as const, headSha: sha("c"), mergeCommitSha: sha("d"), authorProviderActorId: "bot",
+            review: { reviewId: "review-7", currentness: "current" as const, verdict: "pass" as const, coverage: "complete" as const, reviewedHead: sha("c"), contextRevision: evidence.contextRevision, policyRevision: evidence.policyRevision },
+            authorizedHumanApproval: { reviewerId, providerActorId, serverId: "github", reviewedHead: sha("c"), state: "APPROVED", hasProjectAccess: true },
+          };
+        },
+      },
+    };
+    const reconciliation = effective.reconcileGatePublication(deps, evidence.decisionId);
+    await observationEntered;
+    try { await revoke(); }
+    finally { releaseObservation(); }
+    return reconciliation;
   }
 
   async function publish(evidence: GateEvidence) {
@@ -135,6 +183,43 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     expect((await db.pool.query("select state,record_commit from workflow.gate_publication where decision_id=$1", [evidence.decisionId])).rows[0]).toEqual({ state: "pending-publication", record_commit: null });
     await expect(effective.reconcileGatePublication(deps, evidence.decisionId)).resolves.toMatchObject({ status: "effective" });
   });
+
+  it("does not record effective state when reviewer access is revoked during provider observation", async () => {
+    const { evidence } = await seed();
+    const reviewerId = `reviewer-${number}`;
+    const providerActorId = `provider-${number}`;
+    const reconciliation = reconcileWhileProviderObservationIsBlocked(evidence, reviewerId, providerActorId,
+      () => db.pool.query("delete from admin.project_access where project_id='shop' and user_id=$1", [reviewerId]));
+
+    await expect(reconciliation).resolves.toMatchObject({ status: "awaiting-merge", code: "GATE_AUTHORITY_REVOKED" });
+    expect((await db.pool.query("select state,record_commit from workflow.gate_publication where decision_id=$1", [evidence.decisionId])).rows[0]).toEqual({ state: "pending-publication", record_commit: null });
+    expect((await db.pool.query("select count(*)::int as count from workflow.member_event where kind='gate.effective' and metadata->>'decisionId'=$1", [evidence.decisionId])).rows[0].count).toBe(0);
+  });
+
+  it("does not record effective state when the mapped reviewer account is disabled during provider observation", async () => {
+    const { evidence } = await seed();
+    const reviewerId = `reviewer-${number}`;
+    const providerActorId = `provider-${number}`;
+    const reconciliation = reconcileWhileProviderObservationIsBlocked(evidence, reviewerId, providerActorId,
+      () => db.pool.query("update core.app_user set enabled=false where id=$1", [reviewerId]));
+    await expect(reconciliation).resolves.toMatchObject({ status: "awaiting-merge", code: "GATE_AUTHORITY_REVOKED" });
+    expect((await db.pool.query("select state,record_commit from workflow.gate_publication where decision_id=$1", [evidence.decisionId])).rows[0]).toEqual({ state: "pending-publication", record_commit: null });
+    expect((await db.pool.query("select count(*)::int as count from workflow.member_event where kind='gate.effective' and metadata->>'decisionId'=$1", [evidence.decisionId])).rows[0].count).toBe(0);
+  });
+
+  it.each([
+    ["account is disabled", () => db.pool.query("update core.app_user set enabled=false where id='human'")],
+    ["gates.decide is revoked", () => db.pool.query("delete from core.user_role where user_id='human' and role_id='admin'")],
+    ["Project Access is revoked", () => db.pool.query("delete from admin.project_access where project_id='shop' and user_id='human'")],
+  ])("does not record effective state when decision actor %s during provider observation", async (_reason, revoke) => {
+    const { evidence } = await seed();
+    const reviewerId = `reviewer-${number}`;
+    const providerActorId = `provider-${number}`;
+    const reconciliation = reconcileWhileProviderObservationIsBlocked(evidence, reviewerId, providerActorId, revoke);
+    await expect(reconciliation).resolves.toMatchObject({ status: "awaiting-merge", code: "GATE_AUTHORITY_REVOKED" });
+    expect((await db.pool.query("select state,record_commit from workflow.gate_publication where decision_id=$1", [evidence.decisionId])).rows[0]).toEqual({ state: "pending-publication", record_commit: null });
+    expect((await db.pool.query("select count(*)::int as count from workflow.member_event where kind='gate.effective' and metadata->>'decisionId'=$1", [evidence.decisionId])).rows[0].count).toBe(0);
+  });
   it("runs the production provider/SQL/Git adapter and rejects dismissed approvals and changed context", async () => {
     const { evidence, evidenceHash } = await seed(item => {
       item.deliverables[0] = {...item.deliverables[0]!,repositoryId:"docs",pullRequestId:"7",reviewResultId:"rev_"+randomUUID()};
@@ -163,7 +248,7 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     let approvalState = "DISMISSED";
     const observer = { async get(_connection: unknown, identity: { pullRequestId: string; number: number }) { return { repositoryId: "42", pullRequestId: identity.pullRequestId, htmlUrl: identity.pullRequestId === "99" ? prUrl : "https://github.example.invalid/org/docs/pull/7", state: "merged", headSha: sha("c"), mergeCommitSha: identity.pullRequestId === "99" ? gateMerge : sha("d"), authorId: "bot", mergedAt: "2026-10-22T00:00:00Z", reviews: [{ id: "review-1", actorId: "200", state: "APPROVED", commitSha: sha("c"), submittedAt: "2026-10-20T00:00:00Z" }, { id: "review-2", actorId: "200", state: approvalState, commitSha: sha("c"), submittedAt: "2026-10-21T00:00:00Z" }] } as ObservedPullRequest; } };
     const adapter = new PostgresGateReconciler({ pool: db.pool, repositories: repo, storage, observer });
-    const live = { pool: db.pool, verification: adapter.verification, mergedRecord: adapter.mergedRecord.bind(adapter) };
+    const live = { pool: db.pool, verification: adapter.verification, mergedRecord: adapter.mergedRecord.bind(adapter), recheckAuthority: adapter.recheckAuthority.bind(adapter) };
     await expect(effective.reconcileGatePublication(live, inputId)).resolves.toMatchObject({ status: "awaiting-merge" });
     approvalState = "APPROVED";
     await expect(effective.reconcileGatePublication(live, inputId)).resolves.toMatchObject({ status: "effective" });
