@@ -124,15 +124,20 @@ function makeSleep(): Sleep {
 function errorFromEnvelope(status: number, body: unknown, secret?: string): CodingAgentClientError {
   const envelope = body !== null && typeof body === "object" ? body as ErrorEnvelope : {};
   const nested = envelope.details !== null && typeof envelope.details === "object" ? envelope.details as Record<string, unknown> : undefined;
-  const code = typeof nested?.code === "string" ? nested.code : typeof envelope.error === "string" ? envelope.error.toUpperCase().replace(/[^A-Z0-9_]+/g, "_") : `HTTP_${status}`;
+  const code = typeof nested?.code === "string" ? redactText(nested.code, secret) : typeof envelope.error === "string" ? redactText(envelope.error, secret).toUpperCase().replace(/[^A-Z0-9_]+/g, "_") : `HTTP_${status}`;
   let message = typeof envelope.message === "string" ? envelope.message : `Kintsugi request failed (${status})`;
   if (secret) message = message.split(secret).join("[redacted]");
   return new CodingAgentClientError({ code, status, message, details: redactSecret(envelope.details, secret) });
 }
 
-function redactSecret(value: unknown, secret?: string): unknown {
+function redactText(value: string, secret?: string): string {
   if (secret === undefined || secret.length === 0) return value;
-  if (typeof value === "string") return value.split(secret).join("[redacted]");
+  return value.split(secret).join("[redacted]");
+}
+
+function redactSecret(value: unknown, secret?: string): unknown {
+  if (typeof value === "string") return redactText(value, secret);
+  if (secret === undefined || secret.length === 0) return value;
   if (Array.isArray(value)) return value.map((item) => redactSecret(item, secret));
   if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactSecret(item, secret)]));
   return value;
