@@ -1,4 +1,5 @@
 import type { GitHubObservationConnection } from "./github-app.js";
+import type { MemberAssociationClaim, MemberAssociationClaimParseResult } from "@kintsugi/domain";
 
 export type ObservedPullRequestState = "open" | "closed" | "merged";
 export type CapabilityState = "supported" | "unsupported" | "unknown";
@@ -51,6 +52,9 @@ export interface ObservedPullRequestSummary extends PullRequestIdentity {
   /** Stable Git-provider author identity; logins are display data and never authorize association. */
   authorId?: string;
   authorLogin?: string;
+  /** Parsed identifiers from the bounded Kintsugi PR-body block. This claim is untrusted. */
+  associationClaimStatus: MemberAssociationClaimParseResult["status"];
+  associationClaim?: MemberAssociationClaim;
   state: ObservedPullRequestState;
   draft: boolean;
   updatedAt: string;

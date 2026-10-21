@@ -19,7 +19,17 @@ Use `task_status` when the developer asks for current task, pull request, review
 
 ## Work and PR handoff
 
-Only make code or document changes when the developer asks you to work on them. When implementing, apply the task criteria and approved project standards within the requested project scope. Follow the developer's repository and harness workflow for branches, tests, commits, and pull requests. Kintsugi's context tools do not create, approve, merge, or gate a pull request. After a pull request exists, use `task_status` to fetch the current Kintsugi view and report any returned review or gate references. Do not claim a PR is accepted or a gate passed unless the returned evidence says so.
+Only make code or document changes when the developer asks you to work on them. When implementing, apply the task criteria and approved project standards within the requested project scope. Follow the developer's repository and harness workflow for branches, tests, commits, and pull requests. Kintsugi's context tools do not create, approve, merge, or gate a pull request.
+
+When the developer asks you to open a PR for a registered GitHub/GHES repository, include this single association block in its description, using the explicit values from the same complete task brief:
+
+```markdown
+<!-- kintsugi:task-association
+{"projectId":"<projectId>","unitId":"<full unitId>","contextRevision":"<contextRevision>","deliverableIds":["<requiredDeliverableId>"]}
+-->
+```
+
+Use only deliverable IDs implemented by that PR in its repository. For separate deliverable repositories, create one block per PR with only that repository's IDs. If a required value is unavailable or the brief is partial, omit the block and tell the developer that maintainer association may be needed. Never guess or copy identifiers from another task. This metadata is an untrusted lookup hint; it cannot authorize work, approve a review, or satisfy a gate. After a pull request exists, use `task_status` to fetch the current Kintsugi view and report any returned review or gate references. Do not claim a PR is accepted or a gate passed unless the returned evidence says so.
 
 ## Trust boundary
 

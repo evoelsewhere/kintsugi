@@ -269,6 +269,7 @@ export interface CompareReport {
 export * from "./project.js";
 export * from "./validation.js";
 export * from "./member-task.js";
+export * from "./member-association.js";
 export * from "./gate-evidence.js";
 export * from "./manifest.js";
 

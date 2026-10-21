@@ -48,7 +48,15 @@ You work in your chosen AI harness and keep using your existing model subscripti
 
 3. Work in the code and document repositories. Follow the brief's approved designs and standards. The AI can retrieve sections from the same pinned snapshot as the brief and can refresh context when Kintsugi reports a newer relevant revision.
 
-4. Once PR continuation ships, open the usual pull request or pull requests. Include the full Kintsugi unit identity and the deliverable paths so the provider change can be associated with the task. Kintsugi is planned to discover current GitHub state even if you close your AI session.
+4. Open the usual pull request or pull requests. For a registered GitHub/GHES repository, include one machine-readable association block in each PR body. Use the `projectId`, full `unitId`, and `contextRevision` from the task brief. Include only the `requiredDeliverableIds` implemented by this PR in its repository. These values are a lookup hint; Kintsugi validates them against the observed repository, default branch, and retained snapshot, and may ask a maintainer to confirm the association.
+
+   ~~~markdown
+   <!-- kintsugi:task-association
+   {"projectId":"billing-modernization","unitId":"billing-api/payments/invoice-validation","contextRevision":"sha256:<64 lowercase hex characters>","deliverableIds":["invoice-api"]}
+   -->
+   ~~~
+
+   If the task brief is partial or does not supply a required value, leave the block out and report that the PR needs maintainer association. Never guess IDs or reuse a context revision from a different brief. Kintsugi discovers current GitHub state even if you close your AI session.
 
 5. Read Kintsugi's current review findings, fix the issues in a new commit and let Kintsugi review the new revision. Findings name the reviewed revision and source lines; a finding for an older revision is marked stale.
 

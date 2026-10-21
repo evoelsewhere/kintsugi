@@ -10,6 +10,7 @@ import type {
   ProviderCapabilities,
   ProviderCapability,
 } from "./pull-request-observer.js";
+import { parseMemberAssociationClaim } from "@kintsugi/domain";
 
 type Fetch = typeof fetch;
 type JsonResponse = { body: unknown; response: Response };
@@ -149,6 +150,7 @@ function mapPullRequest(value: unknown, connection: GitHubRepositoryConnection, 
   const mergeBaseSha = optionalSha(pull["merge_base_sha"], "merge_base_sha");
   const identityHost = new URL(connection.baseUrl).hostname.toLowerCase();
   const htmlUrl = new URL(`/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repository)}/pull/${number}`, new URL(connection.baseUrl).origin).toString();
+  const associationClaim = parseMemberAssociationClaim(pull["body"]);
   return {
     provider: connection.kind,
     host: identityHost,
@@ -159,6 +161,8 @@ function mapPullRequest(value: unknown, connection: GitHubRepositoryConnection, 
     htmlUrl,
     ...(authorId === undefined ? {} : { authorId }),
     ...(authorLogin === undefined ? {} : { authorLogin }),
+    associationClaimStatus: associationClaim.status,
+    ...(associationClaim.status === "valid" ? { associationClaim: associationClaim.claim } : {}),
     state,
     draft,
     updatedAt,

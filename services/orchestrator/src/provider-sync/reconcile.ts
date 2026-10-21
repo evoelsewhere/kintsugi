@@ -32,6 +32,7 @@ export interface ProviderSyncStore {
     deepBackfillStartedAt?: string;
   }): Promise<void>;
   persistObservation(repositoryId: string, pullRequest: ObservedPullRequest): Promise<void>;
+  reconcileAssociations(repositoryId: string): Promise<void>;
   completeSweep(repositoryId: string, completed: {
     updatedAtWatermark: string;
     providerRepositoryId?: string;
@@ -217,6 +218,7 @@ export async function discoverChanges(deps: ProviderSyncDependencies, repository
         if (page.complete) {
           const completedAt = now().toISOString();
           const updatedAtWatermark = maxTime(watermark.updatedAtWatermark, highWatermark);
+          await deps.store.reconcileAssociations(repositoryId);
           await deps.store.completeSweep(repositoryId, {
             updatedAtWatermark,
             ...(providerRepositoryId === undefined ? {} : { providerRepositoryId }),
