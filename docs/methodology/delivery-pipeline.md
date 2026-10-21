@@ -1,6 +1,8 @@
 # Delivery pipeline
 
-This page explains the migration delivery method Kintsugi supports. How the system implements it is described in the [architecture](../architecture/README.md).
+This page explains the delivery method Kintsugi supports: every application is **rebuilt** on a new architecture from what its legacy system does. How the system implements it is described in the [architecture](../architecture/README.md).
+
+> **Where Kintsugi stands today.** The built-in runtime covers reverse engineering of the as-is system: the `assess` and `understand` stages of P1. The phases after them describe the planned shape of the rebuild; they are not implemented yet.
 
 ## 1. The big picture
 
@@ -31,7 +33,7 @@ Details: [document repository](../reference/document-repo.md) · how-to: [build 
 
 ## 2. Standard pipeline (P0 → P7)
 
-The pipeline merges the common delivery approaches (reverse design & porting, re-write with existing design, rebuild) into one pipeline. It is configured per application by its **7R strategy**.
+One pipeline takes an application from understanding the as-is system to running its rebuilt replacement.
 
 ```
 P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare Factory
@@ -56,10 +58,9 @@ P0 Mobilize ─► P1 Discover & Assess ─► P2 Define To-Be ─► P3 Prepare
   - AS-IS ingestion into the **AS-IS knowledge base**: source code, documents (xlsx/docx → md), knowledge-transfer recordings (transcribed), DB schemas.
   - Generate requirements from KT recordings and the running application. Detect the **gap list** between docs, code and app.
   - Score the **transformation scorecard** (business value, technical value, feasibility, cost, risk; weighted) to get a priority.
-  - Recommend a **7R disposition** (Retire / Retain / Rehost / Replatform / Refactor / Re-architect / Rebuild / Repurchase).
-  - Group applications by **migration pattern** and build the **wave plan**.
-- **Outputs**: inventory, AS-IS KB, AS-IS docs, gap list, scorecard, 7R decision, wave plan.
-- **Gate G1**: portfolio decision approved by the steering committee.
+  - Group applications by what they share (stack, domain, dependencies) and build the **wave plan**.
+- **Outputs**: inventory, AS-IS KB, AS-IS docs, gap list, scorecard, wave plan.
+- **Gate G1**: the order in which applications are rebuilt (the wave plan) approved by the steering committee.
 
 #### Reverse engineering the AS-IS system (runtime stages)
 The current built-in runtime plans perform application assessment in two stages, each delivered as a pull request to the document repo that a person reviews and merges ([ADR-0027](../decisions/0027-builtin-modernization-content.md), [ADR-0031](../decisions/0031-understand-stage-as-is-specification.md), [ADR-0033](../decisions/0033-assess-catalog-understand-selection.md)):
@@ -88,7 +89,6 @@ The security review is part of `understand`. Runtime jobs do not run a scanner; 
   - TO-BE requirements;
   - target architecture (business / application / data / technology);
   - co-existence options (data continuity layer, strangler, monolith → macro → mini → micro-services);
-  - buy / build / hybrid;
   - cost-benefit;
   - POC plan;
   - prototype or first working version.
@@ -99,14 +99,14 @@ The security review is part of `understand`. Runtime jobs do not run a scanner; 
 - **Activities**:
   - base source / skeleton, landing zone and IaC, CI/CD;
   - deliverable creation guidelines;
-  - **agent plugins (skills, agents, hooks), prompt libraries and task-pack templates** for members' harnesses, per type of work (reverse design, version upgrade, language transformation, unit-test generation, test-case generation, data migration);
+  - **agent plugins (skills, agents, hooks), prompt libraries and task-pack templates** for members' harnesses, per type of work (reverse design, design generation, code generation, unit-test generation, test-case generation, data migration);
   - configure the runtime agents (task-planner, gate-reviewer) and their eval sets;
   - run pilot units and fix the standards where they were unclear or wrong.
 - **Outputs**: runnable base source, CI/CD pipeline, piloted agent plugins and task-pack templates, configured runtime agents, complete TO-BE KB.
 - **Gate G3**: a pilot of 1–2 units per unit kind meets quality, and the architect confirms the target repos are scaffolded and the standards are written (a human decision; there is no automatic readiness check).
 
 ### P4 — Migrate (by wave / feature)
-- **Activities**: reverse design (code → detail design), new design generation, code migration/porting, data migration, design ↔ code sync, fixing static-check and runtime errors.
+- **Activities**: reverse design (code → detail design), new design generation, code generation on the target architecture, data migration, design ↔ code sync, fixing static-check and runtime errors.
 - **How the work is done**:
   1. Members work in their own AI harness, following the **task pack** produced by the runtime.
   2. `gate-reviewer` (runtime) reviews each PR first.
@@ -145,39 +145,26 @@ The security review is part of `understand`. Runtime jobs do not run a scanner; 
 | **AI metrics** | Coverage, active rate, SDLC coverage, time saved, cost reduction, outcome ratio, AI vs. human defect rate | See [AI metrics](ai-metrics.md) |
 | **Workforce / RACI** | PM, core team, dev, QC, BA, AI practice owner, AI champion, AI engineer / prompt engineer, KM lead / engineer | Project roles named in pipelines (open set, ADR-0024); every task has R/A/C/I |
 
-## 4. Pipeline ↔ 7R
+## 4. Pipeline definitions
 
-Not every application goes through all of P0–P7.
-- Each application follows a **pipeline definition**: a built-in one chosen by id, or one declared under `pipelines:` in `kintsugi.yaml`. It lists phases, stages, performers and gates.
-- Kintsugi ships one built-in definition per 7R strategy. Projects can declare their own instead: add custom phases (mapped to a built-in category for reporting) or remove stages.
+Not every application needs every stage of P0–P7 the same way.
+- Each application follows a **pipeline definition**: the one Kintsugi ships for a rebuild, or one declared under `pipelines:` in `kintsugi.yaml`. It lists phases, stages, performers and gates.
+- A project that needs a different shape declares its own: add custom phases (mapped to a built-in category for reporting) or remove stages.
 
-Typical shape of the built-in templates:
-
-| 7R | Heavy phases | Main plugin skills (member harness) / runtime agents |
-|---|---|---|
-| Retire | P1 → P6 (decommission) | `assessment`, dependency analysis (runtime) |
-| Retain | P1 | — |
-| Rehost | P1, P3 (IaC), P6 | Infrastructure generation (AWS/Azure), cutover checklist |
-| Replatform | P1, P3, light P4 | Version upgrade, container / IaC generation |
-| Refactor | Full P1–P5 | Reverse design, version upgrade, unit-test generation, compare test |
-| Re-architect | P1–P6 + co-existence | Reverse design, design generation, service extraction, data migration |
-| Rebuild | P1–P6, heavy P2/P3 | Business analysis, prototyping, design/code/test generation from the TO-BE KB |
-| Repurchase | P1, P2 (vendor fit), P4 data migration | Data migration |
-
-### Transformation scorecard → disposition
+### Scorecard → rebuild priority
 The scorecard combines five criteria groups: business, technical, feasibility, cost and risk. Each criterion is scored 1–10 and weighted; the weights sum to 1 (`ScorecardCriterion` in [`packages/domain`](../../packages/domain/src/index.ts)).
 
-The weighted total maps to a priority and candidate dispositions:
+The weighted total maps to a priority for the wave plan:
 
-| Total | Priority | Candidates |
-|---|---|---|
-| ≥ 7 | Low | Retain, Rehost |
-| 4–7 | Medium | Rehost, Refactor |
-| < 4 | High | Retire, Re-architect, Rebuild, Repurchase |
+| Total | Priority |
+|---|---|
+| ≥ 7 | Low |
+| 4–7 | Medium |
+| < 4 | High |
 
 ## 5. Implications for Kintsugi
 
-1. **The pipeline is a configurable template** (per 7R and project type), not hard-coded.
+1. **The pipeline is a configurable template** (a project may declare its own), not hard-coded.
 2. **A unit** is a feature, screen, module or data object moving through stages. Each unit has a file in the document repo whose frontmatter holds its state (ADR-0012). Each stage is performed by a member (with an AI harness), a runtime agent (preparation / review) or a tool.
 3. **The knowledge base is first-class.** Runtime agents and members' harnesses both read it, and merged results flow back into it (continuous TO-BE KB enrichment).
 4. **Project knowledge is built, versioned and verified**: standards are written per project in the document repo, changed by PR, and only deliberately copied to other projects.

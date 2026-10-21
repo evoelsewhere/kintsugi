@@ -20,7 +20,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Roadmap](product/roadmap.md): milestones M0–M5
 
 **Methodology**
-- [Delivery pipeline](methodology/delivery-pipeline.md): phases P0–P7, gates, 7R mapping
+- [Delivery pipeline](methodology/delivery-pipeline.md): phases P0–P7, gates, scorecard priority
 - [AI metrics](methodology/ai-metrics.md): definitions, targets, data sources
 
 **Architecture** ([index](architecture/README.md))

@@ -2,7 +2,7 @@
 // Mirrors apps/api -> modules/admin/projects (ADR-0028). Repositories are the ones
 // registered in Settings -> Git; a project references them, grouped AS-IS / TO-BE.
 
-import type { ApplicationRepositoryRole, Disposition, RepositoryRole } from "@kintsugi/domain";
+import type { ApplicationRepositoryRole, RepositoryRole } from "@kintsugi/domain";
 import { apiGet, apiGetAll, apiSend, type Page } from "../api";
 
 export interface ProjectView {
@@ -30,7 +30,6 @@ export interface ApplicationView {
   id: string;
   projectId: string;
   name: string;
-  disposition: Disposition;
   pipeline?: string;
   asIs: { legacy: ProjectRepositoryView[]; legacyData: ProjectRepositoryView[] };
   toBe: { document: ProjectRepositoryView | null; targets: ProjectRepositoryView[] };
@@ -49,7 +48,6 @@ export interface ProjectInput {
 
 export interface ApplicationInput {
   name: string;
-  disposition: Disposition;
   pipeline?: string | null;
 }
 

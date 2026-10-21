@@ -75,7 +75,7 @@ The item graph is {in}/${GRAPH}: per catalog item its size (loc), complexity, wh
 generated code (assetClass), whether it holds an entry point, the items it depends on (dependsOn, with the kinds of calls and
 how many), the items that use it (usedBy), the data stores it touches, its fan-in and fan-out, its depth (0 = it depends on no
 other item) and its cycle (items that depend on each other). Also under {in}: ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")}
-(the assessment: summary, recommended pattern, risks), ${assessmentCatalogPath(APP_TOKEN)} (and the module documents next to it) and ${assessmentTopologyPath(APP_TOKEN)}.
+(the assessment: summary, rebuild outlook, risks), ${assessmentCatalogPath(APP_TOKEN)} (and the module documents next to it) and ${assessmentTopologyPath(APP_TOKEN)}.
 Read the graph and the assessment first; open source files only to settle a doubt, a few at most.
 
 Follow your understand-planning skill: it says how to read the graph and which rules decide an order. Plan only items that are

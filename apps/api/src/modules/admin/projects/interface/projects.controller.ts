@@ -99,7 +99,7 @@ export class ProjectsController {
 
   @RequirePermission("projects.manage")
   @Patch(":id/applications/:applicationId")
-  @ApiOperation({ summary: "Update an application: name, disposition, pipeline" })
+  @ApiOperation({ summary: "Update an application: name, pipeline" })
   @ApiOkResponse({ description: "The updated application." })
   updateApplication(
     @Param("id") id: string,

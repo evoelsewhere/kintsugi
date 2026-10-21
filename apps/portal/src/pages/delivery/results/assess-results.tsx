@@ -1,5 +1,5 @@
 // Results of assess, in six views over one header of KPIs:
-//   Summary     — code composition, signals, the summary and recommendation, risk and run health
+//   Summary     — code composition, signals, the summary and rebuild outlook, risk and run health
 //   Code        — complexity hotspots, directories, size and complexity distributions, languages
 //   Risk & debt — security highlights and technical debt with their distributions, gaps
 //   Inventory   — every measured file, filterable by language
@@ -109,16 +109,16 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
   const topLanguage = inventory === null ? undefined : [...inventory.languages].sort((a, b) => b.sloc - a.sloc)[0];
   return (
     <div className="flex flex-col gap-4">
-      {highlights.summary === undefined && highlights.recommendation === undefined ? null : (
+      {highlights.summary === undefined && highlights.outlook === undefined ? null : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {highlights.summary === undefined ? null : (
             <Section title="Executive summary" className="lg:col-span-2" description={inventory?.sourceRepository === undefined ? undefined : `${inventory.sourceRepository} at ${shortSha(inventory.sourceCommit)}`}>
               <ClampedText text={highlights.summary} />
             </Section>
           )}
-          {highlights.recommendation === undefined ? null : (
-            <Section title="Recommended pattern" actions={<MoreLink label="Risk & debt" onClick={() => onTab("risk")} />}>
-              <ClampedText text={highlights.recommendation} />
+          {highlights.outlook === undefined ? null : (
+            <Section title="Rebuild outlook" actions={<MoreLink label="Risk & debt" onClick={() => onTab("risk")} />}>
+              <ClampedText text={highlights.outlook} />
               {urgent.length === 0 ? null : (
                 <div className="mt-3 border-t border-hover pt-3">
                   <p className="mb-1.5 text-[11px] tracking-wide text-text-muted uppercase">Fix first · {urgent.length} critical or high</p>

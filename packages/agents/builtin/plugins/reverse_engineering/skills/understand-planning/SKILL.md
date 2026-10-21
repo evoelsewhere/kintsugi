@@ -13,7 +13,7 @@ understood therefore decides how good the later specifications are, and how much
 ## Inputs
 
 - `graph.json` (scratch JSON of the run): one entry per catalog item. Fields and how to read them: [references/item-graph.md](references/item-graph.md).
-- `ASSESSMENT.md`: the assessment (summary, recommended pattern, risks, security findings).
+- `ASSESSMENT.md`: the assessment (summary, rebuild outlook, risks, security findings).
 - The catalog documents (`applications/<app>/assessment/catalog/`) and `topology.md` for names and detail, when the graph is not enough.
 
 Only **open** items are planned: `understood` is false and `assetClass` is `code`. Test and generated items are never

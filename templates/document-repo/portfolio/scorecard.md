@@ -1,3 +1,3 @@
 # Portfolio scorecard
 
-<!-- One row per application: assessment summary, risks, KPI impact, recommended disposition. -->
+<!-- One row per application: assessment summary, risks, KPI impact, rebuild priority. -->

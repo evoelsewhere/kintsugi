@@ -58,7 +58,7 @@ A small Java service.
 |---|---|---|---|---|
 | SEC-001 | CWE-862 | Medium | \`src/A.java:16-22\` | No authorization check |
 
-## Recommended Modernization Pattern
+## Rebuild Outlook
 
 Rebuild on the target architecture.
 `
@@ -173,7 +173,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('local', 'plain-git', 'Local', $1, 'none')", [remote.baseUrl]);
     await app.db.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('docs', 'local', $1, 'main'), ('legacy', 'local', $2, 'main')", [`${remote.baseUrl}/docs.git`, `${remote.baseUrl}/legacy.git`]);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "shop", name: "Shop", documentRepositoryId: "docs" } })).status).toBe(201);
-    expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web", disposition: "refactor" } })).status).toBe(201);
+    expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications/web/repositories", { body: { repositoryId: "legacy", role: "legacy" } })).status).toBe(201);
 
     // What the worker records for a merged assess run and an open map run.
@@ -265,7 +265,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     expect(data.inventory.sloc).toBe(40);
     expect(data.inventory.files).toHaveLength(2);
     expect(data["architecture"]).toBe("graph TD\n  A --> B\n");
-    expect(data.highlights).toMatchObject({ summary: "A small Java service.", recommendation: "Rebuild on the target architecture.", security: [{ id: "SEC-001", severity: "Medium", cwe: "CWE-862" }] });
+    expect(data.highlights).toMatchObject({ summary: "A small Java service.", outlook: "Rebuild on the target architecture.", security: [{ id: "SEC-001", severity: "Medium", cwe: "CWE-862" }] });
     expect(data.counts).toMatchObject({ files: 2, sloc: 40, debtItems: 1, securityFindings: 1 });
     expect(data.headline).toEqual(["40 SLOC", "2 files"]);
     expect(data.document.path).toBe("applications/web/assessment/ASSESSMENT.md");

@@ -11,7 +11,7 @@ Project 1─* Application 1─* WorkItem (index of applications/*/units/**) 1─
    │             │              └─ TaskPack(repo@commit:path) ─ PullRequest ─ GateReview
    │             ├─ AS-IS: ProjectRepository(role legacy | legacy-data) → GitRepository  [many]
    │             ├─ TO-BE: ProjectRepository(role target, component) → GitRepository  [many]
-   │             └─ Scorecard, Disposition (7R), Wave       (primary copy: files in the document repo)
+   │             └─ Scorecard, Wave       (primary copy: files in the document repo)
    ├─ ProjectRepository(role document, no application) → GitRepository  [exactly one] ─ GitSyncState(last seen commit per repo)
    │     └─ HarnessRendererConfig
    ├─ PipelineTemplate (phase/stage/gate) ─ GateDecision (index of unit frontmatter `gates`)
@@ -29,7 +29,7 @@ WorkerHeartbeat(host, pid, version, lastSeenAt, activeJobs, queues)          (wo
 
 | Package | Main types |
 |---|---|
-| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `ProjectRole` (open), `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `GATE_IDS`, `GateStatus`, `GateDecision`, `GATE_KEY_PATTERN`, `ScorecardCriterion`, `RepositoryRole`, `StagePerformer`, `PipelineDefinition`, `CompareReport`, `Project`, `Application`, `ProjectRepositoryLink`, `projectRepositoryProblems`, `groupRepositories`, `KintsugiManifest`, `validateManifest`, `manifestFromProject`, `repositoryPath` |
+| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `ProjectRole` (open), `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `GATE_IDS`, `GateStatus`, `GateDecision`, `GATE_KEY_PATTERN`, `ScorecardCriterion`, `RepositoryRole`, `StagePerformer`, `PipelineDefinition`, `CompareReport`, `Project`, `Application`, `ProjectRepositoryLink`, `projectRepositoryProblems`, `groupRepositories`, `KintsugiManifest`, `validateManifest`, `manifestFromProject`, `repositoryPath` |
 | [`packages/manifest`](../../packages/manifest/src/index.ts) | `parseKintsugiYaml`, `renderKintsugiYaml` |
 | [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts) | `JobSpec`, `AgentDefinition`, `AgentSkill`, `JobLimits`, `JobEvent`, `JobFailureReason`, `JobHandle`, `AgentRuntime`, `LlmProviderConfig`, `AgentModelBinding` |
 | [`packages/harness-sdk`](../../packages/harness-sdk/src/index.ts) | `TaskPack`, `PluginManifest`, `PublishedPlugin`, `MarketplaceFile`, `HarnessPluginSupport`, `MarketplaceGenerator`, `HarnessRendererConfig`, `AssetRenderer`, `HarnessActivity`, `TelemetryNormalizer`, `HarnessPolicy` |
@@ -41,7 +41,7 @@ Persisted by the API in the `admin` schema (migration [`008_projects.sql`](../..
 | Table | Key | Content |
 |---|---|---|
 | `admin.project` | `id` (kebab-case) | `name`, `description` |
-| `admin.application` | (`project_id`, `id`) | `name`, `disposition` (7R), `pipeline` (optional id) |
+| `admin.application` | (`project_id`, `id`) | `name`, `pipeline` (optional id) |
 | `admin.project_repository` | (`project_id`, `repository_id`) | `application_id` (null only for the document repo), `role`, `component` (targets only); `repository_id` references `admin.git_repository` (on delete restrict) |
 
 Rules, checked by `projectRepositoryProblems` (400 with every problem) and, where SQL can, by constraints:

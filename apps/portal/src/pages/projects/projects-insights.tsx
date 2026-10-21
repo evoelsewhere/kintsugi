@@ -1,5 +1,5 @@
 // The charts of the Projects pages. The list gets the installation-wide picture (applications,
-// dispositions, repository sync, runs per project); a project gets its own figures, the pipeline
+// repository sync, runs per project); a project gets its own figures, the pipeline
 // progress of each application and the run activity.
 
 import { Link } from "react-router-dom";

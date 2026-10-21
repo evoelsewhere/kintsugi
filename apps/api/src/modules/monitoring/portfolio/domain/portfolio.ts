@@ -28,8 +28,8 @@ export interface AssessSummary {
   critical: number;
   high: number;
   securityFindings: number;
-  /** The assessment's recommended pattern, as written. */
-  recommendation?: string;
+  /** The assessment's rebuild outlook, as written. */
+  outlook?: string;
 }
 
 export interface CatalogSummary {

@@ -77,7 +77,7 @@ describe.skipIf(!hasDatabase)("document writes (integration)", () => {
   });
 
   it("publishes the starter structure with the manifest: one pull request, create-only files, one skeleton per application", async () => {
-    const application = await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "web", name: "Web", disposition: "refactor" } });
+    const application = await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "web", name: "Web" } });
     expect(application.status).toBe(201);
     const before = await app.db.query<{ id: string }>("select id from pgboss.job where name = 'document-write'");
 

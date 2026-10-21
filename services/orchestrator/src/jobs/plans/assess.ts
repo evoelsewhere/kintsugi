@@ -182,10 +182,9 @@ available") · Technical Debt (top 10, file:line) · Security Findings (CWE tabl
 Documentation Gaps (compare what the code does with what README, docs and comments say: the top 5 behaviors or
 subsystems a new engineer would need explained) · Relative Scale (the complexity index and KSLOC, for ranking against
 other applications only; state plainly that it is not a timeline or a cost, and print no person-months, schedule,
-cost or date) · Recommended Modernization Pattern (one of Rehost, Replatform, Refactor, Rearchitect, Rebuild,
-Replace, with a one-paragraph rationale and the stage it routes to: a newer version of the same technology →
-uplift; a rewrite in another technology piece by piece → transform; a rebuild on a new architecture → reimagine;
-Rehost and Replace change no code, so say so and what the analysis is still good for).
+cost or date) · Rebuild Outlook (every application is rebuilt, so say what makes this one easy or hard to rebuild:
+the domains to understand first and why, the main risks such as hidden business rules, data and integrations, and what
+the assessment could not establish; one short paragraph and a list, no timeline and no cost).
 
 Also write ${assessmentFilePath(APP_TOKEN, "ARCHITECTURE.mmd")}: the domain diagram from the structure notes, one Mermaid \`flowchart LR\`
 per the mermaid-diagrams skill, without a Markdown fence. It must be readable at a glance, so keep to these rules:

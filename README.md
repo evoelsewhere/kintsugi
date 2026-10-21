@@ -19,7 +19,7 @@ The platform never drives implementation work itself. **Kintsugi's own agents** 
 
 ## Delivery pipeline
 
-A project moves through **P0–P7**, each phase configured by the application's 7R strategy. Every phase is closed by a **gate** — a person's decision backed by evidence in Git.
+A project moves through **P0–P7**, every application rebuilt on a new architecture. Every phase is closed by a **gate** — a person's decision backed by evidence in Git.
 
 ![Delivery pipeline — phases P0 to P7 on the Kintsugi platform lane, each closed by a person-decided gate G0 to G6 before the next phase starts](assets/diagrams/delivery-pipeline.png)
 
@@ -42,7 +42,7 @@ Start at the [documentation map](docs/README.md). It is organized by purpose (Di
 | Section | Content |
 |---|---|
 | [Product](docs/product/) | [Overview](docs/product/overview.md), [roadmap](docs/product/roadmap.md) |
-| [Methodology](docs/methodology/) | [Delivery pipeline](docs/methodology/delivery-pipeline.md) (P0–P7, gates, 7R), [AI metrics](docs/methodology/ai-metrics.md) |
+| [Methodology](docs/methodology/) | [Delivery pipeline](docs/methodology/delivery-pipeline.md) (P0–P7, gates), [AI metrics](docs/methodology/ai-metrics.md) |
 | [Architecture](docs/architecture/README.md) | arc42 chapters 1–11 and crosscutting concepts |
 | [Decisions](docs/decisions/README.md) | Decision register and ADRs |
 | [Reference](docs/reference/) | Glossary, runtime agents, harness integration, data model, document repo, configuration |

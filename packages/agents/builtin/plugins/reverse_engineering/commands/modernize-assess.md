@@ -1,5 +1,5 @@
 ---
-description: What am I dealing with? Inventory, complexity, debt, security and a recommended modernization pattern
+description: What am I dealing with? Inventory, complexity, debt, security and a rebuild outlook
 argument-hint: <app> | --portfolio
 arguments: app
 metadata:
@@ -209,15 +209,10 @@ read) · **Architecture at a Glance** (domain table, refer to the diagram) ·
 (top 10) · **Security Findings** (CWE table) · **Documentation Gaps** (top 5) ·
 **Relative Scale** (the index and KSLOC for ranking against other applications; state
 plainly that it is not a timeline or a cost, and print no person-months, schedule,
-cost or date) · **Recommended Modernization Pattern**: one of Rehost, Replatform,
-Refactor, Rearchitect, Rebuild, Replace, with a one-paragraph rationale and the
-stage it routes to: a move to a newer version of the same technology (or its
-supporting platform) → `uplift`; a rewrite in another technology, piece by piece →
-`transform`; a rebuild on a new architecture → `reimagine`. Rehost (move as is) and
-Replace (buy or adopt a product) change no code, so no build stage applies: say so,
-and say what the analysis is still good for. For Rehost, `map`, `harden` and the `preflight`
-build check show what the move must carry along; for Replace, `extract-rules` turns
-what the application does into the acceptance criteria a replacement is judged against.
+cost or date) · **Rebuild Outlook**: every application is rebuilt, so say what
+makes this one easy or hard to rebuild: the domains to understand first and why,
+the main risks (hidden business rules, data, integrations) and what the assessment
+could not establish; one short paragraph and a list, no timeline and no cost.
 
 Also write `applications/$app/assessment/ARCHITECTURE.mmd`, the domain diagram from the
 structure job: one `flowchart TB` per the `mermaid-diagrams` skill, without a

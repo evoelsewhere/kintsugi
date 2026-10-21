@@ -124,7 +124,7 @@ export interface PortfolioApplication {
   applicationName: string;
   phase: Phase;
   gate: PortfolioGate | null;
-  assess: { sloc: number; sourceFiles: number; complexityIndex: number; critical: number; high: number; securityFindings: number; recommendation?: string } | null;
+  assess: { sloc: number; sourceFiles: number; complexityIndex: number; critical: number; high: number; securityFindings: number; outlook?: string } | null;
   catalog: { total: number; understood: number; counts: Partial<Record<ItemStatus, number>> } | null;
   blocked?: string;
   lastRunAt?: string;

@@ -15,7 +15,7 @@ A **unit** is the thing being migrated. Its id is always the full `<app>/<module
 ```text
 kintsugi.yaml                  project manifest (written by the portal's publish, arrives as a pull request)
 program/                       P0: charter.md, raci.md, ai-strategy.md, kpi-baseline.md, ai-usage-policy.md
-portfolio/                     P1: scorecard.md, dispositions.md, wave-plan.md
+portfolio/                     P1: scorecard.md, wave-plan.md
 architecture/                  P2: blueprint.md, coexistence.md, data-migration.md, poc-plan.md, adr/
 standards/                     P2-P3: conventions/, mappings/, review-rules.md
 plugins/                       P3: project-authored plugins only

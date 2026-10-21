@@ -10,7 +10,7 @@ it into the end-to-end environment's document repository.
 ```text
 kintsugi.yaml                  project manifest (repositories, unit kinds, pipelines, policy)
 program/                       P0: charter, RACI, AI strategy, KPI baseline, AI usage policy
-portfolio/                     P1: scorecard, disposition decisions, wave plan
+portfolio/                     P1: scorecard, wave plan
 architecture/                  P2: blueprint, coexistence, data migration plan, PoC plan, ADRs
 standards/                     P2-P3: conventions/, mappings/, review-rules.md
 plugins/                       P3: project-authored plugins only

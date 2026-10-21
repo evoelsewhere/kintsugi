@@ -69,7 +69,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     }
     expect((await admin.request("POST", "/admin/projects", { body: { id: "alpha", name: "Alpha", documentRepositoryId: "alpha-docs" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "beta", name: "Beta", documentRepositoryId: "beta-docs" } })).status).toBe(201);
-    expect((await admin.request("POST", "/admin/projects/alpha/applications", { body: { id: "web", name: "Web", disposition: "refactor" } })).status).toBe(201);
+    expect((await admin.request("POST", "/admin/projects/alpha/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/alpha/applications/web/repositories", { body: { repositoryId: "alpha-legacy", role: "legacy" } })).status).toBe(201);
 
     // What the worker records: runs (with a step), document writes and restricted records.

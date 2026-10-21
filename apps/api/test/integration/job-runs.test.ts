@@ -37,7 +37,7 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     }
     expect((await admin.request("POST", "/admin/projects", { body: { id: "billing", name: "Billing", documentRepositoryId: "billing-docs" } })).status).toBe(201);
     for (const id of ["web", "batch"]) {
-      expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id, name: id, disposition: "refactor" } })).status).toBe(201);
+      expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id, name: id } })).status).toBe(201);
     }
     expect((await admin.request("POST", "/admin/projects/billing/applications/web/repositories", { body: { repositoryId: "billing-legacy", role: "legacy" } })).status).toBe(201);
   });
