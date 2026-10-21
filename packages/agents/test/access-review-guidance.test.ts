@@ -18,15 +18,33 @@ describe("access plugin handoff guidance", () => {
     expect(skill).toMatch(/findings are evidence for the developer; they never authorize edits, approval, merge, or gate passage/i);
   });
 
-  it("separates CLI setup and watch from the chosen AI's read-only MCP role", async () => {
+  it("matches task-status fields and keeps gate publication separate from effectiveness", async () => {
+    const skill = await readSkill();
+    expect(skill).toMatch(/interpret `evidenceAvailability` before interpreting empty pull-request or review lists/i);
+    expect(skill).toMatch(/when a source is unavailable, say that its evidence could not be retrieved rather than claiming none exists/i);
+    expect(skill).toMatch(/gate decision status and gate publication status as separate facts/i);
+    expect(skill).toMatch(/an approval or a published record alone does not prove that a gate is effective or that the workflow advanced/i);
+    expect(skill).toMatch(/only advancement and next steps supported by the returned status and `nextAction`/i);
+    expect(skill).toMatch(/task-status gate entries expose `status` \(`pending`, `approved`, `rejected`, or `unknown`\) and `publication` \(`pending`, `published`, or `unknown`\)/i);
+    expect(skill).toMatch(/does not expose effective, stale, or failed publication states/i);
+    expect(skill).toMatch(/same selected `projectId`/i);
+    expect(skill).toMatch(/when PR evidence or its head revision is unavailable, do not claim a revision match/i);
+  });
+
+  it("separates CLI setup and optional SSE watch from the chosen AI's read-only MCP role", async () => {
     const skill = await readSkill();
     expect(skill).toContain("local Kintsugi CLI owns plugin setup, local MCP configuration, and authentication");
-    expect(skill).toContain("configured local MCP connection to read task briefs, cited standards and context, and review evidence");
+    expect(skill).toContain("configured local MCP connection to read task briefs, cited standards and context, review evidence, and task status");
     expect(skill).toContain("does not run or operate the assistant");
-    expect(skill).toContain("MCP access is read-only and has no watch tool or gate-write operation");
-    expect(skill).toContain("use `kintsugi task watch` only when that command is supported by the installed CLI");
-    expect(skill).toContain("This preview may report streaming as unsupported");
-    expect(skill).toContain("in that case, refresh `task_status`");
+    expect(skill).toContain("current adapter exposes `project_list`, `task_list`, `task_brief`, `document_get`, `document_search`, and `task_status`");
+    expect(skill).toContain("`review_get` is exposed only when the review capability is enabled");
+    expect(skill).toContain("All MCP tools are read-only. There is no MCP watch tool or gate-write operation");
+    expect(skill).toContain("only when the developer asks to monitor, use `kintsugi task watch <unitId>`");
+    expect(skill).toContain("subscribes to durable task events over SSE");
+    expect(skill).toContain("`--after-event-id` to resume, and `--limit` to bound the stream");
+    expect(skill).toContain("Do not start an unbounded watch by default");
+    expect(skill).toContain("call `task_status` to inspect current task, review, and gate facts");
+    expect(skill).toContain("Reading context through MCP does not require starting a watch");
   });
 
   it("hands implementation and PR creation to the chosen AI and reports only Kintsugi-observed provider state", async () => {
