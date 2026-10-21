@@ -41,6 +41,7 @@ import {
   type JobStore,
   type NewJobRun,
   type SourceCheckouts,
+  type SpanRecord,
   type StepLimits,
   isCancelled,
 } from "./model.js";
@@ -529,7 +530,7 @@ export class JobRunner {
       },
       metadata: { jobRunId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }) },
     };
-    const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0 };
+    const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0, cacheReadTokens: 0, cacheWriteTokens: 0, compactions: 0 };
     const stepId = run.id === ws.rootId ? undefined : run.id;
     const roots = { src: ws.src, in: ws.in, out: ws.out };
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
@@ -540,7 +541,20 @@ export class JobRunner {
       try {
         for await (const event of handle.events) {
           this.#count(event, usage);
-          if (event.type === "progress") {
+          if (event.type === "span") {
+            spans.push({
+              runId: ws.rootId,
+              ...(stepId === undefined ? {} : { stepId }),
+              projectId: run.projectId,
+              ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }),
+              agent: agentId,
+              provider: binding.provider,
+              model: binding.model,
+              attempt: attempts,
+              span: event.span,
+            });
+            if (spans.length >= 100) await flushSpans();
+          } else if (event.type === "progress") {
             const kb = (chars: number): string => (chars < 1000 ? `${chars}` : `${(chars / 1000).toFixed(1)}k`);
             await this.#event(ws, stepId, "log", `model working: turn ${event.turn}, thinking ${kb(event.thinkingChars)} chars, tool arguments ${kb(event.toolArgsChars)}, text ${kb(event.textChars)}`, {
               turn: event.turn,
@@ -566,7 +580,16 @@ export class JobRunner {
       done = await attempt();
     }
     if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
+    // The job's spans (ADR-0048) are stored in batches as they arrive; each run of the agent is an attempt.
+    let attempts = 0;
+    let spans: SpanRecord[] = [];
+    const flushSpans = async (): Promise<void> => {
+      const batch = spans;
+      spans = [];
+      await this.#deps.store.addSpans(batch);
+    };
     const writeMock = async (): Promise<void> => {
+      attempts += 1;
       if (!(this.#deps.mockOutputs ?? mock)) return;
       await writeMockOutputs({
         out: ws.out,
@@ -590,6 +613,7 @@ export class JobRunner {
       if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
       await writeMock();
     }
+        await flushSpans();
 
     let result: unknown;
     if (run.inputs["resultFile"] === true) {
@@ -633,7 +657,10 @@ export class JobRunner {
     await writeFile(target, `${JSON.stringify(result ?? null, null, 2)}\n`, "utf8");
   }
 
-  #count(event: JobEvent, usage: { inputTokens: number; outputTokens: number; costUsd: number; toolCalls: number; blocked: number }): void {
+  #count(
+    event: JobEvent,
+    usage: { inputTokens: number; outputTokens: number; costUsd: number; toolCalls: number; blocked: number; cacheReadTokens: number; cacheWriteTokens: number; compactions: number },
+  ): void {
     if (event.type === "usage") {
       usage.inputTokens += event.inputTokens;
       usage.outputTokens += event.outputTokens;
@@ -698,6 +725,9 @@ export class JobRunner {
     if (run.applicationId === undefined || run.sourceRepositoryId === undefined || ws.commit === undefined) throw new JobFailure(`Stage ${run.name} needs an application with a legacy repository`);
     const work = join(ws.root, "work");
     await mkdir(work, { recursive: true });
+      usage.cacheReadTokens += event.cacheReadTokens ?? 0;
+      usage.cacheWriteTokens += event.cacheWriteTokens ?? 0;
+      usage.compactions += event.compactions ?? 0;
     const scope = scopeOf(run.inputs);
     const provenance = new Map<string, Provenance>();
     let agent: string | undefined;

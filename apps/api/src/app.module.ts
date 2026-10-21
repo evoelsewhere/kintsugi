@@ -27,6 +27,7 @@ import { JobRunsModule } from "./modules/monitoring/observability/job-runs.modul
 import { OverviewModule } from "./modules/monitoring/overview/overview.module.js";
 import { PortfolioOverviewModule } from "./modules/monitoring/portfolio/portfolio.module.js";
 import { HealthChecksModule } from "./modules/monitoring/target-health/health-checks.module.js";
+import { TelemetryModule } from "./modules/monitoring/telemetry/telemetry.module.js";
 import { AuditEntriesModule } from "./modules/governance/audit/audit-entries.module.js";
 import { GatesModule } from "./modules/governance/gates/gates.module.js";
 import { PoliciesModule } from "./modules/governance/policies/policies.module.js";
@@ -72,6 +73,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     PortfolioOverviewModule,
     JobRunsModule,
     DashboardStatsModule,
+    TelemetryModule,
     AiMetricsModule,
     CostEntriesModule,
     HealthChecksModule,

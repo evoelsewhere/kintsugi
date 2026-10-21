@@ -2,7 +2,8 @@
 // audit log (audit.read) with filters, the restricted records of job runs (restricted.read:
 // listed without content; opening a run's records decrypts them and every record read is
 // audited) and which permission governs what.
-// URL: /governance?tab=gates|audit|restricted|permissions&status=<gate filter>&run=<top-level run id>
+// The telemetry tab (telemetry.view) shows what runtime agent jobs cost and how they behave (ADR-0048).
+// URL: /governance?tab=gates|audit|restricted|telemetry|permissions&status=<gate filter>&run=<top-level run id>
 
 import { Check, Eye, FileLock2, RefreshCw, ScrollText, ShieldCheck } from "lucide-react";
 import { useState } from "react";
@@ -33,6 +34,7 @@ import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { GatesView } from "./governance-gates";
 import { GovernanceInsights } from "./governance-insights";
+import { TelemetryView } from "./governance-telemetry";
 
 const PAGE_SIZE = 25;
 
@@ -43,6 +45,7 @@ export function GovernancePage(): React.JSX.Element {
     { id: "gates", label: "Gates" },
     ...(can("audit.read") ? [{ id: "audit" as const, label: "Audit log" }] : []),
     ...(can("restricted.read") ? [{ id: "restricted" as const, label: "Restricted records" }] : []),
+    ...(can("telemetry.view") ? [{ id: "telemetry" as const, label: "Telemetry" }] : []),
     { id: "permissions", label: "Permissions" },
   ];
   const tab = tabs.find((entry) => entry.id === params.get("tab"))?.id ?? tabs[0]!.id;
@@ -88,6 +91,7 @@ export function GovernancePage(): React.JSX.Element {
       ) : null}
       {tab === "audit" ? <AuditView /> : null}
       {tab === "restricted" ? <RestrictedView runFilter={params.get("run") ?? undefined} /> : null}
+      {tab === "telemetry" ? <TelemetryView projectOptions={projectOptions} /> : null}
       {tab === "permissions" ? <PermissionsView /> : null}
     </div>
   );
@@ -413,7 +417,7 @@ function PermissionsView(): React.JSX.Element {
           <CardTitle>Permissions</CardTitle>
           <CardDescription>
             Reading projects, runs, writes and the monitoring views needs a session. Changing state or revealing sensitive content needs a permission — audit.read for the audit log,
-            restricted.read for restricted records, gates.request and gates.decide for gates — granted to roles in{" "}
+            restricted.read for restricted records, telemetry.view for telemetry, gates.request and gates.decide for gates — granted to roles in{" "}
             <Link to="/members" className="text-accent hover:underline">
               Members &amp; Permissions
             </Link>

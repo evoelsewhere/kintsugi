@@ -17,6 +17,7 @@ import { type JobRunDetail, jobRunsApi } from "@/lib/api/job-runs";
 import { useAuth } from "@/lib/auth";
 import { formatBytes, formatDuration, shortSha } from "@/lib/format";
 import { isActiveStatus } from "@/lib/status";
+import { cacheHitRate, formatCost, formatRate, formatTokens, sumUsage } from "@/lib/telemetry";
 import { useLoader } from "@/lib/use-loader";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
@@ -124,6 +125,7 @@ function RunSummary({ run, stats, events, now }: { run: JobRunDetail; stats: Rea
   const blocked = [...stats.values()].reduce((sum, entry) => sum + entry.blocked, 0);
   const turns = Math.max(0, ...[...stats.values()].map((entry) => entry.turn ?? 0));
   const done = (counts["succeeded"] ?? 0) + (counts["failed"] ?? 0) + (counts["cancelled"] ?? 0);
+  const usage = sumUsage(run.steps);
   return (
     <div className="flex flex-col gap-3 rounded-xl bg-recessed/60 p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -154,16 +156,24 @@ function RunSummary({ run, stats, events, now }: { run: JobRunDetail; stats: Rea
         <Figure label="Blocked calls" value={blocked} tone={blocked > 0 ? "var(--ds-status-red)" : undefined} />
         <Figure label="Log lines" value={events} />
       </dl>
+      {usage === undefined ? null : (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+          <Figure label="Tokens" value={usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens} display={formatTokens(usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens)} hint={`new in ${formatTokens(usage.inputTokens)} · out ${formatTokens(usage.outputTokens)}`} />
+          <Figure label="Read from cache" value={usage.cacheReadTokens} display={formatRate(cacheHitRate(usage))} hint={`${formatTokens(usage.cacheReadTokens)} tokens`} />
+          <Figure label="Compactions" value={usage.compactions} />
+          <Figure label="Cost" value={usage.costUsd} display={formatCost(usage.costUsd)} />
+        </dl>
+      )}
     </div>
   );
 }
 
-function Figure({ label, value, hint, tone }: { label: string; value: number; hint?: string; tone?: string | undefined }): React.JSX.Element {
+function Figure({ label, value, display, hint, tone }: { label: string; value: number; display?: string; hint?: string; tone?: string | undefined }): React.JSX.Element {
   return (
     <div className="min-w-0">
       <dt className="truncate text-[11px] text-text-muted">{label}</dt>
       <dd className="text-[18px] leading-6 font-semibold tracking-tight text-text tabular-nums" style={tone === undefined ? undefined : { color: tone }}>
-        {value.toLocaleString()}
+        {display ?? value.toLocaleString()}
       </dd>
       {hint === undefined ? null : <p className="truncate text-[10.5px] text-text-muted">{hint}</p>}
     </div>

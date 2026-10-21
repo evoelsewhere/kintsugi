@@ -13,7 +13,7 @@ import { formatMs } from "@/lib/run-stats";
 import { countBy, formatCount, segmentsOf } from "./delivery/results/results-format";
 import { Kpi, KpiRow, Section } from "./delivery/results/results-parts";
 
-export function GovernanceInsights({ tab }: { tab: "gates" | "audit" | "restricted" | "permissions" }): React.JSX.Element | null {
+export function GovernanceInsights({ tab }: { tab: "gates" | "audit" | "restricted" | "telemetry" | "permissions" }): React.JSX.Element | null {
   if (tab === "gates") return <GatesInsights />;
   if (tab === "audit") return <AuditInsights />;
   return null;
