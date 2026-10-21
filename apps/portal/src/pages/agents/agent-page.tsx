@@ -30,7 +30,7 @@ import {
 } from "@/lib/api/agents";
 import { type AgentModelBindingInput, providersApi, type ProviderView, type SupportedProviders } from "@/lib/api/providers";
 import { useAuth } from "@/lib/auth";
-import { modelOptions } from "@/lib/model-options";
+import { modelOptions, modelThinkingLevels } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
 import { CopyAgentDialog } from "./agent-dialogs";
 
@@ -391,7 +391,7 @@ function AgentForm({ draft, context, readOnly, nameLocked, update }: AgentFormPr
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr]">
-        <Field label="Thinking" hint="Default level; a model binding can override it.">
+        <Field label="Thinking" hint="Default level, clamped to what the bound model supports; a model binding can override it.">
           <Select
             value={draft.thinking ?? ""}
             options={THINKING_OPTIONS}
@@ -549,10 +549,16 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
               setModel("");
             }}
           />
-          <Select value={model} placeholder="Model" options={modelOptions(providers.find((entry) => entry.id === provider), supported, model)} disabled={provider === ""} onChange={setModel} />
-          <Select value={thinking} options={THINKING_OPTIONS} onChange={setThinking} />
+          <Select value={thinking} options={thinkingOptions} onChange={setThinking} />
           <Button size="small" variant="solid" disabled={busy || provider === "" || model.trim() === ""} onClick={() => void save(false)}>
             Save binding
+  const selectedProvider = providers.find((entry) => entry.id === provider);
+  const levels = modelThinkingLevels(selectedProvider, supported, model);
+  const thinkingOptions: SelectOption[] = [
+    { value: "", label: "Default", ...(levels.length === 0 ? { hint: "Choose a model to see its reasoning levels" } : levels.every((level) => level === "off") ? { hint: "This model has no reasoning effort" } : {}) },
+    ...levels.map((level) => ({ value: level, label: level })),
+    ...(thinking !== "" && !levels.includes(thinking as ThinkingLevel) ? [{ value: thinking, label: thinking, hint: "not supported by this model" }] : []),
+  ];
           </Button>
           <Button size="small" variant="ghost" disabled={busy || detail.binding === undefined} onClick={() => void save(true)}>
             Clear
@@ -566,3 +572,14 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
     </div>
   );
 }
+              setThinking("");
+            }}
+          />
+          <Select
+            value={model}
+            placeholder="Model"
+            options={modelOptions(providers.find((entry) => entry.id === provider), supported, model)}
+            disabled={provider === ""}
+            onChange={(value) => {
+              setModel(value);
+              if (thinking !== "" && !modelThinkingLevels(selectedProvider, supported, value).includes(thinking as ThinkingLevel)) setThinking("");

@@ -71,6 +71,8 @@ export interface SupportedModel {
 export interface SupportedBuiltinProvider {
   id: string;
   models: SupportedModel[];
+  /** The thinking levels pi accepts for this model, weakest first. */
+  thinkingLevels: ThinkingLevel[];
 }
 
 export interface SupportedCustomApi {

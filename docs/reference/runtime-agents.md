@@ -32,7 +32,7 @@ Higher layers (orchestrator) translate their concepts (projects, units, standard
 | `skills` | Optional inline skills `{ name, content }` (`name` matches `[a-z][a-z0-9-]*`), appended to the system prompt |
 | `tools` | Optional tool allowlist by name (kernel tools below). Absent = every kernel tool (the built-in agents list none); `[]` = no tools |
 | `denyCommandPatterns` | Optional regular expressions; a tool call whose `command` input matches is blocked before it runs |
-| `thinking` | Default thinking level |
+| `thinking` | Default thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`. pi accepts a subset per model (the portal offers only those, from the provider catalog); a level the model lacks is clamped to the nearest one it has |
 
 ## Kernel tools
 
