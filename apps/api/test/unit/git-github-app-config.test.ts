@@ -13,6 +13,7 @@ const record: GitServerRecord = {
   baseUrl: "https://ghe.example.invalid",
   authType: "none",
   hasCredential: false,
+  hasGithubWebhookSecret: false,
   githubApp: { appId: "12345", installationId: "67890", hasPrivateKey: true },
   createdAt: "2026-10-21T00:00:00.000Z",
   updatedAt: "2026-10-21T00:00:00.000Z",
@@ -91,6 +92,22 @@ describe("GitHub App admin configuration", () => {
       authType: "none",
       credential: {},
       githubApp: { appId: "12345", installationId: "67890", privateKey },
+    } as RegisterGitServer;
+
+    await expect(git.createServer(input, {} as Actor)).rejects.toBeInstanceOf(BadRequestException);
+    expect(registry.createServer).not.toHaveBeenCalled();
+  });
+
+  it("rejects weak GitHub webhook secrets before persistence", async () => {
+    const { service: git, registry } = service();
+    const input = {
+      id: "github-hook",
+      kind: "github",
+      name: "GitHub",
+      baseUrl: "https://github.com",
+      authType: "none",
+      credential: {},
+      githubWebhookSecret: "too-short",
     } as RegisterGitServer;
 
     await expect(git.createServer(input, {} as Actor)).rejects.toBeInstanceOf(BadRequestException);

@@ -96,6 +96,29 @@ describe("GitHub pull-request observation", () => {
     expect(enterpriseFetch.calls[0]?.url).toMatch(/^https:\/\/ghe\.example\.com\/api\/v3\/repos\/Acme\/Billing\/pulls\?/);
   });
 
+  it("enumerates a stable all-state history for recovery scans", async () => {
+    const next = "https://api.github.com/repos/Acme/Billing/pulls?state=all&sort=created&direction=asc&per_page=100&page=2";
+    const fetch = fakeFetch([
+      { status: 200, body: [pr({ id: 987, number: 12, updated_at: "2020-01-01T00:00:00Z" })], headers: { link: `<${next}>; rel="next"` } },
+      { status: 200, body: [pr({ id: 988, number: 13, state: "closed", updated_at: "2026-10-21T10:00:00Z" })] },
+    ]);
+    const observer = new GitHubPullRequestObserver({ credentials: resolver(), fetch: fetch.fetch });
+
+    const first = await observer.listAll(connection());
+    const second = await observer.listAll(connection(), first.nextCursor);
+
+    expect(new URL(fetch.calls[0]!.url).searchParams).toEqual(new URLSearchParams({ state: "all", sort: "created", direction: "asc", per_page: "100" }));
+    expect(first).toMatchObject({ complete: false, items: [{ number: 12, state: "open" }] });
+    expect(second).toMatchObject({ complete: true, items: [{ number: 13, state: "closed" }] });
+  });
+
+  it("preserves GitHub Retry-After metadata for durable worker backoff", async () => {
+    const fetch = fakeFetch([{ status: 429, body: { message: "rate limited" }, headers: { "retry-after": "75" } }]);
+    const observer = new GitHubPullRequestObserver({ credentials: resolver(), fetch: fetch.fetch });
+
+    await expect(observer.listAll(connection())).rejects.toMatchObject({ code: "GITHUB_HTTP_429", retryAfterMs: 75_000 });
+  });
+
   it("preserves check producer and evaluated SHAs and review actor identity", async () => {
     const fetch = fakeFetch([
       { status: 200, body: pr({ state: "closed", merged_at: "2026-10-21T10:45:00Z", merge_commit_sha: FINAL_MERGE_SHA }) },

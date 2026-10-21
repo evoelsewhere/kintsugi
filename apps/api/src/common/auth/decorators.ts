@@ -4,9 +4,10 @@
 //   - @RequirePermission("code", …): additionally requires one of the permissions (PermissionsGuard)
 //   - @CurrentActor(): injects the signed-in caller into a handler parameter
 
-import { createParamDecorator, type ExecutionContext, SetMetadata, UnauthorizedException } from "@nestjs/common";
+import { applyDecorators, createParamDecorator, type ExecutionContext, SetMetadata, UnauthorizedException } from "@nestjs/common";
 
 export const IS_PUBLIC_KEY = "kintsugi:is-public";
+export const SIGNED_WEBHOOK_KEY = "kintsugi:signed-webhook";
 export const PERMISSION_KEY = "kintsugi:required-permission";
 export const MEMBER_READ_SCOPE_KEY = "kintsugi:member-read-scope";
 
@@ -24,6 +25,9 @@ export interface Actor {
 
 /** Marks a route as reachable without a session. */
 export const Public = (): MethodDecorator & ClassDecorator => SetMetadata(IS_PUBLIC_KEY, true);
+
+/** Public ingress that has its own signature authentication and does not ride browser cookies. */
+export const SignedWebhook = (): MethodDecorator => applyDecorators(Public(), SetMetadata(SIGNED_WEBHOOK_KEY, true));
 
 /**
  * Requires at least one of the permission codes from the caller's effective roles.
