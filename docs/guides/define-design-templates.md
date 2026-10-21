@@ -15,7 +15,7 @@ A **design set** is a group of documents written together for a unit. Start from
 | Who writes and who reviews each? | an analyst writes the basic design, a developer the detail design |
 | Which pipeline stage produces each? | `basic-design`, `detail-design` |
 
-The starter in `standards/design/` has `basic` and `detail` for the unit kind `module`. Copy and change it, or add sets (`db`, `screen`, `report`).
+The starter in `standards/design/` has `basic` and `detail` for every unit kind. Copy and change it, or add sets (`db`, `screen`, `report`).
 
 ## 2. Write `set.md`
 

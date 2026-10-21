@@ -12,7 +12,7 @@ standards/design/<set>/
   <template>.md   one template per document
 ```
 
-The starter has two sets for the unit kind `module`: `basic` (what the unit is, written for every unit in scope) and `detail` (how it is built, written just before the unit is coded). Replace them with the sets your project needs; a project may have one set, or four (`basic`, `detail`, `db`, `report`).
+The starter has two sets for every unit kind: `basic` (what the unit is, written for every unit in scope) and `detail` (how it is built, written just before the unit is coded). Replace them with the sets your project needs; a project may have one set, or four (`basic`, `detail`, `db`, `report`).
 
 ## `set.md`
 

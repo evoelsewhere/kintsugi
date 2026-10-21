@@ -79,7 +79,7 @@ A closed vocabulary: a project chooses and parameterises checks, it cannot add c
 
 ## What the scaffold writes
 
-`scaffold_design.py` creates each document the set lists for the unit's kind. The front matter names the template and the unit (`template: "detail@2"`); the template is copied with its variables filled; each directive block is replaced by what the author writes: a table section by its header (and, when it is `required`, a `TODO` row, or one row per rule when it is seeded), a `required` section without a table by `TODO`. Text under a section's heading in the template is not carried over: guidance lives in the directive. A file that exists is never overwritten.
+`scaffold_design.py` creates each required document the set lists for the unit's kind (`--all` adds the optional ones, `--file` writes one). The front matter names the template and the unit (`template: "detail@2"`); the template is copied with its variables filled; each directive block is replaced by what the author writes: a table section by its header (and, when it is `required`, a `TODO` row, or one row per rule when it is seeded), a `required` section without a table by `TODO`. Text under a section's heading in the template is not carried over: guidance lives in the directive. A file that exists is never overwritten.
 
 A seeded table gets one row per rule of the unit, the rule id in the column that `covers-rules` names (else the first), `TODO` in the others.
 

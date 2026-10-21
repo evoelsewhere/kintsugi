@@ -2,7 +2,7 @@
 id: basic
 title: Basic design
 version: 1
-appliesTo: ["module"]
+appliesTo: []
 needs: []
 stage: basic-design
 ---
