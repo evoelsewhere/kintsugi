@@ -448,7 +448,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(folder.run?.status).toBe("succeeded");
     expect(folder.agents.specs).toHaveLength(1);
 
-    const retried = await run((call) => (call === 0 ? {} : { "result.json": result }));
+    const retried = await run((call): Record<string, string> => (call === 0 ? {} : { "result.json": result }));
     expect(retried.run?.status).toBe("succeeded");
     expect(retried.agents.specs).toHaveLength(2);
     expect(retried.agents.specs[1]?.task).toContain('bare path "result.json"');
