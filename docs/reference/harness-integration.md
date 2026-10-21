@@ -57,7 +57,7 @@ The implemented CLI commands are read-only except for local sign-in, profile sel
 | kintsugi document search UNIT --snapshot ID --query TEXT | Bounded keyword search inside the pinned context |
 | kintsugi review list --task UNIT / review get ID | Find current authorized review references and retrieve actionable findings |
 | kintsugi task status UNIT | Read current task and relevant PR/gate state |
-| kintsugi task watch UNIT | Reserved for SSE; currently reports `UNSUPPORTED_CAPABILITY` |
+| kintsugi task watch UNIT | Stream and resume authorized task events when the server endpoint is available |
 | kintsugi plugins setup --client claude --profile NAME | Generate a package and print native install/removal commands; exact-version gated |
 | kintsugi doctor | Check local installation, credential store, network and client capabilities |
 | kintsugi mcp serve --profile NAME | Start a local stdio bridge using the selected profile and its OS credential |

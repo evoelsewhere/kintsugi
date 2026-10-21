@@ -18,6 +18,7 @@ import {
   taskQuerySchema,
   taskIdentitySchema,
   taskStatusSchema,
+  taskEventQuerySchema,
 } from "../src/agent-context-schemas.js";
 
 const sha = (char: string): string => char.repeat(40);
@@ -211,6 +212,14 @@ describe("Coding Agent Workflow wire schemas", () => {
       snapshotId: "ctx_001",
       query: "x".repeat(501),
     }).success).toBe(false);
+  });
+
+  it("keeps task event streams unbounded by default and validates an optional event limit", () => {
+    const identity = { projectId: "modernization", unitId: "billing/invoices/tax" };
+    expect(taskEventQuerySchema.parse(identity)).not.toHaveProperty("limit");
+    expect(taskEventQuerySchema.parse({ ...identity, limit: "1000" }).limit).toBe(1000);
+    expect(taskEventQuerySchema.safeParse({ ...identity, limit: "0" }).success).toBe(false);
+    expect(taskEventQuerySchema.safeParse({ ...identity, limit: "1001" }).success).toBe(false);
   });
 
   it("preserves partial-context metadata instead of claiming a complete brief", () => {

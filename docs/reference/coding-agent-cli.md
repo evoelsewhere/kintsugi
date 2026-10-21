@@ -1,6 +1,6 @@
 # Coding Agent Workflow CLI
 
-Status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. Streaming, PR ingestion and review continuation remain planned. Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
+Status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. The SSE client and `task watch` command are implemented; server-side event replay, PR ingestion and workflow continuation are still in progress. Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
 
 The CLI lets a developer or a shell-enabled coding agent retrieve Kintsugi data. The developer's chosen AI interprets those documents and decides how to answer; the CLI does not call a model or inject text into an already-running AI conversation.
 
@@ -81,6 +81,6 @@ Each tool call supplies its own project and task identity. `mcp serve --project`
 
 ## Current limits
 
-`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented, so the local bridge does not advertise `review_get`. `task watch` likewise returns `UNSUPPORTED_CAPABILITY` until the SSE milestone. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
+`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented, so the local bridge does not advertise `review_get`. `task watch` streams only when the selected installation exposes the authorized task-event endpoint; installations without that server capability cannot yet provide a live stream. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
 
 `doctor` checks the runtime, profile credential availability and an authorized API read. It does not certify support for a Claude Code, Codex or Copilot version; those require native setup and interaction tests.

@@ -270,3 +270,106 @@ describe("review retrieval contract", () => {
     expect(JSON.parse(state.output().stdout)).toEqual([{ reviewId: "review_authorized", currentness: "current" }]);
   });
 });
+
+describe("task watch CLI", () => {
+  const event = (id: string) => ({ schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id,
+    kind: "task.activity-ready", occurredAt: "2026-10-21T00:00:00Z", metadata: { activity: "verification", ready: true } });
+  const frame = (id: string) => `event: task-event\nid: ${id}\ndata: ${JSON.stringify(event(id))}\n\n`;
+
+  it("uses the selected profile/project and resume options, emitting compact NDJSON", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(frame("evt_1") + frame("evt_2"), { headers: { "content-type": "text/event-stream" } }));
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    expect(await runCli(["task", "watch", "/web/core/invoice/", "--after-event-id", "evt_0", "--limit", "2", "--json"], state.deps as never)).toBe(0);
+    expect(String(fetch.mock.calls[0]?.[0])).toBe("https://kintsugi.example/api/member/v1/task-events?projectId=shop&unitId=web%2Fcore%2Finvoice&afterEventId=evt_0&limit=2");
+    expect(state.output().stdout).toBe(`${JSON.stringify(event("evt_1"))}\n${JSON.stringify(event("evt_2"))}\n`);
+    expect(state.output().stderr).toBe("");
+  });
+
+  it.each(["text", "markdown"])("shows event identity, time, kind and metadata in %s", async (format) => {
+    const state = harness(async () => new Response(frame("evt_1"), { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", format], state.deps as never)).toBe(0);
+    for (const value of ["evt_1", "task.activity-ready", "2026-10-21T00:00:00Z", "shop/web/core/invoice", "verification", "true"]) expect(state.output().stdout).toContain(value);
+  });
+
+  it.each(["0", "1001", "1.5", "nope"])("rejects invalid event limit %s without fetching", async (limit) => {
+    const fetch = vi.fn();
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", limit], state.deps as never)).toBe(2);
+    expect(state.output().stderr).toContain("LIMIT_INVALID");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("surfaces cursor expiry as a structured error without output", async () => {
+    const state = harness(async () => Response.json({ success: false, message: "Refresh task status before resuming", details: { code: "MEMBER_EVENT_CURSOR_EXPIRED" } }, { status: 409 }), { profile: true, token: "TEST-token" });
+    expect(await runCli(["task", "watch", "web/core/invoice", "--json"], state.deps as never)).toBe(2);
+    expect(state.output().stdout).toBe("");
+    expect(JSON.parse(state.output().stderr)).toMatchObject({ error: { code: "MEMBER_EVENT_CURSOR_EXPIRED", status: 409 } });
+  });
+
+  it("prints events immediately, cancels only the subscription and cleans up process listeners", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    let onOutput!: () => void;
+    const printed = new Promise<void>((resolve) => { onOutput = resolve; });
+    const cancel = vi.fn();
+    const fetch = vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ start(value) { controller = value; value.enqueue(new TextEncoder().encode(frame("evt_1"))); }, cancel }), { headers: { "content-type": "text/event-stream" } }));
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    const watch = new AbortController();
+    Object.assign(state.deps, { watchSignal: watch.signal, signal: AbortSignal.abort() });
+    const originalWrite = state.deps.stdout.write;
+    state.deps.stdout.write = (value) => { originalWrite(value); onOutput(); };
+    const before = [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")];
+    const running = runCli(["task", "watch", "web/core/invoice", "--json"], state.deps as never);
+    await printed;
+    expect(JSON.parse(state.output().stdout).id).toBe("evt_1");
+    expect(controller).toBeDefined();
+    watch.abort();
+    expect(await running).toBe(0);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(state.output().stderr).toBe("");
+    expect([process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")]).toEqual(before);
+  });
+});
+
+describe("watch process signals", () => {
+  it.each(["SIGINT", "SIGTERM"] as const)("closes its stream cleanly for %s", async (signalName) => {
+    const before = process.listenerCount(signalName);
+    const cancel = vi.fn();
+    const value = { schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id: "evt_1", kind: "task.changed", occurredAt: "2026-10-21T00:00:00Z", metadata: {} };
+    const state = harness(async () => new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(`event: task-event\nid: evt_1\ndata: ${JSON.stringify(value)}\n\n`));
+    }, cancel }), { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+    const write = state.deps.stdout.write;
+    state.deps.stdout.write = (output) => { write(output); process.emit(signalName); };
+    expect(await runCli(["task", "watch", "web/core/invoice", "--json"], state.deps as never)).toBe(0);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(process.listenerCount(signalName)).toBe(before);
+    expect(state.output().stderr).toBe("");
+  });
+});
+
+describe("watch authorization", () => {
+  it("uses the named profile credential and an explicit project instead of its default", async () => {
+    const value = { schemaVersion: "1", projectId: "payments", unitId: "web/core/invoice", id: "evt_1", kind: "task.changed", occurredAt: "2026-10-21T00:00:00Z", metadata: {} };
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(`event: task-event\nid: evt_1\ndata: ${JSON.stringify(value)}\n\n`, { headers: { "content-type": "text/event-stream" } }));
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    state.profiles.value.profiles.other = { id: "other", baseUrl: "https://other.example/base", projectId: "default" };
+    state.credentials.values.set("other", "TEST-other-token");
+    expect(await runCli(["--project", "payments", "task", "watch", "web/core/invoice", "--profile", "other", "--limit", "1", "--json"], state.deps as never)).toBe(0);
+    expect(String(fetch.mock.calls[0]?.[0])).toBe("https://other.example/base/api/member/v1/task-events?projectId=payments&unitId=web%2Fcore%2Finvoice&limit=1");
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("authorization")).toBe("Bearer TEST-other-token");
+    expect(JSON.parse(state.output().stdout)).toEqual(value);
+  });
+
+  it("keeps delivered events and sends revocation only to stderr, cleaning up listeners", async () => {
+    const value = { schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id: "evt_1", kind: "task.changed", occurredAt: "2026-10-21T00:00:00Z", metadata: {} };
+    const fetch = vi.fn(async () => new Response(`event: task-event\nid: evt_1\ndata: ${JSON.stringify(value)}\n\nevent: error\ndata: {"code":"FORBIDDEN","message":"Access revoked"}\n\n`, { headers: { "content-type": "text/event-stream" } }));
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    const before = [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")];
+    expect(await runCli(["task", "watch", "web/core/invoice", "--json"], state.deps as never)).toBe(3);
+    expect(JSON.parse(state.output().stdout)).toEqual(value);
+    expect(JSON.parse(state.output().stderr)).toMatchObject({ success: false, error: { code: "FORBIDDEN", status: 403 } });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect([process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")]).toEqual(before);
+  });
+});

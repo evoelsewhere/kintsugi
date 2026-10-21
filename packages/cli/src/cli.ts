@@ -44,6 +44,8 @@ export interface CliDeps {
   launcher?: { launcherPath: string; cliEntrypointPath: string; cliVersion: string };
   getClientVersion?: (target: CodingAgentClient) => Promise<string>;
   signal?: AbortSignal;
+  /** Subscription lifetime, independent of the ordinary request deadline. */
+  watchSignal?: AbortSignal;
 }
 
 function sleepWithSignal(milliseconds: number, signal?: AbortSignal): Promise<void> {

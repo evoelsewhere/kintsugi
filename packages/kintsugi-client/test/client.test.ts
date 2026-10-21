@@ -154,12 +154,12 @@ describe("typed Coding Agent Workflow HTTP client", () => {
     expect(sleep).toHaveBeenCalledTimes(2);
   });
 
-  it("does not make a request without a token and does not claim streaming is available", async () => {
+  it("does not make a request without a token for reads or streaming", async () => {
     const fetcher = vi.fn();
     const client = createCodingAgentWorkflowClient({ baseUrl: "https://kintsugi.example", tokenProvider: async () => undefined, fetch: fetcher });
     await expect(client.listProjects({})).rejects.toMatchObject({ code: "UNAUTHENTICATED", status: 401 });
     expect(fetcher).not.toHaveBeenCalled();
-    await expect(async () => { for await (const _event of client.watchTask({ projectId: "shop", unitId: "web/core/invoice" }, new AbortController().signal)) { void _event; } }).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
+    await expect(async () => { for await (const _event of client.watchTask({ projectId: "shop", unitId: "web/core/invoice" }, new AbortController().signal)) { void _event; } }).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
   });
 
   it("redacts a credential echoed in an API error message or details", async () => {
