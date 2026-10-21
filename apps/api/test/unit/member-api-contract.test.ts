@@ -1,5 +1,5 @@
-import { BadRequestException, HttpException } from "@nestjs/common";
-import { taskStatusSchema } from "@kintsugi/harness-sdk";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { reviewReportSchema, taskStatusSchema, type TaskIdentity } from "@kintsugi/harness-sdk";
 import type { MemberPrincipal } from "../../src/modules/core/auth/index.js";
 import type { ProjectAccessPort } from "../../src/modules/delivery/agent-context/domain/project-access.ports.js";
 import type { TaskQueryService } from "../../src/modules/delivery/agent-context/application/task-query.service.js";
@@ -26,7 +26,10 @@ function service() {
   const tasks = { list: vi.fn(), get: vi.fn() } as unknown as TaskQueryService;
   const snapshots = { brief: vi.fn() } as unknown as SnapshotService;
   const documents = { get: vi.fn(), search: vi.fn() } as unknown as DocumentQueryService;
-  const reviews = { get: vi.fn() };
+  const reviews = {
+    get: vi.fn(),
+    listCurrentIds: vi.fn(async (_principal: MemberPrincipal, _identity: TaskIdentity): Promise<string[]> => []),
+  };
   return { subject: new AgentContextService(projectAccess, tasks, snapshots, documents, reviews), projectAccess, tasks, reviews };
 }
 
@@ -48,8 +51,9 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     await expect(subject.listProjects(principal, { cursor: "YWxwaGE=" })).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("returns task status in the shared client schema without claiming unobserved PR or review evidence", async () => {
-    const { subject, tasks } = service();
+  it("returns task status with review capability while leaving unobserved PR evidence unavailable", async () => {
+    const { subject, tasks, reviews } = service();
+    vi.mocked(reviews.listCurrentIds).mockResolvedValue(["rev_018f0000-0000-4000-8000-000000000001"]);
     vi.mocked(tasks.get).mockResolvedValue({
       projectId: "alpha",
       unitId: "web/core/invoice",
@@ -65,8 +69,8 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     const status = await subject.taskStatus(principal, { projectId: "alpha", unitId: "web/core/invoice" });
     expect(taskStatusSchema.parse(status)).toEqual(status);
     expect(status.pullRequests).toEqual([]);
-    expect(status.currentReviewIds).toEqual([]);
-    expect(status.evidenceAvailability).toEqual({ pullRequests: "unavailable", reviews: "unavailable" });
+    expect(status.currentReviewIds).toEqual(["rev_018f0000-0000-4000-8000-000000000001"]);
+    expect(status.evidenceAvailability).toEqual({ pullRequests: "unavailable", reviews: "available" });
     expect(status.gates).toEqual([{ gateId: "G3", status: "unknown", publication: "unknown" }]);
     expect(status.nextAction).toContain("pull request");
   });
@@ -117,18 +121,23 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     expect(result.nextAction).toBe(action);
   });
 
-  it("reports review capability as unsupported without returning a verdict", async () => {
+  it("returns a validated review report through the authorized query port", async () => {
     const { subject, reviews } = service();
-    vi.mocked(reviews.get).mockRejectedValue(new HttpException({
-      message: "Review evidence is not available yet",
-      details: { code: "UNSUPPORTED_CAPABILITY", capability: "reviews" },
-    }, 501));
+    const report = reviewReportSchema.parse({
+      schemaVersion: "1", projectId: "alpha", unitId: "web/core/invoice", reviewId: "rev_018f0000-0000-4000-8000-000000000001",
+      generation: 1, currentness: "current", verdict: "fail", reviewedHead: "a".repeat(40), reviewedBase: "b".repeat(40),
+      mergeBase: "c".repeat(40), contextRevision: `sha256:${"c".repeat(64)}`, policyRevision: "policy-v1", agentVersion: "review-agent-v1", coverage: "complete",
+      findings: [{ findingId: "finding-001", severity: "high", title: "Boundary is unchecked", rationale: "The input is multiplied first.",
+        repairGuidance: "Check the bound before multiplication.", citation: { sourceId: "pull-request", path: "src/invoice.ts", startLine: 3 }, currentness: "current" }],
+    });
+    vi.mocked(reviews.get).mockResolvedValue(report);
+    vi.mocked(reviews.listCurrentIds).mockResolvedValue([report.reviewId]);
 
-    const error = await subject.getReview(principal, { projectId: "alpha", reviewId: "review-1" }).catch((value: unknown) => value);
-    expect(error).toBeInstanceOf(HttpException);
-    expect((error as HttpException).getStatus()).toBe(501);
-    expect((error as HttpException).getResponse()).toMatchObject({ details: { code: "UNSUPPORTED_CAPABILITY", capability: "reviews" } });
-    expect(reviews.get).toHaveBeenCalledWith(principal, { projectId: "alpha", reviewId: "review-1" });
+    await expect(subject.getReview(principal, { projectId: "alpha", reviewId: report.reviewId })).resolves.toEqual(report);
+    expect(reviews.get).toHaveBeenCalledWith(principal, { projectId: "alpha", reviewId: report.reviewId });
+    await expect(subject.getReview({ ...principal, projectIds: ["beta"] }, { projectId: "alpha", reviewId: report.reviewId }))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(reviews.get).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -66,14 +66,14 @@ const access = {
     return {
       schemaVersion: "1", projectId: query.projectId, unitId: "billing/invoices/tax",
       reviewId: query.reviewId, generation: 1, currentness: "current", verdict: "pass",
-      reviewedHead: sha("c"), reviewedBase: sha("d"), contextRevision: hash("a"),
+      reviewedHead: sha("c"), reviewedBase: sha("d"), mergeBase: sha("e"), contextRevision: hash("a"),
       policyRevision: "policy-v1", agentVersion: "reviewer-v1", coverage: "complete", findings: [],
     };
   },
   async taskStatus(query) {
     return {
       schemaVersion: "1", projectId: query.projectId, unitId: query.unitId, status: "in-progress",
-      evidenceAvailability: { pullRequests: "unavailable", reviews: "unavailable" },
+      evidenceAvailability: { pullRequests: "unavailable", reviews: process.env.KINTSUGI_TEST_REVIEWS === "1" ? "available" : "unavailable" },
       pullRequests: [], currentReviewIds: [], gates: [], nextAction: "Read the task brief.",
     };
   },

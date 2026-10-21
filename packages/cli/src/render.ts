@@ -1,6 +1,6 @@
 import { open, unlink } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import type { TaskBrief } from "@kintsugi/harness-sdk";
+import { reviewReportSchema, type ReviewReport, type TaskBrief } from "@kintsugi/harness-sdk";
 import { CliError } from "./profile.js";
 
 function citation(sourceId: string, path: string, startLine?: number, endLine?: number): string {
@@ -147,8 +147,37 @@ async function restrictWindowsFile(path: string): Promise<void> {
   await runWindowsTool(`${systemRoot}\\System32\\icacls.exe`, [path, "/inheritance:r", "/grant:r", `*${sid}:(M)`]);
 }
 
+function renderReviewReport(report: ReviewReport, markdown: boolean): string {
+  const lines = [
+    `${markdown ? "# " : ""}Review ${report.reviewId}`,
+    `Task: ${report.projectId}/${report.unitId}`,
+    `Generation: ${report.generation}`,
+    `Currentness: ${report.currentness}`,
+    `Verdict: ${report.verdict}`,
+    `Coverage: ${report.coverage}`,
+    `Reviewed head: ${report.reviewedHead}`,
+    `Reviewed base: ${report.reviewedBase}`,
+    ...(report.mergeBase === undefined ? [] : [`Merge base: ${report.mergeBase}`]),
+    `Context revision: ${report.contextRevision}`,
+    `Policy revision: ${report.policyRevision}`,
+    `Agent version: ${report.agentVersion}`,
+    "", `${markdown ? "## " : ""}Findings`, "",
+  ];
+  if (report.findings.length === 0) lines.push("No findings.");
+  for (const finding of report.findings) {
+    lines.push(`${markdown ? "### " : ""}${finding.findingId}: ${finding.title}`,
+      `Severity: ${finding.severity}; currentness: ${finding.currentness}`, "", finding.rationale, "", `Repair guidance: ${finding.repairGuidance}`);
+    const source = formatCitation(finding.citation);
+    if (source !== undefined) lines.push(`Source: ${source}`);
+    lines.push("");
+  }
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
 export function formatResult(value: unknown, format: "text" | "json" | "markdown"): string {
   if (format === "json") return `${JSON.stringify(value, null, 2)}\n`;
+  const review = reviewReportSchema.safeParse(value);
+  if (review.success) return renderReviewReport(review.data, format === "markdown");
   if (format === "markdown") {
     if (typeof value === "string") return `${value.trimEnd()}\n`;
     const values = value !== null && typeof value === "object" && "items" in value && Array.isArray((value as { items?: unknown }).items)

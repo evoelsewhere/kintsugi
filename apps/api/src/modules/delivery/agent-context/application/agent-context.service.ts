@@ -102,6 +102,7 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
   async taskStatus(principal: MemberPrincipal, identity: TaskIdentity): Promise<TaskStatus> {
     await this.authorize(principal, identity.projectId);
     const task = await this.tasks.get(principal, identity);
+    const currentReviewIds = await this.reviews.listCurrentIds(principal, identity);
     if (task.predecessorGates.length > MAX_STATUS_GATES) {
       throw new PayloadTooLargeException("The task has too many gates for the Coding Agent Workflow status response");
     }
@@ -110,9 +111,9 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
       projectId: task.projectId,
       unitId: task.unitId,
       status: task.workItem.status,
-      evidenceAvailability: { pullRequests: "unavailable", reviews: "unavailable" },
+      evidenceAvailability: { pullRequests: "unavailable", reviews: "available" },
       pullRequests: [],
-      currentReviewIds: [],
+      currentReviewIds,
       gates: task.predecessorGates.map((gate) => ({
         gateId: gate.gateId,
         status: gate.status,

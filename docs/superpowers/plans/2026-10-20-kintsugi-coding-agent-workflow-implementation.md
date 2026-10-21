@@ -260,11 +260,12 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 **Interfaces:** `materializeReviewInput(deps, observed: ObservedPullRequest, context: SnapshotManifest): Promise<ReviewInputManifest>`; `scheduleReview(deps, key: ReviewKey, generationReason): Promise<ReviewAttempt>`. Key binds immutable revisions/context/policy/agent version; generation records intentional reruns separately from duplicates.
 
-- [ ] Write REV-01/02/04–07 tests: new push invalidates old completion, unchanged duplicate schedules once, authorized same-revision rerun creates the next generation, missing objects/API-cap truncation makes coverage incomplete and no passing report is published.
-- [ ] Run worker review input/scheduling tests using the real local Git helper. A declared 3,001-file API response scenario must use Git enumeration or become inconclusive, never silently review 3,000 files.
-- [ ] Fetch/verify immutable Git objects under worker credentials, enumerate complete changed inputs, and materialize only read-only job inputs. Record binaries/submodules/generated/excluded/missing/oversized coverage explicitly. Pin active inputs and exclude untrusted code execution.
-- [ ] Supply a real versioned agent definition through the existing generic job contract, with bounded output validated against `ReviewReport`. No pi/use-case code in other services and no new runtime kernel tool. Preserve model-job retryLimit=0; distinguish safe fetch retries from audited new generations. Use scripted review output in automated tests; actual model semantics require the pilot.
-- [ ] Confirm no credentials in job env/input/output, report validation rejects unsupported “pass” claims and stale generation results stay superseded; commit `feat(review): materialize fixed inputs and schedule revision-bound reviews`.
+- [x] Write REV-01/02/04–07 tests: new push invalidates old completion, unchanged duplicate schedules once, authorized same-revision rerun creates the next generation, missing objects/API-cap truncation makes coverage incomplete and no passing report is published.
+- [x] Run worker review input/scheduling tests using the real local Git helper. A declared 3,001-file API response scenario must use Git enumeration or become inconclusive, never silently review 3,000 files.
+- [x] Fetch/verify immutable Git objects under worker credentials, enumerate complete changed inputs, and materialize only read-only job inputs. Record binaries/submodules/generated/excluded/missing/oversized coverage explicitly. Pin active inputs and exclude untrusted code execution.
+- [x] Supply a real versioned agent definition through the existing generic job contract, with bounded output validated against `ReviewReport`. No pi/use-case code in other services and no new runtime kernel tool. Preserve model-job retryLimit=0; distinguish safe fetch retries from audited new generations. Use scripted review output in automated tests; actual model semantics require the pilot.
+- [x] Confirm no credentials in job env/input/output, report validation rejects unsupported “pass” claims and stale generation results stay superseded.
+- [x] Commit feat(review): materialize fixed inputs and schedule revision-bound reviews.
 
 ### Task 13 (T13) — Trusted evidence policy and actionable findings retrieval
 
@@ -272,11 +273,15 @@ Workspace package names are `@kintsugi/kintsugi-client` and `@kintsugi/cli`; the
 
 **Interfaces:** `evaluateReviewEvidence(input: ReviewEvidenceInput, policy: ReviewPolicy): EvidenceVerdict`; `ReviewQueryService.get(principal, query): Promise<ReviewReport>` implements the T06 `ReviewReader`. Policy defines context/check name, expected producer/App, evaluated revision, latest applicable attempt and required conclusions/review authority.
 
-- [ ] Write REV-03/08–10 tests: wrong producer, skipped/neutral test evidence, dismissed/old human approval, stale revision and incomplete coverage cannot satisfy policy. Assertions name the unmet requirement rather than only `false`.
-- [ ] Run domain policy, API findings and CLI/MCP contract tests; expect missing current findings capability before wiring.
-- [ ] Implement immutable report/findings storage and current/superseded/inconclusive projection. Return stable finding IDs, severity, rationale, cited file/line, reviewed revision and repair guidance. Resolve final merged identity correctly for squash/rebase; unrelated later branch commits do not rewrite historical evidence.
-- [ ] Enable real `review_get`, CLI `review get` and task-status review IDs. Optional GitHub publishing uses a separate capability/permission and SHA-bound output; absence never hides findings from the developer's AI.
-- [ ] Exercise AI-independent repair retrieval against seeded findings, rerun auth/snapshot regressions, then commit `feat(review): expose trusted review evidence and current findings`.
+- [x] Write REV-03/08–10 tests: wrong producer, skipped/neutral test evidence, dismissed/old human approval, stale revision and incomplete coverage cannot satisfy policy. Assertions name the unmet requirement rather than only `false`.
+- [x] Run domain policy, API findings and CLI/MCP contract tests; expect missing current findings capability before wiring.
+- [x] Implement immutable report/findings storage and current/superseded/inconclusive projection. Return stable finding IDs, severity, rationale, cited file/line, reviewed revision and repair guidance. Keep check-evaluated revision separate from the reviewable PR head; preserve historical findings by review ID across later observations.
+- [x] Enable real review_get, CLI review get and task-status review IDs. Optional GitHub publishing uses a separate capability/permission and SHA-bound output; absence never hides findings from the developer AI.
+- [x] Exercise AI-independent repair retrieval against seeded findings and rerun auth/snapshot regressions.
+- [x] Commit feat(review): expose trusted review evidence and current findings.
+
+
+**T13 revision ruling:** findings remain keyed to immutable review IDs. Required checks match the exact evaluatedRevision; human approvals match the expected PR head. The final provider merge identity, including squash/rebase results, is validated with merged deliverable evidence in T14.
 
 ### Task 14 (T14) — Evidence-bound human decision and Git gate publication
 

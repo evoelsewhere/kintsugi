@@ -8,6 +8,7 @@ import {
   documentPageSchema,
   documentSearchResultSchema,
   projectListResultSchema,
+  reviewReportSchema,
   taskBriefSchema,
   taskListResultSchema,
   taskStatusSchema,
@@ -51,6 +52,11 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
   let dataDir: string;
   let token: string;
   let memberId: string;
+  const currentReviewId = "rev_018f0000-0000-4000-8000-000000000001";
+  const hiddenReviewId = "rev_018f0000-0000-4000-8000-000000000002";
+  const supersededReviewId = "rev_018f0000-0000-4000-8000-000000000003";
+  const queuedReviewId = "rev_018f0000-0000-4000-8000-000000000004";
+  const failedReviewId = "rev_018f0000-0000-4000-8000-000000000005";
   const previousDataDir = process.env["KINTSUGI_DATA_DIR"];
 
   beforeAll(async () => {
@@ -93,6 +99,71 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     });
     expect(issued.status).toBe(201);
     token = issued.body.data!.token;
+
+    for (const [reviewId, projectId, key, currentness] of [
+      [currentReviewId, "shop", "a", "current"],
+      [hiddenReviewId, "hidden", "b", "current"],
+      [supersededReviewId, "shop", "c", "superseded"],
+    ] as const) {
+      const report = {
+        schemaVersion: "1" as const,
+        projectId,
+        unitId: "web/core/invoice",
+        reviewId,
+        generation: 1,
+        currentness,
+        verdict: "fail" as const,
+        reviewedHead: "a".repeat(40),
+        reviewedBase: "b".repeat(40),
+        mergeBase: "c".repeat(40),
+        contextRevision: `sha256:${"d".repeat(64)}`,
+        policyRevision: "policy-v1",
+        agentVersion: "review-agent-v1",
+        coverage: "complete" as const,
+        findings: [{
+          findingId: "finding-001",
+          severity: "high" as const,
+          title: "Invoice calculation can overflow",
+          rationale: "The amount is multiplied before applying the checked bound.",
+          repairGuidance: "Use checked decimal arithmetic and add a boundary test.",
+          citation: { sourceId: "pull-request", path: "src/invoice.ts", startLine: 4, endLine: 5 },
+          currentness: "current" as const,
+        }],
+      };
+      reviewReportSchema.parse(report);
+      await app.db.query(
+        `insert into workflow.member_review
+           (review_id, review_key, generation, project_id, unit_id, implementation_repository_id, server_id,
+            provider, provider_repository_id, provider_pull_request_id, pull_request_number, head_sha, base_sha,
+            merge_base_sha, context_revision, policy_revision, agent_version, status, currentness, coverage,
+            verdict, input_manifest, report, finished_at)
+           values ($1, $2, 1, $3, 'web/core/invoice', 'docs', 'local', 'github', 'repo-1', $4, 1,
+                 $5, $6, $7, $8, 'policy-v1', 'review-agent-v1', 'succeeded', $9, 'complete', 'fail',
+                 '{}'::jsonb, $10::jsonb, clock_timestamp())`,
+        [reviewId, key.repeat(64), projectId, `pull-${key}`, "a".repeat(40), "b".repeat(40), "c".repeat(40),
+          `sha256:${"d".repeat(64)}`, currentness, JSON.stringify(report)],
+      );
+    }
+    await app.db.query(
+      `insert into workflow.member_review
+         (review_id, review_key, generation, project_id, unit_id, implementation_repository_id, server_id,
+          provider, provider_repository_id, provider_pull_request_id, pull_request_number, head_sha, base_sha,
+          merge_base_sha, context_revision, policy_revision, agent_version, status, currentness, input_manifest)
+       values ($1, $2, 1, 'shop', 'web/core/invoice', 'docs', 'local', 'github', 'repo-1', 'pull-d', 1,
+               $3, $4, $5, $6, 'policy-v1', 'review-agent-v1', 'queued', 'current', '{}'::jsonb)`,
+      [queuedReviewId, "e".repeat(64), "a".repeat(40), "b".repeat(40), "c".repeat(40), `sha256:${"d".repeat(64)}`],
+    );
+    await app.db.query(
+      `insert into workflow.member_review
+         (review_id, review_key, generation, project_id, unit_id, implementation_repository_id, server_id,
+          provider, provider_repository_id, provider_pull_request_id, pull_request_number, head_sha, base_sha,
+          merge_base_sha, context_revision, policy_revision, agent_version, status, currentness, input_manifest,
+          failure_code, finished_at)
+       values ($1, $2, 1, 'shop', 'web/core/invoice', 'docs', 'local', 'github', 'repo-1', 'pull-e', 1,
+               $3, $4, $5, $6, 'policy-v1', 'review-agent-v1', 'failed', 'current', '{}'::jsonb,
+               'REVIEW_JOB_FAILED', clock_timestamp())`,
+      [failedReviewId, "f".repeat(64), "a".repeat(40), "b".repeat(40), "c".repeat(40), `sha256:${"d".repeat(64)}`],
+    );
 
     const { getPool } = await import("../../src/common/db/pool.js");
     const { startWorker } = await import("@kintsugi/orchestrator");
@@ -157,9 +228,9 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     const status = await client.request("GET", statusPath, { csrf: false, headers: bearer() });
     expect(status.status).toBe(200);
     expect(taskStatusSchema.parse(status.body.data)).toMatchObject({
-      evidenceAvailability: { pullRequests: "unavailable", reviews: "unavailable" },
+      evidenceAvailability: { pullRequests: "unavailable", reviews: "available" },
       pullRequests: [],
-      currentReviewIds: [],
+      currentReviewIds: [currentReviewId],
     });
 
     for (const state of [
@@ -246,10 +317,27 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     expect(response.raw).not.toContain("Internal server error");
   });
 
-  it("returns an explicit unavailable review capability without a passing stub", async () => {
-    const response = await member().request("GET", withQuery("/member/v1/reviews/review-1", { projectId: "shop" }), { csrf: false, headers: bearer() });
-    expect(response.status).toBe(501);
-    expect(response.body).toMatchObject({ success: false, details: { code: "UNSUPPORTED_CAPABILITY", capability: "reviews" } });
-    expect(response.raw).not.toContain("verdict");
+  it("returns validated findings only inside the authorized project scope", async () => {
+    const response = await member().request("GET", withQuery(`/member/v1/reviews/${currentReviewId}`, { projectId: "shop" }), { csrf: false, headers: bearer() });
+    expect(response.status).toBe(200);
+    expect(reviewReportSchema.parse(response.body.data)).toMatchObject({
+      reviewId: currentReviewId,
+      findings: [{ findingId: "finding-001", repairGuidance: "Use checked decimal arithmetic and add a boundary test." }],
+    });
+
+    const superseded = await member().request("GET", withQuery(`/member/v1/reviews/${supersededReviewId}`, { projectId: "shop" }), { csrf: false, headers: bearer() });
+    expect(reviewReportSchema.parse(superseded.body.data).currentness).toBe("superseded");
+
+    const queued = await member().request("GET", withQuery(`/member/v1/reviews/${queuedReviewId}`, { projectId: "shop" }), { csrf: false, headers: bearer() });
+    expect(queued.status).toBe(409);
+    expect(queued.body).toMatchObject({ success: false, details: { code: "REVIEW_NOT_READY", status: "queued" } });
+
+    const failed = await member().request("GET", withQuery(`/member/v1/reviews/${failedReviewId}`, { projectId: "shop" }), { csrf: false, headers: bearer() });
+    expect(failed.status).toBe(409);
+    expect(failed.body).toMatchObject({ success: false, details: { code: "REVIEW_FAILED", status: "failed" } });
+
+    const crossProject = await member().request("GET", withQuery(`/member/v1/reviews/${hiddenReviewId}`, { projectId: "shop" }), { csrf: false, headers: bearer() });
+    expect(crossProject.status).toBe(404);
+    expect(crossProject.raw).not.toContain("Invoice calculation can overflow");
   });
 });
