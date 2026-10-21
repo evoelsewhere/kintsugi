@@ -8,8 +8,14 @@ export interface GatePublicationPage {
   offset: number;
 }
 
+export interface GatePublicationIdentity {
+  unitId: string;
+  gateId: string;
+}
+
 export abstract class GatePublicationRepository {
   abstract createDecision(input: CreateGatePublication): Promise<GatePublication>;
   abstract get(decisionId: string): Promise<GatePublication | undefined>;
   abstract listByProject(projectId: string, limit: number, offset: number): Promise<GatePublicationPage>;
+  abstract listLatestForTask(projectId: string, gates: readonly GatePublicationIdentity[]): Promise<GatePublication[]>;
 }

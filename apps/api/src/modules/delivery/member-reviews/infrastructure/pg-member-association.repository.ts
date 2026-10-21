@@ -31,6 +31,38 @@ interface PendingAssociationRow {
 
 @Injectable()
 export class PgMemberAssociationRepository extends MemberAssociationRepository {
+  async listConfirmedForTask(identity: { projectId: string; unitId: string }, limit: number) {
+    const result = await getPool().query<{
+      repository_id: string;
+      provider_pull_request_id: string;
+      state: "open" | "closed" | "merged";
+      head_sha: string;
+      provider_updated_at: Date;
+    }>(
+      "select a.repository_id, o.provider_pull_request_id, o.state, o.head_sha, o.provider_updated_at " +
+        "from workflow.member_task_pull_request a " +
+        "join workflow.member_provider_observation o " +
+          "on o.repository_id = a.repository_id and o.server_id = a.server_id " +
+          "and o.provider_repository_id = a.provider_repository_id " +
+          "and o.provider_pull_request_id = a.provider_pull_request_id " +
+        "where a.project_id = $1 and a.unit_id = $2 and a.association_state = 'confirmed' " +
+        "order by o.provider_updated_at desc, a.repository_id, o.provider_pull_request_id " +
+        "limit $3",
+      [identity.projectId, identity.unitId, limit + 1],
+    );
+    const rows = result.rows.slice(0, limit);
+    return {
+      items: rows.map((row) => ({
+        repositoryId: row.repository_id,
+        pullRequestId: row.provider_pull_request_id,
+        state: row.state,
+        headRevision: row.head_sha,
+        updatedAt: row.provider_updated_at.toISOString(),
+      })),
+      hasMore: result.rows.length > limit,
+    };
+  }
+
   async listNeedsConfirmation(projectId: string, limit: number, offset: number): Promise<{ items: PendingMemberAssociation[]; hasMore: boolean }> {
     const result = await getPool().query<PendingAssociationRow>(
       `select o.server_id, o.repository_id, o.provider_repository_id, o.provider_pull_request_id,

@@ -1,5 +1,7 @@
 import type {
   GateId,
+  TaskGatePublicationStatus,
+  TaskGateStatusValue,
   Phase,
   WorkItemStatus,
 } from "@kintsugi/domain";
@@ -206,9 +208,10 @@ export interface TaskPullRequest {
 }
 
 export interface TaskGateStatus {
+  unitId: string;
   gateId: GateId | (string & {});
-  status: "pending" | "approved" | "rejected" | "unknown";
-  publication: "pending" | "published" | "unknown";
+  status: TaskGateStatusValue;
+  publication: TaskGatePublicationStatus;
 }
 
 export interface TaskStatus extends TaskIdentity {

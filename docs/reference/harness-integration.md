@@ -1,6 +1,6 @@
 # Harness integration
 
-Status: The unreleased workspace includes the typed client, read-only CLI/export, local stdio MCP bridge, generated client packages, GitHub/GHES pull-request observation, review findings and authorized task-event replay with `kintsugi task watch`. Native package setup remains version-gated. Evidence-bound gate publication and workflow continuation are still in progress. API and SDK changes must ship together; their strict version-1 schemas are still pre-release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
+Status: The unreleased workspace includes the typed client, read-only CLI/export, local stdio MCP bridge, generated client packages, GitHub/GHES pull-request observation, review findings, authorized task-event replay with `kintsugi task watch`, and evidence-bound gate publication. Effective workflow continuation remains in progress. Native package setup remains version-gated. API and SDK changes must ship together; their strict version-1 schemas are still pre-release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
 
 Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
@@ -24,11 +24,11 @@ All routes below use Kintsugi's normal response envelope and require the catalog
 | `/documents?projectId=…&unitId=…&snapshotId=…&sourceId=…` | One registered source/section at the snapshot revision |
 | `/search?projectId=…&unitId=…&snapshotId=…&query=…` | Bounded keyword matches with citations |
 | `/task-status?projectId=…&unitId=…` | Work-item status, next action and observation availability |
-| `/reviews/:reviewId?projectId=…` | HTTP 501 with `details.code: UNSUPPORTED_CAPABILITY` until review ingestion exists |
+| `/reviews/:reviewId?projectId=…` | Authorized current review findings and evidence |
 
 Use the full `application/module/unit` identity in `unitId`, encoded as a query value. Documents accept registered source IDs rather than arbitrary paths or URLs. Read tokens cannot issue tokens, change Project Access, claim tasks or call legacy session routes.
 
-`TaskStatus.evidenceAvailability` reports `pullRequests` and `reviews` as `unavailable` in this preview. Empty arrays do not establish that no PR or review exists. Unknown gate publication remains `unknown`; source approval is fail-closed until trustworthy evidence readers exist.
+Current `TaskStatus.evidenceAvailability` reports both pull-request and review readers as `available`; empty arrays mean no matching confirmed PR or current review was returned. Each gate status carries its authoritative `unitId` and `gateId`, with publication states kept separate from the decision result. A missing publication remains `unknown`; source approval is fail-closed until trustworthy evidence readers exist.
 
 Snapshot failures put a stable code and `snapshotId` in the error envelope's `details`:
 
@@ -42,7 +42,7 @@ Every retry rechecks authorization. A valid historical snapshot remains readable
 
 ## CLI commands and current limits
 
-The implemented CLI commands are read-only except for local sign-in, profile selection and explicit file export. Output can be text, JSON or Markdown. `mcp serve` exposes the same typed HTTPS context API through a local stdio process; generated client setup remains future work.
+The implemented CLI commands are read-only except for local sign-in, profile selection and explicit file export. Output can be text, JSON or Markdown. `mcp serve` exposes the same typed HTTPS context API through a local stdio process; generated client packages and native setup commands are available for version-gated clients.
 
 | Command | Purpose |
 |---|---|
@@ -75,10 +75,10 @@ The local server exposes these read-only tools when the matching backend capabil
 | task_brief | Explicit project, full unit identity and requested activity |
 | document_get | Explicit project, snapshot ID, registered source ID and section |
 | document_search | Explicit project and snapshot ID with a bounded query |
-| review_get | Explicit project and authorized review ID; advertised only when a review reader is available (currently unavailable) |
+| review_get | Explicit project and authorized review ID; advertised when the review capability is enabled |
 | task_status | Explicit project and full unit identity |
 
-The current CLI bridge advertises six tools: `project_list`, `task_list`, `task_brief`, `document_get`, `document_search` and `task_status`. `review_get` is omitted because the current review reader is unavailable. Document retrieval and search require the snapshot returned by `task_brief`; every tool call supplies its project/task selectors, and the bridge keeps no implicit active project or task. Read-only annotations communicate intent but never replace server authorization. The CLI reads its OS credential store before each API request, allowing server-side Project Access revocation to take effect on the next call. Disposable-profile native lifecycle probes cover Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2; neither probe yet proves a live authenticated MCP tool call. Copilot setup is disabled pending a native version probe.
+The current CLI bridge advertises seven tools: `project_list`, `task_list`, `task_brief`, `document_get`, `document_search`, `review_get` and `task_status`. Document retrieval and search require the snapshot returned by `task_brief`; every tool call supplies its project/task selectors, and the bridge keeps no implicit active project or task. Read-only annotations communicate intent but never replace server authorization. The CLI reads its OS credential store before each API request, allowing server-side Project Access revocation to take effect on the next call. Disposable-profile native lifecycle probes cover Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2; neither probe yet proves a live authenticated MCP tool call. Copilot setup is disabled pending a native version probe.
 
 CLI JSON, MCP structured results and cited text use the same validated DTOs. MCP returns both structured data and equivalent JSON text, with stable safe error codes; it does not wrap JSON-RPC in REST response envelopes. Its stdin/stdout carry only protocol messages.
 

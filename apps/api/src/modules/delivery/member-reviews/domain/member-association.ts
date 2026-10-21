@@ -35,7 +35,21 @@ export type ProviderActorMappingResult =
   | { status: "created" | "unchanged" }
   | { status: "repository-not-linked" | "user-not-authorized" | "mapping-conflict" };
 
+export interface ConfirmedMemberPullRequest {
+  repositoryId: string;
+  pullRequestId: string;
+  state: "open" | "closed" | "merged";
+  headRevision: string;
+  updatedAt: string;
+}
+
+export interface ConfirmedMemberPullRequestPage {
+  items: ConfirmedMemberPullRequest[];
+  hasMore: boolean;
+}
+
 export abstract class MemberAssociationRepository {
+  abstract listConfirmedForTask(identity: { projectId: string; unitId: string }, limit: number): Promise<ConfirmedMemberPullRequestPage>;
   abstract listNeedsConfirmation(projectId: string, limit: number, offset: number): Promise<{
     items: PendingMemberAssociation[];
     hasMore: boolean;

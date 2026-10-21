@@ -1,7 +1,8 @@
 // Wiring for the read-only Coding Agent Workflow task and immutable context APIs.
 
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
+import { GatePublicationModule } from "#modules/governance/gate-publication/index.js";
 import { AuthModule } from "#modules/core/auth/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { MemberReviewsModule, ReviewQueryService } from "#modules/delivery/member-reviews/index.js";
@@ -25,7 +26,7 @@ import { AuthMemberEventPrincipalRevalidator } from "./infrastructure/auth-membe
 import { PgMemberEventReader } from "./infrastructure/pg-member-event.reader.js";
 
 @Module({
-  imports: [AuthModule, DocumentsModule, MemberReviewsModule, ProjectAccessModule],
+  imports: [AuthModule, DocumentsModule, MemberReviewsModule, ProjectAccessModule, forwardRef(() => GatePublicationModule)],
   controllers: [AgentContextController],
   providers: [
     AgentContextService,

@@ -224,12 +224,42 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     expect(search.status).toBe(200);
     expect(documentSearchResultSchema.parse(search.body.data).items.length).toBeGreaterThan(0);
 
+    const confirmedPrUpdatedAt = "2026-10-20T12:00:00.000Z";
+    const confirmedPrHead = "1".repeat(40);
+    await app.db.query(
+      `insert into workflow.member_provider_observation
+         (server_id, repository_id, provider_repository_id, provider_pull_request_id, pull_request_number,
+          state, head_sha, head_ref, base_sha, base_ref, merge_commit_sha, merged_at, provider_updated_at)
+       values ('local', 'docs', 'repo-1', 'pr-confirmed', 42, 'merged', $1, 'feature/invoice', $2, 'main',
+               $3, $4, $5),
+              ('local', 'docs', 'repo-1', 'pr-unconfirmed', 43, 'open', $1, 'feature/other', $2, 'main',
+               null, null, $6)`,
+      [confirmedPrHead, "2".repeat(40), "3".repeat(40), confirmedPrUpdatedAt, confirmedPrUpdatedAt, "2026-10-20T11:00:00.000Z"],
+    );
+    await app.db.query(
+      `insert into workflow.member_task_pull_request
+         (server_id, repository_id, provider_repository_id, provider_pull_request_id, pull_request_number,
+          project_id, unit_id, association_state, association_source, context_revision, target_branch,
+          deliverable_ids, confirmed_by, confirmed_at)
+       values ('local', 'docs', 'repo-1', 'pr-confirmed', 42, 'shop', 'web/core/invoice', 'confirmed',
+               'maintainer', $1, 'main', '["code"]'::jsonb, $2, $3),
+              ('local', 'docs', 'repo-1', 'pr-unconfirmed', 43, 'shop', 'web/core/invoice', 'needs_confirmation',
+               null, null, null, '[]'::jsonb, null, null)`,
+      [`sha256:${"4".repeat(64)}`, memberId, confirmedPrUpdatedAt],
+    );
+
     const statusPath = withQuery("/member/v1/task-status", { projectId: "shop", unitId: "web/core/invoice" });
     const status = await client.request("GET", statusPath, { csrf: false, headers: bearer() });
     expect(status.status).toBe(200);
     expect(taskStatusSchema.parse(status.body.data)).toMatchObject({
-      evidenceAvailability: { pullRequests: "unavailable", reviews: "available" },
-      pullRequests: [],
+      evidenceAvailability: { pullRequests: "available", reviews: "available" },
+      pullRequests: [{
+        repositoryId: "docs",
+        pullRequestId: "pr-confirmed",
+        state: "merged",
+        headRevision: confirmedPrHead,
+        updatedAt: confirmedPrUpdatedAt,
+      }],
       currentReviewIds: [currentReviewId],
     });
 
