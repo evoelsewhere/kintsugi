@@ -55,6 +55,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Glossary](reference/glossary.md)
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
 - [Harness integration](reference/harness-integration.md): read-only CLI and local MCP contract, snapshots, client setup and workflow
+- [Coding Agent Workflow CLI](reference/coding-agent-cli.md): build, authenticate, fetch task context, export briefs and inspect current limits
 - [Data model](reference/data-model.md)
 - [Document repository layout](reference/document-repo.md): the ADR-0038 subject and phase layout, gate records and auto-commit
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`

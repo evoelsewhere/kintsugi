@@ -1,6 +1,6 @@
 # Use a coding agent on a migration task
 
-> Planned behavior. The CLI, local MCP connection and PR continuation described here are being implemented. Commands become available with a released Coding Agent Workflow release.
+> Implementation status: the typed client and read-only CLI are implemented in the unreleased workspace. The local MCP connection, client plugins, PR continuation and streaming in later steps remain planned. See the [CLI reference](../reference/coding-agent-cli.md) for the current supported commands and build instructions.
 
 You work in your chosen AI harness and keep using your existing model subscription. Kintsugi supplies the authorized task and design context, then follows your normal pull request through review and the human gate. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
 
@@ -22,6 +22,8 @@ You work in your chosen AI harness and keep using your existing model subscripti
    ~~~
 
 4. Set up the Coding Agent Workflow plugin for a tested AI client. It gives the AI read-only Kintsugi tools and a short guide for retrieving complete cited context. It does not install a Kintsugi assistant or run hooks.
+
+   Plugin generation and setup are later work; this command is shown as the target workflow and is not available in the current T07 CLI.
 
    ~~~sh
    kintsugi plugins setup --harness claude-code
@@ -48,13 +50,13 @@ You work in your chosen AI harness and keep using your existing model subscripti
 
 3. Work in the code and document repositories. Follow the brief's approved designs and standards. The AI can retrieve sections from the same pinned snapshot as the brief and can refresh context when Kintsugi reports a newer relevant revision.
 
-4. Open the usual pull request or pull requests. Include the full Kintsugi unit identity and the deliverable paths so the provider change can be associated with the task. Kintsugi discovers current GitHub state even if you close your AI session.
+4. Once PR continuation ships, open the usual pull request or pull requests. Include the full Kintsugi unit identity and the deliverable paths so the provider change can be associated with the task. Kintsugi is planned to discover current GitHub state even if you close your AI session.
 
 5. Read Kintsugi's current review findings, fix the issues in a new commit and let Kintsugi review the new revision. Findings name the reviewed revision and source lines; a finding for an older revision is marked stale.
 
 6. Complete provider-required human reviews and merge each required code and document deliverable. The unit's effective gate is recorded separately: an authorized human decision is published as a gate-record PR that must merge and validate against the exact delivered revisions. Kintsugi continues the workflow only after that evidence is effective.
 
-You can check progress in the portal or stream it from the CLI:
+After the streaming milestone ships, you will be able to check progress in the portal or stream it from the CLI. The current `task watch` command reports `UNSUPPORTED_CAPABILITY`.
 
 ~~~sh
 kintsugi task status billing/invoices/tax

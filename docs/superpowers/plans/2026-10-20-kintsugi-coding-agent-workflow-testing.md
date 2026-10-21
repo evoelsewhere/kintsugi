@@ -1,6 +1,6 @@
 # Kintsugi Coding Agent Workflow Testing Plan
 
-Date: 20 October 2026. Status: acceptance matrix for the complete workflow. Fresh evidence for the implemented T00–T06 foundation is recorded in the [integration review](../reviews/2026-10-20-coding-agent-workflow-integration.md); native-client and full-workflow release gates remain pending.
+Date: 20 October 2026. Status: acceptance matrix for the complete workflow. The T00–T06 integration evidence is recorded in the [integration review](../reviews/2026-10-20-coding-agent-workflow-integration.md); T07 client/CLI checks now exist on the implementation branch. Native-client and full-workflow release gates remain pending.
 
 **Purpose:** Prove the approved task/design handoff and PR-to-effective-gate journey without relying on skipped suites, synthetic model output or one client's success as evidence for unsupported surfaces.
 
@@ -8,11 +8,12 @@ Date: 20 October 2026. Status: acceptance matrix for the complete workflow. Fres
 
 ## 1. Current test foundation and gaps
 
-Verified by static inspection at `1bfa73d`:
+Repository and execution evidence checked on the isolated T07 implementation branch:
 
 - API and orchestrator use Vitest. API tests already start a real Nest app, use uniform envelopes/cookie/CSRF checks and have disposable database helpers. Git package supplies a local smart-HTTP fixture server through `@kintsugi/git/testing`.
 - API/orchestrator database helpers derive a server from `DATABASE_URL` or root `.env`, create randomly named throwaway databases and can skip integration suites when configuration is absent. Required Coding Agent Workflow checks must use an explicitly configured isolated server and reject missing/skipped proof.
-- API/worker package tests typecheck separately; SDK currently has no test script, and Harness Hub/CLI/client packages do not yet exist. Their test/package configuration is part of T01/T07/T08, not assumed available now.
+- API/worker package tests typecheck separately. Harness SDK, typed client and CLI now have package test/typecheck/lint/build scripts; Harness Hub does not yet exist and remains T08 work.
+- T07 has 23 CLI tests and 11 typed-client tests, including an actual compiled CLI subprocess against a loopback HTTP fixture, an ephemeral stdin token, private-CA TLS, output redaction and a Windows native-keyring round trip. Linux Secret Service is covered through an injected `secret-tool` runner because the available WSL distro has no `secret-tool`; macOS has not been tested. The subprocess currently ran on Node 24.21.0, not the declared minimum Node 22.19.0.
 - Root Turbo test tasks depend on upstream builds and cache by default. Strict environment filtering can omit database configuration. A cached result or a silently filtered environment is not fresh integration proof.
 - The only observed GitHub workflow is deployment. T17 adds a separate non-publishing validation workflow; it must not run production deployment.
 - No native client interoperability matrix, real provider recovery test, model-review semantic evaluation or complete gate bridge is currently proven.
@@ -204,7 +205,7 @@ pnpm --filter @kintsugi/cli exec vitest run test/cli.test.ts test/export.test.ts
 pnpm --filter @kintsugi/harness-hub exec vitest run test/stdio.test.ts test/tool-contract.test.ts test/plugins.test.ts
 ```
 
-T07 sets the client package name to `@kintsugi/kintsugi-client`. Public npm namespace ownership is separate from a local workspace name. The existing package Vitest configurations execute the commands above; T01/T07/T08 add the new package configs first.
+T07 sets the client package name to `@kintsugi/kintsugi-client`. Public npm namespace ownership is separate from a local workspace name. Package Vitest configurations execute the commands above; T08 still needs to add the Harness Hub package and its protocol tests.
 
 The mandatory real DB/Git lane uses a parent-supplied `KINTSUGI_TEST_DATABASE_URL` for a dedicated disposable server. T17 adds `scripts/run-member-integration.mjs --suite api|worker|pilot|all`: it runs preflight, forwards that validated URL as child `DATABASE_URL`, sets `KINTSUGI_REQUIRED_INTEGRATION=1`, runs fresh Vitest processes and checks their JSON reports. Mandatory-mode helpers reject absent configuration before root `.env` fallback. The CLI arguments and report do not contain the URL. These scripts are planned deliverables, not tools available now.
 
