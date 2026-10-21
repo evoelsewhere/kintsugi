@@ -183,6 +183,12 @@ const missingFilesNote = (missing: readonly string[], written: readonly string[]
   "write and edit take paths relative to the output directory, not to the repository: give the full path above, never a bare file name. " +
   "Write each missing file at exactly that path (reuse what you already wrote), then stop.";
 
+/** Appended to an agent's task when its structured result is missing or not JSON: where it goes, never what was in it. */
+const resultFileNote = (problem: string, written: readonly string[]): string =>
+  `\n\nThe step needs your structured result and ${problem}. ` +
+  `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
+  `Write the JSON result with write to the bare path "${RESULT_FILE}" (no folder, the one exception to the full-path rule), matching the schema above, nothing else in that file, then stop.`;
+
 const sha256 = (content: Buffer): string => createHash("sha256").update(content).digest("hex");
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -439,22 +445,36 @@ export class JobRunner {
 
   /**
    * An agent that wrote an expected file under the right name but in the wrong folder (a bare
-   * "ASSESSMENT.md" for "applications/<app>/assessment/ASSESSMENT.md") keeps its work: when exactly one
-   * stray file has the missing file's name, it is moved into place. Returns whether files are still missing.
+   * "ASSESSMENT.md" for "applications/<app>/assessment/ASSESSMENT.md") keeps its work: the stray file with
+   * the missing file's name (the best path match when several) is moved into place. A file under another name is
+   * never guessed (it may be notes): that is the repair attempt's job. Returns whether files are still missing.
    */
   async #recoverExpected(run: JobRun, ws: StepWorkspace, stepId: string | undefined): Promise<boolean> {
     const missing = await this.#missingExpected(run, ws);
     if (missing.length === 0) return false;
     const expected = new Set(this.#expects(run, ws));
-    const stray = (await listFiles(ws.out)).filter((entry) => !expected.has(entry.path) && !entry.path.startsWith("restricted/"));
-    for (const path of missing) {
-      const candidates = stray.filter((entry) => basename(entry.path) === basename(path));
-      const [only] = candidates;
-      if (candidates.length !== 1 || only === undefined) continue;
+    const stray = (await listFiles(ws.out)).filter((entry) => !expected.has(entry.path) && !entry.path.startsWith("restricted/") && basename(entry.path) !== RESULT_FILE);
+    const moveInto = async (entry: (typeof stray)[number], path: string): Promise<void> => {
       const target = join(ws.out, ...path.split("/"));
       await mkdir(dirname(target), { recursive: true });
-      await rename(only.full, target);
-      await this.#event(ws, stepId, "log", `${run.name} wrote ${only.path} instead of ${path}: moved into place`);
+      await rename(entry.full, target);
+      stray.splice(stray.indexOf(entry), 1);
+      await this.#event(ws, stepId, "log", `${run.name} wrote ${entry.path} instead of ${path}: moved into place`);
+    };
+    // Same name: the only one, or, among several (an index.md per folder), the one whose path ends most like the expected path.
+    const sharedSuffix = (a: string, b: string): number => {
+      const left = a.split("/").reverse();
+      const right = b.split("/").reverse();
+      let count = 0;
+      while (count < left.length && count < right.length && left[count] === right[count]) count += 1;
+      return count;
+    };
+    for (const path of missing) {
+      const candidates = stray.filter((entry) => basename(entry.path) === basename(path));
+      const ranked = candidates.map((entry) => ({ entry, score: sharedSuffix(entry.path, path) })).sort((a, b) => b.score - a.score);
+      const [best, next] = ranked;
+      if (best === undefined || (next !== undefined && next.score === best.score)) continue;
+      await moveInto(best.entry, path);
     }
     return (await this.#missingExpected(run, ws)).length > 0;
   }
@@ -511,13 +531,24 @@ export class JobRunner {
     if (typeof task !== "string" || task.trim() === "") throw new JobFailure("inputs.task is missing");
     const limits = this.#limits(run, "agent");
     const agentId = `${definition.id}@${definition.version}`;
+    // The MCP servers the agent names in its tools: resolved here, where the registry and its secrets are, and handed to the job's child.
+    const mcpIds = mcpServersNamedBy(definition.tools);
+    let mcp: JobSpec["mcp"];
+    if (mcpIds.length > 0) {
+      if (this.#deps.mcpServers === undefined) throw new JobFailure(`Agent ${run.name} names MCP servers (${mcpIds.join(", ")}) but this worker has no MCP registry`);
+      try {
+        mcp = { servers: await this.#deps.mcpServers(mcpIds) };
+      } catch (error) {
+        throw new JobFailure(`Agent ${run.name}: ${redactText(message(error)).slice(0, 300)}`);
+      }
+    }
     const thinking = (THINKING_LEVELS as readonly string[]).includes(binding.thinking ?? "") ? (binding.thinking as ThinkingLevel) : undefined;
     await this.#deps.store.update(run.id, { agent: agentId });
 
     const schema = run.inputs["schema"];
     const schemaNote =
       typeof schema === "object" && schema !== null
-        ? `\n\nReturn your result as JSON matching this schema, written with write to ${RESULT_FILE} (nothing else in that file):\n${JSON.stringify(schema)}`
+        ? `\n\nReturn your result as JSON matching this schema, written with write to the bare path "${RESULT_FILE}" at the root of the output directory, with no folder (the one exception to the full-path rule; nothing else in that file):\n${JSON.stringify(schema)}`
         : "";
     const spec: JobSpec = {
       agent: definition,
@@ -530,23 +561,22 @@ export class JobRunner {
         ...(limits.maxTurns === undefined ? {} : { maxTurns: limits.maxTurns }),
         ...(limits.maxCostUsd === undefined ? {} : { maxCostUsd: limits.maxCostUsd }),
       },
+      ...(mcp === undefined ? {} : { mcp }),
       metadata: { jobRunId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }) },
-    // The MCP servers the agent names in its tools: resolved here, where the registry and its secrets are, and handed to the job's child.
-    const mcpIds = mcpServersNamedBy(definition.tools);
-    let mcp: JobSpec["mcp"];
-    if (mcpIds.length > 0) {
-      if (this.#deps.mcpServers === undefined) throw new JobFailure(`Agent ${run.name} names MCP servers (${mcpIds.join(", ")}) but this worker has no MCP registry`);
-      try {
-        mcp = { servers: await this.#deps.mcpServers(mcpIds) };
-      } catch (error) {
-        throw new JobFailure(`Agent ${run.name}: ${redactText(message(error)).slice(0, 300)}`);
-      }
-    }
     };
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0, cacheReadTokens: 0, cacheWriteTokens: 0, compactions: 0 };
     const stepId = run.id === ws.rootId ? undefined : run.id;
     const roots = { src: ws.src, in: ws.in, out: ws.out };
+    // The job's spans (ADR-0048) are stored in batches as they arrive; each run of the agent is an attempt.
+    let attempts = 0;
+    let spans: SpanRecord[] = [];
+    const flushSpans = async (): Promise<void> => {
+      const batch = spans;
+      spans = [];
+      await this.#deps.store.addSpans(batch);
+    };
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
+      attempts += 1;
       const handle = await this.#deps.agents.startJob({ ...spec, task });
       const onAbort = (): void => void handle.abort(isCancelled(signal) ? "cancelled" : "the worker is stopping");
       if (signal?.aborted === true) onAbort();
@@ -583,6 +613,7 @@ export class JobRunner {
         }
       } finally {
         signal?.removeEventListener("abort", onAbort);
+        await flushSpans();
       }
       return handle.done;
     };
@@ -593,16 +624,7 @@ export class JobRunner {
       done = await attempt();
     }
     if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
-    // The job's spans (ADR-0048) are stored in batches as they arrive; each run of the agent is an attempt.
-    let attempts = 0;
-    let spans: SpanRecord[] = [];
-    const flushSpans = async (): Promise<void> => {
-      const batch = spans;
-      spans = [];
-      await this.#deps.store.addSpans(batch);
-    };
     const writeMock = async (): Promise<void> => {
-      attempts += 1;
       if (!(this.#deps.mockOutputs ?? mock)) return;
       await writeMockOutputs({
         out: ws.out,
@@ -626,19 +648,40 @@ export class JobRunner {
       if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
       await writeMock();
     }
-        await flushSpans();
 
     let result: unknown;
     if (run.inputs["resultFile"] === true) {
-      const file = join(ws.out, RESULT_FILE);
-      const text = await readFile(file, "utf8").catch(() => undefined);
-      await rm(file, { force: true });
-      if (text === undefined) throw new JobFailure(`Agent ${run.name} wrote no ${RESULT_FILE}`);
-      try {
-        result = JSON.parse(text) as unknown;
-      } catch {
-        throw new JobFailure(`Agent ${run.name} wrote an invalid ${RESULT_FILE}`);
+      const take = async (): Promise<{ ok: true; value: unknown } | { ok: false; missing: boolean; problem: string }> => {
+        let file = join(ws.out, RESULT_FILE);
+        let text = await readFile(file, "utf8").catch(() => undefined);
+        if (text === undefined) {
+          // The workspace rule asks for full document-repository paths, so a model may put the result in a folder.
+          const stray = (await listFiles(ws.out)).find((entry) => entry.path.split("/").pop() === RESULT_FILE);
+          if (stray !== undefined) {
+            file = join(ws.out, ...stray.path.split("/"));
+            text = await readFile(file, "utf8").catch(() => undefined);
+          }
+        }
+        await rm(file, { force: true });
+        if (text === undefined) return { ok: false, missing: true, problem: `${RESULT_FILE} is not in the output directory` };
+        try {
+          return { ok: true, value: JSON.parse(text) as unknown };
+        } catch {
+          return { ok: false, missing: false, problem: `${RESULT_FILE} is not valid JSON` };
+        }
+      };
+      let taken = await take();
+      // One repair attempt, like the missing expected files below: a rerun of the whole job costs far more.
+      if (!taken.ok && signal?.aborted !== true) {
+        await this.#event(ws, stepId, "log", `agent ${run.name}: ${taken.problem}; asking it to write the result once`);
+        const written = (await listFiles(ws.out)).map((entry) => entry.path);
+        done = await attempt(`${spec.task}${resultFileNote(taken.problem, written)}`);
+        if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
+        await writeMock();
+        taken = await take();
       }
+      if (!taken.ok) throw new JobFailure(`Agent ${run.name} wrote ${taken.missing ? "no" : "an invalid"} ${RESULT_FILE}`);
+      result = taken.value;
       if (run.inputs["resultTo"] !== undefined) await this.#saveResult(run, ws, result);
     }
     // Missing expected files: a file written under the right name in the wrong folder is moved into place;
@@ -651,6 +694,10 @@ export class JobRunner {
       if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
       await writeMock();
       await this.#recoverExpected(run, ws, stepId);
+      // The repair run repeats the task, so it may have written the result again: it is already taken, never a document.
+      if (run.inputs["resultFile"] === true) {
+        for (const entry of await listFiles(ws.out)) if (basename(entry.path) === RESULT_FILE) await rm(entry.full, { force: true });
+      }
     }
     await this.#checkExpected(run, ws, `Agent ${run.name}`);
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
@@ -678,6 +725,9 @@ export class JobRunner {
       usage.inputTokens += event.inputTokens;
       usage.outputTokens += event.outputTokens;
       usage.costUsd += event.costUsd ?? 0;
+      usage.cacheReadTokens += event.cacheReadTokens ?? 0;
+      usage.cacheWriteTokens += event.cacheWriteTokens ?? 0;
+      usage.compactions += event.compactions ?? 0;
     } else if (event.type === "tool.call") {
       usage.toolCalls += 1;
       if (event.decision === "blocked") usage.blocked += 1;
@@ -738,9 +788,6 @@ export class JobRunner {
     if (run.applicationId === undefined || run.sourceRepositoryId === undefined || ws.commit === undefined) throw new JobFailure(`Stage ${run.name} needs an application with a legacy repository`);
     const work = join(ws.root, "work");
     await mkdir(work, { recursive: true });
-      usage.cacheReadTokens += event.cacheReadTokens ?? 0;
-      usage.cacheWriteTokens += event.cacheWriteTokens ?? 0;
-      usage.compactions += event.compactions ?? 0;
     const scope = scopeOf(run.inputs);
     const provenance = new Map<string, Provenance>();
     let agent: string | undefined;
