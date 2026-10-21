@@ -43,6 +43,7 @@ describe.skipIf(!hasDatabase)("procedural stage decisions (integration)", () => 
 
   it("records the session actor, audit and event once; exact replay is safe and conflicting replay is rejected", async () => {
     const { projectId, runId } = await seedOpenDecision(app, "stage-decision-replay", deciderId, adminId);
+    await app.db.query("insert into admin.project_access (project_id, user_id, granted_by) values ($1, $2, $3)", [projectId, adminId, adminId]);
     const me = await decider.get<{ id: string; permissions: string[] }>("/auth/me");
     expect(me.body.data?.permissions).toContain("workitems.manage");
     expect(me.body.data?.permissions).not.toContain("gates.decide");
