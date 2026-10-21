@@ -310,6 +310,89 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(0);
   });
 
+  it("refuses to run a queued review when its pinned agent version no longer matches", async () => {
+    const { store, runner, agents, writes } = setup({ "legacy-analyst": () => ({ "review-report.json": "{}" }) });
+    const id = randomUUID();
+    await store.create({
+      id,
+      projectId: "demo",
+      kind: "agent",
+      name: "legacy-analyst",
+      inputs: { task: "Review the pinned change.", expectedAgentVersion: "9.9.9" },
+    });
+
+    const run = await runner.run(id);
+
+    expect(run?.status).toBe("failed");
+    expect(run?.failureReason).toContain("expected agent version 9.9.9");
+    expect(agents.specs).toHaveLength(0);
+    expect(writes).toHaveLength(0);
+  });
+
+  it("keeps review output out of the document-repo publication queue", async () => {
+    const { store, runner, writes } = setup({ "legacy-analyst": () => ({ "review-report.json": "{}" }) });
+    const id = randomUUID();
+    await store.create({
+      id,
+      projectId: "demo",
+      kind: "agent",
+      name: "legacy-analyst",
+      inputs: { task: "Review the pinned change.", publishOutput: false },
+    });
+
+    const run = await runner.run(id);
+
+    expect(run?.status).toBe("succeeded");
+    expect(writes).toHaveLength(0);
+    expect(store.writes).toHaveLength(0);
+  });
+
+  it("does not replay a stalled review agent when the generic job disables stalled retries", async () => {
+    const store = new MemoryJobStore();
+    let starts = 0;
+    const stalled = {
+      engine: "mock-review",
+      async startJob() {
+        starts += 1;
+        return {
+          jobId: `stalled-${starts}`,
+          events: { async *[Symbol.asyncIterator]() { /* no progress events */ } },
+          abort: async () => undefined,
+          done: Promise.resolve({
+            type: "job.failed" as const,
+            jobId: `stalled-${starts}`,
+            at: new Date().toISOString(),
+            reason: "timeout" as const,
+            error: "stalled after no provider response",
+          }),
+        };
+      },
+    };
+    const runner = new JobRunner({
+      store,
+      storage,
+      checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
+      agents: stalled,
+      agentDefinitions: builtinAgents(),
+      interpreters: interpretersFromEnv(),
+      requestWrite: async () => undefined,
+      log: () => undefined,
+    });
+    const id = randomUUID();
+    await store.create({
+      id,
+      projectId: "demo",
+      kind: "agent",
+      name: "legacy-analyst",
+      inputs: { task: "Review the pinned change.", disableStalledRetry: true },
+    });
+
+    const run = await runner.run(id);
+
+    expect(run?.status).toBe("failed");
+    expect(starts).toBe(1);
+  });
+
   describe("an agent that misplaces an expected file", () => {
     const EXPECTED = "applications/demo/assessment/ASSESSMENT.md";
     const agentRun = async (files: AgentFiles) => {

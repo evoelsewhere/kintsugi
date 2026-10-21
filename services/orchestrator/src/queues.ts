@@ -116,7 +116,7 @@ export async function ensureSnapshotRetentionQueue(boss: PgBoss): Promise<void> 
   await boss.createQueue(SNAPSHOT_RETENTION_QUEUE, SNAPSHOT_RETENTION_QUEUE_OPTIONS);
 }
 
-/** Enqueues a job run for the worker. */
+/** Enqueues one delivery per run id; outbox replay and recovery can safely send it again. */
 export async function sendJobRun(boss: PgBoss, request: JobRunRequest): Promise<void> {
-  await boss.send(JOB_RUN_QUEUE, request);
+  await boss.send(JOB_RUN_QUEUE, request, { singletonKey: request.jobRunId });
 }

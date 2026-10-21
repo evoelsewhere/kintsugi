@@ -270,6 +270,7 @@ export * from "./project.js";
 export * from "./validation.js";
 export * from "./member-task.js";
 export * from "./member-association.js";
+export * from "./member-task-summary.js";
 export * from "./gate-evidence.js";
 export * from "./manifest.js";
 

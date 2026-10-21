@@ -159,16 +159,21 @@ const omittedSectionSchema = z.object({
   required: z.boolean(),
 }).strict();
 
-export const citationSchema = z.object({
+const citationShape = z.object({
   sourceId: opaqueIdSchema,
   path: z.string().min(1).max(1000),
   startLine: z.number().int().positive().optional(),
   endLine: z.number().int().positive().optional(),
-}).strict().superRefine((citation, context) => {
+}).strict();
+
+function validateCitationRange(citation: { startLine?: number; endLine?: number }, context: z.RefinementCtx): void {
   if (citation.startLine !== undefined && citation.endLine !== undefined && citation.endLine < citation.startLine) {
     context.addIssue({ code: "custom", path: ["endLine"], message: "must not be before startLine" });
   }
-});
+}
+
+export const citationSchema = citationShape.superRefine(validateCitationRange);
+const reviewCitationSchema = citationShape.extend({ startLine: z.number().int().positive() }).superRefine(validateCitationRange);
 
 const contextSectionSchema = z.object({
   sourceId: opaqueIdSchema,
@@ -247,7 +252,8 @@ export const reviewFindingSchema = z.object({
   severity: z.enum(["critical", "high", "medium", "low", "info"]),
   title: z.string().min(1).max(MAX_TASK_TITLE_LENGTH),
   rationale: z.string().min(1).max(8_000),
-  citation: citationSchema.optional(),
+  repairGuidance: z.string().min(1).max(4_000),
+  citation: reviewCitationSchema,
   currentness: z.enum(["current", "superseded"]),
 }).strict();
 
@@ -261,7 +267,7 @@ export const reviewReportSchema = z.object({
   verdict: z.enum(["pass", "fail", "inconclusive"]),
   reviewedHead: fullShaSchema,
   reviewedBase: fullShaSchema,
-  mergeBase: fullShaSchema.optional(),
+  mergeBase: fullShaSchema,
   contextRevision: contextRevisionSchema,
   policyRevision: opaqueIdSchema,
   agentVersion: opaqueIdSchema,

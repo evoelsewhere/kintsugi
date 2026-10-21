@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import type { ContextSource, TaskBrief, TaskBriefQuery } from "@kintsugi/harness-sdk";
 import { DEFAULT_CONTEXT_BYTES, taskBriefSchema } from "@kintsugi/harness-sdk";
-import type { MemberActivity } from "@kintsugi/domain";
+import { markdownHeading, memberTaskSummary, type MemberActivity } from "@kintsugi/domain";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
 import { TaskApprovalEvidenceReader } from "../domain/task.js";
@@ -86,9 +86,7 @@ export class SnapshotService {
     const sourceTexts = await this.readBriefSources(record);
     const taskPack = record.manifest.sources.find((source) => source.role === "task-pack");
     const taskPackText = taskPack === undefined ? undefined : sourceTexts.get(taskPack.sourceId);
-    const objective = (taskPackText === undefined ? undefined : markdownHeading(taskPackText, "Objective"))
-      ?.slice(0, 16_384) || record.workItem.title;
-    const acceptanceCriteria = taskPackText === undefined ? [] : markdownBullets(markdownHeading(taskPackText, "Acceptance criteria"));
+    const { objective, acceptanceCriteria } = memberTaskSummary(taskPackText, record.workItem.title);
     const summaryBytes = Buffer.byteLength(objective, "utf8")
       + acceptanceCriteria.reduce((total, criterion) => total + Buffer.byteLength(criterion, "utf8"), 0);
     if (summaryBytes > maxBytes) {
@@ -352,38 +350,6 @@ export class SnapshotService {
 
 function hash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function markdownHeading(markdown: string, wanted: string): string | undefined {
-  const lines = markdown.split(/\r\n|\n|\r/);
-  let start = -1;
-  let level = 0;
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(lines[index] ?? "");
-    if (match === null || match[2]!.trim().toLowerCase() !== wanted.toLowerCase()) continue;
-    start = index + 1;
-    level = match[1]!.length;
-    break;
-  }
-  if (start < 0) return undefined;
-  let end = lines.length;
-  for (let index = start; index < lines.length; index += 1) {
-    const match = /^(#{1,6})[ \t]+/.exec(lines[index] ?? "");
-    if (match !== null && match[1]!.length <= level) {
-      end = index;
-      break;
-    }
-  }
-  return lines.slice(start, end).join("\n").trim();
-}
-
-function markdownBullets(section: string | undefined): string[] {
-  if (section === undefined) return [];
-  return section.split(/\r\n|\n|\r/)
-    .map((line) => /^(?:[-*+][ \t]+|\d+[.)][ \t]+)(.+)$/.exec(line.trim())?.[1]?.trim())
-    .filter((value): value is string => value !== undefined && value.length > 0)
-    .slice(0, 100)
-    .map((value) => value.slice(0, 2_000));
 }
 
 function representedInBrief(role: string, title: string, markdown: string): boolean {
