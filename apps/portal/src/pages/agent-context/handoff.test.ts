@@ -19,7 +19,13 @@ describe("Coding Agent Workflow handoff", () => {
     expect(safeProfileName("!!!")).toBe("kintsugi");
     const commands = clientSetupCommands("https://kintsugi.example", safeProfileName("shop"), "codex");
     expect(commands).toContain("kintsugi auth login --url https://kintsugi.example --profile kintsugi-shop");
-    expect(commands).toContain("kintsugi plugins setup --client codex --profile kintsugi-shop");
+    expect(commands).toContain("kintsugi plugins setup --harness codex --profile kintsugi-shop");
     expect(commands).not.toContain("token");
+  });
+
+  it("maps the Claude UI choice to the CLI's Claude Code harness identifier", () => {
+    const commands = clientSetupCommands("https://kintsugi.example", "kintsugi-shop", "claude");
+    expect(commands).toContain("kintsugi plugins setup --harness claude-code --profile kintsugi-shop");
+    expect(commands).not.toContain("--client");
   });
 });
