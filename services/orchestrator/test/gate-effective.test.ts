@@ -62,6 +62,7 @@ const fact: GateDeliverableFact = {
   authorizedHumanApproval: {
     reviewerId: "reviewer-1",
     providerActorId: "provider-reviewer",
+    serverId: "github",
     reviewedHead: sha("c"),
     state: "APPROVED",
     hasProjectAccess: true,
