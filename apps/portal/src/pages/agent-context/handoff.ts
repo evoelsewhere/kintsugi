@@ -19,8 +19,9 @@ export function safeProfileName(projectId: string): string {
 }
 
 export function clientSetupCommands(origin: string, profile: string, client: "claude" | "codex"): string {
+  const harness = client === "claude" ? "claude-code" : "codex";
   return [
     `kintsugi auth login --url ${origin} --profile ${profile}`,
-    `kintsugi plugins setup --client ${client} --profile ${profile}`,
+    `kintsugi plugins setup --harness ${harness} --profile ${profile}`,
   ].join("\n");
 }
