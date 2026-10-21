@@ -1,6 +1,6 @@
 # Kintsugi Coding Agent Workflow Testing Plan
 
-Date: 20 October 2026. Status: acceptance matrix for the complete workflow. The T00–T06 integration evidence is recorded in the [integration review](../reviews/2026-10-20-coding-agent-workflow-integration.md); T07 client/CLI checks now exist on the implementation branch. Native-client and full-workflow release gates remain pending.
+Date: 21 October 2026. Status: acceptance matrix for the complete workflow. The T00–T06 integration evidence is recorded in the [integration review](../reviews/2026-10-20-coding-agent-workflow-integration.md); T07–T09 package/client checks now exist on the implementation branch. Authenticated native MCP calls and full-workflow release gates remain pending.
 
 **Purpose:** Prove the approved task/design handoff and PR-to-effective-gate journey without relying on skipped suites, synthetic model output or one client's success as evidence for unsupported surfaces.
 
@@ -13,10 +13,10 @@ Repository and execution evidence checked on the isolated T07 implementation bra
 - API and orchestrator use Vitest. API tests already start a real Nest app, use uniform envelopes/cookie/CSRF checks and have disposable database helpers. Git package supplies a local smart-HTTP fixture server through `@kintsugi/git/testing`.
 - API/orchestrator database helpers derive a server from `DATABASE_URL` or root `.env`, create randomly named throwaway databases and can skip integration suites when configuration is absent. Required Coding Agent Workflow checks must use an explicitly configured isolated server and reject missing/skipped proof.
 - API/worker package tests typecheck separately. Harness SDK, typed client, CLI and Harness Hub have package test/typecheck/lint/build scripts. T08 adds the Hub package and real stdio protocol tests.
-- T07 has 23 CLI tests and 11 typed-client tests, including an actual compiled CLI subprocess against a loopback HTTP fixture, an ephemeral stdin token, private-CA TLS, output redaction and a Windows native-keyring round trip. Linux Secret Service is covered through an injected `secret-tool` runner because the available WSL distro has no `secret-tool`; macOS has not been tested. The subprocess currently ran on Node 24.21.0, not the declared minimum Node 22.19.0.
+- T07 has compiled CLI subprocess coverage against a loopback HTTP fixture, an ephemeral stdin token, private-CA TLS, output redaction and a Windows native-keyring round trip. Linux Secret Service is covered through an injected `secret-tool` runner because the available WSL distro has no `secret-tool`; macOS has not been tested. The subprocess currently ran on Node 24.21.0, not the declared minimum Node 22.19.0. T09 adds 59 agents tests, 31 CLI tests, 17 Harness Hub tests and native Claude/Codex package lifecycle probes; exact scope and limitations are in the [compatibility record](../../reference/coding-agent-workflow-compatibility.md).
 - Root Turbo test tasks depend on upstream builds and cache by default. Strict environment filtering can omit database configuration. A cached result or a silently filtered environment is not fresh integration proof.
 - The only observed GitHub workflow is deployment. T17 adds a separate non-publishing validation workflow; it must not run production deployment.
-- No native client interoperability matrix, real provider recovery test, model-review semantic evaluation or complete gate bridge is currently proven.
+- Native package lifecycle probes now pass for exact Claude Code and Codex CLI versions in disposable profiles. No authenticated plugin-launched MCP call, full client interoperability matrix, real provider recovery test, model-review semantic evaluation or complete gate bridge is currently proven.
 
 ## 2. Test layers and what each proves
 

@@ -1,7 +1,11 @@
 import { Command, CommanderError } from "commander";
 import { serveCodingAgentStdio } from "@kintsugi/harness-hub";
+import type { CodingAgentClient } from "@kintsugi/harness-hub";
 import type { CodingAgentWorkflowCapabilities, CodingAgentWorkflowPort } from "@kintsugi/harness-sdk";
+import { execFile } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { emitKeypressEvents } from "node:readline";
+import { promisify } from "node:util";
 import { CodingAgentClientError } from "@kintsugi/kintsugi-client";
 import type { CredentialStore } from "./credential-store.js";
 import { NativeCredentialStore } from "./credential-store.js";
@@ -11,8 +15,18 @@ import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerProjectCommands } from "./commands/project.js";
 import { registerTaskCommands } from "./commands/task.js";
 import { registerMcpCommands } from "./commands/mcp.js";
+import { registerPluginsCommand } from "./commands/plugins.js";
 import { validateFormat } from "./commands/shared.js";
 import { CliError, FileProfileStore, profileConfigPathFromEnv, type ProfileStore } from "./profile.js";
+import { KINTSUGI_CLI_VERSION } from "./version.js";
+
+const execFileAsync = promisify(execFile);
+
+const NATIVE_CLIENT_COMMANDS: Record<CodingAgentClient, string> = {
+  claude: "claude",
+  codex: "codex",
+  copilot: "copilot",
+};
 
 export interface CliDeps {
   profiles: ProfileStore;
@@ -27,6 +41,8 @@ export interface CliDeps {
   stdout: { write(value: string): unknown };
   stderr: { write(value: string): unknown };
   sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+  launcher?: { launcherPath: string; cliEntrypointPath: string; cliVersion: string };
+  getClientVersion?: (target: CodingAgentClient) => Promise<string>;
   signal?: AbortSignal;
 }
 
@@ -54,11 +70,23 @@ function sleepWithSignal(milliseconds: number, signal?: AbortSignal): Promise<vo
 }
 
 export function createDefaultCliDeps(): CliDeps {
+  const entrypoint = process.argv[1];
   return {
     profiles: new FileProfileStore(profileConfigPathFromEnv(process.env, process.cwd())),
     credentials: new NativeCredentialStore(),
     fetch: globalThis.fetch,
     serveMcp: (access, capabilities) => serveCodingAgentStdio({ access, capabilities }),
+    launcher: {
+      launcherPath: process.execPath,
+      cliEntrypointPath: entrypoint === undefined ? process.execPath : realpathSync(entrypoint),
+      cliVersion: KINTSUGI_CLI_VERSION,
+    },
+    getClientVersion: async (target) => {
+      const { stdout, stderr } = await execFileAsync(NATIVE_CLIENT_COMMANDS[target], ["--version"], { timeout: 5_000, windowsHide: true });
+      const match = /\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/.exec(`${stdout}\n${stderr}`);
+      if (match?.[0] === undefined) throw new Error("Native client did not report a semantic version");
+      return match[0];
+    },
     cwd: process.cwd(),
     env: process.env,
     isTTY: Boolean(process.stdin.isTTY),
@@ -117,7 +145,7 @@ function errorFields(error: unknown): { code: string; status?: number; message: 
 
 export async function runCli(argv: readonly string[], deps: CliDeps): Promise<number> {
   const program = new Command();
-  program.name("kintsugi").description("Read project context and workflow data from Kintsugi").version("0.1.0");
+  program.name("kintsugi").description("Read project context and workflow data from Kintsugi").version(KINTSUGI_CLI_VERSION);
   program
     .option("--format <format>", "Output format: text, json, or markdown", "text")
     .option("--json", "Alias for --format json")
@@ -141,6 +169,7 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
   registerDocumentCommands(program, deps);
   registerDoctorCommand(program, deps);
   registerMcpCommands(program, deps);
+  registerPluginsCommand(program, deps);
 
   try {
     await program.parseAsync([...argv], { from: "user" });
