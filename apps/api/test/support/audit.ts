@@ -6,8 +6,15 @@ import type { Actor } from "#common/auth/decorators.js";
 export class MemoryAuditTrail extends AuditTrail {
   readonly entries: AuditRecord[] = [];
 
+  #nextId = 0;
+
   async record(entries: readonly AuditRecord[]): Promise<void> {
+    await this.recordWithIds(entries);
+  }
+
+  async recordWithIds(entries: readonly AuditRecord[]): Promise<string[]> {
     this.entries.push(...entries);
+    return entries.map(() => String(++this.#nextId));
   }
 
   async recordChange(entry: AuditRecord): Promise<void> {

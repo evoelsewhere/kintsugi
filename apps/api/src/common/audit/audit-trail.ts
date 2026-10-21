@@ -4,6 +4,7 @@
 // the content that was acted on, credentials or key values: only ids, names and small detail.
 
 import type { Actor } from "#common/auth/decorators.js";
+import type { PoolClient } from "pg";
 
 /** Actions recorded in the audit log. New actions are added here (the portal lists them). */
 export const AUDIT_ACTIONS = {
@@ -44,6 +45,7 @@ export const AUDIT_ACTIONS = {
   commitIdentityUpdate: "commit-identity.update",
   gateRequest: "gate.request",
   gateDecide: "gate.decide",
+  gateDecisionRequest: "gate.decision.request",
   roleCreate: "role.create",
   rolePermissionsUpdate: "role.permissions",
   roleDelete: "role.delete",
@@ -106,6 +108,9 @@ export abstract class AuditTrail {
    * it before returning protected content (a restricted-record read): no entry, no content.
    */
   abstract record(entries: readonly AuditRecord[]): Promise<void>;
+
+  /** Appends atomically and returns the durable database IDs in input order. */
+  abstract recordWithIds(entries: readonly AuditRecord[], client?: PoolClient): Promise<string[]>;
 
   /**
    * After a change succeeded: appends the entry and never throws (the change already happened;

@@ -279,3 +279,4 @@ export * from "./manifest.js";
 export * from "./document-layout.js";
 export * from "./catalog.js";
 export * from "./traceability.js";
+export * from "./gate-record.js";

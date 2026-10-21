@@ -54,6 +54,37 @@ export class SnapshotService {
     private readonly snapshots: SnapshotRepository,
   ) {}
 
+  /**
+   * Rebuilds the current implementation context for a server-side gate decision. The caller
+   * supplies identity only; revisions and required deliverables always come from Git-backed data.
+   */
+  async currentGateContext(userId: string, projectId: string, unitId: string): Promise<{
+    projectId: string;
+    unitId: string;
+    contextRevision: string;
+    policyRevision: string;
+    requiredDeliverableIds: string[];
+    requiredDeliverables: Array<{ id: string; repositoryId: string; path: string }>;
+  }> {
+    const principal: MemberPrincipal = {
+      userId,
+      tokenId: "session-gate-context",
+      projectIds: [projectId],
+      credentialKind: "coding-agent-read",
+    };
+    await this.authorize(principal, projectId);
+    const task = await this.tasks.get(principal, { projectId, unitId });
+    const prepared = await this.prepareSnapshot(task, "implementation", "gate_" + randomUUID());
+    return {
+      projectId,
+      unitId,
+      contextRevision: prepared.manifest.contextRevision,
+      policyRevision: prepared.manifest.policyRevision,
+      requiredDeliverableIds: [...prepared.manifest.requiredDeliverableIds],
+      requiredDeliverables: (prepared.workItem.requiredDeliverables ?? []).map(({ id, repositoryId, path }) => ({ id, repositoryId, path })),
+    };
+  }
+
   async brief(principal: MemberPrincipal, query: TaskBriefQuery): Promise<TaskBrief> {
     await this.authorize(principal, query.projectId);
     const maxBytes = query.maxBytes ?? DEFAULT_CONTEXT_BYTES;
