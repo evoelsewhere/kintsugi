@@ -83,7 +83,7 @@ export interface JobHandle {
 }
 
 export interface AgentRuntime {
-  /** Identifies the underlying engine, e.g. "pi@1.1.0". */
+  /** Identifies the underlying engine, e.g. "pi@1.3.0". */
   readonly engine: string;
   startJob(spec: JobSpec): Promise<JobHandle>;
 }

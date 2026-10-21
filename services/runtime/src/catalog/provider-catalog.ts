@@ -4,6 +4,7 @@
 // Exported as `@kintsugi/runtime/provider-catalog` so importers load only pi-ai's
 // provider list, not the agent session machinery.
 
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getBuiltinModels, getBuiltinProviders } from "@earendil-works/pi-ai/providers/all";
 
 export interface SupportedModel {
@@ -12,6 +13,8 @@ export interface SupportedModel {
   contextWindow?: number;
   maxTokens?: number;
   reasoning?: boolean;
+  /** The thinking levels pi accepts for this model, weakest first (`["off"]` when it does not reason). */
+  thinkingLevels: string[];
 }
 
 export interface SupportedBuiltinProvider {
@@ -57,18 +60,13 @@ export function builtinEndpoint(providerId: string): { api: string; baseUrl: str
 }
 
 function modelsOf(providerId: string): SupportedModel[] {
-  const models = getBuiltinModels(providerId as Parameters<typeof getBuiltinModels>[0]) as unknown as Array<{
-    id: string;
-    name?: string;
-    contextWindow?: number;
-    maxTokens?: number;
-    reasoning?: boolean;
-  }>;
+  const models = getBuiltinModels(providerId as Parameters<typeof getBuiltinModels>[0]);
   return models.map((model) => ({
     id: model.id,
     ...(model.name === undefined ? {} : { name: model.name }),
     ...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
     ...(model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens }),
     ...(model.reasoning === undefined ? {} : { reasoning: model.reasoning }),
+    thinkingLevels: getSupportedThinkingLevels(model),
   }));
 }

@@ -4,7 +4,7 @@
 // provider, an optional project scope; "All projects" is the installation default).
 // Credentials are write-only.
 
-import { THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
+import type { ThinkingLevel } from "@kintsugi/domain";
 import { PlugZap, Plus, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ import {
   type SupportedProviders,
   type TestConnectionResult,
 } from "@/lib/api/providers";
-import { modelOptions, modelSupportsReasoning } from "@/lib/model-options";
+import { modelOptions, modelThinkingLevels } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
 import { ProviderFormDialog } from "./provider-form-dialog";
 
@@ -226,11 +226,12 @@ export function ProvidersSection(): React.JSX.Element {
             <div className="flex flex-col gap-2">
               {bindings.map((binding, index) => {
                 const provider = providers.find((entry) => entry.id === binding.provider);
-                const reasoningSupported = modelSupportsReasoning(provider, supported, binding.model);
+                const levels = modelThinkingLevels(provider, supported, binding.model);
+                const reasoningSupported = levels.some((level) => level !== "off");
                 const thinkingOptions: SelectOption[] = [
-                  { value: "", label: "Default", ...(!reasoningSupported ? { hint: "No reasoning effort support reported" } : {}) },
-                  ...(reasoningSupported ? THINKING_LEVELS.map((level) => ({ value: level, label: level })) : []),
-                  ...(binding.thinking !== undefined && !reasoningSupported
+                  { value: "", label: "Default", ...(!reasoningSupported ? { hint: levels.length === 0 ? "Choose a model to see its reasoning levels" : "This model has no reasoning effort" } : {}) },
+                  ...levels.map((level) => ({ value: level, label: level })),
+                  ...(binding.thinking !== undefined && !levels.includes(binding.thinking)
                     ? [{ value: binding.thinking, label: binding.thinking, hint: "not supported by this model" }]
                     : []),
                 ];
@@ -292,7 +293,7 @@ export function ProvidersSection(): React.JSX.Element {
                           prev.map((row, i) => {
                             if (i !== index) return row;
                             const next = { ...row, model: value };
-                            if (modelSupportsReasoning(providers.find((provider) => provider.id === row.provider), supported, value)) return next;
+                            if (row.thinking === undefined || modelThinkingLevels(providers.find((provider) => provider.id === row.provider), supported, value).includes(row.thinking)) return next;
                             const { thinking: _previous, ...rest } = next;
                             return rest;
                           }),

@@ -52,7 +52,7 @@ Flow details: [runtime view §6.3](../06-runtime-view.md#63-work-item-loop-membe
 | Small core | Only read / bash / edit / write by default; orchestration stays in Kintsugi |
 
 Survey as of 2026-10-09:
-- Repo `earendil-works/pi`, v1.1.0 (2026-10-07), Node ≥ 22.19.
+- Repo `earendil-works/pi`, v1.3.0 (2026-10-15), Node ≥ 22.19.
 - Releases ship almost daily, so pin the version.
 - pi has **no sandbox and no permission system**. Kintsugi provides the isolation instead ([security](security.md)).
 

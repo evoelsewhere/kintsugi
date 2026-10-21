@@ -88,7 +88,7 @@ describe("agent packages", () => {
   it("reports every format problem at once", () => {
     const result = parseAgentPackage(
       files({
-        "bad.md": agentFile("name: Bad Name\nversion: one\ntools: 3\nthinking: max\nmetadata: {audience: robot}", ""),
+        "bad.md": agentFile("name: Bad Name\nversion: one\ntools: 3\nthinking: extreme\nmetadata: {audience: robot}", ""),
         "skills/x/SKILL.md": "---\nname: y\n---\n\nbody",
         "scripts/run.sh": "echo",
       }),

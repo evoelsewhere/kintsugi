@@ -3,7 +3,7 @@
 // OpenAPI generation. Domain commands are built here — the application layer never
 // sees transport shapes.
 
-import type { ThinkingLevel } from "@kintsugi/domain";
+import { THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
 import type { AgentModelBinding } from "@kintsugi/runtime-sdk";
 import { z } from "zod";
 import { idSchema } from "#common/interface/dto.js";
@@ -89,7 +89,7 @@ export const agentModelBindingSchema = z.object({
   projectId: z.string().min(1).max(200).optional(),
   provider: providerIdSchema,
   model: z.string().min(1).max(200),
-  thinking: z.enum(["off", "minimal", "low", "medium", "high", "xhigh"]).optional(),
+  thinking: z.enum(THINKING_LEVELS).optional(),
 });
 export type AgentModelBindingInput = z.infer<typeof agentModelBindingSchema>;
 export type { AgentModelBinding, ThinkingLevel };
