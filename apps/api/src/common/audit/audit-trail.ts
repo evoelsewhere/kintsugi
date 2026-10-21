@@ -55,6 +55,8 @@ export const AUDIT_ACTIONS = {
   memberTokenRevoke: "member-token.revoke",
   projectAccessGrant: "project-access.grant",
   projectAccessRevoke: "project-access.revoke",
+  providerActorMap: "provider-actor.map",
+  memberPrAssociate: "member-pr.associate",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

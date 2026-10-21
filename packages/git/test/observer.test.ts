@@ -148,6 +148,28 @@ describe("GitHub pull-request observation", () => {
     expect(fetch.calls.every((call) => call.init?.redirect === "error")).toBe(true);
   });
 
+  it("normalizes only the Kintsugi task-association block from an untrusted PR body", async () => {
+    const claim = {
+      projectId: "billing-modernization",
+      unitId: "billing-api/payments/invoice-validation",
+      contextRevision: `sha256:${"a".repeat(64)}`,
+      deliverableIds: ["invoice-api"],
+    };
+    const fetch = fakeFetch([
+      { status: 200, body: pr({ body: `Please implement this change.\n\n<!-- kintsugi:task-association\n${JSON.stringify(claim)}\n-->` }) },
+      { status: 200, body: [] },
+      { status: 200, body: { total_count: 0, check_runs: [] } },
+    ]);
+    const observer = new GitHubPullRequestObserver({ credentials: resolver(), fetch: fetch.fetch });
+
+    const result = await observer.get(connection(), {
+      host: "github.com", repositoryId: "42", repositoryPath: "Acme/Billing", pullRequestId: "987", number: 12,
+    });
+
+    expect(result).toMatchObject({ associationClaimStatus: "valid", associationClaim: claim });
+    expect(JSON.stringify(result)).not.toContain("Please implement this change");
+  });
+
   it("rejects a foreign cursor before sending the installation credential", async () => {
     const fetch = fakeFetch([]);
     const observer = new GitHubPullRequestObserver({ credentials: resolver(), fetch: fetch.fetch });

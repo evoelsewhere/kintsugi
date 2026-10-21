@@ -27,6 +27,7 @@ function pull(overrides: Partial<ObservedPullRequest> = {}): ObservedPullRequest
     htmlUrl: "https://github.com/Acme/Billing/pull/12",
     authorId: "9",
     authorLogin: "dev",
+    associationClaimStatus: "absent",
     state: "merged",
     draft: false,
     updatedAt: "2026-10-21T10:10:00.000Z",
@@ -80,6 +81,7 @@ function harness(options: {
       state.deepBackfillStartedAt = progress.deepBackfillStartedAt;
     }),
     persistObservation: vi.fn(async () => undefined),
+    reconcileAssociations: vi.fn(async () => undefined),
     completeSweep: vi.fn(async (_repositoryId: string, completed: Parameters<ProviderSyncStore["completeSweep"]>[1]) => {
       state.updatedAtWatermark = completed.updatedAtWatermark;
       state.sweepMode = undefined;
@@ -148,6 +150,7 @@ describe("provider pull-request reconciliation", () => {
     expect(store.persistObservation).toHaveBeenCalledWith("billing", current);
     expect(vi.mocked(observer.get).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(observer.listChanged).mock.invocationCallOrder[0]!);
     expect(store.acknowledgeDeliveries).toHaveBeenCalledWith("billing", ["delivery-open", "delivery-merged"]);
+    expect(store.reconcileAssociations).toHaveBeenCalledWith("billing");
     expect(store.completeSweep).toHaveBeenCalledWith("billing", expect.objectContaining({ deliveryIds: [] }));
   });
 
