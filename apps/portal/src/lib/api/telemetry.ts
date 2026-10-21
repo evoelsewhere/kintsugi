@@ -119,7 +119,7 @@ export interface Trace {
 
 export const telemetryApi = {
   summary: (filter: TelemetryFilter = {}) => apiGet<TelemetrySummary>(`/api/monitoring/telemetry/summary${queryString(filter)}`),
-  runs: (filter: TelemetryFilter & { status?: "ok" | "error"; limit?: number; offset?: number } = {}) =>
+  runs: (filter: TelemetryFilter & { status?: "ok" | "error"; runId?: string; limit?: number; offset?: number } = {}) =>
     apiGet<Page<TelemetryRun>>(`/api/monitoring/telemetry/runs${queryString(filter)}`),
   trace: (runId: string, options: { step?: string; attempt?: number } = {}) =>
     apiGet<Trace>(`/api/monitoring/telemetry/runs/${encodeURIComponent(runId)}/trace${queryString(options)}`),
