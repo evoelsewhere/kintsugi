@@ -12,7 +12,7 @@ Repository and execution evidence checked on the isolated T07 implementation bra
 
 - API and orchestrator use Vitest. API tests already start a real Nest app, use uniform envelopes/cookie/CSRF checks and have disposable database helpers. Git package supplies a local smart-HTTP fixture server through `@kintsugi/git/testing`.
 - API/orchestrator database helpers derive a server from `DATABASE_URL` or root `.env`, create randomly named throwaway databases and can skip integration suites when configuration is absent. Required Coding Agent Workflow checks must use an explicitly configured isolated server and reject missing/skipped proof.
-- API/worker package tests typecheck separately. Harness SDK, typed client and CLI now have package test/typecheck/lint/build scripts; Harness Hub does not yet exist and remains T08 work.
+- API/worker package tests typecheck separately. Harness SDK, typed client, CLI and Harness Hub have package test/typecheck/lint/build scripts. T08 adds the Hub package and real stdio protocol tests.
 - T07 has 23 CLI tests and 11 typed-client tests, including an actual compiled CLI subprocess against a loopback HTTP fixture, an ephemeral stdin token, private-CA TLS, output redaction and a Windows native-keyring round trip. Linux Secret Service is covered through an injected `secret-tool` runner because the available WSL distro has no `secret-tool`; macOS has not been tested. The subprocess currently ran on Node 24.21.0, not the declared minimum Node 22.19.0.
 - Root Turbo test tasks depend on upstream builds and cache by default. Strict environment filtering can omit database configuration. A cached result or a silently filtered environment is not fresh integration proof.
 - The only observed GitHub workflow is deployment. T17 adds a separate non-publishing validation workflow; it must not run production deployment.
@@ -205,7 +205,7 @@ pnpm --filter @kintsugi/cli exec vitest run test/cli.test.ts test/export.test.ts
 pnpm --filter @kintsugi/harness-hub exec vitest run test/stdio.test.ts test/tool-contract.test.ts test/plugins.test.ts
 ```
 
-T07 sets the client package name to `@kintsugi/kintsugi-client`. Public npm namespace ownership is separate from a local workspace name. Package Vitest configurations execute the commands above; T08 still needs to add the Harness Hub package and its protocol tests.
+T07 sets the client package name to `@kintsugi/kintsugi-client`. Public npm namespace ownership is separate from a local workspace name. Package Vitest configurations execute the commands above. T08 implementation evidence and executed results are recorded in the implementation ledger and integration review.
 
 The mandatory real DB/Git lane uses a parent-supplied `KINTSUGI_TEST_DATABASE_URL` for a dedicated disposable server. T17 adds `scripts/run-member-integration.mjs --suite api|worker|pilot|all`: it runs preflight, forwards that validated URL as child `DATABASE_URL`, sets `KINTSUGI_REQUIRED_INTEGRATION=1`, runs fresh Vitest processes and checks their JSON reports. Mandatory-mode helpers reject absent configuration before root `.env` fallback. The CLI arguments and report do not contain the URL. These scripts are planned deliverables, not tools available now.
 

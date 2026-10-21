@@ -49,6 +49,7 @@ export interface CodingAgentWorkflowClientOptions {
   fetch?: typeof globalThis.fetch;
   sleep?: Sleep;
   signal?: AbortSignal;
+  signalProvider?: () => AbortSignal | undefined;
   maxRetries?: number;
   maxSnapshotWaitMs?: number;
   now?: () => number;
@@ -153,9 +154,10 @@ export function createCodingAgentWorkflowClient(options: CodingAgentWorkflowClie
     endpoint: string,
     query: Record<string, unknown>,
     schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
-    signal = options.signal,
+    signalOverride?: AbortSignal,
     prepareSnapshot = false,
   ): Promise<T> {
+    const signal = signalOverride ?? options.signalProvider?.() ?? options.signal;
     const basePath = baseUrl.pathname.replace(/\/+$/, "");
     const url = new URL(`${basePath}${API_PREFIX}/${endpoint}`, baseUrl.origin);
     const urlQuery = { ...query };
@@ -245,7 +247,7 @@ export function createCodingAgentWorkflowClient(options: CodingAgentWorkflowClie
     },
     briefTask: async (query: TaskBriefQuery): Promise<TaskBrief> => {
       const parsed = taskBriefQuerySchema.parse(query);
-      return request("task-brief", parsed, taskBriefSchema, options.signal, true);
+      return request("task-brief", parsed, taskBriefSchema, undefined, true);
     },
     getDocument: (query: DocumentQuery) => {
       const parsed = documentQuerySchema.parse(query);

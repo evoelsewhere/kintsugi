@@ -1,6 +1,6 @@
-# Coding Agent Workflow CLI
+`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented, so the local bridge does not advertise `review_get`. `task watch` likewise returns `UNSUPPORTED_CAPABILITY` until the SSE milestone. `plugins setup` remains planned. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
 
-Status: the typed client and read-only CLI are implemented in the unreleased workspace. They can retrieve context and workflow status from the member API. The local MCP bridge, generated plugins, streaming, PR ingestion and review continuation remain planned.
+Status: the typed client, read-only CLI and local stdio MCP bridge are implemented in the unreleased workspace. Generated plugins, streaming, PR ingestion and review continuation remain planned.
 
 The CLI lets a developer or a shell-enabled coding agent retrieve Kintsugi data. The developer's chosen AI interprets those documents and decides how to answer; the CLI does not call a model or inject text into an already-running AI conversation.
 
@@ -55,8 +55,20 @@ The default project comes from `project use`; `--project` selects one command's 
 
 Lists use cursor pagination; pass `--cursor` to continue and `--limit` to control page size (1–100). Output supports `--format text|json|markdown`; `--json` is an alias. Results go to stdout, errors to stderr. `--no-input` disables prompts. `--output` writes a new file only and refuses to overwrite an existing destination. POSIX exports use mode `0600`; Windows exports remove inherited ACLs and grant the current user modify access.
 
+## Serve the local MCP bridge
+
+Start a local stdio server for a compatible coding agent:
+
+```sh
+kintsugi mcp serve --profile work
+```
+
+The bridge has no inbound network listener. It uses the selected installation profile and reads the OS-stored credential for every API request, so the installation can revoke access between tool calls. Stdin and stdout are reserved for MCP messages; diagnostics use stderr. Authenticate with auth login first. The --token-stdin option is not accepted by mcp serve because it would consume the MCP protocol stream.
+
+Each tool call supplies its own project and task identity. `mcp serve --project` is rejected so a connection cannot retain hidden project context. `task_brief` returns a snapshot ID; `document_get` and `document_search` require that ID explicitly. The tools are read-only. The selected AI reads the returned documents and answers the developer; the CLI does not inject a prompt into an already-running AI conversation.
+
 ## Current limits
 
-`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented. `task watch` likewise returns `UNSUPPORTED_CAPABILITY` until the SSE milestone. `plugins setup` and `mcp serve` are not implemented yet. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
+`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented, so the local bridge does not advertise `review_get`. `task watch` likewise returns `UNSUPPORTED_CAPABILITY` until the SSE milestone. `plugins setup` remains planned. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
 
 `doctor` checks the runtime, profile credential availability and an authorized API read. It does not certify support for a Claude Code, Codex or Copilot version; those require native setup and interaction tests.

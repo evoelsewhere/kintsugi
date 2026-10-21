@@ -1,4 +1,6 @@
 import { Command, CommanderError } from "commander";
+import { serveCodingAgentStdio } from "@kintsugi/harness-hub";
+import type { CodingAgentWorkflowCapabilities, CodingAgentWorkflowPort } from "@kintsugi/harness-sdk";
 import { emitKeypressEvents } from "node:readline";
 import { CodingAgentClientError } from "@kintsugi/kintsugi-client";
 import type { CredentialStore } from "./credential-store.js";
@@ -8,6 +10,7 @@ import { registerDocumentCommands } from "./commands/document.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerProjectCommands } from "./commands/project.js";
 import { registerTaskCommands } from "./commands/task.js";
+import { registerMcpCommands } from "./commands/mcp.js";
 import { validateFormat } from "./commands/shared.js";
 import { CliError, FileProfileStore, profileConfigPathFromEnv, type ProfileStore } from "./profile.js";
 
@@ -15,6 +18,7 @@ export interface CliDeps {
   profiles: ProfileStore;
   credentials: CredentialStore;
   fetch: typeof globalThis.fetch;
+  serveMcp: (access: CodingAgentWorkflowPort, capabilities: CodingAgentWorkflowCapabilities) => Promise<void>;
   cwd: string;
   env: NodeJS.ProcessEnv;
   isTTY: boolean;
@@ -54,6 +58,7 @@ export function createDefaultCliDeps(): CliDeps {
     profiles: new FileProfileStore(profileConfigPathFromEnv(process.env, process.cwd())),
     credentials: new NativeCredentialStore(),
     fetch: globalThis.fetch,
+    serveMcp: (access, capabilities) => serveCodingAgentStdio({ access, capabilities }),
     cwd: process.cwd(),
     env: process.env,
     isTTY: Boolean(process.stdin.isTTY),
@@ -135,6 +140,7 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
   registerTaskCommands(program, deps);
   registerDocumentCommands(program, deps);
   registerDoctorCommand(program, deps);
+  registerMcpCommands(program, deps);
 
   try {
     await program.parseAsync([...argv], { from: "user" });

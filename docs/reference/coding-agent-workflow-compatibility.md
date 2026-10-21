@@ -8,7 +8,7 @@ Status: probe record for implementation planning, recorded 2026-10-20. Presence 
 |---|---|---|
 | Host OS | Windows x64; edition and build were not available from the sandboxed inventory call | Shell and Git were Windows builds. Record edition/build during the release matrix. |
 | Node.js | 24.21.0 | Local command output. |
-| Corepack pnpm | 10.18.0 | Frozen install completed in the isolated worktree earlier in this execution. A later registry lookup was blocked by DNS restrictions; no install was attempted. |
+| Corepack pnpm | 10.18.0 | Exact MCP server/client 2.3.1 packages resolved from npm and the isolated workspace install completed; native host interoperability remains unverified. |
 | Git | 2.45.1.windows.1 | Local command output; anonymous HTTPS fetch of the public repository succeeded. SSH and gh authentication were unavailable. |
 | Turborepo | 2.11.7 | Resolved from the installed repository package. Its bundled README and run/reference docs were read before planning commands. |
 | Claude Code | 2.1.278 | Binary version observed. No plugin or MCP journey was run. |
