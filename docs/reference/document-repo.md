@@ -48,7 +48,7 @@ A gate record is a Markdown file whose body records:
 - Date:                YYYY-MM-DD
 ```
 
-Project-level records live in `gates/` (G0 bootstrap, G3 pilot exit and factory readiness); application records live in `applications/<app>/gates/` (G1 portfolio decision, G2 target architecture, G5 test exit and UAT, G6 go / no-go). A unit's G4 record lives under the unit's `reviews/` and its `unit.md` frontmatter points to it. Gate records arrive through pull requests and are never auto-committed. The format is scaffolded as placeholders only; there is no gate-record automation.
+Project-level records live in `gates/` (G0 bootstrap, G3 pilot exit and factory readiness); application records live in `applications/<app>/gates/` (G1 portfolio decision, G2 target architecture, G5 test exit and UAT, G6 go / no-go). A unit's G4 record lives under the unit's `reviews/` and its `unit.md` frontmatter points to it. Gate records arrive through pull requests and are never auto-committed. The starter records are placeholders. Evidence-bound unit decisions use the validated [gate-record schema and publication flow](gate-records.md); a placeholder or a typed approver name cannot approve a task.
 
 ## Auto-commit
 

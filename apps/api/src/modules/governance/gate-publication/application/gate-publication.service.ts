@@ -100,7 +100,11 @@ export class GatePublicationService {
       contextRevision: context.contextRevision,
       requiredDeliverableIds: requiredIds,
       actor: { userId: actor.id, authorizationId },
-      deliverables: [...evidenceDeliverables].sort((left, right) => left.deliverableId.localeCompare(right.deliverableId)),
+      deliverables: evidenceDeliverables.map(item => {
+        const required = requiredDeliverables.find(required => required.id === item.deliverableId);
+        if (required === undefined || required.repositoryId !== item.repositoryId) throw new ConflictException("Deliverable repository does not match the task");
+        return {...item,path:required.path};
+      }).sort((left, right) => left.deliverableId.localeCompare(right.deliverableId)),
       ...(input.decision === "waived" ? {
         waiver: { deliverableIds: waiverDeliverableIds, reason: input.waiverReason!.trim() },
       } : {}),
@@ -147,9 +151,10 @@ export class GatePublicationService {
     });
   }
 
-  async get(decisionId: string): Promise<GatePublication> {
+  async get(decisionId: string, actor: Actor): Promise<GatePublication> {
     const publication = await this.publications.get(decisionId);
     if (publication === undefined) throw new NotFoundException("Gate publication not found");
+    await this.projectAccess.requireRead(actor.id, publication.projectId);
     return publication;
   }
 }

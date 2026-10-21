@@ -60,6 +60,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Document repository layout](reference/document-repo.md): the ADR-0038 subject and phase layout, gate records and auto-commit
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`
 - [Item catalog](reference/document-repo-item-catalog.md): catalog items, stable IDs, and the units they become
+- [Evidence-bound gate records](reference/gate-records.md): schema, authenticated decisions, reviewed publication and effective approval
 - [Document write path](reference/document-repo-write-path.md): job outputs, branches and pull requests
 - [Document reads and stage results](reference/document-repo-read-path.md): file APIs and result views
 - [Commit conventions](reference/document-repo-commit-conventions.md): identity, trailers and auto-commit defaults

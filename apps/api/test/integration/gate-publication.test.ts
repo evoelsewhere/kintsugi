@@ -5,6 +5,9 @@ import { hasDatabase } from "../support/database.js";
 import { adminClient, startTestApp, type TestApp } from "../support/app.js";
 import { PgGatePublicationRepository } from "../../src/modules/governance/gate-publication/infrastructure/pg-gate-publication.repository.js";
 
+import { PgTaskApprovalEvidenceReader } from "../../src/modules/delivery/agent-context/infrastructure/pg-task-approval-evidence.reader.js";
+import { TaskQueryService } from "../../src/modules/delivery/agent-context/application/task-query.service.js";
+
 const sha = (char: string): string => char.repeat(40);
 
 describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", () => {
@@ -111,4 +114,33 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
     );
     expect(counts.rows[0]).toEqual({ audits: 0, writes: 0, transitions: 0, publications: 0 });
   });
+  it("uses a retained design approval after the implementation task replaces its deliverable list", async () => {
+    const input = createInput("gate_" + "3".repeat(48));
+    const designPath = "applications/web/units/core/invoice/design.md";
+    input.evidence.gateId = "G2";
+    input.recordPath = "applications/web/units/core/invoice/reviews/G2.md";
+    input.evidence.deliverables = input.evidence.deliverables.map(item => ({ ...item, ...(item.repositoryId === "shop-docs" ? { path: designPath } : {}) }));
+    input.evidenceHash = createHash("sha256").update(gateEvidenceCanonicalJson({ ...input.evidence, auditEventId: "0" })).digest("hex");
+    input.audit.detail = { ...input.audit.detail, gateId: "G2", evidenceHash: input.evidenceHash };
+    const publication = await repository.createDecision(input);
+    const stored = (await app.db.query<{ evidence: GateEvidence }>("select evidence from workflow.gate_publication where decision_id=$1", [publication.decisionId])).rows[0]!.evidence;
+    let changed = false;
+    const approvals = new PgTaskApprovalEvidenceReader({
+      async context() { return { repo: { repositoryId: "shop-docs" } }; },
+      async isAncestor() { return true; },
+      async readText(_context: unknown, commit: string, path: string) { return path === input.recordPath ? formatGateRecord(stored) : (changed && commit === sha("8") ? "changed design" : "approved design"); },
+    } as never);
+    await expect(approvals.predecessorStatus("shop", "web/core/invoice", "G2", sha("8"))).resolves.toBe("pending");
+    await app.db.query("update workflow.gate_publication set state='effective',record_commit=$2 where decision_id=$1", [publication.decisionId, sha("7")]);
+    const source = { sourceId: "design", role: "detailed-design", repositoryId: "shop-docs", path: designPath, requiredFor: ["implementation"], availability: "present", publication: "published", approval: "unknown" };
+    const record = { projectId: "shop", unitId: "web/core/invoice", repositoryId: "shop-docs", sourceCommit: sha("8"), workItem: { id: "web/core/invoice", application: "web", module: "core", kind: "module", title: "Invoice", phase: "migrate", status: "pending", requiredDeliverables: [{ id: "code", repositoryId: "shop-api", path: "src/invoice.ts" }] }, requiredInputs: [source], sourceReferences: [source], predecessorGates: [{ gateId: "G2", status: "unknown", requiredFor: ["implementation"] }] };
+    const revision = { repositoryId: "shop-docs", commit: sha("8"), applicationIdsFingerprint: "fingerprint" };
+    const tasks = new TaskQueryService({ currentRevision: async () => revision } as never, { indexRevision: async () => revision, get: async () => record } as never, { requireRead: async () => undefined } as never, approvals);
+    const principal = { userId: adminId, tokenId: "test", projectIds: ["shop"], credentialKind: "coding-agent-read" as const };
+    await expect(approvals.sourceApproval("shop", designPath, sha("8"))).resolves.toBe("approved");
+    expect((await tasks.get(principal, { projectId: "shop", unitId: "web/core/invoice" })).readiness.byActivity.implementation.ready).toBe(true);
+    changed = true;
+    expect((await tasks.get(principal, { projectId: "shop", unitId: "web/core/invoice" })).readiness.byActivity.implementation.ready).toBe(false);
+  });
+
 });

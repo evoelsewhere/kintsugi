@@ -39,6 +39,13 @@ const approvedEvidence = {
 };
 
 describe("gate evidence contract", () => {
+  it("binds an optional safe source path without accepting traversal", () => {
+    const deliverables = approvedEvidence.deliverables.map(item => ({ ...item, path: "design/design.md" }));
+    const valid = validateGateEvidence({ ...approvedEvidence, deliverables });
+    expect(valid.ok).toBe(true);
+    if (valid.ok) expect(valid.value.deliverables[0]).toMatchObject({ path: "design/design.md" });
+    expect(validateGateEvidence({ ...approvedEvidence, deliverables: [{ ...deliverables[0], path: "../escape" }, deliverables[1]] }).ok).toBe(false);
+  });
   it("validates evidence for every required deliverable and exact revisions", () => {
     const result = validateGateEvidence(approvedEvidence);
 

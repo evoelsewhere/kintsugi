@@ -101,6 +101,12 @@ function dependencies(options: {
 }
 
 describe("effective gate verification", () => {
+  it("rejects a gate record listed as its own deliverable", async () => {
+    const self = { ...evidence, deliverables: [{ ...evidence.deliverables[0]!, repositoryId: "docs", path: location.path }] };
+    const state = dependencies({ recordText: formatGateRecord(self), audit: { ...audit, detail: { ...audit.detail, evidenceHash: createHash("sha256").update(gateEvidenceCanonicalJson(self)).digest("hex") } } });
+    state.deps.deliverable = async () => ({ ...fact, repositoryId: "docs" });
+    await expect(verifyEffectiveGate(state.deps, location)).resolves.toMatchObject({ status: "invalid", code: "GATE_SELF_DEPENDENCY" });
+  });
   it("requires the authenticated audit proof; Markdown actor text is not authority", async () => {
     const { deps } = dependencies({ audit: null });
     await expect(verifyEffectiveGate(deps, location)).resolves.toMatchObject({

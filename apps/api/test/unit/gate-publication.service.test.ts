@@ -42,12 +42,23 @@ function fixture(evidence: GateDeliverableEvidence[] = deliverables) {
   const projectAccess = { requireRead: vi.fn(async () => undefined) };
   const snapshots = { currentGateContext: vi.fn(async () => context) };
   const projects = { getProject: vi.fn(async () => ({ documentRepository: { repositoryId: "docs" } })) };
-  const repository = { createDecision } as unknown as GatePublicationRepository;
+  const get = vi.fn(async () => ({ projectId: "shop" }));
+  const repository = { createDecision, get } as unknown as GatePublicationRepository;
   const service = new GatePublicationService(repository, reader, snapshots as never, projects as never, projectAccess as never);
-  return { service, createDecision, reader, projectAccess, snapshots, projects };
+  return { service, createDecision, get, reader, projectAccess, snapshots, projects };
 }
 
 describe("GatePublicationService", () => {
+  it("requires current Project Access to read gate publication status", async () => {
+    const state = fixture();
+    state.projectAccess.requireRead.mockRejectedValue(new Error("Project Access is required"));
+    await expect(state.service.get("decision", actor)).rejects.toThrow("Project Access is required");
+  });
+  it("binds source paths to the decision so implementation outputs can replace design deliverables", async () => {
+    const state = fixture();
+    await state.service.requestDecision(actor, authorizationId, { projectId: "shop", unitId: "web/core/invoice", gateId: "G2", decision: "approved" });
+    expect(state.createDecision.mock.calls[0]?.[0].evidence.deliverables[1]).toMatchObject({ path: context.requiredDeliverables[1]!.path });
+  });
   it("does not treat a database decision as effective when current merged evidence is missing", async () => {
     const state = fixture([deliverables[0]!]);
     const result = await state.service.requestDecision(actor, authorizationId, {

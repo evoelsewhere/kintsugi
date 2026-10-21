@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import type { ContextSource, TaskBrief, TaskBriefQuery } from "@kintsugi/harness-sdk";
 import { DEFAULT_CONTEXT_BYTES, taskBriefSchema } from "@kintsugi/harness-sdk";
-import { markdownHeading, memberTaskSummary, type MemberActivity } from "@kintsugi/domain";
+import { MEMBER_CONTEXT_POLICY_REVISION, markdownHeading, memberTaskSummary, type MemberActivity } from "@kintsugi/domain";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
 import { TaskApprovalEvidenceReader } from "../domain/task.js";
@@ -36,7 +36,7 @@ const PREPARE_POLL_MS = 100;
 const MAX_SOURCE_BYTES = 256 * 1024;
 const MAX_SNAPSHOT_SOURCES = 100;
 const MAX_BRIEF_SOURCE_BYTES = 8 * 1024 * 1024;
-const POLICY_REVISION = "member-context-v1";
+const POLICY_REVISION = MEMBER_CONTEXT_POLICY_REVISION;
 
 interface PreparedSnapshot {
   manifest: SnapshotManifest;

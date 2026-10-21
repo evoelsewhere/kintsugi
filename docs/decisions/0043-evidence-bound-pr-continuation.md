@@ -21,6 +21,8 @@ Members implement work in their chosen harness and open ordinary Git pull reques
 8. The portal and CLI can stream durable workflow events over authorized SSE and resume from event IDs. Provider discovery and review continue while clients are disconnected; an SSE connection is a view of workflow progress, not its trigger.
 9. The pilot ordering is automated review, required provider checks and human approvals, merge of every required deliverable, evidence-bound G4 decision and merged gate record, then exactly-once next-step continuation.
 
+The implemented version 1 [gate-record schema](../reference/gate-records.md) binds artifact paths as well as provider PR and revision identities. Source approvals use this immutable path binding after a task changes its required output list. Publication effectiveness is projected atomically with a durable `gate.effective` event; the next-step planner consumes that handoff.
+
 ## Consequences
 
 - Webhook delivery, polling, review attempts, current findings, gate evidence and workflow continuation have separate durable identities.

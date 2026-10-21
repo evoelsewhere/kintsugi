@@ -10,6 +10,9 @@ import {
 import { ITEM_SEGMENT_PATTERN } from "./catalog.js";
 import { DELIVERABLE_ID_PATTERN, IDENTIFIER_MAX_LENGTH, IDENTIFIER_PATTERN, MAX_REQUIRED_DELIVERABLES, MAX_REPOSITORY_PATH_LENGTH, MAX_TASK_ASSIGNEE_LENGTH, MAX_TASK_TITLE_LENGTH, isSafeRepositoryPath, DomainValidationReader, type ValidationResult } from "./validation.js";
 
+/** Shared snapshot policy identity for API creation and worker gate validation. */
+export const MEMBER_CONTEXT_POLICY_REVISION = "member-context-v1";
+
 /** Activities a member can request from a task brief; these are not pipeline phases. */
 export const MEMBER_ACTIVITIES = ["design", "implementation", "verification"] as const;
 export type MemberActivity = (typeof MEMBER_ACTIVITIES)[number];
