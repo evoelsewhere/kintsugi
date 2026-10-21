@@ -170,4 +170,23 @@ describe("typed Coding Agent Workflow HTTP client", () => {
     });
     await expect(client.listProjects({})).rejects.toMatchObject({ code: "FORBIDDEN", status: 403, message: "[redacted] denied", details: { echoed: "[redacted]" } });
   });
+  it("redacts a credential echoed in the API error code", async () => {
+    const secret = "TEST-private-token";
+    const responses: unknown[] = [
+      { success: false, statusCode: 403, error: "Forbidden", message: "Access denied", details: { code: `${secret}_FORBIDDEN` } },
+      { success: false, statusCode: 403, error: `${secret} denied`, message: "Access denied" },
+    ];
+    for (const body of responses) {
+      const client = createCodingAgentWorkflowClient({
+        baseUrl: "https://kintsugi.example",
+        tokenProvider: async () => secret,
+        fetch: async () => new Response(JSON.stringify(body), { status: 403 }),
+      });
+      let error: unknown;
+      try { await client.listProjects({}); } catch (value) { error = value; }
+      expect(error).toBeInstanceOf(CodingAgentClientError);
+      expect(error).toMatchObject({ status: 403 });
+      expect(JSON.stringify(error)).not.toContain(secret);
+    }
+  });
 });
