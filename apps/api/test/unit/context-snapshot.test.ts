@@ -225,6 +225,23 @@ it("keeps declared code and design deliverable IDs in the prepared manifest and 
   expect(records.get(brief.snapshotId)!.manifest.requiredDeliverableIds).toEqual(["code", "design"]);
 });
 
+it("builds a fresh implementation context for a gate decision without accepting caller revisions", async () => {
+  const { instance } = briefFixture(undefined, undefined, "ready");
+  const gateContext = await instance.currentGateContext("member-1", "shop", "web/core/invoice");
+
+  expect(gateContext).toMatchObject({
+    projectId: "shop",
+    unitId: "web/core/invoice",
+    policyRevision: "member-context-v1",
+    requiredDeliverableIds: ["code", "design"],
+    requiredDeliverables: [
+      { id: "code", repositoryId: "invoice-api", path: "src/invoice.ts" },
+      { id: "design", repositoryId: "docs", path: "applications/web/units/core/invoice/design.md" },
+    ],
+  });
+  expect(gateContext.contextRevision).toMatch(/^sha256:[a-f0-9]{64}$/);
+});
+
 describe("historical source context availability", () => {
   const source: SnapshotSource = {
     sourceId: "src_task", role: "task", repositoryId: "docs", path: "unit.md", commit: "a".repeat(40),

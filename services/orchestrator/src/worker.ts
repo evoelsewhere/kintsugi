@@ -31,6 +31,7 @@ import { PgJobStore } from "./jobs/store.js";
 import { onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.js";
 import { triggerRebuilds } from "./aggregates.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
+import { publishGate } from "./gates/publish.js";
 import { GitSnapshotPins, pruneExpiredSnapshots, recoverStaleSnapshots, retainSnapshot } from "./git-sync/retention.js";
 import { PostgresSnapshotRetentionRepository } from "./git-sync/retention-store.js";
 import { pruneMemberEvents } from "./member-event-retention.js";
@@ -391,6 +392,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
             throw new TypeError("snapshot retention outbox payload is invalid");
           }
           await boss.send(SNAPSHOT_RETENTION_QUEUE, { snapshotId: payload["snapshotId"] }, { singletonKey: operation.operationId });
+          return;
+        }
+        if (operation.queue === DOCUMENT_WRITE_QUEUE) {
+          await publishGate({ enqueue: (repositoryId, request) => sendDocumentWrite(boss, repositoryId, request) }, operation);
           return;
         }
         if (operation.queue === JOB_RUN_QUEUE) {

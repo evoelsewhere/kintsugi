@@ -13,7 +13,8 @@ export interface GateEvidence {
   projectId: string;
   unitId: string;
   gateId: GateId | (string & {});
-  decision: "approved" | "rejected";
+  decision: "approved" | "rejected" | "waived";
+  decisionReason?: string;
   auditEventId: string;
   policyRevision: string;
   contextRevision: string;
@@ -23,6 +24,10 @@ export interface GateEvidence {
     authorizationId: string;
   };
   deliverables: GateDeliverableEvidence[];
+  waiver?: {
+    deliverableIds: string[];
+    reason: string;
+  };
 }
 
 export interface GateDeliverableEvidence {
@@ -34,11 +39,25 @@ export interface GateDeliverableEvidence {
   mergedRevision: string;
 }
 
+/** Stable audit binding; the database-generated audit ID is intentionally excluded. */
+export function gateEvidenceCanonicalJson(evidence: GateEvidence): string {
+  const { auditEventId: _auditEventId, ...decision } = evidence;
+  return canonicalJson(decision);
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map((entry) => canonicalJson(entry)).join(",") + "]";
+  const object = value as Record<string, unknown>;
+  const entries = Object.keys(object).filter((key) => object[key] !== undefined).sort();
+  return "{" + entries.map((key) => JSON.stringify(key) + ":" + canonicalJson(object[key])).join(",") + "}";
+}
+
 export function validateGateEvidence(value: unknown): ValidationResult<GateEvidence> {
   const reader = new DomainValidationReader();
   const root = reader.object(value, "", [
     "schemaVersion", "decisionId", "projectId", "unitId", "gateId", "decision", "auditEventId",
-    "policyRevision", "contextRevision", "requiredDeliverableIds", "actor", "deliverables",
+    "policyRevision", "contextRevision", "requiredDeliverableIds", "actor", "deliverables", "waiver", "decisionReason",
   ]);
   if (root === undefined) return reader.result({} as GateEvidence);
 
@@ -48,11 +67,26 @@ export function validateGateEvidence(value: unknown): ValidationResult<GateEvide
   const unitId = reader.string(root["unitId"], "unitId");
   if (unitId !== undefined && !isFullUnitId(unitId)) reader.problem("unitId", "must be a full application/module/unit identity");
   const gateId = reader.string(root["gateId"], "gateId", { pattern: GATE_KEY_PATTERN });
-  const decision = reader.oneOf(root["decision"], "decision", ["approved", "rejected"] as const);
+  const decision = reader.oneOf(root["decision"], "decision", ["approved", "rejected", "waived"] as const);
+  const decisionReason = reader.optionalString(root["decisionReason"], "decisionReason", { maxLength: 2000 });
+  if (decision === "rejected" && decisionReason === undefined) reader.problem("decisionReason", "is required for a rejected decision");
+  if (decision !== undefined && decision !== "rejected" && decisionReason !== undefined) reader.problem("decisionReason", "is allowed only for a rejected decision");
   const auditEventId = reader.string(root["auditEventId"], "auditEventId", { pattern: EVIDENCE_ID_PATTERN });
   const policyRevision = reader.string(root["policyRevision"], "policyRevision");
   const contextRevision = reader.string(root["contextRevision"], "contextRevision", { pattern: CONTEXT_REVISION_PATTERN });
   const requiredDeliverableIds = reader.strings(root["requiredDeliverableIds"], "requiredDeliverableIds", { nonEmpty: true, unique: true });
+
+  let waiver: GateEvidence["waiver"];
+  if (root["waiver"] !== undefined) {
+    const rawWaiver = reader.object(root["waiver"], "waiver", ["deliverableIds", "reason"]);
+    if (rawWaiver !== undefined) {
+      const deliverableIds = reader.strings(rawWaiver["deliverableIds"], "waiver.deliverableIds", { nonEmpty: true, unique: true, maxLength: 100, itemMaxLength: 100 });
+      const reason = reader.string(rawWaiver["reason"], "waiver.reason", { maxLength: 2000 });
+      if (deliverableIds !== undefined && reason !== undefined) waiver = { deliverableIds, reason };
+    }
+  }
+  if (decision === "waived" && waiver === undefined) reader.problem("waiver", "is required for a waived decision");
+  if (decision !== undefined && decision !== "waived" && waiver !== undefined) reader.problem("waiver", "is allowed only for a waived decision");
 
   const rawActor = reader.object(root["actor"], "actor", ["userId", "authorizationId"]);
   const userId = rawActor === undefined ? undefined : reader.string(rawActor["userId"], "actor.userId", { pattern: EVIDENCE_ID_PATTERN });
@@ -78,18 +112,29 @@ export function validateGateEvidence(value: unknown): ValidationResult<GateEvide
   });
 
   if (requiredDeliverableIds !== undefined) {
+    const waivedIds = waiver?.deliverableIds ?? [];
     const seen = new Set<string>();
     for (const item of deliverables) {
       if (seen.has(item.deliverableId)) reader.problem("deliverables", "contains duplicate deliverable " + item.deliverableId);
       seen.add(item.deliverableId);
     }
     for (const deliverableId of requiredDeliverableIds) {
-      if (!seen.has(deliverableId)) reader.problem("deliverables", "is missing required deliverable " + deliverableId);
+      if (waivedIds.includes(deliverableId)) {
+        if (seen.has(deliverableId)) reader.problem("waiver.deliverableIds", "cannot waive deliverable " + deliverableId + " that is also recorded as evidence");
+      } else if (!seen.has(deliverableId)) {
+        reader.problem("deliverables", "is missing required deliverable " + deliverableId);
+      }
     }
     for (const item of deliverables) {
       if (!requiredDeliverableIds.includes(item.deliverableId)) {
         reader.problem("deliverables", "contains unrequired deliverable " + item.deliverableId);
       }
+    }
+    for (const deliverableId of waivedIds) {
+      if (!requiredDeliverableIds.includes(deliverableId)) reader.problem("waiver.deliverableIds", "contains unrequired deliverable " + deliverableId);
+    }
+    if (waivedIds.length === requiredDeliverableIds.length && waivedIds.length > 0) {
+      reader.problem("waiver.deliverableIds", "must leave at least one required deliverable verified");
     }
   }
 
@@ -100,11 +145,13 @@ export function validateGateEvidence(value: unknown): ValidationResult<GateEvide
     unitId: unitId ?? "",
     gateId: gateId ?? "G4",
     decision: decision ?? "approved",
+    ...(decisionReason === undefined ? {} : { decisionReason }),
     auditEventId: auditEventId ?? "",
     policyRevision: policyRevision ?? "",
     contextRevision: contextRevision ?? "",
     requiredDeliverableIds: requiredDeliverableIds ?? [],
     actor: { userId: userId ?? "", authorizationId: authorizationId ?? "" },
     deliverables,
+    ...(waiver === undefined ? {} : { waiver }),
   });
 }

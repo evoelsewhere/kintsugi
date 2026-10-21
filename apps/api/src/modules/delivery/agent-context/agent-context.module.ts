@@ -18,7 +18,7 @@ import { GitTaskReader } from "./infrastructure/git-task.reader.js";
 import { PgSnapshotRepository } from "./infrastructure/pg-snapshot.repository.js";
 import { PgTaskProjectionRepository } from "./infrastructure/pg-task-projection.repository.js";
 import { ProjectAccessAdapter } from "./infrastructure/project-access.adapter.js";
-import { UnknownTaskApprovalEvidenceReader } from "./infrastructure/unknown-task-approval.reader.js";
+import { PgTaskApprovalEvidenceReader } from "./infrastructure/pg-task-approval-evidence.reader.js";
 import { MemberEventService } from "./application/member-event.service.js";
 import { MemberEventPrincipalRevalidator, MemberEventReader } from "./domain/member-event.port.js";
 import { AuthMemberEventPrincipalRevalidator } from "./infrastructure/auth-member-event-principal.revalidator.js";
@@ -36,14 +36,14 @@ import { PgMemberEventReader } from "./infrastructure/pg-member-event.reader.js"
     GitTaskReader,
     PgSnapshotRepository,
     PgTaskProjectionRepository,
-    UnknownTaskApprovalEvidenceReader,
+    PgTaskApprovalEvidenceReader,
     PgMemberEventReader,
     AuthMemberEventPrincipalRevalidator,
     ProjectAccessAdapter,
     { provide: SnapshotRepository, useExisting: PgSnapshotRepository },
     { provide: TaskSourceReader, useExisting: GitTaskReader },
     { provide: TaskProjectionRepository, useExisting: PgTaskProjectionRepository },
-    { provide: TaskApprovalEvidenceReader, useExisting: UnknownTaskApprovalEvidenceReader },
+    { provide: TaskApprovalEvidenceReader, useExisting: PgTaskApprovalEvidenceReader },
     { provide: ProjectAccessPort, useExisting: ProjectAccessAdapter },
     { provide: MemberEventReader, useExisting: PgMemberEventReader },
     { provide: MemberEventPrincipalRevalidator, useExisting: AuthMemberEventPrincipalRevalidator },
