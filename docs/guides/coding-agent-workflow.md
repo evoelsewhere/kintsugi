@@ -26,7 +26,7 @@ You work in your chosen AI harness and keep using your existing model subscripti
 4. Generate a local Coding Agent Workflow plugin package for a tested AI client. It gives the AI read-only Kintsugi tools and a short guide for retrieving complete cited context. The CLI prints the client's native marketplace/install commands; run those commands yourself to change client settings. Package generation does not install a Kintsugi assistant or run hooks.
 
    ~~~sh
-   kintsugi plugins setup --client claude --profile work
+   kintsugi plugins setup --harness claude-code --profile work
    ~~~
 
    The native package lifecycle has been probed with Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2. These probes do not yet verify an authenticated MCP tool call against a live Kintsugi installation. Copilot packages can be generated, but setup stays disabled until a native version is tested. To use an AI chat without MCP tools, export a brief and paste it into the conversation; export is a copy and cannot be recalled after it leaves Kintsugi.

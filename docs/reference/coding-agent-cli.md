@@ -20,7 +20,7 @@ The CLI requires Node.js 22.19 or newer. Native client and operating-system comp
 After signing in, generate the client-specific package for a tested client version:
 
 ```sh
-kintsugi plugins setup --client claude --profile work
+kintsugi plugins setup --harness claude-code --profile work
 ```
 
 The command writes a Kintsugi-owned package below the selected profile's local configuration directory and prints native marketplace/install and removal commands. Run the printed commands to change the client installation. The CLI does not edit client settings or execute those commands. Re-running setup updates files only inside the marked Kintsugi-owned package. It refuses to overwrite an existing unowned package or follow symbolic links in the target path.
