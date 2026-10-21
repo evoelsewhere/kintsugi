@@ -1,7 +1,7 @@
 // PostgreSQL adapter for the retained, project-sequenced member event log.
 
 import { Injectable } from "@nestjs/common";
-import { MEMBER_SCHEMA_VERSION, taskContinuationEventSchema, taskEventSchema, type TaskContinuationEvent, type TaskEvent } from "@kintsugi/harness-sdk";
+import { MEMBER_SCHEMA_VERSION, taskContinuationEventSchema, taskEventSchema, type TaskContinuationEvent } from "@kintsugi/harness-sdk";
 import { getPool } from "#common/db/pool.js";
 import { MemberEventReader, type MemberEventEnvelope } from "../domain/member-event.port.js";
 
