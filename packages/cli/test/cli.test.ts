@@ -72,15 +72,45 @@ describe("kintsugi CLI", () => {
     }
   });
 
-  it("preserves latestContinuation unchanged in JSON status output", () => {
+  it("escapes and labels latestContinuation across task status formats", () => {
+    const latestContinuation = {
+      schemaVersion: "1",
+      projectId: "shop",
+      unitId: "web/core/invoice",
+      id: "evt_status_continuation",
+      kind: "task.continuation",
+      occurredAt: "2026-10-21T00:00:00Z",
+      metadata: {
+        schemaVersion: "1",
+        status: "member-action",
+        nextAction: "Continue after \u202echecking the brief.",
+        "hostile\u200fkey": "line\u0085separator",
+      },
+    };
     const status = {
       schemaVersion: "1",
       projectId: "shop",
       unitId: "web/core/invoice",
-      latestContinuation: { status: "member-action", nextAction: "Refresh task status before acting." },
+      status: "in-progress",
+      latestContinuation,
+      evidenceAvailability: { pullRequests: "available", reviews: "available" },
+      pullRequests: [],
+      currentReviewIds: [],
+      gates: [],
+      nextAction: "Refresh before \u202eacting.",
     };
 
-    expect(formatResult(status, "json")).toBe(`${JSON.stringify(status, null, 2)}\n`);
+    const json = formatResult(status, "json");
+    expect(json).not.toMatch(/[\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/);
+    expect(JSON.parse(json)).toEqual(status);
+    for (const format of ["text", "markdown"] as const) {
+      const output = formatResult(status, format);
+      expect(output).not.toMatch(/[\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/);
+      expect(output).toContain("Latest continuation (historical)");
+      expect(output).toContain("Continuation is advisory only.");
+      expect(output).toContain("\\u202E");
+      expect(output).toContain("\\u0085");
+    }
   });
 
   it("serves MCP with the selected profile and reloads its credential for every request", async () => {
@@ -543,7 +573,7 @@ describe("task watch CLI", () => {
     expect(output).toContain("\\n");
     if (format === "markdown") {
       expect(output).toContain("### `future.event\\n### forged kind` (`evt_unknown`)");
-      expect(output).toContain('`## Forged header\\nFake field`: `"safe\\n### forged header\\rStatus: forged\\u001b[31m**bold** [link](https://example.test)\\u2028"`');
+      expect(output).toContain('`## Forged header\\nFake field`: `"safe\\n### forged header\\rStatus: forged\\u001B[31m**bold** [link](https://example.test)\\u2028"`');
     }
   });
 
@@ -627,6 +657,27 @@ describe("task watch CLI", () => {
       expect(output).toContain("### `future.event\\n### forged kind`");
       expect(output).toContain('`## Forged header\\nFake field`: `"safe\\n### forged header\\rStatus: forged\\u001B[31m**bold** [link](https://example.test)\\u2028\\u202E"`');
     }
+  });
+
+  it("escapes display controls in JSON task events without changing parsed values", async () => {
+    const value = {
+      ...event("evt_json_controls"),
+      metadata: {
+        hostile: "line\u0085separator\u2028paragraph\u2029rtl\u202eoverride\u2066isolate\u2069",
+        "key\u200fmark": "preserved",
+      },
+    };
+    const responseFrame = `event: task-event\nid: ${value.id}\ndata: ${JSON.stringify(value)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--json"], state.deps as never)).toBe(0);
+    const output = state.output().stdout;
+    const jsonLine = output.trimEnd();
+    expect(jsonLine).not.toMatch(/[\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/);
+    for (const escaped of ["\\u0085", "\\u2028", "\\u2029", "\\u202E", "\\u2066", "\\u2069", "\\u200F"]) {
+      expect(jsonLine).toContain(escaped);
+    }
+    expect(JSON.parse(output)).toEqual(value);
   });
 
   it.each(["0", "1001", "1.5", "nope"])("rejects invalid event limit %s without fetching", async (limit) => {
