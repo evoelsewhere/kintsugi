@@ -18,6 +18,7 @@ import {
 import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { CODEMODE_TOOL, createCodemodeExtensions } from "./codemode.js";
 import { compactionBudget, stableSessionId } from "./context.js";
+import { createMcpKernel } from "./mcp.js";
 import { composeSystemPrompt } from "./policy.js";
 import { normalizeTools } from "./tool-names.js";
 import { createTools, type ToolContext } from "./tools.js";
@@ -62,7 +63,9 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
     // codemode only for an agent that lists it (an agent without a tool list has every kernel tool).
     const onBlocked = options.onBlocked ?? (() => undefined);
     const hasCodemode = spec.agent.tools.includes(CODEMODE_TOOL);
-    const codemode = hasCodemode ? createCodemodeExtensions({ onBlocked }) : [];
+    const mcpServers = spec.mcp?.servers ?? [];
+    const mcp = mcpServers.length === 0 ? undefined : createMcpKernel({ servers: mcpServers, codemode: hasCodemode, onBlocked });
+    const codemode = hasCodemode ? createCodemodeExtensions({ onBlocked, ...(mcp === undefined ? {} : { allowsNestedTool: mcp.allows }) }) : [];
     const resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir,
@@ -74,7 +77,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       noContextFiles: true,
       appendSystemPrompt: [],
       systemPromptOverride: () => systemPrompt,
-      extensionFactories: [...options.extensions, ...codemode],
+      extensionFactories: [...options.extensions, ...codemode, ...(mcp?.factories ?? [])],
     });
     await resourceLoader.reload();
 
@@ -95,6 +98,8 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       settingsManager,
       sessionManager: SessionManager.inMemory(cwd, { id: stableSessionId(spec) }),
     });
+    // session_start is what connects the MCP servers (in the background: a script or the first prompt waits for the ones it needs).
+    if (mcp !== undefined) await session.bindExtensions({});
 
     return {
       session,

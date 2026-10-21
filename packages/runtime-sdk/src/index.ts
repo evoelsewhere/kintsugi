@@ -41,6 +41,23 @@ export interface JobLimits {
   maxCostUsd?: number;
 }
 
+/**
+ * An MCP server a job may use (ADR-0047): an HTTP endpoint the admin registered. The job gets it only when
+ * the agent names it in `tools` (`mcp__<server>__*`). The headers are decrypted by the worker and travel on
+ * the job child's stdin, never in its environment or in an event.
+ */
+export interface McpServerSpec {
+  /** The server's id; its tools are `mcp__<id>__<tool>` (dashes of the id written as `_`). */
+  name: string;
+  url: string;
+  headers: Record<string, string>;
+  /** Per-request timeout, seconds. */
+  timeoutSec: number;
+  description?: string;
+  /** Tool-name patterns (`*` matches any characters) allowed besides the tools the server marks read-only. */
+  allowedTools: string[];
+}
+
 export interface JobSpec {
   agent: AgentDefinition;
   /** The user prompt for this job. */
@@ -54,6 +71,8 @@ export interface JobSpec {
     outDir: string;
   };
   limits: JobLimits;
+  /** The MCP servers the agent names in `tools`; absent when it names none. */
+  mcp?: { servers: McpServerSpec[] };
   /** Opaque correlation data (e.g. projectId, trigger), echoed on job.started; never shown to the agent. */
   metadata?: Record<string, string>;
 }
@@ -137,6 +156,13 @@ export type ProviderAuth =
   | { type: "service-account-json"; file: SecretRef; envVar: string }
   | { type: "none" };
 
+/**
+ * How long a provider keeps a prompt cached (ADR-0048): `short` (about 5 minutes, renewed by every hit; the
+ * default) or `long` (about an hour; written at a higher price, worth it when jobs of one agent are minutes
+ * apart). pi reads it from `PI_CACHE_RETENTION`, which only knows `long`; there is no way to turn caching off.
+ */
+export type CacheRetention = "short" | "long";
+
 /** A provider from pi-ai's built-in catalog (list is read from the pinned pi version). */
 export interface BuiltinProviderConfig {
   kind: "builtin";
@@ -146,6 +172,7 @@ export interface BuiltinProviderConfig {
   /** pi `modelOverrides` for built-in models (sampling, prompt cache, input limits…). */
   modelOverrides?: Record<string, Record<string, unknown>>;
   enabledModels?: string[]; // allowlist; empty = all catalog models
+  cacheRetention?: CacheRetention;
 }
 
 /** A custom provider expressed in pi's models.json shape (vLLM, Ollama, LiteLLM, internal gateway…). */
@@ -156,23 +183,16 @@ export interface CustomProviderConfig {
    *  "google-generative-ai", "bedrock-converse-stream", "mistral-conversations". */
   api: string;
   baseUrl: string;
-/**
- * How long a provider keeps a prompt cached (ADR-0048): `short` (about 5 minutes, renewed by every hit; the
- * default) or `long` (about an hour; written at a higher price, worth it when jobs of one agent are minutes
- * apart). pi reads it from `PI_CACHE_RETENTION`, which only knows `long`; there is no way to turn caching off.
- */
-export type CacheRetention = "short" | "long";
-
   auth: ProviderAuth;
   headers?: Record<string, string | SecretRef>;
   models: CustomModelConfig[];
+  cacheRetention?: CacheRetention;
 }
 
 export interface CustomModelConfig {
   id: string;
   name?: string;
   input?: ("text" | "image")[];
-  cacheRetention?: CacheRetention;
   reasoning?: boolean;
   contextWindow?: number;
   maxTokens?: number;
@@ -186,7 +206,6 @@ export type LlmProviderConfig = BuiltinProviderConfig | CustomProviderConfig;
 
 /** Which provider/model a runtime agent (by id) uses, optionally per project. */
 export interface AgentModelBinding {
-  cacheRetention?: CacheRetention;
   agent: string;
   projectId?: string; // undefined = installation default
   provider: string; // LlmProviderConfig.id

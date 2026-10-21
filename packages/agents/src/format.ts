@@ -81,8 +81,8 @@ const MAX_DESCRIPTION = 1024;
 const REFUSED_AGENT_FIELDS: Record<string, string> = {
   model: "the model is bound per agent in Settings → Providers",
   hooks: "the runtime kernel runs no hooks",
-  mcpServers: "the runtime kernel connects to no MCP servers",
-  "mcp-servers": "the runtime kernel connects to no MCP servers",
+  mcpServers: "an agent names MCP servers in `tools` (mcp__<server>__*); administrators register them (ADR-0047)",
+  "mcp-servers": "an agent names MCP servers in `tools` (mcp__<server>__*); administrators register them (ADR-0047)",
   permissionMode: "the kernel has no permission modes; use the tools allowlist",
   "permission-mode": "the kernel has no permission modes; use the tools allowlist",
   disallowedTools: "list the allowed tools instead",

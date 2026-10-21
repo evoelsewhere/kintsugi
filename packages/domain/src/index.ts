@@ -257,3 +257,4 @@ export * from "./document-layout.js";
 export * from "./catalog.js";
 export * from "./design-template.js";
 export * from "./traceability.js";
+export * from "./mcp.js";
