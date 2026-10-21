@@ -11,7 +11,9 @@
     "dev": "node scripts/dev.mjs",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "test:coding-agent:runner": "node --test test/coding-agent-workflow/runner.test.mjs scripts/member-db-config.test.mjs",
+    "test:coding-agent:integration": "node scripts/run-member-integration.mjs --suite all"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

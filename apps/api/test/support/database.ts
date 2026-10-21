@@ -3,17 +3,13 @@
 // it names — each test file creates its own `kintsugi_api_test_*` and drops it after.
 
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { databaseUrlFromEnvironment } from "../../../../scripts/member-db-config.mjs";
 import pg from "pg";
 
 function serverUrl(): URL | undefined {
-  let raw = process.env["DATABASE_URL"];
-  const envFile = resolve(import.meta.dirname, "../../../../.env");
-  if ((raw === undefined || raw === "") && existsSync(envFile)) {
-    raw = /^DATABASE_URL=(.*)$/m.exec(readFileSync(envFile, "utf8"))?.[1]?.trim();
-  }
-  return raw === undefined || raw === "" ? undefined : new URL(raw);
+  const raw = databaseUrlFromEnvironment(process.env, resolve(import.meta.dirname, "../../../../.env"));
+  return raw === undefined ? undefined : new URL(raw);
 }
 
 /** False when no Postgres is configured: integration suites skip themselves. */

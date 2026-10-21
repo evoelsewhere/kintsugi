@@ -207,25 +207,26 @@ pnpm --filter @kintsugi/harness-hub exec vitest run test/stdio.test.ts test/tool
 
 T07 sets the client package name to `@kintsugi/kintsugi-client`. Public npm namespace ownership is separate from a local workspace name. Package Vitest configurations execute the commands above. T08 implementation evidence and executed results are recorded in the implementation ledger and integration review.
 
-The mandatory real DB/Git lane uses a parent-supplied `KINTSUGI_TEST_DATABASE_URL` for a dedicated disposable server. T17 adds `scripts/run-member-integration.mjs --suite api|worker|pilot|all`: it runs preflight, forwards that validated URL as child `DATABASE_URL`, sets `KINTSUGI_REQUIRED_INTEGRATION=1`, runs fresh Vitest processes and checks their JSON reports. Mandatory-mode helpers reject absent configuration before root `.env` fallback. The CLI arguments and report do not contain the URL. These scripts are planned deliverables, not tools available now.
+The mandatory real DB/Git lane uses a parent-supplied `KINTSUGI_TEST_DATABASE_URL` for a dedicated disposable PostgreSQL server. `scripts/run-member-integration.mjs --suite api|worker|all` validates the explicit URL and TCP endpoint, forwards it to child processes only through environment variables, sets `KINTSUGI_REQUIRED_INTEGRATION=1`, runs fresh uncached Vitest processes and checks their redacted JSON reports. Mandatory-mode helpers reject absent configuration before any root `.env` fallback. URL credentials are redacted from reports; the URL is never a command argument.
+
+`--suite pilot` intentionally exits with an actionable message until a public-process E2E pilot is implemented. `--suite all` means the automated API and worker suites; it does not claim real provider, model or native-client pilot proof. The CI workflow provisions PostgreSQL for the API/worker jobs, runs Windows/Linux contract checks without installation credentials, and uploads only scrubbed JSON reports.
 
 ```powershell
-node --test test/coding-agent-workflow/runner.test.mjs
+node --test test/coding-agent-workflow/runner.test.mjs scripts/member-db-config.test.mjs
 node scripts/run-member-integration.mjs --suite all
 ```
 
-Exact child suite selection (all include `--reporter=json --outputFile=<run-owned-absolute-report-path>`):
+Exact child suite selection (each Vitest process writes a JSON report that must contain executed, passing tests and no skips):
 
 | Runner suite | Child command and files |
 |---|---|
-| `api` | `pnpm --filter @kintsugi/api exec vitest run` with `test/integration/member-auth.test.ts`, `project-access.test.ts`, `member-tasks.test.ts`, `member-context.test.ts`, `member-api.test.ts`, `member-reviews.test.ts`, `gate-publication.test.ts`, `member-events.test.ts`; every abbreviated filename is under `test/integration/` |
-| `worker` | `pnpm --filter @kintsugi/orchestrator exec vitest run` with `test/outbox.test.ts`, `snapshot-retention.test.ts`, `provider-sync.test.ts`, `review-inputs.test.ts`, `review-scheduling.test.ts`, `gate-publication.test.ts`, `continuation.test.ts`, `stage-decisions.test.ts`; every abbreviated filename is under `test/` |
-| `pilot` | `pnpm exec vitest run --config test/coding-agent-workflow/vitest.config.ts`; T17 adds the root dev dependency, config, `test:coding-agent:pilot` script and separate test typecheck script |
-| `all` | Run `api`, `worker`, then `pilot`; fail on any child/report failure |
+| `api` | `pnpm --filter @kintsugi/api exec vitest run` with `test/integration/{member-auth,project-access,member-tasks,member-context,member-api,member-associations,github-webhook,member-events,gate-publication,stage-decisions}.test.ts` |
+| `worker` | `pnpm --filter @kintsugi/orchestrator exec vitest run` with `test/{outbox,snapshot-retention,provider-sync,provider-sync-store,review-inputs,review-scheduling,review-store,gate-publication,gate-effective,stage-decisions,member-event-retention}.test.ts` |
+| `pilot` | Not automated yet. Requires a real public-process/API-worker journey and separately captured GitHub/client/model evidence; the runner fails explicitly instead of substituting unit tests. |
+| `all` | Run `api` then `worker`; fail if either child exits nonzero, produces no report, reports zero tests or includes a skipped/pending test. |
 
-The pilot starts built API/worker processes with explicit isolated child configuration and public APIs, not imports into private modules. Required report gates reject zero executed cases or any required skipped/pending case. Runner tests prove environment forwarding and missing-prerequisite behavior under CI-01/02. Direct package commands avoid Turbo cache/env filtering for DB/recovery proof; if routed through Turbo instead, declare pass-through test env and force fresh execution, then verify the same report gates.
-
-For changed packages, run their `typecheck` and `lint` scripts through the build-aware root graph. Once the integrated branch is ready, run the existing repository checks with the required test environment configured and inspect every result:
+The runner test suite proves missing-URL failure before Vitest, environment forwarding, command-argument privacy, report redaction and rejection of zero/skipped cases. Direct package commands avoid Turbo caching for DB/recovery proof. Runner/configuration tests passed locally (5/5); local required database suites were not run because no endpoint was configured. The GitHub Actions database lane is defined but awaits its first remote run.
+For changed packages, run their `typecheck` and `lint` scripts through the build-aware root graph. Root lint, typecheck and build were run for this change; the required database suite remains a separate explicit lane below. The full root `pnpm test` command was not run in this environment: it does not replace the no-skip database runner and earlier full-suite attempts exposed an existing Windows `HOME` assertion and parallel CLI timeout.
 
 ```powershell
 pnpm lint
@@ -234,7 +235,7 @@ pnpm build
 pnpm test
 ```
 
-A successful root test command does not replace the explicit required-integration lane. Broaden/repeat checks after new changes, failures or unresolved concerns; do not repeatedly run the entire suite without a reason. Commands are planned here, not reported as executed.
+A successful root test command does not replace the explicit required-integration lane. Broaden/repeat checks after new changes, failures or unresolved concerns; do not repeatedly run the entire suite without a reason. These are the prescribed root commands; actual execution results for this change appear in the evidence record below.
 
 ## 7. Native-client, provider and model evidence
 
@@ -276,7 +277,7 @@ Judge factual grounding, required-context retrieval, unanswered-decision behavio
 
 Coverage goal: every critical invariant/case above has an owner and explicit executed proof in its release lane. Prefer branch/condition coverage for authorization, state transitions and policy decisions over a whole-repo percentage. Do not add trivial getter tests or copy implementation logic into assertions.
 
-For each run, record: code revision, packages/files tested, command, environment identity (nonsecret), passed/failed/skipped counts, actual duration, fixture/provider/model revisions, report/artifact paths and validation limits. The initial ledger status for every product case is **Not run**. A skipped suite is neither a pass nor a product failure; it is missing proof and blocks any gate requiring it.
+For each run, record code revision, packages/files tested, command, environment identity (nonsecret), passed/failed/skipped counts, duration, fixture/provider/model revisions, report paths and limits. At plan approval every case was **Not run**; the current execution ledger below records later checks. A skipped suite is neither a pass nor a product failure; it is missing proof and blocks any gate requiring it.
 
 Rollback acceptance: revoking Project Access stops tokens/tools from retrieving data; old cookie sessions preserve established behavior. Disabling review/continuation stops new dispatch without losing durable receipts or inventing gate success. Existing model jobs retain normal cancellation semantics; no duplicate auto-rerun. Roll back compatible client/plugin versions through explicit recorded artifacts. Prefer disabling new behavior over dropping audit/evidence tables or reversing applied migrations. Server downgrade compatibility must be tested against additive migrations and schema version checks before release.
 
@@ -286,4 +287,12 @@ Rollback acceptance: revoking Project Access stops tokens/tools from retrieving 
 - [x] Critical skip/cache/environment pitfalls have explicit failing preflight/report tests.
 - [x] Native/provider/model proof is distinct from unit, mocked adapter and scripted runtime tests.
 - [x] Privacy, source/credential boundaries, gate ordering, retention and recovery are covered.
-- [x] Product test results remain Not run; no test suite, native agent, database or external provider was invoked to create this plan.
+- [x] Planning-time results were not presented as product evidence; later execution results and outstanding release gates are recorded separately below.
+
+## Execution evidence record (21 October 2026)
+
+- **CI-01/02 runner contracts:** `corepack pnpm run test:coding-agent:runner` — 5 passed, 0 failed, 0 skipped. Covers explicit URL enforcement/no `.env` fallback, child environment, argument privacy, report redaction, and zero/skipped report failures.
+- **T16 portal contracts:** portal Vitest — 13 passed; portal typecheck passed; scoped lint exited successfully with two pre-existing hook warnings in `workflow-board.tsx`. Helper tests prove task-scoped handoff text and secret-free setup commands; they do not replace browser, keyboard, token one-time-display or populated-state QA.
+- **Repository checks:** `pnpm lint` passed 14/14 tasks with two pre-existing portal hook warnings; `pnpm typecheck` passed 25/25; `pnpm build` passed 14/14 with the existing portal chunk-size advisory. API and orchestrator typechecks also passed directly. Targeted API unit tests passed 13 cases across the new session principal, gate-list schema and Agent Builder suites; the focused integration command reported 10 DB-backed skips because no local Postgres URL was configured. Those skipped cases are missing evidence, not passes.
+- **Plugin/CLI delegated checks:** plugin suites passed 7 + 4 + 8 + 2; CLI client tests passed 33 and CLI tests passed 61. Strict Claude plugin validation passed. Copilot, Linux/macOS secure-store behavior and authenticated live MCP calls remain unverified.
+- **Not run:** required PostgreSQL runner suites and GitHub Actions, browser/keyboard pilot, GitHub.com/GHES, real model semantics, crash/recovery and rollback evidence. The CI lane is committed as an implementation artifact but has not completed a remote run.
