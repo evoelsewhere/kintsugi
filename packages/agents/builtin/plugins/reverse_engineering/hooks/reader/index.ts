@@ -52,3 +52,29 @@ export { ITEM_ID, parseItemCatalog, type ItemCatalog, type ItemCatalogDependency
 export { renderLedger, parseLedger } from './ledger.js'
 export { parsePlan, type PlanBatch, type UnderstandPlan } from './plan.js'
 export { cardsOf, countOf, documentOf, fieldList, fieldText, firstRecords, itemsOf, listOf, numberOf, recordsOf, textOf, uncode, type Card, type Document } from './document.js'
+export {
+  DESIGN_CHECKS,
+  DESIGN_SEEDS,
+  checkDesignDocument,
+  designCoverage,
+  designFilesFor,
+  designIsStale,
+  designReferences,
+  designItemIds,
+  designTemplateRefOf,
+  loadDesignSets,
+  parseDesignSet,
+  parseDesignTemplate,
+  ruleCardsOf,
+  type DesignCheck,
+  type DesignContext,
+  type DesignFile,
+  type DesignProblem,
+  type DesignProblemCode,
+  type DesignSection,
+  type DesignSet,
+  type DesignSetSource,
+  type DesignTemplate,
+  type DesignTemplateProblem,
+  type LoadedDesignSet,
+} from './design.js'

@@ -237,7 +237,8 @@ export interface PipelineDefinition {
     /** Required for custom phases: built-in phase used for reporting. */
     category?: Phase;
     perUnit?: boolean;
-    stages: { id: string; performer: StagePerformer; gate?: GateId | (string & {}) }[];
+    /** `produces` names the design set (standards/design/<set>) the stage writes (ADR-0045). */
+    stages: { id: string; performer: StagePerformer; gate?: GateId | (string & {}); produces?: string }[];
   }[];
   gates?: Record<string, { require: string[] }>;
 }
@@ -257,4 +258,5 @@ export * from "./manifest.js";
 // Application and per-unit document-repo paths (ADR-0038), with catalog vocabulary (ADR-0033).
 export * from "./document-layout.js";
 export * from "./catalog.js";
+export * from "./design-template.js";
 export * from "./traceability.js";

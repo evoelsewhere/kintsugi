@@ -248,9 +248,6 @@ class RulesNeedExecutedTests(unittest.TestCase):
         self.assertIn("RULE-012 and 18 more", d)
         self.assertNotIn("RULE-013", d)
 
-    def test_an_uplift_still_traces_no_rules(self):
-        self.assertEqual(pp.check_rules({"trace": None, "trace_problem": "x", "ran": {}}, {"track": "uplift", "rel": "modernized/s-uplifted"}, {}, [])["state"], "na")
-
     def test_the_markdown_table_says_named_not_run_in_plain_words(self):
         self.ws.test_file("CalcTest.java", SKIPPED_TEST)
         self.ws.keep_only(("OtherTest", "works", "PASS", ""))
@@ -318,7 +315,7 @@ class TestOnlyFolders(unittest.TestCase):
             os.remove(os.path.join(self.mod, *rel.split("/")))
         self.assertTrue(tr.tooling_only(self.mod))
 
-    def test_a_folder_with_no_test_file_is_not_tooling_and_neither_is_an_uplift(self):
+    def test_a_folder_with_no_test_file_is_not_tooling(self):
         os.remove(os.path.join(self.mod, "src", "test", "java", "HarnessTest.java"))
         os.remove(os.path.join(self.mod, "src", "test", "java", "Storefront.java"))
         self.assertFalse(tr.tooling_only(self.mod))
@@ -326,8 +323,6 @@ class TestOnlyFolders(unittest.TestCase):
         empty = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, empty, True)
         self.assertFalse(tr.tooling_only(empty))
-        put(self.ws.root, "modernized/s-uplifted/src/test/java/ATest.java", "class ATest {}\n", T0 + 20)
-        self.assertEqual({m["track"] for m in self.ws.pack()["modules"]}, {"rewrite", "uplift"})          # the whole working copy is one thing to prove, tests or not
 
     def test_what_counts_as_tooling_files(self):
         for name in ("pom.xml", "mvnw", "mvnw.cmd", "gradlew", "build.gradle", "build.gradle.kts", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.build.json", "jest.config.js",

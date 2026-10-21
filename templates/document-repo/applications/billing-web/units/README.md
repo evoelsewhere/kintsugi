@@ -12,10 +12,11 @@ units/<module>/<unit>/
   understanding/               P1: what is known about the unit
     as-is.md                   AS-IS specification
     understanding.md           provenance record (marks the unit understood)
-    rules.md data-objects.md   machine rule extraction
+    rules.md rules/ data-objects.md   machine rule extraction (an index and a file per rule)
     rules-review.md            human rule verdicts (a table)
     findings.md topology.md trace.md
-  task.md design.md            P4 task pack (auto-committed) and design
+  design/<set>/                P2-P4: the unit's design documents, one folder per design set (`standards/design/`)
+  task.md                      P4 task pack (auto-committed)
   reviews/G4.md                the unit's G4 record
   verify/                      P5 golden cases, equivalence runs and test evidence
 ```

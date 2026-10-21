@@ -17,27 +17,18 @@ export const AUDIENCE_LABEL: Record<StageAudience, string> = {
   portal: "Portal stages",
 };
 
-export const AUDIENCE_SHORT: Record<StageAudience, string> = {
-  runtime: "Runtime",
-  member: "Members",
-  portal: "Portal",
-};
-
-/** The stages in pipeline order, grouped by audience (runtime, member, portal); the API order is kept within a group. */
-/** The runtime stages a person runs (ADR-0033): map, extract-rules and harden are steps of understand now; design is a POC. */
-export const RUNTIME_STAGES: readonly string[] = ["assess", "understand", "design"];
+/** The stages shown in the pipeline: the runtime stages a person runs (ADR-0033; map, extract-rules and harden are steps of understand) and the design stage, which members carry out and the portal tracks (ADR-0044). */
+export const PIPELINE_STAGES: readonly string[] = ["assess", "understand", "design"];
 
 /** Display names of the stages whose id alone reads poorly; the rest show their id in title case. */
 const STAGE_LABELS: Record<string, string> = {
   assess: "Assessment & Catalog",
   understand: "AS-IS Understanding",
   "plan-understand": "Understanding Plan",
-  design: "TO-BE Design",
-  preflight: "Preflight Check",
-  brief: "Modernization Brief",
-  transform: "Code Transform",
-  uplift: "Version Uplift",
-  reimagine: "Reimagine & Rebuild",
+  "design-architecture": "Common Design",
+  scaffold: "Skeleton",
+  design: "Unit Design",
+  implement: "Implementation",
   verify: "Behavior Verification",
 };
 
@@ -46,9 +37,14 @@ export function stageLabel(id: string): string {
   return STAGE_LABELS[id] ?? id.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-/** The stages shown in the pipeline: only the runtime stages a person runs; member and portal stages are not implemented yet. */
+/** The stages shown in the pipeline; the other member and portal stages are not tracked in the portal yet. */
 export function pipelineStages(stages: readonly StageView[]): StageView[] {
-  return stages.filter((stage) => stage.audience === "runtime" && RUNTIME_STAGES.includes(stage.id));
+  return stages.filter((stage) => PIPELINE_STAGES.includes(stage.id));
+}
+
+/** The pipeline stages a runtime job runs: what progress and health count (the design stage is tracked by its documents). */
+export function runtimePipelineStages(stages: readonly StageView[]): StageView[] {
+  return pipelineStages(stages).filter((stage) => stage.audience === "runtime");
 }
 
 export function stagesByAudience(stages: readonly StageView[]): Array<{ audience: StageAudience; stages: StageView[] }> {

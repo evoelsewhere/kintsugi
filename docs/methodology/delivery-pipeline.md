@@ -2,7 +2,7 @@
 
 This page explains the delivery method Kintsugi supports: every application is **rebuilt** on a new architecture from what its legacy system does. How the system implements it is described in the [architecture](../architecture/README.md).
 
-> **Where Kintsugi stands today.** The built-in runtime covers reverse engineering of the as-is system: the `assess` and `understand` stages of P1. The phases after them describe the planned shape of the rebuild; they are not implemented yet.
+> **Where Kintsugi stands today.** The built-in runtime covers reverse engineering of the as-is system: the `assess` and `understand` stages of P1. The design phases (P2–P4) are carried out by members in their own harness with the `modernize` plugin's commands (`design-architecture`, `scaffold`, `design`, `implement`), from the project's own design templates; the runtime stages that plan and review them (`plan-design`, `design-review`) and the later phases (verify, cutover, hypercare) are planned.
 
 ## 1. The big picture
 
@@ -87,12 +87,13 @@ The security review is part of `understand`. Runtime jobs do not run a scanner; 
 ### P2 — Define To-Be
 - **Activities**:
   - TO-BE requirements;
-  - target architecture (business / application / data / technology);
+  - **common design** by the foundation team: the target architecture (business / application / data / technology) and the **common components** every unit reuses (authentication, logging, error handling, transactions, batch framework, data access), each with a stable id (`COM-…`);
   - co-existence options (data continuity layer, strangler, monolith → macro → mini → micro-services);
   - cost-benefit;
   - POC plan;
-  - prototype or first working version.
-- **Outputs**: target architecture blueprint, ADRs, co-existence strategy, data migration strategy, POC plan, initial TO-BE KB, **standards drafted** in the document repo (target and UI conventions, mappings, review rules).
+  - prototype or first working version;
+  - **basic design of every unit in scope**, from the project's own template (what the unit is: functions, inputs and outputs, data, how each business rule is handled). It is needed before the waves are planned, because scope and estimates rest on it.
+- **Outputs**: target architecture blueprint, the common components, ADRs, co-existence strategy, data migration strategy, POC plan, initial TO-BE KB, the basic design of each unit, **standards drafted** in the document repo (target and UI conventions, mappings, review rules, the **design templates** in `standards/design/`).
 - **Gate G2**: approved by the **Architecture Review Board**.
 
 ### P3 — Prepare Factory
@@ -101,17 +102,18 @@ The security review is part of `understand`. Runtime jobs do not run a scanner; 
   - deliverable creation guidelines;
   - **agent plugins (skills, agents, hooks), prompt libraries and task-pack templates** for members' harnesses, per type of work (reverse design, design generation, code generation, unit-test generation, test-case generation, data migration);
   - configure the runtime agents (task-planner, gate-reviewer) and their eval sets;
-  - run pilot units and fix the standards where they were unclear or wrong.
-- **Outputs**: runnable base source, CI/CD pipeline, piloted agent plugins and task-pack templates, configured runtime agents, complete TO-BE KB.
+  - run pilot units, each through basic design, detail design and code, and fix the standards and the design templates where they were unclear or wrong.
+- **Outputs**: runnable base source, CI/CD pipeline, piloted agent plugins and task-pack templates, piloted design templates, configured runtime agents, complete TO-BE KB.
 - **Gate G3**: a pilot of 1–2 units per unit kind meets quality, and the architect confirms the target repos are scaffolded and the standards are written (a human decision; there is no automatic readiness check).
 
 ### P4 — Migrate (by wave / feature)
-- **Activities**: reverse design (code → detail design), new design generation, code generation on the target architecture, data migration, design ↔ code sync, fixing static-check and runtime errors.
+- **Activities**: per unit, in its wave, **detail design** (how the unit is built, from the project's template, precise enough to generate the code from), design review, implementation with unit tests on the target architecture, code review; data migration; design ↔ code sync (when the code has to differ, the design is corrected in the same pull request); fixing static-check and runtime errors.
 - **How the work is done**:
   1. Members work in their own AI harness, following the **task pack** produced by the runtime.
-  2. `gate-reviewer` (runtime) reviews each PR first.
-  3. A human approves.
-- **Outputs**: new source code, detail designs, migration scripts, PRs.
+  2. Each unit runs the stages `detail-design` → `design-review` → `implement` → `unit-test` → `code-review`; the review points between them are stage gates (`stage:<id>`), and a pipeline may name the design set a stage produces (`produces:`).
+  3. `gate-reviewer` (runtime) reviews each PR first.
+  4. A human approves.
+- **Outputs**: new source code and unit tests, detail designs, migration scripts, PRs.
 - **Gate G4** (per unit): green build, static checks, AI code review, human PR approval.
 
 ### P5 — Verify (refine + test)
@@ -150,6 +152,7 @@ The security review is part of `understand`. Runtime jobs do not run a scanner; 
 Not every application needs every stage of P0–P7 the same way.
 - Each application follows a **pipeline definition**: the one Kintsugi ships for a rebuild, or one declared under `pipelines:` in `kintsugi.yaml`. It lists phases, stages, performers and gates.
 - A project that needs a different shape declares its own: add custom phases (mapped to a built-in category for reporting) or remove stages.
+- A stage may name the **design set** it produces (`produces: detail`), and the design sets are the project's own: how many there are, which documents they hold and what each must contain is defined in `standards/design/` ([design templates](../reference/design-templates.md)). The design levels above are the starter's, not the engine's.
 
 ### Scorecard → rebuild priority
 The scorecard combines five criteria groups: business, technical, feasibility, cost and risk. Each criterion is scored 1–10 and weighted; the weights sum to 1 (`ScorecardCriterion` in [`packages/domain`](../../packages/domain/src/index.ts)).
@@ -165,7 +168,7 @@ The weighted total maps to a priority for the wave plan:
 ## 5. Implications for Kintsugi
 
 1. **The pipeline is a configurable template** (a project may declare its own), not hard-coded.
-2. **A unit** is a feature, screen, module or data object moving through stages. Each unit has a file in the document repo whose frontmatter holds its state (ADR-0012). Each stage is performed by a member (with an AI harness), a runtime agent (preparation / review) or a tool.
+2. **A unit** is a feature, screen, module or data object moving through stages, and has its own design documents (`design/<set>/`). Each unit has a file in the document repo whose frontmatter holds its state (ADR-0012). Each stage is performed by a member (with an AI harness), a runtime agent (preparation / review) or a tool.
 3. **The knowledge base is first-class.** Runtime agents and members' harnesses both read it, and merged results flow back into it (continuous TO-BE KB enrichment).
 4. **Project knowledge is built, versioned and verified**: standards are written per project in the document repo, changed by PR, and only deliberately copied to other projects.
 5. **AI metrics are measured from day one.**

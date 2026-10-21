@@ -9,6 +9,8 @@ the scratch directory, which is never committed. Standard library only.
 
 APPLICATIONS_ROOT = 'applications'
 SCRATCH_ROOT = 'scratch'
+ARCHITECTURE_ROOT = 'architecture'
+DESIGN_SETS_ROOT = 'standards/design'
 
 
 def split_unit_key(unit_key):
@@ -43,6 +45,38 @@ def application_requirements_path(app):
 
 def application_design_path(app):
     return f'{application_to_be_dir(app)}/design.md'
+
+
+# ---------------------------------------------------------------------------
+# Design context (ADR-0044, ADR-0045)
+# ---------------------------------------------------------------------------
+
+def architecture_dir():
+    return ARCHITECTURE_ROOT
+
+
+def common_components_dir():
+    return f'{ARCHITECTURE_ROOT}/common'
+
+
+def common_component_path(component_id):
+    return f'{common_components_dir()}/{component_id}.md'
+
+
+def design_sets_dir():
+    return DESIGN_SETS_ROOT
+
+
+def design_set_dir(set_id):
+    return f'{design_sets_dir()}/{set_id}'
+
+
+def design_set_path(set_id):
+    return f'{design_set_dir(set_id)}/set.md'
+
+
+def design_template_path(set_id, template):
+    return f'{design_set_dir(set_id)}/{template}'
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +284,15 @@ def unit_rules_path(app, module, unit):
     return unit_understanding_file_path(app, module, unit, 'rules.md')
 
 
+def unit_rules_dir(app, module, unit):
+    """The folder of the unit's rule files, one `<rule id>.md` per rule; rules.md is their index."""
+    return unit_understanding_file_path(app, module, unit, 'rules')
+
+
+def unit_rule_file_path(app, module, unit, rule_id):
+    return f'{unit_rules_dir(app, module, unit)}/{rule_id}.md'
+
+
 def unit_data_objects_path(app, module, unit):
     return unit_understanding_file_path(app, module, unit, 'data-objects.md')
 
@@ -274,8 +317,16 @@ def unit_task_path(app, module, unit):
     return unit_file_path(app, module, unit, 'task.md')
 
 
-def unit_design_path(app, module, unit):
-    return unit_file_path(app, module, unit, 'design.md')
+def unit_design_dir(app, module, unit):
+    return unit_file_path(app, module, unit, 'design')
+
+
+def unit_design_set_dir(app, module, unit, set_id):
+    return f'{unit_design_dir(app, module, unit)}/{set_id}'
+
+
+def unit_design_file_path(app, module, unit, set_id, file):
+    return f'{unit_design_set_dir(app, module, unit, set_id)}/{file}'
 
 
 def unit_reviews_dir(app, module, unit):

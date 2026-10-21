@@ -2,7 +2,7 @@
 """Independent proof pack: one plain verdict per built module, computed from the evidence files.
 
     python3 proof_pack.py <app> [module] --source <checkout> --assessment <applications/app/assessment> \\
-        --target <checkout> --out <folder> [--runs <runs/unit/run-id>] [--uplift]
+        --target <checkout> --out <folder> [--runs <runs/unit/run-id>]
 
 Writes VERIFICATION.md (for people) and VERIFICATION.json under --out. The
 verdict is computed here by fixed rules, never by a model's opinion, and every rule is written into
@@ -10,7 +10,7 @@ the output so an auditor can follow it:
 
   PROVEN         all six checks below pass.
   NOT PROVEN     any check fails: nothing executed, a test failed, an equivalence case differs or is
-                 missing, a baseline regression or new failure, a deliberate break that no test noticed.
+                 missing, a deliberate break that no test noticed.
   PARTLY PROVEN  nothing failed, but at least one check could not be passed; each is listed.
 
   1  Tests ran         at least one test executed in a fresh run, none failed, none was skipped
@@ -18,17 +18,15 @@ the output so an auditor can follow it:
                        come from files this script parsed itself: JUnit-style XML, or a saved raw runner
                        log (Maven/Gradle, cargo, pytest, unittest, go test, dotnet test, jest, vitest,
                        ctest, phpunit). Counts only typed into test-runs.json cap the check at "gap".
-  2  Rules traced      rewrite and reimagine only: every P0 rule the module answers for is backed by a
+  2  Rules traced      every P0 rule the module answers for is backed by a
                        test that ran and passed here: the rule id is in the name (test or class) of a test
                        result this script parsed, or a test file names it on a line not marked skipped or
                        pending and its class or file is one of a test that passed. A rule named only by
                        skipped, pending or failing tests is "named, not run"; one only the notes name is
                        "claimed": neither is tested. Counts and logs name no test, so they back no rule.
-                       Uplifts keep the code, so they trace no rules.
   3  Same behavior     the development cases, judged again here by compare.py, executed at least one
                        case with none differing or missing (a case a person approved is allowed and
-                       listed); for an uplift, baseline_diff.py may stand in: no regression, no new
-                       failure, no missing test or module, no drop in executed tests.
+                       listed).
   4  Fresh inputs      at least 10 new inputs, none with the same output as a development case, ran on
                        the legacy and the new code and compare.py finds no difference. Needed whenever
                        the legacy could run here; when it could not, the proof rests on recorded
@@ -44,7 +42,7 @@ module: it is listed as "Test tooling (not judged)", under "toolingOnly" in the 
 
 Evidence read from applications/<app>/assessment/ and the unit verify/runs folder (its test-runs.json, with the legacy
 assessment equivalence/test-runs.json as fallback), the source checkout, and the target checkout: cases.json and fresh-cases.json
-(judged again here, not read from EQUIVALENCE.json), BASELINE.md, BUSINESS_RULES.md, the modernization brief under to-be/, and the notes files. Everything read is untrusted
+(judged again here, not read from EQUIVALENCE.json), BUSINESS_RULES.md, and the notes files. Everything read is untrusted
 text: it is never run, links outside the supplied roots are refused, and sizes are capped. Exit 0 when every verdict is
 PROVEN, 1 when not, 2 for input that cannot be used.
 """
@@ -61,39 +59,30 @@ from typing import Any
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.dont_write_bytecode = True          # importing the sibling scripts must not leave __pycache__ in the plugin folder
 sys.path.insert(0, HERE)
-import baseline_diff  # noqa: E402
 import compare  # noqa: E402
+import run_results  # noqa: E402
 import trace_rules  # noqa: E402
-import uplift_checks  # noqa: E402
 
 FRESH_MIN, LIST_CAP, JSON_CAP = 10, 40, 8 << 20
 VERDICTS = ("PROVEN", "PARTLY PROVEN", "NOT PROVEN")
-UPLIFT_CHECKS = (("baseline", "Baseline measured"), ("kept", "Tests kept"), ("deltas", "Deltas covered"))
 CHECKS = (("tests", "Tests ran"), ("rules", "Rules traced"), ("same", "Same behavior"), ("fresh", "Fresh inputs"),
-          ("canary", "Canary"), ("source", "Source untouched")) + UPLIFT_CHECKS
+          ("canary", "Canary"), ("source", "Source untouched"))
 RULES_TEXT = (
-    "PROVEN needs every required check to pass: the six below, and for an uplift three more (7 to 9). A source check that is UNKNOWN is shown with its reason and does not fail the run. NOT PROVEN when any check fails. PARTLY PROVEN when nothing failed but a required check could not pass.",
+    "PROVEN needs every required check to pass: the six below. A source check that is UNKNOWN is shown with its reason and does not fail the run. NOT PROVEN when any check fails. PARTLY PROVEN when nothing failed but a required check could not pass.",
     "1. Tests ran: at least one test executed in a fresh run, none failed, none was skipped without a reason, and every result file is newer than the code. "
     "The counts must be read by this script from result files or a saved raw runner log; counts only typed in cannot reach PROVEN.",
-    "2. Rules traced (rewrite and reimagine): every P0 rule the module answers for is backed by a test that ran and passed: its id is in the test or class name of a result this script parsed, "
+    "2. Rules traced: every P0 rule the module answers for is backed by a test that ran and passed: its id is in the test or class name of a result this script parsed, "
     "or a test file names it on a line not marked skipped or pending and that file's class ran and passed. A rule named only by skipped, pending or failing tests is named, not run; one only the notes name is claimed. Neither is tested.",
-    "3. Same behavior: the development cases, judged again by compare.py, executed at least one case and none differs or is missing (a difference a person approved is allowed and listed); "
-    "for an uplift, no regression, no new failure, no missing test and no drop in executed tests against BASELINE.md.",
+    "3. Same behavior: the development cases, judged again by compare.py, executed at least one case and none differs or is missing (a difference a person approved is allowed and listed).",
     "4. Fresh inputs: at least 10 new inputs, none with the same output as a development case, ran on the legacy and the new code with no difference. Needed whenever the legacy could run here; "
     "when it could not, the proof is trace-based and the best verdict is PARTLY PROVEN.",
     "5. Canary: a deliberate one-line break whose own result file or saved runner log shows failing tests. A line in the notes is a claim.",
     "6. Source untouched: Git reports a clean source checkout with HEAD equal to `sourceCommit` in inventory.md; missing evidence or Git is UNKNOWN.",
-    "7. Baseline measured (uplift): the old version's numbers in BASELINE.md come from per-test result files, a per-test results file or a raw runner log that this script parsed "
-    "(in applications/<app>/assessment/baseline/, or on a Recorded: or Machine-readable: line of BASELINE.md), and the typed table agrees with them. A table typed by hand, or sources that disagree, cannot reach PROVEN.",
-    "8. Tests kept (uplift): no test file of the untouched legacy tree is missing from the working copy, no more than 25% of them changed, and the legacy tree has test files to compare against "
-    "(walked by file, no process is run). The list is for a person to review; weakened assertions cannot be detected, only that files changed.",
-    "9. Deltas covered (uplift): every Behavioral-silent delta in DELTA_CATALOG.md has its site's file named, as a whole word, by some test file of the working copy. A name is not proof that the test exercises the change.",
     "Open questions, unticked criteria and the sign-off are for a person. They never change the verdict.",
     "A folder that holds only test code and the files that build it is test tooling: it is listed, not judged, and not counted.",
 )
 WORDS = {"pass": "pass", "gap": "not proven", "fail": "FAIL", "na": "not applicable", "unknown": "unknown"}
 CANARY = re.compile(r"Canary[^:\n|]{0,20}:\s*(.{1,300}?)\s*(?:→|->|=>|,)\s*(\d[\d,]*)\s+tests?\s+(?:failed|went red|failing)", re.I)
-CHECKBOX = re.compile(r"^\s*[-*]\s*\[( |x|X)\]\s*(.*)$")
 NOTE_NAMES = trace_rules.NOTES_NAMES
 clean = trace_rules.clean
 
@@ -180,18 +169,12 @@ def paths_of(value):
     return [v for v in (value if isinstance(value, list) else [value])[:20] if isinstance(v, str) and v]
 
 
-def suites_for(runs, subject, unit, subjects):
+def suites_for(runs, subject, subjects):
     """The suites that belong to one subject. A suite that names no module belongs to the only subject."""
-    others = {s["name"].lower() for s in subjects if s["track"] != "uplift"}
     out = []
     for s in runs["suites"]:
         mod = s["module"].lower()
-        if not mod:
-            ok = len(subjects) == 1
-        elif subject["track"] == "uplift":       # one uplifted working copy holds many units; a unit argument narrows it
-            ok = mod not in others and (not unit or mod == unit.lower() or mod == subject["name"].lower())
-        else:
-            ok = mod == subject["name"].lower()
+        ok = len(subjects) == 1 if not mod else mod == subject["name"].lower()
         if ok:
             out.append(s)
     return out
@@ -215,8 +198,8 @@ def code_mtime(root):
     return newest
 
 
-# ---------------------------------------------------------------- raw runner logs (read by baseline_diff.py, which the baseline check shares)
-LOG_CAP, parse_runner_log, read_logs = baseline_diff.LOG_CAP, baseline_diff.parse_runner_log, baseline_diff.read_logs
+# ---------------------------------------------------------------- raw runner logs (read by run_results.py, which trace_rules shares)
+LOG_CAP, parse_runner_log, read_logs = run_results.LOG_CAP, run_results.parse_runner_log, run_results.read_logs
 
 
 def utc(ts):
@@ -241,10 +224,10 @@ def suite_evidence(suite, workspace):
 
     good = [p for _, p in junit if p]
     if good:
-        fresh = baseline_diff.read_results(good)
+        fresh = run_results.read_results(good)
         ev["notes"] += ["result file not used: " + u for u in fresh["unreadable"][:3]]
         if fresh["files"]:
-            c = baseline_diff.tally(fresh["tests"].values())
+            c = run_results.tally(fresh["tests"].values())
             ev.update({"source": "result files", "files": fresh["files"], "newest": fresh["newest"], "oldest": fresh["oldest"], "written": utc(fresh["newest"]), "executed": c["executed"],
                        "failed": c["fail"] + c["error"], "skipped": c["skip"],
                        "skippedNoReason": 0 if suite["skippedReason"] else sum(1 for t, st in fresh["tests"].items() if st == "SKIP" and not fresh["skipReasons"].get(t))})
@@ -272,7 +255,7 @@ def suite_results(ctx, suite):
 
 def module_run(ctx, subject):
     """What ran for one module (trace_rules.run_evidence): read from its suites' result files. Counts and logs name no test, so they back no rule."""
-    return trace_rules.run_evidence([suite_results(ctx, s)[1] for s in suites_for(ctx["runs"], subject, ctx["unit"], ctx["subjects"])])
+    return trace_rules.run_evidence([suite_results(ctx, s)[1] for s in suites_for(ctx["runs"], subject, ctx["subjects"])])
 
 
 # ---------------------------------------------------------------- the source check
@@ -282,16 +265,13 @@ NO_VCS_RESULT = "NO_VCS"
 
 
 def reference_time(adir):
-    """The assessment start time: PREFLIGHT.md, or the oldest file in applications/<app>/assessment/."""
+    """The assessment start time: the oldest file in applications/<app>/assessment/."""
     def mtime(path):
         try:
             st = os.lstat(path)
             return st.st_mtime if stat.S_ISREG(st.st_mode) else None
         except OSError:
             return None
-    ref = mtime(os.path.join(adir, "PREFLIGHT.md"))
-    if ref is not None:
-        return ref
     try:
         times = [t for t in (mtime(os.path.join(adir, n)) for n in os.listdir(adir)) if t is not None]
     except OSError:
@@ -310,7 +290,7 @@ def source_check(workspace, system, adir):
         return out
     ref = reference_time(adir)
     if ref is None:
-        out["detail"] = "there is no PREFLIGHT.md or other analysis file to date the analysis by, so legacy/%s was not checked" % system
+        out["detail"] = "there is no analysis file to date the analysis by, so legacy/%s was not checked" % system
         return out
     newer, seen, unreadable = [], 0, [0]
 
@@ -346,7 +326,7 @@ def source_check(workspace, system, adir):
 
 
 def recorded_source_commit(adir):
-    """Read the preflight-pinned source revision from the front matter of the bounded inventory evidence (inventory.md)."""
+    """Read the pinned source revision from the front matter of the bounded inventory evidence (inventory.md)."""
     path = os.path.join(adir, "inventory.md")
     try:
         if os.path.islink(path) or os.path.getsize(path) > (1 << 20):
@@ -405,57 +385,6 @@ def git_source_check(source, adir):
     result["state"] = "clean"
     result["detail"] = "source checkout is clean and HEAD matches the recorded source commit"
     return result
-
-
-# ---------------------------------------------------------------- the brief
-def brief_items(text, module, track):
-    """Unticked criteria a person decides: the exit criteria of the module's phase, and the open questions of section 7."""
-    if not text:
-        return {"found": False, "phase": "", "items": [], "count": 0}
-    lines = [ln[:2000] for ln in text.split("\n")]
-    phases: list[dict[str, Any]] = []
-    cur: dict[str, Any] | None = None
-    for line in lines:
-        m = re.match(r"#{2,5}\s+Phase\s+(\d+)\b", line)
-        if m:
-            cur = {"n": int(m.group(1)), "title": clean(re.split(r"\s[—-]\s", line.lstrip("# "))[0], 60), "command": "", "modules": set(), "exit": [], "in_exit": False}
-            phases.append(cur)
-        elif re.match(r"#{1,3}\s", line):
-            cur = None
-        elif cur is not None:
-            k = re.match(r"\s*(Command|Modules)\s*:\s*(.*)$", line)
-            if k and k.group(1) == "Command":
-                cur["command"] = k.group(2).lower()
-            elif k:
-                cur["modules"] = {t.strip().lower() for t in re.split(r"[,;]", k.group(2)) if t.strip()}
-            elif re.match(r"\s*Exit criteria\s*:", line):
-                cur["in_exit"] = True
-            elif re.match(r"\s*(Entry criteria|Scale|Risk|Command|Modules)\s*:", line):
-                cur["in_exit"] = False
-            elif cur["in_exit"]:
-                c = CHECKBOX.match(line)
-                if c and c.group(1) == " ":
-                    cur["exit"].append(clean(c.group(2), 300))
-    verb = {"rewrite": "transform", "reimagine": "reimagine", "uplift": "uplift"}[track]
-    by_name = [p for p in phases if module.lower() in p["modules"]] if track != "uplift" else []
-    mine = by_name or [p for p in phases if verb in p["command"]]
-    items = [{"text": t, "where": "%s exit criterion" % p["title"]} for p in mine for t in p["exit"]]
-    phase_n = min((p["n"] for p in mine), default=None)
-    level = None
-    for line in lines:
-        h = re.match(r"(#{1,3})\s+(.*)", line)
-        if h:
-            if re.match(r"(?:\d+[.)]?\s*)?open questions|7[.):\s]", h.group(2), re.I):
-                level = len(h.group(1))
-            elif level is not None and len(h.group(1)) <= level:
-                level = None
-            continue
-        c = CHECKBOX.match(line) if level else None
-        if c and c.group(1) == " ":
-            tag = re.search(r"\[before Phase (\d+)\]", c.group(2), re.I)
-            if not (tag and phase_n is not None and int(tag.group(1)) > phase_n):
-                items.append({"text": clean(c.group(2).replace("**", ""), 300), "where": "open question, section 7"})
-    return {"found": True, "phase": mine[0]["title"] if len(mine) == 1 else "", "items": items[:LIST_CAP], "count": len(items)}
 
 
 # ---------------------------------------------------------------- the six checks
@@ -524,16 +453,16 @@ def recorded_matches(path, rec):
     return all(obj["totals"].get(k) == mine[k] for k in ("cases", "executed", "same", "differs", "differsApproved", "missing"))
 
 
-def check_tests(g, uplift, comparable):
+def check_tests(g):
     """Check 1. g: {executed, failed, skipped, skippedNoReason, suites, stale}. A suite's own note is added to the detail."""
-    r = check_tests_state(g, uplift, comparable)
+    r = check_tests_state(g)
     notes = " ".join(e["note"] for e in g["suites"] if e.get("note"))
     if notes:
         r["detail"] = clean(r["detail"] + " Note: " + notes, 700)
     return r
 
 
-def check_tests_state(g, uplift, comparable):
+def check_tests_state(g):
     ex, fail, skip, nr = g["executed"], g["failed"], g["skipped"], g["skippedNoReason"]
     if not g["suites"]:
         return row("tests", "fail", "No test run is recorded for this module, so nothing executed. Run its tests again and record them in equivalence/test-runs.json.")
@@ -542,28 +471,25 @@ def check_tests_state(g, uplift, comparable):
         return row("tests", "gap", "No test result could be read: no result file was parsed, no saved runner log has a summary line this script knows, and no counts were given (%s)." % "; ".join(n for e in g["suites"] for n in e["notes"][:2])[:300])
     if ex == 0:
         return row("tests", "fail", "Nothing executed: no test ran%s." % (" (%d were skipped)" % skip if skip else ""))
-    if fail and not (uplift and comparable):
+    if fail:
         return row("tests", "fail", "%d of %d executed test(s) failed." % (fail, ex))
-    if nr and not (uplift and comparable):
+    if nr:
         return row("tests", "gap", "%d test(s) were skipped with no reason given (%d executed, %d failed)." % (nr, ex, fail))
     if g["stale"]:
         return row("tests", "gap", "%d test(s) executed, but some result files are older than the code, so this was not a clean run of the current code: delete the build output and run the tests again." % ex)
     typed = [e["name"] or "a suite" for e in g["suites"] if e["source"] == "reported"]
     if unread or typed:
         return row("tests", "gap", "%d test(s) executed, but the counts for %s were typed in by the command, not read from a result file or a saved runner log, so this cannot be PROVEN." % (ex, ", ".join(unread + typed)))
-    judged = " (failures are judged against the baseline below)" if fail and uplift else ""
-    return row("tests", "pass", "%d test(s) executed, %d failed%s, %d skipped." % (ex, fail, judged, skip))
+    return row("tests", "pass", "%d test(s) executed, %d failed, %d skipped." % (ex, fail, skip))
 
 
 def check_rules(ctx, subject, evidence, caveats):
     """Check 2."""
-    if subject["track"] == "uplift":
-        return row("rules", "na", "An uplift keeps the code, so no business rule is traced. The baseline comparison stands in.")
     tr = ctx["trace"]
     if tr is None:
         return row("rules", "gap", ctx["trace_problem"])
     if not tr["rules"]:
-        return row("rules", "gap", "BUSINESS_RULES.md has no rule cards in the form '### RULE-001: name', so no rule can be traced.")
+        return row("rules", "gap", "BUSINESS_RULES.md lists no rule (a table row with a RULE-001 id and a name, or a '### RULE-001: name' card), so no rule can be traced.")
     view = trace_rules.module_view(tr, subject["rel"])
     p0 = [r for r in view["rows"] if r["priority"] == "P0"]
     missing = [r["id"] for r in p0 if r["status"] != "tested"]
@@ -590,117 +516,9 @@ def check_rules(ctx, subject, evidence, caveats):
     return row("rules", "pass", "All %d P0 rule(s) this module answers for are backed by a test that ran and passed." % len(p0))
 
 
-def baseline_info(ctx):
-    """(assessment of BASELINE.md, the measured evidence) for an uplift: is the baseline measured or only typed? (None, None) without a BASELINE.md."""
-    path = os.path.join(ctx["adir"], "BASELINE.md")
-    text = read_text(path)
-    if text is None:
-        return None, None
-    found = baseline_diff.evidence_paths(path, text)
-    measured = baseline_diff.read_baseline_evidence(found) if found else None
-    return baseline_diff.assess_baseline(baseline_diff.parse_baseline(text), measured), measured
-
-
-def baseline_state(ctx, suites, xml_paths, evidence, caveats, person, measured=None):
-    """The uplift's baseline comparison: (state, detail, whether it could compare)."""
-    path = os.path.join(ctx["adir"], "BASELINE.md")
-    if not os.path.isfile(path):
-        return "gap", "BASELINE.md is missing: an uplift needs the old version's results recorded first (uplift, Step 4).", False
-    if not xml_paths:
-        return "gap", "BASELINE.md exists, but there are no result files to compare it with.", False
-    try:
-        b = baseline_diff.run(path, xml_paths, measured=measured)
-    except baseline_diff.InputError as err:
-        return "gap", clean(str(err), 300), False
-    keys = ("ok", "regressionsCount", "newFailuresCount", "fixedCount", "missingCount", "missingModulesCount", "moduleDiffsCount", "renamed", "executedDrop", "skippedGrowth",
-            "stillFailingCount", "newlySkippedCount", "flakyCount", "approvedCount")
-    evidence["baseline"] = dict({k: b[k] for k in keys}, source=b["baseline"]["source"], targetOnly=b["baseline"]["targetOnly"], why=b["baseline"]["why"], before=b["baseline"]["counts"],
-                                now=b["fresh"]["counts"], approved=b["approved"][:LIST_CAP], regressions=b["regressions"][:LIST_CAP], newFailures=b["newFailures"][:LIST_CAP], fixed=b["fixed"][:LIST_CAP], missing=b["missing"][:LIST_CAP])
-    if b["fixedCount"]:
-        person.append("%d test(s) failed on the old version and pass now. A person decides whether each is an intended fix." % b["fixedCount"])
-    if b["flakyCount"]:
-        caveats.append("%d test(s) the baseline lists as flaky flipped; they are not counted as regressions." % b["flakyCount"])
-    if b["approvedCount"]:
-        caveats.append("%d test difference(s) were approved by a person in BASELINE.md and are not counted: %s." % (
-            b["approvedCount"], "; ".join("%s (%s)" % (clean(x["id"], 80), clean(x["reason"] or "no reason given", 80)) for x in b["approved"][:5])))
-    if b["baseline"]["targetOnly"] or not b["baseline"]["counts"]:
-        return "gap", "The baseline says target-only (%s): the old version did not run here, so there is nothing to compare with." % (b["baseline"]["why"] or "no reason given"), False
-    if b["renamed"]:
-        caveats.append("%d test name(s) changed while their class did not get worse (parameterized names that embed a path, for example); they were not counted as missing." % b["renamed"])
-    if b["regressionsCount"] or b["newFailuresCount"]:
-        hint = " Tests the baseline never listed were added after it was recorded: run them on the old version too and add them to BASELINE.md to tell a regression from a test that was never green." if b["newFailuresCount"] else ""
-        return "fail", "%d test(s) passed before and fail now; %d test(s) the baseline never listed (or skipped) fail now.%s" % (b["regressionsCount"], b["newFailuresCount"], hint), True
-    gaps = ["%d %s" % (n, what) for n, what in ((b["missingCount"], "baseline test(s) did not run now"), (b["missingModulesCount"], "baseline module(s) are missing from the results"),
-                                                   (b["moduleDiffsCount"], "module(s) ran fewer tests or skipped more"), (b["newlySkippedCount"], "test(s) that passed before are skipped now")) if n]
-    if b["executedDrop"]:
-        gaps.append("executed tests dropped from %(before)d to %(now)d" % b["executedDrop"])
-    if gaps:
-        return "gap", "; ".join(gaps) + ".", True
-    return "pass", "No regression: %d test(s) executed against %d in the baseline (%s)." % (b["fresh"]["counts"]["executed"], b["baseline"]["counts"]["executed"], b["baseline"]["source"]), True
-
-
-def check_baseline_measured(info, evidence):
-    """Check 7 (uplift): is the old version's baseline measured, or only typed?"""
-    if info is None:
-        return row("baseline", "na", "There is no BASELINE.md to check (see Same behavior).")
-    evidence["baselineEvidence"] = info
-    if info["kind"] == "target-only":
-        return row("baseline", "na", "BASELINE.md says target-only: the old version was not measured here (see Same behavior).")
-    if info["kind"] in ("typed", "none"):
-        ignored = " Files that only hold counts were ignored: %s." % ", ".join(info["ignored"][:3]) if info["ignored"] else ""
-        return row("baseline", "gap", "BASELINE.md is a table typed by hand: no per-test result file, per-test results file or raw runner log that this script can read backs it, so nothing shows the old "
-                                      "version really produced those numbers. Save the old version's results in applications/<app>/assessment/baseline/ (or name them on a Recorded: line of BASELINE.md) "
-                                      "and run this again.%s" % ignored)
-    names = ", ".join("%s%s" % (x["kind"], " " + x["name"] if x.get("name") else "") for x in info["sources"][:3])
-    if info["conflict"]:
-        return row("baseline", "gap", "The baseline's own sources disagree with each other (%s), so it cannot be trusted." % "; ".join(info["conflictExamples"][:2]))
-    if info["disagree"]:
-        return row("baseline", "gap", "The measured results and BASELINE.md's typed table disagree on %d test(s) or count(s) (%s): the measured results were used, but a typed table that does not match its evidence cannot be trusted." % (
-            info["disagree"], "; ".join(info["examples"][:2])))
-    what = "%d test(s) (%d executed, %d failed)" % (info["measuredTests"], info["measuredExecuted"], info["measuredFailed"]) if info["measuredTests"] else "%d executed, %d failed" % (
-        info["measuredExecuted"] or 0, info["measuredFailed"] or 0)
-    return row("baseline", "pass", "The baseline is measured: %s from %s, and BASELINE.md agrees with it." % (what, names))
-
-
-def check_tests_kept(tc, person):
-    """Check 8 (uplift): were the tests kept as they were?"""
-    if not tc["checked"]:
-        return row("kept", "gap", "The test files could not be compared: %s." % tc["why"])
-    c = tc["counts"]
-    if c["added"] or c["removed"] or c["changed"]:
-        person.append("Review the test files that changed during the uplift (%d changed, %d added, %d removed; the list is in VERIFICATION.md). Weakened assertions cannot be detected, only that files changed." % (
-            c["changed"], c["added"], c["removed"]))
-    if not tc["legacyTests"]:
-        return row("kept", "gap", "%s (%d test file(s) in the working copy)." % (tc["why"][:1].upper() + tc["why"][1:], tc["workTests"]))
-    reasons = []
-    if c["removed"]:
-        reasons.append("%d legacy test file(s) are missing from the working copy (%s)" % (c["removed"], ", ".join(x["path"].rsplit("/", 1)[-1] for x in tc["removed"][:3])))
-    if tc["legacyTests"] and c["changed"] > uplift_checks.SHARE_LIMIT * tc["legacyTests"]:
-        reasons.append("%d of %d legacy test files (%.0f%%) were changed, more than the 25%% allowed" % (c["changed"], tc["legacyTests"], 100 * tc["share"]))
-    if reasons:
-        return row("kept", "gap", "; ".join(reasons) + ": the tests were edited or deleted, so passing them proves less. A person should review the list.")
-    return row("kept", "pass", "No legacy test file was removed and %d of %d (%.0f%%) changed; %d test file(s) were added. The list is for a person to review." % (c["changed"], tc["legacyTests"], 100 * tc["share"], c["added"]))
-
-
-def check_deltas(dc, person):
-    """Check 9 (uplift): does some test name the site of every Behavioral-silent delta?"""
-    if dc["parsed"] == 0:
-        return row("deltas", "gap", "%s." % dc["why"])
-    if dc["config"]:
-        person.append("%d Behavioral-silent delta(s) sit at a build or configuration file that a test cannot name (%s): a person decides how each is checked." % (
-            len(dc["config"]), ", ".join(x["id"] for x in dc["config"][:6])))
-    extra = " %d more at a build or configuration file (a test cannot name it; for a person)." % len(dc["config"]) if dc["config"] else ""
-    if dc["uncovered"]:
-        listed = "; ".join("%s (%s)" % (x["id"], x.get("why", "")) for x in dc["uncovered"][:4])
-        return row("deltas", "gap", "%d of %d Behavioral-silent delta(s) have no test that names their site: %s.%s" % (len(dc["uncovered"]), dc["silent"], listed, extra))
-    if not dc["silent"]:
-        return row("deltas", "pass", "%d delta(s) are in DELTA_CATALOG.md and none is Behavioral-silent.%s" % (dc["parsed"], extra))
-    return row("deltas", "pass", "All %d Behavioral-silent delta(s) (of %d in the catalog) have their site's file named by a test in the working copy.%s" % (len(dc["covered"]), dc["parsed"], extra))
-
-
-def check_same(ctx, subject, paths, dev, dev_problem, base, evidence, caveats):
-    """Check 3. `base` is baseline_state's answer for an uplift, else None."""
-    uplift, dev_state, dev_detail = subject["track"] == "uplift", None, ""
+def check_same(ctx, paths, dev, dev_problem, evidence, caveats):
+    """Check 3."""
+    dev_state, dev_detail = None, ""
     if dev:
         s = evidence["equivalence"] = summary_of(dev)
         problem = compare.verdict_of(dev)
@@ -718,14 +536,6 @@ def check_same(ctx, subject, paths, dev, dev_problem, base, evidence, caveats):
             caveats.append("The equivalence cases are shared by every module, so they are not attributed to this module alone.")
     elif dev_problem:
         caveats.append(dev_problem)
-    if uplift:
-        b_state, b_detail, comparable = base
-        detail = " ".join(x for x in (b_detail, dev_detail) if x)
-        if "fail" in (dev_state, b_state):
-            return row("same", "fail", detail)
-        if comparable:
-            return row("same", b_state, detail)
-        return row("same", "pass" if dev_state == "pass" else "gap", detail)
     if dev_state:
         return row("same", dev_state, dev_detail)
     if os.path.isfile(os.path.join(ctx["adir"], "EQUIVALENCE.json")):
@@ -787,7 +597,7 @@ def canary_run(entry, workspace, clean_ids, clean_failed):
     With result files, a test that fails in both runs is not the canary's doing; with a log, only the count can be compared."""
     junit, logs = [p for p in (inside(workspace, j) for j in entry["junit"]) if p], [p for p in (inside(workspace, j) for j in entry["log"]) if p]
     if junit:
-        fresh = baseline_diff.read_results(junit)
+        fresh = run_results.read_results(junit)
         if fresh["files"]:
             bad = {t for t, st in fresh["tests"].items() if st in ("FAIL", "ERROR")}
             return len(bad - clean_ids), [os.path.relpath(p, workspace).replace(os.sep, "/") for p in junit][:3]
@@ -798,12 +608,12 @@ def canary_run(entry, workspace, clean_ids, clean_failed):
     return None, []
 
 
-def check_canary(subject, module, runs, evidence, workspace, others, clean_ids, clean_failed):
+def check_canary(subject, module, runs, evidence, workspace, clean_ids, clean_failed):
     """Check 5. A canary counts only when its own result file or saved runner log, parsed here, shows tests that fail because of the break
     (failures the clean run did not have). A line in the notes, or a count typed into test-runs.json, is a claim."""
     shown, claimed = [], []
     for c in runs["canaries"]:
-        mine = c["module"].lower() in ("", module.lower()) or (subject["track"] == "uplift" and c["module"].lower() not in others)
+        mine = c["module"].lower() in ("", module.lower())
         if not mine:
             continue
         failed, where = canary_run(c, workspace, clean_ids, clean_failed)
@@ -839,7 +649,7 @@ def check_source(ctx):
     return row("source", "gap", "%s: %s. Checked %s." % (name, src["detail"], src["method"]))
 
 
-def not_proven(subject, ev, legacy_ran):
+def not_proven(ev, legacy_ran):
     """What even a PROVEN verdict would not tell you, specific to this module."""
     out = ["It does not prove behavior on inputs nobody tried: the equivalence cases and the fresh inputs are samples, not the whole input space."]
     if not legacy_ran:
@@ -851,14 +661,10 @@ def not_proven(subject, ev, legacy_ran):
         for t in (ev.get(key) or {}).get("tolerances") or []:
             out.append("Numbers may differ in the %s within a declared tolerance (relative %g, absolute %g) in %d case(s): %s. That is a person's rule, not an exact match." % (
                 where, t["rel"] or 0, t["abs"] or 0, t["cases"], t["why"]))
-    if (ev.get("equivalence") or {}).get("approved") or (ev.get("fresh") or {}).get("approved") or (ev.get("baseline") or {}).get("approvedCount"):
+    if (ev.get("equivalence") or {}).get("approved") or (ev.get("fresh") or {}).get("approved"):
         out.append("A difference a person approved is a decision, not evidence.")
     out.append("It does not cover speed, capacity, security, concurrency, or anything the tests and cases do not exercise.")
-    if subject["track"] != "uplift":
-        out.append("It traces only the rules that were extracted: behavior nobody wrote down as a rule has no rule to trace.")
-    else:
-        out.append("Weakened assertions cannot be detected: only that test files changed. A test file that was edited may check less than it did.")
-        out.append("A silent version change counts as covered when some test names its site's file, not when a test exercises the changed behavior.")
+    out.append("It traces only the rules that were extracted: behavior nobody wrote down as a rule has no rule to trace.")
     out.append("A test that names a rule shows the rule is mentioned, not that the test is a good one. The canary shows only that some test can fail.")
     out.append("It does not replace the review and sign-off of the people who own the system.")
     return out
@@ -866,10 +672,10 @@ def not_proven(subject, ev, legacy_ran):
 
 def evaluate(subject, ctx):
     """-> the module record: verdict, reasons, the six checks and the evidence behind each."""
-    ws, module, uplift = ctx["workspace"], subject["name"], subject["track"] == "uplift"
-    suites = suites_for(ctx["runs"], subject, ctx["unit"], ctx["subjects"])
-    evidence, caveats, person = {}, [], []
-    per, xml_paths, oldest, clean_ids = [], [], None, set()
+    ws, module = ctx["workspace"], subject["name"]
+    suites = suites_for(ctx["runs"], subject, ctx["subjects"])
+    evidence, caveats = {}, []
+    per, oldest, clean_ids = [], None, set()
     for s in suites:
         ev, fresh = suite_results(ctx, s)
         per.append(ev)
@@ -877,70 +683,49 @@ def evaluate(subject, ctx):
         if ev["oldest"] is not None:
             oldest = ev["oldest"] if oldest is None else min(oldest, ev["oldest"])
         if fresh:
-            xml_paths += [p for p in (inside(ws, j) for j in s["junit"]) if p]
             clean_ids |= {t for t, st in fresh["tests"].items() if st in ("FAIL", "ERROR")}
     g = {k: sum(e[k] for e in per) for k in ("executed", "failed", "skipped", "skippedNoReason")}
     g.update({"suites": per, "stale": oldest is not None and code_mtime(subject["path"]) > oldest + 2})       # any result file older than the code: not a clean run
     evidence["tests"] = dict({k: g[k] for k in ("executed", "failed", "skipped", "skippedNoReason", "stale")},
                              suites=[{k: e.get(k, "") for k in ("name", "command", "date", "note", "source", "files", "written", "executed", "failed", "skipped")} for e in per][:20])
-    binfo, bmeasured = baseline_info(ctx) if uplift else (None, None)
-    base = baseline_state(ctx, suites, xml_paths, evidence, caveats, person, bmeasured) if uplift else None
     paths = cases_paths(ctx["adir"], module, len(ctx["subjects"]))
     dev, dev_problem = judge(paths["cases"]) if paths["cases"] else (None, None)
     frs, fr_problem = judge(paths["fresh"]) if paths["fresh"] else (None, None)
     legacy_ran = ctx["runs"]["legacy"]["ran"]
-    if uplift and evidence.get("baseline", {}).get("targetOnly"):
-        legacy_ran = False
     if legacy_ran is None:
         legacy_ran = bool(frs and frs["totals"]["executed"])
     evidence["legacy"] = dict(ctx["runs"]["legacy"], ran=legacy_ran)
-    checks = [check_tests(g, uplift, bool(base and base[2])), check_rules(ctx, subject, evidence, caveats), check_same(ctx, subject, paths, dev, dev_problem, base, evidence, caveats),
-              check_fresh(ctx, paths, dev, legacy_ran, frs, fr_problem, evidence), check_canary(subject, module, ctx["runs"], evidence, ws, {x["name"].lower() for x in ctx["subjects"] if x["track"] != "uplift"}, clean_ids, g["failed"]), check_source(ctx)]
-    if uplift:
-        legacy_root = os.path.realpath(os.path.join(ws, "legacy", ctx["system"])) if os.path.lexists(os.path.join(ws, "legacy", ctx["system"])) else ""
-        evidence["testsChanged"] = uplift_checks.tests_changed(legacy_root, subject["path"])
-        catalog = read_text(os.path.join(ctx["adir"], "DELTA_CATALOG.md"))
-        evidence["deltas"] = uplift_checks.delta_coverage(catalog, subject["path"])
-        checks += [check_baseline_measured(binfo, evidence), check_tests_kept(evidence["testsChanged"], person), check_deltas(evidence["deltas"], person)]
+    checks = [check_tests(g), check_rules(ctx, subject, evidence, caveats), check_same(ctx, paths, dev, dev_problem, evidence, caveats),
+              check_fresh(ctx, paths, dev, legacy_ran, frs, fr_problem, evidence), check_canary(subject, module, ctx["runs"], evidence, ws, clean_ids, g["failed"]), check_source(ctx)]
     states = [c["state"] for c in checks if c["state"] != "unknown"]
     label = dict(CHECKS)
     return {"name": module, "track": subject["track"], "path": subject["rel"], "verdict": "NOT PROVEN" if "fail" in states else "PARTLY PROVEN" if "gap" in states else "PROVEN",
             "reasons": ["%s: %s" % (label[c["id"]], c["detail"]) for c in checks if c["state"] in ("fail", "gap")],
             "passed": ["%s: %s" % (label[c["id"]], c["detail"]) for c in checks if c["state"] == "pass"],
-            "checks": checks, "evidence": evidence, "caveats": caveats[:20], "needsPerson": person[:10], "brief": ctx["brief"](module, subject["track"]),
-            "notProven": not_proven(subject, evidence, legacy_ran), "verifiedAt": ctx["now"]}
+            "checks": checks, "evidence": evidence, "caveats": caveats[:20], "notProven": not_proven(evidence, legacy_ran), "verifiedAt": ctx["now"]}
 
 
 # ---------------------------------------------------------------- putting the pack together
-def build(system, workspace, module=None, now=None, assessment_dir=None, target_dir=None, source_dir=None, runs_dir=None, uplift=False):
+def build(system, workspace, module=None, now=None, assessment_dir=None, target_dir=None, source_dir=None, runs_dir=None):
     """-> the pack (a dict). Raises InputError when nothing is built to verify."""
     workspace = os.path.abspath(workspace)
     adir = assessment_dir or os.path.join(workspace, "analysis", system)
     now = now or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     everything = trace_rules.discover_modules(workspace, system, target_dir)
-    if target_dir and uplift:
-        for subject in everything:
-            subject["track"] = "uplift"
     if not everything:
-        raise InputError("nothing is built in the target checkout for %s: run transform, uplift or reimagine first" % system)
-    unit = None
+        raise InputError("nothing is built in the target checkout for %s: build the target first" % system)
     if module and not any(m["name"].lower() == module.lower() for m in everything):
-        # not a module: it may be a unit inside an uplifted working copy, which narrows that copy's suites
-        if not any(m["track"] == "uplift" and os.path.isdir(os.path.join(m["path"], module)) and not os.path.islink(os.path.join(m["path"], module)) for m in everything):
-            raise InputError("nothing is built in the target checkout for %s module %s (built: %s)" % (system, module, ", ".join(clean(m["name"], 40) for m in everything[:10])))
-        unit = module
+        raise InputError("nothing is built in the target checkout for %s module %s (built: %s)" % (system, module, ", ".join(clean(m["name"], 40) for m in everything[:10])))
     runs = load_test_runs(adir, runs_dir)
-    # The brief lives with the application's TO-BE documents (ADR-0038); the legacy copy sits in the assessment folder.
-    brief = read_text(os.path.join(os.path.dirname(adir), "to-be", "modernization-brief.md")) or read_text(os.path.join(adir, "MODERNIZATION_BRIEF.md"))
-    ctx = {"workspace": runs_dir or workspace, "adir": adir, "system": system, "runs": runs, "subjects": everything, "unit": unit, "trace": None, "trace_problem": "", "now": now, "parsed": {}, "ran": {},
-           "source": git_source_check(source_dir, adir) if source_dir else source_check(workspace, system, adir), "source_git": bool(source_dir), "brief": lambda mod, track: brief_items(brief, mod, track)}
-    ctx["ran"] = {s["rel"]: module_run(ctx, s) for s in everything if s["track"] != "uplift"}       # what ran, per module: a rule is traced against it
+    ctx = {"workspace": runs_dir or workspace, "adir": adir, "system": system, "runs": runs, "subjects": everything, "trace": None, "trace_problem": "", "now": now, "parsed": {}, "ran": {},
+           "source": git_source_check(source_dir, adir) if source_dir else source_check(workspace, system, adir), "source_git": bool(source_dir)}
+    ctx["ran"] = {s["rel"]: module_run(ctx, s) for s in everything}       # what ran, per module: a rule is traced against it
     try:
         ctx["trace"] = trace_rules.trace(workspace, system, ctx["ran"], assessment_dir=adir, target_dir=target_dir)
     except OSError as err:
         ctx["trace_problem"] = "%s, so no rule can be traced; complete the rule-extraction stage for %s." % (clean(str(err), 200), system)
     # a folder of only test code and the files that build it (a parity harness) is not a module: listed, not judged, not counted
-    tooling = [s for s in everything if s["track"] != "uplift" and trace_rules.tooling_only(s["path"])]
+    tooling = [s for s in everything if trace_rules.tooling_only(s["path"])]
     mods = [evaluate(s, ctx) for s in sorted(everything, key=lambda s: s["name"].lower()) if s not in tooling]
     problems = [clean(p, 300) for p in runs["problems"]] + ([] if runs["present"] else ["test-runs.json was not found under the unit's verify/runs folder or the legacy equivalence/ folder, so no test run is recorded and no module can be proven."])
     if tooling and not mods:
@@ -981,7 +766,7 @@ def render_md(pack):
         out += ["", "## Test tooling (not judged)", "", "These folders hold only test code and the files that build it, so there is no behavior in them to prove. They are not in the verdict or its counts. A module whose code is not written yet is listed here too, until its code exists.", ""]
         out += ["- `%s` (%s)" % (cell(t["path"]), t["track"]) for t in pack["toolingOnly"]]
     for m in pack["modules"]:
-        ev, t, br = m["evidence"], m["evidence"]["tests"], m["brief"]
+        ev, t = m["evidence"], m["evidence"]["tests"]
         out += ["", "## %s: %s" % (cell(m["name"]), m["verdict"]), "", "Track: %s. Folder: `%s`. Checked %s." % (m["track"], cell(m["path"]), m["verifiedAt"]), ""]
         if m["reasons"]:
             out += ["**What is missing or wrong**", ""] + ["- " + cell(r) for r in m["reasons"]] + [""]
@@ -1003,43 +788,6 @@ def render_md(pack):
             out += ["- Declared tolerance (relative %g, absolute %g), %d case(s): %s" % (t["rel"] or 0, t["abs"] or 0, t["cases"], cell(t["why"])) for t in e["tolerances"]]
             out += ["- Approved difference %s: %s" % (cell(a["id"]), cell(a["why"])) for a in e["approved"]] + ["- Ignored by the comparison: %s (%d case(s))" % (cell(x["why"]), x["cases"]) for x in e["masks"]]
             out += ["- %s: %s" % (cell(d["id"]), cell(d["reason"])) for d in e["differing"]]
-        if "baseline" in ev:
-            b = ev["baseline"]
-            out += ["", "### Baseline comparison", "", "%d regression(s), %d new failure(s), %d fixed, %d missing, %d renamed." % (b["regressionsCount"], b["newFailuresCount"], b["fixedCount"], b["missingCount"], b["renamed"])]
-            out += ["- Regression: %s (%s, now %s)" % (cell(x["id"]), x["before"], x["now"]) for x in b["regressions"][:10]] + ["- New failure: " + cell(x) for x in b["newFailures"][:10]]
-        if ev.get("baseline", {}).get("approvedCount"):
-            out += ["- Difference a person approved in BASELINE.md: %s (%s)" % (cell(x["id"]), cell(x["reason"] or "no reason given")) for x in ev["baseline"]["approved"][:10]]
-        if ev.get("baselineEvidence"):
-            a = ev["baselineEvidence"]
-            out += ["", "### Baseline evidence", "", ("Measured: %s." % ", ".join("%s%s" % (x["kind"], " " + cell(x["name"]) if x.get("name") else "") for x in a["sources"][:5])) if a["kind"] == "measured" else
-                    "Typed by hand: no per-test result file, per-test results file or raw runner log backs BASELINE.md."]
-            out += ["- The typed table disagrees on %d test(s) or count(s): %s" % (a["disagree"], "; ".join(cell(x) for x in a["examples"][:3]))] if a["disagree"] else []
-            out += ["- Sources disagree: " + "; ".join(cell(x) for x in a["conflictExamples"][:3])] if a["conflict"] else []
-            out += ["- Looked at: " + ", ".join(cell(x) for x in a["considered"][:8])] if a["considered"] else []
-        if ev.get("testsChanged"):
-            tc = ev["testsChanged"]
-            out += ["", "### Test files changed during the uplift", ""]
-            if tc["checked"]:
-                out += ["%d test file(s) in the legacy tree, %d in the working copy: %d removed, %d added, %d changed (%.0f%% of the legacy test files). Weakened assertions cannot be detected, only that files changed." % (
-                    tc["legacyTests"], tc["workTests"], tc["counts"]["removed"], tc["counts"]["added"], tc["counts"]["changed"], 100 * tc["share"])]
-                out += ["- Removed: `%s` (%d lines)" % (cell(x["path"]), x["lines"]) for x in tc["removed"]]
-                out += ["- Changed: `%s` (+%d -%d lines%s)" % (cell(x["path"]), x["added"], x["removed"], "; " + cell(x["note"]) if x["note"] else "") for x in tc["changed"]]
-                out += ["- Added: `%s` (%d lines)" % (cell(x["path"]), x["lines"]) for x in tc["added"]]
-                shown = len(tc["removed"]) + len(tc["changed"]) + len(tc["added"])
-                if sum(tc["counts"].values()) > shown:
-                    out.append("- ... and %d more (see VERIFICATION.json)." % (sum(tc["counts"].values()) - shown))
-            else:
-                out.append("Not compared: %s." % cell(tc["why"]))
-        if ev.get("deltas"):
-            dc = ev["deltas"]
-            out += ["", "### Version changes (deltas) and the tests that name them", ""]
-            if dc["parsed"]:
-                out += ["%d delta(s) in DELTA_CATALOG.md; %d are Behavioral-silent: %d have a test naming their site, %d do not; %d more at a build or configuration file." % (
-                    dc["parsed"], dc["silent"], len(dc["covered"]), len(dc["uncovered"]), len(dc["config"]))]
-                out += ["- Not named by any test: %s %s (%s)" % (cell(x["id"]), cell(x["title"]), cell(x.get("why", ""))) for x in dc["uncovered"][:LIST_CAP]]
-                out += ["- At a build or configuration file (for a person): %s %s (%s)" % (cell(x["id"]), cell(x["title"]), ", ".join(cell(y) for y in x["sites"][:3])) for x in dc["config"][:LIST_CAP]]
-            else:
-                out.append(cell(dc["why"]) + ".")
         if ev.get("leftOut"):
             out += ["", "Inputs left out of the fresh check: " + "; ".join(cell(x) for x in ev["leftOut"])]
         if "fresh" in ev:
@@ -1049,12 +797,6 @@ def render_md(pack):
             out += ["- Declared tolerance (relative %g, absolute %g), %d case(s): %s" % (t["rel"] or 0, t["abs"] or 0, t["cases"], cell(t["why"])) for t in f["tolerances"]]
             out += ["- Not counted, because the legacy output equals a development output (status lines repeat by nature): " + ", ".join(cell(x) for x in f["reused"][:20])] if f["reused"] else []
         out += (["", "### Caveats", ""] + ["- " + cell(c) for c in m["caveats"]]) if m["caveats"] else []
-        out += ["", "### Waiting for a person", "", "Claude never ticks these. A person decides them.", ""]
-        out += ["- [ ] %s [%s]" % (cell(i["text"]), i["where"]) for i in br["items"]] + ["- [ ] " + cell(n) for n in m["needsPerson"]]
-        if not br["items"] and not m["needsPerson"]:
-            out.append("- The brief lists no unticked criterion for this module." if br["found"] else "- No modernization brief was found, so no criterion could be listed.")
-        if br["count"] > len(br["items"]):
-            out.append("- ... and %d more in the brief." % (br["count"] - len(br["items"])))
         out += ["", "### What this does not prove", ""] + ["- " + cell(n) for n in m["notProven"]]
     s = pack["signoff"]
     out += ["", "## Sign-off", "", "A person fills this in. Claude leaves it blank.", "", "| | |", "|---|---|", "| Name | %s |" % (s["name"] or "________________"), "| Role | %s |" % (s["role"] or "________________"),
@@ -1081,7 +823,6 @@ def main(argv=None):
     ap.add_argument("--target", required=True, metavar="CHECKOUT", help="target checkout to verify")
     ap.add_argument("--out", required=True, metavar="DIR", help="folder for VERIFICATION.md and VERIFICATION.json")
     ap.add_argument("--runs", metavar="DIR", help="applications/<app>/units/<module>/<unit>/verify/runs/<run-id> result directory")
-    ap.add_argument("--uplift", action="store_true", help="include the three same-stack uplift checks")
     args = ap.parse_args(argv)
     for name in (args.app, args.module or "x"):
         if not name or name in (".", "..") or re.search(r"[\\/\x00]", name):
@@ -1116,7 +857,7 @@ def main(argv=None):
                 raise InputError("--out must not be inside a source or target checkout")
         assessment_parent = os.path.dirname(assessment)
         workspace = os.path.dirname(assessment_parent) if os.path.basename(assessment_parent).lower() in ("assessment", "analysis") else assessment_parent
-        pack = overall(build(args.app, workspace, args.module, assessment_dir=assessment, target_dir=target, source_dir=source, runs_dir=runs, uplift=args.uplift))
+        pack = overall(build(args.app, workspace, args.module, assessment_dir=assessment, target_dir=target, source_dir=source, runs_dir=runs))
         for filename in ("VERIFICATION.md", "VERIFICATION.json"):
             if os.path.lexists(os.path.join(out, filename)) and os.path.islink(os.path.join(out, filename)):
                 raise InputError("%s must not be a symbolic link" % filename)

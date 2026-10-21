@@ -2,7 +2,7 @@
 
 > Defines the unit directory and the contract of each file in it.
 
-One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md)), at `applications/<app>/units/<module>/<unit>/`; it is the **Unit aggregate** of [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md): `unit.md` is its root and each context writes into its own subfolder (`understanding/` today). Every document is Markdown ([document formats](document-formats.md)). The unit id is the full `<app>/<module>/<unit>`; `<unit>` in the path is only the last segment. A unit is created when a catalog item (`<module>/<item>`, see the [item catalog](document-repo-item-catalog.md)) is selected for migration. This reference uses **unit** and does not rename the legacy API `WorkItem`/`work-items` contracts.
+One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md)), at `applications/<app>/units/<module>/<unit>/`; it is the **Unit aggregate** of [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md): `unit.md` is its root and each context writes into its own subfolder (`understanding/` and `design/`). Every document is Markdown ([document formats](document-formats.md)). The unit id is the full `<app>/<module>/<unit>`; `<unit>` in the path is only the last segment. A unit is created when a catalog item (`<module>/<item>`, see the [item catalog](document-repo-item-catalog.md)) is selected for migration. This reference uses **unit** and does not rename the legacy API `WorkItem`/`work-items` contracts.
 
 | File | Content | Written by |
 |---|---|---|
@@ -15,8 +15,8 @@ One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-sub
 | `understanding/findings.md` | security findings: scorecard, table, a card per finding | the security step of `understand` |
 | `understanding/topology.md` | the unit's leaves, links to other items, data stores | the scope step of `understand` |
 | `understanding/trace.md` | the unit traceability record | the `understand` job |
+| `design/<set>/<file>` | the unit's design: one folder per design set the project defines, one document per file of the set, from the set's template ([design templates](design-templates.md)) | the member's harness with `/kintsugi:modernize-design`, through a pull request |
 | `task.md` | the P4 task pack (transformation notes) | the `design` job; auto-committed |
-| `design.md` | the P4 unit design | planned (P4) |
 | `reviews/G4.md` | the unit's G4 gate record | the unit's reviewer, through a pull request |
 | `verify/` | P5 golden cases (`golden/`) and run evidence (`runs/<run-id>/`) | the member harness's verification plugin |
 
@@ -37,6 +37,7 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 | `source`, `target` | `{repo, paths}` lists in the legacy (read-only) and target repos |
 | `links` | Task pack, AS-IS doc, mappings (paths under `standards/mappings/`), business rules, pull requests |
 | `gates` | Per-gate result: `status`, `by`, `at`, and the record path (`review: reviews/G4.md`) |
+| `waived` | Design files the unit does not need, a list of `<set>/<file>: <reason>`; written by a person, never by an agent ([design templates](design-templates.md#conformance)) |
 
 **Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one file per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a file is left unchanged.
 

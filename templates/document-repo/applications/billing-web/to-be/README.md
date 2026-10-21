@@ -7,7 +7,7 @@
 | File | Content |
 | --- | --- |
 | `requirements.md` | the requirements record: `REQ-` sections with `derivedFrom` rule ids |
-| `design.md` | the application-level target design |
+| `design.md` | the target design specific to this application: its components and target repositories, the interfaces between them, data ownership, and the mapping of the AS-IS modules to the components (the common design is in `architecture/`; each unit's design is under its `design/<set>/`) |
 
 ## Requirements record
 

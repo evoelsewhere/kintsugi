@@ -1,4 +1,4 @@
-"""Tests for the trace, baseline-diff and verification evidence scripts.
+"""Tests for the trace and verification evidence scripts.
 
 Run:  python -m pytest packages/agents/builtin/plugins/modernize/scripts/tests/test_proof_tools.py
 Every input here stands in for untrusted text from a legacy code base, so the hostile cases matter as much as the good ones.
@@ -18,11 +18,10 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(PLUGIN, "scripts"))
-import baseline_diff as bd  # noqa: E402
 import compare as cmp  # noqa: E402
 import proof_pack as pp  # noqa: E402
+import run_results as rr  # noqa: E402
 import trace_rules as tr  # noqa: E402
-import uplift_checks as uc  # noqa: E402
 
 T0 = 1_700_000_000
 
@@ -74,46 +73,6 @@ def run_main(fn, argv):
                 argv[i] = "--module"
             argv.extend(["--source", source, "--assessment", assessment, "--target", target, "--out", os.path.join(root, "trace-out")])
             argv.extend(runs)
-    elif fn is bd.main and argv and os.path.isfile(argv[0]):
-        baseline = argv.pop(0)
-        assessment = os.path.dirname(os.path.abspath(baseline))
-        parent = os.path.basename(os.path.dirname(assessment)).lower()
-        if parent in ("analysis", "assessment"):
-            root = os.path.dirname(os.path.dirname(assessment))
-            app = os.path.basename(assessment)
-        else:
-            root = os.path.dirname(assessment)
-            app = "s"
-        source, target, out = (os.path.join(root, "legacy", app), os.path.join(root, "modernized", app), os.path.join(root, "baseline-out"))
-        for path in (source, target):
-            os.makedirs(path, exist_ok=True)
-        old = []
-        i = 0
-        while i < len(argv):
-            if argv[i] in ("--junit", "--trx", "--baseline-evidence"):
-                flag, value = argv[i], argv[i + 1]
-                if flag in ("--junit", "--trx") and os.path.isdir(value):
-                    old.extend(["--runs", value])
-                else:
-                    old.extend([flag, value])
-                i += 2
-            else:
-                old.append(argv[i])
-                i += 1
-        argv = [app, "--source", source, "--assessment", assessment, "--target", target, "--out", out, "--baseline", baseline] + old
-    elif fn is uc.main and len(argv) >= 2 and not argv[0].startswith("-"):
-        source, target = argv[:2]
-        catalog = argv[2] if len(argv) > 2 and not argv[2].startswith("-") else None
-        rest = argv[3:] if catalog else argv[2:]
-        root = os.path.dirname(source)
-        assessment = os.path.join(root, "assessment", "app")
-        os.makedirs(assessment, exist_ok=True)
-        if catalog and os.path.isfile(catalog):
-            with open(catalog, "rb") as inp:
-                put(assessment, "DELTA_CATALOG.md", inp.read())
-            catalog = os.path.join(assessment, "DELTA_CATALOG.md")
-        out = os.path.join(root, "uplift-out")
-        argv = ["app", "--source", source, "--assessment", assessment, "--target", target, "--out", out] + (["--catalog", catalog] if catalog else []) + rest
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         try:
@@ -343,6 +302,16 @@ class TraceRules(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("symbolic link", err)
 
+    def test_rules_are_read_from_an_index_table_without_cards(self):
+        index = ("# Business Rules - s\n\n| ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file |\n"
+                 "| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+                 "| RULE-001 | Late fee | Calculation | P0 | High | 2 | confirmed | `src/a.cbl:10-20` | [RULE-001](rules/RULE-001.md) |\n"
+                 "| RULE-002 | Entry date | Validation | P1 | Low | 1 | needs-sme | `src/b.cbl:3` | [RULE-002](rules/RULE-002.md) |\n")
+        rules, notes = tr.parse_rules(index)
+        self.assertEqual(notes, [])
+        self.assertEqual([(r["id"], r["name"], r["priority"], r["confidence"], r["source"], r["sourceFile"]) for r in rules],
+                         [("RULE-001", "Late fee", "P0", "High", "src/a.cbl:10-20", "a.cbl"), ("RULE-002", "Entry date", "P1", "Low", "src/b.cbl:3", "b.cbl")])
+
     def test_malformed_rules_files_do_not_crash(self):
         for text in ("", "```\n### RULE-001: in a fence\n```\n", "### RULE-001: x\n### RULE-001: again\n**Priority:** P0\n",
                      "### RULE-001: \x1b[31mred\x1b[0m name\n**Priority:** " + "P0" * 100000 + "\n", "|" * 100000 + "\n" + "#" * 100000,
@@ -361,131 +330,28 @@ class TraceRules(unittest.TestCase):
         self.assertEqual(run_main(tr.main, ["s", "--workspace", self.root])[0], 2)
 
 
-# ---------------------------------------------------------------- baseline_diff
-BASELINE_MD = """# BASELINE
-
-## Totals
-
-| | Count |
-|---|---|
-| Executed | 5 |
-
-## Known-flaky tests
-
-| Test | Evidence |
-|---|---|
-| `B#flip` | flips on the same version |
-
-## Per-test results
-
-| Test | Result |
-|---|---|
-| `A#pass1` | PASS |
-| `A#pass2` | PASS |
-| `A#failed` | FAIL |
-| `A#skipped` | SKIP |
-| `B#flip` | PASS |
-| `B#gone` | PASS |
-"""
-
-
-class BaselineDiff(unittest.TestCase):
+# ---------------------------------------------------------------- run_results
+class RunResults(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.root, True)
-        self.base = put(self.root, "BASELINE.md", BASELINE_MD)
 
     def results(self, cases, name="TEST-x.xml", sub="results"):
         put(self.root, "%s/%s" % (sub, name), junit(cases))
         return os.path.join(self.root, sub)
 
-    def test_every_kind_of_difference_is_named(self):
-        rep = bd.run(self.base, [self.results([("A", "pass1", "FAIL", ""), ("A", "pass2", "SKIP", ""), ("A", "failed", "PASS", ""), ("A", "skipped", "ERROR", ""),
-                                               ("B", "flip", "FAIL", ""), ("A", "brand_new", "FAIL", "")])])
-        self.assertEqual([r["id"] for r in rep["regressions"]], ["A#pass1"])
-        self.assertEqual(rep["fixed"], ["A#failed"])
-        self.assertEqual(rep["newlySkipped"], ["A#pass2"])
-        self.assertEqual(sorted(rep["newFailures"]), ["A#brand_new", "A#skipped"])
-        self.assertEqual([r["id"] for r in rep["flaky"]], ["B#flip"])
-        self.assertEqual(rep["missing"], ["B#gone"])
-        self.assertFalse(rep["ok"])
-
-    def test_same_results_are_ok_and_a_still_failing_test_is_not_a_regression(self):
-        rep = bd.run(self.base, [self.results([("A", "pass1", "PASS", ""), ("A", "pass2", "PASS", ""), ("A", "failed", "FAIL", ""), ("A", "skipped", "SKIP", ""),
-                                               ("B", "flip", "PASS", ""), ("B", "gone", "PASS", "")])])
-        self.assertTrue(rep["ok"])
-        self.assertEqual((rep["regressionsCount"], rep["newFailuresCount"], rep["missingCount"], rep["stillFailingCount"]), (0, 0, 0, 1))
-        self.assertIsNone(rep["executedDrop"])
-
-    def test_nothing_executed_is_not_ok_and_exit_codes(self):
-        folder = self.results([("A", "pass1", "SKIP", ""), ("A", "pass2", "SKIP", "")])
-        code, out, _ = run_main(bd.main, [self.base, "--junit", folder])
-        self.assertEqual(code, 1)
-        self.assertIn("NOT OK: no test executed", out)
-        self.assertEqual(run_main(bd.main, [self.base])[0], 2)
-        self.assertEqual(run_main(bd.main, [os.path.join(self.root, "none.md"), "--junit", folder])[0], 2)
-        put(self.root, "EMPTY.md", "Nothing readable here.\n")
-        self.assertEqual(run_main(bd.main, [os.path.join(self.root, "EMPTY.md"), "--junit", folder])[0], 2)
-        ok = self.results([("A", "pass1", "PASS", "")], name="TEST-ok.xml", sub="ok")
-        self.assertEqual(run_main(bd.main, [self.base, "--junit", ok])[0], 0)
-
-    def test_json_and_list_length_options(self):
-        folder = self.results([("A", "pass1", "FAIL", ""), ("A", "pass2", "FAIL", ""), ("A", "failed", "PASS", ""), ("A", "skipped", "SKIP", ""), ("B", "flip", "PASS", ""), ("B", "gone", "PASS", "")])
-        code, out, _ = run_main(bd.main, [self.base, "--junit", folder, "--json"])
-        self.assertEqual(code, 1)
-        data = json.loads(out)
-        self.assertEqual((data["regressionsCount"], data["ok"]), (2, False))
-        code, out, _ = run_main(bd.main, [self.base, "--junit", folder, "--max-list", "1"])
-        self.assertIn("... and 1 more", out)
-
-    def test_a_difference_a_person_approved_is_listed_with_its_reason_and_not_counted(self):
-        put(self.root, "APPROVED.md", BASELINE_MD + "\n## Approved differences\n\n| Test | Reason |\n|---|---|\n| `A#pass1` | the JDK words this message differently |\n| `A#failed` | now passes, nothing to approve |\n")
-        folder = self.results([("A", "pass1", "FAIL", ""), ("A", "pass2", "PASS", ""), ("A", "failed", "PASS", ""), ("A", "skipped", "SKIP", ""), ("B", "flip", "PASS", ""),
-                               ("B", "gone", "PASS", "")])
-        rep = bd.run(os.path.join(self.root, "APPROVED.md"), [folder])
-        self.assertEqual((rep["regressionsCount"], rep["approvedCount"], rep["ok"]), (0, 1, True))
-        self.assertEqual(rep["approved"][0]["reason"], "the JDK words this message differently")
-        self.assertIn("approved", bd.render(rep))
-        folder = self.results([("A", "pass1", "FAIL", ""), ("A", "pass2", "FAIL", ""), ("A", "failed", "PASS", ""), ("A", "skipped", "SKIP", ""), ("B", "flip", "PASS", ""),
-                               ("B", "gone", "PASS", "")])
-        rep = bd.run(os.path.join(self.root, "APPROVED.md"), [folder])
-        self.assertEqual((rep["regressionsCount"], rep["approvedCount"], rep["ok"]), (1, 1, False))       # one approval never covers another test
-
-    def test_per_module_table_missing_module_and_skip_growth(self):
-        table = "| Module | Pass | Fail | Error | Skip |\n|---|---|---|---|---|\n| `A` | 2 | 0 | 0 | 0 |\n| `Gone` | 5 | 0 | 0 | 1 |\n| Total | 7 | 0 | 0 | 1 |\n"
-        base = put(self.root, "TABLE.md", table)
-        rep = bd.run(base, [self.results([("A", "x", "PASS", ""), ("A", "y", "SKIP", "")])])
-        self.assertEqual(rep["missingModules"], ["Gone"])
-        self.assertEqual(rep["moduleDiffsCount"], 1)
-        self.assertIsNotNone(rep["executedDrop"])
-        self.assertFalse(bd.parse_baseline(table)["tests"])
-
-    def test_totals_and_target_only(self):
-        rep = bd.run(put(self.root, "T.md", "| | Count |\n|---|---|\n| Executed | 10 |\n| Passed | 10 |\n"), [self.results(passing(3))])
-        self.assertEqual(rep["executedDrop"], {"before": 10, "now": 3})
-        only = bd.parse_baseline("target-only: the source runtime is not available here\n")
-        self.assertTrue(only["targetOnly"])
-        rep = bd.run(put(self.root, "TO.md", "target-only: no Java 8 here\n"), [self.results(passing(2))])
-        self.assertTrue(rep["ok"])
-        self.assertTrue(rep["baseline"]["targetOnly"])
-        self.assertIn("no old-version result to compare with", bd.render(rep))
-
-    def test_a_test_name_with_a_newline_does_not_break_the_table(self):
-        md = "| Test | Result |\n|---|---|\n| `A#one[file.txt\n]` | PASS |\n| `A#two` | PASS |\n"
-        self.assertEqual(sorted(bd.parse_baseline(md)["tests"]), ["A#one[file.txt\n]", "A#two"])
-
     def test_repeated_ids_get_a_suffix_in_document_order(self):
-        rep = bd.read_results([self.results([("A", "p[x]", "PASS", ""), ("A", "p[x]", "FAIL", "")])])
+        rep = rr.read_results([self.results([("A", "p[x]", "PASS", ""), ("A", "p[x]", "FAIL", "")])])
         self.assertEqual(rep["tests"], {"A#p[x]": "PASS", "A#p[x]~1": "FAIL"})
 
     def test_skip_reasons_and_trx(self):
-        rep = bd.read_results([self.results([("A", "a", "SKIP", "waiting for RULE-009"), ("A", "b", "SKIP", "")])])
+        rep = rr.read_results([self.results([("A", "a", "SKIP", "waiting for RULE-009"), ("A", "b", "SKIP", "")])])
         self.assertEqual(rep["skipReasons"], {"A#a": True, "A#b": False})
         trx = ('<?xml version="1.0"?><TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><Results>'
                '<UnitTestResult testName="Ns.Klass.Good" outcome="Passed"/><UnitTestResult testName="Ns.Klass.Bad(1)" outcome="Failed"/>'
                '<UnitTestResult testName="Ns.Klass.Off" outcome="NotExecuted"/></Results></TestRun>')
         put(self.root, "trx/r.trx", trx)
-        rep = bd.read_results([os.path.join(self.root, "trx")])
+        rep = rr.read_results([os.path.join(self.root, "trx")])
         self.assertEqual(rep["tests"], {"Ns.Klass#Good": "PASS", "Ns.Klass#Bad(1)": "FAIL", "Ns.Klass#Off": "SKIP"})
 
     def test_hostile_xml_is_refused_reported_and_skipped(self):
@@ -496,13 +362,12 @@ class BaselineDiff(unittest.TestCase):
                            ("bad5.xml", '<?xml version="1.0"?><!DOCTYPE x SYSTEM "http://example.invalid/x.dtd"><testsuite><testcase classname="a" name="b"/></testsuite>'),
                            ("bad6.xml", "<testsuite>" + '<testcase classname="A" name="' + "n" * 5000000 + '"/></testsuite>')):
             put(self.root, "results/" + name, data)
-        rep = bd.read_results([folder])
+        rep = rr.read_results([folder])
         self.assertEqual(len(rep["tests"]), 2 if not any(k.startswith("A#n") for k in rep["tests"]) else 3)
         self.assertTrue(all("A#case" in t or t.startswith("A#n") for t in rep["tests"]) or True)
         self.assertGreaterEqual(len(rep["unreadable"]), 4)
         self.assertTrue(any("entit" in u or "DTD" in u for u in rep["unreadable"]))
-        text = bd.render(bd.compare(bd.parse_baseline(BASELINE_MD), rep))
-        self.assertNotIn("aaaaaaaaaa", text)
+        self.assertFalse(any("aaaaaaaaaa" in test for test in rep["tests"]))
 
     def test_links_are_never_followed(self):
         outside = tempfile.mkdtemp()
@@ -511,53 +376,22 @@ class BaselineDiff(unittest.TestCase):
         folder = self.results(passing(1))
         make_symlink(self, os.path.join(outside, "TEST-out.xml"), os.path.join(folder, "TEST-link.xml"))
         make_symlink(self, outside, os.path.join(folder, "linked"))
-        rep = bd.read_results([folder])
+        rep = rr.read_results([folder])
         self.assertEqual(list(rep["tests"]), ["CalcTest#case0"])
         linked = os.path.join(self.root, "asfolder")
         make_symlink(self, outside, linked)
-        rep = bd.read_results([linked])
+        rep = rr.read_results([linked])
         self.assertEqual((rep["tests"], rep["files"]), ({}, 0))
-        put(self.root, "LINKED.md", BASELINE_MD)
-        os.remove(self.base)
-        make_symlink(self, os.path.join(self.root, "LINKED.md"), self.base)
-        self.assertEqual(run_main(bd.main, [self.base, "--junit", folder])[0], 2)
 
     def test_the_module_path_inside_parameterised_names_is_replaced(self):
         module = os.path.join(self.root, "mod")
         name = "t[%s/src/test/resources/a.txt]" % module
         put(module, "target/surefire-reports/TEST-a.xml", junit([("A", name, "PASS", "")]))
-        rep = bd.read_results([os.path.join(module, "target", "surefire-reports")])
+        rep = rr.read_results([os.path.join(module, "target", "surefire-reports")])
         self.assertEqual(list(rep["tests"]), ["A#t[<MODULE>/src/test/resources/a.txt]"])
 
 
 # ---------------------------------------------------------------- proof_pack
-BRIEF_MD = """# Brief
-
-#### Phase 1 - Pilot
-Command: /kintsugi:modernize-transform
-Modules: mod, extra
-Exit criteria:
-- [x] All P0 rules pass
-- [ ] A business owner accepts the report output
-- [ ] Row counts match
-
-#### Phase 2 - Later
-Command: /kintsugi:modernize-transform
-Modules: other
-Exit criteria:
-- [ ] Phase 2 only criterion
-
-## 7. Open Questions
-
-- [ ] **Q1 [before Phase 1]** Is `s` the whole system?
-- [x] **Q2 [before Phase 1]** Already answered
-- [ ] **Q3 [before Phase 2]** A later phase question
-
-## 8. Approval Block
-- [ ] not a question
-"""
-
-
 @contextlib.contextmanager
 def mock_no_processes():
     """Fail the test if the code under test tries to start a program."""
@@ -575,9 +409,7 @@ class Ws:
         self.test, self.root = test, tempfile.mkdtemp()
         test.addCleanup(shutil.rmtree, self.root, True)
         put(self.root, "legacy/s/app/mod.cbl", "IDENTIFICATION DIVISION.\n", T0)
-        put(self.root, "analysis/s/PREFLIGHT.md", "# Preflight\n", T0 + 10)
         put(self.root, "analysis/s/BUSINESS_RULES.md", RULES_MD.replace("### RULE-003", "### RULE-003").replace("**Priority:** P1", "**Priority:** P1"), T0 + 10)
-        put(self.root, "analysis/s/MODERNIZATION_BRIEF.md", BRIEF_MD, T0 + 10)
         put(self.root, "modernized/s/mod/src/main/Calc.java", "// RULE-001 RULE-002\nclass Calc {}\n", T0 + 20)
         put(self.root, "modernized/s/mod/src/test/CalcTest.java", "// RULE-001\nvoid rule002_rounds() {}\n", T0 + 20)
         put(self.root, "modernized/s/mod/TRANSFORMATION_NOTES.md", "Legacy: `legacy/s/app/mod.cbl`\n\nCanary: flip the rounding mode -> 3 tests failed\n", T0 + 20)
@@ -901,10 +733,8 @@ class ProofVerdicts(unittest.TestCase):
         m = self.check("PARTLY PROVEN", source="gap")
         self.assertIn("was not found", m["checks"][5]["detail"])
 
-    def test_the_analysis_is_dated_by_preflight_else_by_the_oldest_analysis_file(self):
-        os.remove(os.path.join(self.ws.root, "analysis", "s", "PREFLIGHT.md"))
+    def test_the_analysis_is_dated_by_the_oldest_analysis_file(self):
         os.utime(os.path.join(self.ws.root, "analysis", "s", "BUSINESS_RULES.md"), (T0 + 5, T0 + 5))
-        os.utime(os.path.join(self.ws.root, "analysis", "s", "MODERNIZATION_BRIEF.md"), (T0 + 10, T0 + 10))
         self.check("PROVEN", source="pass")
         put(self.ws.root, "legacy/s/app/late.cbl", "x", T0 + 7)
         self.check("PARTLY PROVEN", source="gap")
@@ -927,16 +757,6 @@ class ProofVerdicts(unittest.TestCase):
             self.addCleanup(os.chmod, hidden, 0o755)
             m = self.check("PARTLY PROVEN", source="gap")
             self.assertIn("could not finish", m["checks"][5]["detail"])
-
-    def test_people_items_are_listed_never_ticked_and_never_change_the_verdict(self):
-        m = self.check("PROVEN")
-        texts = [i["text"] for i in m["brief"]["items"]]
-        self.assertEqual(texts[:2], ["A business owner accepts the report output", "Row counts match"])
-        self.assertTrue(any("Is `s` the whole system" in t for t in texts))
-        self.assertFalse(any("Phase 2" in t or "Already answered" in t or "not a question" in t or "All P0 rules" in t for t in texts))
-        self.assertEqual(m["brief"]["items"][0]["where"], "Phase 1 exit criterion")
-        os.remove(os.path.join(self.ws.root, "analysis", "s", "MODERNIZATION_BRIEF.md"))
-        self.assertFalse(self.ws.module()["brief"]["found"])
 
     def test_hostile_test_runs_json_cannot_crash_or_read_outside(self):
         outside = tempfile.mkdtemp()
@@ -1097,311 +917,6 @@ class RunnerLogs(unittest.TestCase):
         self.assertEqual(len(got["unrecognised"]), 3)
 
 
-class BaselineEvidence(unittest.TestCase):
-    """baseline_diff.py: where the old version's measured results are looked for, and what counts as measured."""
-
-    def setUp(self):
-        self.root = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.root, True)
-        self.base = put(self.root, "analysis/s/BASELINE.md", BASELINE_MD)
-        self.per_test = json.dumps({"A#pass1": "PASS", "A#pass2": "PASS", "A#failed": "FAIL", "A#skipped": "SKIP", "B#flip": "PASS", "B#gone": "PASS"})
-
-    def found(self, text=""):
-        return [os.path.relpath(p, os.path.join(self.root, "analysis", "s")).replace(os.sep, "/") for p in bd.evidence_paths(self.base, BASELINE_MD + text)]
-
-    def test_per_test_json_shapes_are_read_and_counts_or_prose_are_not(self):
-        self.assertEqual(bd.parse_results_json({"A#x": "PASS", "A#y": "failed", "A#z": "Skipped"}), {"A#x": "PASS", "A#y": "FAIL", "A#z": "SKIP"})
-        self.assertEqual(bd.parse_results_json({"tests": {"A#x": "ok"}}), {"A#x": "PASS"})
-        self.assertEqual(bd.parse_results_json([{"name": "A#x", "status": "pass"}, {"test": "A#y", "result": "FAIL"}, {"id": "A#z", "outcome": "error"}, {"name": "no status"}, 5]),
-                         {"A#x": "PASS", "A#y": "FAIL", "A#z": "ERROR"})
-        for bad in ({"PASS": 10, "FAIL": 1}, {"passed": 5, "failed": 0, "executed": 5}, {"tests": {"count": 3}}, {"a": "hello", "b": "world"}, [], {}, "text", 5, None, [1, 2], {"a": {"b": "PASS"}}):
-            self.assertIsNone(bd.parse_results_json(bad), bad)
-        many = bd.parse_results_json({"t%d" % i: "PASS" for i in range(1000)} | {"junk": "hello"} if sys.version_info >= (3, 9) else dict({"t%d" % i: "PASS" for i in range(1000)}, junk="hello"))
-        self.assertEqual(len(many), 1000)                                            # one stray value in a thousand does not spoil it
-        self.assertIsNone(bd.parse_results_json({"a": "PASS", "b": "hello", "c": "world"}))       # but a mostly-unrecognised map is no evidence
-
-    def test_the_baseline_folder_and_recorded_lines_are_the_only_places(self):
-        put(self.root, "analysis/s/baseline/old.json", self.per_test)
-        put(self.root, "analysis/s/harness/named.json", self.per_test)
-        put(self.root, "analysis/s/harness/prose.json", self.per_test)
-        put(self.root, "analysis/s/harness/bare.log", "x")
-        self.assertEqual(self.found(), ["baseline"])
-        self.assertEqual(self.found("\nSee `analysis/s/harness/prose.json` too.\n"), ["baseline"])
-        self.assertEqual(self.found("\n- **Recorded:** 2026-09-24. Machine-readable per-test results: `analysis/s/harness/named.json`; tool: `analysis/s/harness/prose.json`\n"),
-                         ["baseline", "harness/named.json", "harness/prose.json"])                 # everything on the Recorded line counts
-        self.assertEqual(self.found("\nMachine-readable: harness/bare.log\n"), ["baseline", "harness/bare.log"])
-        self.assertEqual(self.found("\n  * recorded on Thursday: harness/named.json\n"), ["baseline", "harness/named.json"])
-        self.assertEqual(self.found("\nNot recorded: harness/named.json\n"), ["baseline"])       # the line must start with the label
-
-    def test_paths_that_leave_analysis_or_go_through_links_are_refused(self):
-        outside = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, outside, True)
-        put(outside, "o.json", self.per_test)
-        put(self.root, "analysis/other/o.json", self.per_test)
-        put(self.root, "modernized/o.json", self.per_test)
-        put(self.root, "analysis/s/inner.json", self.per_test)
-        make_symlink(self, os.path.join(outside, "o.json"), os.path.join(self.root, "analysis", "s", "link.json"))
-        make_symlink(self, outside, os.path.join(self.root, "analysis", "s", "dirlink"))
-        make_symlink(self, os.path.join(self.root, "analysis", "other"), os.path.join(self.root, "analysis", "s", "sibling"))
-        for line in ("../other/o.json", "analysis/other/o.json", "analysis/s/../other/o.json", "modernized/o.json", outside + "/o.json", "link.json", "dirlink/o.json", "sibling/o.json", "./../s/../other/o.json"):
-            self.assertEqual(self.found("\nRecorded: `%s`\n" % line), [], line)
-        self.assertEqual(self.found("\nRecorded: `analysis/s/inner.json`\n"), ["inner.json"])
-        os.rename(os.path.join(self.root, "analysis", "s", "dirlink"), os.path.join(self.root, "dirlink-moved"))
-        make_symlink(self, outside, os.path.join(self.root, "analysis", "s", "baseline"))
-        self.assertEqual(self.found(), [])                                                      # a linked baseline/ folder is not entered
-
-    def test_result_files_json_and_logs_are_all_read_and_counts_only_files_are_ignored(self):
-        put(self.root, "analysis/s/baseline/xml/TEST-A.xml", junit([("A", "one", "PASS", ""), ("A", "two", "FAIL", "")]))
-        put(self.root, "analysis/s/baseline/map.json", json.dumps({"B#x": "PASS"}))
-        put(self.root, "analysis/s/baseline/counts.json", json.dumps({"PASS": 9}))
-        put(self.root, "analysis/s/baseline/bad.json", "{not json")
-        put(self.root, "analysis/s/baseline/notes.txt", "nothing that looks like a runner summary")
-        got = bd.read_baseline_evidence(bd.evidence_paths(self.base, ""))
-        self.assertEqual(got["tests"], {"A#one": "PASS", "A#two": "FAIL", "B#x": "PASS"})
-        self.assertEqual((got["measured"], got["conflicts"], got["ignored"]), (True, [], ["counts.json"]))
-        self.assertEqual([x["kind"] for x in got["sources"]], ["result files", "machine-readable results"])
-        self.assertTrue(any("bad.json" in u for u in got["unreadable"]))
-        only_log = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, only_log, True)
-        put(only_log, "run.log", "[INFO] Tests run: 5, Failures: 1, Errors: 0, Skipped: 0\n")
-        got = bd.read_baseline_evidence([only_log])
-        self.assertEqual((got["tests"], got["counts"], got["measured"]), (None, {"executed": 5, "failed": 1, "skipped": 0}, True))
-        nothing = bd.read_baseline_evidence([os.path.join(self.root, "analysis", "s", "baseline", "counts.json")])
-        self.assertEqual((nothing["measured"], nothing["tests"], nothing["counts"]), (False, None, None))
-
-    def test_sources_that_disagree_are_conflicts_not_first_wins(self):
-        put(self.root, "analysis/s/baseline/a.json", json.dumps({"A#x": "PASS", "A#y": "PASS"}))
-        put(self.root, "analysis/s/baseline/b.json", json.dumps({"A#x": "FAIL", "A#y": "PASS", "A#z": "PASS"}))
-        got = bd.read_baseline_evidence(bd.evidence_paths(self.base, ""))
-        self.assertEqual(len(got["conflicts"]), 1)
-        self.assertIn("A#x", got["conflicts"][0])
-        self.assertEqual(got["tests"]["A#x"], "PASS")                                          # kept only so the report can show something; the conflict is what counts
-        info = bd.assess_baseline(bd.parse_baseline("| Test | Result |\n|---|---|\n| `A#x` | PASS |\n"), got)
-        self.assertEqual((info["kind"], info["conflict"]), ("measured", 1))
-        put(self.root, "analysis/s/baseline/b.json", json.dumps({"A#x": "ERROR", "A#y": "PASS"}))
-        put(self.root, "analysis/s/baseline/a.json", json.dumps({"A#x": "FAIL"}))
-        self.assertEqual(bd.read_baseline_evidence(bd.evidence_paths(self.base, ""))["conflicts"], [])   # FAIL and ERROR are both red
-
-    def test_assess_says_typed_measured_disagreeing_or_target_only(self):
-        typed = bd.parse_baseline(BASELINE_MD)
-        self.assertEqual(bd.assess_baseline(typed, None)["kind"], "typed")
-        self.assertEqual(bd.assess_baseline(bd.parse_baseline("target-only: no old runtime\n"), {"measured": True, "tests": {"a": "PASS"}, "counts": None, "sources": []})["kind"], "target-only")
-        self.assertEqual(bd.assess_baseline(bd.parse_baseline("nothing here"), None)["kind"], "none")
-        good = {"measured": True, "tests": {"A#pass1": "PASS", "A#pass2": "PASS", "A#failed": "FAIL", "A#skipped": "SKIP", "B#flip": "PASS", "B#gone": "PASS"}, "counts": None,
-                "sources": [{"kind": "machine-readable results", "name": "x.json"}], "conflicts": []}
-        info = bd.assess_baseline(typed, good)
-        self.assertEqual((info["kind"], info["disagree"], info["measuredTests"], info["measuredExecuted"], info["measuredFailed"]), ("measured", 0, 6, 5, 1))
-        bad = dict(good, tests=dict(good["tests"], **{"A#pass1": "FAIL"}))
-        self.assertEqual(bd.assess_baseline(typed, bad)["disagree"], 1)
-        missing = dict(good, tests={k: v for k, v in good["tests"].items() if k != "B#gone"})
-        self.assertEqual(bd.assess_baseline(typed, missing)["disagree"], 2)                        # the missing row, and the Totals table that counts it
-
-    def test_the_cli_can_be_given_the_evidence_and_says_typed_only_otherwise(self):
-        folder = os.path.join(self.root, "res")
-        put(folder, "TEST-x.xml", junit([("A", "pass1", "PASS", ""), ("A", "pass2", "PASS", ""), ("A", "failed", "FAIL", ""), ("A", "skipped", "SKIP", ""), ("B", "flip", "PASS", ""), ("B", "gone", "PASS", "")]))
-        code, out, _ = run_main(bd.main, [self.base, "--junit", folder])
-        self.assertIn("typed table only", out)
-        put(self.root, "analysis/s/baseline/old.json", self.per_test)
-        code, out, _ = run_main(bd.main, [self.base, "--junit", folder])
-        self.assertIn("baseline evidence: measured (machine-readable results old.json)", out)
-        evidence = os.path.join(self.root, "analysis", "s", "elsewhere.json")
-        put(self.root, "analysis/s/elsewhere.json", self.per_test)
-        code, out, _ = run_main(bd.main, [self.base, "--junit", folder, "--baseline-evidence", evidence, "--json"])
-        self.assertEqual(json.loads(out)["baseline"]["assessment"]["kind"], "measured")
-
-
-class UpliftChecks(unittest.TestCase):
-    """uplift_checks.py: the test files of the untouched tree against the working copy, and the deltas no test names."""
-
-    def setUp(self):
-        self.root = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.root, True)
-        self.old, self.new = os.path.join(self.root, "old"), os.path.join(self.root, "new")
-
-    def both(self, rel, old, new=None, kind="w"):
-        put(self.old, rel, old)
-        put(self.new, rel, old if new is None else new)
-
-    def test_which_files_count_as_tests_and_what_is_skipped(self):
-        for rel in ("src/test/java/AThing.java", "tests/b.py", "web/__tests__/c.js", "spec/d.rb", "src/FooTest.java", "pkg/test_e.py", "pkg/e_test.go", "web/f.spec.ts", "src/test/resources/data.json"):
-            put(self.old, rel, "x")
-        for rel in ("src/main/A.java", "README.md", "src/test/notes.txt", "target/test/X.java", "node_modules/y/test/Z.js", ".hidden/test/H.java", "src/test/.dotfile"):
-            put(self.old, rel, "x")
-        got, cut, links = uc.walk_tests(self.old)
-        self.assertEqual(sorted(got), ["pkg/e_test.go", "pkg/test_e.py", "spec/d.rb", "src/FooTest.java", "src/test/java/AThing.java", "src/test/resources/data.json", "tests/b.py",
-                                       "web/__tests__/c.js", "web/f.spec.ts"])
-        self.assertEqual((cut, links), (False, 0))
-        self.assertEqual(uc.walk_tests(os.path.join(self.root, "missing")), ({}, False, 0))
-
-    def test_removed_added_and_changed_with_line_counts(self):
-        self.both("t/keep/AKeepTest.java", "one\ntwo\nthree\n")
-        self.both("t/edit/AEditTest.java", "one\ntwo\nthree\nfour\n", "one\nTWO\nthree\nfour\nfive\n")
-        put(self.old, "t/gone/AGoneTest.java", "x\ny\n")
-        put(self.new, "t/new/ANewTest.java", "a\nb\nc\n")
-        got = uc.tests_changed(self.old, self.new)
-        self.assertEqual((got["checked"], got["legacyTests"], got["workTests"], got["counts"]), (True, 3, 3, {"added": 1, "removed": 1, "changed": 1}))
-        self.assertEqual(got["changed"], [{"path": "t/edit/AEditTest.java", "added": 2, "removed": 1, "note": ""}])
-        self.assertEqual((got["removed"], got["added"]), ([{"path": "t/gone/AGoneTest.java", "lines": 3}], [{"path": "t/new/ANewTest.java", "lines": 4}]))
-        self.assertTrue(got["gap"])                                                               # a removed file
-        self.assertEqual(round(got["share"], 3), round(1 / 3, 3))
-
-    def test_a_quarter_changed_is_not_a_gap_and_more_is_and_line_endings_are_ignored(self):
-        for i in range(4):
-            self.both("t/T%dTest.java" % i, "line %d\r\nsecond\r\n" % i)
-        put(self.new, "t/T0Test.java", "line 0\nsecond\n")                                        # only the line endings differ
-        self.assertEqual(uc.tests_changed(self.old, self.new)["counts"]["changed"], 0)
-        put(self.new, "t/T1Test.java", "line 1 edited\nsecond\n")
-        got = uc.tests_changed(self.old, self.new)
-        self.assertEqual((got["counts"]["changed"], got["gap"], got["share"]), (1, False, 0.25))
-        put(self.new, "t/T2Test.java", "line 2 edited\nsecond\n")
-        self.assertTrue(uc.tests_changed(self.old, self.new)["gap"])
-
-    def test_no_legacy_tests_is_a_gap_and_so_is_a_missing_tree(self):
-        put(self.new, "t/ANewTest.java", "x")
-        put(self.old, "src/main/A.java", "the legacy tree exists but holds no test file")
-        got = uc.tests_changed(self.old, self.new)
-        self.assertEqual((got["checked"], got["legacyTests"], got["gap"]), (True, 0, True))
-        self.assertIn("nothing shows that the working copy's tests were not written during the uplift", got["why"])
-        for old, new in ((os.path.join(self.root, "none"), self.new), ("", self.new), (self.old, os.path.join(self.root, "none")), (self.old, "")):
-            got = uc.tests_changed(old, new)
-            self.assertEqual(got["checked"], False, (old, new))
-            self.assertTrue(got["why"])
-
-    def test_binary_large_and_unreadable_files_are_compared_without_crashing(self):
-        self.both("t/data/a.bin.Test.dat", b"\x00\x01\x02", b"\x00\x01\x03")
-        self.both("t/big/BigTest.java", "x\n" * (1 << 20), "x\n" * (1 << 20) + "y\n")
-        self.both("t/same/SameBigTest.java", "z\n" * (1 << 20))
-        self.both("t/lines/ManyTest.java", "".join("line %d\n" % i for i in range(9000)), "".join("line %d\n" % i for i in range(1, 9001)))
-        got = uc.tests_changed(self.old, self.new)
-        notes = {c["path"]: c["note"] for c in got["changed"]}
-        self.assertEqual(notes["t/data/a.bin.Test.dat"], "binary file")
-        self.assertEqual(notes["t/big/BigTest.java"], "large file, lines not counted")
-        self.assertEqual(notes["t/lines/ManyTest.java"], "lines counted approximately")
-        self.assertNotIn("t/same/SameBigTest.java", notes)
-        many = next(c for c in got["changed"] if c["path"] == "t/lines/ManyTest.java")
-        self.assertEqual((many["added"], many["removed"]), (1, 1))
-
-    def test_links_are_never_followed_and_hostile_trees_stay_bounded(self):
-        outside = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, outside, True)
-        put(outside, "OutTest.java", "outside")
-        self.both("t/InTest.java", "in")
-        make_symlink(self, os.path.join(outside, "OutTest.java"), os.path.join(self.new, "t", "LinkTest.java"))
-        make_symlink(self, outside, os.path.join(self.new, "t", "linked"))
-        got = uc.tests_changed(self.old, self.new)
-        self.assertEqual((got["workTests"], got["counts"]), (1, {"added": 0, "removed": 0, "changed": 0}))
-        self.assertNotIn("Out", json.dumps(got))
-        for i in range(300):
-            self.both("t/many/M%03dTest.java" % i, "a\n" * 50, "a\n" * 50 + "edit %d\n" % i)
-        started = time.time()
-        got = uc.tests_changed(self.old, self.new)
-        self.assertLess(time.time() - started, 30)
-        self.assertEqual((got["counts"]["changed"], len(got["changed"])), (300, 40))              # the count is complete, the list is cut
-        self.assertNotRegex(json.dumps(uc.tests_changed(self.old, self.new)), "\x1b")
-
-    def test_a_hostile_file_name_is_cleaned(self):
-        rel = "t/ev\x1b[31mil\nTest.java"
-        put_or_skip(self, self.old, rel, "a")
-        put_or_skip(self, self.new, rel, "b")
-        got = uc.tests_changed(self.old, self.new)
-        self.assertNotRegex(got["changed"][0]["path"], r"[\x00-\x1f]")
-
-    CARDS = """# DELTA_CATALOG: x
-
-| ID | Category | Fix | Site | Old to new |
-|---|---|---|---|---|
-| **D-01** | Behavioral-silent | Judgment | `a/b/Alpha.java:916` | changed |
-| **D-02** | Behavioral-silent (pre-existing bug, wider on 17) | Judgment | `Beta.java` (`decode`) | changed |
-| **D-03** | Project-system | Judgment | root `pom.xml:629` | build |
-
-| # | Category | Fix | Conf. | Delta | Site | Sites | Note |
-|---|---|---|---|---|---|---|---|
-| 9 | Behavioral-silent | Mechanical | High | CLDR listing dates | `x/y/Resource.java:574` | 1 | Gamma.java is mentioned in prose only |
-| 10 | Dependency | Mechanical | High | JaCoCo agent | `pom.xml:614` | 3 | n |
-
-## Card detail
-
-### 9. CLDR listing dates
-- **Category / fix / confidence:** Behavioral-silent / Mechanical / High; sites: 1; cited: `x/y/Resource.java:574`
-- **Blast radius:** One site. Sites: Delta.java:12, and Epsilon.java:40 also matter.
-
-### 11. A card that only exists as a card
-- **Category / fix / confidence:** Behaviour-Silent / Judgment / Low; sites: 2; cited: `p/Zeta.py:3`, `p/Eta.py:9`
-
-### 12. A numbered heading with no category line
-- Some prose about Theta.java:1.
-
-### D-04 Another id style
-- **Category:** behavioral silent
-- **Site:** `q/Iota.cs:5`
-"""
-
-    def test_deltas_are_read_from_tables_and_cards_and_merged(self):
-        got = {d["id"]: d for d in uc.parse_deltas(self.CARDS)}
-        self.assertEqual(sorted(got), ["11", "9", "10", "D-01", "D-02", "D-03", "D-04"] if False else sorted(["11", "9", "10", "D-01", "D-02", "D-03", "D-04"]))
-        self.assertEqual([s["stem"] for s in got["D-01"]["sites"]], ["Alpha"])
-        self.assertEqual(got["D-01"]["sites"][0]["line"], 916)
-        self.assertEqual([s["stem"] for s in got["D-02"]["sites"]], ["Beta"])                     # a site without a line, with a known extension
-        self.assertEqual(got["D-02"]["category"], "Behavioral-silent (pre-existing bug, wider on 17)")
-        self.assertEqual([s["stem"] for s in got["9"]["sites"]], ["Resource"])                    # the table and the card agree; prose files are not sites
-        self.assertEqual(got["9"]["title"], "CLDR listing dates")
-        self.assertEqual([s["stem"] for s in got["11"]["sites"]], ["Zeta", "Eta"])
-        self.assertEqual(got["11"]["category"], "Behaviour-Silent")
-        self.assertEqual(got["D-04"]["category"], "behavioral silent")
-        self.assertEqual([s["stem"] for s in got["D-04"]["sites"]], ["Iota"])
-        self.assertNotIn("12", got)
-
-    def test_the_parser_is_tolerant_and_bounded(self):
-        for text in ("", "no tables at all", "| a | b |\n|---|---|\n| 1 | 2 |\n", "| Category |\n|---|\n| Behavioral-silent |\n", "### 1. x\n" * 10, "|" * 100000, "#" * 100000,
-                     "### 3. t\n- **Category:** " + "Behavioral-silent " * 100000 + "\n", "| # | Category | Site |\n|---|---|---|\n| 1 | Behavioral-silent | " + "a/" * 100000 + "B.java:1 |\n"):
-            started = time.time()
-            uc.parse_deltas(text)
-            self.assertLess(time.time() - started, 10)
-        many = "| # | Category | Site |\n|---|---|---|\n" + "".join("| %d | Behavioral-silent | `S%d.java:1` |\n" % (i, i) for i in range(6000))
-        self.assertLessEqual(len(uc.parse_deltas(many)), uc.DELTA_CAP)
-        weird = uc.parse_deltas("| # | Category | Site |\n|---|---|---|\n| 1\x1b[31m | Behavioral-silent\x00 | `Ev\x1bil.java:1` |\n")
-        self.assertNotRegex(json.dumps(weird), r"\\u001b|\\u0000")
-
-    def test_coverage_names_sites_as_whole_words_in_test_files_only(self):
-        put(self.new, "src/main/Alpha.java", "class Alpha {}")
-        put(self.new, "src/test/AlphaTest.java", "class AlphaTest { Alpha a; AlphaBeta x; Gamma_ y; }")
-        put(self.new, "src/main/Beta.java", "class Beta { Delta d; }")
-        put(self.new, "src/test/notes.txt", "Delta is discussed here")
-        cat = ("| # | Category | Site |\n|---|---|---|\n| 1 | Behavioral-silent | `src/main/Alpha.java:1` |\n| 2 | Behavioral-silent | `src/main/Beta.java:2` |\n"
-               "| 3 | Behavioral-silent | `src/main/Gamma.java:3` |\n| 4 | Behavioral-silent | `src/main/Delta.java:4` |\n| 5 | Dependency | `src/main/Other.java:5` |\n"
-               "| 6 | Behavioral-silent | `src/main/Alpha.java:1`, `src/main/Beta.java:2` |\n| 7 | Behavioral-silent | no site here |\n| 8 | Behavioral-silent | `pom.xml:9` |\n")
-        got = uc.delta_coverage(cat, self.new)
-        self.assertEqual((got["parsed"], got["silent"], got["other"], got["testFiles"]), (8, 7, 1, 1))
-        self.assertEqual([d["id"] for d in got["covered"]], ["1"])
-        self.assertEqual({d["id"]: d["why"] for d in got["uncovered"]}, {"2": "no test names Beta", "3": "no test names Gamma", "4": "no test names Delta", "6": "no test names Beta", "7": "no site is named in the catalog"})
-        self.assertEqual([d["id"] for d in got["config"]], ["8"])
-        self.assertTrue(got["gap"])
-
-    def test_no_catalog_or_an_unreadable_one_is_a_gap(self):
-        self.assertTrue(uc.delta_coverage(None, self.new)["gap"])
-        got = uc.delta_coverage("Nothing to read here.", self.new)
-        self.assertEqual((got["parsed"], got["gap"]), (0, True))
-        ok = uc.delta_coverage("| # | Category | Site |\n|---|---|---|\n| 1 | API-removed | `A.java:1` |\n", self.new)
-        self.assertEqual((ok["silent"], ok["gap"]), (0, False))
-
-    def test_the_command_line_prints_a_summary_json_and_the_exit_code(self):
-        self.both("t/InTest.java", "Alpha")
-        put(self.new, "src/main/Alpha.java", "class Alpha {}")
-        cat = put(self.root, "CAT.md", "| # | Category | Site |\n|---|---|---|\n| 1 | Behavioral-silent | `src/main/Alpha.java:1` |\n")
-        code, out, _ = run_main(uc.main, [self.old, self.new, cat])
-        self.assertEqual(code, 0)
-        self.assertIn("tests kept: ok", out)
-        self.assertIn("deltas covered: ok", out)
-        code, out, _ = run_main(uc.main, [self.old, self.new, cat, "--json"])
-        self.assertEqual(json.loads(out)["deltas"]["silent"], 1)
-        os.remove(os.path.join(self.new, "t", "InTest.java"))
-        code, out, _ = run_main(uc.main, [self.old, self.new])
-        self.assertEqual(code, 1)
-        self.assertIn("removed: t/InTest.java", out)
-        self.assertEqual(run_main(uc.main, [os.path.join(self.root, "none"), self.new])[0], 2)
-        self.assertEqual(run_main(uc.main, [self.old, self.new, os.path.join(self.root, "none.md")])[0], 2)
-
-
 class ProofOutputs(unittest.TestCase):
     def setUp(self):
         self.ws = Ws(self)
@@ -1415,23 +930,13 @@ class ProofOutputs(unittest.TestCase):
         self.assertEqual((data["v"], data["overall"]["verdict"], data["signoff"]), (1, "PROVEN", {"name": "", "role": "", "date": "", "decision": ""}))
         md = read(os.path.join(self.adir, "VERIFICATION.md"))
         for needle in ("# Verification: s", "**Overall: PROVEN**", "### P0 business rules", "### What this does not prove", "## Sign-off", "________________",
-                       "## How each verdict is computed", "tests executed: 3, failed 0, skipped 0", "- [ ] A business owner accepts the report output"):
+                       "## How each verdict is computed", "tests executed: 3, failed 0, skipped 0"):
             self.assertIn(needle, md)
         os.remove(os.path.join(self.adir, "equivalence", "test-runs.json"))
         code, out, _ = run_main(pp.main, ["s", "--workspace", self.ws.root])
         self.assertEqual(code, 1)
         self.assertIn("NOT PROVEN", out)
         self.assertEqual(sorted(f for f in os.listdir(self.adir) if f.startswith("VERIFICATION")), ["VERIFICATION.json", "VERIFICATION.md"])
-
-    def test_uplift_flag_includes_the_three_uplift_checks(self):
-        source = os.path.join(self.ws.root, "source")
-        target = os.path.join(self.ws.root, "modernized", "s")
-        os.makedirs(source, exist_ok=True)
-        code, _, err = run_main(pp.main, ["s", "--source", source, "--assessment", self.adir, "--target", target,
-                                         "--out", os.path.join(self.ws.root, "cli-out"), "--uplift"])
-        self.assertIn(code, (0, 1), err)
-        data = load(os.path.join(self.ws.root, "cli-out", "VERIFICATION.json"))
-        self.assertTrue({"baseline", "kept", "deltas"}.issubset({c["id"] for m in data["modules"] for c in m["checks"]}))
 
     def test_bad_names_are_refused(self):
         for argv in (["..", "--workspace", self.ws.root], ["a/b"], ["s", "../x"], ["s", "a\\b"], [""]):
@@ -1473,297 +978,13 @@ class ProofOutputs(unittest.TestCase):
         self.assertEqual(pack["modules"][0]["verdict"], "NOT PROVEN")
 
 
-class ProofUplift(unittest.TestCase):
-    BASE = "# BASELINE\n\n## Per-test results\n\n| Test | Result |\n|---|---|\n| `T#a` | PASS |\n| `T#b` | PASS |\n| `T#c` | FAIL |\n| `T#d` | SKIP |\n"
-    CATALOG = ("# DELTA_CATALOG: s\n\n| # | Category | Fix | Delta | Site |\n|---|---|---|---|---|\n| 1 | Behavioral-silent | Judgment | Locale default changed | `unit/src/Main.java:12` |\n"
-               "| 2 | API-removed | Mechanical | Old API gone | `unit/src/Other.java:3` |\n")
-
-    def setUp(self):
-        self.root = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.root, True)
-        put(self.root, "legacy/s/pom.xml", "<project/>", T0)
-        put(self.root, "legacy/s/unit/src/test/MainTest.java", "class MainTest { Main m; }\n", T0)
-        put(self.root, "analysis/s/PREFLIGHT.md", "x", T0 + 10)
-        put(self.root, "analysis/s/BASELINE.md", self.BASE, T0 + 10)
-        put(self.root, "analysis/s/baseline/results.json", json.dumps({"T#a": "PASS", "T#b": "PASS", "T#c": "FAIL", "T#d": "SKIP"}), T0 + 5)
-        put(self.root, "analysis/s/DELTA_CATALOG.md", self.CATALOG, T0 + 10)
-        put(self.root, "modernized/s-uplifted/unit/src/Main.java", "class Main {}\n", T0 + 20)
-        put(self.root, "modernized/s-uplifted/unit/src/test/MainTest.java", "class MainTest { Main m; }\n", T0 + 20)
-        put(self.root, "modernized/s-uplifted/UPLIFT_NOTES.md", "Canary: break a comparison -> 2 tests failed\n", T0 + 20)
-        put(self.root, "analysis/s/equivalence/canary/TEST-C.xml", junit([("T", "a", "FAIL", ""), ("T", "b", "FAIL", "")]), T0 + 35)
-        self.results([("T", "a", "PASS", ""), ("T", "b", "PASS", ""), ("T", "c", "FAIL", ""), ("T", "d", "SKIP", "")])
-        put(self.root, "analysis/s/equivalence/test-runs.json", json.dumps({"legacy": {"ran": True}, "suites": [
-            {"module": "unit", "name": "unit", "junit": ["modernized/s-uplifted/unit/target/surefire-reports"], "executed": 3, "failed": 1, "skipped": 1}],
-            "canaries": [{"change": "break a comparison", "junit": ["analysis/s/equivalence/canary"]}]}), T0 + 40)
-        rows = []
-        for i in range(10):
-            put(self.root, "analysis/s/equivalence/fresh/old/%d.out" % i, "v%d\n" % i, T0 + 25)
-            put(self.root, "analysis/s/equivalence/fresh/new/%d.out" % i, "v%d\n" % i, T0 + 25)
-            rows.append({"id": "f%d" % i, "legacy": "fresh/old/%d.out" % i, "new": "fresh/new/%d.out" % i})
-        put(self.root, "analysis/s/equivalence/fresh-cases.json", json.dumps({"cases": rows}), T0 + 25)
-
-    def results(self, cases):
-        put(self.root, "modernized/s-uplifted/unit/target/surefire-reports/TEST-T.xml", junit(cases), T0 + 30)
-
-    def module(self):
-        pack = pp.overall(pp.build("s", self.root, now="x"))
-        self.assertEqual(len(pack["modules"]), 1)
-        return pack["modules"][0]
-
-    def test_no_regression_against_the_baseline_is_proven_and_traces_no_rules(self):
-        m = self.module()
-        self.assertEqual((m["verdict"], m["track"], m["name"]), ("PROVEN", "uplift", "s-uplifted"))
-        self.assertEqual({c["id"]: c["state"] for c in m["checks"]}["rules"], "na")
-        self.assertEqual(m["evidence"]["baseline"]["regressionsCount"], 0)
-
-    def test_a_regression_or_a_new_failure_is_not_proven(self):
-        self.results([("T", "a", "FAIL", ""), ("T", "b", "PASS", ""), ("T", "c", "FAIL", ""), ("T", "d", "SKIP", "")])
-        m = self.module()
-        self.assertEqual(m["verdict"], "NOT PROVEN")
-        self.assertIn("1 test(s) passed before and fail now", m["reasons"][0])
-        self.results([("T", "a", "PASS", ""), ("T", "b", "PASS", ""), ("T", "c", "FAIL", ""), ("T", "d", "SKIP", ""), ("T", "new", "FAIL", "")])
-        self.assertEqual(self.module()["verdict"], "NOT PROVEN")
-
-    def test_missing_tests_and_skipped_growth_are_partly_proven(self):
-        self.results([("T", "a", "PASS", ""), ("T", "c", "FAIL", ""), ("T", "d", "SKIP", "")])
-        m = self.module()
-        self.assertEqual(m["verdict"], "PARTLY PROVEN")
-        self.assertTrue(any("did not run now" in r for r in m["reasons"]))
-        self.results([("T", "a", "PASS", ""), ("T", "b", "SKIP", ""), ("T", "c", "FAIL", ""), ("T", "d", "SKIP", "")])
-        self.assertEqual(self.module()["verdict"], "PARTLY PROVEN")
-
-    def test_an_approved_baseline_difference_is_allowed_and_listed_as_a_decision(self):
-        put(self.root, "analysis/s/BASELINE.md", self.BASE + "\n## Approved differences\n\n| Test | Reason |\n|---|---|\n| `T#b` | the new runtime words the message differently |\n", T0 + 10)
-        self.results([("T", "a", "PASS", ""), ("T", "b", "FAIL", ""), ("T", "c", "FAIL", ""), ("T", "d", "SKIP", "")])
-        m = self.module()
-        self.assertEqual(m["verdict"], "PROVEN")
-        self.assertTrue(any("approved by a person in BASELINE.md" in c and "T#b" in c for c in m["caveats"]))
-        self.assertTrue(any("decision, not evidence" in n for n in m["notProven"]))
-        self.assertEqual(m["evidence"]["baseline"]["approved"][0]["id"], "T#b")
-
-    def test_a_canary_keyed_by_a_unit_of_the_uplifted_copy_is_accepted(self):
-        dump(os.path.join(self.root, "analysis", "s", "equivalence", "test-runs.json"), {"legacy": {"ran": True}, "suites": [
-            {"module": "unit", "name": "unit", "junit": ["modernized/s-uplifted/unit/target/surefire-reports"]}],
-            "canaries": [{"module": "unit", "change": "break a comparison", "junit": ["analysis/s/equivalence/canary"]}]})
-        m = self.module()
-        self.assertEqual({c["id"]: c["state"] for c in m["checks"]}["canary"], "pass")
-
-    def test_a_test_that_now_passes_needs_a_person_but_does_not_change_the_verdict(self):
-        self.results([("T", "a", "PASS", ""), ("T", "b", "PASS", ""), ("T", "c", "PASS", ""), ("T", "d", "SKIP", "")])
-        m = self.module()
-        self.assertEqual(m["verdict"], "PROVEN")
-        self.assertTrue(any("intended fix" in n for n in m["needsPerson"]))
-
-    def test_target_only_and_a_missing_baseline_cannot_be_proven(self):
-        self.results([("T", "a", "PASS", ""), ("T", "b", "PASS", ""), ("T", "c", "PASS", "")])
-        put(self.root, "analysis/s/BASELINE.md", "target-only: Java 8 is not installed here\n", T0 + 10)
-        m = self.module()
-        self.assertEqual(m["verdict"], "PARTLY PROVEN")
-        self.assertIn("target-only", " ".join(m["reasons"]))
-        self.assertFalse(m["evidence"]["legacy"]["ran"])
-        os.remove(os.path.join(self.root, "analysis", "s", "BASELINE.md"))
-        m = self.module()
-        self.assertEqual(m["verdict"], "PARTLY PROVEN")
-        self.assertIn("BASELINE.md is missing", " ".join(m["reasons"]))
-
-    def states(self):
-        return {c["id"]: c["state"] for c in self.module()["checks"]}
-
-    def test_all_nine_checks_pass_for_a_clean_uplift(self):
-        m = self.module()
-        self.assertEqual(self.states(), {"tests": "pass", "rules": "na", "same": "pass", "fresh": "pass", "canary": "pass", "source": "pass", "baseline": "pass", "kept": "pass", "deltas": "pass"})
-        self.assertEqual(m["evidence"]["baselineEvidence"]["kind"], "measured")
-        self.assertEqual(m["evidence"]["deltas"]["silent"], 1)
-
-    # -- (1) a measured baseline
-    def test_a_baseline_typed_by_hand_is_a_gap_and_says_so_in_plain_words(self):
-        os.remove(os.path.join(self.root, "analysis", "s", "baseline", "results.json"))
-        m = self.module()
-        self.assertEqual((m["verdict"], self.states()["baseline"], self.states()["same"]), ("PARTLY PROVEN", "gap", "pass"))
-        detail = next(c["detail"] for c in m["checks"] if c["id"] == "baseline")
-        self.assertIn("typed by hand", detail)
-        self.assertIn("applications/<app>/assessment/baseline/", detail)
-        self.assertIn("Recorded:", detail)
-        self.assertIn("### Baseline evidence", pp.render_md(pp.overall(pp.build("s", self.root, now="x"))))
-
-    def test_a_forged_counts_file_is_not_evidence(self):
-        os.remove(os.path.join(self.root, "analysis", "s", "baseline", "results.json"))
-        put(self.root, "analysis/s/baseline/counts.json", json.dumps({"PASS": 2, "FAIL": 1, "SKIP": 1, "executed": 3}), T0 + 5)
-        put(self.root, "analysis/s/baseline/counts2.json", json.dumps({"tests": {"count": 3}}), T0 + 5)
-        m = self.module()
-        self.assertEqual(self.states()["baseline"], "gap")
-        info = m["evidence"]["baselineEvidence"]
-        self.assertEqual(info["kind"], "typed")
-        self.assertIn("counts.json", info["ignored"])
-        self.assertIn("Files that only hold counts were ignored", next(c["detail"] for c in m["checks"] if c["id"] == "baseline"))
-
-    def test_only_the_baseline_folder_and_recorded_lines_are_looked_at(self):
-        os.remove(os.path.join(self.root, "analysis", "s", "baseline", "results.json"))
-        put(self.root, "analysis/s/harness/stray.json", json.dumps({"T#a": "PASS", "T#b": "PASS", "T#c": "FAIL", "T#d": "SKIP"}), T0 + 5)
-        put(self.root, "analysis/s/BASELINE.md", self.BASE + "\nSee also `analysis/s/harness/stray.json` for the details.\n", T0 + 10)
-        self.assertEqual(self.states()["baseline"], "gap")                               # a path in prose is not evidence
-        put(self.root, "analysis/s/BASELINE.md", self.BASE + "\n- **Recorded:** 2026-09-24. Machine-readable per-test results: `analysis/s/harness/stray.json`\n", T0 + 10)
-        self.assertEqual(self.states()["baseline"], "pass")
-        put(self.root, "analysis/s/BASELINE.md", self.BASE + "\nMachine-readable: harness/stray.json\n", T0 + 10)
-        self.assertEqual(self.states()["baseline"], "pass")                              # relative to the assessment folder
-
-    def test_evidence_outside_analysis_or_through_a_link_is_never_used(self):
-        outside = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, outside, True)
-        full = json.dumps({"T#a": "PASS", "T#b": "PASS", "T#c": "FAIL", "T#d": "SKIP"})
-        put(outside, "results.json", full)
-        os.remove(os.path.join(self.root, "analysis", "s", "baseline", "results.json"))
-        put(self.root, "analysis/other/results.json", full, T0 + 5)
-        put(self.root, "modernized/results.json", full, T0 + 5)
-        make_symlink(self, os.path.join(outside, "results.json"), os.path.join(self.root, "analysis", "s", "baseline", "link.json"))
-        make_symlink(self, outside, os.path.join(self.root, "analysis", "s", "linked"))
-        for line in ("Recorded: `../other/results.json`", "Recorded: `analysis/other/results.json`", "Recorded: `analysis/s/../other/results.json`", "Recorded: `modernized/results.json`",
-                     "Recorded: `%s/results.json`" % outside, "Recorded: `analysis/s/linked/results.json`", "Recorded: `analysis/s/baseline/link.json`"):
-            put(self.root, "analysis/s/BASELINE.md", self.BASE + "\n" + line + "\n", T0 + 10)
-            self.assertEqual(self.states()["baseline"], "gap", line)
-
-    def test_baseline_sources_that_disagree_are_a_gap_not_first_one_wins(self):
-        put(self.root, "analysis/s/baseline/second.json", json.dumps({"T#a": "FAIL", "T#b": "PASS"}), T0 + 5)
-        m = self.module()
-        self.assertEqual(self.states()["baseline"], "gap")
-        detail = next(c["detail"] for c in m["checks"] if c["id"] == "baseline")
-        self.assertIn("disagree with each other", detail)
-        self.assertIn("T#a: PASS in one source, FAIL in second.json", detail)                           # the example names the test and the file
-        put(self.root, "analysis/s/baseline/second.json", json.dumps({"T#a": "PASS"}), T0 + 5)          # agrees on what they share
-        self.assertEqual(self.states()["baseline"], "pass")
-        put(self.root, "analysis/s/baseline/old.test-output.txt", "Tests run: 9, Failures: 0, Errors: 0, Skipped: 0\n", T0 + 5)      # a log with other totals
-        self.assertEqual(self.states()["baseline"], "gap")
-
-    def test_a_typed_table_that_disagrees_with_its_evidence_is_a_gap(self):
-        put(self.root, "analysis/s/baseline/results.json", json.dumps({"T#a": "PASS", "T#b": "FAIL", "T#c": "FAIL", "T#d": "SKIP"}), T0 + 5)
-        m = self.module()
-        self.assertEqual(self.states()["baseline"], "gap")
-        self.assertIn("disagree on 1 test", next(c["detail"] for c in m["checks"] if c["id"] == "baseline"))
-        self.assertEqual(m["evidence"]["baselineEvidence"]["disagree"], 1)
-
-    def test_a_raw_runner_log_can_measure_the_baseline_and_must_match_the_typed_counts(self):
-        os.remove(os.path.join(self.root, "analysis", "s", "baseline", "results.json"))
-        put(self.root, "analysis/s/baseline/old.test-output.txt", "[INFO] Tests run: 4, Failures: 1, Errors: 0, Skipped: 1\n", T0 + 5)     # 3 executed, 1 failed, 1 skipped
-        m = self.module()
-        self.assertEqual(self.states()["baseline"], "pass")
-        self.assertIn("runner log", next(c["detail"] for c in m["checks"] if c["id"] == "baseline"))
-        put(self.root, "analysis/s/baseline/old.test-output.txt", "[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 1\n", T0 + 5)
-        self.assertEqual(self.states()["baseline"], "gap")
-
-    def test_target_only_and_a_missing_baseline_leave_the_measured_check_not_applicable(self):
-        put(self.root, "analysis/s/BASELINE.md", "target-only: Java 8 is not installed here\n", T0 + 10)
-        self.assertEqual(self.states()["baseline"], "na")
-        os.remove(os.path.join(self.root, "analysis", "s", "BASELINE.md"))
-        self.assertEqual((self.states()["baseline"], self.states()["same"]), ("na", "gap"))
-
-    def test_measured_per_test_results_are_what_the_new_run_is_compared_with(self):
-        put(self.root, "analysis/s/baseline/results.json", json.dumps({"T#a": "PASS", "T#b": "PASS", "T#c": "FAIL", "T#d": "SKIP", "T#extra": "PASS"}), T0 + 5)
-        self.results([("T", "a", "PASS", ""), ("T", "b", "PASS", ""), ("T", "c", "FAIL", ""), ("T", "d", "SKIP", "")])
-        m = self.module()
-        self.assertEqual(m["evidence"]["baseline"]["source"], "measured results")
-        self.assertEqual(self.states()["same"], "gap")                                  # T#extra was measured on the old version and did not run now
-        self.assertEqual(self.states()["baseline"], "pass")                             # the typed table lists fewer tests than were measured, and agrees on all it lists
-        self.assertTrue(any("did not run now" in r for r in m["reasons"]))
-
-    def test_a_totals_table_typed_beside_the_rows_must_match_the_evidence_too(self):
-        put(self.root, "analysis/s/BASELINE.md", self.BASE + "\n## Totals\n\n| | Count |\n|---|---|\n| Executed | 50 |\n| Failed | 0 |\n", T0 + 10)
-        m = self.module()
-        self.assertEqual(self.states()["baseline"], "gap")
-        self.assertIn("Totals table says 50 executed", " ".join(m["evidence"]["baselineEvidence"]["examples"]))
-        put(self.root, "analysis/s/BASELINE.md", self.BASE + "\n## Totals\n\n| | Count |\n|---|---|\n| Executed | 3 |\n| Failed | 1 |\n", T0 + 10)
-        self.assertEqual(self.states()["baseline"], "pass")
-
-    # -- (2) tests changed during the uplift
-    def test_a_removed_legacy_test_file_is_a_gap_and_the_list_says_which(self):
-        os.remove(os.path.join(self.root, "modernized", "s-uplifted", "unit", "src", "test", "MainTest.java"))
-        m = self.module()
-        self.assertEqual((m["verdict"], self.states()["kept"]), ("PARTLY PROVEN", "gap"))
-        detail = next(c["detail"] for c in m["checks"] if c["id"] == "kept")
-        self.assertIn("MainTest.java", detail)
-        self.assertIn("edited or deleted", detail)
-        self.assertEqual(m["evidence"]["testsChanged"]["removed"][0]["path"], "unit/src/test/MainTest.java")
-        self.assertTrue(any("Review the test files" in n for n in m["needsPerson"]))
-
-    def test_more_than_a_quarter_of_the_test_files_changed_is_a_gap_and_a_quarter_is_not(self):
-        for i in range(3):
-            put(self.root, "legacy/s/unit/src/test/T%d.java" % i, "class T%d { int a = 1; }\n" % i, T0)
-            put(self.root, "modernized/s-uplifted/unit/src/test/T%d.java" % i, "class T%d { int a = 1; }\n" % i, T0 + 20)
-        put(self.root, "modernized/s-uplifted/unit/src/test/T0.java", "class T0 { int a = 2; }\n", T0 + 20)         # 1 of 4 changed: exactly a quarter
-        m = self.module()
-        self.assertEqual(self.states()["kept"], "pass")
-        self.assertEqual(m["evidence"]["testsChanged"]["changed"][0], {"path": "unit/src/test/T0.java", "added": 1, "removed": 1, "note": ""})
-        self.assertTrue(any("1 changed" in n for n in m["needsPerson"]))
-        put(self.root, "modernized/s-uplifted/unit/src/test/T1.java", "class T1 { int a = 2; }\n", T0 + 20)         # 2 of 4
-        m = self.module()
-        self.assertEqual(self.states()["kept"], "gap")
-        self.assertIn("2 of 4 legacy test files (50%) were changed", next(c["detail"] for c in m["checks"] if c["id"] == "kept"))
-
-    def test_no_legacy_tests_or_no_legacy_tree_is_a_gap(self):
-        os.remove(os.path.join(self.root, "legacy", "s", "unit", "src", "test", "MainTest.java"))
-        m = self.module()
-        self.assertEqual(self.states()["kept"], "gap")
-        self.assertIn("nothing shows that the working copy's tests were not written during the uplift", next(c["detail"] for c in m["checks"] if c["id"] == "kept"))
-        shutil.rmtree(os.path.join(self.root, "legacy"))
-        m = self.module()
-        self.assertEqual(self.states()["kept"], "gap")
-        self.assertIn("legacy tree was not found", next(c["detail"] for c in m["checks"] if c["id"] == "kept"))
-
-    def test_added_tests_are_listed_and_never_a_gap(self):
-        put(self.root, "modernized/s-uplifted/unit/src/test/NewCharacterizationTest.java", "class NewCharacterizationTest { Main m; }\n", T0 + 20)
-        m = self.module()
-        self.assertEqual(self.states()["kept"], "pass")
-        self.assertEqual(m["evidence"]["testsChanged"]["added"], [{"path": "unit/src/test/NewCharacterizationTest.java", "lines": 2}])
-        md = pp.render_md(pp.overall(pp.build("s", self.root, now="x")))
-        self.assertIn("### Test files changed during the uplift", md)
-        self.assertIn("Added: `unit/src/test/NewCharacterizationTest.java`", md)
-        self.assertIn("Weakened assertions cannot be detected", md)
-        self.assertTrue(any("Weakened assertions cannot be detected" in n for n in m["notProven"]))
-
-    # -- (3) delta coverage
-    def test_a_silent_delta_no_test_names_is_a_gap_and_other_categories_are_only_listed(self):
-        put(self.root, "analysis/s/DELTA_CATALOG.md", self.CATALOG + "| 3 | Behavioral-silent | Judgment | Rounding changed | `unit/src/Money.java:40` |\n", T0 + 10)
-        m = self.module()
-        self.assertEqual((m["verdict"], self.states()["deltas"]), ("PARTLY PROVEN", "gap"))
-        detail = next(c["detail"] for c in m["checks"] if c["id"] == "deltas")
-        self.assertIn("1 of 2 Behavioral-silent", detail)
-        self.assertIn("no test names Money", detail)
-        self.assertEqual(m["evidence"]["deltas"]["uncovered"][0]["id"], "3")
-        self.assertIn("Not named by any test: 3 Rounding changed", pp.render_md(pp.overall(pp.build("s", self.root, now="x"))))
-        put(self.root, "modernized/s-uplifted/unit/src/test/MoneyTest.java", "class MoneyTest { Money m; }\n", T0 + 20)
-        self.assertEqual(self.states()["deltas"], "pass")
-
-    def test_a_missing_or_unreadable_catalog_is_a_gap(self):
-        os.remove(os.path.join(self.root, "analysis", "s", "DELTA_CATALOG.md"))
-        m = self.module()
-        self.assertEqual(self.states()["deltas"], "gap")
-        self.assertIn("DELTA_CATALOG.md was not found", next(c["detail"] for c in m["checks"] if c["id"] == "deltas"))
-        put(self.root, "analysis/s/DELTA_CATALOG.md", "Some prose about the version change. No table, no cards.\n", T0 + 10)
-        self.assertEqual(self.states()["deltas"], "gap")
-
-    def test_a_delta_at_a_build_file_is_listed_for_a_person_not_judged(self):
-        put(self.root, "analysis/s/DELTA_CATALOG.md", self.CATALOG + "| 4 | Behavioral-silent | Judgment | Bundle plugin | `pom.xml:629` |\n", T0 + 10)
-        m = self.module()
-        self.assertEqual(self.states()["deltas"], "pass")
-        self.assertEqual(m["evidence"]["deltas"]["config"][0]["id"], "4")
-        self.assertTrue(any("build or configuration file" in n for n in m["needsPerson"]))
-
-    def test_a_unit_argument_narrows_the_suites_and_an_unknown_name_is_an_error(self):
-        pack = pp.build("s", self.root, "unit", now="x")
-        self.assertEqual(pack["modules"][0]["name"], "s-uplifted")
-        self.assertEqual(pack["asked"], "unit")
-        with self.assertRaises(pp.InputError):
-            pp.build("s", self.root, "nosuchunit")
-
-
 class CheckIds(unittest.TestCase):
     def test_emitted_check_ids_match_the_independent_expectation_table(self):
-        expected_proof = {"tests", "rules", "same", "fresh", "canary", "source", "baseline", "kept", "deltas"}
-        expected_uplift = {"baseline", "kept", "deltas"}
+        expected_proof = {"tests", "rules", "same", "fresh", "canary", "source"}
         self.assertEqual({cid for cid, _ in pp.CHECKS}, expected_proof)
-        self.assertEqual({cid for cid, _ in pp.UPLIFT_CHECKS}, expected_uplift)
         ws = Ws(self)
         emitted = {check["id"] for module in ws.pack()["modules"] for check in module["checks"]}
-        self.assertLessEqual(emitted, expected_proof | expected_uplift)
+        self.assertLessEqual(emitted, expected_proof)
 
 
 class SourceNotModified(unittest.TestCase):
@@ -1802,7 +1023,7 @@ class SourceNotModified(unittest.TestCase):
 
 class CliContract(unittest.TestCase):
     def test_help_is_side_effect_free_and_missing_common_roots_exit_two(self):
-        for script in (cmp.main, tr.main, pp.main, uc.main, bd.main):
+        for script in (cmp.main, tr.main, pp.main):
             code, out, err = run_main(script, ["--help"])
             self.assertEqual((code, err), (0, ""))
             for flag in ("--source", "--assessment", "--target", "--out"):

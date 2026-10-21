@@ -6,14 +6,19 @@
  *     inputs/                what people attach
  *     assessment/            Assessment context: what the estate is (inventory, topology, catalog)
  *     understanding/         Understanding context at application level (the plan)
- *     units/<module>/<unit>/ the Unit aggregate: unit.md is its root, understanding/ holds what is known
+ *     units/<module>/<unit>/ the Unit aggregate: unit.md is its root, understanding/ holds what is known,
+ *                            design/<set>/ holds its design documents (ADR-0044, ADR-0045)
  *     generated/             read models rebuilt after a merge
+ *   architecture/            Design context, project level: the blueprint and common/<COM-id>.md components
+ *   standards/design/<set>/  the project's design sets: a set.md and its template files (ADR-0045)
  *   scratch/<app>/           job-to-job data of one run; outside the layout, never committed
  *
  * The document repo holds no JSON: committed files are Markdown (docs/reference/document-formats.md).
  */
 const APPLICATIONS_ROOT = "applications";
 const SCRATCH_ROOT = "scratch";
+const ARCHITECTURE_ROOT = "architecture";
+const DESIGN_SETS_ROOT = "standards/design";
 const APP_SEGMENT_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 export const DOCUMENT_PATH_TOKENS = {
@@ -144,6 +149,43 @@ export function applicationUnderstandingDir(app: string): string {
 /** The checked plan of what to understand next, batch by batch (auto-committed advice). */
 export function understandPlanPath(app: string): string {
   return `${applicationUnderstandingDir(app)}/plan.md`;
+}
+
+// ---------------------------------------------------------------------------
+// Design context (ADR-0044, ADR-0045)
+// ---------------------------------------------------------------------------
+
+/** The project-level architecture folder: the blueprint and the common components. */
+export function architectureDir(): string {
+  return ARCHITECTURE_ROOT;
+}
+
+export function commonComponentsDir(): string {
+  return `${ARCHITECTURE_ROOT}/common`;
+}
+
+/** One common component, written by the foundation team; `id` is its `COM-…` id. */
+export function commonComponentPath(id: string): string {
+  return `${commonComponentsDir()}/${id}.md`;
+}
+
+/** Where a project defines its design sets: one folder per set. */
+export function designSetsDir(): string {
+  return DESIGN_SETS_ROOT;
+}
+
+export function designSetDir(set: string): string {
+  return `${designSetsDir()}/${set}`;
+}
+
+/** The definition of a set: front matter for its identity, a table of its files. */
+export function designSetPath(set: string): string {
+  return `${designSetDir(set)}/set.md`;
+}
+
+/** A template file of a set, named by the `Template` column of its files table. */
+export function designTemplatePath(set: string, template: string): string {
+  return `${designSetDir(set)}/${template}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,8 +324,18 @@ export function unitUnderstandingPath(app: string, module: string, unit: string)
   return unitUnderstandingFilePath(app, module, unit, "understanding.md");
 }
 
+/** The unit's rules index: a table of its rules, each linking its own file under `unitRulesDir`. */
 export function unitRulesPath(app: string, module: string, unit: string): string {
   return unitUnderstandingFilePath(app, module, unit, "rules.md");
+}
+
+/** The folder of the unit's rule files, one `<rule id>.md` per rule. */
+export function unitRulesDir(app: string, module: string, unit: string): string {
+  return unitUnderstandingFilePath(app, module, unit, "rules");
+}
+
+export function unitRuleFilePath(app: string, module: string, unit: string, ruleId: string): string {
+  return `${unitRulesDir(app, module, unit)}/${ruleId}.md`;
 }
 
 export function unitDataObjectsPath(app: string, module: string, unit: string): string {
@@ -316,8 +368,18 @@ export function unitTaskPath(app: string, module: string, unit: string): string 
   return unitFilePath(app, module, unit, "task.md");
 }
 
-export function unitDesignPath(app: string, module: string, unit: string): string {
-  return unitFilePath(app, module, unit, "design.md");
+/** The unit's design documents, one folder per design set the project defines. */
+export function unitDesignDir(app: string, module: string, unit: string): string {
+  return unitFilePath(app, module, unit, "design");
+}
+
+export function unitDesignSetDir(app: string, module: string, unit: string, set: string): string {
+  return `${unitDesignDir(app, module, unit)}/${set}`;
+}
+
+/** A design document of the unit; `file` is the `Path` of the set's files table. */
+export function unitDesignFilePath(app: string, module: string, unit: string, set: string, file: string): string {
+  return `${unitDesignSetDir(app, module, unit, set)}/${file}`;
 }
 
 export function unitReviewsDir(app: string, module: string, unit: string): string {
@@ -342,10 +404,6 @@ export function unitRunsDir(app: string, module: string, unit: string): string {
 
 export function unitId(app: string, module: string, unit: string): string {
   return `${app}/${module}/${unit}`;
-}
-
-export function modernizationBriefPath(app: string): string {
-  return `${applicationToBeDir(app)}/modernization-brief.md`;
 }
 
 /** Module-scoped authored notes live beside the module's units. */

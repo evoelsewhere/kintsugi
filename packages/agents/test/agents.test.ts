@@ -157,8 +157,8 @@ describe("built-in catalog", () => {
   it("ships the six understanding agents for the runtime and three member agents", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst", "security-auditor", "understand-planner", "version-delta-analyst"]);
-    expect(byAudience("member")).toEqual(["scaffolder", "test-engineer", "uplift-migrator"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst", "security-auditor", "understand-planner"]);
+    expect(byAudience("member")).toEqual(["designer", "scaffolder", "test-engineer"]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
     for (const agent of catalog.agents) {
@@ -213,7 +213,7 @@ describe("built-in catalog", () => {
 });
 
 /** Commands written for Kintsugi, not adapted from the upstream plugin. */
-const KINTSUGI_COMMANDS = new Set(["modernize-understand.md", "modernize-plan-understand.md"]);
+const KINTSUGI_COMMANDS = new Set(["modernize-understand.md", "modernize-plan-understand.md", "modernize-design-architecture.md", "modernize-scaffold.md", "modernize-design.md", "modernize-implement.md"]);
 
 describe("built-in commands", () => {
   it("declare who runs them and name only agents of the catalog", async () => {
@@ -225,7 +225,7 @@ describe("built-in commands", () => {
       for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".md")).sort()) files.push({ name, path: join(dir, name) });
     }
     const names = files.map((file) => file.name);
-    expect(names).toHaveLength(9);
+    expect(names).toHaveLength(8);
     for (const { name, path } of files) {
       const text = await readFile(path, "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
@@ -255,10 +255,10 @@ describe("built-in commands", () => {
 
   it("load in pipeline order with their stage ids", async () => {
     const commands = await loadBuiltinCommands();
-    expect(commands).toHaveLength(9);
-    expect(commands[0]).toMatchObject({ id: "preflight", command: "modernize-preflight", audience: "member" });
+    expect(commands).toHaveLength(8);
+    expect(commands[0]).toMatchObject({ id: "assess", command: "modernize-assess", audience: "runtime" });
     expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand"]);
-    expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "brief", "understand", "reimagine"]);
+    expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "understand", "design-architecture", "design"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
       command: "modernize-understand",
       audience: "runtime",

@@ -47,10 +47,12 @@ The project's knowledge about the target is plain Markdown under `standards/`, w
 |---|---|---|
 | `standards/conventions/` | Target conventions extracted from the scaffolded target repos: layering, naming, idioms, UI kit, build and CI. UX decisions go to `architecture/adr/` | `to-be-analyst` |
 | `standards/mappings/` | One file per legacy construct or UI pattern → target equivalent, with an example | Pilot reverse designs |
+| `standards/design/` | The project's design sets: the format and required content of each unit's basic design, detail design, … as templates with checks. See [Define a project's design templates](define-design-templates.md) | The customer's design format, the foundation team |
 | `standards/review-rules.md` | The rules reviewers enforce, each with a stable id (`RR-001`, …) and `block` / `warn` | Architecture rules, lint config |
 | `plugins/<project>-<topic>/` | Member plugins: skills, reviewer agents, commands, hooks. Validate with `claude plugin validate --strict` | The built-in `kintsugi` plugin as a base |
 
 Notes:
+- **Design**: the common design (the architecture and `architecture/common/`) is written by the foundation team with `/kintsugi:modernize-design-architecture`; each unit's design by members with `/kintsugi:modernize-design`.
 - **Samples**: the template's `.example` files show the shape. Copy the ones you adopt to a real name and delete the rest.
 - **Pilot units**: flag 1–2 representative units per kind as `pilot: true` and run them first. Fix the standards where results were inconsistent, unclear or wrong.
 - **Gate G3** (Prepare Factory) is a human decision: the target repos are scaffolded, the standards are written and the pilots are reviewed.

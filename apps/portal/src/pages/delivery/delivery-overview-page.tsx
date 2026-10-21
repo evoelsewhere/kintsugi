@@ -12,13 +12,14 @@ import { Loaded } from "@/components/loaded";
 import { RunStatusBadge, StatusBadge } from "@/components/status-badges";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { catalogApi } from "@/lib/api/catalog";
+import { designApi } from "@/lib/api/design";
 import { documentsApi, type StageHeadline } from "@/lib/api/documents";
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
 import { formatDateTime, formatDuration, formatRelative } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
 import { isActiveStatus } from "@/lib/status";
-import { latestRun, pipelineStages, runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
+import { latestRun, pipelineStages, runBlocker, runsOfStage, runtimePipelineStages, stageLabel } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { DeliveryShell, NoApplications, WithProject } from "./delivery-shell";
@@ -82,7 +83,7 @@ function ProjectOverview({ projectId }: { projectId: string }): React.JSX.Elemen
           ) : (
             <Loaded loader={stages} rows={3}>
               {(list) => {
-                const pipeline = pipelineStages(list);
+                const pipeline = runtimePipelineStages(list);
                 const all = runs.data ?? [];
                 const health = pipelineHealth(project.applications, pipeline, all);
                 return (
@@ -142,13 +143,25 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
     catalog.data === undefined || catalog.data === null
       ? undefined
       : [`${catalog.data.counts.understood ?? 0}/${catalog.data.items.filter((item) => item.status !== "retired").length} items understood`];
-  const headlineOf = (stage: string): string[] | undefined => (stage === "understand" ? understood : headlines.data?.find((entry) => entry.stage === stage)?.headline);
+  // The design stage is tracked by its documents (ADR-0044): how many units have each design set written.
+  const design = useLoader(`overview-design/${project.id}/${application.id}`, () => (project.documentRepository === null ? Promise.resolve(null) : designApi.overview(project.id, application.id).catch(() => null)));
+  const designHeadline = (): string[] | undefined => {
+    if (design.data === undefined || design.data === null || design.data.sets.length === 0) return undefined;
+    const written = design.data.sets.map((set) => {
+      const here = design.data?.counts[set.id] ?? {};
+      const total = Object.values(here).reduce((sum, value) => sum + (value ?? 0), 0);
+      return `${set.id} ${(here.conformant ?? 0) + (here.waived ?? 0) + (here.stale ?? 0)}/${total}`;
+    });
+    return design.data.attention.length === 0 ? written : [...written, `${design.data.attention.length} to look at`];
+  };
+  const headlineOf = (stage: string): string[] | undefined => (stage === "understand" ? understood : stage === "design" ? designHeadline() : headlines.data?.find((entry) => entry.stage === stage)?.headline);
 
   const pipeline = pipelineStages(stages);
+  const tracked = runtimePipelineStages(stages);
   const statusOf = (stage: StageView): string | undefined => (stage.audience === "runtime" && runs !== undefined ? latestRun(runs, stage.id)?.status : undefined);
-  const states = pipeline.map((stage) => ({ label: stageLabel(stage.id), status: statusOf(stage) }));
+  const states = tracked.map((stage) => ({ label: stageLabel(stage.id), status: statusOf(stage) }));
   const done = states.filter((state) => state.status === "succeeded").length;
-  const next = runs === undefined ? undefined : pipeline.find((stage) => stage.audience === "runtime" && statusOf(stage) !== "succeeded");
+  const next = runs === undefined ? undefined : tracked.find((stage) => statusOf(stage) !== "succeeded");
   const nextRun = next === undefined || runs === undefined ? undefined : latestRun(runs, next.id);
   const nextLink = next === undefined ? "" : deliveryLink({ projectId: project.id, applicationId: application.id, stage: next.id });
 
@@ -189,7 +202,7 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
         <div className="flex shrink-0 items-center gap-2">
           {active === 0 ? null : <StatusBadge tone="blue" label={`${active} active run${active === 1 ? "" : "s"}`} />}
           <span className="text-[12px] text-text-secondary tabular-nums">
-            <span className="font-medium text-text">{done}</span>/{pipeline.length} stages done
+            <span className="font-medium text-text">{done}</span>/{tracked.length} stages done
           </span>
         </div>
       </CardHeader>

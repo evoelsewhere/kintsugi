@@ -27,9 +27,10 @@ You implement units in **your own AI harness** (Claude Code, GitHub Copilot or C
    ```
    This claims the unit for you, so the board shows you as assignee. It also creates a branch in the target repo and fetches the task pack (`tasks/<id>.md` in the document repo).
 2. **Work in your harness.** Point it at the task pack. Follow the standards it cites (conventions, mappings, review rules in `standards/`), use the suggested skills, and query the KB through MCP (`kb.search`, `kb.ask`). If a rule is missing or wrong, propose a PR to `standards/` in the document repo instead of deciding locally.
+   - **Design comes before code.** A unit has a design for each design set its kind needs (`standards/design/`, [design templates](../reference/design-templates.md)). If one is missing, write it with `/kintsugi:modernize-design <app> <module/unit> <set>`: the scaffold writes the drafts, your harness fills them, and `python3 scripts/check_design.py <app> <module/unit>` lists what is left (the portal's Design view shows the same). Then build the unit with `/kintsugi:modernize-implement <app> <module/unit>`; if the code has to differ from the detail design, correct the design in the same pull request.
 3. **Commit.**
    - Put code in the target repo. Source (legacy) repos are read-only.
-   - Put deliverables (detail design, test report…) in the document repo, at the paths listed in the task pack.
+   - Put deliverables (the unit's design documents under `design/<set>/`, test report…) in the document repo, at the paths listed in the task pack.
    - Add `Assisted-by: <harness>` to AI-assisted commits.
 4. **Open PRs.** Reference the unit id and fill in the AI-usage section of the PR template.
 5. **Register deliverables.**
