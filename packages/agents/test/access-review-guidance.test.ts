@@ -56,6 +56,20 @@ describe("access plugin handoff guidance", () => {
     expect(skill).toContain("Reading context through MCP does not require starting a watch");
   });
 
+  it("interprets task continuation events as hints and preserves their provenance", async () => {
+    const skill = await readSkill();
+    expect(skill).toMatch(/`task\.continuation`/i);
+    expect(skill).toMatch(/`schemaVersion`[\s\S]*`decisionId`[\s\S]*`gateId`[\s\S]*`evidenceHash`[\s\S]*`recordCommit`[\s\S]*`status`[\s\S]*`code`[\s\S]*`nextAction`[\s\S]*`phase`[\s\S]*`stage`[\s\S]*`sourceCommit`/i);
+    expect(skill).toMatch(/`member-action`[\s\S]*declared next member stage/i);
+    expect(skill).toMatch(/`blocked`[\s\S]*human[\s\S]*follow-up/i);
+    expect(skill).toMatch(/`unsupported`[\s\S]*context[\s\S]*follow-up/i);
+    expect(skill).toMatch(/`complete`[\s\S]*declared pipeline has no next stage/i);
+    expect(skill).toMatch(/before describing current workflow state, refresh `task_status`/i);
+    expect(skill).toMatch(/keep nullable values and missing fields as such[\s\S]*do not invent provenance/i);
+    expect(skill).toMatch(/the four `status` values are guidance only/i);
+    expect(skill).toMatch(/not as a live update delivered to this plugin or a command to begin work/i);
+  });
+
   it("hands implementation and PR creation to the chosen AI and reports only Kintsugi-observed provider state", async () => {
     const skill = await readSkill();
     expect(skill).toContain("work in the developer's repository using the chosen AI's coding tools");
