@@ -2,6 +2,7 @@
 // installation (known kernel tools, shared skills) and the AgentDefinition embedded in a
 // JobSpec. The kernel never looks an agent up; this is the launcher's side.
 
+import { isMcpToolEntry } from "@kintsugi/domain";
 import type { AgentDefinition } from "@kintsugi/runtime-sdk";
 import type { AgentPackage, SkillPackage } from "./format.js";
 
@@ -20,7 +21,8 @@ export function validateAgent(agent: AgentPackage, context: AgentContext): strin
   const tools = manifest.tools ?? [];
   if (manifest.audience === "runtime") {
     for (const tool of tools) {
-      if (!context.knownTools.includes(tool)) problems.push(`unknown tool "${tool}" (available: ${context.knownTools.join(", ")})`);
+      // An MCP tool (`mcp__<server>__<tool or *>`) names a server an administrator registered; the job checks it exists.
+      if (!context.knownTools.includes(tool) && !isMcpToolEntry(tool)) problems.push(`unknown tool "${tool}" (available: ${context.knownTools.join(", ")}, or an MCP tool such as mcp__<server>__*)`);
     }
   }
   if (new Set(tools).size !== tools.length) problems.push("a tool is listed twice");

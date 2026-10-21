@@ -4,7 +4,7 @@
 // lose their mirror. Document writes run one at a time per document repository.
 
 import { CheckoutStorage } from "@kintsugi/git";
-import { type Interpreters, interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { type Interpreters, interpretersFromEnv, loadMcpServers } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
@@ -162,6 +162,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       checkouts: new MirrorCheckouts({ repositories: store, storage: options.storage }),
       agents: options.jobs.agents,
       agentDefinitions: installedAgents({ pool: options.pool }),
+      mcpServers: (ids) => loadMcpServers(ids, options.databaseUrl),
       interpreters: options.jobs.interpreters ?? interpretersFromEnv(),
       ...(options.jobs.defaults === undefined ? {} : { defaults: options.jobs.defaults }),
       requestWrite,
@@ -223,9 +224,9 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const pruneJobs = tick("job workspace cleanup", async () => {
     const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
     if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
-  });
     const spans = await jobStore.pruneTelemetry(options.telemetryRetentionDays ?? 30);
     if (spans > 0) log(`removed ${spans} expired telemetry span(s)`);
+  });
   const timers = [
     setInterval(() => void scanPending(), (options.pendingScanSeconds ?? 5) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),

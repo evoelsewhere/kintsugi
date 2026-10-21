@@ -7,6 +7,7 @@ import { GitModule } from "./modules/admin/git/git.module.js";
 import { InstallationSettingsModule } from "./modules/admin/settings/installation-settings.module.js";
 import { HarnessesModule } from "./modules/admin/harnesses/harnesses.module.js";
 import { LlmProvidersModule } from "./modules/admin/llm-providers/llm-providers.module.js";
+import { McpServersModule } from "./modules/admin/mcp-servers/mcp-servers.module.js";
 import { ProjectBuildsModule } from "./modules/admin/project-build/project-builds.module.js";
 import { ProjectsModule } from "./modules/admin/projects/projects.module.js";
 import { RolesModule } from "./modules/admin/roles/roles.module.js";
@@ -26,8 +27,8 @@ import { DashboardStatsModule } from "./modules/monitoring/dashboards/dashboard-
 import { JobRunsModule } from "./modules/monitoring/observability/job-runs.module.js";
 import { OverviewModule } from "./modules/monitoring/overview/overview.module.js";
 import { PortfolioOverviewModule } from "./modules/monitoring/portfolio/portfolio.module.js";
-import { HealthChecksModule } from "./modules/monitoring/target-health/health-checks.module.js";
 import { TelemetryModule } from "./modules/monitoring/telemetry/telemetry.module.js";
+import { HealthChecksModule } from "./modules/monitoring/target-health/health-checks.module.js";
 import { AuditEntriesModule } from "./modules/governance/audit/audit-entries.module.js";
 import { GatesModule } from "./modules/governance/gates/gates.module.js";
 import { PoliciesModule } from "./modules/governance/policies/policies.module.js";
@@ -55,6 +56,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     GitModule,
     InstallationSettingsModule,
     LlmProvidersModule,
+    McpServersModule,
     AgentsModule,
     PluginsModule,
     HarnessesModule,
@@ -71,9 +73,9 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     // monitoring
     OverviewModule,
     PortfolioOverviewModule,
+    TelemetryModule,
     JobRunsModule,
     DashboardStatsModule,
-    TelemetryModule,
     AiMetricsModule,
     CostEntriesModule,
     HealthChecksModule,

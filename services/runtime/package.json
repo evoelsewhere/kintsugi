@@ -46,6 +46,10 @@
     "./launcher": {
       "types": "./dist/launcher/index.d.ts",
       "import": "./dist/launcher/index.js"
+    },
+    "./mcp-probe": {
+      "types": "./dist/catalog/mcp-probe.d.ts",
+      "import": "./dist/catalog/mcp-probe.js"
     }
   }
 }

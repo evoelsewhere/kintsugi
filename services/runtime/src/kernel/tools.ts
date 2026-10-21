@@ -18,6 +18,7 @@ import { createKernelLsTool } from "./ls.js";
 import { PathGuard } from "./paths.js";
 import { createKernelShellTool } from "./shell.js";
 import { CODEMODE_TOOL, SCRIPT_TOOLS } from "./codemode.js";
+import { MCP_TOOL_PREFIX } from "./mcp.js";
 import type { KernelToolName } from "./tool-names.js";
 
 export interface ToolContext {
@@ -174,8 +175,8 @@ export { KERNEL_TOOL_NAMES } from "./tool-names.js";
 /** Creates the allowlisted tools; unknown names are rejected by job validation first. */
 export function createTools(names: readonly string[], context: ToolContext): ToolDefinition[] {
   return names
-    // codemode is pi's own tool, added as an extension (codemode.ts): no factory here.
-    .filter((name) => name !== CODEMODE_TOOL)
+    // codemode and the MCP tools are pi's own, added as extensions (codemode.ts, mcp.ts): no factory here.
+    .filter((name) => name !== CODEMODE_TOOL && !name.startsWith(MCP_TOOL_PREFIX))
     .map((name) => {
       const factory = (KERNEL_TOOLS as Record<string, ToolFactory | undefined>)[name];
       if (factory === undefined) throw new Error(`unknown tool "${name}"`);

@@ -36,6 +36,7 @@ export function stableSessionId(spec: JobSpec): string {
     spec.agent.instructions,
     (spec.agent.skills ?? []).map((skill) => [skill.name, skill.content]),
     normalizeTools(spec.agent.tools),
+    (spec.mcp?.servers ?? []).map((server) => [server.name, server.url, server.allowedTools]),
     spec.model.provider,
     spec.model.id,
     spec.model.thinking ?? spec.agent.thinking ?? "off",

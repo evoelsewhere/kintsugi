@@ -20,10 +20,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { findBuiltinFile } from "@kintsugi/agents";
-import { THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
+import { mcpServersNamedBy, THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
 import type { CheckoutStorage } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
-import type { AgentRuntime, JobEvent, JobSpec } from "@kintsugi/runtime-sdk";
+import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 import type { AgentResolver } from "./agents.js";
 import { materializeSkillFiles } from "./skill-files.js";
@@ -76,6 +76,8 @@ export interface JobRunnerDeps {
   /** pi in production; the mock backend in tests and mock-mode development. */
   agents: AgentRuntime;
   agentDefinitions: AgentResolver;
+  /** The MCP servers (with decrypted headers) an agent names in its tools; absent when the installation has no registry. */
+  mcpServers?: (ids: readonly string[]) => Promise<McpServerSpec[]>;
   interpreters: Interpreters;
   defaults?: JobDefaults;
   /** Hands a write to the document repo writer (queue `document-write`). */
@@ -529,6 +531,17 @@ export class JobRunner {
         ...(limits.maxCostUsd === undefined ? {} : { maxCostUsd: limits.maxCostUsd }),
       },
       metadata: { jobRunId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }) },
+    // The MCP servers the agent names in its tools: resolved here, where the registry and its secrets are, and handed to the job's child.
+    const mcpIds = mcpServersNamedBy(definition.tools);
+    let mcp: JobSpec["mcp"];
+    if (mcpIds.length > 0) {
+      if (this.#deps.mcpServers === undefined) throw new JobFailure(`Agent ${run.name} names MCP servers (${mcpIds.join(", ")}) but this worker has no MCP registry`);
+      try {
+        mcp = { servers: await this.#deps.mcpServers(mcpIds) };
+      } catch (error) {
+        throw new JobFailure(`Agent ${run.name}: ${redactText(message(error)).slice(0, 300)}`);
+      }
+    }
     };
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0, cacheReadTokens: 0, cacheWriteTokens: 0, compactions: 0 };
     const stepId = run.id === ws.rootId ? undefined : run.id;

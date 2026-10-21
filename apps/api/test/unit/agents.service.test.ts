@@ -129,7 +129,7 @@ describe("agents service", () => {
     expect(format.messages.join("\n")).toMatch(/`name` must match[\s\S]*semantic version[\s\S]*instructions \(body\) are empty/);
 
     const installation = await rejection(service.create(draft({ tools: ["read", "bash"], skills: ["missing"] }), admin));
-    expect(installation.messages).toEqual([`unknown tool "bash" (available: ${KERNEL_TOOL_NAMES.join(", ")})`, 'unknown shared skill "missing"']);
+    expect(installation.messages).toEqual([`unknown tool "bash" (available: ${KERNEL_TOOL_NAMES.join(", ")}, or an MCP tool such as mcp__<server>__*)`, 'unknown shared skill "missing"']);
 
     expect(await rejection(service.create(draft({ name: "legacy-analyst" }), admin))).toMatchObject({ type: ConflictException });
     await service.create(draft(), admin);

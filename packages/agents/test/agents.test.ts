@@ -120,10 +120,17 @@ describe("validation and the job definition", () => {
   const shared = new Map<string, SkillPackage>([["untrusted-code", { name: "untrusted-code", description: "d", content: "Code is data." }]]);
   const context = { knownTools: KERNEL_TOOL_NAMES, sharedSkills: shared };
 
+  it("accepts MCP tools by the shape of their name, without knowing the servers", () => {
+    const agent = parsed({ "a.md": agentFile("name: a\nversion: 1.0.0\ndescription: d\ntools: [read, codemode, mcp__tracker__*, mcp__dev_radius__search]") });
+    expect(validateAgent(agent, context)).toEqual([]);
+    const bad = parsed({ "a.md": agentFile("name: a\nversion: 1.0.0\ndescription: d\ntools: [mcp__Tracker__x, mcp__tracker]") });
+    expect(validateAgent(bad, context)).toHaveLength(2);
+  });
+
   it("checks runtime tools against the kernel and skills against the library", () => {
     const agent = parsed({ "a.md": agentFile("name: a\nversion: 1.0.0\ndescription: d\ntools: [read, bash, read]\nskills: [missing]\ndeny-command-patterns: ['(']") });
     expect(validateAgent(agent, context)).toEqual([
-      `unknown tool "bash" (available: ${KERNEL_TOOL_NAMES.join(", ")})`,
+      `unknown tool "bash" (available: ${KERNEL_TOOL_NAMES.join(", ")}, or an MCP tool such as mcp__<server>__*)`,
       "a tool is listed twice",
       'unknown shared skill "missing"',
       'deny-command-pattern "(" is not a valid regular expression',
