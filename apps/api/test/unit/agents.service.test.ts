@@ -228,8 +228,10 @@ describe("agents service", () => {
 
     await service.remove("house-reviewer", admin);
     await service.removeSkill("house-style", admin);
-    // Only the built-in shared skills remain, used by the built-in agents that draw diagrams.
-    expect((await service.listSkills()).map((skill) => [skill.name, skill.source, skill.usedBy])).toEqual([
+    // Agent Builder exposes runtime-shared skills only; member plugin skills stay in their plugin catalog.
+    const sharedSkills = await service.listSkills();
+    expect(sharedSkills.some((skill) => skill.name === "kintsugi-task")).toBe(false);
+    expect(sharedSkills.map((skill) => [skill.name, skill.source, skill.usedBy])).toEqual([
       ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "legacy-analyst"]],
     ]);
 
