@@ -91,7 +91,7 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
               >
                 <button
                   type="button"
-                  className="mt-0.5 rounded-[var(--geist-radius)] text-text-muted hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+                  className="flex h-7 shrink-0 items-center rounded-[var(--geist-radius)] text-text-muted hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
                   aria-expanded={expanded}
                   aria-label={expanded ? `Hide details of ${run.name}` : `Show details of ${run.name}`}
                   onClick={() => setOpen(expanded ? null : run.id)}
@@ -99,7 +99,7 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
                   {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                 </button>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
                     <button
                       type="button"
                       className="rounded-[var(--geist-radius)] text-left text-[13px] font-medium text-text hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
@@ -140,13 +140,13 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
                   {run.failureReason === undefined ? null : <Failure text={run.failureReason} />}
                   {run.documentWrite?.error === undefined ? null : <Failure text={`Document write: ${run.documentWrite.error}`} />}
                 </div>
-                <span className="w-16 shrink-0 text-right text-[11.5px] tabular-nums text-text-secondary" title="Run time">
+                <span className="w-16 shrink-0 text-right text-[11.5px] leading-7 tabular-nums text-text-secondary" title="Run time">
                   {run.startedAt === undefined ? "—" : <Elapsed run={run} />}
                 </span>
-                <span className="hidden w-20 shrink-0 text-right text-[11.5px] tabular-nums text-text-muted sm:block" title={formatDateTime(run.createdAt)}>
+                <span className="hidden w-20 shrink-0 text-right text-[11.5px] leading-7 tabular-nums text-text-muted sm:block" title={formatDateTime(run.createdAt)}>
                   {formatRelative(run.createdAt)}
                 </span>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex h-7 shrink-0 items-center gap-2">
                   {run.documentWrite === undefined ? null : <WriteStatusBadge status={run.documentWrite.status} title="Document write of this run" />}
                   {run.documentWrite?.prUrl === undefined ? null : (
                     <a
