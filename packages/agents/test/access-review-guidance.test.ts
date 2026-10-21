@@ -21,7 +21,7 @@ describe("access plugin review findings guidance", () => {
     expect(skill).toContain("configured local MCP connection to read task briefs, cited standards and context, and review evidence");
     expect(skill).toContain("does not run or operate the assistant");
     expect(skill).toContain("MCP access is read-only and has no watch tool or gate-write operation");
-    expect(skill).toContain("use `kintsugi task watch` only when the installed CLI supports streaming");
-    expect(skill).toContain("otherwise refresh `task_status`");
+    expect(skill).toContain("use `kintsugi task watch` when the installation exposes the authorized event stream");
+    expect(skill).toContain("if the endpoint is unavailable, refresh `task_status`");
   });
 });
