@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { redactReportValue, requiredChildEnvironment, summarizeRequiredReport } from "../../scripts/check-member-test-env.mjs";
-import { commandForSuite, parseSuiteArgs, suitesFor } from "../../scripts/run-member-integration.mjs";
+import { commandForSuite, parseSuiteArgs, suitesFor, summarizeFailureReport } from "../../scripts/run-member-integration.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -49,4 +49,49 @@ test("required report rejects zero cases and any skipped test and redacts connec
   const safe = JSON.stringify(redactReportValue(report, "postgresql://runner:secret@127.0.0.1/kintsugi_test"));
   assert.doesNotMatch(safe, /runner:secret/);
   assert.match(safe, /redacted database URL/);
+});
+
+
+test("failure summary names failed assertions and suite errors without passing cases or database URLs", () => {
+  const report = {
+    testResults: [
+      {
+        name: "member-api.test.ts",
+        status: "failed",
+        message: "",
+        assertionResults: [
+          { status: "passed", fullName: "unrelated passing case", failureMessages: [] },
+          { status: "failed", fullName: "member API rejects stale credentials", failureMessages: ["Expected 401, received 500\npostgresql://runner:secret@localhost/kintsugi_test"] },
+        ],
+      },
+      { name: "project-access.test.ts", status: "failed", message: "beforeAll: connect postgres://other:private@localhost/another_test", assertionResults: [] },
+      { name: "other.test.ts", status: "passed", message: "unrelated suite output", assertionResults: [] },
+    ],
+  };
+  const summary = summarizeFailureReport(redactReportValue(report, "postgresql://runner:secret@localhost/kintsugi_test"));
+  assert.match(summary, /member-api\.test\.ts.*member API rejects stale credentials.*Expected 401, received 500/);
+  assert.match(summary, /project-access\.test\.ts.*beforeAll: connect/);
+  assert.match(summary, /redacted database URL/);
+  assert.doesNotMatch(summary, /runner:secret|other:private|postgres(?:ql)?:\/\/|unrelated/);
+});
+
+test("failure summary bounds failure count and line length and redacts before truncating", () => {
+  const report = {
+    testResults: [{
+      name: "member-api.test.ts",
+      status: "failed",
+      assertionResults: Array.from({ length: 20 }, (_, index) => ({
+        status: "failed",
+        fullName: `case ${index}`,
+        failureMessages: [`${"x".repeat(550)}postgresql://runner:${"s".repeat(1000)}@localhost/kintsugi_test`],
+      })),
+    }],
+  };
+  const summary = summarizeFailureReport(report);
+  const lines = summary.split("\n");
+  assert.ok(lines.length <= 9);
+  assert.ok(lines.every((line) => line.length <= 700));
+  assert.match(summary, /case 0/);
+  assert.match(summary, /Additional failures omitted/);
+  assert.doesNotMatch(summary, /case 19|postgres(?:ql)?:\/\/|runner:|s{20}/);
 });

@@ -73,6 +73,34 @@ function redactDiagnostic(value) {
   return value.replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, "[redacted database URL]");
 }
 
+export function summarizeFailureReport(report) {
+  const lines = [];
+  const maxFailures = 8;
+  let omitted = false;
+  const addFailure = (value) => {
+    if (lines.length >= maxFailures) {
+      omitted = true;
+      return;
+    }
+    const line = redactDiagnostic(value).replace(/\s+/g, " ").trim();
+    lines.push(line.length > 700 ? `${line.slice(0, 697)}...` : line);
+  };
+  for (const suite of report.testResults ?? []) {
+    const name = typeof suite.name === "string" ? suite.name : "Unnamed suite";
+    for (const assertion of suite.assertionResults ?? []) {
+      if (assertion.status !== "failed") continue;
+      const title = assertion.fullName || assertion.title || "Unnamed test";
+      const messages = Array.isArray(assertion.failureMessages) ? assertion.failureMessages.filter((message) => typeof message === "string").join("; ") : "";
+      addFailure(`${name} > ${title}: ${messages || "Test failed without a failure message"}`);
+    }
+    if (suite.status === "failed" && typeof suite.message === "string" && suite.message.trim() !== "") {
+      addFailure(`${name}: ${suite.message}`);
+    }
+  }
+  if (omitted) lines.push("Additional failures omitted; see the redacted JSON report.");
+  return lines.join("\n");
+}
+
 async function runSuite(suite, databaseUrl, reportDir, sequence) {
   const reportPath = join(reportDir, `${String(sequence).padStart(2, "0")}-${suite}.json`);
   const command = commandForSuite(suite, reportPath);
@@ -88,7 +116,7 @@ async function runSuite(suite, databaseUrl, reportDir, sequence) {
   }
   const assertion = await run(process.execPath, [resolve(repoRoot, "scripts/assert-member-test-report.mjs"), reportPath, "--require-executed", "--forbid-required-skips"], { cwd: repoRoot, env: requiredChildEnvironment(process.env, databaseUrl) });
   if (result.code !== 0 || assertion.code !== 0) {
-    const details = redactDiagnostic(result.stderr).split(/\r?\n/).filter(Boolean).slice(-8).join("\n");
+    const details = summarizeFailureReport(report) || redactDiagnostic(result.stderr).split(/\r?\n/).filter(Boolean).slice(-8).map((line) => line.slice(0, 700)).join("\n");
     throw new Error(`${suite} required suite failed (Vitest exit ${result.code}); report: ${reportPath}${details === "" ? "" : `\n${details}`}`);
   }
   const counts = summarizeRequiredReport(report);
