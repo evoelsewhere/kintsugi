@@ -221,12 +221,12 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
           ? []
           : [
               "--permission",
-              ...[...(await childCodeRoots()), entry, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
               // The kernel's `shell` and `git` start processes and codemode runs scripts in a worker thread. The
               // OS account is the isolation boundary (ADR-0029); these flags only let the kernel use its own tools.
               "--allow-child-process",
               "--allow-worker",
               "--disable-warning=SecurityWarning",
+              ...[...(await childCodeRoots()), entry, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
               ...[spec.workspace.outDir, tmp].map((path) => `--allow-fs-write=${path}`),
             ];
       const job = new ChildAgentJob(randomUUID(), idleTimeoutSec);
