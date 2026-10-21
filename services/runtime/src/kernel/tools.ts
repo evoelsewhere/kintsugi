@@ -17,6 +17,7 @@ import { createKernelGitTool } from "./git.js";
 import { createKernelLsTool } from "./ls.js";
 import { PathGuard } from "./paths.js";
 import { createKernelShellTool } from "./shell.js";
+import { CODEMODE_TOOL, SCRIPT_TOOLS } from "./codemode.js";
 import type { KernelToolName } from "./tool-names.js";
 
 export interface ToolContext {
@@ -156,7 +157,8 @@ const gitTool: ToolFactory = (context) =>
     ),
   );
 
-const KERNEL_TOOLS: Record<KernelToolName, ToolFactory> = {
+// `codemode` is pi's own tool, added as an extension (codemode.ts), so it has no factory here.
+const KERNEL_TOOLS: Record<Exclude<KernelToolName, typeof CODEMODE_TOOL>, ToolFactory> = {
   read: readTool,
   ls: lsTool,
   grep: grepTool,
@@ -171,9 +173,14 @@ export { KERNEL_TOOL_NAMES } from "./tool-names.js";
 
 /** Creates the allowlisted tools; unknown names are rejected by job validation first. */
 export function createTools(names: readonly string[], context: ToolContext): ToolDefinition[] {
-  return names.map((name) => {
-    const factory = (KERNEL_TOOLS as Record<string, ToolFactory | undefined>)[name];
-    if (factory === undefined) throw new Error(`unknown tool "${name}"`);
-    return factory(context);
-  });
+  return names
+    // codemode is pi's own tool, added as an extension (codemode.ts): no factory here.
+    .filter((name) => name !== CODEMODE_TOOL)
+    .map((name) => {
+      const factory = (KERNEL_TOOLS as Record<string, ToolFactory | undefined>)[name];
+      if (factory === undefined) throw new Error(`unknown tool "${name}"`);
+      const tool = factory(context);
+      // A codemode script reaches only the read tools: the others are declared to the model, never to a script.
+      return SCRIPT_TOOLS.has(name) ? tool : { ...tool, exposure: "model-only" as const };
+    });
 }
