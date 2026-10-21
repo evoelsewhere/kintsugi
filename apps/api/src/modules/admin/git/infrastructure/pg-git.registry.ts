@@ -23,6 +23,7 @@ import { GitRegistry } from "../domain/git.ports.js";
 const SECRETS: SecretTable = { table: "admin.git_secret", ownerColumn: "server_id" };
 const tokenSecretId = (serverId: string): string => `git-server:${serverId}:token`;
 const keySecretId = (serverId: string): string => `git-server:${serverId}:ssh-key`;
+const githubAppKeySecretId = (serverId: string): string => `git-server:${serverId}:github-app-private-key`;
 
 interface ServerRow {
   id: string;
@@ -32,6 +33,8 @@ interface ServerRow {
   auth_type: GitAuthType;
   username: string | null;
   known_hosts: string | null;
+  github_app_id: string | null;
+  github_installation_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -49,7 +52,7 @@ interface RepositoryRow {
   updated_at: Date;
 }
 
-const SERVER_COLUMNS = "id, kind, name, base_url, auth_type, username, known_hosts, created_at, updated_at";
+const SERVER_COLUMNS = "id, kind, name, base_url, auth_type, username, known_hosts, github_app_id, github_installation_id, created_at, updated_at";
 const REPOSITORY_COLUMNS = "id, server_id, url, default_branch, sync_status, last_commit, last_synced_at, last_error, created_at, updated_at";
 
 @Injectable()
@@ -72,10 +75,14 @@ export class PgGitRegistry extends GitRegistry {
   async createServer(input: RegisterGitServer): Promise<GitServerRecord> {
     await withTransaction(async (client) => {
       await client.query(
-        "insert into admin.git_server (id, kind, name, base_url, auth_type, username, known_hosts) values ($1, $2, $3, $4, $5, $6, $7)",
-        [input.id, input.kind, input.name, input.baseUrl, input.authType, input.username ?? null, input.knownHosts ?? null],
+        `insert into admin.git_server (id, kind, name, base_url, auth_type, username, known_hosts, github_app_id, github_installation_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [input.id, input.kind, input.name, input.baseUrl, input.authType, input.username ?? null, input.knownHosts ?? null, input.githubApp?.appId ?? null, input.githubApp?.installationId ?? null],
       );
       await this.#storeCredential(client, input.id, input.authType, input.credential);
+      if (input.githubApp !== undefined && input.githubApp !== null) {
+        await storeSecret(client, SECRETS, input.id, githubAppKeySecretId(input.id), input.githubApp.privateKey);
+      }
     });
     return (await this.getServer(input.id))!;
   }
@@ -84,13 +91,36 @@ export class PgGitRegistry extends GitRegistry {
     const fresh = input.credential.token !== undefined || input.credential.privateKey !== undefined;
     const updated = await withTransaction(async (client) => {
       const result = await client.query(
-        "update admin.git_server set kind = $2, name = $3, base_url = $4, auth_type = $5, username = $6, known_hosts = $7, updated_at = now() where id = $1",
-        [id, input.kind, input.name, input.baseUrl, input.authType, input.username ?? null, input.knownHosts ?? null],
+        `update admin.git_server set kind = $2, name = $3, base_url = $4, auth_type = $5, username = $6, known_hosts = $7,
+           github_app_id = case when $8 then $9 else github_app_id end,
+           github_installation_id = case when $8 then $10 else github_installation_id end,
+           updated_at = now()
+         where id = $1`,
+        [
+          id,
+          input.kind,
+          input.name,
+          input.baseUrl,
+          input.authType,
+          input.username ?? null,
+          input.knownHosts ?? null,
+          input.githubApp !== undefined,
+          input.githubApp === undefined || input.githubApp === null ? null : input.githubApp.appId,
+          input.githubApp === undefined || input.githubApp === null ? null : input.githubApp.installationId,
+        ],
       );
       if ((result.rowCount ?? 0) === 0) return false;
-      // A new credential replaces the old one entirely; switching to "none" drops it.
-      if (fresh || input.authType === "none") await client.query("delete from admin.git_secret where server_id = $1", [id]);
+      // Git clone credentials and the independent App key share the encrypted table;
+      // replacing one credential family must not erase the other.
+      if (fresh || input.authType === "none") {
+        await client.query("delete from admin.git_secret where server_id = $1 and secret_id = any($2::text[])", [id, [tokenSecretId(id), keySecretId(id)]]);
+      }
       if (fresh) await this.#storeCredential(client, id, input.authType, input.credential);
+      if (input.githubApp === null) {
+        await client.query("delete from admin.git_secret where server_id = $1 and secret_id = $2", [id, githubAppKeySecretId(id)]);
+      } else if (input.githubApp !== undefined) {
+        await storeSecret(client, SECRETS, id, githubAppKeySecretId(id), input.githubApp.privateKey);
+      }
       return true;
     });
     return updated ? this.getServer(id) : undefined;
@@ -176,6 +206,15 @@ export class PgGitRegistry extends GitRegistry {
       ...(row.username === null ? {} : { username: row.username }),
       ...(row.known_hosts === null ? {} : { knownHosts: row.known_hosts }),
       hasCredential: secretId === undefined ? false : await secretExists(this.#pool, SECRETS, secretId),
+      ...(row.github_app_id === null || row.github_installation_id === null
+        ? {}
+        : {
+            githubApp: {
+              appId: row.github_app_id,
+              installationId: row.github_installation_id,
+              hasPrivateKey: await secretExists(this.#pool, SECRETS, githubAppKeySecretId(row.id)),
+            },
+          }),
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
     };

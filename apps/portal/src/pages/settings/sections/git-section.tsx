@@ -77,7 +77,7 @@ export function GitSection(): React.JSX.Element {
       <div>
         <h2 className="text-[15px] font-medium text-text">Git</h2>
         <p className="mt-0.5 text-[12px] text-text-muted">
-          Servers and the repositories Kintsugi clones into its own storage (ADR-0025). Credentials are encrypted and only sent to their own server.
+          Servers and the repositories Kintsugi clones into its own storage (ADR-0025). Clone credentials and GitHub App keys are encrypted and scoped to their server.
         </p>
       </div>
 
@@ -87,7 +87,7 @@ export function GitSection(): React.JSX.Element {
         <CardHeader className="px-4 pt-3">
           <div>
             <CardTitle>Servers</CardTitle>
-            <CardDescription>One credential per server: an access token, or an SSH key with pinned host keys.</CardDescription>
+            <CardDescription>Clone with an access token or pinned SSH key; optionally configure a separate GitHub App for pull-request evidence.</CardDescription>
           </div>
           <Button size="small" variant="solid" onClick={() => setServerDialog({ open: true, server: null })}>
             <Plus className="size-4" />
@@ -110,6 +110,12 @@ export function GitSection(): React.JSX.Element {
                 <StatusDot tone={server.authType === "none" || server.hasCredential ? "green" : "orange"} />
                 {server.authType === "none" ? AUTH_LABEL.none : server.hasCredential ? `${AUTH_LABEL[server.authType]} stored` : `no ${AUTH_LABEL[server.authType]}`}
               </span>
+              {server.githubApp === undefined ? null : (
+                <span className="hidden shrink-0 items-center gap-1.5 text-[12px] text-text-secondary md:inline-flex">
+                  <StatusDot tone={server.githubApp.hasPrivateKey ? "green" : "orange"} />
+                  {server.githubApp.hasPrivateKey ? "PR App stored" : "PR App needs key"}
+                </span>
+              )}
               <div className="flex shrink-0 items-center gap-1">
                 <Button size="small" variant="ghost" onClick={() => setServerDialog({ open: true, server })}>
                   <Settings2 className="size-4" />

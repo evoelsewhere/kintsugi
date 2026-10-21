@@ -6,6 +6,7 @@
 import { GIT_SERVER_KINDS, type GitServerKind } from "@kintsugi/domain";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -13,6 +14,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { GitAuthType, GitServerInput, GitServerView } from "@/lib/api/git";
 import { uniqueId } from "@/lib/ids";
+import { githubAppInputProblem } from "./git-server-dialog-model";
 
 const KIND_LABELS: Record<GitServerKind, string> = {
   github: "GitHub",
@@ -53,8 +55,15 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
   const [token, setToken] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [knownHosts, setKnownHosts] = useState(server?.knownHosts ?? "");
+  const [githubAppEnabled, setGithubAppEnabled] = useState(server?.githubApp !== undefined);
+  const [githubAppId, setGithubAppId] = useState(server?.githubApp?.appId ?? "");
+  const [githubInstallationId, setGithubInstallationId] = useState(server?.githubApp?.installationId ?? "");
+  const [githubAppPrivateKey, setGithubAppPrivateKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const showGithubApp = kind === "github" || kind === "github-enterprise" || server?.githubApp !== undefined;
+  const storedGithubAppKey = server?.githubApp?.hasPrivateKey === true;
+  const canKeepGithubAppKey = storedGithubAppKey && githubAppId.trim() === server?.githubApp?.appId && githubInstallationId.trim() === server?.githubApp?.installationId;
 
   // A stored credential can be kept only for the same auth type.
   const storedCredential = editing && server.hasCredential && server.authType === authType;
@@ -66,6 +75,13 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
     if (authType === "token" && token === "" && !storedCredential) return "Enter the access token.";
     if (authType === "ssh-key" && privateKey === "" && !storedCredential) return "Paste the SSH private key.";
     if (authType === "ssh-key" && knownHosts.trim() === "") return "Pin the server's SSH host keys (known_hosts lines).";
+    const githubApp = githubAppInputProblem({
+      kind,
+      baseUrl,
+      server,
+      draft: { enabled: githubAppEnabled, appId: githubAppId, installationId: githubInstallationId, privateKey: githubAppPrivateKey },
+    });
+    if ("error" in githubApp) return githubApp.error;
     return {
       kind,
       name: name.trim(),
@@ -75,6 +91,7 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
       ...(authType === "token" && token !== "" ? { token } : {}),
       ...(authType === "ssh-key" && privateKey !== "" ? { privateKey } : {}),
       ...(authType === "ssh-key" ? { knownHosts: knownHosts.trim() } : {}),
+      ...githubApp,
     };
   }
 
@@ -98,7 +115,7 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
       open
       size="nested"
       title={editing ? `Configure ${server.id}` : "Add Git server"}
-      description="Kintsugi clones registered repositories into its own storage with this credential. The credential is encrypted and only ever sent to this server's host."
+      description="Kintsugi clones registered repositories with the clone credential. A GitHub App can be configured separately for pull-request evidence; both credentials are encrypted and scoped to this server."
       onClose={onClose}
       footer={
         <>
@@ -162,6 +179,64 @@ function GitServerForm({ server, existingIds, onClose, onSubmit }: GitServerDial
               <Textarea mono rows={3} value={knownHosts} spellCheck={false} placeholder="github.com ssh-ed25519 AAAA…" onChange={(event) => setKnownHosts(event.target.value)} />
             </Field>
           </>
+        ) : null}
+
+        {showGithubApp ? (
+          <section aria-label="GitHub App pull-request access" className="rounded-[var(--geist-radius)] bg-recessed/50 p-3">
+            <div className="flex flex-col gap-1">
+              <Checkbox
+                checked={githubAppEnabled}
+                onChange={setGithubAppEnabled}
+                label="Use a GitHub App for pull-request observation"
+              />
+              <p className="pl-6 text-[12px] leading-4 text-text-muted">
+                Separate from clone authentication. Install the App on each repository with Pull requests: read and Checks: read; Kintsugi requests repository-scoped read tokens.
+              </p>
+              {!githubAppEnabled && server?.githubApp !== undefined ? (
+                <p className="pl-6 text-[12px] leading-4 text-text-muted">The stored App configuration will be removed when you save.</p>
+              ) : null}
+            </div>
+            {githubAppEnabled ? (
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="GitHub App ID">
+                  <Input
+                    value={githubAppId}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={30}
+                    placeholder="123456"
+                    onChange={(event) => setGithubAppId(event.target.value)}
+                  />
+                </Field>
+                <Field label="Installation ID">
+                  <Input
+                    value={githubInstallationId}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={30}
+                    placeholder="987654321"
+                    onChange={(event) => setGithubInstallationId(event.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="App private key"
+                  hint="RSA PEM key. Encrypted by Kintsugi and never shown after saving."
+                  className="sm:col-span-2"
+                >
+                  <Textarea
+                    mono
+                    rows={4}
+                    value={githubAppPrivateKey}
+                    spellCheck={false}
+                    autoComplete="off"
+                    maxLength={16384}
+                    placeholder={canKeepGithubAppKey ? "Stored — leave blank to keep" : "-----BEGIN RSA PRIVATE KEY-----"}
+                    onChange={(event) => setGithubAppPrivateKey(event.target.value)}
+                  />
+                </Field>
+              </div>
+            ) : null}
+          </section>
         ) : null}
 
         {error === null ? null : (
