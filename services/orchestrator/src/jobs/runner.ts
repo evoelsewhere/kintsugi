@@ -29,7 +29,7 @@ import type { AgentResolver } from "./agents.js";
 import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepRecord, stepKey } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
-import { MAX_LISTED_MASKS, type MaskOutcome, maskJobOutput, runJobOutputHook } from "./hook.js";
+import { runJobOutputHook } from "./hook.js";
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
@@ -170,8 +170,7 @@ const RESULT_FILE = "result.json";
 /** Appended to an agent's task when the output checks flagged its files: what to fix, never the offending content. */
 const outputFixNote = (findings: readonly string[]): string =>
   `\n\nThe output checks rejected the files you wrote (rule at path:line, paths relative to the output directory):\n${findings.map((finding) => `- ${finding}`).join("\n")}\n` +
-  "Open each of those files with edit and fix the cited lines. A credential-shaped value (password, key, token, connection string, even in a quoted excerpt) must not appear in any output: " +
-  "name the credential and cite its file:line, with at most a 2-4 character preview followed by ****, and no full value. " +
+  "Open each of those files with edit and fix the cited lines. " +
   "Change only what was flagged, check every other line of those files for the same problem, then stop.";
 
 /** Appended to an agent's task when files it had to write are missing: the exact paths, and what it wrote instead (names only). */
@@ -581,10 +580,9 @@ export class JobRunner {
     };
     await writeMock();
 
-    // The output checks (#finish) are fail-closed. An agent that slipped a credential or a malformed
-    // artifact into its files gets the redacted findings (rule, path, line: never content) and one
-    // chance to fix just those lines, in the out/ it already wrote.
-    const maskedByAgent = await this.#maskCredentials(ws, stepId, run.name);
+    // The output checks (#finish) are fail-closed. An agent that wrote a malformed artifact gets the
+    // findings (rule, path, line: never content) and one chance to fix just those lines, in the out/
+    // it already wrote.
     const flagged = await this.#flaggedOutput(ws);
     if (flagged !== undefined && signal?.aborted !== true) {
       await this.#event(ws, stepId, "log", `output checks flagged ${flagged.length} finding${flagged.length === 1 ? "" : "s"} in the files of ${run.name}: ${flagged.join("; ")}; asking it to fix them once`);
@@ -621,7 +619,7 @@ export class JobRunner {
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
     const files = await listFiles(ws.out);
     return {
-      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary, ...(maskedByAgent.count === 0 ? {} : { maskedCredentials: maskedByAgent.count, maskedCredentialsFirst: maskedByAgent.first }) },
+      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary },
       agent: agentId,
       provenance: new Map(files.filter((entry) => !entry.path.startsWith("restricted/")).map((entry) => [entry.path, provenance])),
       ...(result === undefined ? {} : { result }),
@@ -837,20 +835,6 @@ export class JobRunner {
   }
 
   /**
-   * Masks credential-shaped values in out/ (a preview and `****`) so a stray value in an analysis note
-   * never fails a run; the hook after it stays the fail-closed check for whatever could not be masked.
-   * Logs rule, file and line of each masking, never a value. Returns how many values were masked.
-   */
-  async #maskCredentials(ws: StepWorkspace, stepId: string | undefined, who: string): Promise<MaskOutcome> {
-    const outcome = await maskJobOutput({ outDir: ws.out, cwd: ws.root, tmp: ws.tmp, interpreters: this.#deps.interpreters });
-    if (outcome.count > 0) {
-      const more = outcome.count > 10 ? ` (+${outcome.count - 10} more)` : "";
-      await this.#event(ws, stepId, "log", `masked ${outcome.count} credential-shaped value${outcome.count === 1 ? "" : "s"} in ${outcome.files} file${outcome.files === 1 ? "" : "s"} of ${who}: ${outcome.first.slice(0, 10).join("; ")}${more}`);
-    }
-    return outcome;
-  }
-
-  /**
    * The JobOutput hook's redacted findings (`rule at path:line`) over an agent's out/ so far, or
    * undefined when it is clean or the hook could not report. restricted/ is left to #finish, which
    * stores it before the check.
@@ -864,7 +848,6 @@ export class JobRunner {
   /** restricted/ → encrypted records; the JobOutput hook over out/; the artifact index. */
   async #finish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<Record<string, unknown>> {
     const restricted = await this.#storeRestricted(run, ws);
-    const masked = await this.#maskCredentials(ws, run.id === ws.rootId ? undefined : run.id, run.name);
     const hook = await this.#hook(ws);
     if (!hook.ok) throw new JobFailure(hook.reason ?? "JobOutput hook blocked the output");
     const files = await listFiles(ws.out);
@@ -878,12 +861,6 @@ export class JobRunner {
       files: entries.length,
       bytes: entries.reduce((total, entry) => total + entry.size, 0),
       restrictedFiles: restricted,
-      ...(masked.count === 0 && typeof outcome.summary["maskedCredentials"] !== "number"
-        ? {}
-        : {
-            maskedCredentials: masked.count + (typeof outcome.summary["maskedCredentials"] === "number" ? outcome.summary["maskedCredentials"] : 0),
-            maskedCredentialsFirst: [...(Array.isArray(outcome.summary["maskedCredentialsFirst"]) ? (outcome.summary["maskedCredentialsFirst"] as string[]) : []), ...masked.first].slice(0, MAX_LISTED_MASKS),
-          }),
       jobOutputHook: {
         checkedFiles: hook.checked.files,
         checkedBytes: hook.checked.bytes,

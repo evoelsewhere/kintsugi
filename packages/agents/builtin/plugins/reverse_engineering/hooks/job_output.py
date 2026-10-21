@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Fail-closed credential and artifact checks for a runtime job output tree.
+"""Fail-closed artifact checks for a runtime job output tree.
+
+Credentials are deliberately not checked: Kintsugi runs on managed team/enterprise LLM plans and
+legacy sources legitimately contain credentials the analysis must be able to cite.
 
 Mermaid diagrams (`.mmd` files and mermaid fences in Markdown) are also checked with the
 built-in lint (scripts/mermaid_lint.py); what it finds is reported as non-blocking warnings.
@@ -18,54 +21,28 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 EXIT_CLEAN = 0
-EXIT_CREDENTIALS = 2
 EXIT_MALFORMED = 3
-EXIT_BOTH = 4
 EXIT_INPUT_ERROR = 5
 EXIT_USAGE = 64
 
-MAX_FILE_BYTES = 1_048_576
-MAX_TOTAL_BYTES = 64 * 1_048_576
-MAX_FILES = 10_000
-MAX_DIRECTORIES = 10_000
-MAX_ENTRIES = 20_000
+# Only the files that are validated or linted are read (see _needs_content); everything else, such as the
+# run's scratch JSON, is counted and never opened, so its size cannot fail a job.
+MAX_FILE_BYTES = 16 * 1_048_576
+MAX_TOTAL_BYTES = 256 * 1_048_576
+MAX_FILES = 100_000
+MAX_DIRECTORIES = 100_000
+MAX_ENTRIES = 200_000
 MAX_FINDINGS = 10_000
 MAX_WARNINGS = 1_000
 DIAGRAM_SUFFIXES = (".mmd", ".md")
 MERMAID_LINT = Path(__file__).resolve().parent.parent / "scripts" / "mermaid_lint.py"
 
-PRIVATE_KEY = re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----")
-CLOUD_KEY = re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b", re.IGNORECASE)
-TOKEN = re.compile(
-    r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,}|"
-    r"xox[baprs]-[A-Za-z0-9-]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{20,}|"
-    r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b"
-)
-ASSIGNMENT = re.compile(
-    r"(?i)\b[a-z0-9_-]{0,64}(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|"
-    r"auth[_-]?token|token|client[_-]?secret|credential|secret[_-]?access[_-]?key)"
-    r"\b\s*(?:=|:)\s*[\"']?([^\s\"'`,;]{8,})"
-)
-CONNECTION_URI = re.compile(
-    r"(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|amqp)://"
-    r"[^\s/:@]{1,128}:[^\s/@]{4,256}@"
-)
-BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}")
-ADO_CONNECTION = re.compile(
-    r"(?i)\b(?:server|data source|host)\s*=\s*[^;]{1,128};.{0,512}?"
-    r"(?:user id|uid)\s*=\s*[^;]{1,128};.{0,128}?"
-    r"(?:password|pwd)\s*=\s*[^;]{4,256}"
-)
-PLACEHOLDER = re.compile(
-    r"(?i)^(?:changeme|change-me|example|placeholder|redacted|not-set|"
-    r"your[-_].*|<.*>|\$\{.*\}|\*{3,}|x{3,})$"
-)
 # RULE-NNN estate ids, legacy item-namespaced RULE-<module>.<item>-NN (ADR-0033) and the
 # citation-derived RULE-<module>.<unit>-<hash> ids (ADR-0038).
 RULE_HEADING = re.compile(r"^### RULE-(?:\d{2,}|[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})?-(?:\d{2,}|[0-9a-f]{8}(?:-[a-z0-9][a-z0-9-]{0,31})?)): \S.*$")
 # scripts/render_rules.py writes this line when no rule was confirmed: an empty catalog, not a malformed one.
 NO_RULES_MARKER = "_No business rules were confirmed in this run._"
-RULE_CANDIDATE = re.compile(r"^#{1,6}\s+RULE\b", re.IGNORECASE)
+RULE_CANDIDATE = re.compile(r"^#{1,6}\s+RULE-", re.IGNORECASE)
 
 
 class InputProblem(Exception):
@@ -125,34 +102,9 @@ def _read_bounded(path: Path, expected_size: int) -> bytes:
         os.close(descriptor)
 
 
-def _credential_rules(text: str) -> set[str]:
-    rules: set[str] = set()
-    for line in text.splitlines():
-        if PRIVATE_KEY.search(line):
-            rules.add("private_key")
-        if CLOUD_KEY.search(line):
-            rules.add("cloud_access_key")
-        if TOKEN.search(line):
-            rules.add("token")
-        if BEARER.search(line):
-            rules.add("bearer_token")
-        if CONNECTION_URI.search(line) or ADO_CONNECTION.search(line):
-            rules.add("connection_string")
-        for match in ASSIGNMENT.finditer(line):
-            value = match.group(1).rstrip(".])}")
-            if not PLACEHOLDER.fullmatch(value):
-                rules.add("credential_assignment")
-    return rules
-
-
-def _report_path(path: str) -> str:
-    """Avoid echoing credential-shaped file or directory names in reports."""
-    return "[redacted-path]" if _credential_rules(path) else path
-
-
 def _valid_topology_document(text: str) -> bool:
     """A topology document (scripts/render_topology.py): front matter naming the system, then a Domains table."""
-    lines = text.splitlines()
+    lines = text.lstrip("﻿").splitlines()
     if not lines or lines[0].strip() != "---":
         return False
     try:
@@ -187,6 +139,26 @@ def _diagram_warnings(lint: Any, relative: str, text: str) -> list[tuple[str, in
         return [("diagram_lint_failed", 1)]
 
 
+def _lines_outside_fences(text: str) -> list[tuple[int, str]]:
+    """(line number, line) of every line that is not inside a fenced code block."""
+    kept: list[tuple[int, str]] = []
+    fence = ""
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        marker = line.lstrip()[:3]
+        if marker in ("```", "~~~"):
+            fence = "" if fence == marker else (fence or marker)
+            continue
+        if not fence:
+            kept.append((line_number, line))
+    return kept
+
+
+def _needs_content(relative: str) -> bool:
+    """Whether the hook looks inside this file: the artifacts it validates and the diagrams it lints."""
+    name = relative.rsplit("/", 1)[-1]
+    return name in ("topology.md", "BUSINESS_RULES.md", "rules.md") or relative.lower().endswith(DIAGRAM_SUFFIXES)
+
+
 def _validate_artifact(relative: str, content: bytes) -> list[tuple[str, int]]:
     findings: list[tuple[str, int]] = []
     name = relative.rsplit("/", 1)[-1]
@@ -197,7 +169,7 @@ def _validate_artifact(relative: str, content: bytes) -> list[tuple[str, int]]:
     elif name in ("BUSINESS_RULES.md", "rules.md"):
         headings = [
             (line_number, line)
-            for line_number, line in enumerate(text.splitlines(), start=1)
+            for line_number, line in _lines_outside_fences(text)
             if RULE_CANDIDATE.match(line)
         ]
         if not headings:
@@ -221,7 +193,7 @@ def _scan(root: Path) -> dict[str, Any]:
     checked_bytes = 0
 
     def input_error(relative: str, code: str) -> None:
-        errors.append({"path": _report_path(relative), "code": code})
+        errors.append({"path": relative, "code": code})
 
     def add_finding(finding: dict[str, Any]) -> bool:
         if len(findings) >= MAX_FINDINGS:
@@ -269,7 +241,7 @@ def _scan(root: Path) -> dict[str, Any]:
         for entry in entries:
             path = Path(entry.path)
             relative = path.relative_to(root).as_posix()
-            report_path = _report_path(relative)
+            report_path = relative
             try:
                 info = entry.stat(follow_symlinks=False)
             except OSError:
@@ -289,6 +261,8 @@ def _scan(root: Path) -> dict[str, Any]:
                 input_error(".", "file_count_limit_exceeded")
                 stack.clear()
                 break
+            if not _needs_content(relative):
+                continue
             if info.st_size > MAX_FILE_BYTES:
                 input_error(relative, "file_too_large")
                 continue
@@ -304,24 +278,6 @@ def _scan(root: Path) -> dict[str, Any]:
             checked_bytes += len(content)
             text = content.decode("utf-8", errors="replace")
             finding_limit_reached = False
-            for line_number, line in enumerate(text.splitlines(), start=1):
-                for rule in _credential_rules(line):
-                    if not add_finding(
-                        {
-                            "category": "credential",
-                            "rule": rule,
-                            "path": report_path,
-                            "line": line_number,
-                            "redacted": True,
-                        }
-                    ):
-                        finding_limit_reached = True
-                        break
-                if finding_limit_reached:
-                    break
-            if finding_limit_reached:
-                stack.clear()
-                break
             for rule, line_number in _validate_artifact(relative, content):
                 if not add_finding(
                     {
@@ -353,15 +309,9 @@ def _scan(root: Path) -> dict[str, Any]:
     findings.sort(key=lambda item: (item["path"], item["line"], item["rule"]))
     warnings.sort(key=lambda item: (item["path"], item["line"], item["rule"]))
     errors.sort(key=lambda item: (item["path"], item["code"]))
-    has_credentials = any(item["category"] == "credential" for item in findings)
-    has_malformed = any(item["category"] == "malformed_artifact" for item in findings)
     if errors:
         exit_code = EXIT_INPUT_ERROR
-    elif has_credentials and has_malformed:
-        exit_code = EXIT_BOTH
-    elif has_credentials:
-        exit_code = EXIT_CREDENTIALS
-    elif has_malformed:
+    elif findings:
         exit_code = EXIT_MALFORMED
     else:
         exit_code = EXIT_CLEAN

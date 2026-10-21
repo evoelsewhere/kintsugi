@@ -25,7 +25,7 @@ Layout and conventions: [document repository reference](../../reference/document
 
 The runner never writes to repositories:
 1. A job writes only to the `out` directory of its job workspace.
-2. When the job ends, the **worker** stores `out/restricted/` as restricted records, runs the JobOutput hook (credential scan, artifact checks) and validates the rest: allowed paths, size.
+2. When the job ends, the **worker** stores `out/restricted/` as restricted records, runs the JobOutput hook (artifact checks) and validates the rest: allowed paths, size.
 3. The worker commits to the document repo on `kintsugi/<agent>/<job-id>` and opens a PR. Paths configured as `auto-commit` are committed directly ❓ (D29).
 4. On code repos the runtime only reads and comments on PRs.
 
