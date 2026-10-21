@@ -5,7 +5,7 @@
 // job-runs.test.ts.
 
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -452,6 +452,42 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(retried.run?.status).toBe("succeeded");
     expect(retried.agents.specs).toHaveLength(2);
     expect(retried.agents.specs[1]?.task).toContain('bare path "result.json"');
+  });
+
+  it("keeps no copy of result.json, prefers the root one, and sends a wrongly shaped result back once", async () => {
+    const inventory = { sloc: 2000, fileCount: 3, complexityTotal: 10, maxFileComplexity: 4, dominantLanguage: "C", metricsTool: "inventory.py" };
+    const good = JSON.stringify({ depManifest: "none", depFreshness: "n/a", docCoveragePct: 50, riskNotes: ["fixture"] });
+    const run = async (files: (call: number) => Record<string, string>) => {
+      let call = 0;
+      const { store, runner, agents } = setup({ "legacy-analyst": () => files(call++) }, false);
+      const id = randomUUID();
+      await store.create({ id, projectId: "demo", kind: "workflow", name: "portfolio-assess", sourceRepositoryId: "legacy", inputs: { args: { apps: ["alpha"], inventories: { alpha: inventory } } } });
+      const finished = await runner.run(id);
+      const left = existsSync(storage.job(id).out) ? (readdirSync(storage.job(id).out, { recursive: true }) as string[]).filter((path) => path.endsWith("result.json")) : [];
+      return { run: finished, agents, left, failures: store.children(id).flatMap((child) => (child.failureReason === undefined ? [] : [child.failureReason])) };
+    };
+
+    // Root file and a stray copy in a folder: the root one is the result, and nothing is left behind.
+    const both = await run(() => ({ "result.json": good, "applications/alpha/assessment/result.json": "not json" }));
+    expect(both.run?.status).toBe("succeeded");
+    expect(both.agents.specs).toHaveLength(1);
+    expect(both.left).toEqual([]);
+
+    // A valid file in a folder wins over an invalid root file.
+    const folder = await run(() => ({ "result.json": "{", "applications/alpha/assessment/result.json": good }));
+    expect(folder.run?.status).toBe("succeeded");
+    expect(folder.agents.specs).toHaveLength(1);
+
+    // An empty object lacks the required properties: one repair attempt, which says why.
+    const empty = await run((call) => ({ "result.json": call === 0 ? "{}" : good }));
+    expect(empty.run?.status).toBe("succeeded");
+    expect(empty.agents.specs).toHaveLength(2);
+    expect(empty.agents.specs[1]?.task).toContain("does not match the schema (missing");
+
+    // Still wrong after the repair attempt: the step fails and says what was wrong.
+    const hopeless = await run(() => ({ "result.json": "{}" }));
+    expect(hopeless.agents.specs).toHaveLength(2);
+    expect(hopeless.failures.join(" | ")).toContain("an invalid result.json: result.json does not match the schema");
   });
 
   it("records the run's live events: status, steps and agent tool calls, without file content", async () => {
