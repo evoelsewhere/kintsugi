@@ -1,4 +1,4 @@
-// The kernel git tool (ADR-0039): read-only subcommands anywhere in the workspace, mutating ones
+// The kernel git tool (ADR-0040): read-only subcommands anywhere in the workspace, mutating ones
 // only where the job may write, and no alias/option path to a command or another repository.
 
 import { execFileSync } from "node:child_process";

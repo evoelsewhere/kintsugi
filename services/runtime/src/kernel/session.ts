@@ -16,7 +16,9 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
+import { compactionBudget, stableSessionId } from "./context.js";
 import { composeSystemPrompt } from "./policy.js";
+import { normalizeTools } from "./tool-names.js";
 import { createTools, type ToolContext } from "./tools.js";
 
 type ThinkingLevelOption = NonNullable<NonNullable<Parameters<typeof createAgentSession>[0]>["thinkingLevel"]>;
@@ -47,8 +49,10 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
   const cleanup = (): void => rmSync(agentDir, { recursive: true, force: true });
 
   try {
+    // Compaction starts early enough for the window (context.ts), and cache warming stays off: its extra
+    // requests would bill tokens the job never asked for. Retention comes from the provider (PI_CACHE_RETENTION).
     const settingsManager = SettingsManager.inMemory(
-      { compaction: { enabled: true }, retry: { enabled: true, maxRetries: 2 } },
+      { compaction: { enabled: true, ...compactionBudget(model.contextWindow) }, retry: { enabled: true, maxRetries: 2 }, cacheWarming: "off" },
       { projectTrusted: false },
     );
     const systemPrompt = composeSystemPrompt(spec.agent, spec.workspace);
@@ -67,6 +71,8 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
     });
     await resourceLoader.reload();
 
+    // The same tools in the same order for every job of the agent: tool definitions open the cached prefix.
+    const tools = normalizeTools(spec.agent.tools);
     const toolContext: ToolContext = { cwd, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput };
     const { session } = await createAgentSession({
       cwd,
@@ -75,12 +81,12 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       model,
       thinkingLevel: (spec.model.thinking ?? spec.agent.thinking ?? "off") as ThinkingLevelOption,
       // The allowlist covers built-in, custom and extension tools alike; [] means no tools.
-      tools: [...spec.agent.tools],
-      ...(spec.agent.tools.length === 0 ? { noTools: "all" as const } : {}),
-      customTools: createTools(spec.agent.tools, toolContext),
+      tools,
+      ...(tools.length === 0 ? { noTools: "all" as const } : {}),
+      customTools: createTools(tools, toolContext),
       resourceLoader,
       settingsManager,
-      sessionManager: SessionManager.inMemory(cwd),
+      sessionManager: SessionManager.inMemory(cwd, { id: stableSessionId(spec) }),
     });
 
     return {

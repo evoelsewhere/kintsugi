@@ -17,6 +17,7 @@ import { ProviderIcon } from "@/components/ui/provider-icon";
 import { Select } from "@/components/ui/select";
 import {
   providersApi,
+  type CacheRetention,
   type CreateProviderInput,
   type CustomModelConfig,
   type ProviderView,
@@ -105,6 +106,7 @@ function ProviderForm({ provider, existingIds, onClose, onSubmit }: ProviderForm
   const [supported, setSupported] = useState<SupportedProviders | null>(null);
   const [kind, setKind] = useState<Kind>(provider?.kind ?? "builtin");
   const [enabled, setEnabled] = useState(provider?.enabled ?? true);
+  const [cacheRetention, setCacheRetention] = useState<CacheRetention>(provider?.cacheRetention ?? "short");
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -149,7 +151,7 @@ function ProviderForm({ provider, existingIds, onClose, onSubmit }: ProviderForm
 
   function builtinInput(): CreateProviderInput | ReplaceProviderInput | string {
     if (piProvider === "") return "Choose a provider from the catalog.";
-    const input = { kind: "builtin" as const, piProvider, enabledModels, enabled, ...(apiKey === "" ? {} : { apiKey }) };
+    const input = { kind: "builtin" as const, piProvider, enabledModels, enabled, cacheRetention, ...(apiKey === "" ? {} : { apiKey }) };
     return editing ? input : { ...input, id: generatedId };
   }
 
@@ -246,6 +248,7 @@ function ProviderForm({ provider, existingIds, onClose, onSubmit }: ProviderForm
       models: parsedModels,
       headers: Object.fromEntries(headerEntries),
       enabled,
+      cacheRetention,
       ...(apiKey === "" ? {} : { apiKey }),
     };
     return editing ? input : { ...input, id };
@@ -563,6 +566,17 @@ function ProviderForm({ provider, existingIds, onClose, onSubmit }: ProviderForm
 
         <Field label={provider?.hasApiKey === true ? "API key (stored — leave blank to keep)" : "API key"} hint="Write-only: encrypted at rest and never displayed again.">
           <Input type="password" autoComplete="new-password" value={apiKey} placeholder="••••••••" aria-label="API key" onChange={(event) => setApiKey(event.target.value)} />
+        </Field>
+
+        <Field label="Prompt cache" hint="Short keeps a prompt cached for about 5 minutes, renewed by every use. Long keeps it about an hour (written at a higher price): worth it when jobs of one agent start minutes apart.">
+          <Select
+            value={cacheRetention}
+            options={[
+              { value: "short", label: "Short (about 5 minutes)" },
+              { value: "long", label: "Long (about 1 hour)" },
+            ]}
+            onChange={(value) => setCacheRetention(value as CacheRetention)}
+          />
         </Field>
 
         <Checkbox checked={enabled} onChange={setEnabled} label="Enabled for runtime jobs" />

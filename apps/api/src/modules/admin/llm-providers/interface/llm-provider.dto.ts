@@ -29,6 +29,9 @@ export const customModelSchema = z.object({
   compat: z.record(z.string(), z.boolean()).optional(),
 });
 
+/** How long the provider keeps a prompt cached: short (default, about 5 minutes) or long (about an hour). */
+const cacheRetentionSchema = z.enum(["short", "long"]).optional();
+
 const authFields = {
   /** Write-only credential. Stored encrypted; references travel as { secretId }. */
   apiKey: z.string().min(1).max(8192).optional(),
@@ -43,6 +46,7 @@ const builtinProviderSchema = z.object({
   piProvider: z.string().min(1).max(100),
   modelOverrides: z.record(z.string(), z.unknown()).optional(),
   enabledModels: z.array(z.string().min(1)).optional(),
+  cacheRetention: cacheRetentionSchema,
   enabled: z.boolean().optional(),
   ...authFields,
 });
@@ -61,6 +65,7 @@ const customProviderSchema = z.object({
     })
     .optional(),
   models: z.array(customModelSchema).min(1),
+  cacheRetention: cacheRetentionSchema,
   enabled: z.boolean().optional(),
   ...authFields,
 });

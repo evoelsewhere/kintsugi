@@ -142,7 +142,7 @@ const editTool: ToolFactory = (context) => {
   );
 };
 
-// shell and git run child processes (ADR-0039) through the launcher's runProcess: the job's
+// shell and git run child processes (ADR-0040) through the launcher's runProcess: the job's
 // cleared environment, a wall-clock timeout and kill-tree on timeout or abort.
 const shellTool: ToolFactory = (context) => erase(createKernelShellTool(context.cwd, context.tmpDir));
 

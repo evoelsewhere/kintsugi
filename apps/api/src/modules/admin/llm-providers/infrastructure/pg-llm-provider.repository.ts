@@ -25,6 +25,7 @@ interface StoredConfig {
   piProvider?: string;
   enabledModels?: string[];
   modelOverrides?: Record<string, unknown>;
+  cacheRetention?: "short" | "long";
   api?: string;
   baseUrl?: string;
   headers?: Record<string, string | SecretRef>;

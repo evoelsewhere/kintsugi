@@ -58,7 +58,24 @@ export interface JobSpec {
   metadata?: Record<string, string>;
 }
 
-export type JobFailureReason = "error" | "timeout" | "max-turns" | "budget" | "aborted";
+/** `context-overflow`: the conversation outgrew the model's window and compaction could not recover it. */
+export type JobFailureReason = "error" | "timeout" | "max-turns" | "budget" | "aborted" | "context-overflow";
+
+/**
+ * One settled unit of work inside a job (ADR-0048), shaped by the `pi-telemetry` contract:
+ * `kintsugi.job` (the root), `kintsugi.turn`, `kintsugi.tool`, `kintsugi.compaction`,
+ * `kintsugi.retry`, `kintsugi.codemode` and `kintsugi.mcp`. Attributes are scalars only.
+ */
+export interface JobSpan {
+  id: string;
+  parentId?: string;
+  name: string;
+  startedAt: string;
+  durationMs: number;
+  status: "ok" | "error";
+  error?: string;
+  attributes: Record<string, string | number | boolean>;
+}
 
 export type JobEvent =
   | { type: "job.started"; jobId: string; at: string; runtimeVersion: string; agent: string; metadata?: Record<string, string> }
@@ -66,9 +83,25 @@ export type JobEvent =
   /** Periodic sign of work while the model streams: characters so far per kind and the current turn. */
   | { type: "progress"; jobId: string; turn: number; thinkingChars: number; toolArgsChars: number; textChars: number }
   | { type: "tool.call"; jobId: string; callId: string; tool: string; input: unknown; decision: "allowed" | "blocked"; reason?: string }
-  | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string }
+  | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string; durationMs?: number }
   | { type: "output"; jobId: string; path: string }
-  | { type: "usage"; jobId: string; model: string; inputTokens: number; outputTokens: number; costUsd?: number }
+  /** Totals of the job, summarisation included. Cache tokens are not part of `inputTokens`. */
+  | {
+      type: "usage";
+      jobId: string;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      costUsd?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+      turns?: number;
+      /** Times the conversation was compacted. */
+      compactions?: number;
+      /** The highest share of the model's context window the conversation reached, 0-100. */
+      contextPeakPercent?: number;
+    }
+  | { type: "span"; jobId: string; span: JobSpan }
   | { type: "job.completed"; jobId: string; at: string; summary: string }
   | { type: "job.failed"; jobId: string; at: string; reason: JobFailureReason; error: string };
 
@@ -123,6 +156,13 @@ export interface CustomProviderConfig {
    *  "google-generative-ai", "bedrock-converse-stream", "mistral-conversations". */
   api: string;
   baseUrl: string;
+/**
+ * How long a provider keeps a prompt cached (ADR-0048): `short` (about 5 minutes, renewed by every hit; the
+ * default) or `long` (about an hour; written at a higher price, worth it when jobs of one agent are minutes
+ * apart). pi reads it from `PI_CACHE_RETENTION`, which only knows `long`; there is no way to turn caching off.
+ */
+export type CacheRetention = "short" | "long";
+
   auth: ProviderAuth;
   headers?: Record<string, string | SecretRef>;
   models: CustomModelConfig[];
@@ -132,6 +172,7 @@ export interface CustomModelConfig {
   id: string;
   name?: string;
   input?: ("text" | "image")[];
+  cacheRetention?: CacheRetention;
   reasoning?: boolean;
   contextWindow?: number;
   maxTokens?: number;
@@ -145,6 +186,7 @@ export type LlmProviderConfig = BuiltinProviderConfig | CustomProviderConfig;
 
 /** Which provider/model a runtime agent (by id) uses, optionally per project. */
 export interface AgentModelBinding {
+  cacheRetention?: CacheRetention;
   agent: string;
   projectId?: string; // undefined = installation default
   provider: string; // LlmProviderConfig.id

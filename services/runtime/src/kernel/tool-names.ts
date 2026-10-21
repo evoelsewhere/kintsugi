@@ -5,6 +5,19 @@
 export const KERNEL_TOOL_NAMES = ["read", "ls", "grep", "find", "write", "edit", "shell", "git"] as const;
 export type KernelToolName = (typeof KERNEL_TOOL_NAMES)[number];
 
+/**
+ * The allowlist deduplicated and in the kernel's own order. pi sends tool definitions in registration
+ * order and a provider's prompt cache starts with them: the same tools in a different order are a
+ * different prefix.
+ */
+export function normalizeTools(names: readonly string[]): string[] {
+  const rank = (name: string): number => {
+    const index = (KERNEL_TOOL_NAMES as readonly string[]).indexOf(name);
+    return index === -1 ? KERNEL_TOOL_NAMES.length : index;
+  };
+  return [...new Set(names)].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+
 export function isKernelToolName(name: string): name is KernelToolName {
   return (KERNEL_TOOL_NAMES as readonly string[]).includes(name);
 }
