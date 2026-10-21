@@ -373,3 +373,34 @@ describe("watch authorization", () => {
     expect([process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")]).toEqual(before);
   });
 });
+
+describe("watch EOF lifecycle", () => {
+  it.each([true, false])("resumes clean EOF and exits cleanly with a bounded watch: %s", async (bounded) => {
+    const event = (id: string) => ({ schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id,
+      kind: "task.changed", occurredAt: "2026-10-21T00:00:00Z", metadata: {} });
+    const watch = new AbortController();
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      const id = fetch.mock.calls.length === 1 ? "evt_1" : "evt_2";
+      return new Response(`event: task-event\nid: ${id}\ndata: ${JSON.stringify(event(id))}\n\n`, { headers: { "content-type": "text/event-stream" } });
+    });
+    const state = harness(fetch, { profile: true, token: "TEST-initial-token" });
+    Object.assign(state.deps, { watchSignal: watch.signal });
+    const write = state.deps.stdout.write;
+    state.deps.stdout.write = (output) => {
+      write(output);
+      state.credentials.values.set("work", "TEST-refreshed-token");
+      if (!bounded && JSON.parse(output).id === "evt_2") watch.abort();
+    };
+    const before = [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")];
+    expect(await runCli(["task", "watch", "web/core/invoice", ...(bounded ? ["--limit", "2"] : []), "--json"], state.deps as never)).toBe(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const resumed = fetch.mock.calls[1];
+    expect(new Headers(resumed?.[1]?.headers).get("last-event-id")).toBe("evt_1");
+    expect(new Headers(resumed?.[1]?.headers).get("authorization")).toBe("Bearer TEST-refreshed-token");
+    expect(new URL(String(resumed?.[0])).searchParams.get("afterEventId")).toBe("evt_1");
+    expect(new URL(String(resumed?.[0])).searchParams.get("limit")).toBe(bounded ? "1" : null);
+    expect(state.output().stdout.trim().split("\n").map((line) => JSON.parse(line))).toEqual([event("evt_1"), event("evt_2")]);
+    expect(state.output().stderr).toBe("");
+    expect([process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")]).toEqual(before);
+  });
+});

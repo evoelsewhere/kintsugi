@@ -1,8 +1,8 @@
 # Coding Agent Workflow CLI
 
-Status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. The SSE client, server event replay and `task watch` command are implemented; PR ingestion and workflow continuation are still in progress. Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
+Status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. The SSE client, server event replay, `task watch` and review findings retrieval are implemented; workflow continuation is still in progress. Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
 
-The CLI lets a developer or a shell-enabled coding agent retrieve Kintsugi data. The developer's chosen AI interprets those documents and decides how to answer; the CLI does not call a model or inject text into an already-running AI conversation.
+Authenticate a local profile, generate the package for the chosen AI client, and run the printed native install commands. The installed package configures a local MCP bridge that lets the chosen AI read Kintsugi context. The developer and that AI implement the changes and create a PR using their normal coding tools. The CLI can then retrieve review findings and watch durable task events. It does not call a model, inject text into an already-running conversation, or perform the coding work.
 
 ## Build and run from the workspace
 
@@ -67,6 +67,31 @@ The default project comes from `project use`; `--project` selects one command's 
 
 Lists use cursor pagination; pass `--cursor` to continue and `--limit` to control page size (1–100). Output supports `--format text|json|markdown`; `--json` is an alias. Results go to stdout, errors to stderr. `--no-input` disables prompts. `--output` writes a new file only and refuses to overwrite an existing destination. POSIX exports use mode `0600`; Windows exports remove inherited ACLs and grant the current user modify access.
 
+## Retrieve review findings
+
+```sh
+kintsugi review list --task billing/invoices/tax
+kintsugi review get review_123 --project modernization --json
+```
+
+`review list` reads the authorized current review IDs from task status. `review get` requires an explicit `--project`, even when the profile has a default project. It returns the immutable report's reviewed revisions, currentness, verdict, coverage and findings, including rationale, repair guidance and source citations. Check currentness before acting on an older report. The chosen AI can retrieve the same report through the read-only `review_get` MCP tool and use its own coding tools to make a fix.
+
+## Watch task events
+
+```sh
+kintsugi task watch billing/invoices/tax --profile work
+kintsugi task watch billing/invoices/tax --project modernization --limit 10 --json
+kintsugi task watch billing/invoices/tax --after-event-id evt_123 --json
+```
+
+Watch uses the profile's default project unless `--project` overrides it. It follows continuously when `--limit` is omitted; an explicit limit of 1–1000 counts delivered events across reconnections and exits successfully when reached. Ctrl+C or SIGTERM closes this subscription and exits cleanly. Neither action cancels server-side work.
+
+JSON watch output is newline-delimited JSON: one compact event object per line. Text and Markdown show each event's ID, kind, time, task identity and metadata. Results go to stdout, errors to stderr; heartbeat comments produce no output. Watch runs independently of the ordinary request timeout.
+
+If the server closes a stream before the limit is reached, the client retries from the last delivered event ID, reloads the selected profile's credential and requests only the remaining event count. It also resumes after an interrupted connection. Retries are bounded; if recovery fails, the `NETWORK_ERROR` details include the last cursor as `afterEventId` when one exists. Use that value with `--after-event-id` to resume manually. A stream ending before the requested count does not mean the task completed.
+
+Task events replay over authorized SSE for seven days. An expired, malformed or task-mismatched cursor returns `MEMBER_EVENT_CURSOR_EXPIRED`; fetch current `task status` and start a new watch without the old cursor. The stream rechecks the token, `member.read` permission and Project Access while connected. Watching does not trigger provider reconciliation or workflow continuation.
+
 ## Serve the local MCP bridge
 
 Start a local stdio server for a compatible coding agent:
@@ -81,6 +106,6 @@ Each tool call supplies its own project and task identity. `mcp serve --project`
 
 ## Current limits
 
-`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented, so the local bridge does not advertise `review_get`. Task events replay over authorized SSE for seven days; an expired, malformed or task-mismatched cursor returns `MEMBER_EVENT_CURSOR_EXPIRED`, so fetch current `task status` and start a new watch. The stream rechecks the token, `member.read` permission and Project Access while connected. Watching does not trigger provider reconciliation or workflow continuation. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
+The CLI and its MCP bridge cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository. PR creation and repair stay in the developer's chosen coding tools; human decisions and workflow continuation stay in Kintsugi's authorized workflow.
 
 `doctor` checks the runtime, profile credential availability and an authorized API read. It does not certify support for a Claude Code, Codex or Copilot version; those require native setup and interaction tests.

@@ -86,22 +86,25 @@ describe("compiled CLI process", () => {
 });
 
 describe("compiled task watch", () => {
-  it("streams typed events as NDJSON and closes the HTTP subscription at its limit", async () => {
+  it.each([false, true])("streams NDJSON, resumes server EOF if needed, and closes at its limit; reconnect: %s", async (reconnect) => {
     directory = await mkdtemp(join(tmpdir(), "kintsugi-cli-watch-"));
     const event = (id: string) => ({ schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id,
       kind: "task.activity-ready", occurredAt: "2026-10-21T00:00:00Z", metadata: { activity: "verification" } });
-    let subscribed = false;
+    let subscriptions = 0;
     let closeSubscription!: () => void;
     const subscriptionClosed = new Promise<void>((resolveClosed) => { closeSubscription = resolveClosed; });
     const server = createServer((request, response) => {
-      subscribed = true;
-      expect(request.url).toBe("/api/member/v1/task-events?projectId=shop&unitId=web%2Fcore%2Finvoice&afterEventId=evt_0&limit=2");
-      expect(request.headers["last-event-id"]).toBe("evt_0");
+      subscriptions += 1;
+      const isReplay = subscriptions === 2;
+      expect(request.url).toBe(`/api/member/v1/task-events?projectId=shop&unitId=web%2Fcore%2Finvoice&afterEventId=${isReplay ? "evt_1" : "evt_0"}&limit=${isReplay ? "1" : "2"}`);
+      expect(request.headers["last-event-id"]).toBe(isReplay ? "evt_1" : "evt_0");
       expect(request.headers.authorization).toBe("Bearer TEST-watch-token");
-      response.on("close", closeSubscription);
+      if (!reconnect || isReplay) response.on("close", closeSubscription);
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.write(": heartbeat\n\n");
-      for (const id of ["evt_1", "evt_2"]) response.write(`event: task-event\nid: ${id}\ndata: ${JSON.stringify(event(id))}\n\n`);
+      const ids = reconnect ? [isReplay ? "evt_2" : "evt_1"] : ["evt_1", "evt_2"];
+      for (const id of ids) response.write(`event: task-event\nid: ${id}\ndata: ${JSON.stringify(event(id))}\n\n`);
+      if (reconnect && !isReplay) response.end();
     });
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -118,7 +121,7 @@ describe("compiled task watch", () => {
       expect(result.code).toBe(0);
       expect(result.stderr).toBe("");
       expect(result.stdout.trim().split("\n").map((line) => JSON.parse(line))).toEqual([event("evt_1"), event("evt_2")]);
-      expect(subscribed).toBe(true);
+      expect(subscriptions).toBe(reconnect ? 2 : 1);
       await subscriptionClosed;
     } finally { server.closeAllConnections(); await new Promise<void>((resolveClosed) => server.close(() => resolveClosed())); }
   });

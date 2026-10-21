@@ -1,6 +1,8 @@
 # Use a coding agent on a migration task
 
-> Implementation status: the typed client, read-only CLI, local stdio MCP bridge, generated Coding Agent Workflow packages and server-side event replay are implemented in the unreleased workspace. Native package setup is version-gated. PR ingestion and workflow continuation remain in progress. See the [CLI reference](../reference/coding-agent-cli.md) for exact setup behavior.
+See the [CLI and MCP flow diagram](coding-agent-workflow-flow.html) for the local bridge, read-only context path, PR observation and separate SSE watch channel.
+
+> Implementation status: the typed client, read-only CLI, local stdio MCP bridge, generated Coding Agent Workflow packages, GitHub/GHES PR observation, review findings and server-side event replay are implemented in the unreleased workspace. Native package setup is version-gated. Evidence-bound gate publication and workflow continuation remain in progress. See the [CLI reference](../reference/coding-agent-cli.md) for exact setup behavior.
 
 You work in your chosen AI harness and keep using your existing model subscription. Kintsugi supplies the authorized task and design context, then follows your normal pull request through review and the human gate. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
 
