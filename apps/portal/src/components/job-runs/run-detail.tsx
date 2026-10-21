@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import { type JobRunDetail, jobRunsApi } from "@/lib/api/job-runs";
 import { useAuth } from "@/lib/auth";
 import { formatBytes, formatDuration, shortSha } from "@/lib/format";
+import { telemetryTraceLink } from "@/lib/links";
 import { isActiveStatus } from "@/lib/status";
 import { cacheHitRate, formatCost, formatRate, formatTokens, sumUsage } from "@/lib/telemetry";
 import { useLoader } from "@/lib/use-loader";
@@ -118,6 +119,7 @@ function RunConsole({ run, events, live, version }: { run: JobRunDetail; events:
 
 /** Where the run is: step progress, time, tool calls and the problems so far. */
 function RunSummary({ run, stats, events, now }: { run: JobRunDetail; stats: ReadonlyMap<string, StepStats>; events: number; now: number }): React.JSX.Element {
+  const { can } = useAuth();
   const counts = { succeeded: 0, running: 0, failed: 0, queued: 0, cancelled: 0 } as Record<string, number>;
   for (const step of run.steps) counts[step.status] = (counts[step.status] ?? 0) + 1;
   const total = run.steps.length;
@@ -157,12 +159,19 @@ function RunSummary({ run, stats, events, now }: { run: JobRunDetail; stats: Rea
         <Figure label="Log lines" value={events} />
       </dl>
       {usage === undefined ? null : (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-          <Figure label="Tokens" value={usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens} display={formatTokens(usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens)} hint={`new in ${formatTokens(usage.inputTokens)} · out ${formatTokens(usage.outputTokens)}`} />
-          <Figure label="Read from cache" value={usage.cacheReadTokens} display={formatRate(cacheHitRate(usage))} hint={`${formatTokens(usage.cacheReadTokens)} tokens`} />
-          <Figure label="Compactions" value={usage.compactions} />
-          <Figure label="Cost" value={usage.costUsd} display={formatCost(usage.costUsd)} />
-        </dl>
+        <>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+            <Figure label="Tokens" value={usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens} display={formatTokens(usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens)} hint={`new in ${formatTokens(usage.inputTokens)} · out ${formatTokens(usage.outputTokens)}`} />
+            <Figure label="Read from cache" value={usage.cacheReadTokens} display={formatRate(cacheHitRate(usage))} hint={`${formatTokens(usage.cacheReadTokens)} tokens`} />
+            <Figure label="Compactions" value={usage.compactions} />
+            <Figure label="Cost" value={usage.costUsd} display={formatCost(usage.costUsd)} />
+          </dl>
+          {can("telemetry.view") ? (
+            <Link to={telemetryTraceLink({ runId: run.id })} className="w-fit text-[12px] text-text-secondary underline-offset-2 hover:text-text hover:underline">
+              View the trace in Governance → Telemetry
+            </Link>
+          ) : null}
+        </>
       )}
     </div>
   );

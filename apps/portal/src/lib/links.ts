@@ -34,6 +34,11 @@ export function projectLink(projectId: string): string {
 
 export type GovernanceTab = "gates" | "audit" | "restricted" | "telemetry" | "permissions";
 
+/** The trace of one agent attempt in Governance → Telemetry. */
+export function telemetryTraceLink(run: { runId: string; stepRunId?: string | null; attempt?: number }): string {
+  return `/governance${query({ tab: "telemetry", trace: run.runId, step: run.stepRunId ?? undefined, attempt: run.attempt === undefined ? undefined : String(run.attempt) })}`;
+}
+
 /** Governance on a tab; for gates, optionally filtered by status. */
 export function governanceLink(tab: GovernanceTab, status?: string): string {
   return `/governance${query({ tab, status })}`;
