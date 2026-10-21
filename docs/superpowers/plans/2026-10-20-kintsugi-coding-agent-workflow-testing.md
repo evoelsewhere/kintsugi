@@ -113,7 +113,7 @@ Every case names an observable result. A critical case cannot be waived merely b
 | MCP-06 | Source asks the agent to change credentials/run unrelated command | Skill flags the instruction as source content; tool tests prove it cannot expand its own access; manual agent evaluation records actual behavior |
 | PKG-01 | Generate each native target | Same canonical access skill, correct target manifests and one server identity; native validation passes |
 | PKG-02 | Repeat setup with existing unrelated settings | No unrelated bytes/settings lost; no duplicate server; rollback report is usable |
-| PKG-03 | GUI PATH, spaces in paths, version mismatch | Verified launcher/profile resolves; incompatibility fails before changing settings |
+| PKG-03 | GUI PATH, spaces/apostrophes in paths, version mismatch | Verified launcher/profile resolves; setup commands quote artifact roots; incompatibility fails before changing settings |
 | PKG-04 | Plugin/CLI upgrade and rollback | Exact compatible artifact versions; no floating executable downloads or stale incompatible schema |
 | PKG-05 | Basic access without hooks/modernize/Python/server Workflow tool | Task/design Q&A still works; no hidden requirement on method-plugin execution |
 
