@@ -1,6 +1,6 @@
 # Use a coding agent on a migration task
 
-> Implementation status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. Native package setup is version-gated. The CLI SSE consumer and `task watch` command are implemented; server-side event replay and workflow continuation remain in progress. See the [CLI reference](../reference/coding-agent-cli.md) for exact setup behavior.
+> Implementation status: the typed client, read-only CLI, local stdio MCP bridge, generated Coding Agent Workflow packages and server-side event replay are implemented in the unreleased workspace. Native package setup is version-gated. PR ingestion and workflow continuation remain in progress. See the [CLI reference](../reference/coding-agent-cli.md) for exact setup behavior.
 
 You work in your chosen AI harness and keep using your existing model subscription. Kintsugi supplies the authorized task and design context, then follows your normal pull request through review and the human gate. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
 
@@ -62,7 +62,7 @@ You work in your chosen AI harness and keep using your existing model subscripti
 
 6. Complete provider-required human reviews and merge each required code and document deliverable. The unit's effective gate is recorded separately: an authorized human decision is published as a gate-record PR that must merge and validate against the exact delivered revisions. Kintsugi continues the workflow only after that evidence is effective.
 
-The CLI can stream task events and resume from an event ID once the server-side event endpoint is available. The server replay and continuation path is still being completed, so `task watch` is not available against installations that have not released that endpoint.
+The CLI and API stream task events over authorized SSE and resume from the last delivered event ID. The server retains seven days of replay; an older or invalid cursor asks the AI to fetch current task status and start a new watch. The event stream is a view of workflow progress and does not trigger provider reconciliation or continuation. PR ingestion and continuation are still being completed.
 
 ~~~sh
 kintsugi task status billing/invoices/tax --profile work

@@ -1,16 +1,34 @@
 // Versioned, read-only HTTP interface for the local Coding Agent Workflow client.
 
-import { Controller, createParamDecorator, Get, type ExecutionContext, Param, Query, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Controller,
+  createParamDecorator,
+  ForbiddenException,
+  Get,
+  type ExecutionContext,
+  HttpException,
+  Param,
+  Query,
+  Req,
+  Res,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { Request, Response } from "express";
 import { AllowMemberRead, RequirePermission } from "#common/auth/decorators.js";
+import { bearerToken } from "#common/auth/session-cookie.js";
+import { openEventStream } from "#common/interface/sse.js";
 import type { AuthenticatedRequest, MemberPrincipal } from "#modules/core/auth/index.js";
 import { AgentContextService } from "../application/agent-context.service.js";
+import { MemberEventService } from "../application/member-event.service.js";
 import {
   documentQuerySchema,
   documentSearchQuerySchema,
   projectQuerySchema,
   reviewQuerySchema,
   taskBriefQuerySchema,
+  taskEventQuerySchema,
   taskQuerySchema,
   taskStatusQuerySchema,
   type DocumentQuery,
@@ -19,6 +37,7 @@ import {
   type ReviewQuery,
   type TaskBriefQuery,
   type TaskIdentity,
+  type TaskEventQuery,
   type TaskQuery,
 } from "./agent-context.dto.js";
 
@@ -31,7 +50,10 @@ const CurrentMemberPrincipal = createParamDecorator((_data: unknown, context: Ex
 @ApiTags("Coding Agent Workflow")
 @Controller("member/v1")
 export class AgentContextController {
-  constructor(private readonly context: AgentContextService) {}
+  constructor(
+    private readonly context: AgentContextService,
+    private readonly events: MemberEventService,
+  ) {}
 
   @Get("projects")
   @RequirePermission("member.read")
@@ -99,6 +121,35 @@ export class AgentContextController {
     return this.context.taskStatus(principal, query);
   }
 
+  @Get("task-events")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "Watch retained task events and resume from Last-Event-ID" })
+  async taskEvents(
+    @CurrentMemberPrincipal() principal: MemberPrincipal,
+    @Query({ schema: taskEventQuerySchema }) query: TaskEventQuery,
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    const lastEventHeader = request.headers["last-event-id"];
+    if (Array.isArray(lastEventHeader)) throw new BadRequestException("Last-Event-ID must be a single event id");
+    const token = bearerToken(request);
+    if (token === undefined) throw new UnauthorizedException("A Coding Agent Workflow bearer token is required");
+
+    // Prepare before writing headers so an expired or out-of-scope cursor is a normal 409 envelope.
+    const prepared = await this.events.prepare(principal, query, lastEventHeader);
+    const stream = openEventStream(request, response);
+    try {
+      for await (const event of this.events.follow(prepared, token, stream.signal)) {
+        stream.send("task-event", event, event.id);
+      }
+    } catch (error) {
+      if (!stream.signal.aborted) stream.send("error", memberEventStreamError(error));
+    } finally {
+      stream.close();
+    }
+  }
+
   @Get("reviews/:reviewId")
   @RequirePermission("member.read")
   @AllowMemberRead({ projectIdFrom: "query" })
@@ -110,4 +161,17 @@ export class AgentContextController {
   ) {
     return this.context.getReview(principal, { ...query, reviewId });
   }
+}
+
+function memberEventStreamError(error: unknown): { code: string; message: string } {
+  if (error instanceof UnauthorizedException) {
+    return { code: "MEMBER_EVENT_UNAUTHENTICATED", message: "The Coding Agent Workflow token expired or was revoked. Authenticate again." };
+  }
+  if (error instanceof ForbiddenException) {
+    return { code: "MEMBER_EVENT_ACCESS_REVOKED", message: "Member read access or Project Access was revoked. Fetch task_status after access is restored." };
+  }
+  if (error instanceof HttpException && error.getStatus() === 409) {
+    return { code: "MEMBER_EVENT_CURSOR_EXPIRED", message: "The task event cursor is no longer available; fetch task_status and start a new watch." };
+  }
+  return { code: "MEMBER_EVENT_STREAM_FAILED", message: "The task event stream failed. Fetch task_status before reconnecting." };
 }

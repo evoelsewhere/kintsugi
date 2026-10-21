@@ -30,5 +30,6 @@ import { MemberTokensController } from "./interface/member-tokens.controller.js"
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
+  exports: [AuthService, MemberTokenService],
 })
 export class AuthModule {}

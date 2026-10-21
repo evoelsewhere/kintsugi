@@ -33,6 +33,7 @@ import { triggerRebuilds } from "./aggregates.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
 import { GitSnapshotPins, pruneExpiredSnapshots, recoverStaleSnapshots, retainSnapshot } from "./git-sync/retention.js";
 import { PostgresSnapshotRetentionRepository } from "./git-sync/retention-store.js";
+import { pruneMemberEvents } from "./member-event-retention.js";
 import { PostgresProviderSyncStore } from "./provider-sync/inbox.js";
 import { discoverChanges } from "./provider-sync/reconcile.js";
 import { materializeReviewInput } from "./member-reviews/inputs.js";
@@ -94,6 +95,8 @@ export interface WorkerOptions {
   outboxScanSeconds?: number;
   /** Seconds between snapshot pin expiry sweeps (default: hourly). */
   snapshotCleanupSeconds?: number;
+  /** Seconds between physical cleanup of expired task event replay rows (default: hourly). */
+  memberEventCleanupSeconds?: number;
   /** Seconds between recovery scans for exhausted snapshot retention jobs (default: 60). */
   snapshotRecoverySeconds?: number;
   /** Runtime jobs (queue `job-run`); omitted = this worker runs no jobs. */
@@ -416,6 +419,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
     if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
   });
+  const pruneMemberEventLog = tick("member event cleanup", async () => {
+    const removed = await pruneMemberEvents(options.pool);
+    if (removed > 0) log(`removed ${removed} expired member event(s)`);
+  });
   const timers = [
     setInterval(() => void scanPending(), (options.pendingScanSeconds ?? 5) * 1000),
     setInterval(() => void syncProviderChanges(), (options.providerSyncScanSeconds ?? 1) * 1000),
@@ -429,6 +436,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
     setInterval(() => void dispatchMemberOutbox(), (options.outboxScanSeconds ?? 1) * 1000),
     setInterval(() => void pruneSnapshots(), (options.snapshotCleanupSeconds ?? 60 * 60) * 1000),
+    setInterval(() => void pruneMemberEventLog(), (options.memberEventCleanupSeconds ?? 60 * 60) * 1000),
     setInterval(() => void recoverSnapshots(), (options.snapshotRecoverySeconds ?? 60) * 1000),
   ];
   void pollAll();
@@ -440,6 +448,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     void recoverMemberReviews();
   }
   void pruneSnapshots();
+  void pruneMemberEventLog();
   void recoverSnapshots();
   void watchReviews();
 
