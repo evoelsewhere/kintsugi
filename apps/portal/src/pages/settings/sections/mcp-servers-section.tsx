@@ -2,7 +2,7 @@
 // agent opts into by naming them in its tools; header values are write-only. "Test" connects with
 // the stored headers and lists the tools, saying which of them agents can use.
 
-import { PlugZap, Plus, Settings2, Trash2 } from "lucide-react";
+import { Copy, PlugZap, Plus, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,11 +10,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useToast } from "@/components/ui/toast";
 import { mcpServersApi, type McpServerInput, type McpServerView, type McpTestResult } from "@/lib/api/mcp-servers";
+import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { McpServerFormDialog } from "./mcp-server-form-dialog";
 
 export function McpServersSection(): React.JSX.Element {
-  const [servers, setServers] = useState<McpServerView[]>([]);
+  const [servers, setServers] = useState<McpServerView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ open: boolean; server: McpServerView | null }>({ open: false, server: null });
   const [removeTarget, setRemoveTarget] = useState<McpServerView | null>(null);
@@ -49,6 +50,15 @@ export function McpServersSection(): React.JSX.Element {
     await load();
   }
 
+  async function copyEntry(server: McpServerView): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(server.toolEntry);
+      toast.success("Copied", `${server.toolEntry} — paste it into an agent's tools`);
+    } catch {
+      toast.error("Could not copy", server.toolEntry);
+    }
+  }
+
   async function test(server: McpServerView): Promise<void> {
     setTests((previous) => ({ ...previous, [server.id]: "testing" }));
     try {
@@ -59,6 +69,10 @@ export function McpServersSection(): React.JSX.Element {
     }
   }
 
+  const list = servers ?? [];
+  const testable = list.filter((server) => server.enabled);
+  const testing = Object.values(tests).includes("testing");
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-4">
@@ -66,16 +80,26 @@ export function McpServersSection(): React.JSX.Element {
           <h2 className="text-[15px] font-medium text-text">MCP servers</h2>
           <p className="mt-0.5 text-[12px] text-text-muted">HTTP servers the runtime may give to agents that name them in their tools (ADR-0047). Header values are encrypted at rest.</p>
         </div>
-        <Button size="small" variant="solid" onClick={() => setDialog({ open: true, server: null })}>
-          <Plus className="size-4" />
-          Add server
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {testable.length < 2 ? null : (
+            <Button size="small" variant="ghost" disabled={testing} onClick={() => void Promise.all(testable.map((server) => test(server)))}>
+              <PlugZap className="size-4" />
+              Test all
+            </Button>
+          )}
+          <Button size="small" variant="solid" onClick={() => setDialog({ open: true, server: null })}>
+            <Plus className="size-4" />
+            Add server
+          </Button>
+        </div>
       </div>
 
       {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
 
       <Card className="overflow-hidden p-0">
-        {servers.length === 0 ? (
+        {servers === null ? (
+          <p className="px-4 py-8 text-center text-[13px] text-text-muted">{error === null ? "Loading…" : "Could not load the servers."}</p>
+        ) : servers.length === 0 ? (
           <p className="px-4 py-8 text-center text-[13px] text-text-secondary">No MCP servers registered. Add one, then name it in an agent&apos;s tools (for example mcp__tracker__*) so its jobs can use it.</p>
         ) : (
           servers.map((server, index) => {
@@ -90,13 +114,22 @@ export function McpServersSection(): React.JSX.Element {
                     <p className="truncate text-[12px] text-text-muted" title={server.url}>
                       {server.description === undefined ? server.url : `${server.description} · ${server.url}`}
                     </p>
+                    <p className="text-[11.5px] text-text-muted">
+                      Updated {formatDateTime(server.updatedAt)}
+                      {server.updatedBy === undefined ? "" : ` by ${server.updatedBy}`}
+                    </p>
                   </div>
-                  <span className="hidden shrink-0 items-center gap-1.5 text-[12px] text-text-secondary sm:inline-flex">
-                    <StatusDot tone={server.headerNames.length > 0 ? "green" : "muted"} />
+                  <span className="hidden shrink-0 text-[12px] text-text-secondary sm:inline">
                     {server.headerNames.length === 0 ? "no headers" : `${server.headerNames.length} header${server.headerNames.length === 1 ? "" : "s"}`}
                   </span>
-                  {server.enabled ? null : <span className="shrink-0 text-[12px] text-text-muted">disabled</span>}
+                  <span className="inline-flex shrink-0 items-center gap-1.5 text-[12px] text-text-secondary">
+                    <StatusDot tone={server.enabled ? "green" : "muted"} />
+                    {server.enabled ? "enabled" : "disabled"}
+                  </span>
                   <div className="flex shrink-0 items-center gap-1">
+                    <Button size="icon" variant="ghost" aria-label={`Copy ${server.toolEntry}`} title={`Copy ${server.toolEntry} for an agent's tools`} onClick={() => void copyEntry(server)}>
+                      <Copy className="size-4" />
+                    </Button>
                     <Button size="small" variant="ghost" onClick={() => setDialog({ open: true, server })}>
                       <Settings2 className="size-4" />
                       Configure
@@ -138,7 +171,7 @@ export function McpServersSection(): React.JSX.Element {
         )}
       </Card>
 
-      <McpServerFormDialog open={dialog.open} server={dialog.server} existingIds={servers.map((entry) => entry.id)} onClose={() => setDialog({ open: false, server: null })} onSubmit={save} />
+      <McpServerFormDialog open={dialog.open} server={dialog.server} existingIds={list.map((entry) => entry.id)} onClose={() => setDialog({ open: false, server: null })} onSubmit={save} />
       <ConfirmDialog
         open={removeTarget !== null}
         title="Remove MCP server?"
