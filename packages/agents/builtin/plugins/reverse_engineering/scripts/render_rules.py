@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Render the extract-rules workflow's result into BUSINESS_RULES.md and DATA_OBJECTS.md.
+"""Render the extract-rules workflow's result into BUSINESS_RULES.md, one file per rule, and DATA_OBJECTS.md.
 
-    python3 render_rules.py <app> --out DIR [--assessment DIR] [--result FILE]
+    python3 render_rules.py <app> --out DIR --assessment DIR [--date YYYY-MM-DD] [--source-commit SHA]
 
 Reads rules_result.json (the object the workflow returned, saved by the orchestrator: --result,
 else <assessment>/rules_result.json, where --assessment is the folder holding it: the document
 repository's applications/<app>/assessment/understand/ folder) and writes BUSINESS_RULES.md and
 DATA_OBJECTS.md to --out (the step's
-output folder; a member may give the application's generated/ folder itself). Rules are
-numbered RULE-001, RULE-002, ... in the order they appear (by category, then priority) and the heading is always
-`### RULE-NNN: <name>`, the pattern later stages and the portal look for. Every value comes
-from analysis of untrusted code, so it is written as plain text on one line where it is
-a heading or a table cell. Standard library only.
+output folder; a member may give the application's generated/ folder itself). BUSINESS_RULES.md is
+the index: a table of the rules with their version and a link to each rule's own file
+(rules/RULE-NNN.md, see rule_docs.py), then the lists that belong to the whole run (SME questions,
+instruction-shaped content, folded rules, coverage gaps). Rules are numbered RULE-001, RULE-002, ...
+in the order they appear (by category, then priority). Every value comes from analysis of
+untrusted code, so it is written as plain text on one line where it is a heading or a table cell.
+Standard library only.
 """
 import argparse
 import json
@@ -31,7 +33,7 @@ class DataError(ValueError):
     """Invalid or unsafe workflow result."""
 
 
-# Written when no rule was confirmed; hooks/job_output.py accepts a BUSINESS_RULES.md without rule headings only with this line.
+# Written when no rule was confirmed; hooks/job_output.py accepts a rules index without rows only with this line.
 NO_RULES_MARKER = '_No business rules were confirmed in this run._'
 
 
@@ -81,35 +83,6 @@ def block(value):
     return '\n'.join(lines).strip()
 
 
-def render_rule(number, rule, rid=None):
-    rid = rid or f'RULE-{number:03d}'
-    source, also = split_citation(rule.get('source'))
-    out = [f"### {rid}: {one_line(rule.get('name'), 120)}",
-           f"**Category:** {one_line(rule.get('category'), 20)}",
-           f"**Priority:** {one_line(rule.get('priority'), 4)}",
-           f"**Source:** `{source.replace(chr(39), '')}`"]
-    if also:
-        out.append(f'**Also cited:** {also}')
-    out += [f"**Plain English:** {one_line(rule.get('plainEnglish'), 400)}",
-           '**Specification:**',
-           f"  Given {block(rule.get('given'))}",
-           f"  When  {block(rule.get('when'))}",
-           f"  Then  {block(rule.get('then'))}"]
-    if rule.get('and'):
-        out.append(f"  And   {block(rule['and'])}")
-    if rule.get('parameters'):
-        out.append(f"**Parameters:** {block(rule['parameters'])}")
-    cases = rule.get('edgeCases') or []
-    if cases:
-        out.append('**Edge cases handled:** ' + '; '.join(one_line(c, 200) for c in cases))
-    if rule.get('suspectedDefect'):
-        out.append(f"**Suspected defect:** {block(rule['suspectedDefect'])}")
-    confidence = one_line(rule.get('confidence'), 10)
-    question = rule.get('smeQuestion')
-    out.append(f"**Confidence:** {confidence}" + (f" — {one_line(question, 400)}" if question and confidence != 'High' else ''))
-    return rid, '\n'.join(out)
-
-
 def validate_result(result):
     if not isinstance(result, dict):
         raise DataError('rules_result.json must contain a JSON object')
@@ -127,12 +100,25 @@ def validate_result(result):
         for field in ('category', 'priority', 'source'):
             if rule.get(field) is not None and not isinstance(rule[field], str):
                 raise DataError(f'confirmed rule field {field} must be a string')
-        for field in ('edgeCases', 'alsoCited'):
+        for field in ('edgeCases', 'alsoCited', 'inputs', 'reads', 'writes', 'outputs', 'errors', 'dataObjects', 'config', 'tags', 'evidence', 'acceptance'):
             if rule.get(field) is not None and not isinstance(rule[field], list):
                 raise DataError(f'confirmed rule field {field} must be an array')
-        for field in ('edgeCases', 'alsoCited'):
+        for field in ('alsoCited', 'inputs', 'reads', 'writes', 'outputs', 'errors', 'dataObjects', 'config', 'tags'):
             if any(not isinstance(item, str) for item in (rule.get(field) or [])):
                 raise DataError(f'confirmed rule field {field} must contain strings')
+        for field in ('evidence', 'acceptance'):
+            if any(not isinstance(item, dict) for item in (rule.get(field) or [])):
+                raise DataError(f'confirmed rule field {field} must contain objects')
+        if any(not isinstance(item, (str, dict)) for item in (rule.get('edgeCases') or [])):
+            raise DataError('confirmed rule field edgeCases must contain strings or objects')
+        if rule.get('parameters') is not None and not isinstance(rule['parameters'], (str, list)):
+            raise DataError('confirmed rule field parameters must be a string or an array')
+        if any(not isinstance(item, dict) for item in (rule['parameters'] if isinstance(rule.get('parameters'), list) else [])):
+            raise DataError('confirmed rule field parameters must contain objects')
+        if rule.get('decisionTable') is not None and not (isinstance(rule['decisionTable'], dict) and isinstance(rule['decisionTable'].get('headers', []), list) and isinstance(rule['decisionTable'].get('rows', []), list)):
+            raise DataError('confirmed rule field decisionTable must be {headers, rows}')
+        if rule.get('flow') is not None and not isinstance(rule['flow'], str):
+            raise DataError('confirmed rule field flow must be a string')
     if any(not isinstance(item, str) for item in (result.get('injectionFlags') or [])):
         raise DataError('rules_result.json field injectionFlags must contain strings')
     # The extract-rules workflow returns the gap list ready to be passed back as `modules`: entries
@@ -162,29 +148,6 @@ def validate_result(result):
     return result
 
 
-def render_unit_rules(app, item_id, rules):
-    """The rules.md of one unit (ADR-0042): front matter, the table of its rules and one card per rule,
-    grouped by category. Same cards as BUSINESS_RULES.md, under the unit's stable ids."""
-    ordered = sorted(rules, key=lambda r: (CATEGORIES.index(r['category']) if r.get('category') in CATEGORIES else 9, str(r.get('name')), str(r.get('source'))))
-    doc = [docmd.front_matter({'app': app, 'item': item_id, 'generatedBy': 'split_rules.py', 'rules': len(ordered), 'p0': sum(1 for r in ordered if r.get('priority') == 'P0')}),
-           f'# Business rules - {one_line(item_id, 100)}', '',
-           '| ID | Name | Category | Priority | Source | Confidence |', '|---|---|---|---|---|---|']
-    for rule in ordered:
-        doc.append(f"| {rule['id']} | {one_line(rule.get('name'), 80)} | {one_line(rule.get('category'), 20)} | {one_line(rule.get('priority'), 4)} | "
-                   f"`{split_citation(rule.get('source'))[0][:80].replace(chr(39), '')}` | {one_line(rule.get('confidence'), 10)} |")
-    doc.append('')
-    if not ordered:
-        doc += [NO_RULES_MARKER, '']
-    for category in CATEGORIES + [None]:
-        group = [r for r in ordered if (r.get('category') if r.get('category') in CATEGORIES else None) == category]
-        if not group:
-            continue
-        doc += [f"## {category or 'Other'}", '']
-        for rule in group:
-            doc += [render_rule(0, rule, rid=rule['id'])[1], '']
-    return '\n'.join(doc).rstrip() + '\n'
-
-
 def render_unit_data_objects(app, item_id, objects):
     """The data-objects.md of one unit: front matter and one section per object, as DATA_OBJECTS.md has them."""
     doc = [docmd.front_matter({'app': app, 'item': item_id, 'generatedBy': 'split_rules.py', 'dataObjects': len(objects)}), f'# Data objects - {one_line(item_id, 100)}', '']
@@ -203,18 +166,8 @@ def render_unit_data_objects(app, item_id, objects):
 
 
 def unit_rule_rows(text):
-    """The table rows of a unit's rules.md as dicts keyed by the lower-cased header."""
+    """The rows of the rules table of a unit's rules.md as dicts keyed by the lower-cased header."""
     return docmd.records_in(docmd.split_front_matter(text)[1])
-
-
-def unit_rule_cards(text):
-    """[(rule id, card text)] of a unit's rules.md: every `### RULE-...` section with its heading."""
-    cards = []
-    for title, body in docmd.sections(docmd.split_front_matter(text)[1], 3):
-        rule_id = title.split(': ', 1)[0].strip()
-        if rule_id.startswith('RULE-'):
-            cards.append((rule_id, f'### {title}\n{body}'.rstrip()))
-    return cards
 
 
 def write_text(root, name, text):
@@ -232,10 +185,12 @@ def write_text(root, name, text):
 
 
 def main(argv):
-    ap = argparse.ArgumentParser(description="Render the extract-rules workflow's result into BUSINESS_RULES.md and DATA_OBJECTS.md.")
+    ap = argparse.ArgumentParser(description="Render the extract-rules workflow's result into BUSINESS_RULES.md, one file per rule, and DATA_OBJECTS.md.")
     ap.add_argument('app', help='the application id from kintsugi.yaml (used in the headings)')
     ap.add_argument('--assessment', required=True, help='the applications/<app>/assessment/understand/ folder of the document repository (rules_result.json is read from it)')
-    ap.add_argument('--out', required=True, help='the folder BUSINESS_RULES.md and DATA_OBJECTS.md are written to')
+    ap.add_argument('--out', required=True, help='the folder BUSINESS_RULES.md, rules/ and DATA_OBJECTS.md are written to')
+    ap.add_argument('--date', default='', help='the date written in the version history (default: today, UTC)')
+    ap.add_argument('--source-commit', default='', help='the commit of the analysed source, written in the version history')
     args = ap.parse_args(argv[1:])
     if not args.assessment.strip() or not args.out.strip():
         print('render_rules.py: --assessment and --out must be non-empty explicit paths', file=sys.stderr)
@@ -270,30 +225,29 @@ def main(argv):
                    key=lambda r: (CATEGORIES.index(r['category']) if r.get('category') in CATEGORIES else 9,
                                   PRIORITY.get(r.get('priority'), 1),
                                   str(r.get('source'))))
-    numbered = [(i + 1, r) for i, r in enumerate(rules)]
-    rendered = {n: render_rule(n, r) for n, r in numbered}
+    import datetime
+    import rule_docs  # noqa: E402 - imports this module, so it is loaded here
+    date = args.date or datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
+    numbered = [(i + 1, {**r, 'id': f'RULE-{i + 1:03d}'}) for i, r in enumerate(rules)]
     stats = result.get('stats') or {}
+    rule_files = {}
+    rows = []
+    for _, r in numbered:
+        history = [[1, date, 'Rule extracted', args.source_commit]]
+        rule_files[f"rules/{rule_docs.file_name(r['id'])}"] = rule_docs.render_rule_file(system, None, r, 1, history, commit=args.source_commit)
+        rows.append(rule_docs.index_row(r['id'], r.get('name'), r.get('category'), r.get('priority'), r.get('confidence'), 1, rule_docs.status_of(r), split_citation(r.get('source'))[0], f"rules/{rule_docs.file_name(r['id'])}"))
 
-    doc = [f'# Business Rules — {one_line(system, 80)}', '',
+    doc = [docmd.front_matter({'app': system, 'generatedBy': 'render_rules.py', 'catalogVersion': 1, 'rules': len(rules), 'p0': sum(1 for r in rules if r.get('priority') == 'P0')}),
+           f'# Business Rules — {one_line(system, 80)}', '',
            f"At extraction: {len(rules)} confirmed rules ({sum(1 for r in rules if r.get('priority') == 'P0')} P0); "
-           f"later steps may add or correct rules below. "
+           f"later steps may add or correct rules in their files. "
            f"Each citation was checked by a second agent that read the cited lines; "
-           f"{len(result.get('rejectedRules') or [])} candidate rules were refuted and left out.", '',
-           '| ID | Name | Category | Priority | Source | Confidence |', '|---|---|---|---|---|---|']
-    for n, r in numbered:
-        doc.append(f"| RULE-{n:03d} | {one_line(r.get('name'), 80)} | {one_line(r.get('category'), 20)} | "
-                   f"{one_line(r.get('priority'), 4)} | `{split_citation(r.get('source'))[0][:80].replace(chr(39), '')}` | {one_line(r.get('confidence'), 10)} |")
-    doc.append('')
+           f"{len(result.get('rejectedRules') or [])} candidate rules were refuted and left out. "
+           f"Each row links to the rule's own file, which holds the specification, evidence and version history.", '',
+           docmd.table(rule_docs.INDEX_HEADERS, rows).rstrip('\n'), '']
     if not numbered:
         # An empty catalog is a real outcome (a tiny or rule-free estate); say so in a line the JobOutput hook accepts.
         doc += [NO_RULES_MARKER, '']
-    for category in CATEGORIES + [None]:
-        group = [n for n, r in numbered if (r.get('category') if r.get('category') in CATEGORIES else None) == category]
-        if not group:
-            continue
-        doc += [f"## {category or 'Other'}", '']
-        for n in group:
-            doc += [rendered[n][1], '']
     sme = [(n, r) for n, r in numbered if r.get('confidence') != 'High']
     doc += ['## Rules requiring SME confirmation', '']
     if sme:
@@ -352,6 +306,8 @@ def main(argv):
             dto += ['', 'Used by: ' + ', '.join(one_line(u, 80) for u in used)]
         dto.append('')
     try:
+        for relative, text in rule_files.items():
+            write_text(os.path.join(base, 'rules'), relative.split('/', 1)[1], text)
         write_text(base, 'BUSINESS_RULES.md', business_rules)
         write_text(base, 'DATA_OBJECTS.md', '\n'.join(dto).rstrip() + '\n')
     except (DataError, OSError) as error:

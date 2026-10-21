@@ -9,7 +9,8 @@ One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-sub
 | `unit.md` | the unit state (frontmatter) and gate references | the `understand` job proposes it; state changes go through the Kintsugi API; auto-committed |
 | `understanding/as-is.md` | the P1 AS-IS specification of the unit | the `understand` job |
 | `understanding/understanding.md` | the provenance record: digest, source commit, run (`status: understood`) | the `understand` job |
-| `understanding/rules.md` | the P1 machine rule extraction: a table and a card per rule | the extract-rules step of `understand` |
+| `understanding/rules.md` | the index of the unit's rules: id, name, category, priority, confidence, version, status, source and a link to each rule's file | the extract-rules step of `understand` |
+| `understanding/rules/<rule id>.md` | one rule: specification, evidence, edge cases, open questions, acceptance scenarios, version history | the extract-rules step of `understand` |
 | `understanding/data-objects.md` | the data objects of the unit | the extract-rules step of `understand` |
 | `understanding/rules-review.md` | the P1 human rule verdicts (a table) | the unit's reviewer, through a pull request |
 | `understanding/findings.md` | security findings: scorecard, table, a card per finding | the security step of `understand` |
@@ -20,7 +21,7 @@ One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-sub
 | `reviews/G4.md` | the unit's G4 gate record | the unit's reviewer, through a pull request |
 | `verify/` | P5 golden cases (`golden/`) and run evidence (`runs/<run-id>/`) | the member harness's verification plugin |
 
-Format samples for `unit.md`, `rules.md`, `rules-review.md`, `trace.md` and `reviews/G4.md` live in `templates/document-repo/applications/billing-web/units/_example.example/`; they teach the formats and are not loaded.
+Format samples for `unit.md`, `rules.md`, `rules/<rule id>.md`, `rules-review.md`, `trace.md` and `reviews/G4.md` live in `templates/document-repo/applications/billing-web/units/_example.example/`; they teach the formats and are not loaded.
 
 ## `unit.md` frontmatter
 
@@ -46,9 +47,9 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 
-## `rules.md` and `rules-review.md`
+## `rules.md`, `rules/<rule id>.md` and `rules-review.md`
 
-`rules.md` is machine output and the extraction source of truth: a table of the rules and one card per rule (`### RULE-<module>.<unit>-<hash>: name`, the fields of the rule card). Its rule ids are deterministic and citation-derived — each rule carries the source citation it was derived from — so they stay stable across re-extractions. Human rule verdicts live separately in `rules-review.md`, a table keyed by rule id:
+`rules.md` is the **index** of the unit's rules and `rules/<rule id>.md` holds each rule ([ADR-0046](../decisions/0046-one-file-per-business-rule.md)); both are machine output and the extraction source of truth. The index is a table (`ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file`) plus a table of retired rules; the rule file has front matter and the sections of the rule (summary, Given/When/Then, and, where the analysis has evidence, decision table, parameters, inputs and outputs, evidence, edge cases, open questions, acceptance scenarios) and its version history. Rule ids are deterministic and citation-derived — each rule carries the source citation it was derived from — so they stay stable across re-extractions. A rule keeps its version while its content (`digest`) is unchanged, gets the next version when it changes, and becomes a `retired` file when a later extraction no longer finds it. Human rule verdicts live separately in `rules-review.md`, a table keyed by rule id:
 
 ```markdown
 | Rule | Verdict | Approver | Date |

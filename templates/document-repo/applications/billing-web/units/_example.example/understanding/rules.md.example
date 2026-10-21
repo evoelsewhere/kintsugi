@@ -2,39 +2,16 @@
 app: "billing-web"
 item: "invoices/invoice-search"
 generatedBy: "split_rules.py"
+catalogVersion: 1
 rules: 2
 p0: 1
 ---
+
 # Business rules - invoices/invoice-search
 
-| ID | Name | Category | Priority | Source | Confidence |
-|---|---|---|---|---|---|
-| RULE-invoices.invoice-search-1a2b3c4d | Invoice amount includes tax | Calculation | P0 | `src/INVOICE.cbl:200-212` | High |
-| RULE-invoices.invoice-search-5e6f7a8b | Invoice search matches customer, date range and status | Policy | P1 | `src/INVOICE.cbl:340-388` | Medium |
+Each row links to the rule's own file, which holds the specification, evidence and version history.
 
-## Calculation
-
-### RULE-invoices.invoice-search-1a2b3c4d: Invoice amount includes tax
-**Category:** Calculation
-**Priority:** P0
-**Source:** `src/INVOICE.cbl:200-212`
-**Plain English:** The amount shown on an invoice is the net amount plus tax.
-**Specification:**
-  Given an invoice with a net amount and a tax rate
-  When  the invoice is displayed
-  Then  the gross amount is the net amount plus tax
-**Confidence:** High
-
-## Policy
-
-### RULE-invoices.invoice-search-5e6f7a8b: Invoice search matches customer, date range and status
-**Category:** Policy
-**Priority:** P1
-**Source:** `src/INVOICE.cbl:340-388`
-**Also cited:** Invoices/Search.aspx.cs:22-57
-**Plain English:** A search returns invoices that match every filter given.
-**Specification:**
-  Given a customer, a date range and a status
-  When  a person searches
-  Then  only invoices matching all three are listed
-**Confidence:** Medium — Is an empty status "any" or "none"?
+| ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RULE-invoices.invoice-search-1a2b3c4d | Invoice amount includes tax | Calculation | P0 | High | 1 | confirmed | `src/INVOICE.cbl:200-212` | [RULE-invoices.invoice-search-1a2b3c4d](rules/RULE-invoices.invoice-search-1a2b3c4d.md) |
+| RULE-invoices.invoice-search-5e6f7a8b | Invoice search matches customer, date range and status | Policy | P1 | Medium | 1 | needs-sme | `src/INVOICE.cbl:340-388` | [RULE-invoices.invoice-search-5e6f7a8b](rules/RULE-invoices.invoice-search-5e6f7a8b.md) |

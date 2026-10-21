@@ -114,7 +114,7 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
         trace = raw if isinstance(raw, dict) else {}
         rules_text = docmd.read_optional_text(os.path.join(inputs, *paths.unit_rules_path(app, *item_id.split('/')).split('/')))
         findings_text = docmd.read_optional_text(os.path.join(inputs, *paths.unit_findings_path(app, *item_id.split('/')).split('/')))
-        rules = {rule_id for rule_id, _ in rr.unit_rule_cards(rules_text)} if rules_text else set()
+        rules = {row['id'] for row in rr.unit_rule_rows(rules_text) if row.get('id') and row.get('status') != 'retired'} if rules_text else set()
         findings = {row.get('id', '') for row in sf.finding_rows(findings_text)} if findings_text else set()
         dependencies = []
         for dep in trace.get('dependencies') or []:

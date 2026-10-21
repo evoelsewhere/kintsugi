@@ -6,7 +6,7 @@
 //
 //   scope_items.py      per item: topology.md (published), brief and rule shard (scratch)
 //   parallel            extract-rules workflow over the items' shards ∥ harden-scan over their files
-//   split_rules.py      per unit rules.md, stable citation-derived ids RULE-<module>.<unit>-<hash>
+//   split_rules.py      per unit rules.md (the index) and a rules/<id>.md file per rule, stable citation-derived ids RULE-<module>.<unit>-<hash>
 //   split_findings.py   per item findings.md, ids SEC-<module>.<item>-NN
 //   forEach item        a legacy-analyst job writes the AS-IS specification and returns its trace (scratch)
 //   finish_items.py     per item: checked trace.md, understanding.md (understood) and the work item
@@ -75,7 +75,7 @@ ${WORKSPACE}
 Your brief is {in}/{item} (read-only): the item's id, name, kind and summary from the catalog, its source files, its
 size, its topology leaves and entry points, the items it depends on and that use it, the data stores it reads and
 writes. Also under {in}: the item's topology ${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "topology.md")}, its business rules
-${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "rules.md")} (ids RULE-<module>.<unit>-<hash>, derived from the canonical citation and stable across reruns, each citation checked by a second agent), its security
+${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "rules.md")} (the index of its rules, ids RULE-<module>.<unit>-<hash>, derived from the canonical citation and stable across reruns, each citation checked by a second agent; one file per rule in ${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "rules")}/), its security
 findings ${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "findings.md")} (ids SEC-<module>.<item>-NN), ${assessmentCatalogPath(APP_TOKEN)} and the module documents next to it (every item of the
 application) and ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")}. Read the item's source files and follow its calls only as far as needed to
 describe it; the other items have their own specifications.
@@ -172,7 +172,7 @@ export const UNDERSTAND: StagePlan = {
       id: "split-rules",
       kind: "script",
       script: "split_rules.py",
-      args: (ctx) => ["{app}", "--rules", "{in}/" + understandRunFilePath(APP_TOKEN, "rules_result.json"), "--catalog", "{in}/" + assessmentCatalogDir(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--rules", "{in}/" + understandRunFilePath(APP_TOKEN, "rules_result.json"), "--catalog", "{in}/" + assessmentCatalogDir(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}", "--docs", "{in}", "--source-commit", "{commit}"],
     },
     {
       id: "split-findings",

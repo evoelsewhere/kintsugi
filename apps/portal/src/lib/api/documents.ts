@@ -172,6 +172,10 @@ export interface CatalogRule {
   rejectionReason?: string;
   citations: Citation[];
   duplicateGroup?: number;
+  /** From a rules index: the repository path of the rule's own file, its version and status (`confirmed`, `needs-sme`). */
+  file?: string;
+  version?: number;
+  ruleStatus?: string;
 }
 
 export interface DataObject {

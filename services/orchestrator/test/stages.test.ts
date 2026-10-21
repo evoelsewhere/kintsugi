@@ -200,7 +200,10 @@ describe("stage plans (mock agent, fixture repositories)", () => {
 
     // Only per-unit Markdown is published; briefs, shards, traces and workflow results stay out.
     const files = ["as-is.md", "data-objects.md", "findings.md", "rules.md", "topology.md", "trace.md", "understanding.md"];
-    expect(artifacts).toEqual([
+    // Each rule is a file of its own under the unit's rules/ folder; rules.md indexes them.
+    const ruleFiles = artifacts.filter((path) => /\/understanding\/rules\/RULE-[^/]+\.md$/.test(path));
+    expect(ruleFiles.length).toBeGreaterThan(0);
+    expect(artifacts.filter((path) => !ruleFiles.includes(path))).toEqual([
       ...files.map((file) => `applications/demo/units/billing/main/understanding/${file}`),
       ...files.map((file) => `applications/demo/units/rates/rates/understanding/${file}`),
       "applications/demo/units/rates/rates/unit.md",
@@ -308,7 +311,9 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     ]);
     // Every output is under the default autoCommitPaths: the writer commits it without a pull request.
     expect(artifacts.every((path) => isAutoCommitPath(path, DEFAULT_AUTO_COMMIT_PATHS))).toBe(true);
-    expect(readFileSync(join(root, "applications", "demo", "generated", "BUSINESS_RULES.md"), "utf8")).toContain("### RULE-rates.rates-1a2b3c4d: Double large amounts");
+    expect(readFileSync(join(root, "applications", "demo", "generated", "BUSINESS_RULES.md"), "utf8")).toContain(
+      "| RULE-rates.rates-1a2b3c4d | rates/rates | Double large amounts | Calculation | P0 | High | 1 | confirmed | `src/rates.c:1` | [RULE-rates.rates-1a2b3c4d](../units/rates/rates/understanding/rules/RULE-rates.rates-1a2b3c4d.md) |",
+    );
     expect(documentOf(readFileSync(join(root, "applications", "demo", "generated", "traceability.md"), "utf8")).data).toMatchObject({ items: 2, units: 1, rulesCovered: 1 });
     expect(writes[0]).toMatchObject({ message: "Rebuild the generated views of demo from its understood units" });
     // The rebuild must stage the per-unit evidence tree, or the aggregates come out empty.

@@ -1,3 +1,4 @@
+import { columnOf, sectionsOf, tablesIn } from './markdown.js'
 import { baseName } from './paths.js'
 import { linesOf } from './text.js'
 
@@ -9,7 +10,9 @@ import { linesOf } from './text.js'
  * a header line (`P0 · Calculation · confidence High · file:line`), the same heading with
  * labelled fields (`**Category:**`, `**Priority:**`, `**Plain English:**`, a fenced
  * Given/When/Then block, `**Edge cases handled:**`, `**Suspected defect:**`), and table
- * rows for the lower priorities. Anything else is skipped, never thrown on.
+ * rows for the lower priorities. A rules index (`rules.md` of a unit, `BUSINESS_RULES.md`) is a table
+ * `ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file`: one row per rule, the
+ * rule's own file holds the card. Anything else is skipped, never thrown on.
  */
 
 export type Citation = {
@@ -41,6 +44,10 @@ export type Rule = {
   citations: Citation[]
   /** The domain heading (`## D6 Interest & Fees`) the rule sits under. */
   domain?: string
+  /** Index rows only: the link to the rule's own file as written (`rules/RULE-001.md`), its version and status (`confirmed`, `needs-sme`, `retired`). */
+  file?: string
+  version?: number
+  ruleStatus?: string
 }
 
 export type RuleSet = {
@@ -60,7 +67,7 @@ const CARD_HEADING = new RegExp(`^#{3,4}\\s+(${ID})\\s*[·:\\-–—]\\s*(.+?)\\
 
 /** Sections that describe or summarise the rules rather than hold them: a legend, a panel summary, appendices, provenance. */
 const SKIPPED_SECTION =
-  /\b(?:index|appendix|open questions|rejected|refuted|how to read|p0 confirmation|provenance)\b/i
+  /\b(?:index|appendix|open questions|rejected|refuted|retired|how to read|p0 confirmation|provenance)\b/i
 
 const DOMAIN_HEADING = /^##\s+(.+?)\s*$/
 
@@ -336,6 +343,72 @@ function rowOf(
   }
 }
 
+const capitalized = (text: string): string => (text === '' ? '' : (text[0] ?? '').toUpperCase() + text.slice(1).toLowerCase())
+
+/** The rows of the rules tables of an index document (a table with an ID and a Name column), outside skipped sections. */
+function indexRulesOf(text: string): Rule[] {
+  const idPattern = new RegExp(`^${ID}$`)
+  const rules: Rule[] = []
+
+  for (const section of sectionsOf(text)) {
+    if (SKIPPED_SECTION.test(section.title)) {
+      continue
+    }
+
+    // Only the section's own lines: the tables of a deeper heading belong to that heading.
+    const own = section.body.split('\n')
+    const stop = own.findIndex(line => /^#{1,6}\s/.test(line))
+
+    for (const table of tablesIn((stop < 0 ? own : own.slice(0, stop)).join('\n'))) {
+      const id = columnOf(table, /^id$/i)
+      const name = columnOf(table, /^name$/i)
+
+      if (id < 0 || name < 0) {
+        continue
+      }
+
+      const category = columnOf(table, /^category$/i)
+      const priority = columnOf(table, /^priority$/i)
+      const confidence = columnOf(table, /^confidence$/i)
+      const version = columnOf(table, /^version$/i)
+      const status = columnOf(table, /^status$/i)
+      const source = columnOf(table, /^source$/i)
+      const link = columnOf(table, /^rule file$/i)
+      const cell = (row: string[], column: number): string => (column < 0 ? '' : (row[column] ?? '').replace(/`/g, '').trim())
+
+      for (const row of table.rows) {
+        const ruleId = cell(row, id)
+
+        if (!idPattern.test(ruleId)) {
+          continue
+        }
+
+        const target = /\]\(([^)\s]+)\)/.exec(link < 0 ? '' : (row[link] ?? ''))?.[1]
+        const ruleStatus = cell(row, status)
+        const confidenceText = capitalized(cell(row, confidence))
+        const versionText = cell(row, version)
+
+        rules.push({
+          id: ruleId,
+          title: clean(cell(row, name)),
+          priority: /\bP\d\b/.exec(cell(row, priority))?.[0] ?? '',
+          ...(cell(row, category) !== '' && { category: cell(row, category) }),
+          ...(confidenceText !== '' && { confidence: confidenceText }),
+          statement: '',
+          edgeCases: [],
+          ...(ruleStatus === 'needs-sme' && { sme: 'Needs confirmation by someone who knows the system: see the rule file.' }),
+          citations: citationsIn(cell(row, source)),
+          ...(target !== undefined && { file: target }),
+          ...(versionText !== '' && Number.isFinite(Number(versionText)) && { version: Number(versionText) }),
+          ...(ruleStatus !== '' && { ruleStatus }),
+        })
+      }
+    }
+  }
+
+  return rules
+}
+
 /** Parses BUSINESS_RULES.md. Never throws; an unreadable file is no rules. */
 export function parseRules(text: string): RuleSet {
   const lines = linesOf(text)
@@ -408,6 +481,15 @@ export function parseRules(text: string): RuleSet {
   })
 
   close(lines.length)
+
+  // A rules index lists rules whose card lives in their own file; a card in this document is richer and wins.
+  const cards = new Set(rules.map(rule => rule.id))
+
+  for (const rule of indexRulesOf(text)) {
+    if (!cards.has(rule.id)) {
+      rules.push(rule)
+    }
+  }
 
   const byId = new Map<string, Rule>()
   const byFileBase = new Map<string, Rule[]>()

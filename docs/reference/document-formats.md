@@ -28,7 +28,8 @@ One more shape is read only by the design-set tools: a **directive comment** und
 | `understanding/plan.md` | `check_plan.py` | Front matter (`version`, `catalogCommit`, counts); the strategy; a card `## Batch <n>: <title>` per batch (rationale, fields `risk`, `loc`, `high complexity`, `cohesion`, subsections `Items`, `Depends on outside`); tables `Left out`, `Dropped` |
 | `units/<module>/<unit>/understanding/understanding.md` | `finish_items.py` | Front matter: `status: understood`, `digest`, `commit`, `runId`, `specification`, counts. Its presence on the default branch means the unit is understood |
 | `…/understanding/as-is.md` | the specification job | The 11 sections of the AS-IS specification |
-| `…/understanding/rules.md` | `split_rules.py` | Front matter; a table of the rules; one card per rule `### RULE-<module>.<unit>-<hash>: name` grouped by category |
+| `…/understanding/rules.md` | `split_rules.py` | The rules index: front matter (`catalogVersion`, `rules`, `p0`); a table `ID \| Name \| Category \| Priority \| Confidence \| Version \| Status \| Source \| Rule file`; a table `Retired rules`; the explicit no-rules line when empty |
+| `…/understanding/rules/<rule id>.md` | `split_rules.py` | One rule: front matter (`id`, `name`, `category`, `priority`, `confidence`, `status`, `version`, `digest`, `source`, …); sections `Summary`, `Specification` (Given/When/Then), `Decision table`, `Flow`, `Parameters`, `Inputs and outputs`, `Evidence`, `Edge cases`, `Suspected defects`, `Open questions`, `Acceptance scenarios`, `Version history` (only those with evidence), see [ADR-0046](../decisions/0046-one-file-per-business-rule.md) |
 | `…/understanding/data-objects.md` | `split_rules.py` | One `## name` section per object with `Source:` and a field table |
 | `…/understanding/rules-review.md` | people, in a pull request | Table `Rule \| Verdict \| Approver \| Date` (and an optional `Note`); verdicts `confirmed`, `refuted`, `clarify` |
 | `…/understanding/findings.md` | `split_findings.py` | Scorecard table; table `Findings by severity`; a `### SEC-…` card per finding for the fix and the masked evidence; `Tools not run`, `Files reviewed` |
@@ -37,7 +38,7 @@ One more shape is read only by the design-set tools: a **directive comment** und
 | `standards/design/<set>/set.md`, `<template>.md` | people | A design set: front matter (`id`, `title`, `version`, `appliesTo`, `needs`, `stage`) and a files table; templates with directive comments ([design templates](design-templates.md)) |
 | `units/<module>/<unit>/design/<set>/<file>` | `scaffold_design.py`, then the member's harness | A design document: front matter `template: "<set>@<version>"` and `unit`, then the sections and tables the template names |
 | `generated/traceability.md` | `rebuild_aggregates.py` | Front matter with the totals the headlines read; one row per understood unit |
-| `generated/BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `README.md` | `rebuild_aggregates.py` | The units' rules, objects and findings joined; the index of the specifications |
+| `generated/BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `README.md` | `rebuild_aggregates.py` | The index of the units' rules (one row per rule with its version and a link to the rule's file), the units' objects and findings joined; the index of the specifications |
 
 ## Scratch
 

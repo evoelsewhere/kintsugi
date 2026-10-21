@@ -112,15 +112,7 @@ export function understoodUnit(app: string, item: string, options: UnderstoodUni
       "---",
       `# Business rules - ${item}`,
       "",
-      table(["ID", "Name", "Category", "Priority", "Source", "Confidence"], [[id, name, "Calculation", "P0", `\`${source}\``, "High"]]),
-      "",
-      "## Calculation",
-      "",
-      `### ${id}: ${name}`,
-      "**Category:** Calculation",
-      "**Priority:** P0",
-      `**Source:** \`${source}\``,
-      "**Confidence:** High",
+      table(["ID", "Name", "Category", "Priority", "Confidence", "Version", "Status", "Source", "Rule file"], [[id, name, "Calculation", "P0", "High", "1", "confirmed", `\`${source}\``, `[${id}](rules/${id}.md)`]]),
       "",
     ].join("\n");
   }
