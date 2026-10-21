@@ -1,0 +1,17 @@
+{
+  "name": "@kintsugi/kintsugi-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": { "@kintsugi/harness-sdk": "workspace:*" },
+  "devDependencies": { "vitest": "^5.0.3" }
+}

@@ -1,6 +1,6 @@
 # Harness integration
 
-Status: T00–T06 implement the unreleased context API and shared SDK. The CLI, local MCP bridge and PR continuation remain planned. API and SDK changes must ship together; their strict version-1 schemas are still being finalized before release.
+Status: T00–T07 implement the unreleased context API, shared SDK, typed HTTPS client and read-only CLI/export. The local MCP bridge, generated plugins, streaming and PR continuation remain planned. API and SDK changes must ship together; their strict version-1 schemas are still being finalized before release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
 
 Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
@@ -40,29 +40,29 @@ Snapshot failures put a stable code and `snapshotId` in the error envelope's `de
 
 Every retry rechecks authorization. A valid historical snapshot remains readable when newer context is invalid or oversized; its freshness is reported as stale when currentness cannot be established.
 
-## Planned CLI contract
+## CLI commands and current limits
 
-The initial commands are read-only except for local sign-in, profile selection, explicit file export and client setup.
+The implemented CLI commands are read-only except for local sign-in, profile selection and explicit file export. Output can be text, JSON or Markdown. The local MCP bridge and client setup are future work.
 
 | Command | Purpose |
 |---|---|
 | kintsugi auth login --url URL | Sign in to one installation; secret input is hidden and kept in the OS credential store |
-| kintsugi auth status | Show the selected profile and connection status without showing a token |
+| kintsugi auth status / logout | Show profile connection state or remove the selected local token |
 | kintsugi project list / use ID | List authorized projects and select a local default |
 | kintsugi task list --mine | List tasks assigned to the authenticated stable user identity |
 | kintsugi task list --ready-for implementation | List tasks whose current inputs allow the requested activity |
 | kintsugi task brief UNIT | Print the task, readiness blockers, required context index and citations |
 | kintsugi task brief UNIT --format markdown --output FILE | Explicitly export a private, source-referenced brief |
-| kintsugi document get --snapshot ID --source ID --section ID | Fetch a cited document section from the pinned snapshot |
-| kintsugi document search --snapshot ID --query TEXT | Bounded keyword search inside the pinned context |
+| kintsugi document get UNIT --snapshot ID --source ID --section ID | Fetch a cited document section from the pinned snapshot |
+| kintsugi document search UNIT --snapshot ID --query TEXT | Bounded keyword search inside the pinned context |
 | kintsugi review list --task UNIT / review get ID | Find current authorized review references and retrieve actionable findings |
 | kintsugi task status UNIT | Read current task and relevant PR/gate state |
-| kintsugi task watch UNIT | Stream authorized workflow progress over resumable SSE |
-| kintsugi plugins setup --harness claude-code | Install or update the access package for one tested client |
+| kintsugi task watch UNIT | Reserved for SSE; currently reports `UNSUPPORTED_CAPABILITY` |
+| kintsugi plugins setup --harness claude-code | Planned for a later plugin-packaging milestone |
 | kintsugi doctor | Check local installation, credential store, network and client capabilities |
-| kintsugi mcp serve --profile NAME | Run the local stdio MCP bridge for the selected profile |
+| kintsugi mcp serve --profile NAME | Planned local stdio MCP bridge |
 
-The executable returns stable JSON when requested, uses stdout for results and stderr for diagnostics. Noninteractive mode does not prompt. Export refuses to overwrite an existing file unless the user explicitly requests it. A CLI can export text for a chat without tools; it cannot inject a prompt into an arbitrary running AI conversation.
+The executable returns stable JSON when requested, uses stdout for results and stderr for diagnostics, and does not prompt under `--no-input`. Export refuses to overwrite an existing file. A CLI can export text for a chat without tools; it cannot inject a prompt into an arbitrary running AI conversation. Linux uses `secret-tool` with Secret Service; see the [CLI reference](coding-agent-cli.md) for secure-store and private-CA requirements.
 
 ## MCP tools
 
