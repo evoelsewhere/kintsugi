@@ -43,6 +43,7 @@ The content is a set of **plugins** (ADR-0035), one folder each under `plugins/`
 | --- | --- | --- |
 | `understand` | runtime | Commands `assess` and `understand`; the agents `legacy-analyst`, `business-rules-extractor` and `security-auditor`; the workflows `extract-rules`, `harden-scan` and `portfolio-assess`; the item-catalog, rules, findings and work-item scripts; the JobOutput hook and the artifact readers. |
 | `modernize` | member | Commands `preflight`, `brief`, `transform`, `uplift`, `reimagine` and `verify`; the agents `test-engineer`, `uplift-migrator`, `scaffolder`, `architecture-critic` and `version-delta-analyst`; the uplift and reimagine workflows; the verification scripts. Requires `understand`. |
+| `access` | member | The `kintsugi-task` skill, which explains how a member's chosen coding agent reads cited task context and current workflow evidence through the read-only local MCP tools. It has no hooks, scripts, or dependency on `modernize`. |
 
 Inside a plugin folder:
 

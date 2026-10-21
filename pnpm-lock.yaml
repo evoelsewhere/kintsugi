@@ -324,6 +324,9 @@ importers:
 
   services/harness-hub:
     dependencies:
+      '@kintsugi/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@kintsugi/harness-sdk':
         specifier: workspace:*
         version: link:../../packages/harness-sdk

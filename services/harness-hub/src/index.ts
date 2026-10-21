@@ -12,6 +12,30 @@ export {
   registerCodingAgentWorkflowTools,
 } from "./tool-map.js";
 export type { CodingAgentWorkflowToolName } from "./tool-map.js";
+export {
+  AGENT_PLUGINS_MCP_SCHEMA,
+  AGENT_PLUGINS_SCHEMA,
+  CODING_AGENT_WORKFLOW_PLUGIN_NAME,
+  PluginSetupError,
+  generateAccessPlugin,
+  type AccessPluginInput,
+  type CodingAgentClient,
+  type GeneratedPluginFiles,
+} from "./plugins/generate.js";
+export {
+  CODING_AGENT_CLIENT_COMPATIBILITY,
+  assertClientCompatibility,
+  type ClientCompatibility,
+} from "./plugins/compatibility.js";
+export {
+  applyClientSetup,
+  generateAccessMarketplace,
+  planClientSetup,
+  type SetupChange,
+  type SetupFileDeps,
+  type SetupInput,
+  type SetupReport,
+} from "./plugins/setup.js";
 
 export interface StdioDeps {
   access: CodingAgentWorkflowPort;

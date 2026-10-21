@@ -1,6 +1,6 @@
 # Harness integration
 
-Status: T00–T08 implement the unreleased context API, shared SDK, typed HTTPS client, read-only CLI/export and local stdio MCP bridge. Generated plugins, streaming and PR continuation remain planned. API and SDK changes must ship together; their strict version-1 schemas are still pre-release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
+Status: T00–T09 implement the unreleased context API, shared SDK, typed HTTPS client, read-only CLI/export, local stdio MCP bridge and generated client packages. Streaming and PR continuation remain planned. API and SDK changes must ship together; their strict version-1 schemas are still pre-release. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
 
 Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0041](../decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
@@ -8,9 +8,9 @@ Kintsugi gives context to the developer's chosen AI. The AI reads the task, desi
 
 The developer installs the Kintsugi CLI and signs in to a self-hosted installation over HTTPS. The CLI starts a local stdio MCP process when a client asks for tools. The process has no inbound listener, shares the CLI's project-scoped credentials and calls the same typed Coding Agent Context API. A CLI-only path remains available for shells and explicit Markdown export.
 
-Claude Code is the first complete client pilot. Codex and GitHub Copilot CLI are distinct targets; support is claimed only after each exact client version passes authentication, setup, protocol, upgrade and removal checks. See the [compatibility record](coding-agent-workflow-compatibility.md).
+Claude Code is the first client target, and Codex now has a bounded native package lifecycle probe. Neither is yet a complete authenticated MCP pilot. Copilot CLI is a distinct target; support is claimed only after each exact client version passes authentication, setup, protocol, upgrade and removal checks. See the [compatibility record](coding-agent-workflow-compatibility.md).
 
-The Coding Agent Workflow plugin contains a small skill and client-specific MCP configuration. It has no hooks and does not edit arbitrary project instructions. Optional method plugins stay in the project document repository and are installed separately. Client-side instructions help the AI retrieve information; the server enforces authorization.
+The Coding Agent Workflow plugin contains one canonical small skill and generated client-specific MCP configuration. It has no hooks and does not edit arbitrary project instructions. Optional method plugins stay in the project document repository and are installed separately. The CLI generates a local package and prints native client commands; the developer runs those commands to register/install it. Client-side instructions help the AI retrieve information; the server enforces authorization.
 
 ## Implemented context API
 
@@ -58,7 +58,7 @@ The implemented CLI commands are read-only except for local sign-in, profile sel
 | kintsugi review list --task UNIT / review get ID | Find current authorized review references and retrieve actionable findings |
 | kintsugi task status UNIT | Read current task and relevant PR/gate state |
 | kintsugi task watch UNIT | Reserved for SSE; currently reports `UNSUPPORTED_CAPABILITY` |
-| kintsugi plugins setup --harness claude-code | Planned for a later plugin-packaging milestone |
+| kintsugi plugins setup --client claude --profile NAME | Generate a package and print native install/removal commands; exact-version gated |
 | kintsugi doctor | Check local installation, credential store, network and client capabilities |
 | kintsugi mcp serve --profile NAME | Start a local stdio bridge using the selected profile and its OS credential |
 
@@ -78,7 +78,7 @@ The local server exposes these read-only tools when the matching backend capabil
 | review_get | Explicit project and authorized review ID; advertised only when a review reader is available (currently unavailable) |
 | task_status | Explicit project and full unit identity |
 
-The current CLI bridge advertises six tools: `project_list`, `task_list`, `task_brief`, `document_get`, `document_search` and `task_status`. `review_get` is omitted because the current review reader is unavailable. Document retrieval and search require the snapshot returned by `task_brief`; every tool call supplies its project/task selectors, and the bridge keeps no implicit active project or task. Read-only annotations communicate intent but never replace server authorization. The CLI reads its OS credential store before each API request, allowing server-side Project Access revocation to take effect on the next call.
+The current CLI bridge advertises six tools: `project_list`, `task_list`, `task_brief`, `document_get`, `document_search` and `task_status`. `review_get` is omitted because the current review reader is unavailable. Document retrieval and search require the snapshot returned by `task_brief`; every tool call supplies its project/task selectors, and the bridge keeps no implicit active project or task. Read-only annotations communicate intent but never replace server authorization. The CLI reads its OS credential store before each API request, allowing server-side Project Access revocation to take effect on the next call. Disposable-profile native lifecycle probes cover Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2; neither probe yet proves a live authenticated MCP tool call. Copilot setup is disabled pending a native version probe.
 
 CLI JSON, MCP structured results and cited text use the same validated DTOs. MCP returns both structured data and equivalent JSON text, with stable safe error codes; it does not wrap JSON-RPC in REST response envelopes. Its stdin/stdout carry only protocol messages.
 

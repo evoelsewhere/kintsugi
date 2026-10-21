@@ -1,6 +1,6 @@
-`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented, so the local bridge does not advertise `review_get`. `task watch` likewise returns `UNSUPPORTED_CAPABILITY` until the SSE milestone. `plugins setup` remains planned. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
+# Coding Agent Workflow CLI
 
-Status: the typed client, read-only CLI and local stdio MCP bridge are implemented in the unreleased workspace. Generated plugins, streaming, PR ingestion and review continuation remain planned.
+Status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. Streaming, PR ingestion and review continuation remain planned. Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
 
 The CLI lets a developer or a shell-enabled coding agent retrieve Kintsugi data. The developer's chosen AI interprets those documents and decides how to answer; the CLI does not call a model or inject text into an already-running AI conversation.
 
@@ -14,6 +14,18 @@ node packages/cli/dist/main.js --help
 ```
 
 The CLI requires Node.js 22.19 or newer. Native client and operating-system compatibility still needs a release matrix before claiming support.
+
+## Generate a client package
+
+After signing in, generate the client-specific package for a tested client version:
+
+```sh
+kintsugi plugins setup --client claude --profile work
+```
+
+The command writes a Kintsugi-owned package below the selected profile's local configuration directory and prints native marketplace/install and removal commands. Run the printed commands to change the client installation. The CLI does not edit client settings or execute those commands. Re-running setup updates files only inside the marked Kintsugi-owned package. It refuses to overwrite an existing unowned package or follow symbolic links in the target path.
+
+Setup checks the exact client version before writing. Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2 passed disposable-profile marketplace and plugin lifecycle probes. Copilot CLI package generation is available to tests, but native setup is disabled until its exact client version is verified. The probes have not yet exercised an authenticated plugin-launched MCP request against a live Kintsugi installation.
 
 ## Connect a profile
 
@@ -69,6 +81,6 @@ Each tool call supplies its own project and task identity. `mcp serve --project`
 
 ## Current limits
 
-`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented, so the local bridge does not advertise `review_get`. `task watch` likewise returns `UNSUPPORTED_CAPABILITY` until the SSE milestone. `plugins setup` remains planned. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
+`review list --task UNIT` reads authorized review references from task status. `review get` reaches the API route, which returns `UNSUPPORTED_CAPABILITY` until review ingestion is implemented, so the local bridge does not advertise `review_get`. `task watch` likewise returns `UNSUPPORTED_CAPABILITY` until the SSE milestone. This CLI cannot claim, assign, edit, approve, merge or otherwise mutate a Kintsugi task or repository.
 
 `doctor` checks the runtime, profile credential availability and an authorized API read. It does not certify support for a Claude Code, Codex or Copilot version; those require native setup and interaction tests.

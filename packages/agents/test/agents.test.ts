@@ -1,5 +1,6 @@
 // The agent package format, validation against an installation, and the built-in catalog.
 
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { KERNEL_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
@@ -210,6 +211,7 @@ describe("built-in commands", () => {
     const files: Array<{ name: string; path: string }> = [];
     for (const plugin of builtinPluginDirs()) {
       const dir = join(plugin.dir, "commands");
+      if (!existsSync(dir)) continue;
       for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".md")).sort()) files.push({ name, path: join(dir, name) });
     }
     const names = files.map((file) => file.name);
