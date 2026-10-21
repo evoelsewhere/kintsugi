@@ -16,6 +16,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
+import { CODEMODE_TOOL, createCodemodeExtensions } from "./codemode.js";
 import { compactionBudget, stableSessionId } from "./context.js";
 import { composeSystemPrompt } from "./policy.js";
 import { normalizeTools } from "./tool-names.js";
@@ -33,6 +34,8 @@ export interface CreateJobSessionOptions {
   spec: JobSpec;
   modelRuntime: ModelRuntime;
   extensions: ExtensionFactory[];
+  /** Reports a call a policy refused (a script calling a tool it may not). */
+  onBlocked?: (tool: string, reason: string, input: unknown) => void;
   onOutput: ToolContext["onOutput"];
 }
 
@@ -56,6 +59,10 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       { projectTrusted: false },
     );
     const systemPrompt = composeSystemPrompt(spec.agent, spec.workspace);
+    // codemode only for an agent that lists it (an agent without a tool list has every kernel tool).
+    const onBlocked = options.onBlocked ?? (() => undefined);
+    const hasCodemode = spec.agent.tools.includes(CODEMODE_TOOL);
+    const codemode = hasCodemode ? createCodemodeExtensions({ onBlocked }) : [];
     const resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir,
@@ -67,7 +74,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       noContextFiles: true,
       appendSystemPrompt: [],
       systemPromptOverride: () => systemPrompt,
-      extensionFactories: options.extensions,
+      extensionFactories: [...options.extensions, ...codemode],
     });
     await resourceLoader.reload();
 

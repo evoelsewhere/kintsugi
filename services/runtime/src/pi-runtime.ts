@@ -29,6 +29,7 @@ export function createPiJobBackend(options: PiBackendOptions): PiJobBackend {
             spec,
             modelRuntime,
             extensions: [createCommandPolicyExtension(spec.agent.denyCommandPatterns ?? [], (tool, reason, input) => job.blocked(tool, reason, input))],
+            onBlocked: (tool, reason, input) => job.blocked(tool, reason, input),
             onOutput: (path) => job.output(path),
           });
           await job.run(session, dispose);

@@ -2,7 +2,7 @@
 // pi, so the API can validate agent tool allowlists (`@kintsugi/runtime/tool-names`).
 // The registry in tools.ts is typed against this list, so the two cannot drift.
 
-export const KERNEL_TOOL_NAMES = ["read", "ls", "grep", "find", "write", "edit", "shell", "git"] as const;
+export const KERNEL_TOOL_NAMES = ["read", "ls", "grep", "find", "write", "edit", "shell", "git", "codemode"] as const;
 export type KernelToolName = (typeof KERNEL_TOOL_NAMES)[number];
 
 /**
