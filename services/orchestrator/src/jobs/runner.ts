@@ -257,7 +257,7 @@ export class JobRunner {
       await this.#prepareInputs(run, ws);
       const outcome = await this.#step(run, ws, signal, resume);
       const summary = await this.#finish(run, ws, outcome);
-      const write = await this.#publish(run, ws, outcome);
+      const write = run.inputs["publishOutput"] === false ? undefined : await this.#publish(run, ws, outcome);
       await store.succeed(id, { ...summary, ...(write === undefined ? {} : { documentWriteId: write }) });
       await this.#event(ws, undefined, "status", `succeeded${write === undefined ? "" : ", output handed to the document repo writer"}`, { status: "succeeded" });
       this.#log(`${run.kind} ${run.name} (${id}) succeeded${write === undefined ? "" : `, document write ${write}`}`);
@@ -502,6 +502,15 @@ export class JobRunner {
 
   async #agent(run: JobRun, ws: StepWorkspace, signal?: AbortSignal): Promise<StepOutcome> {
     const definition = await materializeSkillFiles(await this.#deps.agentDefinitions.definition(run.name), ws.in);
+    const expectedAgentVersion = run.inputs["expectedAgentVersion"];
+    if (expectedAgentVersion !== undefined) {
+      if (typeof expectedAgentVersion !== "string" || expectedAgentVersion.trim() === "") {
+        throw new JobFailure("inputs.expectedAgentVersion must be a non-empty version string");
+      }
+      if (definition.version !== expectedAgentVersion) {
+        throw new JobFailure(`Agent ${run.name} has version ${definition.version}, expected agent version ${expectedAgentVersion}`);
+      }
+    }
     const mock = this.#deps.agents.engine.startsWith("mock");
     const binding = (await this.#deps.store.modelBinding(run.name, run.projectId)) ?? (mock ? { provider: "mock", model: "mock" } : undefined);
     if (binding === undefined) throw new JobFailure(`No model is bound to agent "${run.name}" (Settings → LLM Providers)`);
@@ -562,7 +571,7 @@ export class JobRunner {
     };
     let done = await attempt();
     // A provider that drops its response stalls the job (the launcher's idle watchdog): try once more.
-    if (done.type === "job.failed" && done.reason === "timeout" && done.error.startsWith("stalled") && signal?.aborted !== true) {
+    if (run.inputs["disableStalledRetry"] !== true && done.type === "job.failed" && done.reason === "timeout" && done.error.startsWith("stalled") && signal?.aborted !== true) {
       await this.#event(ws, stepId, "log", `agent ${run.name} stalled (${redactText(done.error).slice(0, 120)}); retrying once`);
       done = await attempt();
     }

@@ -84,3 +84,4 @@ export type {
   PullRequestIdentity,
   PullRequestObserver,
 } from "./pull-request-observer.js";
+export { fetchPullRequestRefs, listChangedPaths, type PullRequestRevision, type PullRequestRevisionRequest } from "./github-review.js";

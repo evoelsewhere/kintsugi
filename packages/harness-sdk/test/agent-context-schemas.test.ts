@@ -12,6 +12,7 @@ import {
   documentQuerySchema,
   documentSearchQuerySchema,
   projectQuerySchema,
+  reviewReportSchema,
   taskBriefQuerySchema,
   taskBriefSchema,
   taskQuerySchema,
@@ -257,5 +258,51 @@ describe("existing project identifier compatibility", () => {
     expect(taskIdentitySchema.safeParse({ projectId: "a".repeat(100), unitId: "billing/invoices/" + "u".repeat(63) }).success).toBe(true);
     expect(taskIdentitySchema.safeParse({ projectId: "shop", unitId: "billing/invoices/Tax" }).success).toBe(false);
     expect(taskIdentitySchema.safeParse({ projectId: "a".repeat(100), unitId: "billing/invoices/" + "u".repeat(64) }).success).toBe(false);
+  });
+});
+
+describe("review report findings", () => {
+  const finding = {
+    findingId: "finding_rounding",
+    severity: "high",
+    title: "Preserve invoice rounding",
+    rationale: "The rounding step runs before line items are summed.",
+    citation: { sourceId: "pull-request", path: "src/invoice.ts", startLine: 8, endLine: 11 },
+    currentness: "current",
+  };
+
+  it("accepts explicit suggested repair guidance in a cited finding", () => {
+    const result = reviewReportSchema.safeParse({
+      ...review,
+      verdict: "fail",
+      findings: [{
+        ...finding,
+        repairGuidance: "Sum the unrounded line amounts, then round the invoice total once.",
+      }],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects findings without suggested repair guidance", () => {
+    expect(reviewReportSchema.safeParse({ ...review, verdict: "fail", findings: [finding] }).success).toBe(false);
+  });
+
+  it("requires each finding to cite a source path and line", () => {
+    const { citation: _citation, ...uncited } = finding;
+    expect(reviewReportSchema.safeParse({ ...review, verdict: "fail", findings: [{
+      ...uncited,
+      repairGuidance: "Add the boundary check before multiplication.",
+    }] }).success).toBe(false);
+    expect(reviewReportSchema.safeParse({ ...review, verdict: "fail", findings: [{
+      ...finding,
+      repairGuidance: "Add the boundary check before multiplication.",
+      citation: { sourceId: "pull-request", path: "src/invoice.ts" },
+    }] }).success).toBe(false);
+  });
+
+  it("requires the reviewed merge base used by the immutable input", () => {
+    const { mergeBase: _mergeBase, ...withoutMergeBase } = review;
+    expect(reviewReportSchema.safeParse(withoutMergeBase).success).toBe(false);
   });
 });

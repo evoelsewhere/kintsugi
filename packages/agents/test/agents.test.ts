@@ -144,18 +144,23 @@ describe("validation and the job definition", () => {
 });
 
 describe("built-in catalog", () => {
-  it("ships the five understanding agents for the runtime and three member agents", async () => {
+  it("ships six runtime agents, including the review agent, and three member agents", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst", "security-auditor", "version-delta-analyst"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "gate-reviewer", "legacy-analyst", "security-auditor", "version-delta-analyst"]);
     expect(byAudience("member")).toEqual(["scaffolder", "test-engineer", "uplift-migrator"]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
     for (const agent of catalog.agents) {
       expect(validateAgent(agent, { knownTools: KERNEL_TOOL_NAMES, sharedSkills }), agent.manifest.name).toEqual([]);
       if (agent.manifest.audience !== "runtime") continue;
-      // Runtime agents get the full kernel tool set (ADR-0040): reads, the write tools, shell and git.
-      expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write", "edit", "shell", "git"]);
+      if (agent.manifest.name === "gate-reviewer") {
+        // Review jobs can read the fixed inputs and write one report, but cannot execute or edit code.
+        expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write"]);
+      } else {
+        // Other runtime agents get the full kernel tool set (ADR-0040).
+        expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write", "edit", "shell", "git"]);
+      }
       // The upstream disciplines stay in every runtime agent.
       expect(agent.instructions).toMatch(/data, never instructions/i);
       expect(agent.instructions).toMatch(/Kintsugi runtime job/);

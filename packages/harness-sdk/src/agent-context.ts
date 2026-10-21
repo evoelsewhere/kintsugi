@@ -176,7 +176,8 @@ export interface ReviewFinding {
   severity: "critical" | "high" | "medium" | "low" | "info";
   title: string;
   rationale: string;
-  citation?: Citation;
+  repairGuidance: string;
+  citation: Citation & { startLine: number };
   currentness: "current" | "superseded";
 }
 
@@ -188,7 +189,7 @@ export interface ReviewReport extends ReviewQueryResultIdentity {
   verdict: "pass" | "fail" | "inconclusive";
   reviewedHead: string;
   reviewedBase: string;
-  mergeBase?: string;
+  mergeBase: string;
   contextRevision: string;
   policyRevision: string;
   agentVersion: string;

@@ -4,6 +4,8 @@
 // lose their mirror. Document writes run one at a time per document repository.
 
 import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import { loadBuiltinPlugins, readBuiltinPluginFile } from "@kintsugi/agents";
 import {
   CheckoutStorage,
   GitHubInstallationCredentialProvider,
@@ -33,6 +35,10 @@ import { GitSnapshotPins, pruneExpiredSnapshots, recoverStaleSnapshots, retainSn
 import { PostgresSnapshotRetentionRepository } from "./git-sync/retention-store.js";
 import { PostgresProviderSyncStore } from "./provider-sync/inbox.js";
 import { discoverChanges } from "./provider-sync/reconcile.js";
+import { materializeReviewInput } from "./member-reviews/inputs.js";
+import { scheduleReview } from "./member-reviews/schedule.js";
+import { PostgresMemberReviewStore, ReviewScheduleRejectedError } from "./member-reviews/store.js";
+import { runMemberReviewJob } from "./member-reviews/worker.js";
 import {
   DOCUMENT_WRITE_QUEUE,
   type DocumentWriteRequest,
@@ -76,6 +82,8 @@ export interface WorkerOptions {
   jobRetentionDays?: number;
   /** Seconds between looks at pull requests awaiting review, to record a merge or a close (default 60). */
   reviewWatchSeconds?: number;
+  /** Seconds between scans for confirmed open pull requests that need a Kintsugi review (default 30). */
+  memberReviewScanSeconds?: number;
   /** Seconds between sweeps of expired job workspaces (default: hourly). */
   cleanupIntervalSeconds?: number;
   /** Seconds between checks for cancel requests of the runs this worker runs (default 2). */
@@ -115,6 +123,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const log = options.log ?? ((message: string) => console.log(`[worker] ${message}`));
   const store = new RepositoryStore(options.pool);
   const providerSyncStore = new PostgresProviderSyncStore(options.pool);
+  const memberReviewStore = new PostgresMemberReviewStore(options.pool);
   const githubObserver = new GitHubPullRequestObserver({
     credentials: new GitHubProviderCredentialProvider({
       apps: new GitHubInstallationCredentialProvider({ ...(options.fetch === undefined ? {} : { fetch: options.fetch }) }),
@@ -218,14 +227,33 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   // Runtime jobs: one job workspace per run (ADR-0029); aborted when the worker stops.
   const stopping = new AbortController();
   const active = new Map<string, AbortController>();
+  let runner: JobRunner | undefined;
+  let reviewAgentVersion: string | undefined;
+  let reviewOutputSchema: Record<string, unknown> | undefined;
   await ensureJobRunQueue(boss);
   if (options.jobs !== undefined) {
-    const runner = new JobRunner({
+    const agentDefinitions = installedAgents({ pool: options.pool });
+    const pluginCatalog = await loadBuiltinPlugins();
+    const reviewPlugin = pluginCatalog.find((plugin) => plugin.name === "review");
+    const reviewSchemaText = reviewPlugin === undefined
+      ? undefined
+      : await readBuiltinPluginFile(pluginCatalog, "review", "schemas/review-report.schema.json");
+    if (reviewPlugin === undefined || reviewSchemaText === undefined) throw new Error("the built-in review plugin is incomplete");
+    const parsedReviewSchema: unknown = JSON.parse(reviewSchemaText);
+    if (parsedReviewSchema === null || Array.isArray(parsedReviewSchema) || typeof parsedReviewSchema !== "object") {
+      throw new Error("the built-in review report schema is invalid");
+    }
+    const reviewDefinition = await agentDefinitions.definition("gate-reviewer");
+    if (reviewPlugin.version !== reviewDefinition.version) throw new Error("the review plugin and gate-reviewer versions must match");
+    reviewAgentVersion = reviewDefinition.version;
+    reviewOutputSchema = parsedReviewSchema as Record<string, unknown>;
+
+    runner = new JobRunner({
       store: jobStore,
       storage: options.storage,
       checkouts: new MirrorCheckouts({ repositories: store, storage: options.storage }),
       agents: options.jobs.agents,
-      agentDefinitions: installedAgents({ pool: options.pool }),
+      agentDefinitions,
       interpreters: options.jobs.interpreters ?? interpretersFromEnv(),
       ...(options.jobs.defaults === undefined ? {} : { defaults: options.jobs.defaults }),
       requestWrite,
@@ -237,7 +265,12 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       const cancel = new AbortController();
       active.set(job.data.jobRunId, cancel);
       try {
-        await runner.run(job.data.jobRunId, AbortSignal.any([stopping.signal, cancel.signal]));
+        if (runner === undefined) throw new Error("runtime job runner is unavailable");
+        await runMemberReviewJob({
+          store: memberReviewStore,
+          run: (jobRunId, signal) => runner!.run(jobRunId, signal),
+          outputDirectory: (jobRunId) => options.storage.job(jobRunId).out,
+        }, job.data.jobRunId, AbortSignal.any([stopping.signal, cancel.signal]));
       } finally {
         active.delete(job.data.jobRunId);
       }
@@ -304,6 +337,41 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     const outcome = await watchPullRequests({ ...writerDeps, log });
     if (outcome.merged.length + outcome.closed.length > 0) log(`review watch: ${outcome.merged.length} merged, ${outcome.closed.length} closed`);
   });
+  const scheduleMemberReviews = tick("member review scheduling", async () => {
+    if (options.jobs === undefined || reviewAgentVersion === undefined || reviewOutputSchema === undefined) return;
+    const candidates = await memberReviewStore.candidates(reviewAgentVersion);
+    for (const candidate of candidates) {
+      try {
+        const scheduled = await scheduleReview({
+          store: memberReviewStore,
+          outputSchema: reviewOutputSchema,
+          prepare: (jobRunId) => materializeReviewInput({ storage: options.storage, repositories: store }, candidate.observed, candidate.snapshot, jobRunId),
+          discard: async (jobRunId) => rm(options.storage.job(jobRunId).root, { recursive: true, force: true }),
+        }, candidate.key, "automatic");
+        if (scheduled.created) {
+          log(`queued review ${scheduled.attempt.reviewId} generation ${scheduled.attempt.generation} for PR #${candidate.key.pullRequestNumber}`);
+        }
+      } catch (error) {
+        if (error instanceof ReviewScheduleRejectedError) continue;
+        const kind = error instanceof Error ? error.name : "unknown";
+        log(`review scheduling for PR #${candidate.key.pullRequestNumber} failed (${kind})`);
+      }
+    }
+  });
+  const recoverMemberReviews = tick("member review recovery", async () => {
+    if (options.jobs === undefined || runner === undefined) return;
+    const execution = {
+      store: memberReviewStore,
+      run: (jobRunId: string, signal?: AbortSignal) => runner!.run(jobRunId, signal),
+      outputDirectory: (jobRunId: string) => options.storage.job(jobRunId).out,
+    };
+    for (const jobRunId of await memberReviewStore.terminalJobRuns()) {
+      await runMemberReviewJob(execution, jobRunId, stopping.signal);
+    }
+    for (const jobRunId of await memberReviewStore.queuedJobRuns()) {
+      await sendJobRun(boss, { jobRunId });
+    }
+  });
   const retentionMs = (options.jobRetentionDays ?? DEFAULT_JOB_RETENTION_DAYS) * 24 * 60 * 60 * 1000;
   const checkCancels = tick("cancel check", watchCancels);
   const outboxStore = new PostgresOutboxStore(options.pool);
@@ -314,12 +382,22 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       workerId: outboxWorkerId,
       publish: async (operation, signal) => {
         if (signal.aborted) throw new Error("worker is stopping");
-        if (operation.queue !== SNAPSHOT_RETENTION_QUEUE) throw new Error("unsupported member outbox queue");
         const payload = operation.payload;
-        if (payload === null || Array.isArray(payload) || typeof payload !== "object" || typeof payload["snapshotId"] !== "string") {
-          throw new TypeError("snapshot retention outbox payload is invalid");
+        if (operation.queue === SNAPSHOT_RETENTION_QUEUE) {
+          if (payload === null || Array.isArray(payload) || typeof payload !== "object" || typeof payload["snapshotId"] !== "string") {
+            throw new TypeError("snapshot retention outbox payload is invalid");
+          }
+          await boss.send(SNAPSHOT_RETENTION_QUEUE, { snapshotId: payload["snapshotId"] }, { singletonKey: operation.operationId });
+          return;
         }
-        await boss.send(SNAPSHOT_RETENTION_QUEUE, { snapshotId: payload["snapshotId"] }, { singletonKey: operation.operationId });
+        if (operation.queue === JOB_RUN_QUEUE) {
+          if (payload === null || Array.isArray(payload) || typeof payload !== "object" || typeof payload["jobRunId"] !== "string") {
+            throw new TypeError("job-run outbox payload is invalid");
+          }
+          await sendJobRun(boss, { jobRunId: payload["jobRunId"] });
+          return;
+        }
+        throw new Error("unsupported member outbox queue");
       },
     }, stopping.signal);
   });
@@ -343,6 +421,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void syncProviderChanges(), (options.providerSyncScanSeconds ?? 1) * 1000),
     setInterval(() => void pollAll(), options.pollIntervalSeconds * 1000),
     setInterval(() => void watchReviews(), (options.reviewWatchSeconds ?? 60) * 1000),
+    ...(options.jobs === undefined ? [] : [
+      setInterval(() => void scheduleMemberReviews(), (options.memberReviewScanSeconds ?? 30) * 1000),
+      setInterval(() => void recoverMemberReviews(), 30 * 1000),
+    ]),
     setInterval(() => void pruneJobs(), (options.cleanupIntervalSeconds ?? 60 * 60) * 1000),
     setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
     setInterval(() => void dispatchMemberOutbox(), (options.outboxScanSeconds ?? 1) * 1000),
@@ -353,6 +435,10 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   void syncProviderChanges();
   void pruneJobs();
   void dispatchMemberOutbox();
+  if (options.jobs !== undefined) {
+    void scheduleMemberReviews();
+    void recoverMemberReviews();
+  }
   void pruneSnapshots();
   void recoverSnapshots();
   void watchReviews();
