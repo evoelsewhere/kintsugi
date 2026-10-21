@@ -46,6 +46,7 @@ export const AUDIT_ACTIONS = {
   gateRequest: "gate.request",
   gateDecide: "gate.decide",
   gateDecisionRequest: "gate.decision.request",
+  stageDecisionRecord: "stage.decision.recorded",
   roleCreate: "role.create",
   rolePermissionsUpdate: "role.permissions",
   roleDelete: "role.delete",

@@ -361,14 +361,18 @@ describe("watch authorization", () => {
     expect(JSON.parse(state.output().stdout)).toEqual(value);
   });
 
-  it("keeps delivered events and sends revocation only to stderr, cleaning up listeners", async () => {
+  it.each([
+    ["MEMBER_EVENT_UNAUTHENTICATED", 401],
+    ["MEMBER_EVENT_ACCESS_REVOKED", 403],
+  ] as const)("keeps delivered events and reports %s only to stderr", async (code, status) => {
     const value = { schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id: "evt_1", kind: "task.changed", occurredAt: "2026-10-21T00:00:00Z", metadata: {} };
-    const fetch = vi.fn(async () => new Response(`event: task-event\nid: evt_1\ndata: ${JSON.stringify(value)}\n\nevent: error\ndata: {"code":"FORBIDDEN","message":"Access revoked"}\n\n`, { headers: { "content-type": "text/event-stream" } }));
+    const error = JSON.stringify({ code, message: "Access revoked" });
+    const fetch = vi.fn(async () => new Response(`event: task-event\nid: evt_1\ndata: ${JSON.stringify(value)}\n\nevent: error\ndata: ${error}\n\n`, { headers: { "content-type": "text/event-stream" } }));
     const state = harness(fetch, { profile: true, token: "TEST-token" });
     const before = [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")];
     expect(await runCli(["task", "watch", "web/core/invoice", "--json"], state.deps as never)).toBe(3);
     expect(JSON.parse(state.output().stdout)).toEqual(value);
-    expect(JSON.parse(state.output().stderr)).toMatchObject({ success: false, error: { code: "FORBIDDEN", status: 403 } });
+    expect(JSON.parse(state.output().stderr)).toMatchObject({ success: false, error: { code, status } });
     expect(fetch).toHaveBeenCalledOnce();
     expect([process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")]).toEqual(before);
   });

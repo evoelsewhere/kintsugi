@@ -53,6 +53,14 @@ describe("task SSE transport", () => {
   });
 
   it.each([
+    ["MEMBER_EVENT_UNAUTHENTICATED", 401],
+    ["MEMBER_EVENT_ACCESS_REVOKED", 403],
+  ] as const)("preserves the API stream authorization status for %s", async (code, status) => {
+    const body = `event: error\ndata: ${JSON.stringify({ code, message: "Task event access changed" })}\n\n`;
+    await expect(collect(client(async () => sse(body)).watchTask(query, new AbortController().signal))).rejects.toMatchObject({ code, status });
+  });
+
+  it.each([
     'event: task-event\nid: wrong\ndata: ' + JSON.stringify(event("evt_1")) + '\n\n',
     'event: task-event\nid: evt_1\ndata: {}\n\n',
     'event: task-event\nid: evt_1\ndata: invalid-json\n\n',
