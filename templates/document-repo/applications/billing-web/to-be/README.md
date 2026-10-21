@@ -21,4 +21,4 @@ The invoice search returns amounts including tax.
 **derivedFrom:** RULE-invoice-amount-001, RULE-invoice-tax-002
 ```
 
-A unit's `trace.json` links the requirement ids it implements in its `requirements` array.
+A unit's `understanding/trace.md` links the requirement ids it implements under `Requirements`.

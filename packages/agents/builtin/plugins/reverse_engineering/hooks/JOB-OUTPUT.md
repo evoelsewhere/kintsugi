@@ -72,8 +72,8 @@ The hook recursively examines regular files for credential-shaped values, includ
 
 It also validates artifacts when encountered at any depth:
 
-- `topology.json` must be a JSON object with `system`, `root`, `edges`, `entryPoints`, `deadEnds`, `observations`, and `flows`. The root and edge/flow members must have the documented basic object/list shapes. Duplicate JSON object keys and non-finite numbers are rejected.
-- `BUSINESS_RULES.md` must contain at least one section heading of the form `### RULE-NNN: <title>`. Any heading beginning with `RULE` that does not match that shape is malformed.
+- `topology.md` must be a topology document: front matter that names the `system`, then a `## Domains` section (`invalid_topology_document` otherwise). The raw topology JSON is scratch of the run and is checked by `scripts/render_topology.py`, not here.
+- `BUSINESS_RULES.md` and a unit's `rules.md` must contain at least one section heading of the form `### RULE-NNN: <title>` (or the item-namespaced `RULE-<module>.<unit>-<hash>`). Any heading beginning with `RULE` that does not match that shape is malformed.
 
 Every `.mmd` file and every `mermaid` fence in a Markdown file is checked with the built-in Mermaid lint (`scripts/mermaid_lint.py`, the rules of the `mermaid-diagrams` skill; no rendering). Its problems are **warnings**: the lint is a heuristic subset of Mermaid's grammar, and a diagram problem is not worth discarding an otherwise valid output. A reviewer sees the warnings on the job and fixes the diagram in the pull request. Only the rule id, path and line are reported. If the lint cannot be loaded the scan continues without it; if it fails on a file, that file gets a `diagram_lint_failed` warning.
 

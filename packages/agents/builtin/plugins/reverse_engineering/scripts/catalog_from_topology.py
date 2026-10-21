@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Propose the item catalog of an application from topology.json and inventory.json (ADR-0033).
+"""Propose the item catalog of an application from the run's topology.json and inventory.json (ADR-0033).
 
-    python3 catalog_from_topology.py <app> --assessment DIR --out FILE [--manifest FILE] [--max-items N]
+    python3 catalog_from_topology.py <app> --topology FILE --inventory FILE --out FILE [--manifest FILE] [--max-items N]
 
---assessment is the applications/<app>/assessment/ folder with topology.json (the skeleton the assess stage's
-extraction script wrote) and inventory.json (its inventory step). --manifest is kintsugi.yaml, read
-for `unitKinds` only. --out is the catalog file written.
+--topology is the skeleton topology.json the assess stage's extraction script wrote and --inventory the
+per-file inventory.json of its inventory step (both scratch files of the run). --manifest is kintsugi.yaml,
+read for `unitKinds` only. --out is the catalog file written (scratch JSON).
 
-No code is read and nothing is parsed. The grouping is the one of units_from_topology.py (ADR-0031):
+No code is read and nothing is parsed. The grouping is the one of topology_units.py (ADR-0031):
 a module is the map's domain, an item is one leaf (data stores never are), small leaves of one domain
 directory are grouped, and above --max-items the leaves of a domain directory are grouped.
 Kinds come from the leaf kind (mapped onto `unitKinds`) and, for a generic module leaf that is an
@@ -23,7 +23,7 @@ import sys
 sys.dont_write_bytecode = True  # importing the sibling scripts must not leave __pycache__ beside them
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
-import units_from_topology as uft  # noqa: E402
+import topology_units as tu  # noqa: E402
 
 DEFAULT_MAX_ITEMS = 240
 # A generic `module` leaf that is an entry point of the application (routes, main(), schedulers) is
@@ -32,7 +32,7 @@ ENTRY_KINDS = ('api', 'service', 'transaction', 'program')
 
 
 def kind_of(unit, entry_points, kinds):
-    """The unit's kind from its leaf kind (units_from_topology.choose_kind) and its entry points."""
+    """The unit's kind from its leaf kind (topology_units.choose_kind) and its entry points."""
     if unit['leafKind'] == 'module' and kinds and any(leaf in entry_points for leaf in unit['leaves']):
         for candidate in ENTRY_KINDS:
             if candidate in kinds:
@@ -65,17 +65,17 @@ def claims(units, inventory):
 
 
 def build(app, topology, inventory, source, kinds, max_items):
-    leaves = uft.walk_topology(topology)
+    leaves = tu.walk_topology(topology)
     sizes = {rel: entry['codeLines'] for rel, entry in inventory.items() if entry['codeLines'] is not None}
-    units, ambiguities = uft.build_units(leaves, sizes, kinds, max_items)
-    ambiguities = uft.find_ambiguities(leaves, units) + ambiguities
+    units, ambiguities = tu.build_units(leaves, sizes, kinds, max_items)
+    ambiguities = tu.find_ambiguities(leaves, units) + ambiguities
     owner, conflicts = claims(units, inventory)
     ambiguities += conflicts
     entry_points = {leaf for leaf in topology.get('entryPoints', []) if isinstance(leaf, str)}
     described = {leaf['id']: leaf['description'] for leaf in leaves if leaf['description']}
     domains = {}
     for leaf in leaves:
-        if leaf['kind'] not in uft.NON_UNIT_KINDS:
+        if leaf['kind'] not in tu.NON_UNIT_KINDS:
             module = cc.slug(leaf['domain'], 'core') if leaf['domain'] else 'core'
             domains.setdefault(module, leaf['domain'] or 'Core')
     files_of = {}
@@ -101,7 +101,6 @@ def build(app, topology, inventory, source, kinds, max_items):
         ))
     modules = [{'id': module, 'name': cc.clean_text(name, cc.MAX_NAME) or module, 'summary': ''} for module, name in sorted(domains.items())]
     catalog = {
-        'schemaVersion': cc.SCHEMA_VERSION,
         'app': app,
         'generatedBy': 'catalog_from_topology.py',
         'source': {key: value for key, value in source.items() if value},
@@ -116,7 +115,8 @@ def build(app, topology, inventory, source, kinds, max_items):
 def main(argv):
     ap = argparse.ArgumentParser(description='Propose the item catalog of an application from topology.json.')
     ap.add_argument('app', help='the application id from kintsugi.yaml')
-    ap.add_argument('--assessment', required=True, help='the applications/<app>/assessment/ folder (topology.json, inventory.json)')
+    ap.add_argument('--topology', required=True, help="the run's topology.json")
+    ap.add_argument('--inventory', required=True, help="the run's per-file inventory.json")
     ap.add_argument('--out', required=True, help='the catalog file to write')
     ap.add_argument('--manifest', help='kintsugi.yaml (its unitKinds name the item kinds)')
     ap.add_argument('--max-items', type=int, default=DEFAULT_MAX_ITEMS, help='at most this many items')
@@ -127,10 +127,9 @@ def main(argv):
     if args.max_items < 1:
         print('catalog_from_topology.py: --max-items must be at least 1', file=sys.stderr)
         return 1
-    assessment = os.path.realpath(args.assessment)
     try:
-        topology_path = os.path.join(assessment, 'topology.json')
-        inventory_path = os.path.join(assessment, 'inventory.json')
+        topology_path = os.path.realpath(args.topology)
+        inventory_path = os.path.realpath(args.inventory)
         if not os.path.isfile(topology_path):
             raise cc.DataError('topology.json is missing: the extraction step writes it')
         if not os.path.isfile(inventory_path):
@@ -143,7 +142,7 @@ def main(argv):
         if problems:
             raise cc.DataError('the proposed catalog is inconsistent: ' + '; '.join(problems[:5]))
         cc.write_json(os.path.abspath(args.out), catalog)
-    except (cc.DataError, uft.DataError, OSError, RecursionError) as error:
+    except (cc.DataError, OSError, RecursionError) as error:
         print(f'catalog_from_topology.py: {error}', file=sys.stderr)
         return 1
     print(f'{len(catalog["items"])} items in {len(catalog["modules"])} module(s); {len(catalog["unassigned"])} unassigned file(s) -> {args.out}')

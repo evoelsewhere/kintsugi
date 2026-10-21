@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """Finish a scoped understand run (ADR-0033): per selected item that got its specification, the
-checked traceability fragment, meta.json (what marks the item understood) and its work item.
+checked traceability record, the understanding record (what marks the item understood) and its work item.
 
-    python3 finish_items.py <app> --catalog FILE --items ID,ID,... --inputs DIR --out DIR
+    python3 finish_items.py <app> --catalog DIR --items ID,ID,... --inputs DIR --out DIR
         --commit SHA [--run ID] [--repo ID] [--existing DIR]
 
 --inputs is the run's inputs root (document-repository layout): the specifications
-applications/<app>/units/<module>/<unit>/as-is.md, the fragments the specification jobs returned
-(applications/<app>/units/<module>/<unit>/trace.json) and the item's rules.json and
-findings.json in the same unit folder. --commit is the source commit, --run the run id,
---existing the document repository's applications/<app>/units/ folder (a work item already there
-is left as it is, so a person's progress is never overwritten). Writes under --out:
+applications/<app>/units/<module>/<unit>/understanding/as-is.md, the item's rules.md and findings.md in the
+same folder, and the fragments the specification jobs returned (scratch/<app>/understand/trace/<module>/<unit>.json).
+--commit is the source commit, --run the run id, --existing the document repository's
+applications/<app>/units/ folder (a work item already there is left as it is, so a person's progress is never
+overwritten). Writes under --out, in applications/<app>/units/<module>/<unit>/:
 
-- applications/<app>/units/<module>/<unit>/trace.json — the fragment with only the rule and
-  finding ids of that item and dependencies that name a catalog item, a data store or a system,
-  carrying the requirements, pull requests and tests the specification recorded;
-- applications/<app>/units/<module>/<unit>/meta.json — {item, digest, commit, runId, ...}:
-  the item is `understood` once this file is on the default branch, `stale` when the catalog's
-  digest moves away from it;
-- applications/<app>/units/<module>/<unit>/unit.md — the work item.
+- understanding/trace.md - the fragment with only the rule and finding ids of that item and dependencies
+  that name a catalog item, a data store or a system, with the sections the later phases fill in
+  (requirements, pull requests, tests);
+- understanding/understanding.md - digest, commit, run, counts: the item is `understood` once this file is
+  on the default branch, `stale` when the catalog's digest moves away from it;
+- unit.md - the work item (frontmatter = state).
 
 An item without its specification gets none of these (it shows as failed or not analysed).
 Standard library only.
@@ -31,34 +30,92 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import docmd  # noqa: E402
 import paths  # noqa: E402
-import write_work_items as wwi  # noqa: E402
+import render_rules as rr  # noqa: E402
+import split_findings as sf  # noqa: E402
 
 COMMIT = re.compile(r'^[0-9a-f]{40}([0-9a-f]{24})?$')
 RUN = re.compile(r'^[A-Za-z0-9-]{1,80}$')
-
-
-def ids_of(document, key):
-    values = document.get(key) if isinstance(document, dict) else None
-    return [entry['id'] for entry in values or [] if isinstance(entry, dict) and isinstance(entry.get('id'), str)]
 
 
 def strings(value, limit=200):
     return [entry for entry in value if isinstance(entry, str) and entry.strip()][:limit] if isinstance(value, list) else []
 
 
+def complexity(loc):
+    if not isinstance(loc, int) or isinstance(loc, bool):
+        return None
+    return 'low' if loc < 500 else 'medium' if loc < 2000 else 'high'
+
+
+def work_item(app, unit, repo):
+    """unit.md: frontmatter (the unit's state, docs/reference/document-repo-unit-files.md) and a one-paragraph body."""
+    q = docmd.scalar
+    lines = [
+        '---',
+        f'id: {q(unit["id"])}',
+        f'application: {q(app)}',
+        f'module: {q(unit["module"])}',
+        f'kind: {q(unit["kind"] or "module")}',
+        f'title: {q(unit["title"])}',
+        'phase: discover-assess',
+        'stage: understand',
+        'status: pending',
+    ]
+    level = complexity(unit.get('loc'))
+    if level:
+        lines.append(f'complexity: {level}')
+    lines.append('dependsOn: ' + (docmd.scalar_list(unit['dependsOn'])))
+    if unit['files']:
+        lines += ['source:', f'  - {{repo: {q(repo)}, paths: {docmd.scalar_list(unit["files"])}}}']
+    links = [f'  asIs: {q(unit["spec"])}']
+    if unit['rules']:
+        links.append(f'  businessRules: {docmd.scalar_list(unit["rules"])}')
+    lines += ['links:'] + links + ['---']
+    text = [f'{unit["title"]}: proposed by the understand stage from the catalog of {app}.', f'AS-IS specification: `{unit["spec"]}`.']
+    if unit['findings']:
+        text.append(f'Security findings: {", ".join(unit["findings"])} ({paths.unit_key_understanding_path(app, unit["id"].split("/", 1)[1], "findings.md")}).')
+    if unit['entryPoint']:
+        text.append('This unit holds an entry point of the application.')
+    return '\n'.join(lines) + '\n\n' + ' '.join(text) + '\n'
+
+
+def render_trace(app, item_id, checked):
+    def section(title, body):
+        return [f'## {title}', '', body if body else '']
+
+    out = [
+        docmd.front_matter({'app': app, 'item': item_id, 'generatedBy': 'finish_items.py', 'openQuestions': checked['openQuestions']}),
+        f'# Traceability - {item_id}', '',
+        *section('Entry points', docmd.bullet_list(checked['entryPoints'])),
+        *section('Rules applied', docmd.bullet_list(checked['rulesApplied'])),
+        *section('Findings', docmd.bullet_list(checked['findings'])),
+        *section('Dependencies', docmd.table(['Target', 'Kind', 'Direction'], [[dep['target'], dep['kind'], dep['direction']] for dep in checked['dependencies']])),
+        *section('Data objects', docmd.bullet_list(checked['dataObjects'], coded=False)),
+        *section('External systems', docmd.bullet_list(checked['externalSystems'], coded=False)),
+        *section('Files', docmd.bullet_list(checked['files'])),
+        *section('Requirements', docmd.bullet_list(checked['requirements'])),
+        *section('Pull requests', docmd.bullet_list(checked['pullRequests'])),
+        *section('Tests', docmd.bullet_list(checked['tests'])),
+    ]
+    return '\n'.join(out).rstrip() + '\n'
+
+
 def finish(app, items, chosen, inputs, commit, run, repo, existing):
-    outputs, texts, done, missing = {}, {}, [], []
+    texts, done, missing, new_units = {}, [], [], 0
     for item in chosen:
         item_id = item['id']
-        spec = paths.knowledge_as_is_unit_path(app, item_id)
+        spec = paths.unit_key_as_is_path(app, item_id)
         if not os.path.isfile(os.path.join(inputs, *spec.split('/'))):
             missing.append(item_id)
             continue
-        raw = cc.read_optional_json(os.path.join(inputs, *paths.unit_trace_path(app, *item_id.split('/')).split('/')))
+        raw = cc.read_optional_json(os.path.join(inputs, *paths.understand_trace_draft_path(app, item_id).split('/')))
         trace = raw if isinstance(raw, dict) else {}
-        rules = set(ids_of(cc.read_optional_json(os.path.join(inputs, *paths.unit_rules_path(app, *item_id.split('/')).split('/'))), 'rules'))
-        findings = set(ids_of(cc.read_optional_json(os.path.join(inputs, *paths.unit_findings_path(app, *item_id.split('/')).split('/'))), 'findings'))
+        rules_text = docmd.read_optional_text(os.path.join(inputs, *paths.unit_rules_path(app, *item_id.split('/')).split('/')))
+        findings_text = docmd.read_optional_text(os.path.join(inputs, *paths.unit_findings_path(app, *item_id.split('/')).split('/')))
+        rules = {rule_id for rule_id, _ in rr.unit_rule_cards(rules_text)} if rules_text else set()
+        findings = {row.get('id', '') for row in sf.finding_rows(findings_text)} if findings_text else set()
         dependencies = []
         for dep in trace.get('dependencies') or []:
             if not isinstance(dep, dict) or not isinstance(dep.get('target'), str):
@@ -67,8 +124,6 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
             if target in items or target.startswith('ds:') or (target and '/' not in target):
                 dependencies.append({'target': target[:120], 'kind': cc.clean_text(dep.get('kind'), 20) or 'call', 'direction': 'inbound' if dep.get('direction') == 'inbound' else 'outbound'})
         checked = {
-            'app': app,
-            'item': item_id,
             'entryPoints': strings(trace.get('entryPoints')),
             'rulesApplied': sorted(set(strings(trace.get('rulesApplied'))) & rules),
             'findings': sorted(set(strings(trace.get('findings'))) & findings),
@@ -81,18 +136,23 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
             'files': sorted({rel for rel in (cc.norm_path(value) for value in strings(trace.get('files'))) if rel}),
             'openQuestions': trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) and not isinstance(trace.get('openQuestions'), bool) else 0,
         }
-        outputs[paths.unit_trace_path(app, *item_id.split('/'))] = checked
-        outputs[paths.unit_meta_path(app, *item_id.split('/'))] = {
+        texts[paths.unit_trace_path(app, *item_id.split('/'))] = render_trace(app, item_id, checked)
+        record = {
             'app': app,
             'item': item_id,
             'generatedBy': 'finish_items.py',
+            'status': 'understood',
             'digest': item.get('digest') if isinstance(item.get('digest'), str) else '',
             'commit': commit,
-            **({'runId': run} if run else {}),
+            'runId': run or '',
             'specification': spec,
             'rules': len(checked['rulesApplied']),
             'findings': len(checked['findings']),
         }
+        texts[paths.unit_understanding_path(app, *item_id.split('/'))] = (
+            docmd.front_matter(record) + f'# Understanding record - {item_id}\n\nThe specification of this item was written at `{commit}`. '
+            'Its presence on the default branch marks the item understood; a changed catalog digest marks it stale.\n'
+        )
         module, name = item_id.split('/', 1)
         if not (existing and os.path.exists(os.path.join(existing, module, name, 'unit.md'))):
             unit = {
@@ -108,13 +168,14 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
                 'findings': checked['findings'],
                 'entryPoint': bool(item.get('entryPoints')),
             }
-            texts[paths.unit_key_path(app, item_id, 'unit.md')] = '\n'.join(wwi.frontmatter(app, unit, repo)) + '\n\n' + wwi.body(app, unit) + '\n'
+            texts[paths.unit_key_path(app, item_id, 'unit.md')] = work_item(app, unit, repo)
+            new_units += 1
         done.append(item_id)
-    return outputs, texts, done, missing
+    return texts, done, missing, new_units
 
 
 def main(argv):
-    ap = argparse.ArgumentParser(description='Finish a scoped understand run: traces, meta.json and work items per item.')
+    ap = argparse.ArgumentParser(description='Finish a scoped understand run: traces, understanding records and work items per item.')
     ap.add_argument('app')
     ap.add_argument('--catalog', required=True)
     ap.add_argument('--items', required=True)
@@ -134,21 +195,14 @@ def main(argv):
             raise cc.DataError('--run must be a run id')
         items, _ = cc.load_catalog(args.catalog)
         chosen = cc.selected(items, args.items)
-        outputs, texts, done, missing = finish(args.app, items, chosen, os.path.realpath(args.inputs), args.commit, args.run, args.repo, args.existing)
+        texts, done, missing, new_units = finish(args.app, items, chosen, os.path.realpath(args.inputs), args.commit, args.run, args.repo, args.existing)
         root = os.path.abspath(args.out)
-        for path, value in outputs.items():
-            cc.write_json(os.path.join(root, *path.split('/')), value)
         for path, text in texts.items():
-            target = os.path.join(root, *path.split('/'))
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            if os.path.islink(target):
-                raise cc.DataError(f'refusing to write through a symbolic link: {path}')
-            with open(target, 'w', encoding='utf-8', newline='\n') as handle:
-                handle.write(text)
+            docmd.write_text(os.path.join(root, *path.split('/')), text)
     except (cc.DataError, OSError, RecursionError) as error:
         print(f'finish_items.py: {error}', file=sys.stderr)
         return 1
-    print(f'{len(done)} item(s) understood, {len(texts)} work item(s) written; {len(missing)} without a specification')
+    print(f'{len(done)} item(s) understood, {new_units} work item(s) written; {len(missing)} without a specification')
     for item_id in missing[:60]:
         print(f'- no specification: {item_id}')
     return 0

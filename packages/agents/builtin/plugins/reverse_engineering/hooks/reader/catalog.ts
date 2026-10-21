@@ -1,11 +1,9 @@
 import { cellText, columnOf, sectionsOf, tablesIn } from './markdown.js'
-import { citationsIn, idOfTitle, parseRules, type Citation, type Rule } from './rules.js'
+import { parseRules, type Citation, type Rule } from './rules.js'
 
 /**
- * The business rule catalog of the extract-rules stage: `rules_result.json` (the workflow's
- * structured result: confirmed, rejected and unverified rules, data objects, stats), joined with
- * the ids `BUSINESS_RULES.md` gives each rule, plus `DATA_OBJECTS.md` when the result is missing.
- * Every field of the agent-written files is treated as optional. Never throws.
+ * The business rule catalog: the rule cards of a rules document and the data objects document. Every field of the
+ * agent-written files is treated as optional. Never throws.
  */
 
 export type RuleStatus = 'confirmed' | 'refuted' | 'unverified'
@@ -42,22 +40,11 @@ export type DataObject = { name: string; source?: string; fields: DataField[]; c
 export type RuleCatalog = {
   rules: CatalogRule[]
   dataObjects: DataObject[]
-  /** Numeric stats of the result (`confirmed`, `rejected`, `p0`, `needsSme`, …). */
-  stats: Record<string, number>
-  /** Phases the extraction skipped or cut short, as written. */
-  skippedPhases: string[]
   /** Where the rules were read from. */
-  source: 'result' | 'markdown' | 'none'
+  source: 'markdown' | 'none'
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
-const str = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
-
-const strings = (value: unknown): string[] => (Array.isArray(value) ? value.map(str).filter((item): item is string => item !== undefined) : [])
-
-/** Lower-cased words of a name, for matching a result rule to its card and spotting look-alikes. */
+/** Lower-cased words of a name, for spotting look-alike rules. */
 const wordsOf = (text: string): string[] =>
   text
     .toLowerCase()
@@ -66,68 +53,6 @@ const wordsOf = (text: string): string[] =>
     .filter(word => word.length > 2 && !STOP.has(word))
 
 const STOP = new Set(['the', 'and', 'for', 'are', 'its', 'with', 'when', 'than', 'that', 'this', 'into', 'from', 'only', 'one', 'is', 'of'])
-
-const keyOf = (name: string): string => wordsOf(name.replace(/…$/, '')).join(' ')
-
-function ruleOf(raw: Record<string, unknown>, status: RuleStatus): Omit<CatalogRule, 'id'> | null {
-  const name = str(raw.name) ?? str(raw.title)
-
-  if (name === undefined) {
-    return null
-  }
-
-  const source = str(raw.source)
-  const fields = {
-    category: str(raw.category),
-    confidence: str(raw.confidence),
-    source,
-    plainEnglish: str(raw.plainEnglish) ?? str(raw.statement),
-    given: str(raw.given),
-    when: str(raw.when),
-    then: str(raw.then),
-    and: str(raw.and),
-    parameters: str(raw.parameters),
-    suspectedDefect: str(raw.suspectedDefect),
-    smeQuestion: str(raw.smeQuestion),
-    rejectionReason: str(raw.rejectionReason),
-  }
-
-  return {
-    name,
-    priority: str(raw.priority)?.toUpperCase() ?? '',
-    status,
-    ...(Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as Partial<CatalogRule>),
-    edgeCases: strings(raw.edgeCases),
-    citations: citationsIn([source ?? '', str(raw.parameters) ?? ''].join(' ')),
-  }
-}
-
-function dataObjectsOfResult(value: unknown): DataObject[] {
-  const objects: DataObject[] = []
-
-  for (const raw of Array.isArray(value) ? value : []) {
-    const name = isRecord(raw) ? str(raw.name) : undefined
-
-    if (!isRecord(raw) || name === undefined) continue
-
-    const source = str(raw.source)
-
-    objects.push({
-      name,
-      ...(source !== undefined && { source }),
-      fields: (Array.isArray(raw.fields) ? raw.fields : []).filter(isRecord).flatMap(field => {
-        const fieldName = str(field.name)
-        const type = str(field.type)
-        const note = str(field.note)
-
-        return fieldName === undefined ? [] : [{ name: fieldName, ...(type !== undefined && { type }), ...(note !== undefined && { note }) }]
-      }),
-      consumedBy: strings(raw.consumedBy),
-    })
-  }
-
-  return objects
-}
 
 /** DATA_OBJECTS.md: a `## <Object>` section per record with `Source:`, a field table and `Used by:`. */
 export function parseDataObjects(text: string): DataObject[] {
@@ -175,78 +100,17 @@ const fromCard = (rule: Rule): CatalogRule => ({
 })
 
 /**
- * The catalog from rules_result.json (preferred: it is structured) and BUSINESS_RULES.md (for the
- * ids, or the whole catalog when there is no result), with DATA_OBJECTS.md as the data objects'
- * fallback. Look-alike rules are grouped (`duplicateGroup`).
+ * The catalog from a rules document (`BUSINESS_RULES.md` of the generated views, or one unit's `rules.md`: a
+ * `### <id>: <name>` card per rule), with the data objects document as the objects' source. Look-alike rules are
+ * grouped (`duplicateGroup`).
  */
-export function ruleCatalog(resultText: string | null, rulesText: string | null, dataObjectsText: string | null): RuleCatalog {
-  let result: Record<string, unknown> | null = null
-
-  if (resultText !== null) {
-    try {
-      const parsed: unknown = JSON.parse(resultText)
-
-      result = isRecord(parsed) ? parsed : null
-    } catch {
-      result = null
-    }
-  }
-
-  const cards = rulesText === null ? [] : parseRules(rulesText).rules
-  const idByName = new Map<string, string>()
-
-  for (const card of cards) {
-    if (!idByName.has(keyOf(card.title))) idByName.set(keyOf(card.title), card.id)
-  }
-
-  let rules: CatalogRule[]
-  let source: RuleCatalog['source']
-
-  if (result !== null) {
-    const used = new Set<string>()
-    const lists: [unknown, RuleStatus][] = [
-      [result.confirmedRules, 'confirmed'],
-      [result.unverifiedRules, 'unverified'],
-      [result.rejectedRules, 'refuted'],
-    ]
-
-    rules = lists.flatMap(([list, status]) =>
-      (Array.isArray(list) ? list : []).filter(isRecord).flatMap(raw => {
-        const rule = ruleOf(raw, status)
-
-        if (rule === null) return []
-
-        const base = str(raw.id) ?? (status === 'confirmed' ? idByName.get(keyOf(rule.name)) : undefined) ?? idOfTitle(rule.name)
-        let id = base
-
-        for (let copy = 2; used.has(id); copy++) id = `${base}-${copy}`
-        used.add(id)
-
-        return [{ id, ...rule }]
-      }),
-    )
-    source = 'result'
-  } else {
-    rules = cards.map(fromCard)
-    source = cards.length === 0 ? 'none' : 'markdown'
-  }
-
-  const stats: Record<string, number> = {}
-
-  if (result !== null && isRecord(result.stats)) {
-    for (const [key, value] of Object.entries(result.stats)) {
-      if (typeof value === 'number' && Number.isFinite(value)) stats[key] = value
-    }
-  }
-
-  const fromResult = result === null ? [] : dataObjectsOfResult(result.dataObjects)
+export function ruleCatalog(rulesText: string | null, dataObjectsText: string | null): RuleCatalog {
+  const rules = (rulesText === null ? [] : parseRules(rulesText).rules).map(fromCard)
 
   return {
     rules: markDuplicates(rules.sort(byId)),
-    dataObjects: fromResult.length > 0 || dataObjectsText === null ? fromResult : parseDataObjects(dataObjectsText),
-    stats,
-    skippedPhases: result === null || !isRecord(result.stats) ? [] : strings(result.stats.skippedPhases),
-    source,
+    dataObjects: dataObjectsText === null ? [] : parseDataObjects(dataObjectsText),
+    source: rules.length === 0 ? 'none' : 'markdown',
   }
 }
 

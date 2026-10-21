@@ -115,9 +115,10 @@ describe("autoCommitPaths globs", () => {
   it("splits writes by the application and unit defaults", () => {
     expect(isAutoCommitPath("applications/web/units/payroll/run-period/unit.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
     expect(isAutoCommitPath("applications/web/units/payroll/run-period/task.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/generated/traceability.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/units/payroll/run-period/rules.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
-    expect(isAutoCommitPath("applications/web/assessment/generated/topology.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("applications/web/generated/traceability.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("applications/web/understanding/plan.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("applications/web/units/payroll/run-period/understanding/rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("applications/web/assessment/generated/topology.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("applications/team/web/generated/a.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("kintsugi.yaml", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("standards/review-rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);

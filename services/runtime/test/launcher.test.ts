@@ -98,9 +98,11 @@ describe("script steps", () => {
   it("runs the built-in inventory script against a fixture checkout", async () => {
     const ws = workspace("inventory");
     const script = join(import.meta.dirname, "../../../packages/agents/builtin/plugins/reverse_engineering/scripts/inventory.py");
-    const result = await runScript(spec(ws, script, ["demo", "--source", ws.src, "--out", join(ws.out, "assessment", "demo")]));
+    const result = await runScript(spec(ws, script, ["demo", "--source", ws.src, "--out", join(ws.out, "assessment", "demo"), "--scratch", join(ws.out, "scratch", "demo")]));
     expect(result.failure).toBeUndefined();
-    const inventory = JSON.parse(readFileSync(join(ws.out, "assessment", "demo", "inventory.json"), "utf8")) as { sourceFileCount: number };
+    // The summary is committed Markdown; the per-file records are scratch JSON.
+    expect(readFileSync(join(ws.out, "assessment", "demo", "inventory.md"), "utf8")).toMatch(/^sourceFileCount: 1$/m);
+    const inventory = JSON.parse(readFileSync(join(ws.out, "scratch", "demo", "inventory.json"), "utf8")) as { sourceFileCount: number };
     expect(inventory.sourceFileCount).toBe(1);
   });
 

@@ -29,25 +29,63 @@ describe('markdown', () => {
   })
 })
 
+const INVENTORY_MD = `---
+app: "billing"
+sourceRepository: "legacy"
+sourceCommit: "${'a'.repeat(40)}"
+method: "static inventory"
+complexityIndexFormula: "2.94 × KSLOC^1.10"
+fileCount: 3
+sourceFileCount: 2
+totalBytes: 1000
+totalLines: 36
+sloc: 30
+ksloc: 0.03
+complexity: 3
+complexityPerKsloc: 100
+complexityIndex: 0.11
+directoryDepth: 1
+codeFiles: 2
+medianSloc: 15
+halfComplexityFiles: 1
+topTenShare: 1
+oversized: 0
+---
+# Inventory of billing
+
+## Languages
+
+| Language | Files | Lines | SLOC | Complexity |
+| --- | --- | --- | --- | --- |
+| SQL | 1 | 6 | 6 | 0 |
+| Java | 1 | 30 | 24 | 3 |
+
+## Directories
+
+| Path | Files | SLOC | Complexity |
+| --- | --- | --- | --- |
+| (root) | 2 | 30 | 3 |
+
+## Size distribution
+
+| SLOC per file | Files |
+| --- | --- |
+| <50 | 2 |
+| 50-99 | 0 |
+
+## Most complex files
+
+| Path | Language | Lines | SLOC | Complexity |
+| --- | --- | --- | --- | --- |
+| A.java | Java | 30 | 24 | 3 |
+| .git | Other | 1 | 1 | 9 |
+| schema.sql | SQL | 6 | 6 | 0 |
+`
+
 describe('inventory', () => {
-  test('reads the figures of record, per language and per file, without the .git pointer', () => {
-    const inventory = parseInventory(
-      JSON.stringify({
-        app: 'billing',
-        fileCount: 3,
-        sloc: 30,
-        ksloc: 0.03,
-        complexityIndex: 0.11,
-        languages: { Java: 1, SQL: 1 },
-        languageMetrics: { Java: { files: 1, lines: 30, sloc: 24, complexity: 3 } },
-        files: [
-          { path: '.git', bytes: 10, language: 'Other' },
-          { path: 'A.java', language: 'Java', lines: 30, sloc: 24, cyclomaticComplexity: 3, bytes: 900 },
-          { path: 'schema.sql', language: 'SQL', lines: 6, codeLines: 6, bytes: 100 },
-        ],
-      }),
-    )
-    expect(inventory).toMatchObject({ app: 'billing', fileCount: 3, sloc: 30, complexityIndex: 0.11 })
+  test('reads the figures of record, the roll-ups and the most complex files, without the .git pointer', () => {
+    const inventory = parseInventory(INVENTORY_MD)
+    expect(inventory).toMatchObject({ app: 'billing', sourceCommit: 'a'.repeat(40), fileCount: 3, sourceFileCount: 2, sloc: 30, ksloc: 0.03, complexityIndex: 0.11, complexityPerKsloc: 100, directoryDepth: 1 })
     expect(inventory?.files.map(file => [file.path, file.sloc, file.complexity])).toEqual([
       ['A.java', 24, 3],
       ['schema.sql', 6, 0],
@@ -56,42 +94,108 @@ describe('inventory', () => {
       { language: 'Java', files: 1, lines: 30, sloc: 24, complexity: 3 },
       { language: 'SQL', files: 1, lines: 6, sloc: 6, complexity: 0 },
     ])
+    expect(inventory?.directories).toEqual([{ path: '(root)', files: 2, sloc: 30, complexity: 3 }])
+    expect(inventory?.sizeDistribution).toEqual([
+      { label: '<50', files: 2 },
+      { label: '50-99', files: 0 },
+    ])
+    expect(inventory?.signals).toEqual({ codeFiles: 2, medianSloc: 15, halfComplexityFiles: 1, topTenShare: 1, oversized: 0 })
   })
 
   test('is null for text that is not an inventory', () => {
-    expect(parseInventory('not json')).toBeNull()
-    expect(parseInventory('[]')).toBeNull()
-    expect(parseInventory('{}')).toBeNull()
+    expect(parseInventory('not an inventory')).toBeNull()
+    expect(parseInventory('')).toBeNull()
+    expect(parseInventory('---\napp: "x"\n---\n# Nothing')).toBeNull()
   })
 })
+
+const TOPOLOGY_MD = `---
+app: "billing"
+system: "Billing"
+domains: 2
+leaves: 3
+dataStores: 1
+edges: 3
+entryPoints: 1
+deadEnds: 1
+flows: 1
+truncated: false
+---
+# Topology of Billing
+
+## Domains
+
+| Domain | Leaves | Data stores | LOC |
+| --- | --- | --- | --- |
+| A | 2 | 1 | 13 |
+| B | 1 | 0 | 5 |
+
+## Edges between domains
+
+| From | To | Kinds | Edges |
+| --- | --- | --- | --- |
+| A | B | call | 1 |
+
+## Leaves
+
+| Leaf | Name | Kind | Domain | File | LOC | Entry point | Dead end |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| m1 | M1 | module | A | src/a.java | 8 | yes |  |
+| m2 | M2 | module | A | src/b.java | 5 |  | yes |
+| m3 | M3 | module | B | src/c.java | 5 |  |  |
+| ds:acct | Accounts | datastore | A |  |  |  |  |
+
+## Edges
+
+| Source | Target | Kind |
+| --- | --- | --- |
+| m1 | m3 | call |
+| m1 | ds:acct | write |
+
+## Observations
+
+- Coupling between A and B.
+
+## Flows
+
+### Open an account
+
+- **persona:** clerk
+- **description:** Plain words.
+
+| Step | Nodes |
+| --- | --- |
+| Enter the form | m1, m2 |
+`
 
 describe('topology', () => {
-  test('keeps node descriptions, flow descriptions and observations', () => {
-    const topology = parseTopology(
-      JSON.stringify({
-        system: 'Billing',
-        root: { id: 'sys', kind: 'system', children: [{ id: 'dom:a', name: 'A', kind: 'domain', children: [{ id: 'm1', kind: 'module', loc: 3, file: 'a.java', description: 'Reads accounts.' }] }] },
-        flows: [{ name: 'Flow', description: 'Plain words.', steps: [] }],
-        observations: ['Coupling.', 3],
-      }),
-    )
-    expect(topology?.nodes[0]).toMatchObject({ id: 'm1', domain: 'A', description: 'Reads accounts.' })
-    expect(topology?.flows[0]?.description).toBe('Plain words.')
-    expect(topology?.observations).toEqual(['Coupling.'])
+  test('reads the leaves with their domains, the edges, the flows and the observations', () => {
+    const topology = parseTopology(TOPOLOGY_MD)
+    expect(topology?.system).toBe('Billing')
+    expect(topology?.nodes[0]).toMatchObject({ id: 'm1', domain: 'A', loc: 8, file: 'src/a.java' })
+    expect(topology?.modules.map(node => node.id)).toEqual(['m1', 'm2', 'm3'])
+    expect(topology?.domains.map(domain => [domain.name, domain.modules.map(node => node.id)])).toEqual([
+      ['A', ['m1', 'm2']],
+      ['B', ['m3']],
+    ])
+    expect(topology?.edges).toEqual([
+      { source: 'm1', target: 'm3', kind: 'call' },
+      { source: 'm1', target: 'ds:acct', kind: 'write' },
+    ])
+    expect(topology?.domainEdges).toEqual([{ from: 'A', to: 'B', kinds: ['call'], edges: 1 }])
+    expect([...(topology?.entryPoints ?? [])]).toEqual(['m1'])
+    expect([...(topology?.deadEnds ?? [])]).toEqual(['m2'])
+    expect(topology?.flows).toEqual([{ name: 'Open an account', persona: 'clerk', description: 'Plain words.', steps: [{ label: 'Enter the form', nodes: ['m1', 'm2'] }] }])
+    expect(topology?.observations).toEqual(['Coupling between A and B.'])
+    expect(topology?.totals).toEqual({ leaves: 3, dataStores: 1, edges: 3, entryPoints: 1, deadEnds: 1, truncated: false })
+    expect(topology?.byFileBase.get('a.java')?.[0]?.id).toBe('m1')
+  })
+
+  test('is null for text with no leaves', () => {
+    expect(parseTopology('# nothing')).toBeNull()
+    expect(parseTopology('---\nsystem: "x"\n---\n## Domains\n')).toBeNull()
   })
 })
-
-const RESULT = {
-  confirmedRules: [
-    { name: 'Monthly interest is balance times rate divided by twelve', category: 'Calculation', priority: 'P0', source: 'src/A.java:15-17', confidence: 'High', edgeCases: ['zero rate'] },
-    { name: 'Monthly interest is one twelfth of balance times rate', category: 'Calculation', priority: 'P0', source: 'src/A.java:18', confidence: 'High' },
-    { name: 'Late fee applies after 30 days', category: 'Calculation', priority: 'P0', source: 'src/A.java:19', confidence: 'Medium', smeQuestion: 'Is it 30 or 31?' },
-    { name: 'Unknown accounts are rejected', category: 'Validation', priority: 'P1', source: 'src/R.java:20' },
-  ],
-  rejectedRules: [{ name: 'Balance is never negative', category: 'Policy', priority: 'P1', source: 'schema.sql:1-6', rejectionReason: 'refuted: no constraint' }],
-  dataObjects: [{ name: 'Account', source: 'src/Account.java:5', fields: [{ name: 'id', type: 'String' }], consumedBy: ['Late fee applies after 30 days'] }],
-  stats: { confirmed: 4, rejected: 1, p0: 3, skippedPhases: ['round 2 skipped'] },
-}
 
 const RULES_MD = `# Business Rules
 
@@ -120,38 +224,31 @@ const RULES_MD = `# Business Rules
 `
 
 describe('rule catalog', () => {
-  test('joins the structured result with the ids of BUSINESS_RULES.md and groups look-alikes', () => {
-    const catalog = ruleCatalog(JSON.stringify(RESULT), RULES_MD, null)
-    expect(catalog.source).toBe('result')
-    expect(catalog.rules.map(rule => [rule.id, rule.status, rule.duplicateGroup])).toEqual([
-      ['RULE-001', 'confirmed', 1],
-      ['RULE-002', 'confirmed', 1],
-      ['RULE-003', 'confirmed', undefined],
-      ['RULE-004', 'confirmed', undefined],
-      [expect.stringMatching(/^R-[0-9a-f]{6}$/), 'refuted', undefined],
-    ])
-    expect(catalog.rules[2]).toMatchObject({ smeQuestion: 'Is it 30 or 31?', citations: [{ path: 'src/A.java', from: 19, to: 19 }] })
-    expect(catalog.rules[4]?.rejectionReason).toBe('refuted: no constraint')
-    expect(catalog.dataObjects).toEqual([{ name: 'Account', source: 'src/Account.java:5', fields: [{ name: 'id', type: 'String' }], consumedBy: ['Late fee applies after 30 days'] }])
-    expect(catalog.stats).toEqual({ confirmed: 4, rejected: 1, p0: 3 })
-    expect(catalog.skippedPhases).toEqual(['round 2 skipped'])
-  })
-
-  test('falls back to BUSINESS_RULES.md and DATA_OBJECTS.md without a result', () => {
-    const catalog = ruleCatalog(null, RULES_MD, '# Data Objects\n\n## Account\nSource: `src/Account.java:5`\n\n| Field | Type | Note |\n|---|---|---|\n| id | String | key |\n\nUsed by: Rule one, Rule two\n')
+  test('reads the rule cards of a rules document and groups look-alikes', () => {
+    const catalog = ruleCatalog(RULES_MD, null)
     expect(catalog.source).toBe('markdown')
-    expect(catalog.rules.map(rule => [rule.id, rule.priority, rule.source])).toEqual([
-      ['RULE-001', 'P0', 'src/A.java:15-17'],
-      ['RULE-002', 'P0', 'src/A.java:18'],
-      ['RULE-003', 'P0', 'src/A.java:19'],
-      ['RULE-004', 'P1', 'src/R.java:20'],
+    expect(catalog.rules.map(rule => [rule.id, rule.status, rule.priority, rule.source, rule.duplicateGroup])).toEqual([
+      ['RULE-001', 'confirmed', 'P0', 'src/A.java:15-17', 1],
+      ['RULE-002', 'confirmed', 'P0', 'src/A.java:18', 1],
+      ['RULE-003', 'confirmed', 'P0', 'src/A.java:19', undefined],
+      ['RULE-004', 'confirmed', 'P1', 'src/R.java:20', undefined],
     ])
     expect(catalog.rules[0]?.plainEnglish).toBe('Interest is a twelfth of the yearly rate.')
+    expect(catalog.rules[2]).toMatchObject({ citations: [{ path: 'src/A.java', from: 19, to: 19 }] })
+  })
+
+  test('reads the data objects document', () => {
+    const catalog = ruleCatalog(RULES_MD, '# Data Objects\n\n## Account\nSource: `src/Account.java:5`\n\n| Field | Type | Note |\n|---|---|---|\n| id | String | key |\n\nUsed by: Rule one, Rule two\n')
     expect(catalog.dataObjects).toEqual([{ name: 'Account', source: 'src/Account.java:5', fields: [{ name: 'id', type: 'String', note: 'key' }], consumedBy: ['Rule one', 'Rule two'] }])
   })
 
-  test('an unreadable result and no markdown is an empty catalog', () => {
-    expect(ruleCatalog('{', null, null)).toEqual({ rules: [], dataObjects: [], stats: {}, skippedPhases: [], source: 'none' })
+  test('a unit rules document with front matter reads like the catalog', () => {
+    const unit = `---\napp: "billing"\nitem: "tax/calc"\nrules: 1\n---\n# Business rules - tax/calc\n\n| ID | Name |\n|---|---|\n| RULE-tax.calc-1a2b3c4d | Round |\n\n## Calculation\n\n### RULE-tax.calc-1a2b3c4d: Round\n**Category:** Calculation\n**Priority:** P0\n**Source:** \`src/TAX.cbl:3\`\n`
+    expect(ruleCatalog(unit, null).rules.map(rule => [rule.id, rule.name, rule.priority])).toEqual([['RULE-tax.calc-1a2b3c4d', 'Round', 'P0']])
+  })
+
+  test('no document is an empty catalog', () => {
+    expect(ruleCatalog(null, null)).toEqual({ rules: [], dataObjects: [], source: 'none' })
     expect(parseDataObjects('no sections')).toEqual([])
   })
 })

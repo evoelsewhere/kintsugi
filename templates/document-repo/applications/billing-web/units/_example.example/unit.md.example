@@ -19,7 +19,7 @@ target:
   - {repo: org/billing-web-ui, paths: [src/Invoices/Search/]}
 links:
   taskPack: applications/billing-web/units/invoices/invoice-search/task.md
-  asIs: applications/billing-web/units/invoices/invoice-search/as-is.md
+  asIs: applications/billing-web/units/invoices/invoice-search/understanding/as-is.md
   mappings: [standards/mappings/invoice-grid.md, standards/mappings/search-list-screen.md]
   businessRules: [RULE-invoice-amount-001]
   pullRequests: []

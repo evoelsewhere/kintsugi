@@ -1,4 +1,4 @@
-// Builds Mermaid flowcharts of the understand stage's unit dependencies (traceability.json):
+// Builds Mermaid flowcharts of the understand stage's unit dependencies (the units' trace documents):
 // a module view (one node per module, an edge per module pair labelled with how many unit
 // dependencies it carries) and a unit view (one subgraph per module, units as nodes, entry
 // points thick, units without a specification dashed), filtered to a module and its direct

@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Keep the item ids of an application's catalog stable across re-assessments (ADR-0033).
 
-    python3 reconcile_catalog.py --catalog FILE --inventory FILE --out FILE
-        [--previous FILE] [--units-json FILE] [--units-dir DIR]
+    python3 reconcile_catalog.py --catalog FILE --inventory FILE --out FILE [--previous DIR] [--units-dir DIR]
 
---catalog is this run's curated catalog; --inventory its inventory.json; --previous the catalog.json
-on the document repository's default branch. Without a previous catalog, the old items are seeded
-from the understand stage's units (ADR-0031): --units-json (applications/<app>/assessment/units.json)
-and --units-dir (the applications/<app>/units/ work-item files), so existing unit ids are kept.
-Missing inputs are
-skipped. --out is the reconciled catalog.
+--catalog is this run's curated catalog (scratch JSON); --inventory its per-file inventory.json; --previous
+the catalog folder (assessment/catalog/) on the document repository's default branch. Without a previous
+catalog, the old items are seeded from the work items of the understand stage: --units-dir (the
+applications/<app>/units/ work-item files), so existing unit ids are kept. Missing inputs are
+skipped. --out is the reconciled catalog (scratch JSON; render_catalog.py writes the Markdown).
 
 Deterministic rules:
 - A new item whose files overlap an old item's by Jaccard >= 0.5 takes the old id; the pairs are
@@ -133,17 +131,10 @@ def expand(paths, inventory):
     return sorted(files)
 
 
-def old_from_units(units_json, units_dir, inventory):
-    """Seed items of the understand stage's units: units.json first, then work-item files. A unit
-    lists the files of its map leaves, which may be directories: they are expanded on the inventory."""
+def old_from_units(units_dir, inventory):
+    """Seed items of the work items of the understand stage. A unit lists the files of its map leaves,
+    which may be directories: they are expanded on the inventory."""
     seeded = {}
-    if isinstance(units_json, dict):
-        for unit in units_json.get('units', []) if isinstance(units_json.get('units'), list) else []:
-            if not isinstance(unit, dict) or not cc.ITEM_ID_RE.match(str(unit.get('key', ''))):
-                continue
-            files = expand(unit.get('files') if isinstance(unit.get('files'), list) else [], inventory)
-            seeded[unit['key']] = cc.new_item(unit['key'], unit['key'].split('/')[0], cc.clean_text(unit.get('kind'), 40) or 'module',
-                                              cc.clean_text(unit.get('title'), cc.MAX_NAME) or unit['key'], files)
     if units_dir and os.path.isdir(units_dir) and not os.path.islink(units_dir):
         count = 0
         for current, directories, names in os.walk(units_dir):
@@ -277,10 +268,9 @@ def reconcile(catalog, old_items, old_modules):
 def main(argv):
     ap = argparse.ArgumentParser(description='Keep catalog item ids stable across re-assessments.')
     ap.add_argument('--catalog', required=True, help="this run's curated catalog")
-    ap.add_argument('--inventory', required=True, help='inventory.json of this run')
+    ap.add_argument('--inventory', required=True, help='the per-file inventory.json of this run')
     ap.add_argument('--out', required=True, help='the reconciled catalog to write')
-    ap.add_argument('--previous', help='catalog.json on the default branch (optional)')
-    ap.add_argument('--units-json', help='applications/<app>/assessment/units.json, seeds the first reconcile (optional)')
+    ap.add_argument('--previous', help='the catalog folder on the default branch (optional)')
     ap.add_argument('--units-dir', help='applications/<app>/units/, seeds the first reconcile (optional)')
     args = ap.parse_args(argv[1:])
     try:
@@ -288,12 +278,12 @@ def main(argv):
         catalog = cc.read_json(args.catalog, 'the curated catalog')
         if not isinstance(catalog, dict) or not isinstance(catalog.get('items'), list) or not isinstance(catalog.get('modules'), list):
             raise cc.DataError('the curated catalog must have modules and items')
-        previous = cc.read_optional_json(args.previous)
-        if isinstance(previous, dict) and isinstance(previous.get('items'), list):
+        previous = cc.load_catalog(args.previous)[1] if args.previous and os.path.isfile(os.path.join(args.previous, 'index.md')) else None
+        if isinstance(previous, dict) and previous.get('items'):
             old_items, old_modules = old_from_catalog(previous)
             seeded = 'catalog'
         else:
-            old_items, old_modules = old_from_units(cc.read_optional_json(args.units_json), args.units_dir, inventory)
+            old_items, old_modules = old_from_units(args.units_dir, inventory)
             seeded = 'units' if old_items else 'none'
         counts = reconcile(catalog, old_items, old_modules)
         cc.refresh(catalog, inventory)

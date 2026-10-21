@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -7,6 +8,10 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
+sys.path.insert(0, SCRIPTS)
+import catalog_common as cc  # noqa: E402
+import docmd  # noqa: E402
+import render_rules as rr  # noqa: E402
 
 
 def run(script, *args):
@@ -30,10 +35,10 @@ def item(item_id, files, leaves, **extra):
 
 
 CATALOG = {
-    'schemaVersion': 1, 'app': 'billing',
+    'app': 'billing',
     'modules': [{'id': 'invoicing', 'name': 'Invoicing', 'summary': ''}, {'id': 'tax', 'name': 'Tax', 'summary': ''}],
     'items': [
-        item('invoicing/entry', ['src/INV01.cbl'], ['INV01']),
+        item('invoicing/entry', ['src/INV01.cbl'], ['INV01'], entryPoints=['INV01']),
         item('tax/calc', ['src/TAX.cbl', 'src/TAXLIB.cbl'], ['TAX']),
         item('tax/old', ['src/OLD.cbl'], ['OLD'], status='retired'),
     ],
@@ -54,36 +59,51 @@ TOPOLOGY = {
     'entryPoints': ['INV01'], 'deadEnds': [], 'observations': [], 'flows': [],
 }
 
+UNITS = ('applications', 'billing', 'units')
+
+
+def unit_file(root, unit, *parts):
+    return os.path.join(root, *UNITS, *unit.split('/'), *parts)
+
 
 class UnderstandToolsTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = self.temp.name
-        self.catalog = os.path.join(self.root, 'catalog.json')
-        self.topology = os.path.join(self.root, 'topology.json')
         self.out = os.path.join(self.root, 'out')
-        write(self.catalog, CATALOG)
-        write(self.topology, TOPOLOGY)
+        # The catalog the assess stage committed, links included.
+        for path, text in cc.render_catalog('billing', CATALOG, cc.item_graph(CATALOG['items'], TOPOLOGY)).items():
+            write(os.path.join(self.root, 'docs', *path.split('/')), text)
+        self.catalog = os.path.join(self.root, 'docs', *cc.paths.assessment_catalog_dir('billing').split('/'))
 
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_scope_items_writes_fragments_briefs_and_shards(self):
-        result = run('scope_items.py', 'billing', '--catalog', self.catalog, '--topology', self.topology, '--items', 'tax/calc,invoicing/entry', '--out', self.out)
+    def split_rules(self, rules, items='invoicing/entry,tax/calc'):
+        return run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', items, '--out', self.out)
+
+    def rules_of(self, unit):
+        return rr.unit_rule_cards(docmd.read_text(unit_file(self.out, unit, 'understanding', 'rules.md')))
+
+    def test_scope_items_writes_the_topology_document_the_brief_and_the_shards(self):
+        result = run('scope_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc,invoicing/entry', '--out', self.out)
         self.assertEqual(result.returncode, 0, result.stderr)
-        fragment = load(os.path.join(self.out, 'applications', 'billing', 'units', 'invoicing', 'entry', 'topology.json'))
-        self.assertEqual(fragment['item'], 'invoicing/entry')
-        self.assertEqual([edge.get('targetItem') for edge in fragment['edges']], ['tax/calc', None])
-        self.assertEqual(fragment['entryPoints'], ['INV01'])
-        brief = load(os.path.join(self.out, 'applications', 'billing', 'assessment', 'understand', 'briefs', 'invoicing', 'entry.json'))
+        text = docmd.read_text(unit_file(self.out, 'invoicing/entry', 'understanding', 'topology.md'))
+        front, body = docmd.split_front_matter(text)
+        self.assertEqual((front['item'], front['system'], front['leaves'], front['dataStores'], front['entryPoints']), ('invoicing/entry', 'billing', 1, 1, 1))
+        sections = dict(docmd.sections(body, 2))
+        self.assertEqual(docmd.records_in(sections['Depends on']), [{'item': 'tax/calc', 'kinds': 'call', 'edges': '1'}])
+        self.assertEqual(docmd.records_in(sections['Data stores']), [{'store': 'ds:INVOICES', 'access': 'write'}])
+        self.assertEqual(docmd.records_in(sections['Leaves'])[0]['entry point'], 'yes')
+        scratch = os.path.join(self.out, 'scratch', 'billing', 'understand')
+        brief = load(os.path.join(scratch, 'briefs', 'invoicing', 'entry.json'))
         self.assertEqual(brief['dependsOn'], ['tax/calc'])
         self.assertEqual(brief['dataStores'], [{'id': 'ds:INVOICES', 'access': ['write']}])
-        tax = load(os.path.join(self.out, 'applications', 'billing', 'assessment', 'understand', 'briefs', 'tax', 'calc.json'))
+        self.assertTrue(brief['topology'].endswith('/understanding/topology.md'))
+        tax = load(os.path.join(scratch, 'briefs', 'tax', 'calc.json'))
         self.assertEqual(tax['usedBy'], ['invoicing/entry'])
-        shards = load(os.path.join(self.out, 'applications', 'billing', 'assessment', 'understand', 'shards.json'))
-        self.assertEqual([shard['name'] for shard in shards], ['invoicing.entry', 'tax.calc'])
-        scope = load(os.path.join(self.out, 'applications', 'billing', 'assessment', 'understand', 'scope.json'))
-        self.assertEqual(scope['files'], ['src/INV01.cbl', 'src/TAX.cbl', 'src/TAXLIB.cbl'])
+        self.assertEqual([shard['name'] for shard in load(os.path.join(scratch, 'shards.json'))], ['invoicing.entry', 'tax.calc'])
+        self.assertEqual(load(os.path.join(scratch, 'scope.json'))['files'], ['src/INV01.cbl', 'src/TAX.cbl', 'src/TAXLIB.cbl'])
 
     def test_scope_items_refuses_unknown_and_retired_items(self):
         for items in ('tax/old', 'nope/x', ''):
@@ -97,18 +117,23 @@ class UnderstandToolsTests(unittest.TestCase):
             {'name': 'Amount positive', 'category': 'Validation', 'priority': 'P1', 'source': 'src/TAX.cbl:3'},
             {'name': 'Entry date', 'category': 'Validation', 'priority': 'P1', 'source': 'src/INV01.cbl:40'},
             {'name': 'Elsewhere', 'category': 'Policy', 'priority': 'P2', 'source': 'src/OTHER.cbl:1'},
-        ], 'dataObjects': [{'name': 'INVOICE-REC', 'source': 'src/INV01.cbl:5'}]})
-        result = run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', 'invoicing/entry,tax/calc', '--out', self.out)
+        ], 'dataObjects': [{'name': 'INVOICE-REC', 'source': 'src/INV01.cbl:5', 'fields': [{'name': 'AMOUNT', 'type': 'decimal'}]}]})
+        result = self.split_rules(rules)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('1 left out', result.stdout)
-        tax = load(os.path.join(self.out, 'applications', 'billing', 'units', 'tax', 'calc', 'rules.json'))
-        self.assertEqual([rule['name'] for rule in tax['rules']], ['Tax rounding', 'Amount positive'])
-        for rule in tax['rules']:
-            self.assertRegex(rule['id'], r'^RULE-tax\.calc-[0-9a-f]{8}$')
-        self.assertNotEqual(tax['rules'][0]['id'], tax['rules'][1]['id'])
-        entry = load(os.path.join(self.out, 'applications', 'billing', 'units', 'invoicing', 'entry', 'rules.json'))
-        self.assertRegex(entry['rules'][0]['id'], r'^RULE-invoicing\.entry-[0-9a-f]{8}$')
-        self.assertEqual([obj['name'] for obj in entry['dataObjects']], ['INVOICE-REC'])
+        tax = self.rules_of('tax/calc')
+        self.assertEqual(len(tax), 2)
+        for rule_id, card in tax:
+            self.assertRegex(rule_id, r'^RULE-tax\.calc-[0-9a-f]{8}$')
+            self.assertIn(f'### {rule_id}: ', card)
+        self.assertNotEqual(tax[0][0], tax[1][0])
+        self.assertEqual([row['name'] for row in rr.unit_rule_rows(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules.md')))], ['Tax rounding', 'Amount positive'])
+        entry = self.rules_of('invoicing/entry')
+        self.assertRegex(entry[0][0], r'^RULE-invoicing\.entry-[0-9a-f]{8}$')
+        objects = docmd.read_text(unit_file(self.out, 'invoicing/entry', 'understanding', 'data-objects.md'))
+        self.assertIn('## INVOICE-REC', objects)
+        self.assertIn('| AMOUNT | decimal |', objects)
+        self.assertNotIn('"rules"', docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules.md')))
 
         # A rerun with the rules in another order and one added keeps every unchanged rule's id (ADR-0038).
         write(rules, {'confirmedRules': [
@@ -118,117 +143,116 @@ class UnderstandToolsTests(unittest.TestCase):
             {'name': 'Tax floor', 'category': 'Calculation', 'priority': 'P1', 'source': 'src/TAXLIB.cbl:20'},
             {'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAXLIB.cbl:12'},
         ], 'dataObjects': []})
-        result = run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', 'invoicing/entry,tax/calc', '--out', self.out)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        again = load(os.path.join(self.out, 'applications', 'billing', 'units', 'tax', 'calc', 'rules.json'))
-        self.assertEqual({rule['name']: rule['id'] for rule in again['rules'] if rule['name'] != 'Tax floor'},
-                         {rule['name']: rule['id'] for rule in tax['rules']})
+        self.assertEqual(self.split_rules(rules).returncode, 0)
+        names = lambda cards: {re.sub(r'^### \S+: ', '', card.split('\n', 1)[0]): rule_id for rule_id, card in cards}  # noqa: E731
+        again = names(self.rules_of('tax/calc'))
+        before = names(tax)
+        self.assertEqual({name: rule_id for name, rule_id in again.items() if name != 'Tax floor'}, before)
 
         # Two distinct rules on one exact citation are told apart by the rule name, never by order (ADR-0038).
         write(rules, {'confirmedRules': [
             {'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAXLIB.cbl:12'},
             {'name': 'Tax floor', 'category': 'Calculation', 'priority': 'P1', 'source': 'src/TAXLIB.cbl:12'},
         ], 'dataObjects': []})
-        result = run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', 'tax/calc', '--out', self.out)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        shared = load(os.path.join(self.out, 'applications', 'billing', 'units', 'tax', 'calc', 'rules.json'))
-        ids = {rule['name']: rule['id'] for rule in shared['rules']}
+        self.assertEqual(self.split_rules(rules, 'tax/calc').returncode, 0)
+        ids = names(self.rules_of('tax/calc'))
         self.assertRegex(ids['Tax rounding'], r'^RULE-tax\.calc-[0-9a-f]{8}-tax-rounding$')
         self.assertRegex(ids['Tax floor'], r'^RULE-tax\.calc-[0-9a-f]{8}-tax-floor$')
         self.assertEqual(ids['Tax rounding'][:21], ids['Tax floor'][:21])
 
         scan = os.path.join(self.root, 'scan.json')
         write(scan, {'findings': [
-            {'cwe': 'CWE-89', 'severity': 'Medium', 'source': 'src/TAX.cbl:9', 'title': 'SQL', 'credentialMeta': {'maskedPreview': 'ab**'}},
+            {'cwe': 'CWE-89', 'severity': 'Medium', 'source': 'src/TAX.cbl:9', 'title': 'SQL', 'recommendedFix': 'Bind the parameter.', 'credentialMeta': {'maskedPreview': 'ab**'}},
             {'cwe': 'CWE-798', 'severity': 'Critical', 'source': 'src/TAXLIB.cbl:2', 'title': 'Key', 'isCredential': True},
             {'cwe': 'CWE-1', 'severity': 'Low', 'source': 'src/OTHER.cbl:1', 'title': 'Out'},
         ], 'coverage': {'filesReviewed': ['src/TAX.cbl']}, 'toolsNotRun': [], 'deadFinders': []})
         result = run('split_findings.py', 'billing', '--scan', scan, '--catalog', self.catalog, '--items', 'invoicing/entry,tax/calc', '--out', self.out)
         self.assertEqual(result.returncode, 0, result.stderr)
-        findings = load(os.path.join(self.out, 'applications', 'billing', 'units', 'tax', 'calc', 'findings.json'))
-        self.assertEqual([(f['id'], f['cwe']) for f in findings['findings']], [('SEC-tax.calc-01', 'CWE-798'), ('SEC-tax.calc-02', 'CWE-89')])
-        self.assertNotIn('credentialMeta', json.dumps(findings))
-        self.assertEqual(findings['filesReviewed'], ['src/TAX.cbl'])
+        text = docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'findings.md'))
+        import split_findings as sf
+        self.assertEqual([(row['id'], row['cwe'], row['severity']) for row in sf.finding_rows(text)], [('SEC-tax.calc-01', 'CWE-798', 'Critical'), ('SEC-tax.calc-02', 'CWE-89', 'Medium')])
+        self.assertNotIn('credentialMeta', text)
+        self.assertNotIn('ab**', text)
+        self.assertIn('Bind the parameter.', text)
+        self.assertEqual(docmd.split_front_matter(text)[0]['filesReviewed'], 1)
 
     def test_a_rerun_keeps_rules_review_and_reports_orphaned_verdicts(self):
         rules = os.path.join(self.root, 'rules_result.json')
-        write(rules, {'confirmedRules': [
-            {'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAXLIB.cbl:12'},
-        ], 'dataObjects': []})
-        result = run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', 'tax/calc', '--out', self.out)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        rule_id = load(os.path.join(self.out, 'applications', 'billing', 'units', 'tax', 'calc', 'rules.json'))['rules'][0]['id']
-        review_path = os.path.join(self.out, 'applications', 'billing', 'units', 'tax', 'calc', 'rules-review.json')
-        write(review_path, {rule_id: {'verdict': 'confirmed', 'approver': 'jane', 'date': '2026-10-18'},
-                            'RULE-tax.calc-00000000': {'verdict': 'refuted', 'approver': 'jane', 'date': '2026-10-18'}})
-        result = run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', 'tax/calc', '--out', self.out)
+        write(rules, {'confirmedRules': [{'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAXLIB.cbl:12'}], 'dataObjects': []})
+        self.assertEqual(self.split_rules(rules, 'tax/calc').returncode, 0)
+        rule_id = self.rules_of('tax/calc')[0][0]
+        review_path = unit_file(self.out, 'tax/calc', 'understanding', 'rules-review.md')
+        review = docmd.table(['Rule', 'Verdict', 'Approver', 'Date'], [[rule_id, 'confirmed', 'jane', '2026-10-18'], ['RULE-tax.calc-00000000', 'refuted', 'jane', '2026-10-18']])
+        write(review_path, review)
+        result = self.split_rules(rules, 'tax/calc')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('orphaned rule verdict(s)', result.stdout)
         self.assertIn('RULE-tax.calc-00000000', result.stdout)
-        self.assertIn('1 rules-review.json kept unchanged', result.stdout)
-        kept = load(review_path)
-        self.assertEqual(kept[rule_id]['verdict'], 'confirmed')
-        self.assertEqual(kept['RULE-tax.calc-00000000']['verdict'], 'refuted')
-        # A verdict shape the contract does not know is refused, never silently applied.
-        write(review_path, {rule_id: {'verdict': 'wrong', 'approver': 'jane', 'date': '2026-10-18'}})
-        result = run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', 'tax/calc', '--out', self.out)
+        self.assertIn('1 rules-review.md kept unchanged', result.stdout)
+        self.assertEqual(docmd.read_text(review_path), review)
+        # A verdict the contract does not know is refused, never silently applied.
+        write(review_path, docmd.table(['Rule', 'Verdict', 'Approver', 'Date'], [[rule_id, 'wrong', 'jane', '2026-10-18']]))
+        result = self.split_rules(rules, 'tax/calc')
         self.assertEqual(result.returncode, 1)
-        self.assertIn('rules-review.json', result.stderr)
+        self.assertIn('rules-review.md', result.stderr)
 
-    def test_finish_items_writes_trace_meta_and_work_items(self):
+    def finish_inputs(self):
         inputs = os.path.join(self.root, 'in')
-        write(os.path.join(inputs, 'applications', 'billing', 'units', 'tax', 'calc', 'as-is.md'), '# Tax\n')
-        write(os.path.join(inputs, 'applications', 'billing', 'units', 'tax', 'calc', 'trace.json'), {
+        write(unit_file(inputs, 'tax/calc', 'understanding', 'as-is.md'), '# Tax\n')
+        write(os.path.join(inputs, 'scratch', 'billing', 'understand', 'trace', 'tax', 'calc.json'), {
             'entryPoints': ['src/TAX.cbl:1'], 'rulesApplied': ['RULE-tax.calc-01', 'RULE-001', 'RULE-other.x-01'], 'findings': ['SEC-tax.calc-01'],
             'dependencies': [{'target': 'invoicing/entry', 'kind': 'call', 'direction': 'outbound'}, {'target': '../x', 'kind': 'call', 'direction': 'outbound'}],
             'dataObjects': [], 'externalSystems': [],
             'requirements': ['REQ-TAX-01'], 'pullRequests': ['PR-7'], 'tests': ['tests/tax.test'],
             'files': ['src/TAX.cbl', '/etc/passwd'], 'openQuestions': 2})
-        write(os.path.join(inputs, 'applications', 'billing', 'units', 'tax', 'calc', 'rules.json'), {'rules': [{'id': 'RULE-tax.calc-01'}]})
-        write(os.path.join(inputs, 'applications', 'billing', 'units', 'tax', 'calc', 'findings.json'), {'findings': [{'id': 'SEC-tax.calc-01'}]})
+        rules_json = {'confirmedRules': [{'id': 'RULE-tax.calc-01', 'name': 'Round', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAX.cbl:3', 'confidence': 'High'}]}
+        write(unit_file(inputs, 'tax/calc', 'understanding', 'rules.md'), rr.render_unit_rules('billing', 'tax/calc', rules_json['confirmedRules']))
+        import split_findings as sf
+        write(unit_file(inputs, 'tax/calc', 'understanding', 'findings.md'), sf.render_findings('billing', 'tax/calc', [{'id': 'SEC-tax.calc-01', 'cwe': 'CWE-89', 'severity': 'High', 'source': 'src/TAX.cbl:9', 'title': 'SQL'}], ['src/TAX.cbl'], [], []))
+        return inputs
+
+    def test_finish_items_writes_trace_the_understanding_record_and_work_items(self):
+        inputs = self.finish_inputs()
         result = run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc,invoicing/entry', '--inputs', inputs, '--out', self.out,
-                     '--commit', 'a' * 40, '--run', 'run-1', '--repo', 'legacy', '--existing', os.path.join(inputs, 'applications', 'billing', 'units'))
+                     '--commit', 'a' * 40, '--run', 'run-1', '--repo', 'legacy', '--existing', os.path.join(inputs, *UNITS))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('1 without a specification', result.stdout)
-        base = os.path.join(self.out, 'applications', 'billing', 'units', 'tax', 'calc')
-        trace = load(os.path.join(base, 'trace.json'))
-        self.assertEqual(trace['rulesApplied'], ['RULE-tax.calc-01'])
-        self.assertEqual(trace['dependencies'], [{'target': 'invoicing/entry', 'kind': 'call', 'direction': 'outbound'}])
-        self.assertEqual(trace['requirements'], ['REQ-TAX-01'])
-        self.assertEqual(trace['pullRequests'], ['PR-7'])
-        self.assertEqual(trace['tests'], ['tests/tax.test'])
-        self.assertEqual(trace['files'], ['src/TAX.cbl'])
-        meta = load(os.path.join(base, 'meta.json'))
-        self.assertEqual((meta['digest'], meta['commit'], meta['runId']), ('sha256:tax/calc', 'a' * 40, 'run-1'))
-        self.assertFalse(os.path.exists(os.path.join(self.out, 'applications', 'billing', 'units', 'invoicing')))
-        with open(os.path.join(self.out, 'applications', 'billing', 'units', 'tax', 'calc', 'unit.md'), encoding='utf-8') as handle:
-            unit = handle.read()
+        front, body = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'trace.md')))
+        self.assertEqual(front['openQuestions'], 2)
+        sections = dict(docmd.sections(body, 2))
+        self.assertEqual(docmd.bullets_in(sections['Rules applied']), ['RULE-tax.calc-01'])
+        self.assertEqual(docmd.records_in(sections['Dependencies']), [{'target': 'invoicing/entry', 'kind': 'call', 'direction': 'outbound'}])
+        self.assertEqual(docmd.bullets_in(sections['Requirements']), ['REQ-TAX-01'])
+        self.assertEqual(docmd.bullets_in(sections['Pull requests']), ['PR-7'])
+        self.assertEqual(docmd.bullets_in(sections['Tests']), ['tests/tax.test'])
+        self.assertEqual(docmd.bullets_in(sections['Files']), ['src/TAX.cbl'])
+        record = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'understanding.md')))[0]
+        self.assertEqual((record['status'], record['digest'], record['commit'], record['runId']), ('understood', 'sha256:tax/calc', 'a' * 40, 'run-1'))
+        self.assertFalse(os.path.exists(os.path.join(self.out, *UNITS, 'invoicing')))
+        unit = docmd.read_text(unit_file(self.out, 'tax/calc', 'unit.md'))
         self.assertIn('id: "billing/tax/calc"', unit)
         self.assertIn('dependsOn: ["billing/invoicing/entry"]', unit)
         self.assertIn('businessRules: ["RULE-tax.calc-01"]', unit)
+        self.assertIn('asIs: "applications/billing/units/tax/calc/understanding/as-is.md"', unit)
+        for root, _, names in os.walk(os.path.join(self.out, *UNITS)):
+            self.assertFalse([name for name in names if name.endswith('.json')], root)
 
-    def test_rebuild_aggregates_merges_the_items(self):
+    def test_rebuild_aggregates_merges_the_units_into_markdown_read_models(self):
         docs = os.path.join(self.root, 'docs')
-        write(os.path.join(docs, 'applications', 'billing', 'assessment', 'catalog.json'), CATALOG)
-        scoped = run('scope_items.py', 'billing', '--catalog', self.catalog, '--topology', self.topology, '--items', 'tax/calc,invoicing/entry', '--out', docs)
-        self.assertEqual(scoped.returncode, 0, scoped.stderr)
-        write(os.path.join(docs, 'applications', 'billing', 'units', 'tax', 'calc', 'rules.json'), {'rules': [{'id': 'RULE-tax.calc-01', 'name': 'Round', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAX.cbl:3', 'confidence': 'High'}], 'dataObjects': []})
-        write(os.path.join(docs, 'applications', 'billing', 'units', 'tax', 'calc', 'findings.json'), {'findings': [{'id': 'SEC-tax.calc-01', 'cwe': 'CWE-89', 'severity': 'High', 'source': 'src/TAX.cbl:9', 'title': 'SQL'}]})
-        write(os.path.join(docs, 'applications', 'billing', 'units', 'tax', 'calc', 'meta.json'), {'digest': 'sha256:tax/calc', 'commit': 'a' * 40})
-        write(os.path.join(docs, 'applications', 'billing', 'units', 'tax', 'calc', 'trace.json'), {'rulesApplied': ['RULE-tax.calc-01'], 'findings': ['SEC-tax.calc-01'], 'dependencies': []})
+        inputs = self.finish_inputs()
+        self.assertEqual(run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', docs, '--commit', 'a' * 40, '--run', 'run-1').returncode, 0)
+        for name in ('as-is.md', 'rules.md', 'findings.md'):
+            write(unit_file(docs, 'tax/calc', 'understanding', name), docmd.read_text(unit_file(inputs, 'tax/calc', 'understanding', name)))
         result = run('rebuild_aggregates.py', 'billing', '--docs', docs, '--out', self.out)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('1 of 2 item(s) understood', result.stdout)
         gen = os.path.join(self.out, 'applications', 'billing', 'generated')
-        topology = load(os.path.join(gen, 'topology.json'))
-        self.assertEqual([d['id'] for d in topology['root']['children']], ['dom:invoicing', 'dom:tax'])
-        self.assertEqual(topology['entryPoints'], ['INV01'])
-        with open(os.path.join(gen, 'BUSINESS_RULES.md'), encoding='utf-8') as handle:
-            self.assertIn('### RULE-tax.calc-01: Round', handle.read())
-        with open(os.path.join(gen, 'SECURITY_FINDINGS.md'), encoding='utf-8') as handle:
-            self.assertIn('| SEC-tax.calc-01 | CWE-89 | High |', handle.read())
-        trace = load(os.path.join(self.out, 'applications', 'billing', 'generated', 'traceability.json'))
-        self.assertEqual([(row['id'], row['stale']) for row in trace['units']], [('billing/tax/calc', False)])
+        self.assertEqual(sorted(os.listdir(gen)), ['BUSINESS_RULES.md', 'DATA_OBJECTS.md', 'README.md', 'SECURITY_FINDINGS.md', 'traceability.md'])
+        self.assertIn('### RULE-tax.calc-01: Round', docmd.read_text(os.path.join(gen, 'BUSINESS_RULES.md')))
+        self.assertIn('| SEC-tax.calc-01 | CWE-89 | High |', docmd.read_text(os.path.join(gen, 'SECURITY_FINDINGS.md')))
+        front, body = docmd.split_front_matter(docmd.read_text(os.path.join(gen, 'traceability.md')))
+        self.assertEqual((front['items'], front['units'], front['rulesCovered'], front['findingsMapped'], front['openQuestions'], front['stale']), (2, 1, 1, 1, 2, 0))
+        self.assertIn('`tax/calc`', body)
 
 
 if __name__ == '__main__':

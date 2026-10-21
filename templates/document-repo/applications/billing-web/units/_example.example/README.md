@@ -9,12 +9,12 @@ Copy a sample to a real unit directory (`<module>/<unit>/`) and adapt its conten
 | Sample | Format |
 | --- | --- |
 | `unit.md.example` | the unit state file (identity, state, links, gate references) |
-| `rules.json.example` | the machine rule extraction |
-| `rules-review.json.example` | the human rule verdicts |
-| `trace.json.example` | the unit traceability record |
+| `understanding/rules.md.example` | the machine rule extraction (a table and a card per rule) |
+| `understanding/rules-review.md.example` | the human rule verdicts (a table) |
+| `understanding/trace.md.example` | the unit traceability record |
 | `reviews/G4.md.example` | the unit's G4 gate record |
 
-Rule ids in `rules.json` are deterministic and citation-derived (each rule carries the source
-citation it was derived from), so human verdicts in `rules-review.json` keep matching across
+Rule ids in `rules.md` are deterministic and citation-derived (each rule carries the source
+citation it was derived from), so human verdicts in `rules-review.md` keep matching across
 re-extractions. A verdict whose rule id is absent from the current extraction is reported as
 orphaned, never silently applied.

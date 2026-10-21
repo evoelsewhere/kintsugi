@@ -1,87 +1,164 @@
 import { describe, expect, test } from 'vitest'
 
-import { leftOutTotal, parseTraceability } from '../hooks/reader/traceability.js'
+import { parsePlan } from '../hooks/reader/plan.js'
+import { buildTraceability, leftOutTotal, parseTraceSummary, parseUnitTrace, type UnitFacts } from '../hooks/reader/traceability.js'
 import { frontmatterOf, parseWorkItem } from '../hooks/reader/work-item.js'
+import type { ItemCatalogItem } from '../hooks/reader/item-catalog.js'
 
-// The shape merge_traceability.py writes (scripts/merge_traceability.py, merge()).
-const MATRIX = {
-  app: 'billing',
-  generatedBy: 'merge_traceability.py',
-  inputs: { businessRules: true, securityFindings: false },
-  units: [
-    {
-      id: 'billing/core/invoice',
-      module: 'core',
-      unit: 'invoice',
-      title: 'Invoice',
-      kind: 'program',
-      loc: 420,
-      entryPoint: true,
-      spec: 'applications/billing/units/core/invoice/as-is.md',
-      files: ['src/INVOICE.cbl', '../etc/passwd', 'src/./FEES.cpy'],
-      dependsOn: ['billing/data/ledger'],
-      usedBy: [],
-      dataStores: [{ id: 'ds:ACCOUNT', access: ['read', 'write'] }, { access: ['read'] }],
-      externalSystems: ['Bank gateway'],
-      rules: ['RULE-001', 'RULE-002'],
-      findings: [],
-      dataObjects: ['INVOICE-REC'],
-      entryPoints: ['src/INVOICE.cbl:12'],
-      requirements: ['REQ-INV-01'],
-      pullRequests: ['PR-123'],
-      tests: ['tests/invoice.test'],
-      openQuestions: 2,
-    },
-    { id: 'billing/data/ledger', module: 'data', unit: 'ledger', title: 'Ledger', kind: 'program', loc: 80, entryPoint: false, spec: null, files: 'not a list', dependsOn: [], usedBy: ['billing/core/invoice'] },
-    { title: 'no id' },
-    { id: 'billing/data/ledger', module: 'data', unit: 'duplicate' },
-  ],
-  rules: { 'RULE-001': ['billing/core/invoice'], 'RULE-002': ['billing/core/invoice'] },
-  findings: {},
-  files: { 'src/INVOICE.cbl': ['billing/core/invoice'] },
-  requirements: { 'REQ-INV-01': ['billing/core/invoice'] },
-  pullRequests: { 'PR-123': ['billing/core/invoice'] },
-  tests: { 'tests/invoice.test': ['billing/core/invoice'] },
-  dataStores: { 'ds:ACCOUNT': ['billing/core/invoice'] },
-  unmappedRules: ['RULE-003'],
-  unmappedFindings: [],
-  cycles: [['billing/core/invoice', 'billing/data/ledger'], ['alone']],
-  notes: { 'unknown rule ids': 2, 'files not in the source': 1, bogus: 'x' },
-}
+// What finish_items.py writes (scripts/finish_items.py, render_trace()).
+const TRACE = `---
+app: "billing"
+item: "core/invoice"
+generatedBy: "finish_items.py"
+openQuestions: 2
+---
+# Traceability - core/invoice
 
-describe('traceability', () => {
-  test('reads units, indexes, what no unit covers and the left-out counts, dropping what does not fit', () => {
-    const matrix = parseTraceability(JSON.stringify(MATRIX))
-    expect(matrix).not.toBeNull()
-    expect(matrix?.inputs).toEqual({ businessRules: true, securityFindings: false })
-    expect(matrix?.units.map(unit => [unit.id, unit.key, unit.spec, unit.entryPoint, unit.loc])).toEqual([
-      ['billing/core/invoice', 'core/invoice', 'applications/billing/units/core/invoice/as-is.md', true, 420],
-      ['billing/data/ledger', 'data/ledger', null, false, 80],
+## Entry points
+
+- \`src/INVOICE.cbl:12\`
+
+## Rules applied
+
+- \`RULE-core.invoice-1a2b3c4d\`
+- \`RULE-core.invoice-5e6f7a8b\`
+
+## Findings
+
+## Dependencies
+
+| Target | Kind | Direction |
+| --- | --- | --- |
+| data/ledger | call | outbound |
+| ds:ACCOUNT | read | outbound |
+| ds:ACCOUNT | write | outbound |
+| web/portal | call | inbound |
+| ../bad | call | outbound |
+
+## Data objects
+
+- INVOICE-REC
+
+## External systems
+
+- Bank gateway
+
+## Files
+
+- \`src/INVOICE.cbl\`
+- \`../etc/passwd\`
+- \`src/./FEES.cpy\`
+
+## Requirements
+
+- REQ-INV-01
+
+## Pull requests
+
+- PR-123
+
+## Tests
+
+- tests/invoice.test
+`
+
+const item = (id: string, extra: Partial<ItemCatalogItem> = {}): ItemCatalogItem => ({
+  id,
+  module: id.split('/')[0] ?? '',
+  kind: 'program',
+  name: id.split('/')[1] ?? id,
+  summary: '',
+  files: ['src/x.cbl'],
+  leaves: [],
+  entryPoints: [],
+  loc: 100,
+  complexity: 'low',
+  digest: '',
+  status: 'active',
+  aliases: [],
+  parts: [],
+  dependsOn: [],
+  usedBy: [],
+  dataStores: [],
+  ...extra,
+})
+
+describe('unit trace', () => {
+  test('reads the sections of a unit trace.md, dropping what does not fit', () => {
+    const trace = parseUnitTrace(TRACE)!
+    expect(trace.entryPoints).toEqual(['src/INVOICE.cbl:12'])
+    expect(trace.rulesApplied).toEqual(['RULE-core.invoice-1a2b3c4d', 'RULE-core.invoice-5e6f7a8b'])
+    expect(trace.findings).toEqual([])
+    expect(trace.dependencies).toEqual([
+      { target: 'data/ledger', kind: 'call', direction: 'outbound' },
+      { target: 'ds:ACCOUNT', kind: 'read', direction: 'outbound' },
+      { target: 'ds:ACCOUNT', kind: 'write', direction: 'outbound' },
+      { target: 'web/portal', kind: 'call', direction: 'inbound' },
+      { target: '../bad', kind: 'call', direction: 'outbound' },
     ])
-    const [invoice, ledger] = matrix?.units ?? []
-    expect(invoice?.files).toEqual(['src/INVOICE.cbl', 'src/FEES.cpy'])
-    expect(invoice?.dataStores).toEqual([{ id: 'ds:ACCOUNT', access: ['read', 'write'] }])
-    expect(invoice).toMatchObject({ rules: ['RULE-001', 'RULE-002'], externalSystems: ['Bank gateway'], requirements: ['REQ-INV-01'], pullRequests: ['PR-123'], tests: ['tests/invoice.test'], openQuestions: 2 })
-    expect(ledger).toMatchObject({ files: [], usedBy: ['billing/core/invoice'], rules: [], requirements: [], pullRequests: [], tests: [], openQuestions: 0 })
-    expect(matrix?.rules['RULE-001']).toEqual(['billing/core/invoice'])
-    expect(matrix?.requirements).toEqual({ 'REQ-INV-01': ['billing/core/invoice'] })
-    expect(matrix?.pullRequests).toEqual({ 'PR-123': ['billing/core/invoice'] })
-    expect(matrix?.tests).toEqual({ 'tests/invoice.test': ['billing/core/invoice'] })
-    expect(matrix?.unmappedRules).toEqual(['RULE-003'])
-    expect(matrix?.cycles).toEqual([['billing/core/invoice', 'billing/data/ledger']])
-    expect(matrix?.notes).toEqual({ 'unknown rule ids': 2, 'files not in the source': 1 })
-    expect(leftOutTotal(matrix!)).toBe(3)
+    expect(trace.files).toEqual(['src/INVOICE.cbl', 'src/FEES.cpy'])
+    expect(trace).toMatchObject({ dataObjects: ['INVOICE-REC'], externalSystems: ['Bank gateway'], requirements: ['REQ-INV-01'], pullRequests: ['PR-123'], tests: ['tests/invoice.test'], openQuestions: 2 })
   })
 
-  test('derives module and unit from the id when they are missing; refuses text that is not a matrix', () => {
-    expect(parseTraceability(JSON.stringify({ units: [{ id: 'app/m/u' }] }))?.units[0]).toMatchObject({ module: 'm', unit: 'u', key: 'm/u', title: 'u', spec: null })
-    expect(parseTraceability('not json')).toBeNull()
-    expect(parseTraceability(JSON.stringify({ units: 'x' }))).toBeNull()
-    expect(parseTraceability(JSON.stringify({ app: 'a', units: [] }))?.units).toEqual([])
+  test('is null for text without sections', () => {
+    expect(parseUnitTrace('not a trace')).toBeNull()
+    expect(parseUnitTrace('')).toBeNull()
   })
 })
 
-// What write_work_items.py writes (scripts/write_work_items.py, frontmatter()).
+describe('traceability', () => {
+  test('builds the matrix of the understood units, with the reverse indexes', () => {
+    const facts: UnitFacts[] = [
+      { item: item('core/invoice', { entryPoints: ['INV'], loc: 420, name: 'Invoice' }), trace: parseUnitTrace(TRACE), spec: 'applications/billing/units/core/invoice/understanding/as-is.md' },
+      { item: item('data/ledger', { loc: 80, files: ['src/ledger.cbl'] }), trace: null, spec: 'applications/billing/units/data/ledger/understanding/as-is.md' },
+    ]
+    const matrix = buildTraceability('billing', facts, { businessRules: true, securityFindings: false })
+    expect(matrix.inputs).toEqual({ businessRules: true, securityFindings: false })
+    expect(matrix.units.map(unit => [unit.id, unit.key, unit.entryPoint, unit.loc, unit.title])).toEqual([
+      ['billing/core/invoice', 'core/invoice', true, 420, 'Invoice'],
+      ['billing/data/ledger', 'data/ledger', false, 80, 'ledger'],
+    ])
+    const [invoice, ledger] = matrix.units
+    // A dependency on a unit that is not understood (the ../bad target, web/portal) is not a link.
+    expect(invoice?.dependsOn).toEqual(['billing/data/ledger'])
+    expect(invoice?.usedBy).toEqual([])
+    expect(invoice?.dataStores).toEqual([{ id: 'ds:ACCOUNT', access: ['read', 'write'] }])
+    expect(invoice?.files).toEqual(['src/INVOICE.cbl', 'src/FEES.cpy'])
+    expect(invoice).toMatchObject({ rules: ['RULE-core.invoice-1a2b3c4d', 'RULE-core.invoice-5e6f7a8b'], externalSystems: ['Bank gateway'], requirements: ['REQ-INV-01'], openQuestions: 2 })
+    expect(ledger).toMatchObject({ files: ['src/ledger.cbl'], rules: [], requirements: [], pullRequests: [], tests: [], openQuestions: 0 })
+    expect(matrix.rules['RULE-core.invoice-1a2b3c4d']).toEqual(['billing/core/invoice'])
+    expect(matrix.requirements).toEqual({ 'REQ-INV-01': ['billing/core/invoice'] })
+    expect(matrix.pullRequests).toEqual({ 'PR-123': ['billing/core/invoice'] })
+    expect(matrix.tests).toEqual({ 'tests/invoice.test': ['billing/core/invoice'] })
+    expect(matrix.dataStores).toEqual({ 'ds:ACCOUNT': ['billing/core/invoice'] })
+    expect(leftOutTotal(matrix)).toBe(0)
+  })
+
+  test('reads the totals the generated traceability.md keeps in its front matter', () => {
+    const summary = parseTraceSummary(
+      '---\napp: "billing"\nitems: 5\nunits: 2\nmodules: 1\nspecified: 2\nentryPoints: 1\nrulesCovered: 7\nfindingsMapped: 3\nfiles: 40\ndataStores: 2\nrequirements: 1\nopenQuestions: 4\nstale: 1\nbusinessRules: true\nsecurityFindings: false\n---\n# Traceability - billing\n',
+    )
+    expect(summary).toEqual({
+      app: 'billing',
+      items: 5,
+      units: 2,
+      modules: 1,
+      specified: 2,
+      entryPoints: 1,
+      rulesCovered: 7,
+      findingsMapped: 3,
+      files: 40,
+      dataStores: 2,
+      requirements: 1,
+      openQuestions: 4,
+      stale: 1,
+      inputs: { businessRules: true, securityFindings: false },
+    })
+    expect(parseTraceSummary('# no totals')).toBeNull()
+  })
+})
+
+// What finish_items.py writes (scripts/finish_items.py, work_item()).
 const WORK_ITEM = `---
 id: "billing/core/invoice"
 application: "billing"
@@ -96,11 +173,11 @@ dependsOn: ["billing/data/ledger"]
 source:
   - {repo: "legacy", paths: ["src/INVOICE.cbl"]}
 links:
-  asIs: "applications/billing/units/core/invoice/as-is.md"
+  asIs: "applications/billing/units/core/invoice/understanding/as-is.md"
   businessRules: ["RULE-001", "RULE-002"]
 ---
 
-Invoice: proposed by the understand stage from the map of billing.
+Invoice: proposed by the understand stage from the catalog of billing.
 `
 
 describe('unit files', () => {
@@ -115,7 +192,7 @@ describe('unit files', () => {
       stage: 'understand',
       complexity: 'low',
       dependsOn: ['billing/data/ledger'],
-      links: { asIs: 'applications/billing/units/core/invoice/as-is.md', businessRules: ['RULE-001', 'RULE-002'] },
+      links: { asIs: 'applications/billing/units/core/invoice/understanding/as-is.md', businessRules: ['RULE-001', 'RULE-002'] },
     })
   })
 
@@ -125,5 +202,90 @@ describe('unit files', () => {
     expect(frontmatterOf('# Title\n')).toBeNull()
     expect(frontmatterOf('---\nstatus: pending\n')).toBeNull()
     expect(parseWorkItem('no frontmatter')).toBeNull()
+  })
+})
+
+// What check_plan.py writes (scripts/check_plan.py, render_plan()).
+const PLAN = `---
+version: 1
+app: "shop"
+generatedBy: "plan_understand"
+catalogCommit: "${'a'.repeat(40)}"
+items: 6
+open: 5
+batches: 2
+planned: 3
+---
+# Plan to understand shop
+
+Foundations first, then what uses them.
+
+## Batch 1: Foundations
+
+Everything calls them.
+
+- **risk:** high
+- **loc:** 2400
+- **high complexity:** 2
+- **cohesion:** 1.0
+
+### Items
+
+- \`core/base\`
+- \`core/service\`
+
+## Batch 2: Entry
+
+Needs both.
+
+- **risk:** medium
+- **loc:** 300
+- **high complexity:** 0
+- **cohesion:**
+
+### Items
+
+- \`web/entry\`
+
+### Depends on outside
+
+| Item | Used by |
+| --- | --- |
+| core/old | web/entry, web/other |
+
+## Left out
+
+| Item | Reason |
+| --- | --- |
+| batch/a | Low value. |
+
+## Dropped
+
+Named by the planner and refused by the check.
+
+| Item | Reason |
+| --- | --- |
+| nope/x | not an item of the catalog |
+`
+
+describe('plan', () => {
+  test('reads the strategy, the batches, what was left out and what was dropped', () => {
+    const plan = parsePlan(PLAN)!
+    expect(plan.app).toBe('shop')
+    expect(plan.catalog).toEqual({ commit: 'a'.repeat(40), items: 6, open: 5 })
+    expect(plan.strategy).toBe('Foundations first, then what uses them.')
+    expect(plan.summary).toEqual({ batches: 2, planned: 3, open: 5 })
+    expect(plan.batches).toEqual([
+      { n: 1, title: 'Foundations', rationale: 'Everything calls them.', risk: 'high', items: ['core/base', 'core/service'], loc: 2400, high: 2, cohesion: 1, dependsOutside: [] },
+      { n: 2, title: 'Entry', rationale: 'Needs both.', risk: 'medium', items: ['web/entry'], loc: 300, high: 0, cohesion: null, dependsOutside: [{ item: 'core/old', usedBy: ['web/entry', 'web/other'] }] },
+    ])
+    expect(plan.leftOut).toEqual([{ item: 'batch/a', reason: 'Low value.' }])
+    expect(plan.dropped).toEqual([{ item: 'nope/x', reason: 'not an item of the catalog' }])
+  })
+
+  test('is null for text that is not a plan', () => {
+    expect(parsePlan('not a plan')).toBeNull()
+    expect(parsePlan('---\nversion: 2\n---\n## Batch 1: x\n')).toBeNull()
+    expect(parsePlan('---\nversion: 1\napp: "x"\n---\n# Plan\n')).toBeNull()
   })
 })

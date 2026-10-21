@@ -35,7 +35,7 @@ the output so an auditor can follow it:
                        traces and the best possible verdict is PARTLY PROVEN.
   5  Canary            a deliberate one-line break whose own result file or saved runner log, parsed
                        here, shows failing tests. A "Canary:" line in the notes is a claim, not evidence.
-  6  Source untouched  the source checkout is clean and HEAD matches `sourceCommit` in inventory.json.
+  6  Source untouched  the source checkout is clean and HEAD matches `sourceCommit` in inventory.md.
                        Git read-only status checks run against the explicit source checkout; unavailable evidence is UNKNOWN.
 
 Open questions, unticked criteria and the sign-off are for a person: they never change the verdict.
@@ -82,7 +82,7 @@ RULES_TEXT = (
     "4. Fresh inputs: at least 10 new inputs, none with the same output as a development case, ran on the legacy and the new code with no difference. Needed whenever the legacy could run here; "
     "when it could not, the proof is trace-based and the best verdict is PARTLY PROVEN.",
     "5. Canary: a deliberate one-line break whose own result file or saved runner log shows failing tests. A line in the notes is a claim.",
-    "6. Source untouched: Git reports a clean source checkout with HEAD equal to `sourceCommit` in inventory.json; missing evidence or Git is UNKNOWN.",
+    "6. Source untouched: Git reports a clean source checkout with HEAD equal to `sourceCommit` in inventory.md; missing evidence or Git is UNKNOWN.",
     "7. Baseline measured (uplift): the old version's numbers in BASELINE.md come from per-test result files, a per-test results file or a raw runner log that this script parsed "
     "(in applications/<app>/assessment/baseline/, or on a Recorded: or Machine-readable: line of BASELINE.md), and the typed table agrees with them. A table typed by hand, or sources that disagree, cannot reach PROVEN.",
     "8. Tests kept (uplift): no test file of the untouched legacy tree is missing from the working copy, no more than 25% of them changed, and the legacy tree has test files to compare against "
@@ -346,15 +346,26 @@ def source_check(workspace, system, adir):
 
 
 def recorded_source_commit(adir):
-    """Read the preflight-pinned source revision from the bounded inventory evidence."""
-    inventory, problem = read_json(os.path.join(adir, "inventory.json"), 1 << 20)
-    if problem:
-        return None, "inventory.json could not be used (%s)" % problem
-    if not isinstance(inventory, dict):
-        return None, "the source commit is not recorded in inventory.json"
-    commit = inventory.get("sourceCommit")
+    """Read the preflight-pinned source revision from the front matter of the bounded inventory evidence (inventory.md)."""
+    path = os.path.join(adir, "inventory.md")
+    try:
+        if os.path.islink(path) or os.path.getsize(path) > (1 << 20):
+            return None, "inventory.md could not be used (a link or too large)"
+        with open(path, encoding="utf-8-sig") as handle:
+            head = [line.rstrip("\n") for line in handle.readlines()[:200]]
+    except OSError as error:
+        return None, "inventory.md could not be used (%s)" % error.__class__.__name__
+    if not head or head[0].strip() != "---":
+        return None, "the source commit is not recorded in inventory.md"
+    commit = None
+    for line in head[1:]:
+        if line.strip() == "---":
+            break
+        match = re.match(r'^sourceCommit:\s*"?([^"\s]*)"?\s*$', line)
+        if match:
+            commit = match.group(1)
     if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-fA-F]{40,64}", commit):
-        return None, "inventory.json does not contain a valid recorded sourceCommit"
+        return None, "inventory.md does not contain a valid recorded sourceCommit"
     return commit.lower(), None
 
 

@@ -13,7 +13,7 @@ import {
   toBePath,
   unitPath,
 } from '../hooks/reader/layout.js'
-import { mergeLedgers, parseLedger } from '../hooks/reader/ledger.js'
+import { mergeLedgers, parseLedger, renderLedger } from '../hooks/reader/ledger.js'
 import { appsOf, readSnapshot } from '../hooks/reader/progress.js'
 import type { ReaderFs } from '../hooks/reader/fs.js'
 
@@ -70,20 +70,23 @@ class MemoryReaderFs implements ReaderFs {
   }
 }
 
-const topology = {
-  system: 'sample-app',
-  root: {
-    id: 'root',
-    name: 'Sample app',
-    kind: 'system',
-    children: [{ id: 'unit-one', name: 'Unit one', kind: 'module', file: 'Main.java' }],
-  },
-  edges: [],
-  entryPoints: [],
-  deadEnds: [],
-  observations: ['Example observation'],
-  flows: [],
-}
+const topology = `---
+system: "sample-app"
+---
+# Topology of sample-app
+
+## Domains
+
+| Domain | Leaves | Data stores | LOC |
+| --- | --- | --- | --- |
+| Core | 1 | 0 | 5 |
+
+## Leaves
+
+| Leaf | Name | Kind | Domain | File | LOC | Entry point | Dead end |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| unit-one | Unit one | module | Core | Main.java | 5 |  |  |
+`
 
 const readOptions = {
   app: 'sample-app',
@@ -101,16 +104,16 @@ describe('Kintsugi built-in progress reader', () => {
     await expect(appsOf(fs)).resolves.toEqual(['other_app', 'sample-app'])
   })
 
-  test('reads each stage file from its ADR-0038 home', async () => {
+  test('reads each stage file from its ADR-0042 home', async () => {
     const fs = new MemoryReaderFs()
-    fs.addFile('applications/sample-app/assessment/topology.json', JSON.stringify(topology), 42)
+    fs.addFile('applications/sample-app/assessment/topology.md', topology, 42)
     fs.addFile(
       'applications/sample-app/to-be/modernization-brief.md',
       '# Sample app → Java/Spring\n\nApproved by: Dana\nDate: 2026-10-15\n',
       10,
     )
     const snapshot = await readSnapshot(fs, new Map(), readOptions)
-    expect(fs.reads).toContain('applications/sample-app/assessment/topology.json')
+    expect(fs.reads).toContain('applications/sample-app/assessment/topology.md')
     expect(fs.reads).toContain('applications/sample-app/to-be/modernization-brief.md')
     expect(snapshot?.topology?.modules.map(module => module.id)).toContain('unit-one')
     expect(snapshot?.brief?.approval.isSigned).toBe(true)
@@ -132,29 +135,21 @@ describe('Kintsugi built-in progress reader', () => {
     expect(fs.paths).toContain('source/sample-app')
   })
 
-  test('merges every unit rule review into one ledger with the new verdict words', async () => {
+  test('merges every unit rule review into one ledger', async () => {
     const fs = new MemoryReaderFs()
     fs.addFile(
-      'applications/sample-app/units/tax/calc/rules-review.json',
-      JSON.stringify({
-        'RULE-1': { verdict: 'confirmed', approver: 'dana', date: '2026-10-15' },
-        'RULE-2': { verdict: 'refuted', approver: 'lee', date: '2026-10-16' },
-      }),
+      'applications/sample-app/units/tax/calc/understanding/rules-review.md',
+      '| Rule | Verdict | Approver | Date |\n| --- | --- | --- | --- |\n| RULE-1 | confirmed | dana | 2026-10-15 |\n| RULE-2 | refuted | lee | 2026-10-16 |\n',
       5,
     )
     fs.addFile(
-      'applications/sample-app/units/tax/round/rules-review.json',
-      JSON.stringify({ 'RULE-1': { verdict: 'clarify', approver: 'kim', date: '2026-10-17' } }),
+      'applications/sample-app/units/tax/round/understanding/rules-review.md',
+      '| Rule | Verdict | Approver | Date |\n| --- | --- | --- | --- |\n| RULE-1 | clarify | kim | 2026-10-17 |\n',
       6,
     )
     fs.addFile(
-      'applications/sample-app/units/legacy/one/rules-review.json',
-      JSON.stringify({
-        reviews: {
-          'RULE-3': { verdict: 'wrong', at: '2026-10-01', title: 'old', note: 'kept' },
-          'RULE-4': { verdict: 'discuss', at: '2026-10-02' },
-        },
-      }),
+      'applications/sample-app/units/legacy/one/understanding/rules-review.md',
+      '| Rule | Verdict | Approver | Date | Note |\n| --- | --- | --- | --- | --- |\n| RULE-3 | refuted | old | 2026-10-01 | kept |\n| RULE-4 | clarify |  | 2026-10-02 |  |\n',
       7,
     )
     const snapshot = await readSnapshot(fs, new Map(), readOptions)
@@ -167,14 +162,26 @@ describe('Kintsugi built-in progress reader', () => {
   })
 
   test('drops verdicts it cannot read without trusting the file', () => {
+    const table = (...rows: string[]): string => ['| Rule | Verdict | Approver | Date |', '| --- | --- | --- | --- |', ...rows].join('\n')
+
     expect(parseLedger(null)).toEqual({})
-    expect(parseLedger('not json')).toEqual({})
-    expect(parseLedger(JSON.stringify({ 'RULE-1': { verdict: 'maybe', approver: 'dana', date: '2026-10-15' } }))).toEqual({})
-    expect(parseLedger(JSON.stringify({ 'RULE-1': { verdict: 'confirmed', approver: 'dana', date: 'yesterday' } }))).toEqual({
+    expect(parseLedger('not a table')).toEqual({})
+    expect(parseLedger(table('| RULE-1 | maybe | dana | 2026-10-15 |'))).toEqual({})
+    expect(parseLedger(table('| __proto__ | confirmed | dana | 2026-10-15 |'))).toEqual({})
+    expect(parseLedger(table('| RULE-1 | confirmed | dana | yesterday |'))).toEqual({
       'RULE-1': { verdict: 'confirmed', at: '', title: 'dana' },
     })
     expect(mergeLedgers([{ 'RULE-1': { verdict: 'confirmed', at: '2026-10-15' } }, {}])).toEqual({
       'RULE-1': { verdict: 'confirmed', at: '2026-10-15' },
+    })
+  })
+
+  test('renders a ledger as the table it is read from', () => {
+    const ledger = { 'RULE-2': { verdict: 'refuted' as const, at: '2026-10-16', title: 'lee', note: 'a | b' }, 'RULE-1': { verdict: 'confirmed' as const, at: '2026-10-15' } }
+
+    expect(parseLedger(renderLedger(ledger))).toEqual({
+      'RULE-1': { verdict: 'confirmed', at: '2026-10-15' },
+      'RULE-2': { verdict: 'refuted', at: '2026-10-16', title: 'lee', note: 'a | b' },
     })
   })
 
@@ -184,7 +191,7 @@ describe('Kintsugi built-in progress reader', () => {
     expect(toBePath('sample-app')).toBe('applications/sample-app/to-be')
     expect(modulePath('sample-app', 'tax')).toBe('applications/sample-app/units/tax')
     expect(unitPath('sample-app', 'tax', 'calc')).toBe('applications/sample-app/units/tax/calc')
-    expect(rulesReviewPath('sample-app', 'tax', 'calc')).toBe('applications/sample-app/units/tax/calc/rules-review.json')
+    expect(rulesReviewPath('sample-app', 'tax', 'calc')).toBe('applications/sample-app/units/tax/calc/understanding/rules-review.md')
     expect(goldenPath('sample-app', 'tax', 'calc')).toBe('applications/sample-app/units/tax/calc/verify/golden')
     expect(runPath('sample-app', 'tax', 'calc', 'run-123')).toBe('applications/sample-app/units/tax/calc/verify/runs/run-123')
     expect(sourcePath('sample-app')).toBe('source/sample-app')

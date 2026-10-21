@@ -1,31 +1,36 @@
-"""Shared helpers of the item catalog scripts (ADR-0033): catalog_from_topology.py,
-apply_catalog_edits.py and reconcile_catalog.py. Not a script on its own.
+"""Shared helpers of the item catalog scripts (ADR-0033): catalog_from_topology.py, apply_catalog_edits.py,
+reconcile_catalog.py and render_catalog.py. Not a script on its own.
 
-The catalog (`applications/<app>/assessment/catalog.json`) lists an application's items, module -> item:
+The catalog lists an application's items, module -> item. Inside a run it is one JSON document passed
+between the steps (scratch, never committed):
 
-    {"schemaVersion": 1, "app": "...", "generatedBy": "...", "source": {"repo": "...", "commit": "..."},
+    {"app": "...", "generatedBy": "...", "source": {"repo": "...", "commit": "..."},
      "modules": [{"id", "name", "summary"}],
      "items": [{"id": "<module>/<item>", "module", "kind", "name", "summary", "files", "leaves",
                 "entryPoints", "loc", "complexity", "digest", "status", "aliases", "parts"}],
      "unassigned": [...], "ambiguities": [...]}
 
-Invariant (checked by check_catalog): every file of inventory.json is in exactly one active item or
-in `unassigned`; item files are inventory files; ids are unique `<segment>/<segment>`.
-The path, slug and unitKinds helpers are the ones of units_from_topology.py, which the catalog
-evolves. Standard library only.
+What the run commits is Markdown (ADR-0042, docs/reference/document-formats.md): assessment/catalog/index.md
+(the modules and the ambiguities) and assessment/catalog/<module>.md (one card per item, with its leaves,
+the items it depends on and the data stores it touches). render_catalog() writes them and load_catalog()
+reads them back, so the next assessment, the understand stage and the planning stage start from the
+committed documents.
+
+Invariant (checked by check_catalog): every file of the inventory is in exactly one active item or in
+`unassigned`; item files are inventory files; ids are unique `<segment>/<segment>`. Standard library only.
 """
 import hashlib
 import json
 import os
 import re
 import sys
-import time
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import units_from_topology as uft  # noqa: E402
+import docmd  # noqa: E402
+import paths  # noqa: E402
+import topology_units as tu  # noqa: E402
 
-SCHEMA_VERSION = 1
 SEGMENT = r'[a-z0-9][a-z0-9-]{0,62}'
 SEGMENT_RE = re.compile(rf'^{SEGMENT}$')
 ITEM_ID_RE = re.compile(rf'^{SEGMENT}/{SEGMENT}$')
@@ -36,75 +41,35 @@ COMPLEXITY_BANDS = ('low', 'medium', 'high')
 LOW, MEDIUM = 20, 100
 # Without complexity figures, code lines decide: up to LOW_LOC is low, up to MEDIUM_LOC medium.
 LOW_LOC, MEDIUM_LOC = 500, 2000
-MAX_JSON_BYTES = 16_000_000
 MAX_NAME = 120
 MAX_SUMMARY = 1000
 MAX_AMBIGUITIES = 200
 MAX_PARTS = 100
+# The unassigned files the committed index lists; the count is in its front matter.
+MAX_UNASSIGNED_LISTED = 200
 
 
-DataError = uft.DataError
-norm_path = uft.norm_path
-unit_kinds = uft.unit_kinds
+DataError = docmd.DataError
+norm_path = docmd.norm_path
+clean_text = docmd.clean_text
+unit_kinds = docmd.manifest_unit_kinds
+read_json = docmd.read_json
+write_json = docmd.write_json
 
 
 def slug(text, fallback='item'):
-    return uft.slug(text, fallback)
-
-
-def read_json(path, what=None):
-    name = what or os.path.basename(path)
-    if os.path.islink(path):
-        raise DataError(f'refusing to read through a symbolic link: {name}')
-    if os.path.getsize(path) > MAX_JSON_BYTES:
-        raise DataError(f'{name} exceeds the {MAX_JSON_BYTES}-byte limit')
-    with open(path, 'rb') as handle:
-        data = handle.read(MAX_JSON_BYTES + 1)
-    try:
-        return json.loads(data.decode('utf-8-sig'))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise DataError(f'{name} is not valid UTF-8 JSON: {error.__class__.__name__}') from error
+    return docmd.slug(text, fallback)
 
 
 def read_optional_json(path):
-    """The parsed file, or None when the path is not given or not a file."""
+    """The parsed scratch file, or None when the path is not given or not a file."""
     if not path or not os.path.isfile(path):
         return None
     return read_json(path)
 
 
-def write_json(path, value):
-    directory = os.path.dirname(os.path.abspath(path))
-    os.makedirs(directory, exist_ok=True)
-    temporary = path + '.tmp'
-    if os.path.islink(path) or os.path.islink(temporary):
-        raise DataError(f'refusing to write through a symbolic link: {os.path.basename(path)}')
-    with open(temporary, 'w', encoding='utf-8', newline='\n') as handle:
-        json.dump(value, handle, indent=1, ensure_ascii=False)
-        handle.write('\n')
-    # Windows transiently denies the replace while a scanner holds the new file: retry briefly.
-    for attempt in range(20):
-        try:
-            os.replace(temporary, path)
-            return
-        except OSError:
-            if attempt == 19:
-                raise
-            time.sleep(0.05)
-
-
-
-
-def clean_text(value, limit):
-    """A single-line, bounded, printable string ('' for anything else)."""
-    if not isinstance(value, str):
-        return ''
-    text = ''.join(ch if ch.isprintable() else ' ' for ch in value)
-    return re.sub(r'\s+', ' ', text).strip()[:limit]
-
-
 def load_inventory(path):
-    """{path: {'codeLines', 'complexity', 'sha256'}} of inventory.json, in its (sorted) order."""
+    """{path: {'codeLines', 'complexity', 'sha256'}} of the run's inventory.json (scratch), in its (sorted) order."""
     data = read_json(path, 'inventory.json')
     if not isinstance(data, dict) or not isinstance(data.get('files'), list):
         raise DataError('inventory.json must be an object with a files list')
@@ -194,7 +159,7 @@ def check_catalog(catalog, inventory):
             problems.append(f'item {item_id} has no files')
         for rel in item.get('files', []):
             if rel not in inventory:
-                problems.append(f'item {item_id} names {rel}, which is not in inventory.json')
+                problems.append(f'item {item_id} names {rel}, which is not in the inventory')
             elif rel in owner:
                 problems.append(f'{rel} is in both {owner[rel]} and {item_id}')
             else:
@@ -240,11 +205,231 @@ def unique_id(module, base, taken):
 
 
 # ---------------------------------------------------------------------------
-# Scoped understand runs (ADR-0033): the selected items of a catalog.
+# The item graph: what each item calls, what calls it, the data stores it touches
 # ---------------------------------------------------------------------------
 
+def item_graph(items, topology):
+    """{item id: {'leafNodes', 'dependsOn', 'usedBy', 'dataStores'}} of the active items, from the
+    run's raw topology (a dict as the extraction script writes it; None gives items without links).
+
+    dependsOn is [{'item', 'kinds', 'edges'}] (calls from this item's leaves into another item's),
+    usedBy the item ids that depend on it, dataStores [{'id', 'access'}], leafNodes the item's leaves
+    as {'id', 'name', 'kind', 'file', 'loc', 'entry'}."""
+    active = [item for item in items if item.get('status') != 'retired']
+    leaves = {leaf['id']: leaf for leaf in tu.walk_topology(topology)} if topology is not None else {}
+    entry_leaves = {leaf for leaf in (topology or {}).get('entryPoints', []) if isinstance(leaf, str)}
+    leaf_item = {}
+    for item in active:
+        for leaf in item.get('leaves') or []:
+            if isinstance(leaf, str):
+                leaf_item.setdefault(leaf, item['id'])
+    depends, stores = {}, {}
+    for edge in (topology or {}).get('edges', []):
+        if not isinstance(edge, dict) or not isinstance(edge.get('source'), str) or not isinstance(edge.get('target'), str):
+            continue
+        source = leaf_item.get(edge['source'])
+        if source is None:
+            continue
+        kind = clean_text(edge.get('kind'), 20) or 'call'
+        target = leaf_item.get(edge['target'])
+        if target is not None:
+            if target != source:
+                entry = depends.setdefault(source, {}).setdefault(target, {'kinds': set(), 'edges': 0})
+                entry['kinds'].add(kind)
+                entry['edges'] += 1
+        elif leaves.get(edge['target'], {}).get('kind') == 'datastore' or edge['target'].startswith('ds:'):
+            stores.setdefault(source, {}).setdefault(edge['target'], set()).add(kind)
+    used_by = {}
+    for source, targets in depends.items():
+        for target in targets:
+            used_by.setdefault(target, set()).add(source)
+    graph = {}
+    for item in active:
+        item_id = item['id']
+        graph[item_id] = {
+            'leafNodes': [
+                {'id': leaf, 'name': leaves[leaf]['name'], 'kind': leaves[leaf]['kind'], 'file': leaves[leaf]['file'] or '', 'loc': leaves[leaf]['loc'], 'entry': leaf in entry_leaves}
+                for leaf in item.get('leaves') or [] if leaf in leaves
+            ],
+            'dependsOn': [{'item': target, 'kinds': sorted(info['kinds']), 'edges': info['edges']} for target, info in sorted(depends.get(item_id, {}).items())],
+            'usedBy': sorted(used_by.get(item_id, ())),
+            'dataStores': [{'id': store, 'access': sorted(kinds)} for store, kinds in sorted(stores.get(item_id, {}).items())],
+        }
+    return graph
+
+
+# ---------------------------------------------------------------------------
+# The committed catalog: assessment/catalog/index.md and assessment/catalog/<module>.md
+# ---------------------------------------------------------------------------
+
+def render_catalog(app, catalog, graph=None):
+    """{repository-relative path: text} of the catalog documents. `graph` is item_graph()'s result."""
+    graph = graph or {}
+    source = catalog.get('source') if isinstance(catalog.get('source'), dict) else {}
+    modules = {module['id']: module for module in catalog['modules']}
+    by_module = {}
+    for item in catalog['items']:
+        by_module.setdefault(item['module'], []).append(item)
+    for module in by_module:
+        modules.setdefault(module, {'id': module, 'name': module, 'summary': ''})
+    unassigned = catalog.get('unassigned') or []
+    active = [item for item in catalog['items'] if item.get('status') != 'retired']
+    out = {}
+
+    index = [
+        docmd.front_matter({
+            'app': app,
+            'generatedBy': catalog.get('generatedBy') or 'render_catalog.py',
+            'sourceRepository': source.get('repo') or '',
+            'sourceCommit': source.get('commit') or '',
+            'modules': len(modules),
+            'items': len(active),
+            'retired': len(catalog['items']) - len(active),
+            'unassigned': len(unassigned),
+        }),
+        f'# Item catalog of {app}',
+        '',
+        'The items a person selects for analysis, module by module. Each module has its own document with one card per item; '
+        'the ids are stable across assessments.',
+        '',
+        '## Modules',
+        '',
+        docmd.table(['Module', 'Name', 'Items', 'Summary'], [
+            [module_id, module['name'], len(by_module.get(module_id, [])), clean_text(module.get('summary'), 200)] for module_id, module in sorted(modules.items())
+        ]),
+        '## Items',
+        '',
+        docmd.table(['Item', 'Name', 'Kind', 'Status', 'LOC', 'Complexity', 'Files'], [
+            [item['id'], item['name'], item['kind'], item['status'], item['loc'], item['complexity'], len(item['files'])]
+            for item in sorted(catalog['items'], key=lambda entry: entry['id'])
+        ]),
+    ]
+    if catalog.get('ambiguities'):
+        index += ['## Ambiguities', '', 'What a person should check.', '', docmd.bullet_list(catalog['ambiguities'][:MAX_AMBIGUITIES], coded=False)]
+    if unassigned:
+        listed = unassigned[:MAX_UNASSIGNED_LISTED]
+        more = f' ({len(unassigned) - len(listed)} more not listed)' if len(unassigned) > len(listed) else ''
+        index += ['## Unassigned files', '', f'Inventory files in no item: documentation, build files, or code the topology did not place{more}.', '', docmd.bullet_list(listed)]
+    out[paths.assessment_catalog_path(app)] = '\n'.join(index).rstrip() + '\n'
+
+    for module_id, module in sorted(modules.items()):
+        lines = [docmd.front_matter({'module': module_id, 'name': module['name'], 'items': len(by_module.get(module_id, []))}), f'# {module["name"]}', '']
+        if clean_text(module.get('summary'), MAX_SUMMARY):
+            lines += [clean_text(module.get('summary'), MAX_SUMMARY), '']
+        for item in sorted(by_module.get(module_id, []), key=lambda entry: entry['id']):
+            facts = graph.get(item['id'], {})
+            lines += [docmd.heading(2, item['id'], clean_text(item['name'], MAX_NAME)), '']
+            if clean_text(item.get('summary'), MAX_SUMMARY):
+                lines += [clean_text(item.get('summary'), MAX_SUMMARY), '']
+            lines.append(docmd.field_lines({
+                'kind': item['kind'],
+                'status': item['status'],
+                'loc': item['loc'],
+                'complexity': item['complexity'],
+                'digest': item.get('digest') or '',
+                'aliases': item.get('aliases') or [],
+            }, coded=('digest',)))
+            if item.get('leaves'):
+                rows = facts.get('leafNodes')
+                if rows:
+                    lines += ['### Leaves', '', docmd.table(['Leaf', 'Name', 'Kind', 'File', 'LOC', 'Entry point'], [
+                        [leaf['id'], leaf['name'], leaf['kind'], leaf['file'], '' if leaf['loc'] is None else leaf['loc'], 'yes' if leaf['entry'] else ''] for leaf in rows
+                    ])]
+                else:
+                    lines += ['### Leaves', '', docmd.table(['Leaf', 'Name', 'Kind', 'File', 'LOC', 'Entry point'], [[leaf, '', '', '', '', 'yes' if leaf in item.get('entryPoints', []) else ''] for leaf in item['leaves']])]
+            if facts.get('dependsOn'):
+                lines += ['### Depends on', '', docmd.table(['Item', 'Kinds', 'Edges'], [[dep['item'], ', '.join(dep['kinds']), dep['edges']] for dep in facts['dependsOn']])]
+            if facts.get('usedBy'):
+                lines += ['### Used by', '', docmd.bullet_list(facts['usedBy'])]
+            if facts.get('dataStores'):
+                lines += ['### Data stores', '', docmd.table(['Store', 'Access'], [[store['id'], ', '.join(store['access'])] for store in facts['dataStores']])]
+            if item.get('parts'):
+                lines += ['### Parts', '', docmd.table(['Part', 'Kind', 'File'], [[part.get('name'), part.get('kind') or '', part.get('file') or ''] for part in item['parts'][:MAX_PARTS]])]
+            if item['files']:
+                lines += ['### Files', '', docmd.bullet_list(item['files'])]
+            lines.append('')
+        out[paths.assessment_catalog_module_path(app, module_id)] = '\n'.join(lines).rstrip() + '\n'
+    return out
+
+
+def _read_catalog_dir(directory):
+    index_path = os.path.join(directory, 'index.md')
+    if not os.path.isfile(index_path):
+        raise DataError('the catalog has no index.md')
+    return docmd.read_text(index_path, 'catalog/index.md')
+
+
+def load_catalog_dir(directory):
+    """The committed catalog as (items by id, catalog dict): the shape the scratch JSON has, plus, per
+    active item, the links of its card (`dependsOn`, `usedBy`, `dataStores`, `leafNodes`)."""
+    front, body = docmd.split_front_matter(_read_catalog_dir(directory))
+    app = front.get('app') if isinstance(front.get('app'), str) else ''
+    modules = []
+    for row in docmd.records_in(dict(docmd.sections(body, 2)).get('Modules', '')):
+        if SEGMENT_RE.match(row.get('module', '')):
+            modules.append({'id': row['module'], 'name': clean_text(row.get('name'), MAX_NAME) or row['module'], 'summary': clean_text(row.get('summary'), MAX_SUMMARY)})
+    sections = dict(docmd.sections(body, 2))
+    ambiguities = docmd.bullets_in(sections.get('Ambiguities', ''))
+    unassigned = [rel for rel in (norm_path(value) for value in docmd.bullets_in(sections.get('Unassigned files', ''))) if rel]
+    items = {}
+    for module in modules:
+        path = os.path.join(directory, f'{module["id"]}.md')
+        if not os.path.isfile(path):
+            continue
+        for title, card in docmd.sections(docmd.split_front_matter(docmd.read_text(path, f'catalog/{module["id"]}.md'))[1], 2):
+            item_id, name = docmd.split_heading(title)
+            if not ITEM_ID_RE.match(item_id) or item_id in items:
+                continue
+            prose, fields, subs = docmd.parse_card(card, 2)
+            files = [rel for rel in (norm_path(value) for value in docmd.bullets_in(subs.get('Files', ''))) if rel]
+            leaf_rows = docmd.records_in(subs.get('Leaves', ''))
+            entry_points = [row['leaf'] for row in leaf_rows if row.get('entry point', '').strip().lower() == 'yes']
+            items[item_id] = {
+                'id': item_id,
+                'module': module['id'],
+                'kind': clean_text(fields.get('kind'), 40) or 'module',
+                'name': clean_text(name, MAX_NAME) or item_id,
+                'summary': clean_text(prose, MAX_SUMMARY),
+                'files': sorted(set(files)),
+                'leaves': [row['leaf'] for row in leaf_rows if row.get('leaf')],
+                'entryPoints': entry_points,
+                'loc': docmd.as_int(fields.get('loc')),
+                'complexity': fields.get('complexity') if fields.get('complexity') in COMPLEXITY_BANDS else 'low',
+                'digest': fields.get('digest') if isinstance(fields.get('digest'), str) else '',
+                'status': 'retired' if fields.get('status') == 'retired' else 'active',
+                'aliases': [value for value in docmd.as_list(fields.get('aliases')) if isinstance(value, str)],
+                'parts': [{k: v for k, v in (('name', row.get('part')), ('kind', row.get('kind')), ('file', row.get('file'))) if v} for row in docmd.records_in(subs.get('Parts', '')) if row.get('part')][:MAX_PARTS],
+                'dependsOn': [
+                    {'item': row['item'], 'kinds': [kind.strip() for kind in row.get('kinds', '').split(',') if kind.strip()], 'edges': docmd.as_int(row.get('edges'), 1)}
+                    for row in docmd.records_in(subs.get('Depends on', '')) if ITEM_ID_RE.match(row.get('item', ''))
+                ],
+                'usedBy': [value for value in docmd.bullets_in(subs.get('Used by', '')) if ITEM_ID_RE.match(value)],
+                'dataStores': [
+                    {'id': row['store'], 'access': [kind.strip() for kind in row.get('access', '').split(',') if kind.strip()]}
+                    for row in docmd.records_in(subs.get('Data stores', '')) if row.get('store')
+                ],
+                'leafNodes': [
+                    {'id': row['leaf'], 'name': row.get('name', ''), 'kind': row.get('kind', ''), 'file': row.get('file', ''), 'loc': docmd.as_int(row.get('loc'), None) if row.get('loc') else None, 'entry': row.get('entry point', '').strip().lower() == 'yes'}
+                    for row in leaf_rows if row.get('leaf')
+                ],
+            }
+    catalog = {
+        'app': app,
+        'generatedBy': front.get('generatedBy') if isinstance(front.get('generatedBy'), str) else '',
+        'source': {key: front[field] for key, field in (('repo', 'sourceRepository'), ('commit', 'sourceCommit')) if isinstance(front.get(field), str) and front[field]},
+        'modules': modules,
+        'items': list(items.values()),
+        'unassigned': unassigned,
+        'ambiguities': ambiguities,
+    }
+    return items, catalog
+
+
 def load_catalog(path):
-    """The catalog's items by id (every status) and its modules; DataError when it is not a catalog."""
+    """The catalog's items by id (every status) and the catalog itself. `path` is the committed catalog
+    folder (assessment/catalog/) or a run's scratch catalog.json; DataError when it is not a catalog."""
+    if os.path.isdir(path):
+        return load_catalog_dir(path)
     data = read_json(path, 'catalog.json')
     if not isinstance(data, dict) or not isinstance(data.get('items'), list):
         raise DataError('catalog.json must be an object with an items list')
@@ -360,20 +545,19 @@ RULE_REVIEW_VERDICTS = ('confirmed', 'refuted', 'clarify')
 
 def load_rules_review(path):
     """One unit's human rule verdicts: {rule id: {'verdict', 'approver', 'date'}} (ADR-0038).
-    The file is human-owned and authored through a pull request; no script of this plugin writes it."""
-    data = read_json(path, 'rules-review.json')
-    if not isinstance(data, dict):
-        raise DataError('rules-review.json must be an object of rule id -> review')
+    The file is human-owned (a table `Rule | Verdict | Approver | Date`) and authored through a pull
+    request; no script of this plugin writes it."""
+    rows = docmd.records_in(docmd.read_text(path, 'rules-review.md'))
     reviews = {}
-    for rule_id, review in data.items():
-        if not isinstance(rule_id, str) or not rule_id or not isinstance(review, dict):
-            raise DataError('rules-review.json must be an object of rule id -> review')
-        verdict, approver, date = review.get('verdict'), review.get('approver'), review.get('date')
-        if not isinstance(verdict, str) or verdict not in RULE_REVIEW_VERDICTS:
-            raise DataError(f'rules-review.json: {rule_id} has no verdict of {"|".join(RULE_REVIEW_VERDICTS)}')
-        if not isinstance(approver, str) or not isinstance(date, str):
-            raise DataError(f'rules-review.json: {rule_id} has no approver and date')
-        reviews[rule_id] = {'verdict': verdict, 'approver': approver, 'date': date}
+    for row in rows:
+        rule_id, verdict = row.get('rule', '').strip('` '), row.get('verdict', '').strip().lower()
+        if not rule_id:
+            raise DataError('rules-review.md: a row has no rule id')
+        if verdict not in RULE_REVIEW_VERDICTS:
+            raise DataError(f'rules-review.md: {rule_id} has no verdict of {"|".join(RULE_REVIEW_VERDICTS)}')
+        if not row.get('approver') or not row.get('date'):
+            raise DataError(f'rules-review.md: {rule_id} has no approver and date')
+        reviews[rule_id] = {'verdict': verdict, 'approver': row['approver'], 'date': row['date']}
     return reviews
 
 

@@ -65,7 +65,7 @@ export function criterionTextOf(line: string): string | null {
  * Parses the brief.
  *
  * @param text the file
- * @param knownModules module ids from topology.json; a phase lists the ones
+ * @param knownModules module ids from topology.md; a phase lists the ones
  *   its text mentions as whole words
  */
 export function parseBrief(text: string, knownModules: readonly string[] = []): Brief {

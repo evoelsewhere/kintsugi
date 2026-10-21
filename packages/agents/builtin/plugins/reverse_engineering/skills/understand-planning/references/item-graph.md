@@ -1,12 +1,12 @@
 # The item graph (`graph.json`)
 
-Written by `scripts/plan_graph.py` from `catalog.json` and `topology.json`; no code is read.
+Written by `scripts/plan_graph.py` (scratch JSON of the run) from the catalog documents (`assessment/catalog/`), whose cards carry the links between items; no code is read.
 
 ```json
 {
   "app": "billing",
   "source": { "repo": "legacy", "commit": "3fc7e70..." },
-  "stats": { "items": 27, "open": 24, "edges": 61, "topology": true },
+  "stats": { "items": 27, "open": 24, "edges": 61, "linked": true },
   "cycles": [["batch/a", "batch/b"]],
   "items": [
     {
@@ -35,4 +35,4 @@ Written by `scripts/plan_graph.py` from `catalog.json` and `topology.json`; no c
 | `depth` | 0 = depends on no other item; otherwise 1 + the deepest item it depends on. A cycle counts as one step. |
 | `cycle` | The ids of the items that depend on each other, or `null`. |
 
-`stats.topology` is false when no topology was available: every item then has no dependencies and depth 0.
+`stats.linked` is false when the catalog cards record no links between items: every item then has no dependencies and depth 0.

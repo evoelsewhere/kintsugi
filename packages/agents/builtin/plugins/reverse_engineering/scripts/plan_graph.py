@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """The item graph a planning run reasons over (ADR-0041): which catalog items call, read and use which.
 
-    python3 plan_graph.py <app> --catalog FILE --out DIR [--topology FILE] [--existing DIR]
+    python3 plan_graph.py <app> --catalog DIR --out DIR [--existing DIR]
 
---catalog is applications/<app>/assessment/catalog.json; --topology the skeleton topology.json the
-assess stage published (without it no item depends on another); --existing the application's units/
-folder (an item with a meta.json there is understood already); --out the document-repository root
-the graph is written under (applications/<app>/assessment/understand/graph.json, intermediate).
+--catalog is applications/<app>/assessment/catalog/, whose cards carry the links between items (the assess
+stage computed them from the topology); --existing the application's units/ folder (an item with an
+understanding.md there is understood already); --out the document-repository root the graph is written
+under (scratch/<app>/understand/graph.json, intermediate).
 
 Per active item: size, complexity, asset class, whether it holds an entry point, the items it depends
 on (with the kinds of calls and how many) and that use it, the data stores it touches, its depth
@@ -21,8 +21,8 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import docmd  # noqa: E402
 import paths  # noqa: E402
-import units_from_topology as uft  # noqa: E402
 
 # Keep in sync with classifyItem in packages/domain/src/catalog.ts.
 TEST_PATH = re.compile(r'(^|/)(tests?|__tests__|spec|specs|testing|testdata|fixtures)/|\.(test|spec)\.[a-z0-9]+$|(Tests?|IT)\.(java|kt|cs|scala|groovy)$|_test\.(go|py|rb|rs)$|(^|/)test_[^/]+\.py$', re.IGNORECASE)
@@ -84,32 +84,15 @@ def components(nodes, edges):
     return owner, result
 
 
-def build(app, catalog_items, topology, understood, catalog_origin):
+def build(app, catalog_items, understood, catalog_origin):
     active = [item for item in catalog_items.values() if item.get('status') != 'retired']
-    leaves = {leaf['id']: leaf for leaf in uft.walk_topology(topology)} if topology is not None else {}
-    leaf_item = {}
-    for item in active:
-        for leaf in item.get('leaves') or []:
-            if isinstance(leaf, str):
-                leaf_item.setdefault(leaf, item['id'])
-    entry_leaves = {leaf for leaf in (topology or {}).get('entryPoints', []) if isinstance(leaf, str)}
-
     depends, stores = {}, {}
-    for edge in (topology or {}).get('edges', []):
-        if not isinstance(edge, dict) or not isinstance(edge.get('source'), str) or not isinstance(edge.get('target'), str):
-            continue
-        source = leaf_item.get(edge['source'])
-        if source is None:
-            continue
-        kind = cc.clean_text(edge.get('kind'), 20) or 'call'
-        target = leaf_item.get(edge['target'])
-        if target is not None:
-            if target != source:
-                entry = depends.setdefault(source, {}).setdefault(target, {'kinds': set(), 'edges': 0})
-                entry['kinds'].add(kind)
-                entry['edges'] += 1
-        elif leaves.get(edge['target'], {}).get('kind') == 'datastore' or edge['target'].startswith('ds:'):
-            stores.setdefault(source, {}).setdefault(edge['target'], set()).add(kind)
+    for item in active:
+        for dep in item.get('dependsOn') or []:
+            if dep.get('item') in catalog_items and dep['item'] != item['id']:
+                depends.setdefault(item['id'], {})[dep['item']] = {'kinds': set(dep.get('kinds') or []), 'edges': dep.get('edges') or 1}
+        for store in item.get('dataStores') or []:
+            stores.setdefault(item['id'], {})[store['id']] = set(store.get('access') or [])
 
     ids = sorted(item['id'] for item in active)
     owner, groups = components(ids, {item: set(targets) for item, targets in depends.items()})
@@ -129,10 +112,12 @@ def build(app, catalog_items, topology, understood, catalog_origin):
             used_by.setdefault(target, set()).add(source)
 
     items = []
+    linked = False
     for item in sorted(active, key=lambda entry: entry['id']):
         item_id = item['id']
         group = groups[owner[item_id]]
         outgoing = depends.get(item_id, {})
+        linked = linked or bool(outgoing)
         items.append({
             'id': item_id,
             'name': cc.clean_text(item.get('name'), cc.MAX_NAME) or item_id,
@@ -144,7 +129,7 @@ def build(app, catalog_items, topology, understood, catalog_origin):
             'complexity': item.get('complexity') if item.get('complexity') in cc.COMPLEXITY_BANDS else 'low',
             'assetClass': asset_class(item.get('files') or []),
             'understood': item_id in understood,
-            'entryPoint': any(leaf in entry_leaves for leaf in item.get('leaves') or []),
+            'entryPoint': bool(item.get('entryPoints')),
             'dependsOn': [{'item': target, 'kinds': sorted(info['kinds']), 'edges': info['edges']} for target, info in sorted(outgoing.items())],
             'usedBy': sorted(used_by.get(item_id, ())),
             'dataStores': [{'id': store, 'access': sorted(kinds)} for store, kinds in sorted(stores.get(item_id, {}).items())],
@@ -164,7 +149,7 @@ def build(app, catalog_items, topology, understood, catalog_origin):
             'items': len(items),
             'open': sum(1 for item in items if not item['understood'] and item['assetClass'] == 'code'),
             'edges': sum(len(item['dependsOn']) for item in items),
-            'topology': topology is not None,
+            'linked': linked,
         },
     }
 
@@ -172,29 +157,27 @@ def build(app, catalog_items, topology, understood, catalog_origin):
 def main(argv):
     ap = argparse.ArgumentParser(description='Compute the item graph a planning run reasons over.')
     ap.add_argument('app')
-    ap.add_argument('--catalog', required=True)
-    ap.add_argument('--topology')
-    ap.add_argument('--existing', help='the application units/ folder: an item with a meta.json is understood')
+    ap.add_argument('--catalog', required=True, help='the catalog folder (assessment/catalog/)')
+    ap.add_argument('--existing', help='the application units/ folder: an item with an understanding record there is understood')
     ap.add_argument('--out', required=True, help='the document-repository root to write under')
     args = ap.parse_args(argv[1:])
     try:
         if not cc.APP_RE.match(args.app):
             raise cc.DataError('the application id must be kebab-case')
         items, catalog = cc.load_catalog(args.catalog)
-        topology = cc.read_optional_json(args.topology)
         understood = set()
         if args.existing and os.path.isdir(args.existing):
             for item_id in items:
                 module, unit = paths.split_unit_key(item_id)
-                if os.path.isfile(os.path.join(args.existing, module, unit, 'meta.json')):
+                if os.path.isfile(os.path.join(args.existing, module, unit, 'understanding', 'understanding.md')):
                     understood.add(item_id)
-        graph = build(args.app, items, topology, understood, catalog.get('source') if isinstance(catalog.get('source'), dict) else {})
-        cc.write_json(os.path.join(os.path.abspath(args.out), *paths.understand_graph_path(args.app).split('/')), graph)
+        graph = build(args.app, items, understood, catalog.get('source') if isinstance(catalog.get('source'), dict) else {})
+        docmd.write_json(os.path.join(os.path.abspath(args.out), *paths.understand_graph_path(args.app).split('/')), graph)
     except (cc.DataError, OSError, RecursionError) as error:
         print(f'plan_graph.py: {error}', file=sys.stderr)
         return 1
     stats = graph['stats']
-    print(f"{stats['items']} item(s), {stats['open']} open code item(s), {stats['edges']} dependency edge(s), {len(graph['cycles'])} cycle(s); topology {'read' if topology is not None else 'absent'}")
+    print(f"{stats['items']} item(s), {stats['open']} open code item(s), {stats['edges']} dependency edge(s), {len(graph['cycles'])} cycle(s); links {'read' if stats['linked'] else 'absent'}")
     return 0
 
 

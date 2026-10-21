@@ -2,8 +2,8 @@
 // exists; the order matters because a specification cites what an item calls and what calls it, and
 // items that call each other read best in one run. Three steps:
 //
-//   plan_graph.py   the item graph from the catalog and the topology: who depends on whom (through
-//                   the leaves of each item), data stores, fan-in and fan-out, depth, cycles
+//   plan_graph.py   the item graph from the catalog: who depends on whom (the links the assess stage
+//                   recorded in each item's card), data stores, fan-in and fan-out, depth, cycles
 //   plan            an understand-planner job (skill understand-planning) reads the graph and the
 //                   assessment and proposes batches with a reason each (no code needed: the graph and the
 //                   assessment are its evidence)
@@ -12,13 +12,14 @@
 //                   graph can give (size, cohesion, what it still depends on); a plan with nothing
 //                   left sends the job back once with the reason
 //
-// Only plan.json is published, and it is an auto-commit path: advice every run replaces, not a
-// proposal a person reviews. The graph and the draft are intermediate. The plugin's command
+// Only plan.md (understanding/plan.md, ADR-0042) is published, and it is an auto-commit path: advice every
+// run replaces, not a proposal a person reviews. The graph and the draft are scratch JSON (intermediate). The plugin's command
 // (commands/modernize-plan-understand.md) declares the same flow; test/flow-sync.test.ts keeps them equal.
 
 import type { StagePlan } from "../plan.js";
 import {
   DOCUMENT_PATH_TOKENS,
+  assessmentCatalogDir,
   assessmentCatalogPath,
   assessmentFilePath,
   assessmentInventoryPath,
@@ -74,7 +75,7 @@ The item graph is {in}/${GRAPH}: per catalog item its size (loc), complexity, wh
 generated code (assetClass), whether it holds an entry point, the items it depends on (dependsOn, with the kinds of calls and
 how many), the items that use it (usedBy), the data stores it touches, its fan-in and fan-out, its depth (0 = it depends on no
 other item) and its cycle (items that depend on each other). Also under {in}: ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")}
-(the assessment: summary, recommended pattern, risks), ${assessmentCatalogPath(APP_TOKEN)} and ${assessmentTopologyPath(APP_TOKEN)}.
+(the assessment: summary, recommended pattern, risks), ${assessmentCatalogPath(APP_TOKEN)} (and the module documents next to it) and ${assessmentTopologyPath(APP_TOKEN)}.
 Read the graph and the assessment first; open source files only to settle a doubt, a few at most.
 
 Follow your understand-planning skill: it says how to read the graph and which rules decide an order. Plan only items that are
@@ -106,14 +107,14 @@ ${UNTRUSTED}`;
 export const PLAN_UNDERSTAND: StagePlan = {
   id: "plan-understand",
   message: (app) => `Plan which items of ${app} to understand next`,
-  documents: ["kintsugi.yaml", assessmentCatalogPath(APP_TOKEN), assessmentInventoryPath(APP_TOKEN), assessmentTopologyPath(APP_TOKEN), assessmentFilePath(APP_TOKEN, "ASSESSMENT.md"), `${unitsDir(APP_TOKEN)}/`],
+  documents: ["kintsugi.yaml", `${assessmentCatalogDir(APP_TOKEN)}/`, assessmentInventoryPath(APP_TOKEN), assessmentTopologyPath(APP_TOKEN), assessmentFilePath(APP_TOKEN, "ASSESSMENT.md"), `${unitsDir(APP_TOKEN)}/`],
   requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   steps: [
     {
       id: "graph",
       kind: "script",
       script: "plan_graph.py",
-      args: ["{app}", "--catalog", `{in}/${assessmentCatalogPath(APP_TOKEN)}`, "--topology", `{in}/${assessmentTopologyPath(APP_TOKEN)}`, "--existing", `{in}/${unitsDir(APP_TOKEN)}`, "--out", "{out}"],
+      args: ["{app}", "--catalog", `{in}/${assessmentCatalogDir(APP_TOKEN)}`, "--existing", `{in}/${unitsDir(APP_TOKEN)}`, "--out", "{out}"],
       intermediate: [GRAPH],
       expects: [GRAPH],
     },

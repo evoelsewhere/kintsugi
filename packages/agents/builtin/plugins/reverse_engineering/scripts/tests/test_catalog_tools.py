@@ -8,6 +8,9 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
+sys.path.insert(0, SCRIPTS)
+import catalog_common as cc  # noqa: E402
+import docmd  # noqa: E402
 
 
 def run(script, *args):
@@ -85,9 +88,16 @@ class CatalogTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def commit(self, catalog, name='previous', graph=None):
+        """The catalog as the Markdown the assess stage commits; returns the catalog folder."""
+        root = os.path.join(self.root, name)
+        for path, text in cc.render_catalog('billing', catalog, graph).items():
+            write(os.path.join(root, *path.split('/')), text)
+        return os.path.join(root, *cc.paths.assessment_catalog_dir('billing').split('/'))
+
     def propose(self, out='proposed.json'):
         path = os.path.join(self.root, out)
-        result = run('catalog_from_topology.py', 'billing', '--assessment', self.assessment, '--out', path,
+        result = run('catalog_from_topology.py', 'billing', '--topology', os.path.join(self.assessment, 'topology.json'), '--inventory', self.inventory, '--out', path,
                      '--manifest', os.path.join(self.root, 'kintsugi.yaml'))
         self.assertEqual(result.returncode, 0, result.stderr)
         return path
@@ -112,7 +122,6 @@ class CatalogTests(unittest.TestCase):
         ids = [item['id'] for item in catalog['items']]
         self.assertEqual(ids, ['billing/invoice', 'billing/nightly', 'billing/rates', 'billing/util', 'customers/custupd'])
         self.assertEqual([module['id'] for module in catalog['modules']], ['billing', 'customers'])
-        self.assertEqual(catalog['schemaVersion'], 1)
         self.assertEqual(catalog['source'], {'repo': 'legacy', 'commit': 'a' * 40})
         by_id = {item['id']: item for item in catalog['items']}
         # A directory leaf takes every inventory file under it; small leaves of one directory are grouped.
@@ -141,7 +150,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_missing_topology_fails(self):
         os.remove(os.path.join(self.assessment, 'topology.json'))
-        result = run('catalog_from_topology.py', 'billing', '--assessment', self.assessment, '--out', os.path.join(self.root, 'x.json'))
+        result = run('catalog_from_topology.py', 'billing', '--topology', os.path.join(self.assessment, 'topology.json'), '--inventory', self.inventory, '--out', os.path.join(self.root, 'x.json'))
         self.assertEqual(result.returncode, 1)
         self.assertIn('topology.json is missing', result.stderr)
 
@@ -197,23 +206,20 @@ class CatalogTests(unittest.TestCase):
         catalog, stdout = self.reconcile(proposed)
         self.assertEqual(catalog['reconciled'], {'from': 'none', 'kept': 0, 'new': 5, 'retired': 0, 'renamed': 0})
         self.assertIn('first catalog', stdout)
-        previous = os.path.join(self.root, 'previous.json')
-        write(previous, catalog)
-        again, _ = self.reconcile(proposed, '--previous', previous)
+        again, _ = self.reconcile(proposed, '--previous', self.commit(catalog))
         self.assertEqual([item['id'] for item in again['items']], [item['id'] for item in catalog['items']])
         self.assertEqual(again['reconciled'], {'from': 'catalog', 'kept': 5, 'new': 0, 'retired': 0, 'renamed': 0})
 
     def test_reconcile_keeps_ids_aliases_splits_and_retires(self):
-        previous = os.path.join(self.root, 'previous.json')
         old = load(self.propose())
         for item in old['items']:
             if item['id'] == 'billing/invoice':
                 item['id'], item['name'] = 'billing/invoice-entry', 'Invoice entry'
             if item['id'] == 'billing/util':
                 item['id'] = 'billing/formatting'
-        old['items'].append({'id': 'legacy/old-report', 'module': 'legacy', 'kind': 'report', 'name': 'Old report', 'files': ['src/gone/REPORT.cbl'], 'status': 'active'})
+        old['items'].append(cc.new_item('legacy/old-report', 'legacy', 'report', 'Old report', ['src/gone/REPORT.cbl']))
         old['modules'].append({'id': 'legacy', 'name': 'Legacy', 'summary': 'gone'})
-        write(previous, old)
+        previous = self.commit(old)
         # This run: the customer item splits in two, util is unchanged, invoice is renamed.
         proposed = self.propose()
         _, curated = self.apply(proposed, {'edits': [
@@ -235,16 +241,12 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(catalog['reconciled']['new'], 1)
 
     def test_reconcile_seeds_from_units(self):
-        units_json = os.path.join(self.root, 'units.json')
-        write(units_json, {'units': [{'key': 'billing/invoice-unit', 'title': 'Invoice unit', 'kind': 'program', 'files': ['src/billing/INVOICE.cbl']}]})
         units_dir = os.path.join(self.root, 'units', 'billing')
         write(os.path.join(units_dir, 'customers', 'cust.md'),
               '---\nid: "billing/customers/cust"\nmodule: "customers"\nkind: "program"\ntitle: "Customers"\nsource:\n  - {repo: "legacy", paths: ["src/cust/upd/CUSTUPD.cbl", "src/cust/upd/CUSTLIB.cbl"]}\n---\nbody\n')
         write(os.path.join(units_dir, 'old', 'gone.md'), '---\nid: billing/old/gone\ntitle: Gone\nsource:\n  - repo: legacy\n    paths:\n      - src/gone/X.cbl\n---\n')
-        catalog, stdout = self.reconcile(self.propose(), '--units-json', units_json, '--units-dir', units_dir)
+        catalog, stdout = self.reconcile(self.propose(), '--units-dir', units_dir)
         by_id = {item['id']: item for item in catalog['items']}
-        self.assertIn('billing/invoice-unit', by_id)
-        self.assertEqual(by_id['billing/invoice-unit']['aliases'], ['Invoice unit'])
         self.assertIn('customers/cust', by_id)
         self.assertEqual(by_id['old/gone']['status'], 'retired')
         self.assertEqual(by_id['old/gone']['files'], ['src/gone/X.cbl'])
@@ -252,10 +254,11 @@ class CatalogTests(unittest.TestCase):
         self.assertIn('existing units', stdout)
 
     def test_reconcile_expands_unit_directories_on_the_inventory(self):
-        # units_from_topology.py lists a directory leaf's directory, not its files.
-        units_json = os.path.join(self.root, 'units.json')
-        write(units_json, {'units': [{'key': 'customers/customer-update', 'title': 'Customer update', 'kind': 'program', 'files': ['src/cust/upd']}]})
-        catalog, _ = self.reconcile(self.propose(), '--units-json', units_json)
+        # A work item lists a directory leaf's directory, not its files.
+        units_dir = os.path.join(self.root, 'units', 'billing')
+        write(os.path.join(units_dir, 'customers', 'customer-update.md'),
+              '---\nid: "billing/customers/customer-update"\nmodule: "customers"\nkind: "program"\ntitle: "Customer update"\nsource:\n  - {repo: "legacy", paths: ["src/cust/upd"]}\n---\n')
+        catalog, _ = self.reconcile(self.propose(), '--units-dir', units_dir)
         by_id = {item['id']: item for item in catalog['items']}
         self.assertNotIn('customers/custupd', by_id)
         self.assertEqual(by_id['customers/customer-update']['files'], ['src/cust/upd/CUSTLIB.cbl', 'src/cust/upd/CUSTUPD.cbl', 'src/cust/upd/CUSTUPD2.cbl'])
@@ -263,15 +266,13 @@ class CatalogTests(unittest.TestCase):
 
     def test_reconcile_keeps_module_ids(self):
         # The previous catalog called the billing module "invoicing"; this run's topology calls it "billing".
-        previous = os.path.join(self.root, 'previous.json')
         old = load(self.propose())
         old['items'] = [item for item in old['items'] if item['module'] == 'billing' and item['id'] != 'billing/util']
         for item in old['items']:
             item['id'] = 'invoicing/' + item['id'].split('/', 1)[1]
             item['module'] = 'invoicing'
         old['modules'] = [{'id': 'invoicing', 'name': 'Invoicing', 'summary': 'Bills customers.'}]
-        write(previous, old)
-        catalog, _ = self.reconcile(self.propose(), '--previous', previous)
+        catalog, _ = self.reconcile(self.propose(), '--previous', self.commit(old))
         self.assertEqual([module['id'] for module in catalog['modules']], ['customers', 'invoicing'])
         self.assertEqual(next(module for module in catalog['modules'] if module['id'] == 'invoicing')['summary'], 'Bills customers.')
         by_id = {item['id']: item for item in catalog['items']}
@@ -292,6 +293,61 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(by_id['billing/nightly']['kind'], 'batch-job')
 
 
+class CatalogDocumentTests(unittest.TestCase):
+    """The committed catalog: render_catalog.py writes it, load_catalog reads it back."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = self.temp.name
+        write(os.path.join(self.root, 'topology.json'), TOPOLOGY)
+        write(os.path.join(self.root, 'inventory.json'), INVENTORY)
+        write(os.path.join(self.root, 'kintsugi.yaml'), 'unitKinds: [screen, batch-job, program]\n')
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def pipeline(self):
+        proposed = os.path.join(self.root, 'proposed.json')
+        topology, inventory = os.path.join(self.root, 'topology.json'), os.path.join(self.root, 'inventory.json')
+        for args in (
+            ('catalog_from_topology.py', 'billing', '--topology', topology, '--inventory', inventory, '--out', proposed, '--manifest', os.path.join(self.root, 'kintsugi.yaml')),
+            ('reconcile_catalog.py', '--catalog', proposed, '--inventory', inventory, '--out', os.path.join(self.root, 'catalog.json')),
+            ('render_catalog.py', 'billing', '--catalog', os.path.join(self.root, 'catalog.json'), '--topology', topology, '--out', os.path.join(self.root, 'docs')),
+        ):
+            result = run(*args)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        return os.path.join(self.root, 'docs', *cc.paths.assessment_catalog_dir('billing').split('/'))
+
+    def test_the_catalog_is_markdown_and_reads_back_as_it_was_written(self):
+        directory = self.pipeline()
+        self.assertEqual(sorted(os.listdir(directory)), ['billing.md', 'customers.md', 'index.md'])
+        items, catalog = cc.load_catalog(directory)
+        written = load(os.path.join(self.root, 'catalog.json'))
+        for item in written['items']:
+            read = items[item['id']]
+            for key in ('module', 'kind', 'name', 'files', 'leaves', 'entryPoints', 'loc', 'complexity', 'digest', 'status'):
+                self.assertEqual(read[key], item[key], (item['id'], key))
+        self.assertEqual(catalog['source'], {'repo': 'legacy', 'commit': 'a' * 40})
+        self.assertEqual([module['id'] for module in catalog['modules']], ['billing', 'customers'])
+        self.assertEqual(catalog['unassigned'], ['README.md'])
+        self.assertEqual(catalog['app'], 'billing')
+
+    def test_a_card_carries_the_links_between_items(self):
+        items, _ = cc.load_catalog(self.pipeline())
+        # NIGHTLY (an item of its own) calls INVOICE; the data store is not an item.
+        self.assertEqual(items['billing/nightly']['dependsOn'], [{'item': 'billing/invoice', 'kinds': ['call'], 'edges': 1}])
+        self.assertEqual(items['billing/invoice']['usedBy'], ['billing/nightly'])
+        leaf = items['billing/nightly']['leafNodes'][0]
+        self.assertEqual((leaf['id'], leaf['kind'], leaf['file'], leaf['loc'], leaf['entry']), ('NIGHTLY', 'job', 'jcl/NIGHTLY.jcl', 30, True))
+
+    def test_the_committed_files_hold_no_json(self):
+        directory = self.pipeline()
+        for name in os.listdir(directory):
+            text = docmd.read_text(os.path.join(directory, name))
+            self.assertTrue(text.startswith('---\n'), name)
+            self.assertNotIn('"files":', text)
+
+
 class InventoryHashTests(unittest.TestCase):
     def test_every_file_has_a_sha256(self):
         with tempfile.TemporaryDirectory() as root:
@@ -299,9 +355,10 @@ class InventoryHashTests(unittest.TestCase):
             write(os.path.join(source, 'a.py'), 'print(1)\n')
             write(os.path.join(source, 'job.jcl'), '//JOB\n')
             out = os.path.join(root, 'out')
-            result = run('inventory.py', 'billing', '--source', source, '--out', out)
+            scratch = os.path.join(root, 'scratch')
+            result = run('inventory.py', 'billing', '--source', source, '--out', out, '--scratch', scratch)
             self.assertEqual(result.returncode, 0, result.stderr)
-            files = {entry['path']: entry for entry in load(os.path.join(out, 'inventory.json'))['files']}
+            files = {entry['path']: entry for entry in load(os.path.join(scratch, 'inventory.json'))['files']}
             self.assertEqual(files['a.py']['sha256'], hashlib.sha256(b'print(1)\n').hexdigest())
             self.assertEqual(files['job.jcl']['sha256'], hashlib.sha256(b'//JOB\n').hexdigest())
 

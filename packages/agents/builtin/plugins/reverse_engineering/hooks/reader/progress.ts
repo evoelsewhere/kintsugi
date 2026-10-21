@@ -143,7 +143,7 @@ export const STAGE_LABELS: Record<StageKey, string> = {
 const STAGE_FILES = {
   preflight: 'PREFLIGHT.md',
   assess: 'ASSESSMENT.md',
-  map: 'topology.json',
+  map: 'topology.md',
   rules: 'BUSINESS_RULES.md',
   brief: 'modernization-brief.md',
   transform: 'TRANSFORMATION_NOTES.md',
@@ -218,7 +218,7 @@ const moduleDocAt = async (fs: ReaderFs, app: string, file: string, layout: Work
 }
 
 /**
- * The rule verdicts humans left in the app's unit folders (`units/<module>/<unit>/rules-review.json`), merged into the one
+ * The rule verdicts humans left in the app's unit folders (`units/<module>/<unit>/understanding/rules-review.md`), merged into the one
  * ledger the panel counts. The units are walked in sorted order, and a rule several units reviewed keeps the newest verdict.
  */
 const readReviewLedger = async (fs: ReaderFs, app: string, layout: WorkspaceLayout): Promise<ReviewLedger> => {

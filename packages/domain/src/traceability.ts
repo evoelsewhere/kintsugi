@@ -19,7 +19,7 @@ export interface RuleReviewRecord {
   date: string;
 }
 
-/** `rules-review.json`: review details are keyed by the rule id. */
+/** A unit's `rules-review.md`: review details are keyed by the rule id. */
 export type RulesReviewRecord = Record<RuleId, RuleReviewRecord>;
 
 export interface RequirementRecord {
@@ -136,7 +136,7 @@ export function validateRuleRequirementTraceChain(chain: RuleRequirementTraceCha
   }
 
   for (const ruleId of findOrphanRuleReviewIds(chain.rules, chain.reviews)) {
-    problems.push({ path: `rules-review.json.${ruleId}`, message: `review has no matching rule '${ruleId}'` });
+    problems.push({ path: `rules-review.md.${ruleId}`, message: `review has no matching rule '${ruleId}'` });
   }
 
   const traceRuleIds = new Set(chain.trace.rulesApplied ?? []);
@@ -236,7 +236,7 @@ function readDependencies(record: Record<string, unknown>): TraceDependencyRecor
   return dependencies;
 }
 
-/** Parse both current trace files and legacy files without the three newer link arrays. */
+/** Narrow a record read from a unit's `trace.md` (the three link arrays default to empty). */
 export function parseUnitTrace(value: unknown): UnitTraceRecord | undefined {
   if (!isRecord(value)) return undefined;
 
@@ -276,7 +276,7 @@ export function parseUnitTrace(value: unknown): UnitTraceRecord | undefined {
   };
 }
 
-/** Narrow an unknown JSON value to a rules catalog record. */
+/** Narrow a record read from a unit's `rules.md` to a rules catalog record. */
 export function parseRulesFile(value: unknown): RulesFileRecord | undefined {
   if (!isRecord(value) || !Array.isArray(value["rules"])) return undefined;
   const rules: RuleRecord[] = [];
@@ -287,7 +287,7 @@ export function parseRulesFile(value: unknown): RulesFileRecord | undefined {
   return { rules };
 }
 
-/** Narrow a rules-review.json object to verdicts keyed by rule id. */
+/** Narrow a record read from a unit's `rules-review.md` to verdicts keyed by rule id. */
 export function parseRulesReview(value: unknown): RulesReviewRecord | undefined {
   if (!isRecord(value)) return undefined;
   const reviews: RulesReviewRecord = {};

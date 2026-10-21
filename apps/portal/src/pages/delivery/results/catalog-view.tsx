@@ -296,7 +296,7 @@ export function CatalogResults({ view, selection, children }: { view: CatalogVie
         {STATUS_ORDER.filter((status) => status !== "understood" && (view.counts[status] ?? 0) > 0).map((status) => (
           <Kpi key={status} label={styleOf(ITEM_STATUS, status).label} value={view.counts[status] ?? 0} tone={styleOf(ITEM_STATUS, status).tone} />
         ))}
-        <Kpi label="Unassigned files" value={view.catalog.unassigned.length} hint={`${formatCount(active.reduce((total, item) => total + item.files.length, 0))} files in items`} />
+        <Kpi label="Unassigned files" value={Math.max(view.catalog.unassignedCount, view.catalog.unassigned.length)} hint={`${formatCount(active.reduce((total, item) => total + item.files.length, 0))} files in items`} />
         <Kpi label="Code lines" value={active.reduce((total, item) => total + item.loc, 0)} hint={`${formatCount(active.filter((item) => assetClassOf(item) !== "code").reduce((total, item) => total + item.loc, 0))} in test or generated items`} />
       </KpiRow>
       <Section
@@ -312,6 +312,7 @@ export function CatalogResults({ view, selection, children }: { view: CatalogVie
             <p className="text-[13px] text-text-muted">Every file is in an item.</p>
           ) : (
             <div className="max-h-72 overflow-auto">
+              {view.catalog.unassignedCount > view.catalog.unassigned.length ? <p className="px-1.5 pb-1 text-[11.5px] text-text-muted">The first {formatCount(view.catalog.unassigned.length)} of {formatCount(view.catalog.unassignedCount)} files.</p> : null}
               {groupByFolder(view.catalog.unassigned).map((group) => (
                 <details key={group.folder} open={group.paths.length <= 3}>
                   <summary className={cn("flex cursor-pointer items-center justify-between rounded-[4px] px-1.5 py-1 text-[12.5px] text-text hover:bg-hover", FOCUS)}>

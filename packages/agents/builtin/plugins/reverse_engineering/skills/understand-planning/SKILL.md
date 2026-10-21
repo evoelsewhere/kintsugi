@@ -12,9 +12,9 @@ understood therefore decides how good the later specifications are, and how much
 
 ## Inputs
 
-- `graph.json`: one entry per catalog item. Fields and how to read them: [references/item-graph.md](references/item-graph.md).
+- `graph.json` (scratch JSON of the run): one entry per catalog item. Fields and how to read them: [references/item-graph.md](references/item-graph.md).
 - `ASSESSMENT.md`: the assessment (summary, recommended pattern, risks, security findings).
-- `catalog.json` and `topology.json` for names and detail, when the graph is not enough.
+- The catalog documents (`applications/<app>/assessment/catalog/`) and `topology.md` for names and detail, when the graph is not enough.
 
 Only **open** items are planned: `understood` is false and `assetClass` is `code`. Test and generated items are never
 planned.
@@ -48,7 +48,7 @@ Return the structured result the task asks for.
 
 ## Pitfalls
 
-- A graph with no edges (`stats.topology` false or `edges` 0) says nothing about relationships: plan by module,
+- A graph with no edges (`stats.linked` false or `edges` 0) says nothing about relationships: plan by module,
   size and the assessment, and say in the strategy that relationships were not available.
 - Do not invent ids or numbers. The check drops unknown items and recomputes size and cohesion.
 - Do not plan the same item twice.

@@ -1,13 +1,15 @@
-// Stage plans end to end in mock mode (ADR-0027): map, extract-rules and harden over fixture
+// Stage plans end to end in mock mode (ADR-0027): assess, understand, plan-understand and the rebuild over fixture
 // repositories with the mock agent backend, whose scripted outputs (mock-outputs.ts) give every
 // later step valid inputs. Covers the executor's parts: script repair, gates defaulted, forEach
-// fan-out, repeat-until, workflows inside a stage, intermediate outputs and prerequisites.
+// fan-out, repeat-until, workflows inside a stage, intermediate outputs and prerequisites. The document
+// repository holds Markdown only (ADR-0042): what the steps pass to each other is scratch and never published.
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { documentOf, parseItemCatalog } from "@kintsugi/agents/reader";
 import { CheckoutStorage } from "@kintsugi/git";
 import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -19,94 +21,43 @@ import { DEFAULT_AUTO_COMMIT_PATHS, isAutoCommitPath } from "@kintsugi/domain";
 import { JobRunner } from "../src/jobs/runner.js";
 import { stageInfo } from "../src/jobs/stages.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
+import { catalogDocuments, understoodUnit } from "./support/documents.js";
 import { type AgentFiles, LocalCheckouts, MemoryJobStore, fixtureRepository, writingAgentRuntime } from "./support/jobs.js";
 
-/** 45 modules: more than the 40 the "which nodes to describe" gate allows by default. */
-const BIG_LEGACY: Record<string, string> = Object.fromEntries(
-  Array.from({ length: 45 }, (_, index) => [`src/mod${String(index).padStart(2, "0")}.c`, `int f${index}(int x) {\n${"  if (x) { x++; }\n".repeat(index + 1)}  return x;\n}\n`]),
-);
 const SMALL_LEGACY = {
   "src/main.c": "int main(void) {\n  if (1) { return 0; }\n  return 1;\n}\n",
   "src/rates.c": "int rate(int amount) { if (amount > 100) { return amount * 2; } return amount; }\n",
   "package.json": '{ "name": "demo", "dependencies": { "left-pad": "1.0.0" } }\n',
 };
-/** The map of SMALL_LEGACY as the map stage would have merged it: two domains, one data store. */
-const SMALL_TOPOLOGY = {
-  system: "demo",
-  root: {
-    id: "sys",
-    name: "demo",
-    kind: "system",
-    children: [
-      { id: "dom:billing", name: "Billing", kind: "domain", children: [{ id: "MAIN", name: "main", kind: "module", file: "src/main.c", loc: 200 }] },
-      { id: "dom:rates", name: "Rates", kind: "domain", children: [{ id: "RATES", name: "rates", kind: "module", file: "src/rates.c", loc: 300 }] },
-      { id: "dom:data", name: "Data stores", kind: "domain", children: [{ id: "ds:RATES", name: "RATES", kind: "datastore" }] },
-    ],
-  },
-  edges: [
-    { source: "MAIN", target: "RATES", kind: "call" },
-    { source: "RATES", target: "ds:RATES", kind: "read" },
-  ],
-  entryPoints: ["MAIN"],
-  deadEnds: [],
-  observations: [],
-  flows: [],
-};
-/** assess, map and extract-rules merged (harden has not run); one unit already has a work item a person moved on. */
-const MAPPED = {
-  "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n",
-  "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
-  "applications/demo/assessment/topology.json": JSON.stringify(SMALL_TOPOLOGY),
-  "applications/demo/generated/BUSINESS_RULES.md": "# Business rules\n\n### RULE-001: Double large amounts\n**Source:** `src/rates.c:1`\n",
-  "applications/demo/units/billing/main/unit.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
-};
+const MANIFEST = { "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n" };
 /** assess ran before: its catalog holds the source folder under another id, and an item whose file is gone. */
 const CATALOGED = {
-  "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n",
-  "applications/demo/assessment/catalog.json": JSON.stringify({
-    schemaVersion: 1,
-    app: "demo",
-    modules: [{ id: "core", name: "Core", summary: "" }],
-    items: [
-      { id: "core/main-program", module: "core", kind: "module", name: "Main program", files: ["src/main.c", "src/rates.c"], status: "active" },
-      { id: "core/gone", module: "core", kind: "module", name: "Gone", files: ["src/gone.c"], status: "active" },
+  ...MANIFEST,
+  ...catalogDocuments(
+    "demo",
+    [{ id: "core", name: "Core" }],
+    [
+      { id: "core/main-program", name: "Main program", files: ["src/main.c", "src/rates.c"] },
+      { id: "core/gone", name: "Gone", files: ["src/gone.c"] },
     ],
-    unassigned: [],
-    ambiguities: [],
-  }),
+  ),
 };
-const item = (id: string, files: string[], leaves: string[]): Record<string, unknown> => ({
-  id,
-  module: id.split("/")[0],
-  kind: "module",
-  name: id.split("/")[1],
-  summary: "",
-  files,
-  leaves,
-  entryPoints: [],
-  loc: 10,
-  complexity: "low",
-  digest: `sha256:${id.split("/")[1]}`,
-  status: "active",
-  aliases: [],
-  parts: [],
-});
-/** assess merged its catalog and skeleton topology; one item already has a work item a person moved on. */
+/** assess merged its catalog (the links between items are in its cards); one item already has a work item a person moved on. */
 const CATALOGED_SMALL = {
-  "kintsugi.yaml": "schemaVersion: 1\nunitKinds: [module, screen]\n",
+  ...MANIFEST,
   "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
-  "applications/demo/assessment/topology.json": JSON.stringify(SMALL_TOPOLOGY),
-  "applications/demo/assessment/catalog.json": JSON.stringify({
-    schemaVersion: 1,
-    app: "demo",
-    modules: [
-      { id: "billing", name: "Billing", summary: "" },
-      { id: "rates", name: "Rates", summary: "" },
+  ...catalogDocuments(
+    "demo",
+    [
+      { id: "billing", name: "Billing" },
+      { id: "rates", name: "Rates" },
     ],
-    items: [item("billing/main", ["src/main.c"], ["MAIN"]), item("rates/rates", ["src/rates.c"], ["RATES"])],
-    unassigned: ["package.json"],
-    ambiguities: [],
-  }),
+    [
+      { id: "billing/main", files: ["src/main.c"], leaves: ["MAIN"], entryPoints: ["MAIN"], dependsOn: ["rates/rates"] },
+      { id: "rates/rates", files: ["src/rates.c"], leaves: ["RATES"], dataStores: ["ds:RATES"] },
+    ],
+    ["package.json"],
+  ),
   "applications/demo/units/billing/main/unit.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
 };
 const ASSESSED = {
@@ -121,18 +72,14 @@ describe("stage plans (mock agent, fixture repositories)", () => {
   let storage: CheckoutStorage;
 
   beforeAll(async () => {
-    repos["big"] = fixtureRepository(BIG_LEGACY);
     repos["small"] = fixtureRepository(SMALL_LEGACY);
     repos["docs"] = fixtureRepository(ASSESSED);
     repos["empty-docs"] = fixtureRepository({ "kintsugi.yaml": "version: 1\n" });
-    repos["mapped-docs"] = fixtureRepository(MAPPED);
     repos["cataloged-docs"] = fixtureRepository(CATALOGED);
     repos["cataloged-small-docs"] = fixtureRepository(CATALOGED_SMALL);
     repos["understood-docs"] = fixtureRepository({
       ...CATALOGED_SMALL,
-      "applications/demo/units/rates/rates/rules.json": JSON.stringify({ rules: [{ id: "RULE-rates.rates-01", name: "Double large amounts", category: "Calculation", priority: "P0", source: "src/rates.c:1", confidence: "High" }] }),
-      "applications/demo/units/rates/rates/meta.json": JSON.stringify({ digest: "sha256:rates", commit: "a".repeat(40) }),
-      "applications/demo/units/rates/rates/trace.json": JSON.stringify({ rulesApplied: ["RULE-rates.rates-01"], findings: [], dependencies: [] }),
+      ...understoodUnit("demo", "rates/rates", { digest: "sha256:rates", commit: "a".repeat(40), rule: { id: "RULE-rates.rates-1a2b3c4d", name: "Double large amounts", source: "src/rates.c:1" } }),
     });
     dataDir = mkdtempSync(join(tmpdir(), "kintsugi-stages-data-"));
     storage = new CheckoutStorage(dataDir);
@@ -163,20 +110,22 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const id = randomUUID();
     await store.create({ id, projectId: "demo", applicationId: "demo", kind: "stage", name: stage, sourceRepositoryId: options.legacy, actor: "alice", ...(options.inputs === undefined ? {} : { inputs: options.inputs }) });
     const run = await runner.run(id);
-    const out = join(storage.job(id).out, "applications", "demo", "assessment");
+    const root = storage.job(id).out;
+    const out = join(root, "applications", "demo", "assessment");
     const summary = run?.outputSummary as
       | { steps: Array<{ id: string; status: string; key?: string; round?: number }>; gates: Array<{ id: string; choice: string; defaulted: boolean }>; agents: number; missingInputs?: unknown }
       | undefined;
     const logs = store.events.filter((event) => event.runId === id && event.kind === "log").map((event) => event.message);
-    return { id, run, store, writes, agents, out, summary, logs, artifacts: (store.artifacts.get(id) ?? []).map((entry) => entry.path).sort() };
+    return { id, run, store, writes, agents, root, out, summary, logs, artifacts: (store.artifacts.get(id) ?? []).map((entry) => entry.path).sort() };
   }
 
   it("knows which stages are runnable and what they need first", () => {
+    const catalog = "applications/demo/assessment/catalog/index.md";
     expect(stageInfo("demo")).toEqual([
       { id: "assess", requires: [] },
-      { id: "understand", requires: [{ stage: "assess", path: "applications/demo/assessment/catalog.json" }] },
-      { id: "plan-understand", requires: [{ stage: "assess", path: "applications/demo/assessment/catalog.json" }] },
-      { id: "rebuild", requires: [{ stage: "assess", path: "applications/demo/assessment/catalog.json" }] },
+      { id: "understand", requires: [{ stage: "assess", path: catalog }] },
+      { id: "plan-understand", requires: [{ stage: "assess", path: catalog }] },
+      { id: "rebuild", requires: [{ stage: "assess", path: catalog }] },
     ]);
   });
 
@@ -190,36 +139,44 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       "inventory",
       "topology",
       "extract",
+      "topology-render",
       "catalog",
       "catalog-curate",
       "catalog-edits",
       "catalog-reconcile",
+      "catalog-render",
       "synthesis",
       "architecture-style",
     ]);
+    // The document repository gets Markdown: the summaries, the catalog and the extraction script. The per-file
+    // inventory, the raw topology and the catalog drafts are scratch of the run and never published.
     expect(artifacts).toEqual(
-      expect.arrayContaining(["applications/demo/assessment/catalog.json", "applications/demo/assessment/topology.json", "applications/demo/assessment/tools/extract_topology.py"]),
+      expect.arrayContaining([
+        "applications/demo/assessment/inventory.md",
+        "applications/demo/assessment/topology.md",
+        "applications/demo/assessment/catalog/index.md",
+        "applications/demo/assessment/catalog/core.md",
+        "applications/demo/assessment/tools/extract_topology.py",
+      ]),
     );
-    expect(artifacts.some((path) => path.includes("catalog-draft"))).toBe(false);
-    const catalog = JSON.parse(readFileSync(join(out, "catalog.json"), "utf8")) as {
-      items: Array<{ id: string; module: string; files: string[]; status: string; aliases: string[] }>;
-      unassigned: string[];
-      reconciled: Record<string, unknown>;
-    };
+    expect(artifacts.filter((path) => path.endsWith(".json") || path.startsWith("scratch/") || path.includes("catalog-draft"))).toEqual([]);
+    const catalog = parseItemCatalog(readFileSync(join(out, "catalog", "index.md"), "utf8"), { core: readFileSync(join(out, "catalog", "core.md"), "utf8") })!;
     expect(catalog.items.map((item) => [item.id, item.module, item.status])).toEqual([
       ["core/gone", "core", "retired"],
       ["core/main-program", "core", "active"],
     ]);
     expect(catalog.items[1]).toMatchObject({ files: ["src/main.c", "src/rates.c"], aliases: ["Main program"] });
     expect(catalog.unassigned).toEqual(["package.json"]);
-    expect(catalog.reconciled).toEqual({ from: "catalog", kept: 1, new: 0, retired: 1, renamed: 1 });
+    // The mock extraction found no edges, and the inventory summary names the source commit.
+    expect(documentOf(readFileSync(join(out, "inventory.md"), "utf8")).data).toMatchObject({ app: "demo", fileCount: 3, sourceFileCount: 2 });
+    expect(documentOf(readFileSync(join(out, "topology.md"), "utf8")).data).toMatchObject({ system: "demo", domains: 1 });
     // The curation job saw the proposal and got the edit schema.
     const curate = agents.specs.find((spec) => spec.task.startsWith("Curate the item catalog"));
     expect(curate?.task).toContain("Return your result as JSON matching this schema");
   }, 120_000);
 
-  it("runs understand on a selection: per-item fragments, rules and findings, one spec job per item, meta and work items in one PR", async () => {
-    const { run, writes, agents, summary, artifacts, id, store, out } = await runStage("understand", {
+  it("runs understand on a selection: per-item documents, rules and findings, one spec job per item, the understanding record and work items in one PR", async () => {
+    const { run, writes, agents, summary, artifacts, id, store, root } = await runStage("understand", {
       legacy: "small",
       docs: "cataloged-small-docs",
       inputs: { scope: { items: ["billing/main", "rates/rates"], files: ["src/main.c", "src/rates.c"] } },
@@ -235,38 +192,31 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     ]);
     expect(steps.filter((step) => step[0] === "specify-item").map((step) => step[2]).sort()).toEqual(["billing/main", "rates/rates"]);
 
-    // Each spec job got its brief and its item's rule and finding files.
+    // Each spec job got its brief and its item's rule and finding documents.
     const specs = agents.specs.filter((spec) => spec.task.startsWith("Write the AS-IS specification of one catalog item"));
     const main = specs.find((spec) => spec.task.includes("/understand/briefs/billing/main.json"));
-    expect(main?.task).toContain("applications/demo/units/billing/main/rules.json");
-    expect(main?.task).toContain("applications/demo/units/billing/main/as-is.md with write");
+    expect(main?.task).toContain("applications/demo/units/billing/main/understanding/rules.md");
+    expect(main?.task).toContain("applications/demo/units/billing/main/understanding/as-is.md with write");
 
-    // Only per-unit paths are published; briefs, shards and workflow results stay out.
+    // Only per-unit Markdown is published; briefs, shards, traces and workflow results stay out.
+    const files = ["as-is.md", "data-objects.md", "findings.md", "rules.md", "topology.md", "trace.md", "understanding.md"];
     expect(artifacts).toEqual([
-      "applications/demo/units/billing/main/as-is.md",
-      "applications/demo/units/billing/main/findings.json",
-      "applications/demo/units/billing/main/meta.json",
-      "applications/demo/units/billing/main/rules.json",
-      "applications/demo/units/billing/main/topology.json",
-      "applications/demo/units/billing/main/trace.json",
-      "applications/demo/units/rates/rates/as-is.md",
-      "applications/demo/units/rates/rates/findings.json",
-      "applications/demo/units/rates/rates/meta.json",
-      "applications/demo/units/rates/rates/rules.json",
-      "applications/demo/units/rates/rates/topology.json",
-      "applications/demo/units/rates/rates/trace.json",
+      ...files.map((file) => `applications/demo/units/billing/main/understanding/${file}`),
+      ...files.map((file) => `applications/demo/units/rates/rates/understanding/${file}`),
       "applications/demo/units/rates/rates/unit.md",
     ]);
-    const root = join(out, "..", "..", "..");
-    const fragment = JSON.parse(readFileSync(join(root, "applications", "demo", "units", "billing", "main", "topology.json"), "utf8")) as { edges: unknown[]; entryPoints: string[] };
-    expect(fragment.edges).toEqual([{ source: "MAIN", target: "RATES", kind: "call", targetItem: "rates/rates" }]);
-    expect(fragment.entryPoints).toEqual(["MAIN"]);
-    const meta = JSON.parse(readFileSync(join(root, "applications", "demo", "units", "rates", "rates", "meta.json"), "utf8")) as Record<string, unknown>;
-    expect(meta).toMatchObject({ item: "rates/rates", digest: "sha256:rates", runId: id, specification: "applications/demo/units/rates/rates/as-is.md" });
-    expect(meta["commit"]).toMatch(/^[0-9a-f]{40}$/);
+    const unit = (path: string): string => readFileSync(join(root, "applications", "demo", "units", ...path.split("/")), "utf8");
+    // The topology document of an item: its leaves, the items it depends on, the data stores it touches.
+    const topology = unit("billing/main/understanding/topology.md");
+    expect(documentOf(topology).data).toMatchObject({ item: "billing/main", leaves: 1, entryPoints: 1 });
+    expect(topology).toContain("| rates/rates | call | 1 |");
+    expect(unit("rates/rates/understanding/topology.md")).toContain("| ds:RATES | read |");
+    const record = documentOf(unit("rates/rates/understanding/understanding.md")).data;
+    expect(record).toMatchObject({ item: "rates/rates", status: "understood", digest: "sha256:rates", runId: id, specification: "applications/demo/units/rates/rates/understanding/as-is.md" });
+    expect(record["commit"]).toMatch(/^[0-9a-f]{40}$/);
     // The work item a person already has is left alone.
     expect(existsSync(join(root, "applications", "demo", "units", "billing", "main", "unit.md"))).toBe(false);
-    expect(readFileSync(join(root, "applications", "demo", "units", "rates", "rates", "unit.md"), "utf8")).toContain('id: "demo/rates/rates"');
+    expect(unit("rates/rates/unit.md")).toContain('id: "demo/rates/rates"');
 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({ outputOfJob: id, message: "Understand demo: main, rates", reviewAll: true });
@@ -283,10 +233,10 @@ describe("stage plans (mock agent, fixture repositories)", () => {
         { title: "Entry", items: ["billing/main"], rationale: "Needs rates.", risk: "medium" },
       ],
     };
-    const { run, writes, agents, summary, artifacts, out } = await runStage("plan-understand", {
+    const { run, writes, agents, summary, artifacts, root } = await runStage("plan-understand", {
       legacy: "small",
       docs: "cataloged-small-docs",
-      files: { "understand-planner": (spec) => (planningTask(spec) ? { "result.json": JSON.stringify(draft) } : {}) },
+      files: { "understand-planner": (spec): Record<string, string> => (planningTask(spec) ? { "result.json": JSON.stringify(draft) } : {}) },
     });
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
@@ -297,17 +247,15 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     ]);
     // The planner is told where the graph is and gets the schema; only the plan is published.
     const planner = agents.specs.find(planningTask);
-    expect(planner?.task).toContain("applications/demo/assessment/understand/graph.json");
+    expect(planner?.task).toContain("scratch/demo/understand/graph.json");
     expect(planner?.task).toContain("Return your result as JSON matching this schema");
-    expect(artifacts).toEqual(["applications/demo/assessment/understand/plan.json"]);
-    const plan = JSON.parse(readFileSync(join(out, "understand", "plan.json"), "utf8")) as {
-      batches: Array<{ items: string[]; loc: number; cohesion: number | null; dependsOutside: unknown[] }>;
-      dropped: Array<{ item: string; reason: string }>;
-    };
-    expect(plan.batches.map((batch) => batch.items)).toEqual([["rates/rates"], ["billing/main"]]);
-    expect(plan.dropped).toEqual([{ item: "nope/x", reason: "not an item of the catalog" }]);
+    expect(artifacts).toEqual(["applications/demo/understanding/plan.md"]);
+    const plan = readFileSync(join(root, "applications", "demo", "understanding", "plan.md"), "utf8");
+    expect(documentOf(plan).data).toMatchObject({ version: 1, app: "demo", batches: 2, planned: 2 });
+    expect(plan).toMatch(/## Batch 1: Rates[\s\S]*- `rates\/rates`[\s\S]*## Batch 2: Entry[\s\S]*- `billing\/main`/);
+    expect(plan).toContain("| nope/x | not an item of the catalog |");
     // main depends on rates, which the earlier batch holds: nothing is left outside.
-    expect(plan.batches[1]).toMatchObject({ cohesion: 0, dependsOutside: [] });
+    expect(plan).not.toContain("### Depends on outside");
     // Advice, not a proposal: it is not sent to review.
     expect(writes).toHaveLength(1);
     expect(writes[0]?.reviewAll).toBeUndefined();
@@ -320,7 +268,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const { run, summary, agents } = await runStage("plan-understand", {
       legacy: "small",
       docs: "cataloged-small-docs",
-      files: { "understand-planner": (spec) => (planningTask(spec) ? { "result.json": JSON.stringify(++calls === 1 ? bad : good) } : {}) },
+      files: { "understand-planner": (spec): Record<string, string> => (planningTask(spec) ? { "result.json": JSON.stringify(++calls === 1 ? bad : good) } : {}) },
     });
     expect(run?.status).toBe("succeeded");
     expect(summary?.steps.map((step) => step.id)).toEqual(["graph", "plan", "check", "plan-fix", "check"]);
@@ -341,14 +289,14 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const { run, store, id, writes } = await runStage("understand", { legacy: "small", inputs: { scope: { items: ["billing/main"], files: [] } } });
     expect(run?.status).toBe("failed");
     expect(run?.failureReason).toBe(
-      "applications/demo/assessment/catalog.json is not on the default branch of the document repository: run the assess stage first and merge its pull request, then run understand again",
+      "applications/demo/assessment/catalog/index.md is not on the default branch of the document repository: run the assess stage first and merge its pull request, then run understand again",
     );
     expect(store.children(id)).toHaveLength(0);
     expect(writes).toHaveLength(0);
   });
 
   it("rebuilds the generated views from the per-item files: script only, everything under generated/", async () => {
-    const { run, writes, artifacts } = await runStage("rebuild", { legacy: "small", docs: "understood-docs" });
+    const { run, writes, artifacts, root } = await runStage("rebuild", { legacy: "small", docs: "understood-docs" });
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
     expect(artifacts).toEqual([
@@ -356,20 +304,27 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       "applications/demo/generated/DATA_OBJECTS.md",
       "applications/demo/generated/README.md",
       "applications/demo/generated/SECURITY_FINDINGS.md",
-      "applications/demo/generated/rules_result.json",
-      "applications/demo/generated/topology.json",
-      "applications/demo/generated/traceability.json",
       "applications/demo/generated/traceability.md",
     ]);
     // Every output is under the default autoCommitPaths: the writer commits it without a pull request.
     expect(artifacts.every((path) => isAutoCommitPath(path, DEFAULT_AUTO_COMMIT_PATHS))).toBe(true);
+    expect(readFileSync(join(root, "applications", "demo", "generated", "BUSINESS_RULES.md"), "utf8")).toContain("### RULE-rates.rates-1a2b3c4d: Double large amounts");
+    expect(documentOf(readFileSync(join(root, "applications", "demo", "generated", "traceability.md"), "utf8")).data).toMatchObject({ items: 2, units: 1, rulesCovered: 1 });
     expect(writes[0]).toMatchObject({ message: "Rebuild the generated views of demo from its understood units" });
     // The rebuild must stage the per-unit evidence tree, or the aggregates come out empty.
     expect(REBUILD.documents).toContain("applications/{app}/units/");
   }, 120_000);
 
   it("finds the applications whose items a default-branch move touched", () => {
-    expect(appsTouched(["applications/web/units/a/b/rules.json", "applications/shop/units/x/y/meta.json", "applications/web/generated/topology.json", "applications/web/units/a/b/unit.md", "applications/Bad/units/a/b/c.md"])).toEqual(["shop", "web"]);
+    expect(
+      appsTouched([
+        "applications/web/units/a/b/understanding/rules.md",
+        "applications/shop/units/x/y/understanding/understanding.md",
+        "applications/web/generated/traceability.md",
+        "applications/web/units/a/b/unit.md",
+        "applications/Bad/units/a/b/c.md",
+      ]),
+    ).toEqual(["shop", "web"]);
   });
 
   it("fails an agent step that did not write what the plan expects (no mock outputs)", async () => {

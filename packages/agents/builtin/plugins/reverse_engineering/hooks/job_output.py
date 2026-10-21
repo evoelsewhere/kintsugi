@@ -93,19 +93,6 @@ class JsonArgumentParser(argparse.ArgumentParser):
         raise SystemExit(EXIT_USAGE)
 
 
-def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate object key")
-        result[key] = value
-    return result
-
-
-def _reject_constant(_value: str) -> None:
-    raise ValueError("non-finite JSON number")
-
-
 def _is_link_or_junction(path: Path) -> bool:
     is_junction = getattr(os.path, "isjunction", None)
     return path.is_symlink() or (is_junction is not None and is_junction(path))
@@ -163,53 +150,18 @@ def _report_path(path: str) -> str:
     return "[redacted-path]" if _credential_rules(path) else path
 
 
-def _is_string_list(value: Any) -> bool:
-    return isinstance(value, list) and all(isinstance(item, str) for item in value)
-
-
-def _valid_node(node: Any) -> bool:
-    if not isinstance(node, dict):
+def _valid_topology_document(text: str) -> bool:
+    """A topology document (scripts/render_topology.py): front matter naming the system, then a Domains table."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
         return False
-    if not all(isinstance(node.get(key), str) and node[key] for key in ("id", "name", "kind")):
+    try:
+        end = next(index for index in range(1, len(lines)) if lines[index].strip() == "---")
+    except StopIteration:
         return False
-    children = node.get("children", [])
-    return isinstance(children, list) and all(_valid_node(child) for child in children)
-
-
-def _valid_topology(value: Any) -> bool:
-    if not isinstance(value, dict):
+    if not any(re.match(r'^system:\s*\S', line) for line in lines[1:end]):
         return False
-    required = ("system", "root", "edges", "entryPoints", "deadEnds", "observations", "flows")
-    if not all(key in value for key in required):
-        return False
-    if not isinstance(value["system"], str) or not value["system"] or not _valid_node(value["root"]):
-        return False
-    if not isinstance(value["edges"], list):
-        return False
-    if any(
-        not isinstance(edge, dict)
-        or not all(isinstance(edge.get(key), str) and edge[key] for key in ("source", "target", "kind"))
-        for edge in value["edges"]
-    ):
-        return False
-    if not all(_is_string_list(value[key]) for key in ("entryPoints", "deadEnds", "observations")):
-        return False
-    if not isinstance(value["flows"], list):
-        return False
-    for flow in value["flows"]:
-        if not isinstance(flow, dict) or not isinstance(flow.get("name"), str):
-            return False
-        steps = flow.get("steps")
-        if not isinstance(steps, list):
-            return False
-        if any(
-            not isinstance(step, dict)
-            or not isinstance(step.get("label"), str)
-            or not _is_string_list(step.get("nodes"))
-            for step in steps
-        ):
-            return False
-    return True
+    return any(line.strip() == "## Domains" for line in lines[end + 1 :])
 
 
 def _load_mermaid_lint() -> Any:
@@ -239,19 +191,10 @@ def _validate_artifact(relative: str, content: bytes) -> list[tuple[str, int]]:
     findings: list[tuple[str, int]] = []
     name = relative.rsplit("/", 1)[-1]
     text = content.decode("utf-8", errors="replace")
-    if name == "topology.json":
-        try:
-            parsed = json.loads(
-                text,
-                object_pairs_hook=_unique_object,
-                parse_constant=_reject_constant,
-            )
-            valid = _valid_topology(parsed)
-        except (json.JSONDecodeError, RecursionError, ValueError):
-            valid = False
-        if not valid:
-            findings.append(("invalid_topology_schema", 1))
-    elif name == "BUSINESS_RULES.md":
+    if name == "topology.md":
+        if not _valid_topology_document(text):
+            findings.append(("invalid_topology_document", 1))
+    elif name in ("BUSINESS_RULES.md", "rules.md"):
         headings = [
             (line_number, line)
             for line_number, line in enumerate(text.splitlines(), start=1)

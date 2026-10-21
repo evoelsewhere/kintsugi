@@ -3,7 +3,7 @@ import { nodeOfFile, type Topology } from './topology.js'
 
 /**
  * The estate: the units an app's code is divided into, whatever its language.
- * They come from the map's `topology.json` when there is one and from the legacy
+ * They come from the map's `topology.md` when there is one and from the legacy
  * tree itself when there is not, so the portal reader can describe an assessed app
  * before a topology artifact has been published.
  */

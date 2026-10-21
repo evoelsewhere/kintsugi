@@ -9,6 +9,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { documentOf, parseItemCatalog } from "@kintsugi/agents/reader";
 import { CheckoutStorage } from "@kintsugi/git";
 import { createChildAgentRuntime, interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
@@ -83,7 +84,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
         if (!synthesis(spec)) return spec.task.startsWith("Build the structural map") ? { "applications/demo/assessment/analysis/structure.md": "# Structure\n\n| domain | files |\n" } : {};
         const [src, inputs] = spec.workspace.readOnly as [string, string];
         seen.structure = readFileSync(join(inputs, "applications", "demo", "assessment", "analysis", "structure.md"), "utf8");
-        seen.inventory = JSON.parse(readFileSync(join(inputs, "applications", "demo", "assessment", "inventory.json"), "utf8")) as { sourceFileCount: number };
+        seen.inventory = documentOf(readFileSync(join(inputs, "applications", "demo", "assessment", "inventory.md"), "utf8")).data as unknown as { sourceFileCount: number };
         seen.intent = readFileSync(join(inputs, "applications", "demo", "assessment", "INTENT.md"), "utf8");
         try {
           writeFileSync(join(src, "src", "main.c"), "tampered");
@@ -112,10 +113,12 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       ["agent", "security-auditor", "security", "succeeded"],
       ["agent", "legacy-analyst", "topology", "succeeded"],
       ["script", "extract_topology.py", null, "succeeded"],
+      ["script", "render_topology.py", null, "succeeded"],
       ["script", "catalog_from_topology.py", null, "succeeded"],
       ["agent", "legacy-analyst", "catalog-curate", "succeeded"],
       ["script", "apply_catalog_edits.py", null, "succeeded"],
       ["script", "reconcile_catalog.py", null, "succeeded"],
+      ["script", "render_catalog.py", null, "succeeded"],
       ["agent", "legacy-analyst", "synthesis", "succeeded"],
       ["script", "style_architecture.py", null, "succeeded"],
     ]);
@@ -137,24 +140,19 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
 
     // out/ holds what goes to Git (not the intermediate notes); restricted/ went to the restricted record only.
     const out = storage.job(id).out;
-    expect(existsSync(join(out, "applications", "demo", "assessment", "inventory.json"))).toBe(true);
+    expect(existsSync(join(out, "applications", "demo", "assessment", "inventory.md"))).toBe(true);
     expect(readFileSync(join(out, "applications", "demo", "assessment", "ASSESSMENT.md"), "utf8")).toContain("3 source files");
     expect(existsSync(join(out, "applications", "demo", "assessment", "analysis"))).toBe(false);
-    expect(existsSync(join(out, "applications", "demo", "assessment", "catalog-draft"))).toBe(false);
+    // The per-file inventory, the raw topology and the catalog drafts are scratch of the run: not in out/.
+    expect(existsSync(join(out, "scratch"))).toBe(false);
     // The item catalog: every inventory file in one item or unassigned (mock topology: one module per top folder).
-    const catalog = JSON.parse(readFileSync(join(out, "applications", "demo", "assessment", "catalog.json"), "utf8")) as {
-      generatedBy: string;
-      items: Array<{ id: string; files: string[]; status: string; digest: string }>;
-      unassigned: string[];
-      curation?: unknown;
-      reconciled: { from: string };
-    };
-    expect(catalog.generatedBy).toBe("reconcile_catalog.py");
+    const catalogDir = join(out, "applications", "demo", "assessment", "catalog");
+    const catalogIndex = readFileSync(join(catalogDir, "index.md"), "utf8");
+    const catalog = parseItemCatalog(catalogIndex, { src: readFileSync(join(catalogDir, "src.md"), "utf8") })!;
+    expect(documentOf(catalogIndex).data["generatedBy"]).toBe("reconcile_catalog.py");
     expect(catalog.items.map((item) => [item.id, item.files, item.status])).toEqual([["src/src", ["src/main.c", "src/util.c"], "active"]]);
     expect(catalog.items[0]?.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(catalog.unassigned).toEqual(["README.md"]);
-    expect(catalog.curation).toEqual({ applied: 0, rejected: [] });
-    expect(catalog.reconciled.from).toBe("none");
     expect(existsSync(join(out, "restricted"))).toBe(false);
     expect(store.restricted.get(agent!.id)?.get("SECRETS.local.md")).toContain("hu**");
     expect(JSON.stringify(run?.outputSummary)).not.toContain("SECRETS");
@@ -164,12 +162,13 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(artifacts.map((entry) => entry.path).sort()).toEqual([
       "applications/demo/assessment/ARCHITECTURE.mmd",
       "applications/demo/assessment/ASSESSMENT.md",
-      "applications/demo/assessment/catalog.json",
-      "applications/demo/assessment/inventory.json",
+      "applications/demo/assessment/catalog/index.md",
+      "applications/demo/assessment/catalog/src.md",
+      "applications/demo/assessment/inventory.md",
       "applications/demo/assessment/tools/extract_topology.py",
-      "applications/demo/assessment/topology.json",
+      "applications/demo/assessment/topology.md",
     ]);
-    expect(artifacts.find((entry) => entry.path.endsWith("inventory.json"))?.provenance).toMatchObject({ origin: "tool" });
+    expect(artifacts.find((entry) => entry.path.endsWith("inventory.md"))?.provenance).toMatchObject({ origin: "tool" });
     expect(artifacts.find((entry) => entry.path.endsWith("ASSESSMENT.md"))?.provenance).toMatchObject({ origin: "runtime-agent", runtimeAgent: "legacy-analyst", model: "mock/mock" });
 
     // Handed to the writer: the stage's out/, with job, agent and actor provenance.
@@ -186,16 +185,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     for (const child of store.children(id)) expect(existsSync(storage.job(child.id).root)).toBe(false);
   });
 
-  const BAD_TOPOLOGY = { "applications/demo/assessment/topology.json": "{}" };
-  const GOOD_TOPOLOGY = JSON.stringify({
-    system: "demo",
-    root: { id: "root", name: "root", kind: "group", children: [] },
-    edges: [],
-    entryPoints: [],
-    deadEnds: [],
-    observations: [],
-    flows: [],
-  });
+  const BAD_TOPOLOGY = { "applications/demo/assessment/topology.md": "# Topology without front matter\n" };
+  const GOOD_TOPOLOGY = '---\napp: "demo"\nsystem: "demo"\n---\n# Topology of demo\n\n## Domains\n\n| Domain | Leaves | Data stores | LOC |\n| --- | --- | --- | --- |\n| Core | 1 | 0 | 5 |\n';
 
   it("masks a credential an agent left in its files instead of failing the run", async () => {
     const { store, runner, writes, agents } = setup({
@@ -223,16 +214,16 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const id = await assess(store);
     const run = await runner.run(id);
     expect(run?.status).toBe("failed");
-    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: malformed artifact found — invalid_topology_schema at applications\/demo\/assessment\/topology\.json:1/);
+    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: malformed artifact found — invalid_topology_document at applications\/demo\/assessment\/topology\.md:1/);
     expect(writes).toHaveLength(0);
-    expect(store.children(id).map((child) => child.status)).toEqual([...Array<string>(10).fill("succeeded"), "failed"]);
+    expect(store.children(id).map((child) => child.status)).toEqual([...Array<string>(12).fill("succeeded"), "failed"]);
   });
 
   it("gives an agent the redacted findings and one retry when the hook flags its files", async () => {
     const { store, runner, writes, agents } = setup({
       "legacy-analyst": (spec): Record<string, string> => {
         if (!synthesis(spec)) return {};
-        return spec.task.includes("The output checks rejected the files you wrote") ? { "applications/demo/assessment/topology.json": GOOD_TOPOLOGY } : BAD_TOPOLOGY;
+        return spec.task.includes("The output checks rejected the files you wrote") ? { "applications/demo/assessment/topology.md": GOOD_TOPOLOGY } : BAD_TOPOLOGY;
       },
     });
     const id = await assess(store);
@@ -241,7 +232,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(1);
     const attempts = agents.specs.filter(synthesis);
     expect(attempts).toHaveLength(2);
-    expect(attempts[1]?.task).toMatch(/- invalid_topology_schema at applications\/demo\/assessment\/topology\.json:1\n/);
+    expect(attempts[1]?.task).toMatch(/- invalid_topology_document at applications\/demo\/assessment\/topology\.md:1\n/);
   });
 
   it("fails after the one retry when the agent keeps the artifact malformed", async () => {
@@ -277,9 +268,11 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(store.children(second).map((child) => [child.kind, child.inputs["label"] ?? child.name])).toEqual([
       ["script", "inventory.py"],
       ["script", "extract_topology.py"],
+      ["script", "render_topology.py"],
       ["script", "catalog_from_topology.py"],
       ["script", "apply_catalog_edits.py"],
       ["script", "reconcile_catalog.py"],
+      ["script", "render_catalog.py"],
       ["agent", "synthesis"],
       ["script", "style_architecture.py"],
     ]);

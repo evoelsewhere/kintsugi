@@ -11,21 +11,34 @@ import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { type Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { catalogDocuments, understoodUnit } from "../support/documents.js";
 
-const INVENTORY = JSON.stringify({
-  app: "web",
-  fileCount: 2,
-  sourceFileCount: 2,
-  sloc: 40,
-  ksloc: 0.04,
-  complexityIndex: 0.08,
-  languages: { Java: 2 },
-  languageMetrics: { Java: { files: 2, lines: 50, sloc: 40, complexity: 4 } },
-  files: [
-    { path: "src/A.java", language: "Java", lines: 30, sloc: 25, cyclomaticComplexity: 3, bytes: 900 },
-    { path: "src/B.java", language: "Java", lines: 20, sloc: 15, cyclomaticComplexity: 1, bytes: 500 },
-  ],
-});
+// What inventory.py writes (ADR-0042): the figures of record, then the roll-ups and the most complex files.
+const INVENTORY = [
+  "---",
+  'app: "web"',
+  "fileCount: 2",
+  "sourceFileCount: 2",
+  "sloc: 40",
+  "ksloc: 0.04",
+  "complexityIndex: 0.08",
+  "---",
+  "# Inventory of web",
+  "",
+  "## Languages",
+  "",
+  "| Language | Files | Lines | SLOC | Complexity |",
+  "| --- | --- | --- | --- | --- |",
+  "| Java | 2 | 50 | 40 | 4 |",
+  "",
+  "## Most complex files",
+  "",
+  "| Path | Language | Lines | SLOC | Complexity |",
+  "| --- | --- | --- | --- | --- |",
+  "| src/A.java | Java | 30 | 25 | 3 |",
+  "| src/B.java | Java | 20 | 15 | 1 |",
+  "",
+].join("\n");
 
 const ASSESSMENT = `# Application Assessment — web
 
@@ -50,62 +63,80 @@ A small Java service.
 Rebuild on the target architecture.
 `
 
-const TOPOLOGY = JSON.stringify({
-  system: "Web",
-  root: {
-    id: "sys",
-    kind: "system",
-    children: [
-      { id: "dom:core", name: "Core", kind: "domain", children: [{ id: "a", name: "A.java", kind: "module", loc: 25, file: "src/A.java" }, { id: "b", name: "B.java", kind: "module", loc: 15, file: "src/B.java" }] },
-      { id: "dom:data", name: "Data stores", kind: "domain", children: [{ id: "ds:ACCOUNT", name: "ACCOUNT", kind: "datastore" }] },
-    ],
-  },
-  edges: [
-    { source: "a", target: "b", kind: "call" },
-    { source: "b", target: "ds:ACCOUNT", kind: "read" },
-  ],
-  entryPoints: ["a"],
-  deadEnds: [],
-  observations: ["One store."],
-});
+// What render_topology.py writes: two modules of one domain and a data store, the edges between the leaves, one entry point.
+const TOPOLOGY = [
+  "---",
+  'system: "Web"',
+  "domains: 2",
+  "leaves: 2",
+  "dataStores: 1",
+  "edges: 2",
+  "entryPoints: 1",
+  "---",
+  "# Topology of Web",
+  "",
+  "## Domains",
+  "",
+  "| Domain | Leaves | Data stores | LOC |",
+  "| --- | --- | --- | --- |",
+  "| Core | 2 | 0 | 40 |",
+  "| Data stores | 0 | 1 | 0 |",
+  "",
+  "## Leaves",
+  "",
+  "| Leaf | Name | Kind | Domain | File | LOC | Entry point | Dead end |",
+  "| --- | --- | --- | --- | --- | --- | --- | --- |",
+  "| a | A.java | module | Core | src/A.java | 25 | yes |  |",
+  "| b | B.java | module | Core | src/B.java | 15 |  |  |",
+  "| ds:ACCOUNT | ACCOUNT | datastore | Data stores |  |  |  |  |",
+  "",
+  "## Edges",
+  "",
+  "| Source | Target | Kind |",
+  "| --- | --- | --- |",
+  "| a | b | call |",
+  "| b | ds:ACCOUNT | read |",
+  "",
+  "## Observations",
+  "",
+  "- One store.",
+  "",
+].join("\n");
 
-// What merge_traceability.py writes for two units of web (ADR-0031).
-const TRACEABILITY = JSON.stringify({
-  app: "web",
-  generatedBy: "merge_traceability.py",
-  inputs: { businessRules: true, securityFindings: false },
-  units: [
-    {
-      id: "web/core/a",
-      module: "core",
-      unit: "a",
-      title: "A",
-      kind: "module",
-      loc: 25,
-      entryPoint: true,
-      spec: "applications/web/units/core/a/as-is.md",
-      files: ["src/A.java"],
-      dependsOn: ["web/core/b"],
-      usedBy: [],
-      dataStores: [],
-      externalSystems: [],
-      rules: ["RULE-001"],
-      findings: [],
-      dataObjects: [],
-      entryPoints: ["src/A.java:3"],
-      openQuestions: 1,
-    },
-    { id: "web/core/b", module: "core", unit: "b", title: "B", kind: "module", loc: 15, entryPoint: false, spec: null, files: ["src/B.java"], dependsOn: [], usedBy: ["web/core/a"], dataStores: [{ id: "ds:ACCOUNT", access: ["read"] }], externalSystems: [], rules: [], findings: [], dataObjects: [], entryPoints: [], openQuestions: 0 },
+// What the understand stage and the rebuild commit for two units of web (ADR-0033, ADR-0042).
+const CATALOG = catalogDocuments(
+  "web",
+  [{ id: "core", name: "Core" }],
+  [
+    { id: "core/a", files: ["src/A.java"], leaves: ["a"], entryPoints: ["a"], loc: 25 },
+    { id: "core/b", files: ["src/B.java"], loc: 15 },
   ],
-  rules: { "RULE-001": ["web/core/a"] },
-  findings: {},
-  files: { "src/A.java": ["web/core/a"], "src/B.java": ["web/core/b"] },
-  dataStores: { "ds:ACCOUNT": ["web/core/b"] },
-  unmappedRules: ["RULE-002"],
-  unmappedFindings: [],
-  cycles: [],
-  notes: { "unknown rule ids": 1 },
-});
+);
+const UNITS = {
+  ...understoodUnit("web", "core/a", { digest: "sha256:a", commit: "a".repeat(40), rule: { id: "RULE-core.a-1a2b3c4d", name: "A rule", source: "src/A.java:3" }, dependencies: [{ target: "core/b" }], openQuestions: 1 }),
+  ...understoodUnit("web", "core/b", { digest: "sha256:b", commit: "a".repeat(40), dependencies: [{ target: "ds:ACCOUNT", kind: "read" }] }),
+};
+const TRACEABILITY = [
+  "---",
+  'app: "web"',
+  "items: 2",
+  "units: 2",
+  "modules: 1",
+  "specified: 2",
+  "entryPoints: 1",
+  "rulesCovered: 1",
+  "findingsMapped: 0",
+  "files: 2",
+  "dataStores: 1",
+  "requirements: 0",
+  "openQuestions: 1",
+  "stale: 0",
+  "businessRules: true",
+  "securityFindings: false",
+  "---",
+  "# Traceability - web",
+  "",
+].join("\n");
 
 describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
   let app: TestApp;
@@ -121,16 +152,17 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
     // assess merged on main; map proposed on a kintsugi/* branch.
-    await remote.commit("docs", "applications/web/assessment/inventory.json", INVENTORY);
+    await remote.commit("docs", "applications/web/assessment/inventory.md", INVENTORY);
     await remote.commit("docs", "applications/web/assessment/ASSESSMENT.md", ASSESSMENT);
     await remote.commit("docs", "applications/web/assessment/ARCHITECTURE.mmd", "graph TD\n  A --> B\n");
     await remote.commit("docs", "standards/README.md", "# Standards\n");
-    await remote.commit("docs", "applications/web/assessment/topology.json", TOPOLOGY, "kintsugi/legacy-analyst/run-map");
+    await remote.commit("docs", "applications/web/assessment/topology.md", TOPOLOGY, "kintsugi/legacy-analyst/run-map");
     await remote.commit("docs", "applications/web/assessment/call-graph.mmd", "graph TD\n  a --> b\n", "kintsugi/legacy-analyst/run-map");
     mapBranchTip = remote.git("docs", "rev-parse", "kintsugi/legacy-analyst/run-map").trim();
     // understand proposed on its own branch: specifications, synthesis and work items in one pull request.
     const understand = "kintsugi/legacy-analyst/run-understand";
-    await remote.commit("docs", "applications/web/generated/traceability.json", TRACEABILITY, understand);
+    for (const [path, text] of Object.entries({ ...CATALOG, ...UNITS })) await remote.commit("docs", path, text, understand);
+    await remote.commit("docs", "applications/web/generated/traceability.md", TRACEABILITY, understand);
     await remote.commit("docs", "applications/web/generated/README.md", "# Web AS-IS\n", understand);
     await remote.commit("docs", "applications/web/generated/architecture.md", "# Architecture\n\n```mermaid\nflowchart LR\n  core --> data\n```\n", understand);
     await remote.commit("docs", "applications/web/units/core/a/unit.md", '---\nid: "web/core/a"\nstatus: pending\ncomplexity: low\n---\n\nA.\n', understand);
@@ -188,7 +220,7 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     expect(refs.body.data?.refs[2]?.["commit"]).toBe(mapBranchTip);
   });
 
-  it("lists a directory and reads a file at a ref, parsing JSON", async () => {
+  it("lists a directory and reads a file at a ref", async () => {
     const root = await admin.get<{ commit: string; entries: Array<{ path: string; kind: string }> }>("/projects/shop/documents/tree");
     expect(root.body.data?.entries.map((entry) => [entry.path, entry.kind])).toEqual([
       ["applications", "dir"],
@@ -196,12 +228,13 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
       ["README.md", "file"],
     ]);
     const onBranch = await admin.get<{ entries: Array<{ name: string; size?: number }> }>(`/projects/shop/documents/tree?path=applications/web/assessment&ref=refs/heads/kintsugi/legacy-analyst/run-map`);
-    expect(onBranch.body.data?.entries.map((entry) => entry.name)).toEqual(["ARCHITECTURE.mmd", "ASSESSMENT.md", "call-graph.mmd", "inventory.json", "topology.json"]);
+    expect(onBranch.body.data?.entries.map((entry) => entry.name)).toEqual(["ARCHITECTURE.mmd", "ASSESSMENT.md", "call-graph.mmd", "inventory.md", "topology.md"]);
 
-    const file = await admin.get<{ format: string; json: { sloc: number }; size: number; commit: string }>("/projects/shop/documents/file?path=applications/web/assessment/inventory.json");
+    const file = await admin.get<{ content: string; size: number; commit: string }>("/projects/shop/documents/file?path=applications/web/assessment/inventory.md");
     expect(file.status).toBe(200);
-    expect(file.body.data).toMatchObject({ format: "json", json: { sloc: 40 }, size: INVENTORY.length });
-    const byCommit = await admin.get<{ content: string }>(`/projects/shop/documents/file?path=applications/web/assessment/topology.json&ref=${mapBranchTip}`);
+    expect(file.body.data).toMatchObject({ content: INVENTORY, size: INVENTORY.length });
+    expect(file.body.data).not.toHaveProperty("format");
+    const byCommit = await admin.get<{ content: string }>(`/projects/shop/documents/file?path=applications/web/assessment/topology.md&ref=${mapBranchTip}`);
     expect(byCommit.body.data?.content).toBe(TOPOLOGY);
   });
 
@@ -295,11 +328,11 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     const data = results.body.data!;
     expect(data.ref).toMatchObject({ kind: "run", status: "open", runId: "run-understand", branch: "kintsugi/legacy-analyst/run-understand" });
     expect(data.empty).toBe(false);
-    expect(data.units.map((unit) => [unit["id"], unit["key"], unit["spec"], unit["workItem"] ?? null])).toEqual([
-      ["web/core/a", "core/a", "applications/web/units/core/a/as-is.md", { path: "applications/web/units/core/a/unit.md", status: "proposed", complexity: "low", statusFrom: "ref" }],
-      ["web/core/b", "core/b", null, null],
+    expect(data.units.map((unit) => [unit["id"], unit["key"], unit["spec"], unit["dependsOn"], unit["workItem"] ?? null])).toEqual([
+      ["web/core/a", "core/a", "applications/web/units/core/a/understanding/as-is.md", ["web/core/b"], { path: "applications/web/units/core/a/unit.md", status: "proposed", complexity: "low", statusFrom: "ref" }],
+      ["web/core/b", "core/b", "applications/web/units/core/b/understanding/as-is.md", [], null],
     ]);
-    expect(data.matrix).toMatchObject({ path: "applications/web/generated/traceability.json", rulesCovered: ["RULE-001"], unmappedRules: ["RULE-002"], dataStores: ["ds:ACCOUNT"], notes: { "unknown rule ids": 1 } });
+    expect(data.matrix).toMatchObject({ path: "applications/web/generated/traceability.md", rulesCovered: ["RULE-core.a-1a2b3c4d"], unmappedRules: [], dataStores: ["ds:ACCOUNT"] });
     expect(data.documents.map((document) => [document.id, document.path])).toEqual([
       ["readme", "applications/web/generated/README.md"],
       ["architecture", "applications/web/generated/architecture.md"],
@@ -307,9 +340,9 @@ describe.skipIf(!hasDatabase)("document repo reads (integration)", () => {
     expect(data.documents[1]?.markdown).toContain("```mermaid");
     expect(data.document.path).toBe("applications/web/generated/README.md");
     expect(data.missingInputs).toEqual([{ path: "applications/web/generated/SECURITY_FINDINGS.md", stage: "harden" }]);
-    expect(data.counts).toMatchObject({ units: 2, modules: 1, specified: 1, notWritten: 1, rulesCovered: 1, rulesUncovered: 1, files: 2, workItems: 1, leftOut: 1, openQuestions: 1 });
+    expect(data.counts).toMatchObject({ units: 2, modules: 1, specified: 2, notWritten: 0, rulesCovered: 1, files: 2, workItems: 1, openQuestions: 1 });
     expect(data.headline).toEqual(["2 units", "1 module"]);
-    expect(data.files.map((file) => file.path)).toEqual(["applications/web/generated/traceability.json", "applications/web/generated/README.md", "applications/web/generated/architecture.md"]);
+    expect(data.files.map((file) => file.path)).toEqual(["applications/web/generated/traceability.md", "applications/web/generated/README.md", "applications/web/generated/architecture.md"]);
 
     // Not merged yet: the default branch has no understand output.
     const onMain = await admin.get<{ empty: boolean; units: unknown[]; matrix: null; documents: unknown[] }>("/projects/shop/applications/web/stages/understand/results?ref=refs/heads/main");

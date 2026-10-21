@@ -7,7 +7,7 @@ metadata:
   upstream: commands/modernize-brief.md
   agents: []
   skills: [mermaid-diagrams]
-  reads: [standards/, applications/<app>/assessment/ASSESSMENT.md, applications/<app>/assessment/topology.json, applications/<app>/assessment/*.mmd, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/units/<module>/<unit>/rules-review.json, applications/<app>/inputs/INTENT.md, applications/<app>/assessment/PREFLIGHT.md, applications/<app>/assessment/DELTA_CATALOG.md, applications/<app>/assessment/BASELINE.md]
+  reads: [standards/, applications/<app>/assessment/ASSESSMENT.md, applications/<app>/assessment/topology.md, applications/<app>/assessment/*.mmd, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/units/<module>/<unit>/understanding/rules-review.md, applications/<app>/inputs/INTENT.md, applications/<app>/assessment/PREFLIGHT.md, applications/<app>/assessment/DELTA_CATALOG.md, applications/<app>/assessment/BASELINE.md]
   writes: [applications/<app>/to-be/modernization-brief.md]
   gates: [the brief is approved in the portal (Phase 1 only or full plan) before any build stage starts]
 ---
@@ -21,15 +21,14 @@ Synthesize everything in `applications/$app/assessment/` into a **Modernization 
 document a steering committee approves and engineering executes. Target stack:
 `$target_stack` (if blank, the one in `applications/$app/inputs/INTENT.md`, else recommend one from the assessment).
 
-Read `ASSESSMENT.md`, `topology.json` (and the `.mmd` files beside it; never read
-any rendered view of it; the portal draws the topology from `topology.json`) in `applications/$app/assessment/` first,
+Read `ASSESSMENT.md`, `topology.md` (and the `.mmd` files beside it; the portal draws the topology from `topology.md`) in `applications/$app/assessment/` first,
 and `BUSINESS_RULES.md` too unless this is a same-technology **uplift** (the intent or the assessment
 says so): an uplift keeps the code, so its Behavior Contract is the recorded baseline and `understand` rule extraction
 can wait. If a required file is missing, say so and stop: they come from the `assess` and
 `understand` stages (runtime jobs started from the portal), which run first. Four more inputs are conditional:
 
-- **`rules-review.json`**, per unit (`applications/<app>/units/<module>/<unit>/rules-review.json`, human-owned and authored
-  through a pull request; the `RULE_REVIEWS.json`/`.md` files are retired): a person's verdicts on individual rules.
+- **`rules-review.md`**, per unit (`applications/<app>/units/<module>/<unit>/understanding/rules-review.md`, human-owned and authored
+  through a pull request): a person's verdicts on individual rules.
   Never put a rule marked `refuted` or `clarify` in the Behavior
   Contract as settled behavior: list each in section 7 as an open question with the reviewer's note, and
   block the phase that covers its module on it. A `confirmed` rule counts as confirmed by a person.
@@ -88,7 +87,7 @@ Write every phase in this exact shape, because the build stages and the portal's
 ```
 #### Phase N — <name>
 Command: /kintsugi:modernize-transform | -uplift | -reimagine      (exactly one)
-Modules: <module ids exactly as in topology.json, comma separated>
+Modules: <module ids exactly as in topology.md, comma separated>
 Scale: S | M | L | XL
 Risk: <level>; <top 2 risks and mitigations>
 Entry criteria:
@@ -119,7 +118,7 @@ Exit criteria:
   to revise the brief, and that regenerating it after the pilot is the normal path. Legacy systems hide
   their surprises in the build and the runtime, not the source.
 
-**4. Business Walkthroughs.** For each persona flow in `topology.json` (`flows`), a short table:
+**4. Business Walkthroughs.** For each persona flow in `topology.md` (the `Flows` section), a short table:
 persona, what happens in business language, which legacy modules implement it, and which phase
 replaces each. This is the section non-technical approvers read. With no flows, derive 2–3 from the
 entry points and mark them as needing SME confirmation.

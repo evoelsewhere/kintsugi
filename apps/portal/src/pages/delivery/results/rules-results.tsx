@@ -379,9 +379,9 @@ function CoverageTab({ results }: { results: RulesResults }): React.JSX.Element 
           </ul>
         )}
       </Section>
-      <Section title="Extraction stats" description={results.source === "result" ? "From rules_result.json." : "rules_result.json is missing; the rules come from BUSINESS_RULES.md."}>
+      <Section title="Rule counts" description={results.source === "markdown" ? "Counted over the rule cards of the rules document." : "No rules document at this ref."}>
         {stats.length === 0 ? (
-          <p className="text-[12px] text-text-muted">No stats at this ref.</p>
+          <p className="text-[12px] text-text-muted">No rules at this ref.</p>
         ) : (
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-3">
             {stats.map(([key, value]) => (

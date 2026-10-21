@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG_ITEM_ID_PATTERN, ITEM_SEGMENT_PATTERN, catalogPath, classifyItem, itemMetaPath, workItemIdOf } from "../src/index.js";
+import { CATALOG_ITEM_ID_PATTERN, ITEM_SEGMENT_PATTERN, catalogPath, classifyItem, itemUnderstandingPath, workItemIdOf } from "../src/index.js";
 
 describe("item catalog vocabulary", () => {
   it("accepts <module>/<item> ids of kebab-case segments only", () => {
@@ -11,8 +11,8 @@ describe("item catalog vocabulary", () => {
 
   it("names the work item and the document-repo paths of an item", () => {
     expect(workItemIdOf("billing", "invoicing/invoice-entry")).toBe("billing/invoicing/invoice-entry");
-    expect(catalogPath("billing")).toBe("applications/billing/assessment/catalog.json");
-    expect(itemMetaPath("billing", "invoicing/invoice-entry")).toBe("applications/billing/units/invoicing/invoice-entry/meta.json");
+    expect(catalogPath("billing")).toBe("applications/billing/assessment/catalog/index.md");
+    expect(itemUnderstandingPath("billing", "invoicing/invoice-entry")).toBe("applications/billing/units/invoicing/invoice-entry/understanding/understanding.md");
   });
 });
 

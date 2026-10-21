@@ -47,8 +47,8 @@ someone thinks it should do) so that a rewrite can be proven equivalent.
 
 ## Human verdicts on rules
 
-Each unit's `applications/<app>/units/<module>/<unit>/rules-review.json` (human-owned, authored through a pull
-request; the `RULE_REVIEWS.json`/`.md` files are retired) is the verdicts to honor: a rule a person marked `refuted` is not
+Each unit's `applications/<app>/units/<module>/<unit>/understanding/rules-review.md` (human-owned, authored through a pull
+request) is the verdicts to honor: a rule a person marked `refuted` is not
 an oracle (write the test from the reviewer's note, or ask what is right), and a P0 rule marked
 `clarify` is not settled: raise it instead of guessing.
 

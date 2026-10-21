@@ -33,6 +33,10 @@ export interface CatalogItem {
   status: ItemStatus;
   aliases: string[];
   parts: Array<{ name: string; kind?: string; file?: string }>;
+  /** The items it calls (with the kinds and the number of calls), the items that call it and the data stores it touches. */
+  dependsOn?: Array<{ item: string; kinds: string[]; edges: number }>;
+  usedBy?: string[];
+  dataStores?: Array<{ id: string; access: string[] }>;
   lastRun?: { id: string; status: string; at: string };
   pr?: { runId: string; branch: string; url?: string };
   understood?: { commit?: string; runId?: string };
@@ -40,7 +44,7 @@ export interface CatalogItem {
 
 export interface CatalogView {
   ref: { ref: string; commit: string };
-  catalog: { schemaVersion: number; app: string; source: { repo?: string; commit?: string }; modules: CatalogModule[]; unassigned: string[]; ambiguities: string[] };
+  catalog: { app: string; source: { repo?: string; commit?: string }; modules: CatalogModule[]; unassigned: string[]; unassignedCount: number; ambiguities: string[] };
   items: CatalogItem[];
   counts: Partial<Record<ItemStatus, number>>;
 }

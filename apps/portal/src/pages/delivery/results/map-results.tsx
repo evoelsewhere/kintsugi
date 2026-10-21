@@ -1,4 +1,4 @@
-// Results of map: the dependency graph of topology.json as a Mermaid flowchart (filter by
+// Results of map: the dependency graph of topology.md as a Mermaid flowchart (filter by
 // domain, focus a node with a depth) with a node panel, the nodes table, entry points and data
 // stores, the persona flows and observations, and the three diagrams (call graph, data lineage,
 // critical path).
@@ -55,7 +55,7 @@ export function MapResultsView({ results, compare }: { results: MapResults; comp
       />
 
       {topology === null && (tab === "overview" || tab === "graph" || tab === "nodes" || tab === "flows") ? (
-        <EmptyState title="No topology.json at this ref" description="The assess and understand stages write topology.json; pick another ref above." />
+        <EmptyState title="No topology at this ref" description="The assess stage writes topology.md and the understand stage a topology.md per item; pick another ref above." />
       ) : null}
       {tab === "overview" && topology !== null ? <MapOverview topology={topology} onOpen={setDetail} onFlows={() => setTab("flows")} /> : null}
       {tab === "graph" && topology !== null ? <GraphTab topology={topology} /> : null}

@@ -1,15 +1,15 @@
 // Application layer: the item catalog of an application (ADR-0033) with a derived status per
 // item. The catalog is read at a ref (default: the default branch); the understood state
-// (`unitMetaPath`) always at the default branch; the
+// (`unitUnderstandingPath`) always at the default branch; the
 // running, in-pr and failed states from the application's understand runs and the refs logic of
 // the documents module (a run's branch is open until it is reachable from the default branch).
 
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { type ItemCatalog, parseItemCatalog } from "@kintsugi/agents/reader";
-import { type ItemStatus, catalogPath, classifyItem, understandPlanPath, unitMetaPath, unitModuleDir } from "@kintsugi/domain";
+import { type ItemCatalog, documentOf, parseItemCatalog, parsePlan, textOf } from "@kintsugi/agents/reader";
+import { type ItemStatus, assessmentCatalogDir, assessmentCatalogModulePath, catalogPath, classifyItem, understandPlanPath, unitModuleDir, unitUnderstandingPath } from "@kintsugi/domain";
 import { type DocumentContext, DocumentsService } from "#modules/delivery/documents/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
-import { type CatalogItemView, type CatalogView, type ItemMeta, type UnderstandPlan, type UnderstandPlanView, type UnderstandRunFacts, deriveItemStatus } from "../domain/catalog.js";
+import { type CatalogItemView, type CatalogView, type ItemMeta, type UnderstandPlanView, type UnderstandRunFacts, deriveItemStatus } from "../domain/catalog.js";
 
 /** The understand stage's id (ADR-0033). */
 export const UNDERSTAND_STAGE = "understand";
@@ -17,6 +17,8 @@ export const UNDERSTAND_STAGE = "understand";
 const RECENT_RUNS = 200;
 const MAX_CATALOG_BYTES = 16 * 1024 * 1024;
 const MAX_META_BYTES = 64 * 1024;
+/** Reads of module documents at once. */
+const MODULE_READS = 8;
 const MAX_PLAN_BYTES = 1024 * 1024;
 
 /** A catalog read at a ref, with the document context it was read in. */
@@ -35,18 +37,6 @@ function failedItems(run: JobRunView): string[] {
   return steps.flatMap((step) => (isRecord(step) && step["status"] === "failed" && typeof step["key"] === "string" ? [step["key"]] : []));
 }
 
-/** The plan file as a plan, or null when it is not one (a hand edit, another version). */
-function parsePlan(text: string): UnderstandPlan | null {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  if (!isRecord(raw) || raw["version"] !== 1 || !Array.isArray(raw["batches"]) || !isRecord(raw["catalog"])) return null;
-  return raw as unknown as UnderstandPlan;
-}
-
 @Injectable()
 export class CatalogService {
   constructor(
@@ -61,9 +51,20 @@ export class CatalogService {
       throw new NotFoundException(`Application ${applicationId} not found in project ${projectId}`);
     }
     const resolved = await this.documents.resolve(context, ref);
-    const text = await this.documents.readText(context, resolved.commit, catalogPath(applicationId), MAX_CATALOG_BYTES);
-    if (text === undefined) throw new NotFoundException(`${catalogPath(applicationId)} is not at ${resolved.ref}: run assess for ${applicationId} and merge its pull request`);
-    const catalog = parseItemCatalog(text);
+    const index = await this.documents.readText(context, resolved.commit, catalogPath(applicationId), MAX_CATALOG_BYTES);
+    if (index === undefined) throw new NotFoundException(`${catalogPath(applicationId)} is not at ${resolved.ref}: run assess for ${applicationId} and merge its pull request`);
+    // One document per module sits next to the index; a module without a document has no items.
+    const names = (await this.documents.listNames(context, resolved.commit, assessmentCatalogDir(applicationId))).filter((entry) => entry.kind === "file" && entry.name.endsWith(".md") && entry.name !== "index.md").map((entry) => entry.name.slice(0, -3));
+    const modules: Record<string, string> = {};
+    for (let start = 0; start < names.length; start += MODULE_READS) {
+      await Promise.all(
+        names.slice(start, start + MODULE_READS).map(async (module) => {
+          const text = await this.documents.readText(context, resolved.commit, assessmentCatalogModulePath(applicationId, module), MAX_CATALOG_BYTES);
+          if (text !== undefined) modules[module] = text;
+        }),
+      );
+    }
+    const catalog = parseItemCatalog(index, modules);
     if (catalog === null) throw new ConflictException(`${catalogPath(applicationId)} at ${resolved.ref} is not an item catalog`);
     return { context, ref: resolved, catalog };
   }
@@ -129,7 +130,7 @@ export class CatalogService {
     );
   }
 
-  /** meta.json of every item understood on the default branch, by item id. */
+  /** The understanding record of every item understood on the default branch, by item id. */
   private async metas(context: DocumentContext, applicationId: string, catalog: ItemCatalog): Promise<Map<string, ItemMeta>> {
     const commit = (await this.documents.resolve(context, undefined)).commit;
     const metas = new Map<string, ItemMeta>();
@@ -141,16 +142,10 @@ export class CatalogService {
           catalog.items
             .filter((item) => item.id.startsWith(`${module}/`) && present.has(item.id.slice(module.length + 1)))
             .map(async (item) => {
-              const text = await this.documents.readText(context, commit, unitMetaPath(applicationId, module, item.id.slice(module.length + 1)), MAX_META_BYTES);
+              const text = await this.documents.readText(context, commit, unitUnderstandingPath(applicationId, module, item.id.slice(module.length + 1)), MAX_META_BYTES);
               if (text === undefined) return;
-              let raw: unknown;
-              try {
-                raw = JSON.parse(text);
-              } catch {
-                raw = {};
-              }
-              const meta = isRecord(raw) ? raw : {};
-              const pick = (key: string): string | undefined => (typeof meta[key] === "string" ? meta[key] : undefined);
+              const meta = documentOf(text).data;
+              const pick = (key: string): string | undefined => textOf(meta[key], 120);
               const digest = pick("digest");
               const commitOf = pick("commit");
               const runId = pick("runId");

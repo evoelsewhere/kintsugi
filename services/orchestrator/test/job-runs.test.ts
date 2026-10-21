@@ -64,7 +64,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
 
       const run = async (): Promise<{ status: string; failure_reason: string | null; source_commit: string | null; document_write_id: string | null }> =>
         (await db.pool.query("select status, failure_reason, source_commit, document_write_id from workflow.job_run where id = $1", [id])).rows[0];
-      await expect.poll(async () => (await run()).status, { timeout: 60_000, interval: 250 }).not.toMatch(/queued|running/);
+      await expect.poll(async () => (await run()).status, { timeout: 150_000, interval: 250 }).not.toMatch(/queued|running/);
       const finished = await run();
       expect(finished).toMatchObject({ status: "succeeded", failure_reason: null, source_commit: remote.git("legacy", "rev-parse", "main").trim() });
 
@@ -79,29 +79,32 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
         ["agent", "security-auditor", "succeeded"],
         ["agent", "legacy-analyst", "succeeded"],
         ["script", "extract_topology.py", "succeeded"],
+        ["script", "render_topology.py", "succeeded"],
         ["script", "catalog_from_topology.py", "succeeded"],
         ["agent", "legacy-analyst", "succeeded"],
         ["script", "apply_catalog_edits.py", "succeeded"],
         ["script", "reconcile_catalog.py", "succeeded"],
+        ["script", "render_catalog.py", "succeeded"],
         ["agent", "legacy-analyst", "succeeded"],
         ["script", "style_architecture.py", "succeeded"],
       ]);
       expect(steps.rows[0]?.script_hash).toMatch(/^[0-9a-f]{64}$/);
-      expect(steps.rows[10]?.agent).toBe("legacy-analyst@1.1.0");
+      expect(steps.rows[12]?.agent).toBe("legacy-analyst@1.1.0");
 
       const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
       expect(artifacts.rows.map((row) => [row.path, row.provenance.origin])).toEqual([
         ["applications/web/assessment/ARCHITECTURE.mmd", "tool"],
         ["applications/web/assessment/ASSESSMENT.md", "runtime-agent"],
-        ["applications/web/assessment/catalog.json", "tool"],
-        ["applications/web/assessment/inventory.json", "tool"],
+        ["applications/web/assessment/catalog/index.md", "tool"],
+        ["applications/web/assessment/catalog/root.md", "tool"],
+        ["applications/web/assessment/inventory.md", "tool"],
         ["applications/web/assessment/tools/extract_topology.py", "runtime-agent"],
-        ["applications/web/assessment/topology.json", "tool"],
+        ["applications/web/assessment/topology.md", "tool"],
       ]);
 
       const restricted = await db.pool.query<{ path: string; ciphertext: string; iv: string; auth_tag: string }>(
         "select path, ciphertext, iv, auth_tag from governance.restricted_record where job_run_id = $1",
-        [steps.rows[10]!.id],
+        [steps.rows[12]!.id],
       );
       expect(restricted.rows).toHaveLength(1);
       expect(restricted.rows[0]!.ciphertext).not.toContain("hu**");
@@ -115,7 +118,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       const write = (await db.pool.query<{ branch: string; job_id: string; agent: string; actor: string }>("select branch, job_id, agent, actor from workflow.document_write where id = $1", [writeId])).rows[0]!;
       expect(write).toMatchObject({ branch: `kintsugi/legacy-analyst/${id}`, job_id: id, agent: "legacy-analyst@1.1.0", actor: "alice" });
       expect(remote.git("docs", "show", `${write.branch}:applications/web/assessment/ASSESSMENT.md`)).toContain("Assessment of web");
-      expect(remote.git("docs", "show", `${write.branch}:applications/web/assessment/inventory.json`)).toContain('"sourceFileCount"');
+      expect(remote.git("docs", "show", `${write.branch}:applications/web/assessment/inventory.md`)).toContain('sourceFileCount:');
       expect(() => remote.git("docs", "show", `${write.branch}:restricted/SECRETS.local.md`)).toThrow();
       expect(remote.git("docs", "log", "-1", "--format=%(trailers:only,unfold)", write.branch).trim()).toBe(`Kintsugi-Job: ${id}\nKintsugi-Agent: legacy-analyst@1.1.0\nKintsugi-Actor: alice`);
     } finally {
@@ -135,7 +138,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       await worker.requestJobRun({ jobRunId: id });
       const agentRunning = async (): Promise<boolean> =>
         (await db.pool.query("select 1 from workflow.job_event where job_run_id = $1 and kind = 'step.started' and data->>'kind' = 'agent'", [id])).rowCount! >= 1;
-      await expect.poll(agentRunning, { timeout: 60_000, interval: 250 }).toBe(true);
+      await expect.poll(agentRunning, { timeout: 150_000, interval: 250 }).toBe(true);
 
       await db.pool.query("update workflow.job_run set cancel_requested_at = now(), cancel_requested_by = 'bob' where id = $1", [id]);
       await expect.poll(async () => (await db.pool.query("select status from workflow.job_run where id = $1", [id])).rows[0]?.status, { timeout: 30_000, interval: 250 }).toBe("cancelled");
