@@ -119,6 +119,54 @@ process.stdin.on("end", () => {
     }
   }, 90_000);
 
+  it("lets the kernel start processes and codemode start a worker, while paths outside the job stay unreadable", async () => {
+    const outside = join(root, "outside.txt");
+    writeFileSync(outside, "not for the job");
+    const entry = fixture(
+      "tools.mjs",
+      `import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { Worker } from "node:worker_threads";
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", async () => {
+  const report = {};
+  try {
+    report.spawn = spawnSync(process.execPath, ["-e", "process.stdout.write('ok')"], { encoding: "utf8" }).stdout;
+  } catch (error) {
+    report.spawn = error.code;
+  }
+  try {
+    report.worker = await new Promise((resolve, reject) => {
+      const worker = new Worker("require('node:worker_threads').parentPort.postMessage('ok')", { eval: true });
+      worker.once("message", resolve);
+      worker.once("error", reject);
+    });
+  } catch (error) {
+    report.worker = error.code;
+  }
+  try {
+    report.outside = readFileSync(${JSON.stringify(outside)}, "utf8");
+  } catch (error) {
+    report.outside = error.code;
+  }
+  process.stdout.write(JSON.stringify({ type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: JSON.stringify(report) }) + "\\n");
+});
+`,
+    );
+    const runtime = createChildAgentRuntime({
+      mode: "pi",
+      entry,
+      loadProvider: async () => ({ config: { kind: "custom", id: "p", enabled: true, auth: { type: "none" } }, credentials: { env: {}, secrets: {} } }),
+    });
+    const done = await (await runtime.startJob(spec(dirs(), { provider: "p", id: "m" }))).done;
+    if (done.type === "job.failed") console.log("DBG", done.error);
+    expect(done.type).toBe("job.completed");
+    const report = JSON.parse(done.type === "job.completed" ? done.summary : "{}") as Record<string, string>;
+    expect(report).toEqual({ spawn: "ok", worker: "ok", outside: "ERR_ACCESS_DENIED" });
+  });
+
   it("kills the child on abort and on timeout", async () => {
     const entry = fixture("hang.mjs", "setInterval(() => undefined, 1000);\n");
     const runtime = createChildAgentRuntime({ mode: "mock", entry, graceSec: 0 });
