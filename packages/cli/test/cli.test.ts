@@ -119,6 +119,69 @@ describe("kintsugi CLI", () => {
     expect(state.output().stderr).toBe("");
   });
 
+  it("uses a project found after the first project page", async () => {
+    const firstPage = Array.from({ length: 25 }, (_, index) => ({ projectId: "project-" + (index + 1), name: "Project " + (index + 1) }));
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.searchParams.get("cursor") === "cursor-1") {
+        return ok({ schemaVersion: "1", items: [{ projectId: "project-26", name: "Project 26" }], limit: 25 });
+      }
+      return ok({ schemaVersion: "1", items: firstPage, limit: 25, nextCursor: "cursor-1" });
+    });
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    const code = await runCli(["project", "use", "project-26"], state.deps as never);
+
+    expect(code).toBe(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetch.mock.calls[0]?.[0])).searchParams.get("limit")).toBe("25");
+    expect(new URL(String(fetch.mock.calls[1]?.[0])).searchParams.get("cursor")).toBe("cursor-1");
+    expect(state.profiles.value.profiles.work?.projectId).toBe("project-26");
+    expect(state.output().stderr).toBe("");
+  });
+
+  it("rejects a project that is absent after the last project page", async () => {
+    let page = 0;
+    const fetch = vi.fn(async () => {
+      page += 1;
+      return page === 1
+        ? ok({ schemaVersion: "1", items: [], limit: 25, nextCursor: "cursor-1" })
+        : ok({ schemaVersion: "1", items: [], limit: 25 });
+    });
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    const code = await runCli(["project", "use", "missing"], state.deps as never);
+
+    expect(code).toBe(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(state.output().stderr).toContain("PROJECT_NOT_AVAILABLE");
+    expect(state.profiles.value.profiles.work?.projectId).toBe("shop");
+  });
+
+  it("rejects a repeated project cursor", async () => {
+    const fetch = vi.fn(async () => ok({ schemaVersion: "1", items: [], limit: 25, nextCursor: "cursor-repeat" }));
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    const code = await runCli(["project", "use", "missing"], state.deps as never);
+
+    expect(code).toBe(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(state.output().stderr).toContain("PROJECT_PAGINATION_INVALID");
+    expect(state.profiles.value.profiles.work?.projectId).toBe("shop");
+  });
+
+  it("bounds project lookup when the project list keeps returning new cursors", async () => {
+    let page = 0;
+    const fetch = vi.fn(async () => {
+      page += 1;
+      return ok({ schemaVersion: "1", items: [], limit: 25, nextCursor: "cursor-" + page });
+    });
+    const state = harness(fetch, { profile: true, token: "TEST-token" });
+    const code = await runCli(["project", "use", "missing"], state.deps as never);
+
+    expect(code).toBe(2);
+    expect(fetch).toHaveBeenCalledTimes(100);
+    expect(state.output().stderr).toContain("PROJECT_LOOKUP_LIMIT_EXCEEDED");
+    expect(state.profiles.value.profiles.work?.projectId).toBe("shop");
+  });
+
   it("prints structured JSON errors to stderr and leaves stdout empty", async () => {
     const state = harness(async () => Response.json({
       success: false, statusCode: 403, error: "Forbidden", message: "Project Access is required", timestamp: "2026-10-21T00:00:00Z", path: "/member/v1/projects",

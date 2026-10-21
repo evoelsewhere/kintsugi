@@ -1,6 +1,6 @@
 # Coding Agent Workflow CLI
 
-Status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. The SSE client, server event replay, `task watch` and review findings retrieval are implemented; workflow continuation is still in progress. Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
+Status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. The SSE client, server event replay, `task watch` and review findings retrieval are implemented; effective workflow continuation remains in progress (T15 still has open implementation and verification items in the [implementation plan](../superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-implementation.md)). Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
 
 Authenticate a local profile, generate the package for the chosen AI client, and run the printed native install commands. The installed package configures a local MCP bridge that lets the chosen AI read Kintsugi context. The developer and that AI implement the changes and create a PR using their normal coding tools. The CLI can then retrieve review findings and watch durable task events. It does not call a model, inject text into an already-running conversation, or perform the coding work.
 
@@ -39,6 +39,8 @@ kintsugi project use modernization --profile work
 ```
 
 If the profile already belongs to another installation, login fails before reading a token. Use a separate profile name for each installation. `auth logout` removes the selected profile's token. A one-shot `--token-stdin` on read commands is never saved.
+
+`project use` follows project-list cursors (up to 100 pages of 25 projects) before saving the local default. If that bound is reached, it reports `PROJECT_LOOKUP_LIMIT_EXCEEDED` and does not save an unverified project.
 
 Windows and macOS use the native credential store through the pinned keyring binding. Linux uses `secret-tool` directly so the CLI uses Secret Service and fails closed when it is missing; it does not fall back to Linux kernel keyutils. Install `libsecret-tools` and configure a Secret Service provider such as GNOME Keyring or KWallet before signing in. The Linux native-store path has not yet been exercised on a supported desktop release matrix.
 
