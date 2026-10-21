@@ -30,6 +30,7 @@ import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepRecord, stepKey } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
 import { runJobOutputHook } from "./hook.js";
+import { shapeProblem } from "./result-shape.js";
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
@@ -652,23 +653,35 @@ export class JobRunner {
     let result: unknown;
     if (run.inputs["resultFile"] === true) {
       const take = async (): Promise<{ ok: true; value: unknown } | { ok: false; missing: boolean; problem: string }> => {
-        let file = join(ws.out, RESULT_FILE);
-        let text = await readFile(file, "utf8").catch(() => undefined);
-        if (text === undefined) {
-          // The workspace rule asks for full document-repository paths, so a model may put the result in a folder.
-          const stray = (await listFiles(ws.out)).find((entry) => entry.path.split("/").pop() === RESULT_FILE);
-          if (stray !== undefined) {
-            file = join(ws.out, ...stray.path.split("/"));
-            text = await readFile(file, "utf8").catch(() => undefined);
+        // The workspace rule asks for full document-repository paths, so a model may put the result in a folder: the
+        // root file comes first, then the shallowest folder. The first one that parses and fits the schema is the result.
+        const found = (await listFiles(ws.out))
+          .filter((entry) => basename(entry.path) === RESULT_FILE && !entry.path.startsWith("restricted/"))
+          .sort((a, b) => a.path.split("/").length - b.path.split("/").length || a.path.localeCompare(b.path));
+        let missing = true;
+        let problem = `${RESULT_FILE} is not in the output directory`;
+        let value: unknown;
+        let ok = false;
+        for (const entry of found) {
+          const text = await readFile(entry.full, "utf8").catch(() => undefined);
+          if (text === undefined) continue;
+          missing = false;
+          try {
+            const parsed = JSON.parse(text) as unknown;
+            const wrong = shapeProblem(schema, parsed);
+            if (wrong === undefined) {
+              value = parsed;
+              ok = true;
+              break;
+            }
+            problem = `${RESULT_FILE} does not match the schema (${wrong})`;
+          } catch {
+            problem = `${RESULT_FILE} is not valid JSON`;
           }
         }
-        await rm(file, { force: true });
-        if (text === undefined) return { ok: false, missing: true, problem: `${RESULT_FILE} is not in the output directory` };
-        try {
-          return { ok: true, value: JSON.parse(text) as unknown };
-        } catch {
-          return { ok: false, missing: false, problem: `${RESULT_FILE} is not valid JSON` };
-        }
+        // Taken or not, no copy stays in the output: it is a result, never a document.
+        for (const entry of found) await rm(entry.full, { force: true });
+        return ok ? { ok: true, value } : { ok: false, missing, problem };
       };
       let taken = await take();
       // One repair attempt, like the missing expected files below: a rerun of the whole job costs far more.
@@ -680,7 +693,7 @@ export class JobRunner {
         await writeMock();
         taken = await take();
       }
-      if (!taken.ok) throw new JobFailure(`Agent ${run.name} wrote ${taken.missing ? "no" : "an invalid"} ${RESULT_FILE}`);
+      if (!taken.ok) throw new JobFailure(`Agent ${run.name} wrote ${taken.missing ? "no" : "an invalid"} ${RESULT_FILE}${taken.missing ? "" : `: ${taken.problem}`}`);
       result = taken.value;
       if (run.inputs["resultTo"] !== undefined) await this.#saveResult(run, ws, result);
     }
