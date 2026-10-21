@@ -6,16 +6,23 @@ const ENTRYPOINTS = {
 };
 
 const LOOPBACK_POSTGRES_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-const POSTGRES_TARGET_QUERY_KEYS = new Set(["host", "hostaddr", "port", "service", "servicefile"]);
+const POSTGRES_TARGET_QUERY_KEYS = new Set([
+  "host", "hostaddr", "port", "service", "servicefile", "connectionstring", "database", "db",
+  "target_session_attrs", "load_balance_hosts",
+]);
+const SMOKE_DATABASE_NAME = /^kintsugi_smoke_test_[a-f0-9]{12}$/;
 const WINDOWS_RUNTIME_ENV = ["PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "PATHEXT", "COMSPEC"];
 const POSIX_RUNTIME_ENV = ["PATH", "TMPDIR"];
 
-export function resolveSmokeDatabaseConfig(connectionString, parseIntoClientConfig) {
+export function resolveSmokeDatabaseConfig(connectionString, parseIntoClientConfig, expectedDatabase) {
   if (typeof connectionString !== "string" || connectionString.trim() === "") {
     throw new TypeError("KINTSUGI_TEST_DATABASE_URL must be a PostgreSQL URL");
   }
   if (typeof parseIntoClientConfig !== "function") {
     throw new TypeError("the installed PostgreSQL connection-string parser is required");
+  }
+  if (expectedDatabase !== "postgres" && !SMOKE_DATABASE_NAME.test(expectedDatabase ?? "")) {
+    throw new TypeError("Smoke database must be postgres or its uniquely generated test database");
   }
 
   let url;
@@ -49,9 +56,18 @@ export function resolveSmokeDatabaseConfig(connectionString, parseIntoClientConf
     throw new TypeError("KINTSUGI_TEST_DATABASE_URL must contain a valid PostgreSQL port");
   }
 
-  // Supplying these explicitly prevents PGHOST/PGPORT from redirecting a URL
-  // whose authority omitted a value. The child processes also use an allowlist.
-  return { ...config, host, port };
+  // Pass only the connection fields needed by this smoke. In particular, pg
+  // reparses a config.connectionString property and lets it override these
+  // validated values. Explicit host/port/database also prevent env fallbacks.
+  const safeConfig = { host, port, database: expectedDatabase };
+  if (typeof config.user === "string" && config.user !== "") safeConfig.user = config.user;
+  if (typeof config.password === "string") safeConfig.password = config.password;
+  if (config.ssl !== undefined) {
+    const sslConfig = typeof config.ssl === "boolean" || (typeof config.ssl === "object" && config.ssl !== null && !Array.isArray(config.ssl));
+    if (!sslConfig) throw new TypeError("KINTSUGI_TEST_DATABASE_URL has an invalid PostgreSQL SSL configuration");
+    safeConfig.ssl = config.ssl;
+  }
+  return safeConfig;
 }
 
 export function capturePublicProcessClientError(client) {
