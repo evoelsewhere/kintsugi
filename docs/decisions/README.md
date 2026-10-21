@@ -62,6 +62,7 @@ This page has two parts:
 | [0043](0043-rebuild-only.md) | Kintsugi rebuilds; it offers no choice of transformation strategy | Accepted |
 | [0044](0044-design-phase-common-basic-detail.md) | The design phase: common, basic and detail design before implementation | Accepted |
 | [0045](0045-design-templates-are-project-data.md) | Design templates are project data, kept in the document repo | Accepted |
+| [0046](0046-one-file-per-business-rule.md) | One file per business rule, indexed by `rules.md` and `BUSINESS_RULES.md` | Accepted (amends 0038, 0042) |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amends 0015, 0026, 0027) |
 
@@ -127,6 +128,7 @@ This page has two parts:
 | D59 | Rebuild only | 🟢 | Every application is rebuilt: no per-application strategy (`disposition`), one pipeline (a project may declare its own), the scorecard maps to a rebuild priority and the assessment states a rebuild outlook | M1 | ✅ [0043](0043-rebuild-only.md) |
 | D60 | Design phase | 🟢 | After understanding: common design and skeleton (foundation team), basic design per unit (all units, P2), detail design per unit (in its wave), then implementation with unit tests; members write, the runtime plans and reviews; traceability runs rule → requirement → design item → code → test; `modernize` is reorganized around it | M1 | ✅ [0044](0044-design-phase-common-basic-detail.md) |
 | D61 | Design templates | 🟢 | A project defines design sets under `standards/design/` (a `set.md` plus template files whose front matter declares sections and declarative checks); the same definition scaffolds, instructs the agent, validates, serves as review rubric and drives the portal; versioned, staleness derived | M1 | ✅ [0045](0045-design-templates-are-project-data.md) |
+| D62 | Business rules as files | 🟢 | A unit's `rules.md` and the application's `BUSINESS_RULES.md` are indexes (id, name, category, priority, confidence, version, status, source, link); each rule is a file `understanding/rules/<id>.md` with its specification, evidence and version history; versions follow a content digest, a vanished rule becomes a `retired` file | M1 | ✅ [0046](0046-one-file-per-business-rule.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |

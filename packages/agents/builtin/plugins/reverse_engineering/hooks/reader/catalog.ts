@@ -31,6 +31,10 @@ export type CatalogRule = {
   citations: Citation[]
   /** Set on rules that look like another rule of the catalog (same source lines or near-identical name). */
   duplicateGroup?: number
+  /** When the rule comes from a rules index: the link to the rule's own file as written there, its version and its status (`confirmed`, `needs-sme`). */
+  file?: string
+  version?: number
+  ruleStatus?: string
 }
 
 export type DataField = { name: string; type?: string; note?: string }
@@ -97,11 +101,14 @@ const fromCard = (rule: Rule): CatalogRule => ({
   ...(rule.defect !== undefined && { suspectedDefect: rule.defect }),
   ...(rule.sme !== undefined && { smeQuestion: rule.sme }),
   citations: rule.citations,
+  ...(rule.file !== undefined && { file: rule.file }),
+  ...(rule.version !== undefined && { version: rule.version }),
+  ...(rule.ruleStatus !== undefined && { ruleStatus: rule.ruleStatus }),
 })
 
 /**
  * The catalog from a rules document (`BUSINESS_RULES.md` of the generated views, or one unit's `rules.md`: a
- * `### <id>: <name>` card per rule), with the data objects document as the objects' source. Look-alike rules are
+ * table row per rule linking its own file, or a `### <id>: <name>` card per rule), with the data objects document as the objects' source. Look-alike rules are
  * grouped (`duplicateGroup`).
  */
 export function ruleCatalog(rulesText: string | null, dataObjectsText: string | null): RuleCatalog {

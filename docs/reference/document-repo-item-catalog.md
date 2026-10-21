@@ -45,7 +45,7 @@ Before the catalog is written, `reconcile_catalog.py` reads the previous catalog
 
 ## Rules and findings per unit
 
-The extract-rules workflow runs over the selected items' shards. `split_rules.py` writes `understanding/rules.md` and `understanding/data-objects.md` per unit; `split_findings.py` writes `understanding/findings.md`. The application-level views (`BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.md`, `README.md`) are not written by the run: `rebuild_aggregates.py` rebuilds them under `applications/<app>/generated/` after a merge.
+The extract-rules workflow runs over the selected items' shards. `split_rules.py` writes `understanding/rules.md` (the index), a file per rule under `understanding/rules/` and `understanding/data-objects.md` per unit; `split_findings.py` writes `understanding/findings.md`. The application-level views (`BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.md`, `README.md`) are not written by the run: `rebuild_aggregates.py` rebuilds them under `applications/<app>/generated/` after a merge.
 
 **Identity.** Rule ids are deterministic and citation-derived, so they are stable across re-extractions and human verdicts keep matching. Verdicts (`confirmed`, `refuted`, `clarify`, approver, date) live in `understanding/rules-review.md`; a verdict whose rule id is absent from the current extraction is reported as orphaned, not silently applied (see [unit files](document-repo-unit-files.md#rulesmd-and-rules-reviewmd)).
 

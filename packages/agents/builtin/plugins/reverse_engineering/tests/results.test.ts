@@ -247,6 +247,33 @@ describe('rule catalog', () => {
     expect(ruleCatalog(unit, null).rules.map(rule => [rule.id, rule.name, rule.priority])).toEqual([['RULE-tax.calc-1a2b3c4d', 'Round', 'P0']])
   })
 
+  test('a rules index lists the rules and links their files; retired rules are not rules', () => {
+    const index = [
+      '---\napp: "billing"\nrules: 2\n---',
+      '# Business rules - tax/calc',
+      '',
+      '| ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+      '| RULE-tax.calc-1a2b3c4d | Round | Calculation | P0 | High | 3 | confirmed | `src/TAX.cbl:3-9` | [RULE-tax.calc-1a2b3c4d](rules/RULE-tax.calc-1a2b3c4d.md) |',
+      '| RULE-tax.calc-2b3c4d5e | Floor | Validation | P1 | Low | 1 | needs-sme | `src/TAX.cbl:20` | [RULE-tax.calc-2b3c4d5e](rules/RULE-tax.calc-2b3c4d5e.md) |',
+      '',
+      '## Retired rules',
+      '',
+      '| ID | Name | Last version | Retired | Rule file |',
+      '| --- | --- | --- | --- | --- |',
+      '| RULE-tax.calc-3c4d5e6f | Gone | 2 | 2026-10-22 | [RULE-tax.calc-3c4d5e6f](rules/RULE-tax.calc-3c4d5e6f.md) |',
+      '',
+    ].join('\n')
+    const rules = ruleCatalog(index, null).rules
+
+    expect(rules.map(rule => [rule.id, rule.name, rule.category, rule.priority, rule.confidence, rule.source, rule.version, rule.ruleStatus, rule.file])).toEqual([
+      ['RULE-tax.calc-1a2b3c4d', 'Round', 'Calculation', 'P0', 'High', 'src/TAX.cbl:3-9', 3, 'confirmed', 'rules/RULE-tax.calc-1a2b3c4d.md'],
+      ['RULE-tax.calc-2b3c4d5e', 'Floor', 'Validation', 'P1', 'Low', 'src/TAX.cbl:20', 1, 'needs-sme', 'rules/RULE-tax.calc-2b3c4d5e.md'],
+    ])
+    expect(rules[1]?.smeQuestion).toBeDefined()
+    expect(rules[0]?.smeQuestion).toBeUndefined()
+  })
+
   test('no document is an empty catalog', () => {
     expect(ruleCatalog(null, null)).toEqual({ rules: [], dataObjects: [], source: 'none' })
     expect(parseDataObjects('no sections')).toEqual([])

@@ -136,7 +136,7 @@ function ResultsView({ results, projectId }: { results: StageResults; projectId:
     case "map":
       return <MapResultsView results={results} compare={false} />;
     case "extract-rules":
-      return <RulesResultsView results={results} compare={false} />;
+      return <RulesResultsView results={results} compare={false} projectId={projectId} />;
     case "harden":
       return <HardenResultsView results={results} compare={false} />;
     case "understand":

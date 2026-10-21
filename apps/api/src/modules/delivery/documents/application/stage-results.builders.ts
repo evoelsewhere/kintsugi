@@ -3,6 +3,7 @@
 // Each stage has a full build (the results tab) and a counts build that reads as little as
 // possible (the Delivery overview's headline numbers and the comparison with the previous run).
 
+import { posix } from "node:path";
 import {
   buildTraceability,
   bulletsIn,
@@ -241,7 +242,13 @@ export async function rulesResults(source: StageSource, appDir: string): Promise
   const catalog = ruleCatalog(markdown, dataObjects);
   const gaps = markdown === null ? undefined : sectionMatching(sectionsOf(markdown), /coverage gaps/i);
   return {
-    rules: catalog.rules,
+    // A rules index links each rule's own file relative to itself; the portal reads the file by its repository path.
+    rules: catalog.rules.map((rule) => {
+      if (rule.file === undefined) return rule;
+      const { file, ...rest } = rule;
+      const path = posix.normalize(`${appDir}/${file}`);
+      return path.startsWith("..") ? rest : { ...rest, file: path };
+    }),
     dataObjects: catalog.dataObjects,
     stats: rulesCounts(catalog).counts,
     coverageGaps: [...new Set(gaps === undefined ? [] : bulletsIn(gaps.body))],

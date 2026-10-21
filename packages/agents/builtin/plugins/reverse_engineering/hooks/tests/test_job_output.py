@@ -75,7 +75,7 @@ def test_invalid_topology_and_rule_headings_have_malformed_exit_code(tmp_path: P
 def test_an_empty_rule_catalog_needs_the_explicit_marker(tmp_path: Path) -> None:
     rules = tmp_path / "BUSINESS_RULES.md"
     rules.write_text("# Business Rules\n\nAt extraction: 0 confirmed rules.\n", encoding="utf-8")
-    assert {item["rule"] for item in report(run_hook(tmp_path))["findings"]} == {"missing_rule_heading"}
+    assert {item["rule"] for item in report(run_hook(tmp_path))["findings"]} == {"missing_rule_entry"}
 
     rules.write_text("# Business Rules\n\n_No business rules were confirmed in this run._\n", encoding="utf-8")
     result = run_hook(tmp_path)
@@ -218,3 +218,74 @@ def test_mermaid_problems_are_redacted_warnings_that_do_not_block(tmp_path: Path
         {"category": "diagram", "line": 5, "path": "applications/sample-app/assessment/notes.md", "redacted": True, "rule": "unescaped-semicolon"},
     ]
     assert marker not in result.stdout + result.stderr
+
+
+RULE_ID = "RULE-tax.calc-1a2b3c4d"
+INDEX = (
+    "# Business rules - tax/calc\n\n"
+    "| ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file |\n"
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+    f"| {RULE_ID} | Round | Calculation | P0 | High | 1 | confirmed | `src/TAX.cbl:3` | [{RULE_ID}](rules/{RULE_ID}.md) |\n"
+)
+
+
+def rule_file(rule_id: str = RULE_ID, declared: str | None = None) -> str:
+    return f'---\nid: "{declared or rule_id}"\nname: "Round"\n---\n# {rule_id}: Round\n\n## Summary\n\nText.\n'
+
+
+def test_a_rules_index_with_its_rule_files_is_valid(tmp_path: Path) -> None:
+    unit = tmp_path / "understanding"
+    (unit / "rules").mkdir(parents=True)
+    (unit / "rules.md").write_text(INDEX, encoding="utf-8")
+    (unit / "rules" / f"{RULE_ID}.md").write_text(rule_file(), encoding="utf-8")
+
+    result = run_hook(tmp_path)
+
+    assert result.returncode == 0
+    assert report(result)["findings"] == []
+
+
+def test_an_index_row_whose_rule_file_is_missing_is_malformed(tmp_path: Path) -> None:
+    (tmp_path / "rules.md").write_text(INDEX, encoding="utf-8")
+
+    result = run_hook(tmp_path)
+
+    assert result.returncode == 3
+    assert [(item["rule"], item["line"]) for item in report(result)["findings"]] == [("missing_rule_file", 5)]
+
+
+def test_an_aggregate_index_may_link_files_outside_its_tree(tmp_path: Path) -> None:
+    (tmp_path / "BUSINESS_RULES.md").write_text(INDEX.replace(f"(rules/{RULE_ID}.md)", f"(../units/tax/calc/understanding/rules/{RULE_ID}.md)"), encoding="utf-8")
+
+    assert run_hook(tmp_path).returncode == 0
+
+
+def test_an_index_row_with_a_bad_id_or_no_link_is_malformed(tmp_path: Path) -> None:
+    (tmp_path / "BUSINESS_RULES.md").write_text(
+        INDEX + "| RULE-1 | Bad id | Policy | P2 | High | 1 | confirmed | `a:1` | [x](rules/x.md) |\n" + f"| {RULE_ID}-x | No link | Policy | P2 | High | 1 | confirmed | `a:1` | none |\n",
+        encoding="utf-8",
+    )
+
+    findings = report(run_hook(tmp_path))["findings"]
+
+    assert sorted((item["rule"], item["line"]) for item in findings) == [("invalid_rule_row", 6), ("missing_rule_file", 5), ("missing_rule_link", 7)]
+
+
+def test_a_rule_file_must_declare_its_own_id_and_title(tmp_path: Path) -> None:
+    (tmp_path / "rules").mkdir()
+    (tmp_path / "rules" / f"{RULE_ID}.md").write_text(rule_file(declared="RULE-other.x-00000000"), encoding="utf-8")
+    (tmp_path / "rules" / "RULE-tax.calc-ffffffff.md").write_text("# RULE-tax.calc-ffffffff: no front matter\n", encoding="utf-8")
+
+    result = run_hook(tmp_path)
+
+    assert result.returncode == 3
+    assert sorted(item["rule"] for item in report(result)["findings"]) == ["invalid_rule_file", "invalid_rule_file"]
+
+
+def test_an_index_with_no_rules_needs_the_explicit_line(tmp_path: Path) -> None:
+    index = tmp_path / "rules.md"
+    index.write_text("# Business rules\n\n| ID | Name |\n| --- | --- |\n", encoding="utf-8")
+    assert {item["rule"] for item in report(run_hook(tmp_path))["findings"]} == {"missing_rule_entry"}
+
+    index.write_text("# Business rules\n\n_No business rules were confirmed in this run._\n", encoding="utf-8")
+    assert run_hook(tmp_path).returncode == 0

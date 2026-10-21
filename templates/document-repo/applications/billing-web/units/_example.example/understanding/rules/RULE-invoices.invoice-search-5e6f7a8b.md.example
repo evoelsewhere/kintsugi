@@ -1,0 +1,50 @@
+---
+id: "RULE-invoices.invoice-search-5e6f7a8b"
+name: "Invoice search matches customer, date range and status"
+app: "billing-web"
+item: "invoices/invoice-search"
+category: "Policy"
+priority: "P1"
+confidence: "Medium"
+status: "needs-sme"
+version: 1
+digest: "22ccd50752b6"
+sourceCommit: "9f3c2ab"
+source:
+  - "src/INVOICE.cbl:340-388"
+dataObjects: []
+config: []
+tags: []
+generatedBy: "split_rules.py"
+---
+
+# RULE-invoices.invoice-search-5e6f7a8b: Invoice search matches customer, date range and status
+
+## Summary
+
+A search returns invoices that match every filter given.
+
+## Specification
+
+```text
+Given a customer, a date range and a status
+When  a person searches
+Then  only invoices matching all three are listed
+```
+
+## Evidence
+
+| Source | What it shows |
+| --- | --- |
+| `src/INVOICE.cbl:340-388` | Primary citation of the rule |
+| `Invoices/Search.aspx.cs:22-57` | Also cited |
+
+## Open questions
+
+Is an empty status "any" or "none"?
+
+## Version history
+
+| Version | Date | Change | Commit |
+| --- | --- | --- | --- |
+| 1 | 2026-10-21 | Rule extracted | 9f3c2ab |

@@ -41,13 +41,22 @@ class RenderTests(unittest.TestCase):
             done = run('render_rules.py', 's', '--assessment', os.path.join(ws, 'assessment'), '--out', os.path.join(ws, 'out'))
             self.assertEqual(done.returncode, 0, done.stderr)
             text = open(os.path.join(ws, 'out/BUSINESS_RULES.md'), encoding='utf-8').read()
-            self.assertIn('### RULE-001: Late fee', text)
-            self.assertIn('### RULE-002: Bad', text)
-            headings = [line for line in text.splitlines() if line.startswith('### ')]
-            self.assertEqual(len(headings), 2, headings)
-            self.assertNotIn('\n# injected heading', text)
-            ids = [int(n) for n in re.findall(r'^### RULE-(\d+): ', text, re.M)]
-            self.assertEqual(ids, list(range(1, len(ids) + 1)), 'rule numbers read in sequence down the document')
+            # The index lists the rules and links their files; it holds no rule cards.
+            self.assertEqual([line for line in text.splitlines() if line.startswith('### ')], [])
+            rows = [line for line in text.splitlines() if re.match(r'^\| RULE-\d+ \|', line)]
+            self.assertEqual(len(rows), 2, rows)
+            self.assertIn('| RULE-001 | Late fee | Calculation | P0 | High | 1 | confirmed | `a.cbl:10-20` | [RULE-001](rules/RULE-001.md) |', text)
+            ids = [int(n) for n in re.findall(r'^\| RULE-(\d+) \|', text, re.M)]
+            self.assertEqual(ids, list(range(1, len(ids) + 1)), 'rule numbers read in sequence down the index')
+            first = open(os.path.join(ws, 'out/rules/RULE-001.md'), encoding='utf-8').read()
+            self.assertIn('# RULE-001: Late fee', first)
+            self.assertIn('Then  fee 5%', first)
+            self.assertIn('## Version history', first)
+            hostile = open(os.path.join(ws, 'out/rules/RULE-002.md'), encoding='utf-8').read()
+            self.assertEqual([line for line in hostile.splitlines() if line.startswith('# ')], ["# RULE-002: Bad 'name' / pipe # Heading"])
+            self.assertNotIn('\n# injected heading', hostile)
+            self.assertIn('status: "needs-sme"', hostile)
+            self.assertIn('Is it 5 or 6?', hostile)
             self.assertIn('Rules requiring SME confirmation', text)
             self.assertIn('Is it 5 or 6?', text)
             self.assertIn('Coverage gaps', text)
@@ -84,10 +93,12 @@ class RenderTests(unittest.TestCase):
             write(ws, 'assessment/rules_result.json', json.dumps(result))
             self.assertEqual(run('render_rules.py', 's', '--assessment', os.path.join(ws, 'assessment'), '--out', os.path.join(ws, 'out')).returncode, 0)
             text = open(os.path.join(ws, 'out/BUSINESS_RULES.md'), encoding='utf-8').read()
-            cites = re.findall(r'^\*\*Source:\*\* `([^`]*)`', text, re.M)
+            cites = re.findall(r'^\| RULE-\d+ \|.*\| `([^`]*)` \| \[RULE', text, re.M)
             self.assertEqual(sorted(cites), sorted(['wwwroot/a.pl:100-120', 'lib/x.pm:966', 'no citation here', 'c.cbl:7']))
-            self.assertIn('**Also cited:** (aggregation); family table at lib/b.pm:31-40', text)
-            self.assertEqual(text.count('**Also cited:**'), 2)
+            files = [open(os.path.join(ws, 'out/rules', name), encoding='utf-8').read() for name in sorted(os.listdir(os.path.join(ws, 'out/rules')))]
+            self.assertEqual(len(files), 4)
+            self.assertEqual(sum('| Also cited |' in body for body in files), 2)
+            self.assertTrue(any('| (aggregation); family table at lib/b.pm:31-40 | Also cited |' in body for body in files))
 
     def test_folded_rules_are_listed_so_nothing_disappears_untraceably(self):
         result = {'confirmedRules': [{'name': 'Twiddle table', 'category': 'Calculation', 'priority': 'P0', 'source': 'a.c:1-2 ; also b.c:3-4',
@@ -99,7 +110,7 @@ class RenderTests(unittest.TestCase):
             text = open(os.path.join(ws, 'out/BUSINESS_RULES.md'), encoding='utf-8').read()
             self.assertIn('## Rules folded into another', text)
             self.assertIn('- Twiddle factors (b.c:3-4) into Twiddle table', text)
-            self.assertIn('**Also cited:** b.c:3-4', text)
+            self.assertIn('| `b.c:3-4` | Also cited |', open(os.path.join(ws, 'out/rules/RULE-001.md'), encoding='utf-8').read())
             self.assertNotIn('\n# fake heading', text)
 
     def test_unreadable_result_is_an_error(self):

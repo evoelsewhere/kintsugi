@@ -12,6 +12,7 @@ sys.path.insert(0, SCRIPTS)
 import catalog_common as cc  # noqa: E402
 import docmd  # noqa: E402
 import render_rules as rr  # noqa: E402
+import rule_docs as rd  # noqa: E402
 
 
 def run(script, *args):
@@ -79,11 +80,15 @@ class UnderstandToolsTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def split_rules(self, rules, items='invoicing/entry,tax/calc'):
-        return run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', items, '--out', self.out)
+    def split_rules(self, rules, items='invoicing/entry,tax/calc', docs=None, date='2026-10-21'):
+        extra = ['--docs', docs] if docs else []
+        return run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', items, '--out', self.out, '--date', date, '--source-commit', 'c0ffee1', *extra)
 
-    def rules_of(self, unit):
-        return rr.unit_rule_cards(docmd.read_text(unit_file(self.out, unit, 'understanding', 'rules.md')))
+    def rules_of(self, unit, root=None):
+        """[(rule id, text of the rule's file)] in the order of the unit's rules index."""
+        root = root or self.out
+        rows = rr.unit_rule_rows(docmd.read_text(unit_file(root, unit, 'understanding', 'rules.md')))
+        return [(row['id'], docmd.read_text(unit_file(root, unit, 'understanding', 'rules', f"{row['id']}.md"))) for row in rows if row['status'] != 'retired']
 
     def test_scope_items_writes_the_topology_document_the_brief_and_the_shards(self):
         result = run('scope_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc,invoicing/entry', '--out', self.out)
@@ -125,7 +130,8 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual(len(tax), 2)
         for rule_id, card in tax:
             self.assertRegex(rule_id, r'^RULE-tax\.calc-[0-9a-f]{8}$')
-            self.assertIn(f'### {rule_id}: ', card)
+            self.assertIn(f'\n# {rule_id}: ', card)
+            self.assertEqual(docmd.split_front_matter(card)[0]['version'], 1)
         self.assertNotEqual(tax[0][0], tax[1][0])
         self.assertEqual([row['name'] for row in rr.unit_rule_rows(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules.md')))], ['Tax rounding', 'Amount positive'])
         entry = self.rules_of('invoicing/entry')
@@ -133,7 +139,11 @@ class UnderstandToolsTests(unittest.TestCase):
         objects = docmd.read_text(unit_file(self.out, 'invoicing/entry', 'understanding', 'data-objects.md'))
         self.assertIn('## INVOICE-REC', objects)
         self.assertIn('| AMOUNT | decimal |', objects)
-        self.assertNotIn('"rules"', docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules.md')))
+        index = docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules.md'))
+        self.assertNotIn('"rules"', index)
+        self.assertEqual(docmd.split_front_matter(index)[0]['catalogVersion'], 1)
+        self.assertIn(f'[{tax[0][0]}](rules/{tax[0][0]}.md)', index)
+        self.assertEqual([line for line in index.splitlines() if line.startswith('### ')], [])
 
         # A rerun with the rules in another order and one added keeps every unchanged rule's id (ADR-0038).
         write(rules, {'confirmedRules': [
@@ -144,7 +154,7 @@ class UnderstandToolsTests(unittest.TestCase):
             {'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAXLIB.cbl:12'},
         ], 'dataObjects': []})
         self.assertEqual(self.split_rules(rules).returncode, 0)
-        names = lambda cards: {re.sub(r'^### \S+: ', '', card.split('\n', 1)[0]): rule_id for rule_id, card in cards}  # noqa: E731
+        names = lambda cards: {docmd.split_front_matter(card)[0]['name']: rule_id for rule_id, card in cards}  # noqa: E731
         again = names(self.rules_of('tax/calc'))
         before = names(tax)
         self.assertEqual({name: rule_id for name, rule_id in again.items() if name != 'Tax floor'}, before)
@@ -196,6 +206,46 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn('rules-review.md', result.stderr)
 
+    def test_a_rerun_keeps_unchanged_rules_bumps_changed_ones_and_retires_the_missing(self):
+        rules = os.path.join(self.root, 'rules_result.json')
+        first = [{'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAXLIB.cbl:12', 'given': 'g', 'when': 'w', 'then': 'half up', 'confidence': 'High'},
+                 {'name': 'Tax floor', 'category': 'Calculation', 'priority': 'P1', 'source': 'src/TAXLIB.cbl:20', 'given': 'g', 'when': 'w', 'then': 'zero', 'confidence': 'High'},
+                 {'name': 'Amount positive', 'category': 'Validation', 'priority': 'P1', 'source': 'src/TAX.cbl:3', 'confidence': 'High'}]
+        write(rules, {'confirmedRules': first, 'dataObjects': []})
+        self.assertEqual(self.split_rules(rules, 'tax/calc').returncode, 0)
+        ids = {docmd.split_front_matter(text)[0]['name']: rule_id for rule_id, text in self.rules_of('tax/calc')}
+        before = self.out
+        self.out = os.path.join(self.root, 'out2')
+        # Same rules, one changed, one gone: the repository holds the first run.
+        second = [{**first[0], 'then': 'half even'}, first[1]]
+        write(rules, {'confirmedRules': second, 'dataObjects': []})
+        self.assertEqual(self.split_rules(rules, 'tax/calc', docs=before, date='2026-10-22').returncode, 0)
+        files = {docmd.split_front_matter(text)[0]['name']: docmd.split_front_matter(text)[0] for _, text in self.rules_of('tax/calc')}
+        self.assertEqual((files['Tax rounding']['version'], files['Tax floor']['version']), (2, 1))
+        rounding = docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules', f"{ids['Tax rounding']}.md"))
+        history = docmd.records_in(dict(docmd.sections(docmd.split_front_matter(rounding)[1], 2))['Version history'])
+        self.assertEqual([(row['version'], row['date'], row['change'], row['commit']) for row in history], [('1', '2026-10-21', 'Rule extracted', 'c0ffee1'), ('2', '2026-10-22', 'Rule changed', 'c0ffee1')])
+        # The rule that is no longer extracted becomes a tombstone and moves to the retired table.
+        gone = docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules', f"{ids['Amount positive']}.md"))
+        front = docmd.split_front_matter(gone)[0]
+        self.assertEqual((front['status'], front['version']), ('retired', 2))
+        self.assertIn('> Retired 2026-10-22', gone)
+        index = docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules.md'))
+        retired = docmd.records_in(dict(docmd.sections(docmd.split_front_matter(index)[1], 2))['Retired rules'])
+        self.assertEqual([(row['id'], row['last version'], row['retired']) for row in retired], [(ids['Amount positive'], '2', '2026-10-22')])
+        self.assertEqual(docmd.split_front_matter(index)[0]['catalogVersion'], 2)
+        self.assertEqual(docmd.split_front_matter(index)[0]['rules'], 2)
+        # A third run that changes nothing writes the same documents: versions, history and catalogVersion hold.
+        second_out = self.out
+        self.out = os.path.join(self.root, 'out3')
+        self.assertEqual(self.split_rules(rules, 'tax/calc', docs=second_out, date='2026-10-25').returncode, 0)
+        for name in os.listdir(os.path.join(second_out, *UNITS, 'tax', 'calc', 'understanding', 'rules')):
+            if name.startswith(ids['Amount positive']):
+                continue
+            self.assertEqual(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules', name)), docmd.read_text(unit_file(second_out, 'tax/calc', 'understanding', 'rules', name)))
+        self.assertEqual(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding', 'rules.md')), index)
+        self.assertFalse(os.path.exists(unit_file(self.out, 'tax/calc', 'understanding', 'rules', f"{ids['Amount positive']}.md")), 'a retired rule is not rewritten')
+
     def finish_inputs(self):
         inputs = os.path.join(self.root, 'in')
         write(unit_file(inputs, 'tax/calc', 'understanding', 'as-is.md'), '# Tax\n')
@@ -206,7 +256,7 @@ class UnderstandToolsTests(unittest.TestCase):
             'requirements': ['REQ-TAX-01'], 'pullRequests': ['PR-7'], 'tests': ['tests/tax.test'],
             'files': ['src/TAX.cbl', '/etc/passwd'], 'openQuestions': 2})
         rules_json = {'confirmedRules': [{'id': 'RULE-tax.calc-01', 'name': 'Round', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAX.cbl:3', 'confidence': 'High'}]}
-        write(unit_file(inputs, 'tax/calc', 'understanding', 'rules.md'), rr.render_unit_rules('billing', 'tax/calc', rules_json['confirmedRules']))
+        write(unit_file(inputs, 'tax/calc', 'understanding', 'rules.md'), rd.render_unit_index('billing', 'tax/calc', [{'rule': r, 'version': 1} for r in rules_json['confirmedRules']], [], 1))
         import split_findings as sf
         write(unit_file(inputs, 'tax/calc', 'understanding', 'findings.md'), sf.render_findings('billing', 'tax/calc', [{'id': 'SEC-tax.calc-01', 'cwe': 'CWE-89', 'severity': 'High', 'source': 'src/TAX.cbl:9', 'title': 'SQL'}], ['src/TAX.cbl'], [], []))
         return inputs
@@ -248,7 +298,10 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertIn('1 of 2 item(s) understood', result.stdout)
         gen = os.path.join(self.out, 'applications', 'billing', 'generated')
         self.assertEqual(sorted(os.listdir(gen)), ['BUSINESS_RULES.md', 'DATA_OBJECTS.md', 'README.md', 'SECURITY_FINDINGS.md', 'traceability.md'])
-        self.assertIn('### RULE-tax.calc-01: Round', docmd.read_text(os.path.join(gen, 'BUSINESS_RULES.md')))
+        business = docmd.read_text(os.path.join(gen, 'BUSINESS_RULES.md'))
+        self.assertIn('| RULE-tax.calc-01 | tax/calc | Round | Calculation | P0 | High | 1 | confirmed | `src/TAX.cbl:3` | [RULE-tax.calc-01](../units/tax/calc/understanding/rules/RULE-tax.calc-01.md) |', business)
+        self.assertEqual([line for line in business.splitlines() if line.startswith('### ')], [])
+        self.assertEqual(docmd.split_front_matter(business)[0]['rules'], 1)
         self.assertIn('| SEC-tax.calc-01 | CWE-89 | High |', docmd.read_text(os.path.join(gen, 'SECURITY_FINDINGS.md')))
         front, body = docmd.split_front_matter(docmd.read_text(os.path.join(gen, 'traceability.md')))
         self.assertEqual((front['items'], front['units'], front['rulesCovered'], front['findingsMapped'], front['openQuestions'], front['stale']), (2, 1, 1, 1, 2, 0))

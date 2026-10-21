@@ -43,6 +43,9 @@ RULE_HEADING = re.compile(r"^### RULE-(?:\d{2,}|[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z
 # scripts/render_rules.py writes this line when no rule was confirmed: an empty catalog, not a malformed one.
 NO_RULES_MARKER = "_No business rules were confirmed in this run._"
 RULE_CANDIDATE = re.compile(r"^#{1,6}\s+RULE-", re.IGNORECASE)
+RULE_ID = re.compile(r"^RULE-(?:\d{2,}|[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})?-(?:\d{2,}|[0-9a-f]{8}(?:-[a-z0-9][a-z0-9-]{0,31})?))$")
+# A rule's own file: rules/<rule id>.md next to its index.
+RULE_FILE = re.compile(r"(?:^|/)rules/RULE-[^/]+\.md$")
 
 
 class InputProblem(Exception):
@@ -159,7 +162,106 @@ def _needs_content(relative: str) -> bool:
     return name in ("topology.md", "BUSINESS_RULES.md", "rules.md") or relative.lower().endswith(DIAGRAM_SUFFIXES)
 
 
-def _validate_artifact(relative: str, content: bytes) -> list[tuple[str, int]]:
+def _split_row(line: str) -> list[str]:
+    """The cells of a Markdown table row; `\\|` and a `|` inside backticks do not split."""
+    text = line.strip()
+    text = text[1:] if text.startswith("|") else text
+    text = text[:-1] if text.endswith("|") and not text.endswith("\\|") else text
+    cells: list[str] = []
+    current = ""
+    code = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and text[index + 1 : index + 2] == "|":
+            current += "|"
+            index += 2
+            continue
+        if char == "`":
+            code = not code
+        if char == "|" and not code:
+            cells.append(current.strip())
+            current = ""
+        else:
+            current += char
+        index += 1
+    cells.append(current.strip())
+    return cells
+
+
+def _rule_index_rows(text: str) -> list[tuple[int, list[str], dict[str, int]]]:
+    """(line, cells, column index by lower-cased header) of every row of the tables that have an ID and a Name column."""
+    rows: list[tuple[int, list[str], dict[str, int]]] = []
+    lines = text.splitlines()
+    fenced = False
+    columns: dict[str, int] | None = None
+    for number, line in enumerate(lines, start=1):
+        if re.match(r"^\s*(```|~~~)", line):
+            fenced = not fenced
+            columns = None
+            continue
+        if fenced:
+            continue
+        if not line.strip().startswith("|"):
+            columns = None
+            continue
+        following = lines[number] if number < len(lines) else ""
+        if columns is None and re.match(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$", following):
+            header = [cell.lower() for cell in _split_row(line)]
+            if "id" in header and "name" in header:
+                columns = {name: position for position, name in enumerate(header)}
+            else:
+                columns = {}
+            continue
+        if columns and not re.match(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$", line):
+            rows.append((number, _split_row(line), columns))
+    return rows
+
+
+def _validate_rule_index(relative: str, text: str, root: Path | None) -> list[tuple[str, int]]:
+    """An index of rules (`rules.md` of a unit, `BUSINESS_RULES.md`): a table of rule ids, each linking its file,
+    or the explicit no-rules line. A legacy `### RULE-...` card document is accepted as before."""
+    findings: list[tuple[str, int]] = []
+    rows = _rule_index_rows(text)
+    valid_rows = 0
+    for number, cells, columns in rows:
+        rule_id = cells[columns["id"]].strip("` ") if columns["id"] < len(cells) else ""
+        if not RULE_ID.fullmatch(rule_id):
+            findings.append(("invalid_rule_row", number))
+            continue
+        valid_rows += 1
+        if root is not None and "rule file" in columns and "status" in columns and columns["rule file"] < len(cells):
+            link = re.match(r"^\[[^\]]*\]\(([^)\s]+)\)$", cells[columns["rule file"]].strip())
+            target = link.group(1) if link else ""
+            if not target:
+                findings.append(("missing_rule_link", number))
+            elif not target.startswith(("..", "/")) and not (root / Path(relative).parent / target).is_file():
+                findings.append(("missing_rule_file", number))
+    headings = [(number, line) for number, line in _lines_outside_fences(text) if RULE_CANDIDATE.match(line)]
+    findings.extend(("invalid_rule_heading", number) for number, line in headings if not RULE_HEADING.fullmatch(line))
+    if not valid_rows and not any(RULE_HEADING.fullmatch(line) for _, line in headings) and NO_RULES_MARKER not in text.splitlines() and not findings:
+        findings.append(("missing_rule_entry", 1))
+    return findings
+
+
+def _validate_rule_file(relative: str, text: str) -> list[tuple[str, int]]:
+    """A rule's own file (`rules/<id>.md`): front matter naming the same id, and a title line `# <id>: <name>`."""
+    stem = Path(relative).stem
+    lines = text.lstrip("﻿").splitlines()
+    if not lines or lines[0].strip() != "---":
+        return [("invalid_rule_file", 1)]
+    end = next((index for index in range(1, len(lines)) if lines[index].strip() == "---"), -1)
+    if end < 0:
+        return [("invalid_rule_file", 1)]
+    declared = next((re.match(r'^id:\s*"?([^"\s]+)"?\s*$', line) for line in lines[1:end] if re.match(r"^id:", line)), None)
+    if declared is None or declared.group(1) != stem:
+        return [("invalid_rule_file", 1)]
+    if not any(line.startswith(f"# {stem}: ") for line in lines[end + 1 :]):
+        return [("invalid_rule_file", end + 2)]
+    return []
+
+
+def _validate_artifact(relative: str, content: bytes, root: Path | None = None) -> list[tuple[str, int]]:
     findings: list[tuple[str, int]] = []
     name = relative.rsplit("/", 1)[-1]
     text = content.decode("utf-8", errors="replace")
@@ -167,20 +269,9 @@ def _validate_artifact(relative: str, content: bytes) -> list[tuple[str, int]]:
         if not _valid_topology_document(text):
             findings.append(("invalid_topology_document", 1))
     elif name in ("BUSINESS_RULES.md", "rules.md"):
-        headings = [
-            (line_number, line)
-            for line_number, line in _lines_outside_fences(text)
-            if RULE_CANDIDATE.match(line)
-        ]
-        if not headings:
-            if NO_RULES_MARKER not in text.splitlines():
-                findings.append(("missing_rule_heading", 1))
-        else:
-            findings.extend(
-                ("invalid_rule_heading", line_number)
-                for line_number, line in headings
-                if not RULE_HEADING.fullmatch(line)
-            )
+        findings.extend(_validate_rule_index(relative, text, root))
+    elif RULE_FILE.search(relative):
+        findings.extend(_validate_rule_file(relative, text))
     return findings
 
 
@@ -278,7 +369,7 @@ def _scan(root: Path) -> dict[str, Any]:
             checked_bytes += len(content)
             text = content.decode("utf-8", errors="replace")
             finding_limit_reached = False
-            for rule, line_number in _validate_artifact(relative, content):
+            for rule, line_number in _validate_artifact(relative, content, root):
                 if not add_finding(
                     {
                         "category": "malformed_artifact",
