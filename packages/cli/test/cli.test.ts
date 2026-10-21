@@ -371,6 +371,31 @@ describe("task watch CLI", () => {
   const event = (id: string) => ({ schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id,
     kind: "task.activity-ready", occurredAt: "2026-10-21T00:00:00Z", metadata: { activity: "verification", ready: true } });
   const frame = (id: string) => `event: task-event\nid: ${id}\ndata: ${JSON.stringify(event(id))}\n\n`;
+  const continuationPlans = {
+    "member-action": { code: "MEMBER_STAGE_AVAILABLE", phase: "verify", stage: "test", nextAction: "Continue the declared member stage test in phase verify (qc). Request current task context before starting." },
+    blocked: { code: "PIPELINE_NOT_DECLARED", phase: null, stage: null, nextAction: "Continuation is blocked: PIPELINE_NOT_DECLARED. Update the declared pipeline or current Git task and request a new evidence-bound decision." },
+    unsupported: { code: "RUNTIME_CONTINUATION_UNSUPPORTED", phase: "verify", stage: "test", nextAction: "The declared next stage test requires runtime agent verify. Automatic runtime continuation is unsupported; coordinate this stage in the portal." },
+    complete: { code: "PIPELINE_END", phase: null, stage: null, nextAction: "The declared pipeline has no next stage. Review the current Git task; no new task has been created." },
+  } as const;
+  const recordCommit = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
+  const sourceCommit = "a9993e364706816aba3e25717850c26c9cd0d89d";
+  const continuation = (status: "member-action" | "blocked" | "unsupported" | "complete") => ({ schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id: `evt_${status}`,
+    kind: "task.continuation", occurredAt: "2026-10-21T00:00:00Z", metadata: {
+      schemaVersion: "1", decisionId: "decision_42", gateId: "G2", evidenceHash: "evidence_42", recordCommit, sourceCommit,
+      status, ...continuationPlans[status],
+    } });
+  const expectSafeEventOutput = (output: string, format: "text" | "markdown") => {
+    const hasTerminalControl = [...output.replaceAll("\n", "")].some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f) || codePoint === 0x2028 || codePoint === 0x2029
+        || codePoint === 0x061c || codePoint === 0x200e || codePoint === 0x200f
+        || (codePoint >= 0x202a && codePoint <= 0x202e) || (codePoint >= 0x2066 && codePoint <= 0x2069);
+    });
+    expect(hasTerminalControl).toBe(false);
+    expect(output).not.toMatch(/\n(?:Status: forged|Fake field:)/i);
+    if (format === "markdown") expect(output).not.toMatch(/\n(?:#{1,6}\s+forged|[-+*]\s+forged|\d+[.)]\s+forged|>\s+forged)/i);
+  };
+  const expectedMarkdownValue = (value: string, format: "text" | "markdown") => format === "markdown" ? `\`${value}\`` : value;
 
   it("uses the selected profile/project and resume options, emitting compact NDJSON", async () => {
     const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(frame("evt_1") + frame("evt_2"), { headers: { "content-type": "text/event-stream" } }));
@@ -383,8 +408,149 @@ describe("task watch CLI", () => {
 
   it.each(["text", "markdown"])("shows event identity, time, kind and metadata in %s", async (format) => {
     const state = harness(async () => new Response(frame("evt_1"), { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+    const exitCode = await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", format], state.deps as never);
+    expect(exitCode, state.output().stderr).toBe(0);
+    const output = state.output().stdout;
+    if (format === "markdown") {
+      expect(output).toContain("### `task.activity-ready` (`evt_1`)");
+      expect(output).toContain("Time: `2026-10-21T00:00:00Z`");
+      expect(output).toContain("Task: `shop/web/core/invoice`");
+      expect(output).toContain('`activity`: `"verification"`');
+      expect(output).toContain("`ready`: `true`");
+    } else {
+      for (const value of ["evt_1", "task.activity-ready", "2026-10-21T00:00:00Z", "shop/web/core/invoice", "verification", "true"]) {
+        expect(output).toContain(value);
+      }
+    }
+  });
+
+  it.each(["member-action", "blocked", "unsupported", "complete"] as const)("renders %s continuation status as guidance/evidence", async (status) => {
+    for (const format of ["text", "markdown"] as const) {
+      const continuationEvent = continuation(status);
+      const responseFrame = `event: task-event\nid: ${continuationEvent.id}\ndata: ${JSON.stringify(continuationEvent)}\n\n`;
+      const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+      expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", format], state.deps as never)).toBe(0);
+      const output = state.output().stdout;
+      expect(output).toContain(format === "markdown" ? "### Task continuation guidance/evidence" : "Task continuation guidance/evidence");
+      for (const value of [status, continuationEvent.metadata.code, recordCommit, sourceCommit, continuationEvent.metadata.nextAction]) {
+        expect(output).toContain(expectedMarkdownValue(value, format));
+      }
+      if (continuationEvent.metadata.phase === null) expect(output).not.toMatch(/(?:Phase|Stage):/);
+      else for (const value of [continuationEvent.metadata.phase, continuationEvent.metadata.stage]) expect(output).toContain(value);
+      expect(output.toLowerCase()).not.toContain("gate approved");
+    }
+  });
+
+  it("omits null phase and stage while retaining the source commit", async () => {
+    const continuationEvent = continuation("blocked");
+    const responseFrame = `event: task-event\nid: ${continuationEvent.id}\ndata: ${JSON.stringify(continuationEvent)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", "markdown"], state.deps as never)).toBe(0);
+    const output = state.output().stdout;
+    expect(output).toContain("- Status: `blocked`");
+    expect(output).toContain(expectedMarkdownValue(continuationEvent.metadata.nextAction, "markdown"));
+    expect(output).toContain(`- Source commit: \`${sourceCommit}\``);
+    expect(output).not.toMatch(/(?:Phase|Stage):/);
+    expect(output).not.toContain("null");
+  });
+
+  it("preserves continuation JSON as the exact event object", async () => {
+    const continuationEvent = continuation("complete");
+    const responseFrame = `event: task-event\nid: ${continuationEvent.id}\ndata: ${JSON.stringify(continuationEvent)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--json"], state.deps as never)).toBe(0);
+    expect(state.output().stdout).toBe(`${JSON.stringify(continuationEvent)}\n`);
+  });
+
+  it("renders continuation Markdown values in code spans longer than embedded backtick runs", async () => {
+    const base = continuation("member-action");
+    const continuationEvent = { ...base, metadata: { ...base.metadata, nextAction: "Review issue #123 and reference `details`." } };
+    const responseFrame = `event: task-event\nid: ${continuationEvent.id}\ndata: ${JSON.stringify(continuationEvent)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", "markdown"], state.deps as never)).toBe(0);
+    const output = state.output().stdout;
+    expect(output).toContain(`- Record commit: \`${recordCommit}\``);
+    expect(output).toContain("- Next action: ``Review issue #123 and reference `details`.``");
+  });
+
+  it("renders every dynamic generic Markdown value in code spans", async () => {
+    const genericEvent = { ...event("evt_issue"), kind: "issue #123", occurredAt: "2026-10-21T00:00:00Z", metadata: { "reference #123": "commit a9993e364706816aba3e25717850c26c9cd0d89d" } };
+    const responseFrame = `event: task-event\nid: ${genericEvent.id}\ndata: ${JSON.stringify(genericEvent)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", "markdown"], state.deps as never)).toBe(0);
+    const output = state.output().stdout;
+    expect(output).toContain("### `issue #123` (`evt_issue`)");
+    expect(output).toContain("Time: `2026-10-21T00:00:00Z`");
+    expect(output).toContain("Task: `shop/web/core/invoice`");
+    expect(output).toContain('`reference #123`: `"commit a9993e364706816aba3e25717850c26c9cd0d89d"`');
+  });
+
+  it("keeps unknown event kinds on the generic metadata renderer", async () => {
+    const unknownEvent = { ...event("evt_unknown"), kind: "future.event", metadata: { detail: "preserve this metadata" } };
+    const responseFrame = `event: task-event\nid: ${unknownEvent.id}\ndata: ${JSON.stringify(unknownEvent)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", "text"], state.deps as never)).toBe(0);
+    expect(state.output().stdout).toContain("future.event");
+    expect(state.output().stdout).toContain('detail: "preserve this metadata"');
+    expect(state.output().stdout).not.toContain("continuation guidance/evidence");
+  });
+
+  it.each(["text", "markdown"] as const)("escapes hostile continuation fields in %s output", async (format) => {
+    const hostile = "safe\n### forged header\rStatus: forged\u001b[31m**bold** [link](https://example.test)\u2028";
+    const base = continuation("member-action");
+    const continuationEvent = { ...base, metadata: { ...base.metadata, status: hostile, code: hostile, phase: hostile, nextAction: hostile } };
+    const responseFrame = `event: task-event\nid: ${continuationEvent.id}\ndata: ${JSON.stringify(continuationEvent)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    const exitCode = await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", format], state.deps as never);
+    expect(exitCode, state.output().stderr).toBe(0);
+    const output = state.output().stdout;
+    expectSafeEventOutput(output, format);
+    expect(output).toContain("\\n");
+    if (format === "markdown") {
+      expect(output).toContain("- Status: `safe\\n### forged header\\rStatus: forged\\u001B[31m**bold** [link](https://example.test)\\u2028`");
+    }
+  });
+
+  it.each(["text", "markdown"] as const)("escapes hostile generic headers and metadata in %s output", async (format) => {
+    const hostile = "safe\n### forged header\rStatus: forged\u001b[31m**bold** [link](https://example.test)\u2028";
+    const unknownEvent = { ...event("evt_unknown"), kind: "future.event\n### forged kind",
+      metadata: { "## Forged header\nFake field": hostile } };
+    const responseFrame = `event: task-event\nid: ${unknownEvent.id}\ndata: ${JSON.stringify(unknownEvent)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
     expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", format], state.deps as never)).toBe(0);
-    for (const value of ["evt_1", "task.activity-ready", "2026-10-21T00:00:00Z", "shop/web/core/invoice", "verification", "true"]) expect(state.output().stdout).toContain(value);
+    const output = state.output().stdout;
+    expectSafeEventOutput(output, format);
+    expect(output).toContain("future.event");
+    expect(output).toContain("\\n");
+    if (format === "markdown") {
+      expect(output).toContain("### `future.event\\n### forged kind` (`evt_unknown`)");
+      expect(output).toContain('`## Forged header\\nFake field`: `"safe\\n### forged header\\rStatus: forged\\u001b[31m**bold** [link](https://example.test)\\u2028"`');
+    }
+  });
+
+  it.each(["text", "markdown"] as const)("escapes bidi formatting controls in continuation fields in %s output", async (format) => {
+    const base = continuation("member-action");
+    const continuationEvent = { ...base, metadata: { ...base.metadata, nextAction: "before\u202eafter\u2066isolated\u2069" } };
+    const responseFrame = `event: task-event\nid: ${continuationEvent.id}\ndata: ${JSON.stringify(continuationEvent)}\n\n`;
+    const state = harness(async () => new Response(responseFrame, { headers: { "content-type": "text/event-stream" } }), { profile: true, token: "TEST-token" });
+
+    expect(await runCli(["task", "watch", "web/core/invoice", "--limit", "1", "--format", format], state.deps as never)).toBe(0);
+    const output = state.output().stdout;
+    expectSafeEventOutput(output, format);
+    expect(output).toContain("\\u202E");
+    expect(output).toContain("\\u2066");
+    expect(output).toContain("\\u2069");
+    expect(output).not.toContain("\u202e");
+    expect(output).not.toContain("\u2066");
+    expect(output).not.toContain("\u2069");
   });
 
   it.each(["0", "1001", "1.5", "nope"])("rejects invalid event limit %s without fetching", async (limit) => {
