@@ -17,6 +17,12 @@ describe("typed Coding Agent Workflow HTTP client", () => {
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer private-test-token");
       expect(init?.redirect).toBe("manual");
       return json({ schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", status: "pending",
+        latestContinuation: {
+          schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id: "evt_continuation",
+          kind: "task.continuation", occurredAt: "2026-10-21T00:00:00.000Z",
+          metadata: { schemaVersion: "1", decisionId: "decision_42", gateId: "G2", evidenceHash: "sha256:evidence", recordCommit: "a".repeat(40),
+            status: "member-action", code: "MEMBER_STAGE_AVAILABLE", nextAction: "Refresh task status before acting." },
+        },
         evidenceAvailability: { pullRequests: "unavailable", reviews: "unavailable" }, pullRequests: [], currentReviewIds: [], gates: [], nextAction: "Read the task brief." });
     });
     const client = createCodingAgentWorkflowClient({
@@ -27,6 +33,7 @@ describe("typed Coding Agent Workflow HTTP client", () => {
 
     await expect(client.taskStatus({ projectId: "shop", unitId: "web/core/invoice" })).resolves.toMatchObject({
       projectId: "shop", unitId: "web/core/invoice", status: "pending",
+      latestContinuation: { kind: "task.continuation", projectId: "shop", unitId: "web/core/invoice" },
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });

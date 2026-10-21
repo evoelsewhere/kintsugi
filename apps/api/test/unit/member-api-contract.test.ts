@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { reviewReportSchema, taskStatusSchema, type TaskIdentity, type TaskPullRequest } from "@kintsugi/harness-sdk";
+import { reviewReportSchema, taskStatusSchema, type TaskContinuationEvent, type TaskIdentity, type TaskPullRequest } from "@kintsugi/harness-sdk";
 import type { GatePublicationStatus } from "../../src/modules/governance/gate-publication/index.js";
 import type { MemberPrincipal } from "../../src/modules/core/auth/index.js";
 import type { ProjectAccessPort } from "../../src/modules/delivery/agent-context/domain/project-access.ports.js";
@@ -37,9 +37,10 @@ function service() {
   const gatePublications = {
     listForTask: vi.fn(async (_principal: MemberPrincipal, _identity: TaskIdentity, _gates: readonly { unitId: string; gateId: string }[]): Promise<GatePublicationStatus[]> => []),
   };
+  const memberEvents = { latestContinuation: vi.fn(async (): Promise<TaskContinuationEvent | undefined> => undefined) };
   return {
-    subject: new AgentContextService(projectAccess, tasks, snapshots, documents, reviews, pullRequests as never, gatePublications as never),
-    projectAccess, tasks, reviews, pullRequests, gatePublications,
+    subject: new AgentContextService(projectAccess, tasks, snapshots, documents, reviews, pullRequests as never, gatePublications as never, memberEvents as never),
+    projectAccess, tasks, reviews, pullRequests, gatePublications, memberEvents,
   };
 }
 
@@ -61,8 +62,16 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     await expect(subject.listProjects(principal, { cursor: "YWxwaGE=" })).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it("does not read continuation events before checking token scope", async () => {
+    const { subject, memberEvents } = service();
+
+    await expect(subject.taskStatus({ ...principal, projectIds: ["beta"] }, { projectId: "alpha", unitId: "web/core/invoice" }))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(memberEvents.latestContinuation).not.toHaveBeenCalled();
+  });
+
   it("returns confirmed pull requests and current gate publication states", async () => {
-    const { subject, tasks, reviews, pullRequests, gatePublications } = service();
+    const { subject, tasks, reviews, pullRequests, gatePublications, memberEvents } = service();
     vi.mocked(reviews.listCurrentIds).mockResolvedValue(["rev_018f0000-0000-4000-8000-000000000001"]);
     const pullRequest = {
       repositoryId: "billing-api",
@@ -84,6 +93,11 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
       { unitId: "web/core/invoice", gateId: "G4", decision: "approved", state: "awaiting-merge" },
       { unitId: "web/core/invoice", gateId: "G5", decision: "approved", state: "failed" },
     ]);
+    const continuation: TaskContinuationEvent = {
+      schemaVersion: "1", projectId: "alpha", unitId: "web/core/invoice", id: "event_001", kind: "task.continuation",
+      occurredAt: "2026-10-21T09:00:00.000Z", metadata: { status: "member-action", code: "MEMBER_STAGE_AVAILABLE", nextAction: "Refresh task context before starting." },
+    };
+    vi.mocked(memberEvents.latestContinuation).mockResolvedValue(continuation);
 
     vi.mocked(tasks.get).mockResolvedValue({
       projectId: "alpha",
@@ -107,6 +121,7 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     expect(status.pullRequests).toEqual([pullRequest]);
     expect(status.currentReviewIds).toEqual(["rev_018f0000-0000-4000-8000-000000000001"]);
     expect(status.evidenceAvailability).toEqual({ pullRequests: "available", reviews: "available" });
+    expect(status.latestContinuation).toEqual(continuation);
     expect(status.gates).toEqual([
       { unitId: "web/core/invoice", gateId: "G3", status: "waived", publication: "effective" },
       { unitId: "web/catalog/product", gateId: "G3", status: "pending", publication: "awaiting-merge" },
@@ -119,6 +134,7 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
       { unitId: "web/core/invoice", gateId: "G4" },
       { unitId: "web/core/invoice", gateId: "G5" },
     ]);
+    expect(memberEvents.latestContinuation).toHaveBeenCalledWith("alpha", "web/core/invoice");
     expect(status.nextAction).toContain("pull request");
   });
 
