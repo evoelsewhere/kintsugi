@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { formatGateRecord, gateEvidenceCanonicalJson, type GateEvidence } from "@kintsugi/domain";
 import { hasDatabase } from "../support/database.js";
-import { adminClient, startTestApp, type TestApp } from "../support/app.js";
+import { adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
 import { PgGatePublicationRepository } from "../../src/modules/governance/gate-publication/infrastructure/pg-gate-publication.repository.js";
 
 import { PgTaskApprovalEvidenceReader } from "../../src/modules/delivery/agent-context/infrastructure/pg-task-approval-evidence.reader.js";
@@ -110,6 +110,15 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
     expect(stored.rows[0]?.payload.request.files[0]?.content).toBe(formatGateRecord(stored.rows[0]!.evidence));
   });
 
+  it("allows a primary member with exact Project Access to read publication status", async () => {
+    const admin = await adminClient(app);
+    const member = await memberClient(app, admin, "gate-reader", ["user"]);
+    expect((await admin.request("PUT", "/admin/project-access/shop/" + member.id, { body: {} })).status).toBe(204);
+    const publication = await repository.createDecision(createInput("gate_" + "4".repeat(48)));
+    expect((await member.client.get("/governance/gate-publications?projectId=shop")).status).toBe(200);
+    expect((await member.client.get("/governance/gate-publications/" + publication.decisionId)).status).toBe(200);
+    expect((await member.client.get("/governance/gate-publications?projectId=other")).status).toBe(403);
+  });
   it("rolls the audit back when the publication cannot satisfy its user foreign key", async () => {
     const input = createInput("gate_" + "2".repeat(48), "missing-user");
     await expect(repository.createDecision(input)).rejects.toThrow();

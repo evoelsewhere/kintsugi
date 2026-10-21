@@ -35,6 +35,7 @@ export class GatePublicationController {
     return this.publications.requestDecision(actor, authorizationId, body);
   }
 
+  @RequirePermission("gates.view")
   @Get(":decisionId")
   @ApiOperation({ summary: "Get publication, merge and effective-gate status" })
   @ApiOkResponse({ description: "The evidence-bound gate publication." })
