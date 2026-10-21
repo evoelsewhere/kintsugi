@@ -272,6 +272,8 @@ export * from "./member-task.js";
 export * from "./member-association.js";
 export * from "./member-task-summary.js";
 export * from "./gate-evidence.js";
+export * from "./gate-decision.js";
+export * from "./gate-publication.js";
 export * from "./review-policy.js";
 export * from "./manifest.js";
 

@@ -4,6 +4,7 @@ import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { GitHubWebhookService } from "./application/github-webhook.js";
 import { MemberAssociationService } from "./application/member-association.service.js";
 import { ReviewQueryService } from "./application/review-query.service.js";
+import { TaskPullRequestQueryService } from "./application/task-pull-request-query.service.js";
 import { ProviderDeliveryRepository } from "./domain/provider-delivery.js";
 import { MemberAssociationRepository } from "./domain/member-association.js";
 import { ReviewReadRepository } from "./domain/review-read.repository.js";
@@ -20,6 +21,7 @@ import { PgReviewReader } from "./infrastructure/pg-review.reader.js";
     GitHubWebhookService,
     MemberAssociationService,
     ReviewQueryService,
+    TaskPullRequestQueryService,
     PgProviderDeliveryRepository,
     PgMemberAssociationRepository,
     PgReviewReader,
@@ -27,6 +29,6 @@ import { PgReviewReader } from "./infrastructure/pg-review.reader.js";
     { provide: MemberAssociationRepository, useExisting: PgMemberAssociationRepository },
     { provide: ReviewReadRepository, useExisting: PgReviewReader },
   ],
-  exports: [ReviewQueryService],
+  exports: [ReviewQueryService, TaskPullRequestQueryService],
 })
 export class MemberReviewsModule {}

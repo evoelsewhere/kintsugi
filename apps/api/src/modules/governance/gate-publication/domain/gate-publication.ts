@@ -1,7 +1,6 @@
-import type { GateEvidence } from "@kintsugi/domain";
+import type { GateEvidence, GatePublicationState } from "@kintsugi/domain";
+export type { GatePublicationState } from "@kintsugi/domain";
 import type { AuditRecord } from "#common/audit/audit-trail.js";
-
-export type GatePublicationState = "pending-publication" | "awaiting-merge" | "effective" | "stale" | "failed" | "rejected";
 
 export interface GatePublication {
   decisionId: string;

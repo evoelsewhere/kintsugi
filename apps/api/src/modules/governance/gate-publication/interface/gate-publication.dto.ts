@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { GATE_KEY_PATTERN } from "@kintsugi/domain";
+import { GATE_DECISIONS, GATE_KEY_PATTERN } from "@kintsugi/domain";
 
 export const gatePublicationListQuerySchema = z.object({
   projectId: z.string().trim().min(1).max(200),
@@ -11,7 +11,7 @@ export const requestGateDecisionSchema = z.object({
   projectId: z.string().min(1).max(100),
   unitId: z.string().min(1).max(200),
   gateId: z.string().regex(GATE_KEY_PATTERN),
-  decision: z.enum(["approved", "rejected", "waived"]),
+  decision: z.enum(GATE_DECISIONS),
   decisionReason: z.string().trim().min(1).max(2000).optional(),
   waiverDeliverableIds: z.array(z.string().min(1).max(100)).max(100).optional(),
   waiverReason: z.string().trim().min(1).max(2000).optional(),

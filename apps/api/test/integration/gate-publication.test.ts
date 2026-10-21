@@ -29,13 +29,13 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
     await app?.close();
   });
 
-  function createInput(decisionId: string, actorId = adminId) {
+  function createInput(decisionId: string, actorId = adminId, gateId = "G4", unitId = "web/core/invoice") {
     const evidenceBase = {
       schemaVersion: "1" as const,
       decisionId,
       projectId: "shop",
-      unitId: "web/core/invoice",
-      gateId: "G4",
+      unitId,
+      gateId,
       decision: "approved" as const,
       policyRevision: "member-context-v1",
       contextRevision: `sha256:${"a".repeat(64)}`,
@@ -58,7 +58,7 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
         subject: decisionId,
         detail: {
           authorizationId: evidenceBase.actor.authorizationId,
-          gateId: "G4",
+          gateId,
           decision: "approved",
           contextRevision: evidenceBase.contextRevision,
           policyRevision: evidenceBase.policyRevision,
@@ -118,6 +118,31 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
     expect((await member.client.get("/governance/gate-publications?projectId=shop")).status).toBe(200);
     expect((await member.client.get("/governance/gate-publications/" + publication.decisionId)).status).toBe(200);
     expect((await member.client.get("/governance/gate-publications?projectId=other")).status).toBe(403);
+  });
+  it("returns only the latest publication for each requested task gate", async () => {
+    const olderInput = createInput("gate_" + "5".repeat(48), adminId, "G2");
+    olderInput.recordPath = "applications/web/units/core/invoice/reviews/G2-older.md";
+    const older = await repository.createDecision(olderInput);
+
+    const newerInput = createInput("gate_" + "6".repeat(48), adminId, "G2");
+    newerInput.recordPath = "applications/web/units/core/invoice/reviews/G2-newer.md";
+    const newer = await repository.createDecision(newerInput);
+    const dependencyInput = createInput("gate_" + "7".repeat(48), adminId, "G2", "web/catalog/product");
+    dependencyInput.recordPath = "applications/web/units/catalog/product/reviews/G2.md";
+    const dependency = await repository.createDecision(dependencyInput);
+    await app.db.query("update workflow.gate_publication set updated_at = $2 where decision_id = $1", [older.decisionId, "2030-10-19T00:00:00.000Z"]);
+    await app.db.query("update workflow.gate_publication set updated_at = $2 where decision_id = $1", [newer.decisionId, "2026-10-20T00:00:00.000Z"]);
+
+    const latest = await repository.listLatestForTask("shop", [
+      { unitId: "web/core/invoice", gateId: "G2" },
+      { unitId: "web/catalog/product", gateId: "G2" },
+    ]);
+    expect(latest).toHaveLength(2);
+    expect(latest).toEqual(expect.arrayContaining([
+      expect.objectContaining({ decisionId: newer.decisionId, unitId: "web/core/invoice", gateId: "G2", state: "pending-publication" }),
+      expect.objectContaining({ decisionId: dependency.decisionId, unitId: "web/catalog/product", gateId: "G2", state: "pending-publication" }),
+    ]));
+    expect(latest.some((publication) => publication.decisionId === older.decisionId)).toBe(false);
   });
   it("rolls the audit back when the publication cannot satisfy its user foreign key", async () => {
     const input = createInput("gate_" + "2".repeat(48), "missing-user");

@@ -1,4 +1,4 @@
-import { DELIVERABLE_ID_PATTERN, IDENTIFIER_MAX_LENGTH, MAX_REQUIRED_DELIVERABLES, MAX_TASK_ASSIGNEE_LENGTH, MAX_TASK_TITLE_LENGTH, PROJECT_ID_PATTERN, GATE_IDS, MEMBER_ACTIVITIES, PHASES, WORK_ITEM_STATUSES, isFullUnitId } from "@kintsugi/domain";
+import { DELIVERABLE_ID_PATTERN, IDENTIFIER_MAX_LENGTH, MAX_REQUIRED_DELIVERABLES, MAX_TASK_ASSIGNEE_LENGTH, MAX_TASK_TITLE_LENGTH, PROJECT_ID_PATTERN, GATE_IDS, MEMBER_ACTIVITIES, PHASES, TASK_GATE_PUBLICATION_STATUSES, TASK_GATE_STATUSES, WORK_ITEM_STATUSES, isFullUnitId } from "@kintsugi/domain";
 import { z } from "zod";
 import type { ReadinessBlockerCode } from "@kintsugi/domain";
 
@@ -297,9 +297,10 @@ export const taskStatusSchema = z.object({
   }).strict()).max(100),
   currentReviewIds: z.array(opaqueIdSchema).max(100),
   gates: z.array(z.object({
+    unitId: z.string().refine(isFullUnitId, "unitId must be application/module/unit"),
     gateId: z.enum(GATE_IDS).or(opaqueIdSchema),
-    status: z.enum(["pending", "approved", "rejected", "unknown"]),
-    publication: z.enum(["pending", "published", "unknown"]),
+    status: z.enum(TASK_GATE_STATUSES),
+    publication: z.enum(TASK_GATE_PUBLICATION_STATUSES),
   }).strict()).max(20),
   nextAction: z.string().min(1).max(1000),
 }).strict();

@@ -7,7 +7,7 @@ import { AuditTrail } from "#common/audit/audit-trail.js";
 import { getPool, withTransaction, type Queryable } from "#common/db/pool.js";
 import { GatePublicationRepository } from "../domain/gate-publication.repository.js";
 import type { CreateGatePublication, GatePublication, GatePublicationState } from "../domain/gate-publication.js";
-import type { GatePublicationPage } from "../domain/gate-publication.repository.js";
+import type { GatePublicationIdentity, GatePublicationPage } from "../domain/gate-publication.repository.js";
 
 interface GatePublicationRow {
   decision_id: string;
@@ -26,11 +26,13 @@ interface GatePublicationRow {
   record_commit: string | null;
 }
 
-const SELECT = `select p.decision_id, p.project_id, p.unit_id, p.gate_id, p.decision, p.state as stored_state,
+const SELECT_COLUMNS = `p.decision_id, p.project_id, p.unit_id, p.gate_id, p.decision, p.state as stored_state,
        p.evidence_hash, p.record_path, p.document_write_id, d.status as document_write_status,
-       p.created_at, p.updated_at, coalesce(p.pr_url, d.pr_url) as pr_url, p.record_commit
-  from workflow.gate_publication p
+       p.created_at, p.updated_at, coalesce(p.pr_url, d.pr_url) as pr_url, p.record_commit`;
+const SELECT_FROM = `from workflow.gate_publication p
   join workflow.document_write d on d.id = p.document_write_id`;
+const SELECT = `select ${SELECT_COLUMNS} ${SELECT_FROM}`;
+const SELECT_LATEST_FOR_TASK = `select distinct on (p.unit_id, p.gate_id) ${SELECT_COLUMNS} ${SELECT_FROM}`;
 
 function toPublication(row: GatePublicationRow): GatePublication {
   let state: GatePublicationState = row.stored_state;
@@ -139,6 +141,17 @@ export class PgGatePublicationRepository extends GatePublicationRepository {
       db.query<GatePublicationRow>(SELECT + " where p.project_id = $1 order by p.updated_at desc, p.decision_id desc limit $2 offset $3", [projectId, limit, offset]),
     ]);
     return { items: result.rows.map(toPublication), total: Number(count.rows[0]?.total ?? 0), limit, offset };
+  }
+
+  async listLatestForTask(projectId: string, gates: readonly GatePublicationIdentity[]): Promise<GatePublication[]> {
+    if (gates.length === 0) return [];
+    const result = await getPool().query<GatePublicationRow>(
+      SELECT_LATEST_FOR_TASK +
+        " where p.project_id = $1 and (p.unit_id, p.gate_id) in (select * from unnest($2::text[], $3::text[])) " +
+        "order by p.unit_id, p.gate_id, p.created_at desc, p.decision_id desc",
+      [projectId, gates.map(({ unitId }) => unitId), gates.map(({ gateId }) => gateId)],
+    );
+    return result.rows.map(toPublication);
   }
 
   async #find(db: Queryable | Pick<Pool, "query"> | Pick<PoolClient, "query">, decisionId: string): Promise<GatePublication | undefined> {

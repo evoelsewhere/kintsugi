@@ -20,11 +20,14 @@ import {
   type TaskBriefQuery,
   type TaskIdentity,
   type TaskQuery,
+  type TaskGateStatus,
   type TaskStatus,
   type TaskSummary,
 } from "@kintsugi/harness-sdk";
 import { PROJECT_ID_PATTERN, type WorkItemStatus } from "@kintsugi/domain";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
+import { GatePublicationStatusQueryService, type GatePublicationStatus } from "#modules/governance/gate-publication/index.js";
+import { TaskPullRequestQueryService } from "#modules/delivery/member-reviews/index.js";
 import { DocumentQueryService } from "./document-query.service.js";
 import { SnapshotService } from "./snapshot.service.js";
 import { TaskQueryService } from "./task-query.service.js";
@@ -48,6 +51,8 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
     private readonly snapshots: SnapshotService,
     private readonly documents: DocumentQueryService,
     private readonly reviews: ReviewReader,
+    private readonly pullRequests: TaskPullRequestQueryService,
+    private readonly gatePublications: GatePublicationStatusQueryService,
   ) {}
 
   async listProjects(principal: MemberPrincipal, query: ProjectQuery): Promise<ListResult<ProjectSummary>> {
@@ -102,23 +107,37 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
   async taskStatus(principal: MemberPrincipal, identity: TaskIdentity): Promise<TaskStatus> {
     await this.authorize(principal, identity.projectId);
     const task = await this.tasks.get(principal, identity);
-    const currentReviewIds = await this.reviews.listCurrentIds(principal, identity);
     if (task.predecessorGates.length > MAX_STATUS_GATES) {
       throw new PayloadTooLargeException("The task has too many gates for the Coding Agent Workflow status response");
     }
+    const gateIdentities = [...new Map(task.predecessorGates.map((gate) => {
+      const gateIdentity = { unitId: gate.unitId ?? identity.unitId, gateId: gate.gateId };
+      return [gateIdentityKey(gateIdentity.unitId, gateIdentity.gateId), gateIdentity] as const;
+    })).values()];
+    const [currentReviewIds, pullRequests, publications] = await Promise.all([
+      this.reviews.listCurrentIds(principal, identity),
+      this.pullRequests.listForTask(principal, identity),
+      this.gatePublications.listForTask(principal, identity, gateIdentities),
+    ]);
+    const publicationsByGate = new Map(publications.map((publication) => [gateIdentityKey(publication.unitId, publication.gateId), publication]));
     const result: TaskStatus = {
       schemaVersion: "1",
       projectId: task.projectId,
       unitId: task.unitId,
       status: task.workItem.status,
-      evidenceAvailability: { pullRequests: "unavailable", reviews: "available" },
-      pullRequests: [],
+      evidenceAvailability: { pullRequests: "available", reviews: "available" },
+      pullRequests,
       currentReviewIds,
-      gates: task.predecessorGates.map((gate) => ({
-        gateId: gate.gateId,
-        status: gate.status,
-        publication: "unknown",
-      })),
+      gates: task.predecessorGates.map((gate) => {
+        const unitId = gate.unitId ?? identity.unitId;
+        const publication = publicationsByGate.get(gateIdentityKey(unitId, gate.gateId));
+        return {
+          unitId,
+          gateId: gate.gateId,
+          status: publication === undefined ? gate.status : gateStatusFromPublication(publication),
+          publication: publication?.state ?? "unknown",
+        };
+      }),
       nextAction: nextAction(task.workItem.status, task.readiness.byActivity.implementation.ready),
     };
     return taskStatusSchema.parse(result);
@@ -156,6 +175,25 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
 
   private encodeProjectCursor(projectId: string): string {
     return Buffer.from(projectId, "utf8").toString("base64url");
+  }
+}
+
+function gateIdentityKey(unitId: string, gateId: string): string {
+  return JSON.stringify([unitId, gateId]);
+}
+
+function gateStatusFromPublication(publication: GatePublicationStatus): TaskGateStatus["status"] {
+  switch (publication.state) {
+    case "effective":
+      return publication.decision;
+    case "pending-publication":
+    case "awaiting-merge":
+      return "pending";
+    case "rejected":
+      return publication.decision === "rejected" ? "rejected" : "unknown";
+    case "stale":
+    case "failed":
+      return "unknown";
   }
 }
 

@@ -1,4 +1,5 @@
 import { GATE_KEY_PATTERN, type GateId } from "./index.js";
+import { GATE_DECISIONS, type GateDecision } from "./gate-decision.js";
 import { isSafeRepositoryPath, DomainValidationReader, type ValidationResult } from "./validation.js";
 import { isFullUnitId } from "./member-task.js";
 
@@ -13,7 +14,7 @@ export interface GateEvidence {
   projectId: string;
   unitId: string;
   gateId: GateId | (string & {});
-  decision: "approved" | "rejected" | "waived";
+  decision: GateDecision;
   decisionReason?: string;
   auditEventId: string;
   policyRevision: string;
@@ -69,7 +70,7 @@ export function validateGateEvidence(value: unknown): ValidationResult<GateEvide
   const unitId = reader.string(root["unitId"], "unitId");
   if (unitId !== undefined && !isFullUnitId(unitId)) reader.problem("unitId", "must be a full application/module/unit identity");
   const gateId = reader.string(root["gateId"], "gateId", { pattern: GATE_KEY_PATTERN });
-  const decision = reader.oneOf(root["decision"], "decision", ["approved", "rejected", "waived"] as const);
+  const decision = reader.oneOf(root["decision"], "decision", GATE_DECISIONS);
   const decisionReason = reader.optionalString(root["decisionReason"], "decisionReason", { maxLength: 2000 });
   if (decision === "rejected" && decisionReason === undefined) reader.problem("decisionReason", "is required for a rejected decision");
   if (decision !== undefined && decision !== "rejected" && decisionReason !== undefined) reader.problem("decisionReason", "is allowed only for a rejected decision");

@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { reviewReportSchema, taskStatusSchema, type TaskIdentity } from "@kintsugi/harness-sdk";
+import { reviewReportSchema, taskStatusSchema, type TaskIdentity, type TaskPullRequest } from "@kintsugi/harness-sdk";
+import type { GatePublicationStatus } from "../../src/modules/governance/gate-publication/index.js";
 import type { MemberPrincipal } from "../../src/modules/core/auth/index.js";
 import type { ProjectAccessPort } from "../../src/modules/delivery/agent-context/domain/project-access.ports.js";
 import type { TaskQueryService } from "../../src/modules/delivery/agent-context/application/task-query.service.js";
@@ -30,7 +31,16 @@ function service() {
     get: vi.fn(),
     listCurrentIds: vi.fn(async (_principal: MemberPrincipal, _identity: TaskIdentity): Promise<string[]> => []),
   };
-  return { subject: new AgentContextService(projectAccess, tasks, snapshots, documents, reviews), projectAccess, tasks, reviews };
+  const pullRequests = {
+    listForTask: vi.fn(async (_principal: MemberPrincipal, _identity: TaskIdentity): Promise<TaskPullRequest[]> => []),
+  };
+  const gatePublications = {
+    listForTask: vi.fn(async (_principal: MemberPrincipal, _identity: TaskIdentity, _gates: readonly { unitId: string; gateId: string }[]): Promise<GatePublicationStatus[]> => []),
+  };
+  return {
+    subject: new AgentContextService(projectAccess, tasks, snapshots, documents, reviews, pullRequests as never, gatePublications as never),
+    projectAccess, tasks, reviews, pullRequests, gatePublications,
+  };
 }
 
 describe("AgentContextService Coding Agent Workflow contract", () => {
@@ -51,14 +61,40 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
     await expect(subject.listProjects(principal, { cursor: "YWxwaGE=" })).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("returns task status with review capability while leaving unobserved PR evidence unavailable", async () => {
-    const { subject, tasks, reviews } = service();
+  it("returns confirmed pull requests and current gate publication states", async () => {
+    const { subject, tasks, reviews, pullRequests, gatePublications } = service();
     vi.mocked(reviews.listCurrentIds).mockResolvedValue(["rev_018f0000-0000-4000-8000-000000000001"]);
+    const pullRequest = {
+      repositoryId: "billing-api",
+      pullRequestId: "pr_42",
+      state: "merged" as const,
+      headRevision: "a".repeat(40),
+      updatedAt: "2026-10-21T09:00:00.000Z",
+    };
+    const effectiveGate: GatePublicationStatus = {
+      unitId: "web/core/invoice",
+      gateId: "G3",
+      decision: "waived",
+      state: "effective",
+    };
+    vi.mocked(pullRequests.listForTask).mockResolvedValue([pullRequest]);
+    vi.mocked(gatePublications.listForTask).mockResolvedValue([
+      effectiveGate,
+      { unitId: "web/catalog/product", gateId: "G3", decision: "approved", state: "awaiting-merge" },
+      { unitId: "web/core/invoice", gateId: "G4", decision: "approved", state: "awaiting-merge" },
+      { unitId: "web/core/invoice", gateId: "G5", decision: "approved", state: "failed" },
+    ]);
+
     vi.mocked(tasks.get).mockResolvedValue({
       projectId: "alpha",
       unitId: "web/core/invoice",
       workItem: { status: "pending" },
-      predecessorGates: [{ unitId: "web/core/invoice", gateId: "G3", status: "unknown" }],
+      predecessorGates: [
+        { unitId: "web/core/invoice", gateId: "G3", status: "unknown" },
+        { unitId: "web/catalog/product", gateId: "G3", status: "unknown" },
+        { unitId: "web/core/invoice", gateId: "G4", status: "unknown" },
+        { unitId: "web/core/invoice", gateId: "G5", status: "unknown" },
+      ],
       readiness: { readyFor: ["implementation"], blockers: [], byActivity: {
         design: { ready: true, blockers: [] },
         implementation: { ready: true, blockers: [] },
@@ -68,10 +104,21 @@ describe("AgentContextService Coding Agent Workflow contract", () => {
 
     const status = await subject.taskStatus(principal, { projectId: "alpha", unitId: "web/core/invoice" });
     expect(taskStatusSchema.parse(status)).toEqual(status);
-    expect(status.pullRequests).toEqual([]);
+    expect(status.pullRequests).toEqual([pullRequest]);
     expect(status.currentReviewIds).toEqual(["rev_018f0000-0000-4000-8000-000000000001"]);
-    expect(status.evidenceAvailability).toEqual({ pullRequests: "unavailable", reviews: "available" });
-    expect(status.gates).toEqual([{ gateId: "G3", status: "unknown", publication: "unknown" }]);
+    expect(status.evidenceAvailability).toEqual({ pullRequests: "available", reviews: "available" });
+    expect(status.gates).toEqual([
+      { unitId: "web/core/invoice", gateId: "G3", status: "waived", publication: "effective" },
+      { unitId: "web/catalog/product", gateId: "G3", status: "pending", publication: "awaiting-merge" },
+      { unitId: "web/core/invoice", gateId: "G4", status: "pending", publication: "awaiting-merge" },
+      { unitId: "web/core/invoice", gateId: "G5", status: "unknown", publication: "failed" },
+    ]);
+    expect(gatePublications.listForTask).toHaveBeenCalledWith(principal, { projectId: "alpha", unitId: "web/core/invoice" }, [
+      { unitId: "web/core/invoice", gateId: "G3" },
+      { unitId: "web/catalog/product", gateId: "G3" },
+      { unitId: "web/core/invoice", gateId: "G4" },
+      { unitId: "web/core/invoice", gateId: "G5" },
+    ]);
     expect(status.nextAction).toContain("pull request");
   });
 

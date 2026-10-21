@@ -158,6 +158,28 @@ describe("Coding Agent Workflow wire schemas", () => {
     expect(taskStatusSchema.safeParse(withoutAvailability).success).toBe(false);
   });
 
+  it("accepts confirmed PR status and the full gate publication lifecycle", () => {
+    const result = taskStatusSchema.parse({
+      ...taskStatus,
+      evidenceAvailability: { pullRequests: "available", reviews: "available" },
+      pullRequests: [{
+        repositoryId: "billing-api",
+        pullRequestId: "pr_42",
+        state: "merged",
+        headRevision: sha("f"),
+        updatedAt: "2026-10-21T09:00:00.000Z",
+      }],
+      gates: [
+        { unitId: "web/core/invoice", gateId: "G3", status: "waived", publication: "effective" },
+        { unitId: "web/catalog/product", gateId: "G4", status: "pending", publication: "awaiting-merge" },
+        { unitId: "web/core/invoice", gateId: "G5", status: "unknown", publication: "failed" },
+      ],
+    });
+
+    expect(result.pullRequests[0]?.pullRequestId).toBe("pr_42");
+    expect(result.gates.map(({ publication }) => publication)).toEqual(["effective", "awaiting-merge", "failed"]);
+  });
+
   it("rejects unknown selectors and arbitrary document paths", () => {
     expect(taskBriefQuerySchema.safeParse({
       schemaVersion: "1",
