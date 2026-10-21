@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { parseUnitDocument } from "@kintsugi/agents";
+import { parseKintsugiYaml } from "@kintsugi/manifest";
+import { isFullUnitId, unitStatePath } from "@kintsugi/domain";
+import type { ApprovedTaskPlan, EffectiveGateFacts } from "../member-workflow/continue.js";
 import { MEMBER_CONTEXT_POLICY_REVISION, evaluateReviewEvidence, type GateDeliverableEvidence, type GateEvidence, type GitLocation } from "@kintsugi/domain";
 import { assertSafeRepoPath, runGit, type CheckoutStorage, type GitHubObservationConnection, type ObservedPullRequest, type PullRequestObserver } from "@kintsugi/git";
 import type { Pool, PoolClient } from "pg";
 import type { RepositoryStore } from "../git-sync/repositories.js";
 import { syncRepository } from "../git-sync/sync.js";
-import { reconcileGatePublication, type GateAuditProof, type GateDeliverableFact, type GateEffectiveDependencies, type GateMappedReviewer, type GatePublicationCandidate } from "./effective.js";
+import { verifyEffectiveGate, reconcileGatePublication, type GateAuditProof, type GateDeliverableFact, type GateEffectiveDependencies, type GateMappedReviewer, type GatePublicationCandidate } from "./effective.js";
 
 interface Dependencies {
   pool: Pool;
@@ -60,6 +63,38 @@ export class PostgresGateReconciler {
     }
   }
 
+  async currentContinuation(input: EffectiveGateFacts): Promise<{ plan: ApprovedTaskPlan; evidence: GateEvidence; reviewers: GateMappedReviewer[] } | undefined> {
+    const found = await this.deps.pool.query<GatePublicationCandidate>(
+      `select p.*,d.status as write_status,coalesce(p.pr_url,d.pr_url) as pr_url from workflow.gate_publication p
+         join workflow.document_write d on d.id=p.document_write_id
+        where p.decision_id=$1 and p.project_id=$2 and p.unit_id=$3 and p.gate_id=$4 and p.evidence_hash=$5 and p.record_commit=$6 and p.state='effective'`,
+      [input.decisionId,input.projectId,input.unitId,input.gateId,input.evidenceHash,input.recordCommit],
+    );
+    const publication = found.rows[0];
+    if (publication === undefined) return undefined;
+    const merged = await this.mergedRecord(publication);
+    if (merged.status !== "merged" || merged.location.commit !== input.recordCommit) return undefined;
+    const verified = await verifyEffectiveGate(this.verification, merged.location);
+    if (verified.status !== "effective") return undefined;
+    const plan = await this.currentTaskPlan(input, publication.document_repository_id);
+    return {plan,evidence:verified.evidence,reviewers:verified.reviewers};
+  }
+
+  private async currentTaskPlan(input: EffectiveGateFacts, repositoryId: string): Promise<ApprovedTaskPlan> {
+    if (!isFullUnitId(input.unitId)) return {status:"unavailable",code:"TASK_IDENTITY_MISMATCH"};
+    const synced = await syncRepository({store:this.deps.repositories,storage:this.deps.storage},repositoryId);
+    if (synced === undefined) return {status:"unavailable",code:"DOCUMENT_REPOSITORY_UNAVAILABLE"};
+    const [application,module,unit] = input.unitId.split("/") as [string,string,string];
+    const manifestText = await this.readText({repo:repositoryId,commit:synced.commit,path:"kintsugi.yaml"});
+    if (manifestText === undefined) return {status:"unavailable",code:"MANIFEST_UNAVAILABLE"};
+    const parsedManifest = parseKintsugiYaml(manifestText);
+    if (!parsedManifest.ok) return {status:"unavailable",code:"MANIFEST_INVALID"};
+    const taskText = await this.readText({repo:repositoryId,commit:synced.commit,path:unitStatePath(application,module,unit)});
+    if (taskText === undefined) return {status:"unavailable",code:"TASK_NOT_FOUND"};
+    const parsedTask = parseUnitDocument(taskText,input.unitId);
+    if (!parsedTask.ok) return {status:"unavailable",code:"TASK_INVALID"};
+    return {status:"available",repositoryId,commit:synced.commit,manifest:parsedManifest.manifest,workItem:parsedTask.value};
+  }
   async recheckAuthority(client: PoolClient, evidence: GateEvidence, reviewers: readonly GateMappedReviewer[]): Promise<boolean> {
     const actor = await client.query<{ id: string }>(
       `select account.id from core.app_user account

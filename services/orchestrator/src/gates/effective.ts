@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { gateEvidenceCanonicalJson, parseGateRecord, validateGateEvidence, type GateDeliverableEvidence, type GateEvidence, type GateRecordParseResult, type GitLocation } from "@kintsugi/domain";
 
 import { recordTransition } from "../outbox/store.js";
+import { CONTINUATION_QUEUE } from "../member-workflow/continue.js";
 
 export interface GateAuditProof {
   id: string;
@@ -168,7 +169,7 @@ export type GateReconciliationResult = {
   transitionKey?: string;
 };
 
-/** The T15 handoff is the durable gate.effective event, keyed by the immutable decision and evidence. */
+/** Projection, gate event and next-step intent share the immutable decision/evidence transaction. */
 export async function reconcileGatePublication(deps: GateReconciliationDependencies, decisionId: string): Promise<GateReconciliationResult> {
   const found = await deps.pool.query<GatePublicationCandidate>(
     `select p.*, d.status as write_status, coalesce(p.pr_url, d.pr_url) as pr_url
@@ -237,6 +238,7 @@ export async function reconcileGatePublication(deps: GateReconciliationDependenc
       await recordTransition(tx, {
         transitionKey, projectId: publication.project_id, unitId: publication.unit_id,
         event: { kind: `gate.${result.status}`, metadata: { decisionId, gateId: publication.gate_id, evidenceHash: publication.evidence_hash, recordCommit: recordCommit! } },
+        queueIntents: result.status === "effective" ? [{ intentKey: "continue-effective-gate", queue: CONTINUATION_QUEUE, payload: { projectId: publication.project_id, unitId: publication.unit_id, gateId: publication.gate_id, decisionId, evidenceHash: publication.evidence_hash, recordCommit: recordCommit! } }] : [],
       }, apply);
       result = { ...result, transitionKey };
     } else await apply();
