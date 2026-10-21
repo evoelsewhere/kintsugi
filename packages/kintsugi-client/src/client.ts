@@ -13,6 +13,8 @@ import {
   taskQuerySchema,
   taskStatusQuerySchema,
   taskStatusSchema,
+  taskEventQuerySchema,
+  taskEventSchema,
 } from "@kintsugi/harness-sdk";
 import type {
   CodingAgentWorkflowPort,
@@ -34,6 +36,8 @@ import type {
   TaskSummary,
 } from "@kintsugi/harness-sdk";
 import { cancelledError, CodingAgentClientError, isAbortError } from "./errors.js";
+
+import { readSseFrames } from "./sse.js";
 
 const API_PREFIX = "/api/member/v1";
 const DEFAULT_RETRIES = 2;
@@ -236,6 +240,74 @@ export function createCodingAgentWorkflowClient(options: CodingAgentWorkflowClie
     }
   }
 
+  async function* watchTask(query: TaskEventQuery, signal: AbortSignal): AsyncGenerator<TaskEvent> {
+    const parsed = taskEventQuerySchema.parse(query);
+    let cursor = parsed.afterEventId;
+    let delivered = 0;
+    let retries = 0;
+    while (parsed.limit === undefined || delivered < parsed.limit) {
+      if (signal.aborted) throw cancelledError();
+      const token = await options.tokenProvider();
+      if (!token) throw new CodingAgentClientError({ code: "UNAUTHENTICATED", status: 401, message: "No Kintsugi credential is configured for this profile" });
+      const url = new URL(`${baseUrl.pathname.replace(/\/+$/, "")}${API_PREFIX}/task-events`, baseUrl.origin);
+      appendQuery(url, { projectId: parsed.projectId, unitId: parsed.unitId, afterEventId: cursor,
+        ...(parsed.limit === undefined ? {} : { limit: parsed.limit - delivered }) });
+      let delay: number | undefined;
+      try {
+        const response = await fetcher(url, {
+          method: "GET", redirect: "manual", signal,
+          headers: { accept: "text/event-stream", authorization: `Bearer ${token}`, ...(cursor === undefined ? {} : { "Last-Event-ID": cursor }) },
+        });
+        if (response.status >= 300 && response.status < 400) {
+          await response.body?.cancel();
+          throw new CodingAgentClientError({ code: "REDIRECT_BLOCKED", status: response.status, message: "Kintsugi redirected the request; credentials were not forwarded" });
+        }
+        if (!response.ok) {
+          let body: unknown;
+          try { body = await response.json(); } catch { throw new CodingAgentClientError({ code: "INVALID_RESPONSE", status: response.status, message: "Kintsugi returned an unreadable response" }); }
+          const error = errorFromEnvelope(response.status, body, token);
+          if (![429, 502, 503, 504].includes(response.status)) throw error;
+          delay = retryAfterMilliseconds(response, now());
+          if (retries >= maxRetries) throw error;
+        } else {
+          if (response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "text/event-stream" || response.body === null) {
+            await response.body?.cancel();
+            throw new CodingAgentClientError({ code: "INVALID_RESPONSE", message: "Kintsugi did not return a task event stream" });
+          }
+          for await (const frame of readSseFrames(response.body, signal)) {
+            if (frame.event !== "task-event" && frame.event !== "error") continue;
+            let data: unknown;
+            try { data = JSON.parse(frame.data); } catch { throw new CodingAgentClientError({ code: "INVALID_RESPONSE", message: "Kintsugi returned an unreadable task event" }); }
+            if (frame.event === "error") {
+              if (data === null || typeof data !== "object" || !("code" in data) || typeof data.code !== "string" || !("message" in data) || typeof data.message !== "string") {
+                throw new CodingAgentClientError({ code: "INVALID_RESPONSE", message: "Kintsugi returned an invalid stream error" });
+              }
+              const code = data.code.split(token).join("[redacted]");
+              throw new CodingAgentClientError({ code, message: data.message.split(token).join("[redacted]"),
+                ...(code === "FORBIDDEN" ? { status: 403 } : code === "UNAUTHENTICATED" ? { status: 401 } : {}) });
+            }
+            const value = parseBody(taskEventSchema, data, token);
+            if (frame.id !== value.id || value.projectId !== parsed.projectId || value.unitId !== parsed.unitId) {
+              throw new CodingAgentClientError({ code: "INVALID_RESPONSE", message: "Task event identity does not match the subscription" });
+            }
+            if (value.id === cursor) continue;
+            cursor = value.id;
+            delivered += 1;
+            retries = 0;
+            yield value;
+            if (parsed.limit !== undefined && delivered >= parsed.limit) return;
+          }
+        }
+      } catch (error) {
+        if (signal.aborted || isAbortError(error)) throw cancelledError();
+        if (error instanceof CodingAgentClientError) throw error;
+        // Fetch/read failures can interrupt a frame; resume only after the last complete delivered event.
+      }
+      if (retries >= maxRetries) throw new CodingAgentClientError({ code: "NETWORK_ERROR", message: "Task event stream disconnected; resume from the last delivered event", ...(cursor === undefined ? {} : { details: { afterEventId: cursor } }) });
+      retries += 1;
+      await sleep(delay ?? Math.min(250 * 2 ** (retries - 1), MAX_RETRY_DELAY_MS), signal);
+    }
+  }
   return {
     listProjects: (query: ProjectQuery): Promise<ListResult<ProjectSummary>> => {
       const parsed = projectQuerySchema.parse(query);
@@ -265,10 +337,6 @@ export function createCodingAgentWorkflowClient(options: CodingAgentWorkflowClie
       const parsed = taskStatusQuerySchema.parse(query);
       return request("task-status", parsed, taskStatusSchema);
     },
-    watchTask: (_query: TaskEventQuery, _signal: AbortSignal): AsyncIterable<TaskEvent> => ({
-      [Symbol.asyncIterator]: () => ({
-        next: async () => { throw new CodingAgentClientError({ code: "UNSUPPORTED_CAPABILITY", message: "Task event streaming is not available in this client version" }); },
-      }),
-    }),
+    watchTask,
   };
 }

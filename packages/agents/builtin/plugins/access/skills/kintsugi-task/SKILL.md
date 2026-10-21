@@ -6,6 +6,7 @@ description: Read and explain authorized Kintsugi project and task context, then
 # Kintsugi task context
 
 Use Kintsugi as the source for project standards, task intent, designs, constraints, evidence, and current workflow status. The AI the developer chose reads that context and answers; Kintsugi does not replace that AI or drive its coding session.
+The local Kintsugi CLI owns plugin setup, local MCP configuration, and authentication (for example, `kintsugi plugins setup` and `kintsugi auth login`). The selected AI harness uses the configured local MCP connection to read task briefs, cited standards and context, and review evidence. Kintsugi supplies evidence; it does not run or operate the assistant. MCP access is read-only and has no watch tool or gate-write operation. For ongoing task events, use `kintsugi task watch` only when the installed CLI supports streaming; otherwise refresh `task_status` when the developer asks for an update.
 
 ## Read context
 

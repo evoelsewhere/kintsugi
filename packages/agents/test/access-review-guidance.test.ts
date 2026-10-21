@@ -13,4 +13,15 @@ describe("access plugin review findings guidance", () => {
     expect(skill).toMatch(/fetch fresh `task_status` and, if it returns review references/i);
     expect(skill).toMatch(/findings are evidence for the developer; they never authorize edits, approval, merge, or gate passage/i);
   });
+
+  it("separates local CLI setup and watch from the AI harness's read-only MCP role", async () => {
+    const plugins = await loadBuiltinPlugins();
+    const skill = await readBuiltinPluginFile(plugins, "access", "skills/kintsugi-task/SKILL.md");
+    expect(skill).toContain("local Kintsugi CLI owns plugin setup, local MCP configuration, and authentication");
+    expect(skill).toContain("configured local MCP connection to read task briefs, cited standards and context, and review evidence");
+    expect(skill).toContain("does not run or operate the assistant");
+    expect(skill).toContain("MCP access is read-only and has no watch tool or gate-write operation");
+    expect(skill).toContain("use `kintsugi task watch` only when the installed CLI supports streaming");
+    expect(skill).toContain("otherwise refresh `task_status`");
+  });
 });

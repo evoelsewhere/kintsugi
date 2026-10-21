@@ -1,8 +1,9 @@
 import type { Command } from "commander";
 import type { MemberActivity } from "@kintsugi/domain";
+import { MAX_TASK_EVENT_LIMIT } from "@kintsugi/harness-sdk";
 import type { CliDeps } from "../cli.js";
 import { CliError } from "../profile.js";
-import { renderBriefMarkdown, writeBrief } from "../render.js";
+import { renderBriefMarkdown, renderTaskEvent, writeBrief } from "../render.js";
 import { apiFor, emit, projectId, type CommandOptions } from "./shared.js";
 
 const activities: MemberActivity[] = ["design", "implementation", "verification"];
@@ -56,9 +57,38 @@ export function registerTaskCommands(program: Command, deps: CliDeps): void {
     emit(deps, this, await client.taskStatus({ projectId: projectId(options, profile.projectId), unitId: splitUnit(unitId) }));
   });
 
-  task.command("watch <unitId>").description("Watch task changes (requires the streaming milestone)").action(async function() {
-    throw new CliError("UNSUPPORTED_CAPABILITY", "Task event streaming is not available yet");
-  });
+  task.command("watch <unitId>").description("Follow durable task events (JSON output is one event per line)")
+    .option("--project <id>", "Project id")
+    .option("--after-event-id <id>", "Resume after the last delivered event")
+    .option("--limit <count>", "Stop after 1–1000 delivered events; omit to follow continuously")
+    .action(async function(this: Command, unitId: string) {
+      const options = this.optsWithGlobals() as CommandOptions & { afterEventId?: string; limit?: string };
+      const limit = options.limit === undefined ? undefined : Number(options.limit);
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_TASK_EVENT_LIMIT)) {
+        throw new CliError("LIMIT_INVALID", "Event limit must be an integer from 1 to 1000");
+      }
+      const normalizedUnitId = splitUnit(unitId);
+      const { client, profile } = await apiFor(deps, this);
+      const selectedProjectId = projectId(options, profile.projectId);
+      const cancellation = new AbortController();
+      const signal = deps.watchSignal === undefined ? cancellation.signal : AbortSignal.any([cancellation.signal, deps.watchSignal]);
+      const cancel = () => cancellation.abort();
+      process.once("SIGINT", cancel);
+      process.once("SIGTERM", cancel);
+      try {
+        for await (const event of client.watchTask({ projectId: selectedProjectId, unitId: normalizedUnitId,
+          ...(options.afterEventId === undefined ? {} : { afterEventId: options.afterEventId }),
+          ...(limit === undefined ? {} : { limit }) }, signal)) {
+          deps.stdout.write(renderTaskEvent(event, options.json ? "json" : options.format ?? "text"));
+        }
+      } catch (error) {
+        if (!signal.aborted) throw error;
+      } finally {
+        cancellation.abort();
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+      }
+    });
 
   const review = program.command("review").description("Read review references attached to task status");
   review.command("list").requiredOption("--task <unitId>", "Task identity as application/module/unit").option("--project <id>", "Project id").action(async function(this: Command) {

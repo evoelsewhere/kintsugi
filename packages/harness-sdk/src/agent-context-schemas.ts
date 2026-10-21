@@ -5,6 +5,7 @@ import type { ReadinessBlockerCode } from "@kintsugi/domain";
 export const MEMBER_SCHEMA_VERSION = "1" as const;
 export const DEFAULT_LIST_LIMIT = 25;
 export const MAX_LIST_LIMIT = 100;
+export const MAX_TASK_EVENT_LIMIT = 1000;
 export const DEFAULT_CONTEXT_BYTES = 32 * 1024;
 export const MAX_SEARCH_QUERY_LENGTH = 500;
 export const SEARCHABLE_LIMIT = 100;
@@ -17,6 +18,7 @@ const contextRevisionSchema = contentHashSchema;
 const timestampSchema = z.string().datetime({ offset: true });
 const activitySchema = z.enum(MEMBER_ACTIVITIES);
 const limitSchema = z.coerce.number().int().min(1).max(MAX_LIST_LIMIT).default(DEFAULT_LIST_LIMIT);
+const eventLimitSchema = z.coerce.number().int().min(1).max(MAX_TASK_EVENT_LIMIT).optional();
 const maxBytesSchema = z.coerce.number().int().min(1).max(DEFAULT_CONTEXT_BYTES).default(DEFAULT_CONTEXT_BYTES);
 const booleanQuerySchema = z.preprocess((value: unknown) => {
   if (value === "true") return true;
@@ -112,7 +114,7 @@ export const taskStatusQuerySchema = taskIdentitySchema;
 export const taskEventQuerySchema = z.object({
   ...identityShape,
   afterEventId: opaqueIdSchema.optional(),
-  limit: limitSchema,
+  limit: eventLimitSchema,
 }).strict();
 
 export const projectSummarySchema = z.object({

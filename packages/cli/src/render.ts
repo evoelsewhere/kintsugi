@@ -1,6 +1,6 @@
 import { open, unlink } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { reviewReportSchema, type ReviewReport, type TaskBrief } from "@kintsugi/harness-sdk";
+import { reviewReportSchema, type ReviewReport, type TaskEvent, type TaskBrief } from "@kintsugi/harness-sdk";
 import { CliError } from "./profile.js";
 
 function citation(sourceId: string, path: string, startLine?: number, endLine?: number): string {
@@ -174,6 +174,16 @@ function renderReviewReport(report: ReviewReport, markdown: boolean): string {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+export function renderTaskEvent(event: TaskEvent, format: "text" | "json" | "markdown"): string {
+  if (format === "json") return `${JSON.stringify(event)}\n`;
+  return [
+    `${format === "markdown" ? "### " : ""}${event.kind} (${event.id})`,
+    `Time: ${event.occurredAt}`,
+    `Task: ${event.projectId}/${event.unitId}`,
+    ...Object.entries(event.metadata).map(([key, value]) => `${key}: ${JSON.stringify(value)}`),
+    "", "",
+  ].join("\n");
+}
 export function formatResult(value: unknown, format: "text" | "json" | "markdown"): string {
   if (format === "json") return `${JSON.stringify(value, null, 2)}\n`;
   const review = reviewReportSchema.safeParse(value);
