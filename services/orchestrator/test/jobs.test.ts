@@ -49,7 +49,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  function setup(files: AgentFiles): { store: MemoryJobStore; runner: JobRunner; writes: Array<{ repository: string; request: DocumentWriteRequest }>; agents: ReturnType<typeof writingAgentRuntime> } {
+  function setup(files: AgentFiles, mockOutputs?: boolean): { store: MemoryJobStore; runner: JobRunner; writes: Array<{ repository: string; request: DocumentWriteRequest }>; agents: ReturnType<typeof writingAgentRuntime> } {
     const store = new MemoryJobStore();
     store.legacy = { demo: "legacy" };
     const writes: Array<{ repository: string; request: DocumentWriteRequest }> = [];
@@ -61,6 +61,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       agents,
       agentDefinitions: builtinAgents(),
       interpreters: interpretersFromEnv(),
+      ...(mockOutputs === undefined ? {} : { mockOutputs }),
       requestWrite: async (repository, request) => {
         writes.push({ repository, request });
       },
@@ -328,6 +329,15 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       expect(existsSync(join(storage.job(id).out, "ASSESSMENT.md"))).toBe(false);
     });
 
+    it("picks, among several files of the expected name, the one whose path matches best", async () => {
+      const { id, run, agents } = await agentRun({
+        "legacy-analyst": () => ({ "assessment/ASSESSMENT.md": "# Right\n", "other/ASSESSMENT.md": "# Wrong\n" }),
+      });
+      expect(run?.status).toBe("succeeded");
+      expect(agents.specs).toHaveLength(1);
+      expect(readFileSync(join(storage.job(id).out, ...EXPECTED.split("/")), "utf8")).toBe("# Right\n");
+    });
+
     it("asks the agent once, naming the exact paths, when nothing usable was written", async () => {
       let calls = 0;
       const { run, agents } = await agentRun({
@@ -421,6 +431,27 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       ["agent", "legacy-analyst", "succeeded"],
       ["agent", "legacy-analyst", "succeeded"],
     ]);
+  });
+
+  it("takes an agent's result.json from a folder, and asks once more when it is missing", async () => {
+    const inventory = { sloc: 2000, fileCount: 3, complexityTotal: 10, maxFileComplexity: 4, dominantLanguage: "C", metricsTool: "inventory.py" };
+    const result = JSON.stringify({ depManifest: "none", depFreshness: "n/a", docCoveragePct: 50, riskNotes: ["fixture"] });
+    const run = async (files: (call: number) => Record<string, string>) => {
+      let call = 0;
+      const { store, runner, agents } = setup({ "legacy-analyst": () => files(call++) }, false);
+      const id = randomUUID();
+      await store.create({ id, projectId: "demo", kind: "workflow", name: "portfolio-assess", sourceRepositoryId: "legacy", inputs: { args: { apps: ["alpha"], inventories: { alpha: inventory } } } });
+      return { run: await runner.run(id), agents };
+    };
+
+    const folder = await run(() => ({ "applications/alpha/assessment/result.json": result }));
+    expect(folder.run?.status).toBe("succeeded");
+    expect(folder.agents.specs).toHaveLength(1);
+
+    const retried = await run((call) => (call === 0 ? {} : { "result.json": result }));
+    expect(retried.run?.status).toBe("succeeded");
+    expect(retried.agents.specs).toHaveLength(2);
+    expect(retried.agents.specs[1]?.task).toContain('bare path "result.json"');
   });
 
   it("records the run's live events: status, steps and agent tool calls, without file content", async () => {
