@@ -54,7 +54,7 @@ export interface ChildAgentRuntimeOptions {
 
 type JobEnd = Extract<JobEvent, { type: "job.completed" | "job.failed" }>;
 
-const EVENT_TYPES = new Set<JobEvent["type"]>(["job.started", "message.delta", "progress", "tool.call", "tool.result", "output", "usage", "job.completed", "job.failed"]);
+const EVENT_TYPES = new Set<JobEvent["type"]>(["job.started", "message.delta", "progress", "tool.call", "tool.result", "output", "usage", "span", "job.completed", "job.failed"]);
 
 export const AGENT_CHILD_ENTRY = fileURLToPath(new URL("../bin/agent-job.js", import.meta.url));
 
@@ -211,7 +211,8 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
           ...(credentials.apiKey === undefined ? {} : { apiKey: credentials.apiKey }),
           ...(credentials.secrets === undefined ? {} : { secrets: credentials.secrets }),
         };
-        providerEnv = credentials.env ?? {};
+        // pi reads the cache lifetime from the environment of the process that calls the provider.
+        providerEnv = { ...(config.cacheRetention === "long" ? { PI_CACHE_RETENTION: "long" } : {}), ...(credentials.env ?? {}) };
       }
 
       const entry = options.entry ?? AGENT_CHILD_ENTRY;

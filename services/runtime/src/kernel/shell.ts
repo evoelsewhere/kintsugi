@@ -1,4 +1,4 @@
-// The kernel `shell` tool (ADR-0039). pi's own bash keeps a persistent shell in the host's
+// The kernel `shell` tool (ADR-0040). pi's own bash keeps a persistent shell in the host's
 // environment — exactly the boundary ADR-0029 removes — so the kernel runs commands itself: the
 // call shape models know (`command`, `timeout` in seconds) with each command as its own process
 // through the launcher's runProcess — explicit `bash -c` (no implicit shell interpretation by
@@ -12,6 +12,7 @@ import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent
 import { Type } from "typebox";
 import { runProcess } from "../launcher/process.js";
 import { jobEnvironment } from "../launcher/script.js";
+import { boundOutput } from "./output.js";
 
 const DEFAULT_TIMEOUT_SEC = 60;
 const MAX_TIMEOUT_SEC = 600;
@@ -45,9 +46,9 @@ export function createKernelShellTool(cwd: string, tmp: string): ToolDefinition 
       const chunks: string[] = [];
       if (result.stdout !== "") chunks.push(result.stdout);
       if (result.stderr !== "") chunks.push(result.stderr);
-      let text = chunks.join(chunks.length === 2 ? "\n" : "");
-      if (text === "") text = "(no output)";
-      const notices: string[] = [];
+      const bounded = boundOutput(chunks.join(chunks.length === 2 ? "\n" : ""), "head");
+      let text = bounded.text === "" ? "(no output)" : bounded.text;
+      const notices: string[] = bounded.notice === undefined ? [] : [bounded.notice];
       if (result.stopped === "timeout") notices.push(`Command timed out after ${timeoutSec}s`);
       else if (result.stopped === "aborted") notices.push("Command aborted");
       else if (result.stopped === "output-limit") notices.push("Command output exceeded the capture limit");

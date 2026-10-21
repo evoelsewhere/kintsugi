@@ -1,4 +1,4 @@
-// The kernel shell tool (ADR-0039): command execution through runProcess — the job's cleared
+// The kernel shell tool (ADR-0040): command execution through runProcess — the job's cleared
 // environment, a timeout that kills the process tree, and no state between calls.
 
 import { mkdirSync } from "node:fs";
@@ -26,6 +26,13 @@ async function shell(params: Record<string, unknown>): Promise<string> {
 describe("kernel shell", () => {
   beforeAll(() => {
     mkdirSync(tmp, { recursive: true });
+  });
+
+  it("keeps the start of a very long output and says it cut the rest", async () => {
+    const text = await shell({ command: "seq 1 100000" });
+    expect(text.startsWith("1\n2\n3\n")).toBe(true);
+    expect(text).toMatch(/output cut to the first .*lines/);
+    expect(text.length).toBeLessThan(60_000);
   });
 
   it("runs a command and returns its output", async () => {
