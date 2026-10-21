@@ -77,7 +77,7 @@ function childCodeRoots(): Promise<string[]> {
   codeRoots ??= (async () => {
     const roots = new Set<string>([PACKAGE_ROOT, realpathSync(PACKAGE_ROOT)]);
     const require = createRequire(import.meta.url);
-    for (const name of ["@earendil-works/pi-coding-agent", "@earendil-works/pi-ai", "typebox", "@kintsugi/runtime-sdk"]) {
+    for (const name of ["@earendil-works/pi-coding-agent", "@earendil-works/pi-ai", "@earendil-works/pi-codemode", "@earendil-works/pi-mcp", "@earendil-works/pi-telemetry", "typebox", "@kintsugi/runtime-sdk"]) {
       try {
         const file = realpathSync(require.resolve(name));
         const modules = nodeModulesOf(file);
@@ -221,6 +221,11 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
           : [
               "--permission",
               ...[...(await childCodeRoots()), entry, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
+              // The kernel's `shell` and `git` start processes and codemode runs scripts in a worker thread. The
+              // OS account is the isolation boundary (ADR-0029); these flags only let the kernel use its own tools.
+              "--allow-child-process",
+              "--allow-worker",
+              "--disable-warning=SecurityWarning",
               ...[spec.workspace.outDir, tmp].map((path) => `--allow-fs-write=${path}`),
             ];
       const job = new ChildAgentJob(randomUUID(), idleTimeoutSec);
