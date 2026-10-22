@@ -144,7 +144,7 @@ def finish(app, items, chosen, inputs, sources, run, existing):
             'requirements': strings(trace.get('requirements')),
             'pullRequests': strings(trace.get('pullRequests')),
             'tests': strings(trace.get('tests')),
-            # Files as the agent cited them, put right when they name a catalog file (`src/` or the repository left out).
+            # Files as the agent cited them, put right when they name a catalog file (`as-is/` or the repository left out).
             'files': sorted({owners.path_of(rel) or rel for rel in (cc.norm_path(value) for value in strings(trace.get('files'))) if rel}),
             'openQuestions': trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) and not isinstance(trace.get('openQuestions'), bool) else 0,
         }

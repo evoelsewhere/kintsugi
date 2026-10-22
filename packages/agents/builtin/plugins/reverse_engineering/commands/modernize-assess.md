@@ -53,7 +53,7 @@ project. Otherwise run **Single-application mode** on `$app`, the first token: t
 
 The code is the **legacy repositories** of `$app`, registered on the application in `kintsugi.yaml`
 (`role: legacy`, one or several); each job reads every one of them at the commit the orchestrator pinned for this run, one
-folder per repository under `src/`, named by the repository's id, so a file is cited `<repository id>/<path>`
+folder per repository under `as-is/`, named by the repository's id, so a file is cited `<repository id>/<path>`
 ([ADR-0052](../../../../../../docs/decisions/0052-several-legacy-repositories-per-application.md)). Say which repositories
 and commits were read in one line at the top of every artifact. If the application has no legacy repository, the
 stage cannot start: the orchestrator says so, and the fix is registering one on the application in the portal.
