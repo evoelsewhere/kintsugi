@@ -34,14 +34,14 @@ export interface PlanPanelProps {
   blocked: string | undefined;
   selected: ReadonlySet<string>;
   onSelect(ids: string[]): void;
-  /** A planning run was queued or finished: the run list is stale. */
-  onRunsChanged(): Promise<void>;
+  /** A planning run was queued, or a person opened one: show it with its steps and live log. */
+  onOpenRun(run: JobRunView): void | Promise<void>;
 }
 
 /** The planned items of a batch a person can still run, in plan order. */
 const selectableOf = (batch: PlanBatch, status: Record<string, ItemStatus>): string[] => batch.items.filter((id) => OPEN.includes(status[id] ?? "retired"));
 
-export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, blocked, selected, onSelect, onRunsChanged }: PlanPanelProps): React.JSX.Element {
+export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, blocked, selected, onSelect, onOpenRun }: PlanPanelProps): React.JSX.Element {
   const toast = useToast();
   const latest = planRuns[0];
   const planning = latest !== undefined && isActiveStatus(latest.status);
@@ -57,9 +57,9 @@ export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, b
 
   async function plan(): Promise<void> {
     try {
-      await jobRunsApi.runStage(projectId, applicationId, "plan-understand");
-      toast.success("Planning queued", "An agent reads the item graph and the assessment and proposes the order. It takes a few minutes.");
-      await onRunsChanged();
+      const run = await jobRunsApi.runStage(projectId, applicationId, "plan-understand");
+      toast.success("Planning queued", "An agent reads the item graph and the assessment and proposes the order. It takes a few minutes; follow it on the Runs tab.");
+      await onOpenRun(run);
     } catch (failure) {
       toast.error("Could not queue the planning run", failure);
     }
@@ -97,7 +97,14 @@ export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, b
           </div>
           {planButton("Generate Plan")}
         </CardHeader>
-        {planning ? <p className="mt-2 text-[12px] text-text-secondary">Planning: the run started {formatRelative(latest.createdAt)}.</p> : null}
+        {planning ? (
+          <p className="mt-2 text-[12px] text-text-secondary">
+            Planning: the run started {formatRelative(latest.createdAt)}.{" "}
+            <button type="button" className="underline" onClick={() => void onOpenRun(latest)}>
+              Open the run
+            </button>
+          </p>
+        ) : null}
         {problems.length === 0 ? null : <p className="mt-2 text-[12px] text-text-secondary">Before planning: {problems.join("; ")}. Bind a model to the agent in Settings → Providers → Agent model bindings.</p>}
         {failure === undefined ? null : <p className="mt-2 text-[12px] text-[var(--ds-status-red)]">The last planning run failed: {failure}</p>}
       </Card>

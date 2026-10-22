@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { type JobRunView, jobRunsApi } from "@/lib/api/job-runs";
 import type { ProjectDetail } from "@/lib/api/projects";
 import { formatRelative } from "@/lib/format";
+import { stageLabel } from "@/lib/stages";
 import type { Loader } from "@/lib/use-loader";
 
 export interface ScopedRunsLabels {
@@ -24,6 +25,8 @@ export interface ScopedRunsLabels {
   emptyDescription: string;
   /** What a run's scope holds, singular: "item" or "unit". */
   noun: string;
+  /** The stage the panel is about; runs of the stages that go with it (planning, rebuild) are labelled with theirs. */
+  stage?: string;
 }
 
 interface ScopedRunsPanelProps {
@@ -75,6 +78,7 @@ export function ScopedRunsPanel({ project, runs, loader, canRun, initialRun, lab
                       <li key={run.id} className={index > 0 ? "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)] py-2.5" : "py-2.5"}>
                         <div className="flex flex-wrap items-center gap-2">
                           <RunStatusBadge status={run.status} />
+                          {labels.stage === undefined || run.name === labels.stage ? null : <StatusBadge tone="muted" label={stageLabel(run.name)} />}
                           {run.abandonedAt === undefined ? null : <StatusBadge tone="muted" label="Abandoned" />}
                           {run.scope?.set === undefined ? null : <span className="rounded-full bg-hover px-2 py-0.5 font-mono text-[11px] text-text-secondary">{run.scope.set}</span>}
                           {run.attempt > 1 ? <span className="text-[11px] text-text-muted">attempt {run.attempt}</span> : null}
