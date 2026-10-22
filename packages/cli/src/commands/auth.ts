@@ -3,6 +3,8 @@ import type { Command } from "commander";
 import type { CliDeps } from "../cli.js";
 import { CliError, isProfileId, validateInstallationUrl } from "../profile.js";
 import { emit, selectedProfile, type CommandOptions } from "./shared.js";
+import { oauthFor, parseOAuthCredential } from "../oauth.js";
+import { withCredentialLock } from "../oauth-lock.js";
 
 export function registerAuthCommands(program: Command, deps: CliDeps): void {
   const auth = program.command("auth").description("Manage local Kintsugi credentials");
@@ -26,15 +28,19 @@ export function registerAuthCommands(program: Command, deps: CliDeps): void {
         caFile = resolve(deps.cwd, options.caFile!);
         await (await import("../tls.js")).createFetchWithPrivateCa(caFile);
       }
-      let token: string;
-      if (options.tokenStdin === true) token = (await deps.readStdin()).trim();
-      else {
-        if (options.noInput === true || (options as { input?: boolean }).input === false || !deps.isTTY) throw new CliError("INPUT_REQUIRED", "Use --token-stdin or run login in an interactive terminal");
-        token = await deps.promptSecret();
+      const project = options.project ?? prior?.projectId;
+      const profile = { id, baseUrl, ...(project === undefined ? {} : { projectId: project }), ...((caFile ?? prior?.caFile) === undefined ? {} : { caFile: caFile ?? prior?.caFile }) };
+      if (options.tokenStdin === true) {
+        const token = (await deps.readStdin()).trim();
+        if (token.length === 0 || /[\r\n]/.test(token)) throw new CliError("TOKEN_INVALID", "The token must be a non-empty single line");
+        if (token.startsWith("knt_caw_") || token.startsWith("knt_crt_") || token.startsWith("{")) throw new CliError("TOKEN_INVALID", "OAuth credentials require browser sign-in; token-stdin only supports an existing legacy token");
+        await withCredentialLock(id, () => deps.credentials.set(id, token), { ...(deps.signal === undefined ? {} : { signal: deps.signal }) });
+      } else {
+        if (options.noInput === true || (options as { input?: boolean }).input === false) throw new CliError("INPUT_REQUIRED", "Browser sign-in requires interaction; omit --no-input");
+        if (project === undefined) throw new CliError("PROJECT_REQUIRED", "Choose the project to authorize with --project <id>");
+        await oauthFor(deps).beginBrowserLogin(profile, project);
       }
-      if (token.length === 0 || /[\r\n]/.test(token)) throw new CliError("TOKEN_INVALID", "The token must be a non-empty single line");
-      await deps.credentials.set(id, token);
-      config.profiles[id] = { id, baseUrl, ...(prior?.projectId === undefined ? {} : { projectId: prior.projectId }), ...((caFile ?? prior?.caFile) === undefined ? {} : { caFile: caFile ?? prior?.caFile }) };
+      config.profiles[id] = profile;
       config.activeProfile = id;
       await deps.profiles.save(config);
       emit(deps, this, { profile: id, baseUrl, authenticated: true });
@@ -43,12 +49,14 @@ export function registerAuthCommands(program: Command, deps: CliDeps): void {
   auth.command("status").description("Show the selected profile and credential availability").action(async function(this: Command) {
     const { profile } = await selectedProfile(deps, this);
     const credential = await deps.credentials.get(profile.id);
-    emit(deps, this, { profile: profile.id, baseUrl: profile.baseUrl, projectId: profile.projectId ?? null, authenticated: credential !== undefined });
+    const envelope = credential === undefined ? undefined : parseOAuthCredential(credential);
+    emit(deps, this, { profile: profile.id, baseUrl: profile.baseUrl, projectId: profile.projectId ?? null, authenticated: credential !== undefined, ...(envelope === undefined ? {} : { connectionId: envelope.connectionId, projectIds: envelope.projectIds, authentication: "browser" }) });
   });
 
   auth.command("logout").description("Remove the selected profile credential").action(async function(this: Command) {
     const { profile } = await selectedProfile(deps, this);
-    await deps.credentials.delete(profile.id);
+    const legacy = await oauthFor(deps).logout(profile);
+    if (legacy) deps.stderr.write("Legacy token removed locally. Revoke the legacy token in Kintsugi to disable other copies.\n");
     emit(deps, this, { profile: profile.id, authenticated: false });
   });
 }

@@ -40,4 +40,48 @@ describe("private CA transport", () => {
       await once(server, "close");
     }
   });
+
+  it.skipIf(!opensslAvailable)("returns streaming responses before the server finishes sending an event stream", async () => {
+    directory = await mkdtemp(join(tmpdir(), "kintsugi-private-ca-stream-"));
+    const keyFile = join(directory, "server.key");
+    const certFile = join(directory, "server.crt");
+    const generated = spawnSync(openssl, ["req", "-x509", "-newkey", "rsa:2048", "-keyout", keyFile, "-out", certFile, "-days", "1", "-nodes", "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1"], { stdio: "ignore", windowsHide: true });
+    expect(generated.status).toBe(0);
+    const key = await readFile(keyFile);
+    let markStarted!: () => void;
+    let releaseResponse!: () => void;
+    const responseStarted = new Promise<void>((resolve) => { markStarted = resolve; });
+    const finishResponse = new Promise<void>((resolve) => { releaseResponse = resolve; });
+    const server = createServer({ key, cert: await readFile(certFile) }, (_request, response) => {
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write("data: first\n\n");
+      markStarted();
+      void finishResponse.then(() => response.end("data: second\n\n"));
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    let responsePromise: Promise<Response> | undefined;
+    let response: Response | undefined;
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    try {
+      const address = server.address();
+      if (address === null || typeof address === "string") throw new Error("No local TLS port");
+      const fetchWithCa = await createFetchWithPrivateCa(certFile);
+      responsePromise = fetchWithCa(`https://127.0.0.1:${address.port}/events`);
+      await responseStarted;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timeoutTimer = setTimeout(() => reject(new Error("private-CA fetch waited for the full response body")), 1_000);
+      });
+      response = await Promise.race([responsePromise, timeout]);
+      if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+      expect(response.headers.get("content-type")).toBe("text/event-stream");
+    } finally {
+      if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+      releaseResponse();
+      if (response === undefined) response = await responsePromise?.catch(() => undefined);
+      await response?.text();
+      server.close();
+      await once(server, "close");
+    }
+  });
 });

@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 
+export const CREDENTIAL_SERVICE = "com.kintsugi.cli";
+
 export interface CredentialStore {
   get(profileId: string): Promise<string | undefined>;
   set(profileId: string, value: string): Promise<void>;
@@ -45,15 +47,15 @@ export class NativeCredentialStore implements CredentialStore {
 
   private async entry(profileId: string): Promise<KeyringEntry> {
     if (this.platform === "linux") throw new Error("Linux credentials use Secret Service directly");
-    if (this.createEntry !== undefined) return this.createEntry("com.kintsugi.cli", profileId);
+    if (this.createEntry !== undefined) return this.createEntry(CREDENTIAL_SERVICE, profileId);
     const { AsyncEntry } = await import("@napi-rs/keyring");
-    return new AsyncEntry("com.kintsugi.cli", profileId);
+    return new AsyncEntry(CREDENTIAL_SERVICE, profileId);
   }
 
   private linuxArgs(action: "lookup" | "clear" | "store", profileId: string): string[] {
     const args: string[] = [action];
     if (action === "store") args.push("--label=Kintsugi CLI credential");
-    args.push("service", "com.kintsugi.cli", "profile", profileId);
+    args.push("service", CREDENTIAL_SERVICE, "profile", profileId);
     return args;
   }
 

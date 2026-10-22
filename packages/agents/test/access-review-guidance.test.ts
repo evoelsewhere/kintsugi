@@ -42,12 +42,14 @@ describe("access plugin handoff guidance", () => {
 
   it("separates CLI setup and optional SSE watch from the chosen AI's read-only MCP role", async () => {
     const skill = await readSkill();
-    expect(skill).toContain("local Kintsugi CLI owns plugin setup, local MCP configuration, and authentication");
-    expect(skill).toContain("configured local MCP connection to read task briefs, cited standards and context, review evidence, and task status");
+    expect(skill).toContain("The local Kintsugi CLI authenticates the developer, prepares the client package, and runs as the local stdio MCP bridge when the AI client calls Kintsugi.");
+    expect(skill).toContain("The developer prompts and works in their chosen AI app; the CLI does not start the AI or inject a prompt.");
+    expect(skill).toContain("The current bridge exposes `project_list`, `task_list`, `task_brief`, `document_get`, `document_search`, and `task_status`");
     expect(skill).toContain("does not run or operate the assistant");
-    expect(skill).toContain("current adapter exposes `project_list`, `task_list`, `task_brief`, `document_get`, `document_search`, and `task_status`");
+    expect(skill).toContain("The current bridge exposes `project_list`, `task_list`, `task_brief`, `document_get`, `document_search`, and `task_status`");
     expect(skill).toContain("`review_get` is exposed only when the review capability is enabled");
-    expect(skill).toContain("All MCP tools are read-only. There is no MCP watch tool or gate-write operation");
+    expect(skill).toContain("These tools do not edit tasks, documents, or repositories");
+    expect(skill).toContain("There is no MCP watch tool or gate-write operation");
     expect(skill).toContain("only when the developer asks to monitor, use `kintsugi task watch <unitId>`");
     expect(skill).toContain("subscribes to durable task events over SSE");
     expect(skill).toContain("`--after-event-id` to resume, and `--limit` to bound the stream");

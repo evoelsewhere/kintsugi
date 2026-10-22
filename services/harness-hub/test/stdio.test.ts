@@ -44,6 +44,7 @@ describe("Coding Agent Workflow stdio MCP process", () => {
       "task_status",
     ]);
     expect(listed.tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
+    expect(listed.tools.find((tool) => tool.name === "task_brief")?.annotations?.idempotentHint).toBe(false);
 
     const documentTool = listed.tools.find((tool) => tool.name === "document_get");
     expect(documentTool?.inputSchema.required).toEqual(expect.arrayContaining([
