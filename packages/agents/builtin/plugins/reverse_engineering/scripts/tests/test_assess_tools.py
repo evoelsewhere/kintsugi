@@ -110,6 +110,62 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(docmd.read_text(path), first)
 
+    def test_a_vue_and_a_java_repository_are_both_counted_with_their_templates_branches(self):
+        files = {
+            'web/src/App.vue': '<template>\n  <li v-for="item in items" v-if="item.ok">{{ item }}</li>\n</template>\n<script>\nexport default { methods: { go(a) { if (a) { return 1 } return 0 } } }\n</script>\n<style lang="scss">\n.a { color: red }\n</style>\n',
+            'web/src/main.mts': 'export const x = 1\n',
+            'web/.nuxt/dist/skipped.vue': '<template><p/></template>\n',
+            'api/src/Main.java': 'class Main {\n  void run(int a) {\n    if (a > 0) { return; }\n  }\n}\n',
+            'api/src/page.jsp': '<c:if test="${ok}">yes</c:if>\n',
+        }
+        for relative, text in files.items():
+            os.makedirs(os.path.dirname(os.path.join(self.source, *relative.split('/'))), exist_ok=True)
+            with open(os.path.join(self.source, *relative.split('/')), 'w', encoding='utf-8') as handle:
+                handle.write(text)
+        result = self.inventory()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        raw = json.loads(docmd.read_text(os.path.join(self.scratch, 'inventory.json')))
+        self.assertEqual(raw['languages'], {'JSP': 1, 'Java': 1, 'TypeScript': 1, 'Vue': 1})
+        by_path = {entry['path']: entry for entry in raw['files']}
+        self.assertNotIn('web/.nuxt/dist/skipped.vue', by_path)
+        # The decisions of the template (v-for, v-if) and of the script (if) all count.
+        self.assertEqual(by_path['web/src/App.vue']['cyclomaticComplexity'], 4)
+        self.assertGreater(by_path['api/src/page.jsp']['cyclomaticComplexity'], 1)
+
+    def test_the_language_of_a_file_comes_from_its_extension_or_its_name_and_unknown_ones_are_other(self):
+        from inventory import language_for
+        expected = {
+            'src/Main.java': 'Java', 'ui/App.VUE': 'Vue', 'batch/PAYROLL.CBL': 'COBOL', 'lib/util.h': 'C/C++', 'a/b.erl': 'Erlang',
+            'forms/Main.dfm': 'Delphi', 'rpg/ORD001.rpgle': 'RPG', 'x/mod.zig': 'Zig', 'a/Makefile': 'Makefile', 'docker/Dockerfile': 'Dockerfile',
+            'db/pkg.pkb': 'PL/SQL', 'ops/run.ps1': 'PowerShell', 'old/Calc.cls': 'Visual Basic', 'a/b.hs': 'Haskell', 'a/b.lua': 'Lua',
+            'a/data.json': 'Other', 'a/archive.zip': 'Other', 'a/noextension': 'Other', 'a/b.unknownext': 'Other',
+        }
+        self.assertEqual({path: language_for(path) for path in expected}, expected)
+
+    def test_the_generated_table_is_well_formed_and_keeps_the_names_the_inventory_always_used(self):
+        import languages
+        for extension, name in languages.EXTENSIONS.items():
+            self.assertRegex(extension, r'^\.[^\s./]+$')
+            self.assertEqual(extension, extension.lower())
+            self.assertTrue(name.strip(), extension)
+        for filename, name in languages.FILENAMES.items():
+            self.assertEqual(filename, filename.lower())
+            self.assertTrue(name.strip(), filename)
+        self.assertGreater(len(set(languages.EXTENSIONS.values())), 300)
+        for extension, name in {'.c': 'C', '.h': 'C/C++', '.md': 'Markdown', '.sh': 'Shell', '.vb': 'Visual Basic', '.cbl': 'COBOL', '.yaml': 'YAML'}.items():
+            self.assertEqual(languages.EXTENSIONS[extension], name)
+
+    def test_comments_and_decisions_follow_the_language(self):
+        from inventory import analyze
+        pascal = analyze('a.pas', '{ a comment }\n(* another *)\nbegin\n  if x then y := 1;\nend.\n', 'Pascal')
+        self.assertEqual((pascal['commentLines'], pascal['codeLines'], pascal['cyclomaticComplexity']), (2, 3, 2))
+        lisp = analyze('a.lisp', '; a comment\n(defun f (x) (if x 1 (when y 2)))\n', 'Common Lisp')
+        self.assertEqual((lisp['commentLines'], lisp['codeLines'], lisp['cyclomaticComplexity']), (1, 1, 3))
+        fortran = analyze('a.f90', '! a comment\nif (x > 0) then\n  y = 1\nend if\n', 'Fortran')
+        self.assertEqual((fortran['commentLines'], fortran['codeLines']), (1, 3))
+        batch = analyze('a.bat', 'REM a comment\n:: another\nif exist x echo ok\n', 'Batch')
+        self.assertEqual((batch['commentLines'], batch['codeLines']), (2, 1))
+
     def test_sources_are_recorded_in_order_and_validated(self):
         first, second = 'a' * 40, 'b' * 40
         for repo in ('billing-service', 'billing-db'):

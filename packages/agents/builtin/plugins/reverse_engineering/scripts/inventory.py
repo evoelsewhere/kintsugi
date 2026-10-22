@@ -15,6 +15,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import docmd  # noqa: E402
 import paths  # noqa: E402
+from languages import EXTENSIONS, FILENAMES  # noqa: E402
 
 MAX_FILE_BYTES = 5_000_000
 MAX_TOTAL_BYTES = 100_000_000
@@ -29,35 +30,64 @@ SKIP_DIRS = {
     '.git', '.hg', '.svn', '.idea', '.vscode', '__pycache__', '.venv', 'venv',
     'node_modules', 'vendor', 'vendors', 'dist', 'build', 'target', 'out',
     'coverage', 'bin', 'obj',
+    # Generated output and caches of the web and JVM toolchains.
+    '.nuxt', '.next', '.output', '.svelte-kit', '.gradle', '.turbo', '.cache', 'bower_components',
 }
-LANGUAGES = {
-    '.asm': 'Assembly', '.bas': 'BASIC', '.c': 'C', '.cc': 'C++', '.cpp': 'C++',
-    '.cbl': 'COBOL', '.cob': 'COBOL', '.cs': 'C#', '.css': 'CSS', '.dart': 'Dart',
-    '.go': 'Go', '.h': 'C/C++', '.hpp': 'C++', '.html': 'HTML', '.java': 'Java',
-    '.js': 'JavaScript', '.jsx': 'JavaScript', '.kt': 'Kotlin', '.kts': 'Kotlin',
-    '.md': 'Markdown', '.mjs': 'JavaScript', '.php': 'PHP', '.pl': 'Perl',
-    '.py': 'Python', '.rb': 'Ruby', '.rs': 'Rust', '.scala': 'Scala', '.sh': 'Shell',
-    '.sql': 'SQL', '.swift': 'Swift', '.ts': 'TypeScript', '.tsx': 'TypeScript',
-    '.vb': 'Visual Basic', '.xml': 'XML', '.yaml': 'YAML', '.yml': 'YAML',
-    # Visual Basic 6: classes, forms, user controls and designers.
-    '.cls': 'Visual Basic', '.frm': 'Visual Basic', '.ctl': 'Visual Basic', '.dsr': 'Visual Basic',
-}
-C_FAMILY = {'C', 'C++', 'C#', 'C/C++', 'Java', 'JavaScript', 'TypeScript', 'Go', 'Kotlin', 'Swift', 'PHP', 'Dart', 'Scala'}
+# The language of a file by its extension or its name: `languages.py`, generated from the Pygments catalogue by scripts/gen_languages.py.
+# A file of an extension that is not in it is "Other": counted, but not measured.
+DEFAULT_BRANCHES = ('if', 'for', 'while', 'case', 'catch')
+SHELL_BRANCHES = ('if', 'elif', 'for', 'while', 'until', 'case')
+LISP_BRANCHES = ('if', 'when', 'unless', 'cond', 'case', 'loop')
+ML_BRANCHES = ('if', 'case', 'match', 'when')
+PASCAL_BRANCHES = ('if', 'for', 'while', 'case', 'repeat', 'except')
+PERL_BRANCHES = ('if', 'elsif', 'unless', 'for', 'foreach', 'while', 'until')
+BASIC_BRANCHES = ('if', 'elseif', 'for', 'while', 'case', 'until')
+# Decision words per language; a language that is not here uses the C-family words above, which fit most of the rest.
 BRANCHES = {
     'COBOL': ('IF', 'EVALUATE', 'PERFORM'),
     'Python': ('if', 'for', 'while', 'except'),
     'Ruby': ('if', 'unless', 'for', 'while', 'rescue', 'when'),
     'Rust': ('if', 'for', 'while', 'match'),
     'SQL': ('case', 'when'),
-    'Visual Basic': ('if', 'elseif', 'for', 'while', 'case', 'until'),
-    'BASIC': ('if', 'elseif', 'for', 'while', 'case', 'until'),
+    'PL/SQL': ('if', 'elsif', 'for', 'while', 'case', 'when', 'loop', 'exception'),
+    'Visual Basic': BASIC_BRANCHES, 'BASIC': BASIC_BRANCHES, 'VBScript': BASIC_BRANCHES, 'BlitzBasic': BASIC_BRANCHES,
+    'Shell': SHELL_BRANCHES, 'Makefile': ('ifeq', 'ifneq', 'ifdef', 'ifndef'),
+    'PowerShell': ('if', 'elseif', 'for', 'foreach', 'while', 'switch', 'catch'),
+    'Perl': PERL_BRANCHES, 'Raku': PERL_BRANCHES,
+    'Tcl': ('if', 'elseif', 'for', 'foreach', 'while', 'switch', 'catch'),
+    'Lua': ('if', 'elseif', 'for', 'while', 'repeat'),
+    'Fortran': ('if', 'do', 'while', 'select', 'case'),
+    'Ada': ('if', 'elsif', 'for', 'while', 'case', 'when'),
+    'Pascal': PASCAL_BRANCHES, 'Delphi': PASCAL_BRANCHES, 'Modula-2': PASCAL_BRANCHES, 'Component Pascal': PASCAL_BRANCHES,
+    'Erlang': ('if', 'case', 'receive', 'try', 'catch'), 'Elixir': ('if', 'unless', 'case', 'cond', 'with', 'rescue'),
+    'Haskell': ML_BRANCHES, 'OCaml': ML_BRANCHES, 'F#': ML_BRANCHES, 'Standard ML': ML_BRANCHES, 'ReasonML': ML_BRANCHES,
+    'Elm': ML_BRANCHES, 'PureScript': ML_BRANCHES, 'Idris': ML_BRANCHES, 'Agda': ML_BRANCHES, 'Gleam': ML_BRANCHES,
+    'Common Lisp': LISP_BRANCHES, 'Emacs Lisp': LISP_BRANCHES, 'Scheme': LISP_BRANCHES, 'Racket': LISP_BRANCHES,
+    'Clojure': LISP_BRANCHES, 'ClojureScript': LISP_BRANCHES, 'Fennel': LISP_BRANCHES, 'Hy': LISP_BRANCHES,
+    'RPG': ('if', 'elseif', 'for', 'dow', 'dou', 'when', 'on-error'),
+    'PL/I': ('if', 'do', 'when', 'select'), 'Rexx': ('if', 'when', 'do'),
 }
-DEFAULT_BRANCHES = ('if', 'for', 'while', 'case', 'catch')
 COMMENT_PREFIXES = ('#', '//', '/*', '*', '*/', '--', '<!--', '-->', '*>')
+# Comment starts a language has besides those above (the line starts with one, after its indentation).
+SEMICOLON = (';',)
+PERCENT = ('%',)
+COMMENT_EXTRAS = {
+    'Fortran': ('!',), 'Assembly': (';', '@'), 'NASM': (';',), 'TASM': (';',), 'MIPS': ('#', ';'),
+    'Common Lisp': SEMICOLON, 'Emacs Lisp': SEMICOLON, 'Scheme': SEMICOLON, 'Racket': SEMICOLON, 'Clojure': SEMICOLON,
+    'ClojureScript': SEMICOLON, 'Fennel': SEMICOLON, 'Hy': SEMICOLON, 'AutoHotkey': SEMICOLON, 'INI': SEMICOLON,
+    'Erlang': PERCENT, 'Prolog': PERCENT, 'Matlab': PERCENT, 'Octave': PERCENT, 'Scilab': PERCENT, 'PostScript': PERCENT,
+    'Visual Prolog': PERCENT, 'Haskell': ('{-',), 'Elm': ('{-',), 'Idris': ('{-',), 'Agda': ('{-',), 'PureScript': ('{-',),
+    'OCaml': ('(*',), 'F#': ('(*',), 'Standard ML': ('(*',), 'ReasonML': ('(*',), 'Pascal': ('{', '(*'), 'Delphi': ('{', '(*'),
+    'Modula-2': ('(*',), 'Component Pascal': ('(*',), 'AppleScript': ('(*',), 'VimL': ('"',), 'PowerShell': ('<#',),
+    'Batch': ('::',), 'Haml': ('-#',), 'Jinja': ('{#',), 'Twig': ('{#',), 'Mako': ('##',), 'Smarty': ('{*',), 'ERB': ('<%#',),
+    'Handlebars': ('{{!',), 'RPG': ('*',), 'PL/I': ('/*',), 'Natural': ('*',), 'ColdFusion': ('<!---',), 'JSP': ('<%--',),
+    'Vue': ('<!--',), 'Svelte': ('<!--',), 'Astro': ('<!--',), 'Lua': ('--',), 'Ada': ('--',), 'SQL': ('--',), 'PL/SQL': ('--',),
+}
+REM_LANGUAGES = ('Visual Basic', 'BASIC', 'VBScript', 'BlitzBasic', 'Batch')
 
 
 def branch_pattern(language):
-    words = ('if', 'for', 'while', 'case', 'catch') if language in C_FAMILY else BRANCHES.get(language, DEFAULT_BRANCHES)
+    words = BRANCHES.get(language, DEFAULT_BRANCHES)
     return re.compile(r'\b(?:' + '|'.join(re.escape(word) for word in words) + r')\b', re.IGNORECASE)
 
 
@@ -104,7 +134,8 @@ def decode_source(data, path):
 
 
 def language_for(path):
-    return LANGUAGES.get(os.path.splitext(path)[1].lower(), 'Other')
+    name = os.path.basename(path).lower()
+    return FILENAMES.get(name) or EXTENSIONS.get(os.path.splitext(name)[1], 'Other')
 
 
 def analyze(path, text, language):
@@ -113,12 +144,13 @@ def analyze(path, text, language):
     comments = 0
     branches = 0
     pattern = branch_pattern(language)
+    prefixes = COMMENT_PREFIXES + COMMENT_EXTRAS.get(language, ())
     for line in lines:
         stripped = line.strip()
-        is_comment = stripped.startswith(COMMENT_PREFIXES)
+        is_comment = stripped.startswith(prefixes)
         if language == 'COBOL' and len(line) > 6 and line[6] in ('*', '/'):
             is_comment = True
-        if language in ('Visual Basic', 'BASIC') and (stripped.startswith("'") or stripped.upper().startswith('REM ')):
+        if language in REM_LANGUAGES and ((language != 'Batch' and stripped.startswith("'")) or stripped.upper().startswith('REM ')):
             is_comment = True
         if not stripped:
             blank += 1
