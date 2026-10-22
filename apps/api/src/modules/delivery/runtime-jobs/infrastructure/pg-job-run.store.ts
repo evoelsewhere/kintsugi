@@ -4,6 +4,7 @@
 // worker writes everything else.
 
 import { Injectable } from "@nestjs/common";
+import type { SourceRepo } from "@kintsugi/domain";
 import { decryptSecret } from "@kintsugi/secrets";
 import type { Pool } from "pg";
 import { getPool, withTransaction } from "#common/db/pool.js";
@@ -35,6 +36,7 @@ interface RunRow {
   failure_reason: string | null;
   source_repository_id: string | null;
   source_commit: string | null;
+  sources: unknown;
   script_hash: string | null;
   agent: string | null;
   actor: string | null;
@@ -57,13 +59,25 @@ interface RunRow {
 
 const SELECT = `
   select r.id, r.project_id, r.application_id, r.parent_id, r.kind, r.name, r.status, r.failure_reason,
-         r.source_repository_id, r.source_commit, r.script_hash, r.agent, r.actor, r.output_summary,
+         r.source_repository_id, r.source_commit, r.sources, r.script_hash, r.agent, r.actor, r.output_summary,
          r.started_at, r.finished_at, r.created_at, r.cancel_requested_at,
          r.inputs->'scope'->'items' as scope_items, r.inputs->'scope'->>'set' as scope_set, r.inputs->>'resumeOf' as resume_of, r.abandoned_at,
          w.id as write_id, w.status as write_status, w.branch as write_branch, w.pr_url as write_pr_url, w.error as write_error,
          (select count(*)::int from governance.restricted_record x where x.job_run_id = r.id) as restricted_records
     from workflow.job_run r
     left join workflow.document_write w on w.id = r.document_write_id`;
+
+/** The sources of a row: the recorded list, else the one repository a run recorded before the list existed. */
+function sourcesOf(row: RunRow): SourceRepo[] | undefined {
+  if (Array.isArray(row.sources)) {
+    const list = row.sources.flatMap((entry: unknown): SourceRepo[] => {
+      const { repositoryId, commit } = (entry ?? {}) as { repositoryId?: unknown; commit?: unknown };
+      return typeof repositoryId === "string" ? [{ repositoryId, ...(typeof commit === "string" ? { commit } : {}) }] : [];
+    });
+    if (list.length > 0) return list;
+  }
+  return row.source_repository_id === null ? undefined : [{ repositoryId: row.source_repository_id, ...(row.source_commit === null ? {} : { commit: row.source_commit }) }];
+}
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
@@ -79,6 +93,7 @@ function toView(row: RunRow): JobRunView {
     ...optional("failureReason", row.failure_reason),
     ...optional("sourceRepositoryId", row.source_repository_id),
     ...optional("sourceCommit", row.source_commit),
+    ...optional("sources", sourcesOf(row) ?? null),
     ...optional("scriptHash", row.script_hash),
     ...optional("agent", row.agent),
     ...optional("actor", row.actor),
@@ -113,9 +128,9 @@ export class PgJobRunStore extends JobRunStore {
 
   async createStageRun(run: NewStageRun): Promise<JobRunView> {
     await this.#pool.query(
-      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor, source_commit, inputs)
-       values ($1, $2, $3, 'stage', $4, $5, $6, $7, $8)`,
-      [run.id, run.projectId, run.applicationId, run.stage, run.sourceRepositoryId, run.actor ?? null, run.sourceCommit ?? null, JSON.stringify(run.inputs ?? {})],
+      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor, source_commit, sources, inputs)
+       values ($1, $2, $3, 'stage', $4, $5, $6, $7, $8, $9)`,
+      [run.id, run.projectId, run.applicationId, run.stage, run.sources[0]!.repositoryId, run.actor ?? null, run.sources[0]!.commit ?? null, JSON.stringify(run.sources), JSON.stringify(run.inputs ?? {})],
     );
     const result = await this.#pool.query<RunRow>(`${SELECT} where r.id = $1`, [run.id]);
     return toView(result.rows[0]!);

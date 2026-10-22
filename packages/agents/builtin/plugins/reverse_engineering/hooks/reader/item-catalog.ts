@@ -1,4 +1,4 @@
-import { cardsOf, countOf, documentOf, fieldList, fieldText, itemsOf, recordsOf, sectionText, textOf } from './document.js'
+import { cardsOf, countOf, documentOf, fieldList, fieldText, itemsOf, listOf, recordsOf, sectionText, textOf } from './document.js'
 import { sectionsOf, tablesIn } from './markdown.js'
 import { resolveDots } from './paths.js'
 
@@ -45,7 +45,8 @@ export type ItemCatalogItem = {
 
 export type ItemCatalog = {
   app: string
-  source: { repo?: string; commit?: string }
+  /** The legacy repositories and commits the catalog was built from, `<repository id>@<commit>` (ADR-0052). */
+  source: { sources: string[] }
   modules: ItemCatalogModule[]
   items: ItemCatalogItem[]
   /** The unassigned files the index lists (the first ones); `unassignedCount` counts them all. */
@@ -141,12 +142,10 @@ export function parseItemCatalog(indexText: string, moduleTexts: Readonly<Record
     seen.add(item.id)
     return true
   })
-  const repo = textOf(data.sourceRepository)
-  const commit = textOf(data.sourceCommit, 80)
 
   return {
     app: textOf(data.app) ?? '',
-    source: { ...(repo === undefined ? {} : { repo }), ...(commit === undefined ? {} : { commit }) },
+    source: { sources: listOf(data.sources, 32, 200) },
     modules: [...modules.values()],
     items,
     unassigned: paths(itemsOf(under('Unassigned files'))),

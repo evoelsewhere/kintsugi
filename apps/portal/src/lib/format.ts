@@ -41,6 +41,25 @@ export function formatBytes(bytes: number | undefined): string {
 }
 
 /** The first 12 characters of a commit id. */
+/** One legacy repository a run read, at a commit (ADR-0052). */
+export interface SourceRepo {
+  repositoryId: string;
+  commit?: string;
+}
+
+/** `repo@abc1234` of each source, comma separated; a source whose commit is not known yet shows its id alone. */
+export function sourcesLabel(sources: readonly SourceRepo[] | undefined): string {
+  return (sources ?? []).map((source) => (source.commit === undefined ? source.repositoryId : `${source.repositoryId}@${source.commit.slice(0, 12)}`)).join(", ");
+}
+
+/** The `<repository id>@<commit>` entries of an inventory or catalog, shortened the same way. */
+export function sourceEntriesLabel(entries: readonly string[] | undefined): string {
+  return (entries ?? []).map((entry) => {
+    const [repo = "", commit = ""] = entry.split("@");
+    return commit === "" ? repo : `${repo}@${commit.slice(0, 12)}`;
+  }).join(", ");
+}
+
 export function shortSha(sha: string | undefined): string {
   return sha === undefined ? "—" : sha.slice(0, 12);
 }

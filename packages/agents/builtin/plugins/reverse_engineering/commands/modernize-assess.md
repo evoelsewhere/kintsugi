@@ -102,7 +102,7 @@ budget meeting.
 
 ## Step 1 — Inventory
 
-Script step `scripts/inventory.py $app --source <source checkout> --source-repo <the application's repository> --source-commit <the commit the job read> --out 10-applications/$app/01-legacy --scratch scratch/$app` writes `10-applications/$app/01-legacy/inventory.md` (front matter with the figures of record; tables of the languages, the directories, the size distribution and the 50 most complex files) and, as scratch of the run that is never committed, `scratch/$app/inventory.json` with every file: SLOC and
+Script step `scripts/inventory.py $app --source <the source folder: one folder per legacy repository> --sources <`id@commit` of each legacy repository, comma separated> --out 10-applications/$app/01-legacy --scratch scratch/$app` writes `10-applications/$app/01-legacy/inventory.md` (front matter with the figures of record; tables of the languages, the directories, the size distribution and the 50 most complex files) and, as scratch of the run that is never committed, `scratch/$app/inventory.json` with every file: SLOC and
 file count per language, the per-file complexity (decision keywords counted the same way for every
 application: `IF`/`EVALUATE`/`PERFORM` for COBOL, `if`/`for`/`while`/`case`/`catch` for C-family, and the
 language's equivalents elsewhere), and the index `2.94 × KSLOC^1.10`. Use the index

@@ -89,7 +89,7 @@ class UnderstandToolsTests(unittest.TestCase):
 
     def split_rules(self, rules, items='invoicing/entry,tax/calc', docs=None, date='2026-10-21'):
         extra = ['--docs', docs] if docs else []
-        return run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', items, '--out', self.out, '--date', date, '--source-commit', 'c0ffee1', *extra)
+        return run('split_rules.py', 'billing', '--rules', rules, '--catalog', self.catalog, '--items', items, '--out', self.out, '--date', date, '--sources', f'legacy@{"c" * 40}', *extra)
 
     def rules_of(self, unit, root=None):
         """[(rule id, text of the rule's file)] in the order of the unit's rules index."""
@@ -231,7 +231,7 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual((files['Tax rounding']['version'], files['Tax floor']['version']), (2, 1))
         rounding = docmd.read_text(unit_file(self.out, 'tax/calc', 'rules', f"{ids['Tax rounding']}.md"))
         history = docmd.records_in(dict(docmd.sections(docmd.split_front_matter(rounding)[1], 2))['Version history'])
-        self.assertEqual([(row['version'], row['date'], row['change'], row['commit']) for row in history], [('1', '2026-10-21', 'Rule extracted', 'c0ffee1'), ('2', '2026-10-22', 'Rule changed', 'c0ffee1')])
+        self.assertEqual([(row['version'], row['date'], row['change'], row['commit']) for row in history], [('1', '2026-10-21', 'Rule extracted', f'legacy@{"c" * 40}'), ('2', '2026-10-22', 'Rule changed', f'legacy@{"c" * 40}')])
         # The rule that is no longer extracted becomes a tombstone and moves to the retired table.
         gone = docmd.read_text(unit_file(self.out, 'tax/calc', 'rules', f"{ids['Amount positive']}.md"))
         front = docmd.split_front_matter(gone)[0]
@@ -271,7 +271,7 @@ class UnderstandToolsTests(unittest.TestCase):
     def test_finish_items_writes_trace_the_understanding_record_and_work_items(self):
         inputs = self.finish_inputs()
         result = run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc,invoicing/entry', '--inputs', inputs, '--out', self.out,
-                     '--commit', 'a' * 40, '--run', 'run-1', '--repo', 'legacy', '--existing', os.path.join(inputs, *UNITS))
+                     '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1', '--existing', os.path.join(inputs, *UNITS))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('1 without a specification', result.stdout)
         front, body = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'trace.md')))
@@ -284,7 +284,7 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual(docmd.bullets_in(sections['Tests']), ['tests/tax.test'])
         self.assertEqual(docmd.bullets_in(sections['Files']), ['src/TAX.cbl'])
         record = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))[0]
-        self.assertEqual((record['status'], record['digest'], record['commit'], record['runId']), ('understood', 'sha256:tax/calc', 'a' * 40, 'run-1'))
+        self.assertEqual((record['status'], record['digest'], record['sources'], record['runId']), ('understood', 'sha256:tax/calc', ['legacy@' + 'a' * 40], 'run-1'))
         self.assertFalse(os.path.exists(os.path.join(self.out, *UNITS, 'invoicing')))
         unit = docmd.read_text(card_file(self.out, 'tax/calc'))
         self.assertIn('id: "billing/tax/calc"', unit)
@@ -294,10 +294,31 @@ class UnderstandToolsTests(unittest.TestCase):
         for root, _, names in os.walk(os.path.join(self.out, *APP)):
             self.assertFalse([name for name in names if name.endswith('.json')], root)
 
+    def test_the_unit_card_names_each_legacy_repository_its_files_come_from(self):
+        # Two legacy repositories are mounted side by side: files are cited `<repository id>/<path>`.
+        two = {**CATALOG, 'items': [
+            item('invoicing/entry', ['legacy/src/INV01.cbl'], ['INV01'], entryPoints=['INV01']),
+            item('tax/calc', ['legacy/src/TAX.cbl', 'legacy-data/schema/TAX.sql'], ['TAX']),
+        ]}
+        docs = os.path.join(self.root, 'docs-two')
+        for path, text in cc.render_catalog('billing', two, cc.item_graph(two['items'], TOPOLOGY)).items():
+            write(os.path.join(docs, *path.split('/')), text)
+        catalog = os.path.join(docs, *cc.paths.assessment_catalog_dir('billing').split('/'))
+        spec = 'legacy@' + 'a' * 40 + ',legacy-data@' + 'b' * 40
+        result = run('finish_items.py', 'billing', '--catalog', catalog, '--items', 'tax/calc', '--inputs', self.finish_inputs(), '--out', self.out, '--sources', spec, '--run', 'run-1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        card = docmd.read_text(card_file(self.out, 'tax/calc'))
+        self.assertIn('{repo: "legacy", paths: ["src/TAX.cbl"]}', card)
+        self.assertIn('{repo: "legacy-data", paths: ["schema/TAX.sql"]}', card)
+        record = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))[0]
+        self.assertEqual(record['sources'], ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40])
+        for bad in ('legacy', 'legacy@nothex', 'legacy@' + 'a' * 40 + ',legacy@' + 'b' * 40):
+            self.assertNotEqual(run('finish_items.py', 'billing', '--catalog', catalog, '--items', 'tax/calc', '--inputs', self.finish_inputs(), '--out', self.out, '--sources', bad).returncode, 0, bad)
+
     def test_rebuild_aggregates_merges_the_units_into_markdown_read_models(self):
         docs = os.path.join(self.root, 'docs')
         inputs = self.finish_inputs()
-        self.assertEqual(run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', docs, '--commit', 'a' * 40, '--run', 'run-1').returncode, 0)
+        self.assertEqual(run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', docs, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1').returncode, 0)
         for name in ('spec.md', 'rules.md', 'findings.md'):
             write(unit_file(docs, 'tax/calc', name), docmd.read_text(unit_file(inputs, 'tax/calc', name)))
         result = run('rebuild_aggregates.py', 'billing', '--docs', docs, '--out', self.out)

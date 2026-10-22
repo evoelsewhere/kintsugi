@@ -44,7 +44,7 @@ export interface CatalogItem {
 
 export interface CatalogView {
   ref: { ref: string; commit: string };
-  catalog: { app: string; source: { repo?: string; commit?: string }; modules: CatalogModule[]; unassigned: string[]; unassignedCount: number; ambiguities: string[] };
+  catalog: { app: string; source: { sources: string[] }; modules: CatalogModule[]; unassigned: string[]; unassignedCount: number; ambiguities: string[] };
   items: CatalogItem[];
   counts: Partial<Record<ItemStatus, number>>;
 }

@@ -2,7 +2,7 @@
 // about every runtime step it runs, and the ports the job runner depends on. A stage is a
 // sequence of steps; each step is a child run with its own job workspace.
 
-import type { Provenance } from "@kintsugi/domain";
+import type { Provenance, SourceRepo } from "@kintsugi/domain";
 import type { JobSpan } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 
@@ -29,8 +29,10 @@ export interface JobRun {
   name: string;
   status: JobStatus;
   failureReason?: string;
+  /** The first legacy repository and its commit; `sources` lists every one the run reads (ADR-0052). */
   sourceRepositoryId?: string;
   sourceCommit?: string;
+  sources?: SourceRepo[];
   inputs: Record<string, unknown>;
   limits: Partial<StepLimits>;
   scriptHash?: string;
@@ -50,6 +52,7 @@ export interface NewJobRun {
   name: string;
   sourceRepositoryId?: string;
   sourceCommit?: string;
+  sources?: SourceRepo[];
   inputs?: Record<string, unknown>;
   limits?: Partial<StepLimits>;
   actor?: string;
@@ -104,7 +107,7 @@ export interface JobStore {
   create(run: NewJobRun): Promise<void>;
   /** queued → running; false when the run is no longer queued (cancelled before it started). */
   start(id: string): Promise<boolean>;
-  update(id: string, patch: { sourceCommit?: string; scriptHash?: string; agent?: string }): Promise<void>;
+  update(id: string, patch: { sources?: SourceRepo[]; scriptHash?: string; agent?: string }): Promise<void>;
   succeed(id: string, summary: Record<string, unknown>): Promise<void>;
   /** `reason` must be redacted already. */
   fail(id: string, reason: string, summary?: Record<string, unknown>): Promise<void>;
@@ -121,8 +124,6 @@ export interface JobStore {
   addRestricted(id: string, path: string, content: Buffer): Promise<void>;
   /** Records the document write (queued) and links it to the run. */
   recordDocumentWrite(id: string, request: DocumentWriteRequest): Promise<void>;
-  /** The application's legacy repository (the first one when there are several). */
-  legacyRepository(projectId: string, applicationId: string): Promise<string | undefined>;
   /** The project's document repository. */
   documentRepository(projectId: string): Promise<string | undefined>;
   /** The provider/model bound to an agent: per project first, then the installation default. */

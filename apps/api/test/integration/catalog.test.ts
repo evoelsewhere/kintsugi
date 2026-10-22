@@ -30,7 +30,7 @@ export const CATALOG = catalogDocuments(
     { id: "customers/gone", files: ["src/Gone.java"], status: "retired" },
   ],
   ["README.md"],
-  { repo: "legacy", commit: "a".repeat(40) },
+  ["legacy@" + "a".repeat(40), "legacy-data@" + "b".repeat(40)],
   ["src/X.java is claimed by 2 leaves"],
 );
 
@@ -170,7 +170,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     const byId = new Map(data.items.map((entry) => [entry.id, entry]));
     expect(data.items.every((entry) => (entry as { assetClass?: string }).assetClass === "code")).toBe(true);
     expect(byId.get("billing/tax")?.pr).toEqual({ runId: "run-open", branch: "kintsugi/legacy-analyst/run-open", url: "https://git.example/pr/1" });
-    expect(byId.get("billing/invoice")?.understood).toEqual({ commit: "b".repeat(40), runId: "run-merged" });
+    expect(byId.get("billing/invoice")?.understood).toEqual({ commit: "legacy@" + "b".repeat(40), runId: "run-merged" });
     expect(byId.get("billing/rates")?.lastRun?.id).toBe("run-failed");
     expect(data.counts).toEqual({ understood: 1, failed: 3, "in-pr": 1, "not-analysed": 1, retired: 1 });
   });

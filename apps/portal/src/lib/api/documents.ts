@@ -75,8 +75,8 @@ export interface InventorySignals {
 
 export interface Inventory {
   app?: string;
-  sourceRepository?: string;
-  sourceCommit?: string;
+  /** The legacy repositories measured, `<repository id>@<commit>`. */
+  sources: string[];
   method?: string;
   complexityIndexFormula?: string;
   fileCount: number;

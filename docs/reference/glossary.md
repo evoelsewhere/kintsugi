@@ -13,7 +13,7 @@
 | **Harness** | An environment that runs an AI agent (pi, Claude Code, GitHub Copilot, Codex…) |
 | **Installation** | One self-hosted Kintsugi instance (Docker Compose), serving one organization |
 | **Kintsugi Runtime** | Kintsugi's agent environment, built on pi; runs in the worker, one job workspace per job |
-| **Job workspace** | `<data>/jobs/<id>/`: the read-only source checkout (`src`) and inputs (`in`), the writable output (`out`) and scratch (`tmp`) of one job run; the isolation boundary of runtime jobs and script steps, without an OS sandbox ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)) |
+| **Job workspace** | `<data>/jobs/<id>/`: the read-only source checkouts (`src/<repository id>/`, one per legacy repository) and inputs (`in`), the writable output (`out`) and scratch (`tmp`) of one job run; the isolation boundary of runtime jobs and script steps, without an OS sandbox ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)) |
 | **Member harness** | The AI tool a member uses locally: Claude Code, GitHub Copilot, ChatGPT/Codex |
 | **Pipeline definition** | The phases, stages, performers and gates an application follows: built-in, or declared in `kintsugi.yaml` |
 | **Pilot unit** | A unit flagged `pilot: true`, run first to check the project's standards before work at scale |

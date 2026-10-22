@@ -12,7 +12,7 @@ import { type Column, DataTable } from "@/components/ui/data-table";
 import { StatusDot } from "@/components/ui/status-dot";
 import { CHART_COLOR } from "@/components/results/chart-colors";
 import { type JobRunView, jobRunsApi } from "@/lib/api/job-runs";
-import { formatDateTime, formatDuration, formatRelative, shortSha } from "@/lib/format";
+import { formatDateTime, formatDuration, formatRelative, shortSha, sourcesLabel } from "@/lib/format";
 import { isActiveStatus, RUN_STATUS, styleOf } from "@/lib/status";
 import { useLoader } from "@/lib/use-loader";
 import { useNow } from "@/lib/use-now";
@@ -186,7 +186,7 @@ function LatestRun({ projectId, run, title }: { projectId: string; run: JobRunVi
   return (
     <Section
       title={title}
-      description={`${formatDateTime(run.createdAt)}${run.sourceCommit === undefined ? "" : ` · source at ${shortSha(run.sourceCommit)}`}${run.actor === undefined ? "" : ` · by ${run.actor}`}`}
+      description={`${formatDateTime(run.createdAt)}${run.sourceCommit === undefined ? "" : ` · source ${run.sources === undefined ? `at ${shortSha(run.sourceCommit)}` : sourcesLabel(run.sources)}`}${run.actor === undefined ? "" : ` · by ${run.actor}`}`}
       actions={
         <div className="flex items-center gap-2">
           <RunStatusBadge status={run.status} cancelling={run.cancelRequestedAt !== undefined && run.status === "running"} />
@@ -284,7 +284,7 @@ export function MonitoringTab({ projectId, runs }: { projectId: string; runs: re
     { id: "status", header: "Status", cell: (run) => <RunStatusBadge status={run.status} />, sort: (run) => run.status },
     { id: "started", header: "Started", cell: (run) => <span title={formatDateTime(run.createdAt)}>{formatRelative(run.createdAt)}</span>, sort: (run) => run.createdAt },
     { id: "duration", header: "Duration", cell: (run) => <span className="tabular-nums">{formatMs(durationMs(run, now))}</span>, sort: (run) => durationMs(run, now), align: "right" },
-    { id: "commit", header: "Source", cell: (run) => <span className="font-mono text-[12px] text-text-secondary">{run.sourceCommit === undefined ? "—" : shortSha(run.sourceCommit)}</span>, sort: (run) => run.sourceCommit },
+    { id: "commit", header: "Source", cell: (run) => <span className="font-mono text-[12px] text-text-secondary">{run.sourceCommit === undefined ? "—" : run.sources === undefined ? shortSha(run.sourceCommit) : sourcesLabel(run.sources)}</span>, sort: (run) => run.sourceCommit },
     ...(runs.some((run) => run.scope !== undefined)
       ? [{ id: "items", header: "Items", cell: (run: JobRunView) => (run.scope === undefined ? "—" : String(run.scope.items.length)), sort: (run: JobRunView) => run.scope?.items.length, align: "right" as const, title: "Catalog items the run covered" }]
       : []),

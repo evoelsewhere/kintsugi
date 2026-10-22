@@ -3,7 +3,7 @@
 // the document write that carries them to the document repo. The API records a stage run as
 // `queued` and enqueues it; the worker records everything else. Pure types.
 
-import type { Provenance } from "@kintsugi/domain";
+import type { Provenance, SourceRepo } from "@kintsugi/domain";
 
 export type JobRunKind = "stage" | "script" | "agent" | "workflow";
 export const JOB_RUN_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"] as const;
@@ -65,8 +65,11 @@ export interface JobRunView {
   status: JobRunStatus;
   /** Redacted. */
   failureReason?: string;
+  /** The first legacy repository (the application may link several, see `sources`). */
   sourceRepositoryId?: string;
   sourceCommit?: string;
+  /** Every legacy repository the run reads, each at its commit (ADR-0052). */
+  sources?: SourceRepo[];
   scriptHash?: string;
   agent?: string;
   actor?: string;
@@ -160,10 +163,9 @@ export interface NewStageRun {
   projectId: string;
   applicationId: string;
   stage: string;
-  sourceRepositoryId: string;
+  /** The legacy repositories the run reads, at least one; a commit pins it (a retry reads what the failed run read). */
+  sources: SourceRepo[];
   actor?: string;
-  /** Pinned source commit (a retry reads what the failed run read). */
-  sourceCommit?: string;
   /** Run inputs: scope, documentsCommit, resumeOf (ADR-0033). */
   inputs?: Record<string, unknown>;
 }

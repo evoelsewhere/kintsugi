@@ -1,4 +1,4 @@
-import { countOf, documentOf, numberOf, recordsOf, textOf } from './document.js'
+import { countOf, documentOf, listOf, numberOf, recordsOf, textOf } from './document.js'
 import { sectionsOf, tablesIn } from './markdown.js'
 
 /**
@@ -44,8 +44,8 @@ export type InventorySignals = {
 
 export type Inventory = {
   app?: string
-  sourceRepository?: string
-  sourceCommit?: string
+  /** The legacy repositories measured and their commits, `<repository id>@<commit>`, in mount order (ADR-0052). */
+  sources: string[]
   method?: string
   complexityIndexFormula?: string
   fileCount: number
@@ -102,8 +102,6 @@ export function parseInventory(text: string): Inventory | null {
 
   const optional = {
     app: textOf(data.app),
-    sourceRepository: textOf(data.sourceRepository),
-    sourceCommit: textOf(data.sourceCommit),
     method: textOf(data.method, 500),
     complexityIndexFormula: textOf(data.complexityIndexFormula),
     complexityPerKsloc: numberOf(data.complexityPerKsloc),
@@ -111,6 +109,7 @@ export function parseInventory(text: string): Inventory | null {
 
   return {
     ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== undefined)),
+    sources: listOf(data.sources, 32, 200),
     fileCount: countOf(data.fileCount) || files.length,
     sourceFileCount: countOf(data.sourceFileCount) || files.length,
     totalLines: countOf(data.totalLines),

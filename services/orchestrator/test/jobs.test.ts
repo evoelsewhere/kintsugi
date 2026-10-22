@@ -51,7 +51,6 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
 
   function setup(files: AgentFiles, mockOutputs?: boolean): { store: MemoryJobStore; runner: JobRunner; writes: Array<{ repository: string; request: DocumentWriteRequest }>; agents: ReturnType<typeof writingAgentRuntime> } {
     const store = new MemoryJobStore();
-    store.legacy = { demo: "legacy" };
     const writes: Array<{ repository: string; request: DocumentWriteRequest }> = [];
     const agents = writingAgentRuntime(files);
     const runner = new JobRunner({
@@ -88,7 +87,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
         seen.inventory = documentOf(readFileSync(join(inputs, "10-applications", "demo", "01-legacy", "inventory.md"), "utf8")).data as unknown as { sourceFileCount: number };
         seen.intent = readFileSync(join(inputs, "10-applications", "demo", "00-inputs", "INTENT.md"), "utf8");
         try {
-          writeFileSync(join(src, "src", "main.c"), "tampered");
+          writeFileSync(join(src, "legacy", "src", "main.c"), "tampered");
           seen.srcWritable = true;
         } catch {
           seen.srcWritable = false;
@@ -149,11 +148,11 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     // The item catalog: every inventory file in one item or unassigned (mock topology: one module per top folder).
     const catalogDir = join(out, "10-applications", "demo", "01-legacy", "_catalog");
     const catalogIndex = readFileSync(join(catalogDir, "index.md"), "utf8");
-    const catalog = parseItemCatalog(catalogIndex, { src: readFileSync(join(catalogDir, "src.md"), "utf8") })!;
+    const catalog = parseItemCatalog(catalogIndex, { legacy: readFileSync(join(catalogDir, "legacy.md"), "utf8") })!;
     expect(documentOf(catalogIndex).data["generatedBy"]).toBe("reconcile_catalog.py");
-    expect(catalog.items.map((item) => [item.id, item.files, item.status])).toEqual([["src/src", ["src/main.c", "src/util.c"], "active"]]);
+    expect(catalog.items.map((item) => [item.id, item.files, item.status])).toEqual([["legacy/src", ["legacy/src/main.c", "legacy/src/util.c"], "active"]]);
     expect(catalog.items[0]?.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(catalog.unassigned).toEqual(["README.md"]);
+    expect(catalog.unassigned).toEqual(["legacy/README.md"]);
     expect(existsSync(join(out, "restricted"))).toBe(false);
     expect(store.restricted.get(agent!.id)?.get("SECRETS.local.md")).toContain("hu**");
     expect(JSON.stringify(run?.outputSummary)).not.toContain("SECRETS");
@@ -162,7 +161,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const artifacts = store.artifacts.get(id) ?? [];
     expect(artifacts.map((entry) => entry.path).sort()).toEqual([
       "10-applications/demo/01-legacy/_catalog/index.md",
-      "10-applications/demo/01-legacy/_catalog/src.md",
+      "10-applications/demo/01-legacy/_catalog/legacy.md",
       "10-applications/demo/01-legacy/_tools/extract_topology.py",
       "10-applications/demo/01-legacy/architecture.mmd",
       "10-applications/demo/01-legacy/assessment.md",

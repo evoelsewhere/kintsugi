@@ -31,8 +31,9 @@ describe('markdown', () => {
 
 const INVENTORY_MD = `---
 app: "billing"
-sourceRepository: "legacy"
-sourceCommit: "${'a'.repeat(40)}"
+sources:
+  - "legacy@${'a'.repeat(40)}"
+  - "legacy-data@${'b'.repeat(40)}"
 method: "static inventory"
 complexityIndexFormula: "2.94 × KSLOC^1.10"
 fileCount: 3
@@ -85,7 +86,7 @@ oversized: 0
 describe('inventory', () => {
   test('reads the figures of record, the roll-ups and the most complex files, without the .git pointer', () => {
     const inventory = parseInventory(INVENTORY_MD)
-    expect(inventory).toMatchObject({ app: 'billing', sourceCommit: 'a'.repeat(40), fileCount: 3, sourceFileCount: 2, sloc: 30, ksloc: 0.03, complexityIndex: 0.11, complexityPerKsloc: 100, directoryDepth: 1 })
+    expect(inventory).toMatchObject({ app: 'billing', sources: ['legacy@' + 'a'.repeat(40), 'legacy-data@' + 'b'.repeat(40)], fileCount: 3, sourceFileCount: 2, sloc: 30, ksloc: 0.03, complexityIndex: 0.11, complexityPerKsloc: 100, directoryDepth: 1 })
     expect(inventory?.files.map(file => [file.path, file.sloc, file.complexity])).toEqual([
       ['A.java', 24, 3],
       ['schema.sql', 6, 0],

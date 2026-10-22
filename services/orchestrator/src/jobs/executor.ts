@@ -53,7 +53,7 @@ export interface ExecutorDeps {
   plan: StagePlan;
   /** The stage run, for gate requests. */
   run: { id: string; projectId: string; applicationId?: string };
-  values: { app: string; repo: string; commit: string };
+  values: { app: string; sources: string };
   /** The stage's directories: declared documents (in), intermediate outputs (work), published outputs (out). */
   dirs: { root: string; in: string; work: string; out: string };
   limits: { maxAgents: number; concurrency: number };
@@ -183,8 +183,8 @@ export class StagePlanExecutor {
   // ---------------------------------------------------------------------------
 
   #values(extra: Placeholders = {}): Placeholders {
-    const { app, repo, commit } = this.#deps.values;
-    return { app, repo, commit, run: this.#deps.run.id, ...(this.#round === 0 ? {} : { round: String(this.#round) }), ...extra };
+    const { app, sources } = this.#deps.values;
+    return { app, sources, run: this.#deps.run.id, ...(this.#round === 0 ? {} : { round: String(this.#round) }), ...extra };
   }
 
   #context(): StageContext {

@@ -17,6 +17,8 @@ export interface JobRunView {
   failureReason?: string;
   sourceRepositoryId?: string;
   sourceCommit?: string;
+  /** Every legacy repository the run reads, each at its commit (the first is `sourceRepositoryId`). */
+  sources?: Array<{ repositoryId: string; commit?: string }>;
   scriptHash?: string;
   agent?: string;
   actor?: string;

@@ -38,7 +38,7 @@ def inv_file(path, lines, complexity=1, content=None):
 
 
 INVENTORY = {
-    'app': 'billing', 'sourceRepository': 'legacy', 'sourceCommit': 'a' * 40,
+    'app': 'billing', 'sources': ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40],
     'files': [
         inv_file('src/billing/INVOICE.cbl', 900, 120),
         inv_file('src/billing/RATES.cbl', 400, 30),
@@ -122,7 +122,7 @@ class CatalogTests(unittest.TestCase):
         ids = [item['id'] for item in catalog['items']]
         self.assertEqual(ids, ['billing/invoice', 'billing/nightly', 'billing/rates', 'billing/util', 'customers/custupd'])
         self.assertEqual([module['id'] for module in catalog['modules']], ['billing', 'customers'])
-        self.assertEqual(catalog['source'], {'repo': 'legacy', 'commit': 'a' * 40})
+        self.assertEqual(catalog['sources'], ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40])
         by_id = {item['id']: item for item in catalog['items']}
         # A directory leaf takes every inventory file under it; small leaves of one directory are grouped.
         self.assertEqual(by_id['customers/custupd']['files'], ['src/cust/upd/CUSTLIB.cbl', 'src/cust/upd/CUSTUPD.cbl', 'src/cust/upd/CUSTUPD2.cbl'])
@@ -332,7 +332,7 @@ class CatalogDocumentTests(unittest.TestCase):
             read = items[item['id']]
             for key in ('module', 'kind', 'name', 'files', 'leaves', 'entryPoints', 'loc', 'complexity', 'digest', 'status'):
                 self.assertEqual(read[key], item[key], (item['id'], key))
-        self.assertEqual(catalog['source'], {'repo': 'legacy', 'commit': 'a' * 40})
+        self.assertEqual(catalog['sources'], ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40])
         self.assertEqual([module['id'] for module in catalog['modules']], ['billing', 'customers'])
         self.assertEqual(catalog['unassigned'], ['README.md'])
         self.assertEqual(catalog['app'], 'billing')

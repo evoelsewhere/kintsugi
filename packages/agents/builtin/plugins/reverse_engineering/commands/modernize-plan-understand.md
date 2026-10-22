@@ -55,7 +55,7 @@ best in one run. This stage proposes that order.
 
 ## The plan
 
-`plan.md` is Markdown: front matter with `version` 1, the source commit the plan was made at (`catalogCommit`), the
+`plan.md` is Markdown: front matter with `version` 1, the sources the plan was made at (`catalogSources`, `<repository id>@<commit>` of each legacy repository), the
 number of items and of open ones, then the strategy and a section `## Batch <n>: <title>` per batch (the rationale; the
 fields `risk`, `loc`, `high complexity` and `cohesion`; the items; the items outside it that it depends on), and the tables
 `Left out` and `Dropped` (item and reason). The API serves it at

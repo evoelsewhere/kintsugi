@@ -24,8 +24,8 @@ repositories is the `scaffold` command, after the architecture is approved.
 This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **document repository**
 (`10-applications/$app/01-legacy/`: the assessment and the units' folders, `01-standards/`); the **legacy repository** of `$app` is
 your local clone, **read-only** (Kintsugi's member hooks refuse writes to it). Before you start, say in one line which source
-commit you read: the one the assessment recorded for `$app` (`sourceCommit` in `10-applications/$app/01-legacy/inventory.md`, and in
-the portal); check out exactly that commit. Everything this command writes goes on your own branch of the document repository
+commit of each legacy repository you read: the ones the assessment recorded for `$app` (`sources` in `10-applications/$app/01-legacy/inventory.md`, and in
+the portal); check out exactly those commits. Everything this command writes goes on your own branch of the document repository
 and reaches the project through a pull request. Run every subagent in the foreground and wait for its result: never end your
 turn while one is still running. Stop any server or other process you started before you finish, and say you did.
 

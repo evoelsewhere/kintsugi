@@ -64,7 +64,7 @@ def claims(units, inventory):
     return owner, ambiguities
 
 
-def build(app, topology, inventory, source, kinds, max_items):
+def build(app, topology, inventory, sources, kinds, max_items):
     leaves = tu.walk_topology(topology)
     sizes = {rel: entry['codeLines'] for rel, entry in inventory.items() if entry['codeLines'] is not None}
     units, ambiguities = tu.build_units(leaves, sizes, kinds, max_items)
@@ -103,7 +103,7 @@ def build(app, topology, inventory, source, kinds, max_items):
     catalog = {
         'app': app,
         'generatedBy': 'catalog_from_topology.py',
-        'source': {key: value for key, value in source.items() if value},
+        'sources': list(sources),
         'modules': modules,
         'items': items,
         'unassigned': [],
@@ -134,8 +134,8 @@ def main(argv):
             raise cc.DataError('topology.json is missing: the extraction step writes it')
         if not os.path.isfile(inventory_path):
             raise cc.DataError('inventory.json is missing: the inventory step writes it')
-        inventory, source = cc.load_inventory(inventory_path)
-        catalog = build(args.app, cc.read_json(topology_path), inventory, source, cc.unit_kinds(args.manifest), args.max_items)
+        inventory, sources = cc.load_inventory(inventory_path)
+        catalog = build(args.app, cc.read_json(topology_path), inventory, sources, cc.unit_kinds(args.manifest), args.max_items)
         if not catalog['items']:
             raise cc.DataError('the topology has no leaf with a file of the inventory (only data stores, or no leaves at all)')
         problems = cc.check_catalog(catalog, inventory)

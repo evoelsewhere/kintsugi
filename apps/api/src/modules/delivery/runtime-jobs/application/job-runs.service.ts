@@ -8,6 +8,7 @@ import { toPage } from "#common/application/pagination.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
+import type { SourceRepo } from "@kintsugi/domain";
 import { sleep } from "#common/util/async.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import {
@@ -60,11 +61,11 @@ export class JobRunsService {
   }
 
   /**
-   * Records a top-level stage run as `queued` and enqueues it. `inputs` and `sourceCommit` pin what
+   * Records a top-level stage run as `queued` and enqueues it. `inputs` and `sources` (commits) pin what
    * the run reads (scope, documentsCommit, resumeOf: ADR-0033). Several understand or design runs may be
    * active at once (each on its own items or units); any other stage runs once at a time per application.
    */
-  async startRun(projectId: string, applicationId: string, stage: string, actor: Actor, options: { inputs?: Record<string, unknown>; sourceCommit?: string } = {}): Promise<JobRunView> {
+  async startRun(projectId: string, applicationId: string, stage: string, actor: Actor, options: { inputs?: Record<string, unknown>; sources?: SourceRepo[] } = {}): Promise<JobRunView> {
     const plans = this.stages.plans(applicationId);
     const plan = plans.find((entry) => entry.id === stage);
     if (plan === undefined) {
@@ -74,8 +75,12 @@ export class JobRunsService {
     const application = project.applications.find((entry) => entry.id === applicationId);
     if (application === undefined) throw new NotFoundException(`Application ${applicationId} not found in project ${projectId}`);
     if (project.documentRepository === null) throw new ConflictException(`Project ${projectId} has no document repository`);
-    const legacy = application.asIs.legacy[0];
-    if (legacy === undefined) throw new ConflictException(`Application ${applicationId} has no legacy repository; register one on the application first`);
+    // Every legacy repository of the application is read, in the order they were linked (ADR-0052).
+    if (application.asIs.legacy.length === 0) throw new ConflictException(`Application ${applicationId} has no legacy repository; register one on the application first`);
+    const sources: SourceRepo[] = application.asIs.legacy.map((repository) => {
+      const commit = options.sources?.find((pinned) => pinned.repositoryId === repository.repositoryId)?.commit;
+      return { repositoryId: repository.repositoryId, ...(commit === undefined ? {} : { commit }) };
+    });
     if (!SCOPED_STAGES.includes(stage) && (await this.store.hasStageRun(projectId, applicationId, stage, ["queued", "running"]))) {
       throw new ConflictException(`A ${stage} run of ${applicationId} is already queued or running; wait for it or cancel it first`);
     }
@@ -92,10 +97,9 @@ export class JobRunsService {
       projectId,
       applicationId,
       stage,
-      sourceRepositoryId: legacy.repositoryId,
+      sources,
       actor: actor.username ?? actor.id,
       ...(options.inputs === undefined ? {} : { inputs: options.inputs }),
-      ...(options.sourceCommit === undefined ? {} : { sourceCommit: options.sourceCommit }),
     });
     try {
       await this.queue.enqueue(run.id);
@@ -111,7 +115,7 @@ export class JobRunsService {
   }
 
   /**
-   * Retries a failed stage run (ADR-0033): a new run on the same source commit, scope and pinned
+   * Retries a failed stage run (ADR-0033): a new run on the same source commits, scope and pinned
    * documents commit that resumes from the failed run's kept outputs. 409 unless the run failed.
    */
   async retry(projectId: string, id: string, actor: Actor): Promise<JobRunView> {
@@ -122,7 +126,7 @@ export class JobRunsService {
     const pinned = typeof inputs["documentsCommit"] === "string" ? inputs["documentsCommit"] : run.outputSummary?.["documentsCommit"];
     return this.startRun(projectId, run.applicationId, run.name, actor, {
       inputs: { ...inputs, ...(typeof pinned === "string" ? { documentsCommit: pinned } : {}), resumeOf: id },
-      ...(run.sourceCommit === undefined ? {} : { sourceCommit: run.sourceCommit }),
+      ...(run.sources === undefined ? {} : { sources: run.sources }),
     });
   }
 

@@ -110,15 +110,26 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(docmd.read_text(path), first)
 
-    def test_source_identity_flags_are_recorded_and_commit_is_validated(self):
-        commit = 'A' * 40
-        result = self.inventory('--source-repo', 'billing-service', '--source-commit', commit)
+    def test_sources_are_recorded_in_order_and_validated(self):
+        first, second = 'a' * 40, 'b' * 40
+        result = self.inventory('--sources', f'billing-service@{first},billing-db@{second}')
         self.assertEqual(result.returncode, 0, result.stderr)
-        front, _ = docmd.split_front_matter(docmd.read_text(os.path.join(self.out, 'inventory.md')))
-        self.assertEqual(front['sourceRepository'], 'billing-service')
-        self.assertEqual(front['sourceCommit'], commit.lower())
-        result = run('inventory.py', 'billing', '--source-commit', 'bad')
-        self.assertEqual(result.returncode, 2)
+        front, body = docmd.split_front_matter(docmd.read_text(os.path.join(self.out, 'inventory.md')))
+        self.assertEqual(front['sources'], [f'billing-service@{first}', f'billing-db@{second}'])
+        self.assertNotIn('sourceCommit', front)
+        self.assertIn(f'`billing-service@{first}`, `billing-db@{second}`', body)
+        for bad in ('bad', f'x@{first}@y', f'x@{first},x@{second}', 'x@' + 'z' * 40, f'../x@{first}'):
+            self.assertEqual(run('inventory.py', 'billing', '--sources', bad).returncode, 2, bad)
+
+    def test_a_source_folder_with_one_folder_per_repository_is_inventoried_as_one_tree(self):
+        for repo, name in (('billing-service', 'main.py'), ('billing-db', 'schema.py')):
+            os.makedirs(os.path.join(self.source, repo, 'src'))
+            with open(os.path.join(self.source, repo, 'src', name), 'w', encoding='utf-8') as handle:
+                handle.write('def work(value):\n    return value\n')
+        result = self.inventory('--sources', f'billing-service@{"a" * 40},billing-db@{"b" * 40}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        raw = json.loads(docmd.read_text(os.path.join(self.scratch, 'inventory.json')))
+        self.assertEqual(sorted(entry['path'] for entry in raw['files']), ['billing-db/src/schema.py', 'billing-service/src/main.py'])
 
     def test_missing_required_parameter_exits_two_with_usage_and_no_output(self):
         result = run('inventory.py', 'billing', '--source', self.source)

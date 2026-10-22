@@ -139,10 +139,10 @@ const exists = (path: string): Promise<boolean> =>
     () => false,
   );
 
-/** The first source file of the checkout (sorted), cited as `path:1-1`. */
+/** The first source file of the checkout (sorted), cited as `path:1-1`; the checkout holds a folder per repository, each with its own `.git`. */
 async function citation(src: string | undefined): Promise<string> {
   if (src === undefined) return "README.md:1-1";
-  const files = (await listFiles(src).catch(() => [])).filter((file) => !file.path.startsWith(".git/") && file.path !== ".git");
+  const files = (await listFiles(src).catch(() => [])).filter((file) => !/(^|\/)\.git(\/|$)/.test(file.path));
   const code = files.find((file) => !/\.(md|txt|json|ya?ml)$/i.test(file.path)) ?? files[0];
   return `${code?.path ?? "README.md"}:1-1`;
 }
