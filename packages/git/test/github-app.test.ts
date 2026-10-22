@@ -108,7 +108,10 @@ describe("GitHub App installation credentials", () => {
 
   it("deduplicates concurrent installation-token requests", async () => {
     const mock = fakeFetch([tokenResponse("TEST-shared-token")]);
-    const provider = new GitHubInstallationCredentialProvider({ fetch: mock.fetch });
+    const provider = new GitHubInstallationCredentialProvider({
+      fetch: mock.fetch,
+      now: () => new Date("2026-10-21T10:00:00Z"),
+    });
     const app = connection();
 
     const [first, second] = await Promise.all([
