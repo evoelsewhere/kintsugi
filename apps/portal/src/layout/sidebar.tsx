@@ -89,13 +89,13 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
   const widthRef = useRef(width);
   // Content switches to the icon rail only after the collapse animation ends, so labels
   // do not vanish while the sidebar is still wide; expanding switches at once.
-  const [rail, setRail] = useState(targetRail);
+  const [railTransitionFinished, setRailTransitionFinished] = useState(targetRail);
+  const rail = targetRail && railTransitionFinished;
   useEffect(() => {
-    if (!targetRail) {
-      setRail(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setRail(true), TRANSITION_MS);
+    const timer = window.setTimeout(
+      () => setRailTransitionFinished(targetRail),
+      targetRail ? TRANSITION_MS : 0,
+    );
     return () => window.clearTimeout(timer);
   }, [targetRail]);
 

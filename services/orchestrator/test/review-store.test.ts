@@ -18,7 +18,7 @@ describe.skipIf(!hasDatabase)("Postgres member review scheduling (integration)",
     store = new PostgresMemberReviewStore(db.pool);
     await db.pool.query("insert into core.app_user (id, username, password_hash, password_salt) values ('review-admin', 'review-admin', 'test-hash', 'test-salt')");
     await db.pool.query("insert into admin.project (id, name) values ('billing', 'Billing')");
-    await db.pool.query("insert into admin.application (project_id, id, name, disposition) values ('billing', 'billing-api', 'Billing API', 'refactor')");
+    await db.pool.query("insert into admin.application (project_id, id, name) values ('billing', 'billing-api', 'Billing API')");
     await db.pool.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('review-store-server', 'github', 'GitHub', 'https://github.com', 'none')");
     await db.pool.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('review-store-code', 'review-store-server', 'https://github.com/Acme/Billing.git', 'main')");
     await db.pool.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('review-store-docs-server', 'plain-git', 'Docs', 'https://docs.example', 'none')");
