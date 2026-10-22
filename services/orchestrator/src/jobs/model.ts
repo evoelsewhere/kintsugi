@@ -3,6 +3,7 @@
 // sequence of steps; each step is a child run with its own job workspace.
 
 import type { Provenance } from "@kintsugi/domain";
+import type { JobSpan } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 
 export type JobKind = "stage" | "script" | "agent" | "workflow";
@@ -81,6 +82,22 @@ export interface JobEventRecord {
   data?: Record<string, unknown>;
 }
 
+/** One settled span of an agent attempt (monitoring.telemetry_span, ADR-0048). */
+export interface SpanRecord {
+  /** The top-level run, and the agent step (child run) when it is one. */
+  runId: string;
+  stepId?: string;
+  projectId: string;
+  applicationId?: string;
+  /** `<agent>@<version>`, the provider config id and the model id. */
+  agent: string;
+  provider: string;
+  model: string;
+  /** 1 for the first run of the step, 2 for a retry or a repair run. */
+  attempt: number;
+  span: JobSpan;
+}
+
 /** Persistence of job runs and what they need to know about the project. */
 export interface JobStore {
   get(id: string): Promise<JobRun | undefined>;
@@ -97,6 +114,8 @@ export interface JobStore {
   cancelRequested(ids: readonly string[]): Promise<string[]>;
   /** Appends an event to a run's live record; must not throw for a failing write (best effort). */
   addEvent(event: JobEventRecord): Promise<void>;
+  /** Stores the spans of an agent attempt; best effort like addEvent: a failing write never fails the run. */
+  addSpans(spans: readonly SpanRecord[]): Promise<void>;
   addArtifacts(id: string, entries: readonly ArtifactEntry[]): Promise<void>;
   /** Stores one file of the run's restricted/ output, encrypted. */
   addRestricted(id: string, path: string, content: Buffer): Promise<void>;

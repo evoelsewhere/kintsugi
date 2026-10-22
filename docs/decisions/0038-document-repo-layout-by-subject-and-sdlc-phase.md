@@ -1,6 +1,6 @@
 # ADR-0038: Document repo layout by subject and SDLC phase
 
-- Status: Accepted. Amended by [ADR-0042](0042-coding-agent-context-and-project-access.md) and [ADR-0043](0043-evidence-bound-pr-continuation.md) for immutable Coding Agent Workflow context and effective evidence-bound gate continuation.
+- Status: Accepted. The unit and application trees below are superseded by ADR-0042 and ADR-0051. Coding Agent Workflow task context and evidence-bound continuation amend the member access and gate-record rules (ADRs 0052, 0053 and 0054).
 - Date: 2026-10-15
 - Decision register: D55
 
@@ -8,13 +8,13 @@
 
 Each project has one document repo for everything except code. Its current layout grew around stages and tools rather than the subjects that live through the migration. Application inputs, assessment outputs, human documents, scripts and aggregates are mixed under `assessment/<app>/`; the same unit is spread across the catalog, per-item assessment files, the AS-IS knowledge tree and the unit-state tree. Other artifacts use inconsistent application dimensions or do not say whether a unit identifier is a full id or only its final segment.
 
-The current reference also has no durable homes for the P0 program charter and policies, the P1 portfolio, P2 TO-BE requirements and design, P6 cutover, P7 operation or a uniform gate record. Unit frontmatter is the only current gate-state record. Generated aggregates and authored inputs share confusing folder names, and the current sequential rule-number scheme can renumber rules when the extracted set changes. Progress must remain derived from Git artifacts; it must not become a second state machine in Postgres.
+The current reference also has no durable homes for the P0 program charter and policies, the P1 portfolio, P2 TO-BE requirements and design or a uniform gate record. Unit frontmatter is the only current gate-state record. Generated aggregates and authored inputs share confusing folder names, and the current sequential rule-number scheme can renumber rules when the extracted set changes. Progress must remain derived from Git artifacts; it must not become a second state machine in Postgres.
 
-The delivery method follows phases P0–P7 and gates G0–G6. A project therefore needs stable subject paths and reviewable evidence from an AS-IS rule through a TO-BE requirement and test result, while keeping runtime output, human review and implementation responsibilities distinct.
+The delivery method follows phases P0–P4 and gates G0–G4. A project therefore needs stable subject paths and reviewable evidence from an AS-IS rule through a TO-BE requirement and test result, while keeping runtime output, human review and implementation responsibilities distinct.
 
 ## Decision
 
-Keep one Git document repo per project, but organize it by subject and lifecycle rather than by stage or tool. Project-wide material stays at the root; every application's material lives under `applications/<app>/`; a unit lives in one directory for its full P1–P5 life:
+Keep one Git document repo per project, but organize it by subject and lifecycle rather than by stage or tool. Project-wide material stays at the root; every application's material lives under `applications/<app>/`; a unit lives in one directory for its full P1–P4 life:
 
 ```text
 kintsugi.yaml
@@ -28,8 +28,8 @@ applications/<app>/
   inputs/                                  # INTENT.md, graph/, telemetry/ attached by people
   assessment/                              # P1, assess outputs and tools
   to-be/                                   # P2: requirements.md, design.md
-  gates/G1.md G2.md G5.md G6.md            # application-level gate records
-  units/<module>/<unit>/                   # P1–P5, one directory per unit
+  gates/G1.md G2.md            # application-level gate records
+  units/<module>/<unit>/                   # P1–P4, one directory per unit
     unit.md                                # state and gate references
     as-is.md                               # P1
     rules.json                             # P1 machine extraction
@@ -37,9 +37,6 @@ applications/<app>/
     findings.json topology.json trace.json meta.json
     task.md design.md                      # P4
     reviews/G4.md                           # G4 record
-    verify/                                # P5 golden cases, equivalence and test runs
-  cutover/                                 # P6: plan.md, runbook.md, rollback.md, go-no-go.md
-  operate/                                 # P7: hypercare-report.md, handover.md
   generated/                               # rebuilt application aggregates
 ```
 
@@ -63,16 +60,16 @@ Keep auto-commit limited to unit state (`applications/*/units/**/unit.md`), gene
 
 This is a breaking path change; do not add compatibility symlinks, duplicate writes or fallback reads. Migrate an existing document repo in one reviewed PR:
 
-1. Build a mapping from each catalog item to its full `<app>/<module>/<unit>` id. Resolve legacy `golden/`, `runs/`, task and review paths using application ownership before moving anything; do not infer the app from a short module slug.
+1. Build a mapping from each catalog item to its full `<app>/<module>/<unit>` id. Resolve legacy task and review paths using application ownership before moving anything; do not infer the app from a short module slug.
 2. Use `git mv` to move application inputs into `applications/<app>/inputs/`, assessment outputs into `applications/<app>/assessment/`, each AS-IS specification to the corresponding unit's `as-is.md`, and unit state to `unit.md` in that unit directory. Move task packs, detail designs, review records and verification evidence into their unit directories.
-3. Move project-wide P0, P1 portfolio, P2 architecture/standards and gate records to their new project-level homes; move P6/P7 artifacts into the application's `cutover/` and `operate/` directories.
+3. Move project-wide P0, P1 portfolio, P2 architecture/standards and gate records to their new project-level homes.
 4. Do not move stale generated aggregates as authored source. Rebuild them from the migrated unit files after merge, then verify their auto-commit paths.
 5. Update `kintsugi.yaml` auto-commit paths and every reader/writer in the same migration rollout. Remove the old paths; no compatibility copy remains.
 
 ## Consequences
 
 - Paths change for document-repo readers, writers, member plugins, API result builders and portal links. The path module lets the migration change those consumers centrally and makes the current-path checkpoint testable.
-- Existing document repos require an explicit `git mv` migration. The migration PR must validate full unit ids and app ownership before moving short-id verification artifacts.
+- Existing document repos require an explicit `git mv` migration. The migration PR must validate full unit ids and app ownership before moving short-id artifacts.
 - Human rule verdicts survive extraction reruns because they are separate from machine output; citations that no longer exist surface as orphaned review records.
 - Gate decisions become auditable Git evidence and do not create an auto-commit bypass. The API continues to derive progress from files; no progress columns or new datastore are introduced.
 - The layout change does not rename API routes, permission codes, database columns or the `assess`/`understand` stage ids.
@@ -80,6 +77,6 @@ This is a breaking path change; do not add compatibility symlinks, duplicate wri
 
 ## Alternatives considered
 
-- **Keep the current layout and only document it.** Rejected: a unit would still span multiple trees, stage-owned folders would still mix inputs and generated outputs, and the missing P0/P6/P7 and gate homes would remain unresolved.
+- **Keep the current layout and only document it.** Rejected: a unit would still span multiple trees, stage-owned folders would still mix inputs and generated outputs, and the missing P0 and gate homes would remain unresolved.
 - **Group everything by stage.** Rejected: a unit's rules, specification, task, review and test evidence would still be scattered across stage trees.
 - **Group by writer (human, runtime, member harness).** Rejected: writers can change, while a unit and its evidence must remain together; generated and authored content would still share subject folders.

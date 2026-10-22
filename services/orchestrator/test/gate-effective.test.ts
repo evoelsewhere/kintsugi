@@ -25,7 +25,7 @@ const evidence: GateEvidence = {
     mergedRevision: sha("d"),
   }],
 };
-const location: GitLocation = { repo: "docs", commit: sha("e"), path: "applications/web/units/core/invoice/reviews/G4.md" };
+const location: GitLocation = { repo: "docs", commit: sha("e"), path: "10-applications/web/02-modern/core/invoice/reviews/G4.md" };
 const evidenceHash = createHash("sha256").update(gateEvidenceCanonicalJson(evidence)).digest("hex");
 const audit: GateAuditProof = {
   id: "1842",

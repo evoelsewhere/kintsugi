@@ -4,6 +4,9 @@
 import type { ThinkingLevel } from "@kintsugi/domain";
 import { apiGet, apiGetAll, apiSend } from "../api";
 
+/** How long the provider keeps a prompt cached: about 5 minutes (default) or about an hour. */
+export type CacheRetention = "short" | "long";
+
 export interface CustomModelConfig {
   id: string;
   name?: string;
@@ -23,6 +26,7 @@ export interface ProviderView {
   envKeys: string[];
   piProvider?: string;
   enabledModels?: string[];
+  cacheRetention?: CacheRetention;
   api?: string;
   baseUrl?: string;
   headers?: Record<string, string>;
@@ -38,6 +42,7 @@ export interface CreateProviderInput {
   // builtin
   piProvider?: string;
   enabledModels?: string[];
+  cacheRetention?: CacheRetention;
   // custom
   api?: string;
   baseUrl?: string;
@@ -66,6 +71,8 @@ export interface SupportedModel {
   contextWindow?: number;
   maxTokens?: number;
   reasoning?: boolean;
+  /** The thinking levels pi accepts for this model, weakest first. */
+  thinkingLevels: ThinkingLevel[];
 }
 
 export interface SupportedBuiltinProvider {

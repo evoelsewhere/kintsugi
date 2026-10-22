@@ -11,7 +11,7 @@ import { addWorktree, removeWorktree, resolveCommit, runGit } from "@kintsugi/gi
 import { createAgentRuntime } from "@kintsugi/runtime";
 import { makeReadOnly, makeWritable } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
-import type { ArtifactEntry, JobEventRecord, JobRun, JobStore, ModelBinding, NewJobRun, SourceCheckouts } from "../../src/jobs/model.js";
+import type { ArtifactEntry, JobEventRecord, JobRun, JobStore, ModelBinding, NewJobRun, SourceCheckouts, SpanRecord } from "../../src/jobs/model.js";
 import type { DocumentWriteRequest } from "../../src/queues.js";
 
 export class MemoryJobStore implements JobStore {
@@ -47,6 +47,10 @@ export class MemoryJobStore implements JobStore {
   }
   async addEvent(event: JobEventRecord): Promise<void> {
     this.events.push(event);
+  }
+  readonly spans: SpanRecord[] = [];
+  async addSpans(spans: readonly SpanRecord[]): Promise<void> {
+    this.spans.push(...spans);
   }
   async update(id: string, patch: { sourceCommit?: string; scriptHash?: string; agent?: string }): Promise<void> {
     Object.assign(this.runs.get(id)!, patch);

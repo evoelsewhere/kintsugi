@@ -1,10 +1,10 @@
 // Results of assess, in six views over one header of KPIs:
-//   Summary     — code composition, signals, the summary and recommendation, risk and run health
+//   Summary     — code composition, signals, the summary and rebuild outlook, risk and run health
 //   Code        — complexity hotspots, directories, size and complexity distributions, languages
 //   Risk & debt — security highlights and technical debt with their distributions, gaps
 //   Inventory   — every measured file, filterable by language
 //   Monitoring  — the stage's runs: health, the latest run's steps, every run
-//   ASSESSMENT.md — the full document
+//   assessment.md — the full document
 
 import { useMemo, useState } from "react";
 import { BarList, Donut, Histogram, Scatter, type Segment, ShareBar } from "@/components/results/charts";
@@ -64,9 +64,9 @@ export function AssessResultsView({ results, compare, projectId, runs }: { resul
           { id: "overview", label: "Summary" },
           { id: "code", label: "Code analysis", hidden: inventory === null },
           { id: "risk", label: "Risk & debt", count: highlights.security.length + (highlights.debt?.rows.length ?? 0) },
-          { id: "inventory", label: "Inventory", count: inventory?.files.length },
+          { id: "inventory", label: "Hotspots", count: inventory?.files.length },
           { id: "monitoring", label: "Monitoring", count: runs?.length },
-          { id: "document", label: "ASSESSMENT.md", hidden: results.document === undefined },
+          { id: "document", label: "assessment.md", hidden: results.document === undefined },
         ]}
       />
 
@@ -76,7 +76,7 @@ export function AssessResultsView({ results, compare, projectId, runs }: { resul
       {tab === "inventory" ? <InventoryTab results={results} /> : null}
       {tab === "monitoring" ? <MonitoringTab projectId={projectId} runs={runs} /> : null}
       {tab === "document" && results.document !== undefined ? (
-        <Section title="ASSESSMENT.md" description={results.document.path}>
+        <Section title="assessment.md" description={results.document.path}>
           <Markdown text={results.document.markdown} path={results.document.path} />
         </Section>
       ) : null}
@@ -109,16 +109,16 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
   const topLanguage = inventory === null ? undefined : [...inventory.languages].sort((a, b) => b.sloc - a.sloc)[0];
   return (
     <div className="flex flex-col gap-4">
-      {highlights.summary === undefined && highlights.recommendation === undefined ? null : (
+      {highlights.summary === undefined && highlights.outlook === undefined ? null : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {highlights.summary === undefined ? null : (
             <Section title="Executive summary" className="lg:col-span-2" description={inventory?.sourceRepository === undefined ? undefined : `${inventory.sourceRepository} at ${shortSha(inventory.sourceCommit)}`}>
               <ClampedText text={highlights.summary} />
             </Section>
           )}
-          {highlights.recommendation === undefined ? null : (
-            <Section title="Recommended pattern" actions={<MoreLink label="Risk & debt" onClick={() => onTab("risk")} />}>
-              <ClampedText text={highlights.recommendation} />
+          {highlights.outlook === undefined ? null : (
+            <Section title="Rebuild outlook" actions={<MoreLink label="Risk & debt" onClick={() => onTab("risk")} />}>
+              <ClampedText text={highlights.outlook} />
               {urgent.length === 0 ? null : (
                 <div className="mt-3 border-t border-hover pt-3">
                   <p className="mb-1.5 text-[11px] tracking-wide text-text-muted uppercase">Fix first · {urgent.length} critical or high</p>
@@ -143,7 +143,7 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
       )}
 
       {results.architecture === undefined ? null : (
-        <Section title="Architecture" description="ARCHITECTURE.mmd: the domains and how they depend on each other.">
+        <Section title="Architecture" description="architecture.mmd: the domains and how they depend on each other.">
           <MermaidDiagram source={results.architecture} title="Domain diagram" height={760} />
         </Section>
       )}
@@ -159,7 +159,7 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
               <Signal label="Complexity per KSLOC" value={formatCount(inventory.complexityPerKsloc ?? (inventory.ksloc === 0 ? 0 : Math.round((inventory.complexity / inventory.ksloc) * 10) / 10))} note="decision keywords" />
               <Signal label="Median file size" value={`${formatCount(signals?.medianSloc)} SLOC`} note={`over ${formatCount(signals?.codeFiles)} source files`} />
               <Signal
-                label="Largest file"
+                label="Largest hotspot"
                 value={signals?.largest === undefined ? "—" : `${formatCount(signals.largest.sloc)} SLOC`}
                 note={signals?.largest === undefined ? undefined : shortPath(signals.largest.path)}
                 title={signals?.largest?.path}
@@ -205,8 +205,8 @@ function CodeTab({ inventory }: { inventory: Inventory }): React.JSX.Element {
   const colors = useMemo(() => domainColors(inventory.languages.map((language) => language.language)), [inventory]);
   const code = useMemo(() => inventory.files.filter((file) => file.sloc > 0), [inventory]);
   const hotspots = useMemo(() => [...code].sort((a, b) => b.complexity - a.complexity).slice(0, 12), [code]);
-  const rollup = useMemo(() => directoryRollup(code), [code]);
-  const sizes = useMemo(() => sizeDistribution(code), [code]);
+  const rollup = useMemo(() => directoryRollup(inventory), [inventory]);
+  const sizes = useMemo(() => sizeDistribution(inventory), [inventory]);
   const density = useMemo(
     () =>
       [...inventory.languages]
@@ -235,7 +235,7 @@ function CodeTab({ inventory }: { inventory: Inventory }): React.JSX.Element {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <Section title="Size against complexity" description="One dot per file, coloured by language; both axes are logarithmic. Top-right dots are large and branchy." className="xl:col-span-3">
+        <Section title="Size against complexity" description={`One dot per hotspot (the ${formatCount(code.length)} most complex files), coloured by language; both axes are logarithmic. Top-right dots are large and branchy.`} className="xl:col-span-3">
           <Scatter
             xLabel="SLOC"
             yLabel="Complexity"
@@ -363,7 +363,7 @@ function LanguagesTable({ languages, total, colors }: { languages: InventoryLang
 function InventoryTab({ results }: { results: AssessResults }): React.JSX.Element {
   const inventory = results.inventory;
   const [language, setLanguage] = useState<string | undefined>(undefined);
-  if (inventory === null) return <EmptyState title="No inventory at this ref" description="inventory.json is written by the assess stage's inventory script; run assess to produce it." />;
+  if (inventory === null) return <EmptyState title="No inventory at this ref" description="inventory.md is written by the assess stage's inventory script; run assess to produce it." />;
   const columns: Column<InventoryFile>[] = [
     { id: "path", header: "Path", cell: (row) => <span className="font-mono text-[12px] break-all text-text">{row.path}</span>, sort: (row) => row.path },
     { id: "language", header: "Language", cell: (row) => <span className="text-text-secondary">{row.language}</span>, sort: (row) => row.language },
@@ -374,9 +374,9 @@ function InventoryTab({ results }: { results: AssessResults }): React.JSX.Elemen
   const rows = language === undefined ? inventory.files : inventory.files.filter((file) => file.language === language);
   const languages = [...inventory.languages].sort((a, b) => b.files - a.files);
   return (
-    <Section title="Files" description={`${formatCount(inventory.files.length)} files measured in ${inventory.sourceRepository ?? "the legacy repo"}${inventory.sourceCommit === undefined ? "" : ` at ${shortSha(inventory.sourceCommit)}`}.`}>
+    <Section title="Most complex files" description={`${formatCount(inventory.files.length)} of ${formatCount(inventory.sourceFileCount)} source files measured in ${inventory.sourceRepository ?? "the legacy repo"}${inventory.sourceCommit === undefined ? "" : ` at ${shortSha(inventory.sourceCommit)}`}; the inventory keeps the roll-ups, not every file.`}>
       <DataTable
-        label="Files"
+        label="Hotspots"
         rows={rows}
         columns={columns}
         rowKey={(row) => row.path}

@@ -86,7 +86,11 @@ describe.skipIf(!hasDatabase)("agents (integration)", () => {
 
     const unknownTool = await admin.request("POST", "/admin/agents", { body: draft({ tools: ["read", "bash"], skills: ["missing"] }) });
     expect(unknownTool.status).toBe(400);
-    expect(unknownTool.body.message).toEqual([`unknown tool "bash" (available: ${KERNEL_TOOL_NAMES.join(", ")})`, 'unknown shared skill "missing"']);
+    expect(unknownTool.body.message).toEqual([`unknown tool "bash" (available: ${KERNEL_TOOL_NAMES.join(", ")}, or an MCP tool such as mcp__<server>__*)`, 'unknown shared skill "missing"']);
+
+    // An MCP tool is named by the shape of its entry: the server is checked when a job starts.
+    const withMcp = await admin.request("POST", "/admin/agents", { body: draft({ name: "tracker-reader", tools: ["read", "codemode", "mcp__tracker__*"], localSkills: [] }) });
+    expect(withMcp.status, withMcp.raw).toBe(201);
 
     const reserved = await admin.request("POST", "/admin/agents", { body: draft({ name: "legacy-analyst" }) });
     expect(reserved.status).toBe(409);

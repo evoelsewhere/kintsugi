@@ -6,7 +6,7 @@ import { encryptSecret } from "@kintsugi/secrets";
 import type { Pool } from "pg";
 import type { DocumentWriteRequest } from "../queues.js";
 import type { WorkspaceState, WorkspaceStates } from "./cleanup.js";
-import type { ArtifactEntry, JobEventRecord, JobKind, JobRun, JobStatus, JobStore, ModelBinding, NewJobRun, StepLimits } from "./model.js";
+import type { ArtifactEntry, JobEventRecord, JobKind, JobRun, JobStatus, JobStore, ModelBinding, NewJobRun, SpanRecord, StepLimits } from "./model.js";
 
 interface RunRow {
   id: string;
@@ -130,6 +130,42 @@ export class PgJobStore implements JobStore, WorkspaceStates {
         event.message.slice(0, MAX_REASON),
         JSON.stringify(event.data ?? {}),
       ])
+      .catch(() => undefined);
+  }
+
+  /** Deletes the spans started more than `days` ago; returns how many. */
+  async pruneTelemetry(days: number): Promise<number> {
+    const result = await this.pool.query("delete from monitoring.telemetry_span where started_at < now() - make_interval(days => $1)", [days]);
+    return result.rowCount ?? 0;
+  }
+
+  async addSpans(spans: readonly SpanRecord[]): Promise<void> {
+    if (spans.length === 0) return;
+    // One insert for the batch; arrays keep the statement the same size whatever the count.
+    await this.pool
+      .query(
+        `insert into monitoring.telemetry_span
+           (job_run_id, step_run_id, project_id, application_id, agent, provider, model, attempt, span_id, parent_span_id, name, started_at, duration_ms, status, error, attributes)
+         select * from unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::int[], $9::text[], $10::text[], $11::text[], $12::timestamptz[], $13::int[], $14::text[], $15::text[], $16::jsonb[])`,
+        [
+          spans.map((entry) => entry.runId),
+          spans.map((entry) => entry.stepId ?? null),
+          spans.map((entry) => entry.projectId),
+          spans.map((entry) => entry.applicationId ?? null),
+          spans.map((entry) => entry.agent),
+          spans.map((entry) => entry.provider),
+          spans.map((entry) => entry.model),
+          spans.map((entry) => entry.attempt),
+          spans.map((entry) => entry.span.id),
+          spans.map((entry) => entry.span.parentId ?? null),
+          spans.map((entry) => entry.span.name),
+          spans.map((entry) => entry.span.startedAt),
+          spans.map((entry) => entry.span.durationMs),
+          spans.map((entry) => entry.span.status),
+          spans.map((entry) => entry.span.error ?? null),
+          spans.map((entry) => JSON.stringify(entry.span.attributes)),
+        ],
+      )
       .catch(() => undefined);
   }
 

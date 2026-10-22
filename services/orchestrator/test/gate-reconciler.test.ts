@@ -5,7 +5,7 @@ import type { GatePublicationCandidate } from "../src/gates/effective.js";
 const sha = (c: string) => c.repeat(40);
 const publication = {
   decision_id: "gate_" + "a".repeat(48), project_id: "shop", unit_id: "web/core/invoice", gate_id: "G4", state: "pending-publication",
-  evidence: { deliverables: [] }, evidence_hash: "b".repeat(64), document_repository_id: "docs", record_path: "applications/web/units/core/invoice/reviews/G4.md",
+  evidence: { deliverables: [] }, evidence_hash: "b".repeat(64), document_repository_id: "docs", record_path: "10-applications/web/02-modern/core/invoice/reviews/G4.md",
   document_write_id: "write", write_status: "merged", pr_url: "https://github.example/org/docs/pull/9", record_commit: null,
 } as unknown as GatePublicationCandidate;
 

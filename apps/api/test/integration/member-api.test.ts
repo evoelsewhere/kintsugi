@@ -65,11 +65,13 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     process.env["KINTSUGI_DATA_DIR"] = dataDir;
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
-    await remote.commit("docs", "applications/web/units/core/invoice/unit.md", unit);
-    await remote.commit("docs", "applications/web/units/core/invoice/task.md", taskPack);
-    await remote.commit("docs", "applications/web/units/core/invoice/as-is.md", "# Current behavior\nInvoices round per line.\n");
-    await remote.commit("docs", "applications/web/design.md", "# Web basic design\nInvoice rounding is defined here.\n");
-    await remote.commit("docs", "applications/web/units/core/invoice/design.md", "# Detailed design\nUse decimal arithmetic and round once.\n");
+    await remote.commit("docs", "10-applications/web/02-modern/core/invoice/README.md", unit);
+    await remote.commit("docs", "01-standards/templates/detail/set.md", "---\nid: detail\ntitle: Detailed design\nversion: 1\nappliesTo: []\nneeds: []\n---\n| Path | Template | Required | When |\n| --- | --- | --- | --- |\n| logic.md | logic.md | yes | |\n");
+    await remote.commit("docs", "01-standards/templates/detail/logic.md", "# Detailed design template\n");
+
+    await remote.commit("docs", "10-applications/web/02-modern/core/invoice/task.md", taskPack);
+    await remote.commit("docs", "10-applications/web/01-legacy/core/invoice/spec.md", "# Current behavior\nInvoices round per line.\n");
+    await remote.commit("docs", "10-applications/web/02-modern/core/invoice/detail/logic.md", "# Detailed design\nUse decimal arithmetic and round once.\n");
     await cloneMirror(remote.baseUrl + "/docs.git", new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
     app = await startTestAppWithDatabase(database);
@@ -297,7 +299,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
       projectId: "shop",
       unitId: "web/core/invoice",
       sections: expect.arrayContaining([expect.objectContaining({
-        citation: expect.objectContaining({ path: expect.stringContaining("applications/web/units/core/invoice/task.md") }),
+        citation: expect.objectContaining({ path: expect.stringContaining("10-applications/web/02-modern/core/invoice/task.md") }),
       })]),
     });
 

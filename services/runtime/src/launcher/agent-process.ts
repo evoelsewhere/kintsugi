@@ -54,7 +54,7 @@ export interface ChildAgentRuntimeOptions {
 
 type JobEnd = Extract<JobEvent, { type: "job.completed" | "job.failed" }>;
 
-const EVENT_TYPES = new Set<JobEvent["type"]>(["job.started", "message.delta", "progress", "tool.call", "tool.result", "output", "usage", "job.completed", "job.failed"]);
+const EVENT_TYPES = new Set<JobEvent["type"]>(["job.started", "message.delta", "progress", "tool.call", "tool.result", "output", "usage", "span", "job.completed", "job.failed"]);
 
 export const AGENT_CHILD_ENTRY = fileURLToPath(new URL("../bin/agent-job.js", import.meta.url));
 
@@ -77,7 +77,7 @@ function childCodeRoots(): Promise<string[]> {
   codeRoots ??= (async () => {
     const roots = new Set<string>([PACKAGE_ROOT, realpathSync(PACKAGE_ROOT)]);
     const require = createRequire(import.meta.url);
-    for (const name of ["@earendil-works/pi-coding-agent", "@earendil-works/pi-ai", "typebox", "@kintsugi/runtime-sdk"]) {
+    for (const name of ["@earendil-works/pi-coding-agent", "@earendil-works/pi-ai", "@earendil-works/pi-codemode", "@earendil-works/pi-mcp", "@earendil-works/pi-telemetry", "typebox", "@kintsugi/runtime-sdk"]) {
       try {
         const file = realpathSync(require.resolve(name));
         const modules = nodeModulesOf(file);
@@ -211,7 +211,8 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
           ...(credentials.apiKey === undefined ? {} : { apiKey: credentials.apiKey }),
           ...(credentials.secrets === undefined ? {} : { secrets: credentials.secrets }),
         };
-        providerEnv = credentials.env ?? {};
+        // pi reads the cache lifetime from the environment of the process that calls the provider.
+        providerEnv = { ...(config.cacheRetention === "long" ? { PI_CACHE_RETENTION: "long" } : {}), ...(credentials.env ?? {}) };
       }
 
       const entry = options.entry ?? AGENT_CHILD_ENTRY;
@@ -220,6 +221,11 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
           ? []
           : [
               "--permission",
+              // The kernel's `shell` and `git` start processes and codemode runs scripts in a worker thread. The
+              // OS account is the isolation boundary (ADR-0029); these flags only let the kernel use its own tools.
+              "--allow-child-process",
+              "--allow-worker",
+              "--disable-warning=SecurityWarning",
               ...[...(await childCodeRoots()), entry, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
               ...[spec.workspace.outDir, tmp].map((path) => `--allow-fs-write=${path}`),
             ];

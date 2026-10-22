@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import type { JobEvent, JobFailureReason, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
 import { EventStream } from "./event-stream.js";
+import { beginSpan, JobTelemetry } from "./kernel/telemetry.js";
 
 type JobEnd = Extract<JobEvent, { type: "job.completed" | "job.failed" }>;
 
@@ -67,6 +68,9 @@ class MockJob implements JobHandle {
     this.#emit({ type: "message.delta", jobId: this.jobId, text: `[mock ${spec.agent.id}] ${spec.task}\n` });
     await tick();
 
+    // The same spans the pi backend reports, with fixed numbers: one root, a span per turn and per executed tool.
+    const telemetry = new JobTelemetry((span) => this.#emit({ type: "span", jobId: this.jobId, span }));
+    const root = beginSpan(telemetry, "kintsugi.job", { agent: spec.agent.id, agentVersion: spec.agent.version, provider: spec.model.provider, model: spec.model.id });
     const turns = Math.min(spec.limits.maxTurns ?? 3, 8);
     const candidates = ["read", ...spec.agent.tools.filter((tool) => tool !== "read")];
     let blocked = 0;
@@ -76,6 +80,8 @@ class MockJob implements JobHandle {
       const tool = candidates[turn % candidates.length] ?? "read";
       const allowed = spec.agent.tools.includes(tool);
       const callId = `${this.jobId}-${turn}`;
+      const turnSpan = beginSpan(root.span, "kintsugi.turn", { turn: turn + 1 });
+      const toolSpan = allowed ? beginSpan(turnSpan.span, "kintsugi.tool", { tool }) : undefined;
       this.#emit({
         type: "tool.call",
         jobId: this.jobId,
@@ -87,18 +93,34 @@ class MockJob implements JobHandle {
       });
       await tick();
       if (allowed) {
-        this.#emit({ type: "tool.result", jobId: this.jobId, callId, ok: true, summary: `${tool} completed (simulated)` });
+        toolSpan?.end({ ok: true, executeMs: 1 });
+        this.#emit({ type: "tool.result", jobId: this.jobId, callId, ok: true, summary: `${tool} completed (simulated)`, durationMs: 1 });
         if (tool === "write") this.#emit({ type: "output", jobId: this.jobId, path: `mock/turn-${turn}.md` });
       } else {
         blocked++;
       }
+      turnSpan.end({ inputTokens: 128, outputTokens: 64, cacheReadTokens: 64, cacheWriteTokens: 0, costUsd: 0, stopReason: "toolUse" });
       await tick();
     }
 
     const inputTokens = 128 * turns;
     const outputTokens = 64 * turns;
     const costUsd = Number((inputTokens * 0.000001 + outputTokens * 0.000005).toFixed(6));
-    this.#emit({ type: "usage", jobId: this.jobId, model: `${spec.model.provider}/${spec.model.id}`, inputTokens, outputTokens, costUsd });
+    root.end({ turns, inputTokens, outputTokens, cacheReadTokens: 64 * turns, cacheWriteTokens: 0, costUsd, compactions: 0, contextPeakPercent: 12, outcome: "completed" });
+    await telemetry.whenIdle();
+    this.#emit({
+      type: "usage",
+      jobId: this.jobId,
+      model: `${spec.model.provider}/${spec.model.id}`,
+      inputTokens,
+      outputTokens,
+      costUsd,
+      cacheReadTokens: 64 * turns,
+      cacheWriteTokens: 0,
+      turns,
+      compactions: 0,
+      contextPeakPercent: 12,
+    });
 
     if (spec.limits.maxCostUsd !== undefined && costUsd > spec.limits.maxCostUsd) {
       this.#fail("budget", `cost ${costUsd} USD exceeded ${spec.limits.maxCostUsd} USD`);

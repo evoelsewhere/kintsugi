@@ -1,4 +1,4 @@
-// The kernel `ls` (ADR-0039): pi's flat listing plus a `tree` mode. pi's ls definition cannot
+// The kernel `ls` (ADR-0040): pi's flat listing plus a `tree` mode. pi's ls definition cannot
 // take extra parameters, so the kernel wraps it — without `tree`/`depth` the call is delegated to
 // pi unchanged (same output models already know); with them the listing renders as an indented
 // tree under the same path guards. `depth` implies `tree`.

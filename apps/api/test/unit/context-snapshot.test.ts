@@ -28,7 +28,7 @@ function snapshot(status: SnapshotRecord["status"], expiresAt = new Date(Date.no
       unitId: "web/core/invoice",
       activity: "design",
       repositories: [],
-      task: { sourceId: "src_task", repositoryId: "docs", path: "unit.md", commit: "a".repeat(40), contentHash: "sha256:" + "b".repeat(64) },
+      task: { sourceId: "src_task", repositoryId: "docs", path: "README.md", commit: "a".repeat(40), contentHash: "sha256:" + "b".repeat(64) },
       sources: [],
       requiredDeliverableIds: [],
       policyRevision: "member-context-v1",
@@ -121,7 +121,7 @@ function briefFixture(currentError?: Error, resolveError?: Error, createStatus: 
     title: "Historical invoice task", phase: "migrate", status: "pending",
     requiredDeliverables: [
       { id: "code", repositoryId: "invoice-api", path: "src/invoice.ts" },
-      { id: "design", repositoryId: "docs", path: "applications/web/units/core/invoice/design.md" },
+      { id: "design", repositoryId: "docs", path: "10-applications/web/02-modern/core/invoice/detail/logic.md" },
     ],
   };
   const readiness = evaluateReadiness({ workItem, requiredInputs: [], predecessorGates: [] });
@@ -129,7 +129,7 @@ function briefFixture(currentError?: Error, resolveError?: Error, createStatus: 
   const sourceHash = createHash("sha256").update(content).digest("hex");
   const task: MemberTaskRecord = {
     projectId: "shop", unitId: workItem.id, repositoryId: "docs", sourceCommit: "a".repeat(40),
-    sourcePath: "applications/web/units/core/invoice/unit.md", sourceHash, workItem,
+    sourcePath: "10-applications/web/02-modern/core/invoice/README.md", sourceHash, workItem,
     requiredInputs: [], sourceReferences: [], predecessorGates: [], assignmentState: "unassigned", readiness,
   };
   const record = { ...snapshot("ready"), workItem, readiness };
@@ -196,7 +196,7 @@ describe("historical source availability errors", () => {
   it.each([false, true])("returns a stable unavailable code when source readable is %s", async (readable) => {
     const { instance, records } = briefFixture();
     const source: SnapshotSource = {
-      sourceId: "src_task", role: "task", repositoryId: "docs", path: "unit.md", commit: "a".repeat(40),
+      sourceId: "src_task", role: "task", repositoryId: "docs", path: "README.md", commit: "a".repeat(40),
       contentHash: "sha256:" + "b".repeat(64), availability: "present", publication: "published",
       approval: "not-required", requiredFor: ["design"], required: true, readable, sections: [],
     };
@@ -209,7 +209,7 @@ describe("historical source availability errors", () => {
 it("returns a stable unavailable error for a missing retained commit without reading HEAD", async () => {
   const { instance, records } = briefFixture(undefined, new NotFoundException("Commit is missing"));
   const source: SnapshotSource = {
-    sourceId: "src_task", role: "task", repositoryId: "docs", path: "unit.md", commit: "a".repeat(40),
+    sourceId: "src_task", role: "task", repositoryId: "docs", path: "README.md", commit: "a".repeat(40),
     contentHash: "sha256:" + "b".repeat(64), availability: "present", publication: "published",
     approval: "not-required", requiredFor: ["design"], required: true, readable: true, sections: [],
   };
@@ -236,7 +236,7 @@ it("builds a fresh implementation context for a gate decision without accepting 
     requiredDeliverableIds: ["code", "design"],
     requiredDeliverables: [
       { id: "code", repositoryId: "invoice-api", path: "src/invoice.ts" },
-      { id: "design", repositoryId: "docs", path: "applications/web/units/core/invoice/design.md" },
+      { id: "design", repositoryId: "docs", path: "10-applications/web/02-modern/core/invoice/detail/logic.md" },
     ],
   });
   expect(gateContext.contextRevision).toMatch(/^sha256:[a-f0-9]{64}$/);
@@ -244,7 +244,7 @@ it("builds a fresh implementation context for a gate decision without accepting 
 
 describe("historical source context availability", () => {
   const source: SnapshotSource = {
-    sourceId: "src_task", role: "task", repositoryId: "docs", path: "unit.md", commit: "a".repeat(40),
+    sourceId: "src_task", role: "task", repositoryId: "docs", path: "README.md", commit: "a".repeat(40),
     contentHash: "sha256:" + createHash("sha256").update("# Invoice unit\n").digest("hex"),
     availability: "present", publication: "published", approval: "not-required",
     requiredFor: ["design"], required: true, readable: true, sections: [],

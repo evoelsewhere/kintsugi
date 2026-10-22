@@ -41,6 +41,23 @@ export interface JobLimits {
   maxCostUsd?: number;
 }
 
+/**
+ * An MCP server a job may use (ADR-0047): an HTTP endpoint the admin registered. The job gets it only when
+ * the agent names it in `tools` (`mcp__<server>__*`). The headers are decrypted by the worker and travel on
+ * the job child's stdin, never in its environment or in an event.
+ */
+export interface McpServerSpec {
+  /** The server's id; its tools are `mcp__<id>__<tool>` (dashes of the id written as `_`). */
+  name: string;
+  url: string;
+  headers: Record<string, string>;
+  /** Per-request timeout, seconds. */
+  timeoutSec: number;
+  description?: string;
+  /** Tool-name patterns (`*` matches any characters) allowed besides the tools the server marks read-only. */
+  allowedTools: string[];
+}
+
 export interface JobSpec {
   agent: AgentDefinition;
   /** The user prompt for this job. */
@@ -54,11 +71,30 @@ export interface JobSpec {
     outDir: string;
   };
   limits: JobLimits;
+  /** The MCP servers the agent names in `tools`; absent when it names none. */
+  mcp?: { servers: McpServerSpec[] };
   /** Opaque correlation data (e.g. projectId, trigger), echoed on job.started; never shown to the agent. */
   metadata?: Record<string, string>;
 }
 
-export type JobFailureReason = "error" | "timeout" | "max-turns" | "budget" | "aborted";
+/** `context-overflow`: the conversation outgrew the model's window and compaction could not recover it. */
+export type JobFailureReason = "error" | "timeout" | "max-turns" | "budget" | "aborted" | "context-overflow";
+
+/**
+ * One settled unit of work inside a job (ADR-0048), shaped by the `pi-telemetry` contract:
+ * `kintsugi.job` (the root), `kintsugi.turn`, `kintsugi.tool`, `kintsugi.compaction`,
+ * `kintsugi.retry`, `kintsugi.codemode` and `kintsugi.mcp`. Attributes are scalars only.
+ */
+export interface JobSpan {
+  id: string;
+  parentId?: string;
+  name: string;
+  startedAt: string;
+  durationMs: number;
+  status: "ok" | "error";
+  error?: string;
+  attributes: Record<string, string | number | boolean>;
+}
 
 export type JobEvent =
   | { type: "job.started"; jobId: string; at: string; runtimeVersion: string; agent: string; metadata?: Record<string, string> }
@@ -66,9 +102,25 @@ export type JobEvent =
   /** Periodic sign of work while the model streams: characters so far per kind and the current turn. */
   | { type: "progress"; jobId: string; turn: number; thinkingChars: number; toolArgsChars: number; textChars: number }
   | { type: "tool.call"; jobId: string; callId: string; tool: string; input: unknown; decision: "allowed" | "blocked"; reason?: string }
-  | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string }
+  | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string; durationMs?: number }
   | { type: "output"; jobId: string; path: string }
-  | { type: "usage"; jobId: string; model: string; inputTokens: number; outputTokens: number; costUsd?: number }
+  /** Totals of the job, summarisation included. Cache tokens are not part of `inputTokens`. */
+  | {
+      type: "usage";
+      jobId: string;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      costUsd?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+      turns?: number;
+      /** Times the conversation was compacted. */
+      compactions?: number;
+      /** The highest share of the model's context window the conversation reached, 0-100. */
+      contextPeakPercent?: number;
+    }
+  | { type: "span"; jobId: string; span: JobSpan }
   | { type: "job.completed"; jobId: string; at: string; summary: string }
   | { type: "job.failed"; jobId: string; at: string; reason: JobFailureReason; error: string };
 
@@ -83,7 +135,7 @@ export interface JobHandle {
 }
 
 export interface AgentRuntime {
-  /** Identifies the underlying engine, e.g. "pi@1.1.0". */
+  /** Identifies the underlying engine, e.g. "pi@1.3.0". */
   readonly engine: string;
   startJob(spec: JobSpec): Promise<JobHandle>;
 }
@@ -104,6 +156,13 @@ export type ProviderAuth =
   | { type: "service-account-json"; file: SecretRef; envVar: string }
   | { type: "none" };
 
+/**
+ * How long a provider keeps a prompt cached (ADR-0048): `short` (about 5 minutes, renewed by every hit; the
+ * default) or `long` (about an hour; written at a higher price, worth it when jobs of one agent are minutes
+ * apart). pi reads it from `PI_CACHE_RETENTION`, which only knows `long`; there is no way to turn caching off.
+ */
+export type CacheRetention = "short" | "long";
+
 /** A provider from pi-ai's built-in catalog (list is read from the pinned pi version). */
 export interface BuiltinProviderConfig {
   kind: "builtin";
@@ -113,6 +172,7 @@ export interface BuiltinProviderConfig {
   /** pi `modelOverrides` for built-in models (sampling, prompt cache, input limits…). */
   modelOverrides?: Record<string, Record<string, unknown>>;
   enabledModels?: string[]; // allowlist; empty = all catalog models
+  cacheRetention?: CacheRetention;
 }
 
 /** A custom provider expressed in pi's models.json shape (vLLM, Ollama, LiteLLM, internal gateway…). */
@@ -126,6 +186,7 @@ export interface CustomProviderConfig {
   auth: ProviderAuth;
   headers?: Record<string, string | SecretRef>;
   models: CustomModelConfig[];
+  cacheRetention?: CacheRetention;
 }
 
 export interface CustomModelConfig {

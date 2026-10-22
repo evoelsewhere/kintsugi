@@ -4,7 +4,7 @@
 // with restore, and the agent's model binding. Built-in agents open read-only, with "Copy to
 // edit".
 
-import { THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
+import { isMcpToolEntry, THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
 import { ArrowLeft, Copy, Download, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -28,9 +28,10 @@ import {
   type AgentVersionView,
   type SkillPackage,
 } from "@/lib/api/agents";
+import { type McpServerChoice, mcpServersApi } from "@/lib/api/mcp-servers";
 import { type AgentModelBindingInput, providersApi, type ProviderView, type SupportedProviders } from "@/lib/api/providers";
 import { useAuth } from "@/lib/auth";
-import { modelOptions } from "@/lib/model-options";
+import { modelOptions, modelThinkingLevels } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
 import { CopyAgentDialog } from "./agent-dialogs";
 
@@ -63,7 +64,8 @@ function nextVersion(version: string): string {
   return match === null ? version : `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
 }
 
-function draftOf(detail: AgentDetail): AgentDraft {
+/** An agent file without `tools` runs with every tool: the draft lists them. */
+function draftOf(detail: AgentDetail, kernelTools: readonly string[]): AgentDraft {
   const manifest = detail.manifest;
   if (manifest === undefined) return { ...BLANK, name: detail.name, audience: detail.audience, version: nextVersion(detail.version) };
   return {
@@ -71,7 +73,7 @@ function draftOf(detail: AgentDetail): AgentDraft {
     audience: manifest.audience,
     version: detail.source === "custom" ? nextVersion(manifest.version) : manifest.version,
     description: manifest.description,
-    tools: manifest.tools,
+    tools: manifest.tools ?? [...kernelTools],
     skills: manifest.skills,
     ...(manifest.thinking === undefined ? {} : { thinking: manifest.thinking }),
     ...(manifest.denyCommandPatterns === undefined ? {} : { denyCommandPatterns: manifest.denyCommandPatterns }),
@@ -96,6 +98,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
   const [name, setName] = useState<string | null>(target.mode === "open" ? target.name : null);
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [context, setContext] = useState<AgentBuilderContext | null>(null);
+  const [mcpServers, setMcpServers] = useState<McpServerChoice[]>([]);
   const [draft, setDraft] = useState<AgentDraft>(BLANK);
   const [problems, setProblems] = useState<string[]>([]);
   const [definition, setDefinition] = useState<AgentDefinition | null>(null);
@@ -112,10 +115,12 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
     try {
       const nextContext = await agentsApi.context();
       setContext(nextContext);
+      // The servers an administrator registered; a builder without the permission simply sees none.
+      setMcpServers(await mcpServersApi.choices().catch(() => []));
       if (agentName === null) return;
       const loaded = await agentsApi.get(agentName);
       setDetail(loaded);
-      setDraft(draftOf(loaded));
+      setDraft(draftOf(loaded, nextContext.kernelTools));
       setProblems(loaded.problems);
       if (loaded.source === "custom") setVersions(await agentsApi.versions(agentName));
       if (loaded.audience === "runtime" && loaded.problems.length === 0 && (loaded.source === "builtin" || !manage)) {
@@ -164,7 +169,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
       }
       setName(saved.name);
       setDetail(saved);
-      setDraft(draftOf(saved));
+      setDraft(draftOf(saved, context?.kernelTools ?? []));
       setVersions(await agentsApi.versions(saved.name));
     } catch (failure) {
       setError(errorText(failure));
@@ -178,7 +183,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
     if (name === null) return;
     const restored = await agentsApi.restore(name, version);
     setDetail(restored);
-    setDraft(draftOf(restored));
+    setDraft(draftOf(restored, context?.kernelTools ?? []));
     setVersions(await agentsApi.versions(name));
     toast.success(`Restored ${version}`, "It is the current version again.");
   }
@@ -266,7 +271,7 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
         </div>
 
         {tab === "agent" ? (
-          <AgentForm draft={draft} context={context} readOnly={readOnly} nameLocked={name !== null} update={update} />
+          <AgentForm draft={draft} context={context} mcpServers={mcpServers} readOnly={readOnly} nameLocked={name !== null} update={update} />
         ) : null}
         {tab === "agent" && name !== null && detail !== null && detail.audience === "runtime" ? <ModelBinding agent={name} detail={detail} onSaved={() => load(name)} /> : null}
         {tab === "skills" ? <LocalSkills skills={draft.localSkills} readOnly={readOnly} onChange={(localSkills) => update({ localSkills })} /> : null}
@@ -323,15 +328,21 @@ function ProblemList({ problems }: { problems: string[] }): React.JSX.Element | 
 interface AgentFormProps {
   draft: AgentDraft;
   context: AgentBuilderContext | null;
+  mcpServers: McpServerChoice[];
   readOnly: boolean;
   nameLocked: boolean;
   update: (patch: Partial<AgentDraft>) => void;
 }
 
-function AgentForm({ draft, context, readOnly, nameLocked, update }: AgentFormProps): React.JSX.Element {
+function AgentForm({ draft, context, mcpServers, readOnly, nameLocked, update }: AgentFormProps): React.JSX.Element {
   const toggle = (list: string[], value: string, on: boolean): string[] => (on ? [...list, value] : list.filter((entry) => entry !== value));
   // Tools the draft lists that the kernel does not offer stay visible, so they can be removed.
-  const toolChoices = [...(context?.kernelTools ?? []), ...draft.tools.filter((tool) => !(context?.kernelTools ?? []).includes(tool))];
+  const toolChoices = [...(context?.kernelTools ?? []), ...draft.tools.filter((tool) => !(context?.kernelTools ?? []).includes(tool) && !isMcpToolEntry(tool))];
+  // MCP is never implied by a default: an agent names the servers it uses. An entry for a server nobody registered stays visible, so it can be removed.
+  const mcpChoices = [
+    ...mcpServers.map((server) => ({ entry: server.toolEntry, label: server.id, note: server.enabled ? server.description : "disabled" })),
+    ...draft.tools.filter((tool) => isMcpToolEntry(tool) && !mcpServers.some((server) => server.toolEntry === tool)).map((tool) => ({ entry: tool, label: tool, note: "not registered" })),
+  ];
   const skillChoices = [...(context?.sharedSkills.map((skill) => skill.name) ?? []), ...draft.skills.filter((skill) => !(context?.sharedSkills ?? []).some((entry) => entry.name === skill))];
 
   return (
@@ -348,7 +359,7 @@ function AgentForm({ draft, context, readOnly, nameLocked, update }: AgentFormPr
             value={draft.audience}
             options={AUDIENCE_OPTIONS}
             disabled={readOnly}
-            onChange={(value) => update({ audience: value as AgentDraft["audience"], tools: value === "runtime" ? draft.tools.filter((tool) => context?.kernelTools.includes(tool) ?? true) : draft.tools })}
+            onChange={(value) => update({ audience: value as AgentDraft["audience"], tools: value === "runtime" ? draft.tools.filter((tool) => isMcpToolEntry(tool) || (context?.kernelTools.includes(tool) ?? true)) : draft.tools })}
           />
         </Field>
       </div>
@@ -364,7 +375,21 @@ function AgentForm({ draft, context, readOnly, nameLocked, update }: AgentFormPr
               <Checkbox key={tool} checked={draft.tools.includes(tool)} disabled={readOnly} label={tool} onChange={(on) => update({ tools: toggle(draft.tools, tool, on) })} />
             ))}
           </div>
-          <span className="text-[12px] text-text-muted">Kernel tools only. Read tools are confined to the read-only workspace; write and edit work in the job&apos;s output directory.</span>
+          <span className="text-[12px] text-text-muted">
+            Read tools are confined to the read-only workspace; write and edit work in the job&apos;s output directory. codemode lets the model write a short script that reads many files and calls read-only tools, so only its output
+            reaches the context.
+          </span>
+          {mcpChoices.length === 0 ? null : (
+            <>
+              <span className="mt-1 text-[14px] text-text">MCP servers</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {mcpChoices.map((choice) => (
+                  <Checkbox key={choice.entry} checked={draft.tools.includes(choice.entry)} disabled={readOnly} label={choice.note === undefined ? choice.label : `${choice.label} (${choice.note})`} onChange={(on) => update({ tools: toggle(draft.tools, choice.entry, on) })} />
+                ))}
+              </div>
+              <span className="text-[12px] text-text-muted">An agent uses only the servers it names. Only the tools a server marks read-only, or an administrator allowed, run.</span>
+            </>
+          )}
         </div>
       ) : (
         <Field label="Tools" hint="Harness tool names, comma-separated (e.g. Read, Write, Bash).">
@@ -390,7 +415,7 @@ function AgentForm({ draft, context, readOnly, nameLocked, update }: AgentFormPr
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr]">
-        <Field label="Thinking" hint="Default level; a model binding can override it.">
+        <Field label="Thinking" hint="Default level, clamped to what the bound model supports; a model binding can override it.">
           <Select
             value={draft.thinking ?? ""}
             options={THINKING_OPTIONS}
@@ -528,6 +553,13 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
     }
   }
 
+  const selectedProvider = providers.find((entry) => entry.id === provider);
+  const levels = modelThinkingLevels(selectedProvider, supported, model);
+  const thinkingOptions: SelectOption[] = [
+    { value: "", label: "Default", ...(levels.length === 0 ? { hint: "Choose a model to see its reasoning levels" } : levels.every((level) => level === "off") ? { hint: "This model has no reasoning effort" } : {}) },
+    ...levels.map((level) => ({ value: level, label: level })),
+    ...(thinking !== "" && !levels.includes(thinking as ThinkingLevel) ? [{ value: thinking, label: thinking, hint: "not supported by this model" }] : []),
+  ];
   const perProject = detail.bindings.filter((binding) => binding.projectId !== undefined);
   return (
     <div className="flex flex-col gap-2 rounded-[var(--geist-radius)] p-3 shadow-border">
@@ -546,10 +578,20 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
             onChange={(value) => {
               setProvider(value);
               setModel("");
+              setThinking("");
             }}
           />
-          <Select value={model} placeholder="Model" options={modelOptions(providers.find((entry) => entry.id === provider), supported, model)} disabled={provider === ""} onChange={setModel} />
-          <Select value={thinking} options={THINKING_OPTIONS} onChange={setThinking} />
+          <Select
+            value={model}
+            placeholder="Model"
+            options={modelOptions(providers.find((entry) => entry.id === provider), supported, model)}
+            disabled={provider === ""}
+            onChange={(value) => {
+              setModel(value);
+              if (thinking !== "" && !modelThinkingLevels(selectedProvider, supported, value).includes(thinking as ThinkingLevel)) setThinking("");
+            }}
+          />
+          <Select value={thinking} options={thinkingOptions} onChange={setThinking} />
           <Button size="small" variant="solid" disabled={busy || provider === "" || model.trim() === ""} onClick={() => void save(false)}>
             Save binding
           </Button>

@@ -24,16 +24,26 @@ export function describeWorkspace(workspace: JobSpec["workspace"], tools: readon
   return ["<workspace>", ...lines, "</workspace>"].join("\n");
 }
 
-/** The agent's instructions, the workspace note when given, then its skills, each in a named block. */
+/**
+ * The system prompt, ordered for the provider's prompt cache (ADR-0048): a cache reuses a prompt from
+ * its start up to the first difference. What every job of an agent shares comes first (instructions,
+ * then each skill with its text only); what is specific to this job (the workspace paths, where a
+ * skill's supporting files were placed) comes last, so the long shared part stays a reusable prefix.
+ */
 export function composeSystemPrompt(agent: AgentDefinition, workspace?: JobSpec["workspace"]): string {
   const parts = [agent.instructions.trim()];
+  for (const skill of agent.skills ?? []) parts.push(`<skill name="${skill.name}">\n${skill.content.trim()}\n</skill>`);
   if (workspace !== undefined) parts.push(describeWorkspace(workspace, agent.tools));
-  for (const skill of agent.skills ?? []) {
-    const supporting =
-      skill.supporting === undefined || skill.supporting.paths.length === 0
-        ? ""
-        : `\n\nSupporting files of this skill, read only when you need them (read tool), under ${skill.supporting.dir}:\n${skill.supporting.paths.map((path) => `- ${path}`).join("\n")}`;
-    parts.push(`<skill name="${skill.name}">\n${skill.content.trim()}${supporting}\n</skill>`);
+  const files = (agent.skills ?? []).filter((skill) => skill.supporting !== undefined && skill.supporting.paths.length > 0);
+  if (files.length > 0) {
+    parts.push(
+      [
+        "<skill-files>",
+        "Supporting files of the skills above, read only when you need them (read tool):",
+        ...files.map((skill) => `${skill.name} (under ${skill.supporting!.dir}): ${skill.supporting!.paths.join(", ")}`),
+        "</skill-files>",
+      ].join("\n"),
+    );
   }
   return parts.join("\n\n");
 }

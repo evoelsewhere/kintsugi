@@ -2,7 +2,7 @@
 // ADR-0028; schema: admin, migration 008_projects.sql). Links reference admin.git_repository.
 
 import { Injectable } from "@nestjs/common";
-import type { Disposition, RepositoryRole } from "@kintsugi/domain";
+import type { RepositoryRole } from "@kintsugi/domain";
 import type { Pool } from "pg";
 import { getPool, withTransaction } from "#common/db/pool.js";
 import {
@@ -30,7 +30,6 @@ interface ApplicationRow {
   project_id: string;
   id: string;
   name: string;
-  disposition: Disposition;
   pipeline: string | null;
   created_at: Date;
   updated_at: Date;
@@ -47,7 +46,7 @@ interface LinkRow {
 const PROJECT_SELECT = `select p.id, p.name, p.description, d.repository_id as document_repository_id, p.created_at, p.updated_at
   from admin.project p
   left join admin.project_repository d on d.project_id = p.id and d.role = 'document'`;
-const APPLICATION_COLUMNS = "project_id, id, name, disposition, pipeline, created_at, updated_at";
+const APPLICATION_COLUMNS = "project_id, id, name, pipeline, created_at, updated_at";
 const LINK_COLUMNS = "project_id, application_id, repository_id, role, component";
 
 /** Unique and check violations become a conflict the application layer can report. */
@@ -131,11 +130,10 @@ export class PgProjectStore extends ProjectStore {
 
   async createApplication(projectId: string, input: CreateApplication): Promise<ApplicationRecord> {
     await guarded(() =>
-      this.#pool.query("insert into admin.application (project_id, id, name, disposition, pipeline) values ($1, $2, $3, $4, $5)", [
+      this.#pool.query("insert into admin.application (project_id, id, name, pipeline) values ($1, $2, $3, $4)", [
         projectId,
         input.id,
         input.name,
-        input.disposition,
         input.pipeline ?? null,
       ]),
     );
@@ -144,10 +142,10 @@ export class PgProjectStore extends ProjectStore {
 
   async updateApplication(projectId: string, id: string, input: UpdateApplication): Promise<ApplicationRecord | undefined> {
     const result = await this.#pool.query(
-      `update admin.application set name = coalesce($3, name), disposition = coalesce($4, disposition),
-         pipeline = case when $5::boolean then $6 else pipeline end, updated_at = now()
+      `update admin.application set name = coalesce($3, name),
+         pipeline = case when $4::boolean then $5 else pipeline end, updated_at = now()
        where project_id = $1 and id = $2`,
-      [projectId, id, input.name ?? null, input.disposition ?? null, input.pipeline !== undefined, input.pipeline ?? null],
+      [projectId, id, input.name ?? null, input.pipeline !== undefined, input.pipeline ?? null],
     );
     return (result.rowCount ?? 0) === 0 ? undefined : this.getApplication(projectId, id);
   }
@@ -203,7 +201,6 @@ function toApplication(row: ApplicationRow): ApplicationRecord {
     id: row.id,
     projectId: row.project_id,
     name: row.name,
-    disposition: row.disposition,
     ...(row.pipeline === null ? {} : { pipeline: row.pipeline }),
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),

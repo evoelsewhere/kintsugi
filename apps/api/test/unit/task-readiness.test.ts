@@ -38,7 +38,7 @@ function projection(unitId = "billing/invoices/tax", assignedUserId: string | nu
     {
       sourceId: "src:task-pack",
       role: "task-pack",
-      path: "applications/billing/units/invoices/tax/task.md",
+      path: "10-applications/billing/02-modern/invoices/tax/task.md",
       requiredFor: ["design", "implementation", "verification"] as const,
       availability: "present" as const,
       publication: "published" as const,
@@ -47,7 +47,7 @@ function projection(unitId = "billing/invoices/tax", assignedUserId: string | nu
     {
       sourceId: "src:as-is",
       role: "as-is-specification",
-      path: "applications/billing/units/invoices/tax/as-is.md",
+      path: "10-applications/billing/01-legacy/invoices/tax/spec.md",
       requiredFor: ["design", "implementation"] as const,
       availability: "present" as const,
       publication: "published" as const,
@@ -56,7 +56,7 @@ function projection(unitId = "billing/invoices/tax", assignedUserId: string | nu
     {
       sourceId: "src:basic",
       role: "basic-design",
-      path: "applications/billing/to-be/design.md",
+      path: "10-applications/billing/02-modern/design.md",
       requiredFor: ["implementation", "verification"] as const,
       availability: "missing" as const,
       publication: "unknown" as const,
@@ -65,7 +65,7 @@ function projection(unitId = "billing/invoices/tax", assignedUserId: string | nu
     {
       sourceId: "src:detailed",
       role: "detailed-design",
-      path: "applications/billing/units/invoices/tax/design.md",
+      path: "10-applications/billing/02-modern/invoices/tax/detail/logic.md",
       requiredFor: ["implementation", "verification"] as const,
       producedBy: "design" as const,
       availability: "missing" as const,
@@ -78,7 +78,7 @@ function projection(unitId = "billing/invoices/tax", assignedUserId: string | nu
     unitId,
     repositoryId: "docs",
     sourceCommit: COMMIT,
-    sourcePath: "applications/billing/units/invoices/tax/unit.md",
+    sourcePath: "10-applications/billing/02-modern/invoices/tax/README.md",
     sourceHash: "b".repeat(64),
     workItem,
     requiredInputs,

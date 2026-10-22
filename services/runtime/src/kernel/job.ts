@@ -3,9 +3,11 @@
 // an assistant message with stopReason "error" / "aborted" — so the outcome is read from
 // the last assistant message, never assumed from the promise.
 
+import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import type { JobEvent, JobFailureReason, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
+import type { JobEvent, JobFailureReason, JobHandle, JobSpan, JobSpec } from "@kintsugi/runtime-sdk";
 import { EventStream } from "../event-stream.js";
+import { beginSpan, JobTelemetry, type LiveSpan } from "./telemetry.js";
 
 type JobEnd = Extract<JobEvent, { type: "job.completed" | "job.failed" }>;
 
@@ -16,7 +18,16 @@ interface AssistantLike {
   role: "assistant";
   stopReason?: string;
   errorMessage?: string;
-  usage?: { input?: number; output?: number; cost?: { total?: number } };
+  usage?: Usage;
+}
+
+/** Token counts of one model call (or of one compaction summary), as pi reports them. */
+interface Usage {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  cost?: { total?: number };
 }
 
 const isAssistant = (message: unknown): message is AssistantLike =>
@@ -39,14 +50,26 @@ export class KernelJob implements JobHandle {
   #blocked = 0;
   #inputTokens = 0;
   #outputTokens = 0;
+  #cacheReadTokens = 0;
+  #cacheWriteTokens = 0;
   #costUsd = 0;
+  #compactions = 0;
+  #compacting = false;
+  /** Set when pi gave up recovering from a context overflow (`compaction_end` with an error). */
+  #overflowFailed = false;
+  #contextPeakPercent = 0;
   #last: AssistantLike | undefined;
-  /**
-   * When the session last showed any sign of work: every session event, including thinking and
-   * tool-call argument deltas that produce no JobEvent. The agent child turns it into liveness
-   * lines for the launcher's idle watchdog.
-   */
-  lastActivityAt = Date.now();
+  #lastEventAt = Date.now();
+  /** The job's spans (ADR-0048): one root, a span per turn, tool call, compaction and retry. */
+  readonly #telemetry = new JobTelemetry((span) => this.#emitSpan(span));
+  readonly #root: LiveSpan;
+  #turnSpan: LiveSpan | undefined;
+  #turnUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, stopReason: "" };
+  readonly #toolSpans = new Map<string, LiveSpan>();
+  /** Calls a tool made through another one (codemode's nested calls), by the outer call's id. */
+  readonly #nestedCalls = new Map<string, number>();
+  #compactionSpan: LiveSpan | undefined;
+  #retrySpan: LiveSpan | undefined;
   #streamed = { thinking: 0, toolArgs: 0, text: 0 };
   #progressAt = 0;
 
@@ -66,6 +89,22 @@ export class KernelJob implements JobHandle {
       agent: `${spec.agent.id}@${spec.agent.version}`,
       ...(spec.metadata === undefined ? {} : { metadata: spec.metadata }),
     });
+    this.#root = beginSpan(this.#telemetry, "kintsugi.job", {
+      agent: spec.agent.id,
+      agentVersion: spec.agent.version,
+      provider: spec.model.provider,
+      model: spec.model.id,
+    });
+  }
+
+  /**
+   * When the session last showed any sign of work: every session event, including thinking and
+   * tool-call argument deltas that produce no JobEvent. The agent child turns it into liveness
+   * lines for the launcher's idle watchdog. A compaction is one long model call with no events
+   * while it runs, so the job counts as working for as long as it lasts.
+   */
+  get lastActivityAt(): number {
+    return this.#compacting ? Date.now() : this.#lastEventAt;
   }
 
   /** Runs the task on the session; resolves when the job has ended. */
@@ -141,11 +180,14 @@ export class KernelJob implements JobHandle {
 
   #onEvent(event: AgentSessionEvent): void {
     if (this.#ended) return;
-    this.lastActivityAt = Date.now();
+    this.#lastEventAt = Date.now();
     if (event.type === "message_update") this.#track(event.assistantMessageEvent);
     switch (event.type) {
       case "turn_start": {
         this.#turns += 1;
+        this.#endTurn();
+        this.#turnUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, stopReason: "" };
+        this.#turnSpan = beginSpan(this.#root.span, "kintsugi.turn", { turn: this.#turns });
         const max = this.spec.limits.maxTurns;
         if (max !== undefined && this.#turns > max) void this.#halt("max-turns", `stopped after ${max} turn(s)`);
         return;
@@ -155,30 +197,98 @@ export class KernelJob implements JobHandle {
           this.events.push({ type: "message.delta", jobId: this.jobId, text: event.assistantMessageEvent.delta });
         }
         return;
+      case "turn_end":
+        this.#endTurn();
+        return;
       case "tool_execution_start":
+        this.#beginTool(event.toolCallId, event.toolName, (event as { parentToolCallId?: string }).parentToolCallId);
         this.events.push({ type: "tool.call", jobId: this.jobId, callId: event.toolCallId, tool: event.toolName, input: event.args, decision: "allowed" });
         return;
       case "tool_execution_end":
+        this.#endTool(event.toolCallId, !event.isError, event.durationMs);
         this.events.push({
           type: "tool.result",
           jobId: this.jobId,
           callId: event.toolCallId,
           ok: !event.isError,
-          ...(event.durationMs === undefined ? {} : { summary: `took ${event.durationMs} ms` }),
+          ...(event.durationMs === undefined ? {} : { summary: `took ${event.durationMs} ms`, durationMs: event.durationMs }),
         });
         return;
       case "message_end": {
         if (!isAssistant(event.message)) return;
         this.#last = event.message;
-        this.#inputTokens += event.message.usage?.input ?? 0;
-        this.#outputTokens += event.message.usage?.output ?? 0;
-        this.#costUsd += event.message.usage?.cost?.total ?? 0;
-        const max = this.spec.limits.maxCostUsd;
-        if (max !== undefined && this.#costUsd > max) void this.#halt("budget", `cost ${this.#costUsd.toFixed(4)} USD exceeded ${max} USD`);
+        this.#count(event.message.usage);
+        this.#turnUsage.input += event.message.usage?.input ?? 0;
+        this.#turnUsage.output += event.message.usage?.output ?? 0;
+        this.#turnUsage.cacheRead += event.message.usage?.cacheRead ?? 0;
+        this.#turnUsage.cacheWrite += event.message.usage?.cacheWrite ?? 0;
+        this.#turnUsage.cost += event.message.usage?.cost?.total ?? 0;
+        this.#turnUsage.stopReason = event.message.stopReason ?? "";
+        this.#watchContext();
         return;
       }
+      case "compaction_start":
+        this.#compacting = true;
+        this.#compactionSpan?.end();
+        this.#compactionSpan = beginSpan((this.#turnSpan ?? this.#root).span, "kintsugi.compaction", { reason: event.reason });
+        return;
+      case "auto_retry_start":
+        this.#retrySpan?.end();
+        this.#retrySpan = beginSpan(this.#root.span, "kintsugi.retry", {
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          delayMs: event.delayMs,
+          error: event.errorMessage.slice(0, 200),
+        });
+        return;
+      case "auto_retry_end":
+        this.#retrySpan?.end({ success: event.success, attempt: event.attempt }, event.success ? undefined : { status: "error", error: { name: "RetryFailed", message: (event.finalError ?? "the retry failed").slice(0, 300) } });
+        this.#retrySpan = undefined;
+        return;
+      case "compaction_end":
+        this.#compacting = false;
+        this.#compactionSpan?.end(
+          {
+            aborted: event.aborted,
+            willRetry: event.willRetry,
+            ...(event.result === undefined ? {} : { tokensBefore: event.result.tokensBefore }),
+            ...(event.result?.estimatedTokensAfter === undefined ? {} : { tokensAfter: event.result.estimatedTokensAfter }),
+            summaryInputTokens: event.result?.usage?.input ?? 0,
+            summaryOutputTokens: event.result?.usage?.output ?? 0,
+            summaryCostUsd: event.result?.usage?.cost?.total ?? 0,
+          },
+          event.errorMessage === undefined ? undefined : { status: "error", error: { name: "CompactionFailed", message: event.errorMessage.slice(0, 300) } },
+        );
+        this.#compactionSpan = undefined;
+        if (event.aborted) return;
+        if (event.errorMessage === undefined) this.#compactions += 1;
+        else if (/overflow/i.test(event.errorMessage)) this.#overflowFailed = true;
+        // The summary is a model call of its own: its tokens and cost belong to the job and to its budget.
+        this.#count(event.result?.usage);
+        return;
       default:
         return;
+    }
+  }
+
+  /** Adds one call's usage to the totals and stops the job when it passes its budget. */
+  #count(usage: Usage | undefined): void {
+    this.#inputTokens += usage?.input ?? 0;
+    this.#outputTokens += usage?.output ?? 0;
+    this.#cacheReadTokens += usage?.cacheRead ?? 0;
+    this.#cacheWriteTokens += usage?.cacheWrite ?? 0;
+    this.#costUsd += usage?.cost?.total ?? 0;
+    const max = this.spec.limits.maxCostUsd;
+    if (max !== undefined && this.#costUsd > max) void this.#halt("budget", `cost ${this.#costUsd.toFixed(4)} USD exceeded ${max} USD`);
+  }
+
+  /** Remembers how full the context window got. */
+  #watchContext(): void {
+    try {
+      const percent = this.#session?.getContextUsage()?.percent;
+      if (typeof percent === "number" && percent > this.#contextPeakPercent) this.#contextPeakPercent = percent;
+    } catch {
+      // a session that cannot say how full it is simply reports no peak
     }
   }
 
@@ -186,15 +296,105 @@ export class KernelJob implements JobHandle {
     if (this.#stop !== undefined) return this.#end(this.#stop);
     const stopReason = this.#last?.stopReason;
     if (this.#last === undefined) return this.#end({ reason: "error", error: "the model returned no response" });
-    if (stopReason === "error") return this.#end({ reason: "error", error: this.#last.errorMessage ?? "model error" });
+    if (stopReason === "error") {
+      const message = this.#last.errorMessage ?? "model error";
+      if (this.#overflowFailed || isContextOverflow(this.#last as unknown as AssistantMessage)) {
+        return this.#end({ reason: "context-overflow", error: `the conversation outgrew the model's context window and compacting it did not help: ${message}` });
+      }
+      return this.#end({ reason: "error", error: message });
+    }
     if (stopReason === "aborted") return this.#end({ reason: "aborted", error: this.#last.errorMessage ?? "aborted" });
     if (stopReason === "length") return this.#end({ reason: "error", error: "the response hit the model's output token limit" });
     this.#end(undefined);
   }
 
+  #emitSpan(span: JobSpan): void {
+    this.events.push({ type: "span", jobId: this.jobId, span });
+  }
+
+  /** Closes the turn's span with what the turn cost. */
+  #endTurn(): void {
+    if (this.#turnSpan === undefined) return;
+    const usage = this.#turnUsage;
+    const percent = this.#contextPercent();
+    this.#turnSpan.end({
+      inputTokens: usage.input,
+      outputTokens: usage.output,
+      cacheReadTokens: usage.cacheRead,
+      cacheWriteTokens: usage.cacheWrite,
+      costUsd: usage.cost,
+      ...(usage.stopReason === "" ? {} : { stopReason: usage.stopReason }),
+      ...(percent === undefined ? {} : { contextPercent: Math.round(percent * 10) / 10 }),
+    });
+    this.#turnSpan = undefined;
+  }
+
+  #contextPercent(): number | undefined {
+    try {
+      const percent = this.#session?.getContextUsage()?.percent;
+      return typeof percent === "number" ? percent : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** A tool call is a span under its turn, or under the call that made it (codemode runs other tools). */
+  #beginTool(callId: string, tool: string, parentCallId: string | undefined): void {
+    const outer = parentCallId ?? (callId.includes("/") ? callId.slice(0, callId.lastIndexOf("/")) : undefined);
+    if (outer !== undefined) this.#nestedCalls.set(outer, (this.#nestedCalls.get(outer) ?? 0) + 1);
+    const parent = (outer === undefined ? undefined : this.#toolSpans.get(outer)) ?? this.#turnSpan ?? this.#root;
+    const mcp = tool.startsWith("mcp__");
+    const name = mcp ? "kintsugi.mcp" : tool === "codemode" ? "kintsugi.codemode" : "kintsugi.tool";
+    this.#toolSpans.set(
+      callId,
+      beginSpan(parent.span, name, { tool, ...(outer === undefined ? {} : { nested: true }), ...(mcp ? { server: tool.split("__")[1] ?? "" } : {}) }),
+    );
+  }
+
+  #endTool(callId: string, ok: boolean, executeMs: number | undefined): void {
+    const span = this.#toolSpans.get(callId);
+    if (span === undefined) return;
+    this.#toolSpans.delete(callId);
+    const nested = this.#nestedCalls.get(callId);
+    span.end(
+      { ok, ...(executeMs === undefined ? {} : { executeMs }), ...(nested === undefined ? {} : { nestedCalls: nested }) },
+      ok ? undefined : { status: "error", error: { name: "ToolError", message: "the tool reported an error" } },
+    );
+  }
+
+  /** Settles every open span, the root last, with how the job ended. */
+  #closeSpans(failure: { reason: JobFailureReason; error: string } | undefined): void {
+    for (const span of this.#toolSpans.values()) span.end({ ok: false, ended: "job" });
+    this.#toolSpans.clear();
+    this.#compactionSpan?.end({ ended: "job" });
+    this.#retrySpan?.end({ ended: "job" });
+    this.#endTurn();
+    this.#root.end(
+      {
+        turns: this.#turns,
+        inputTokens: this.#inputTokens,
+        outputTokens: this.#outputTokens,
+        cacheReadTokens: this.#cacheReadTokens,
+        cacheWriteTokens: this.#cacheWriteTokens,
+        costUsd: this.#costUsd,
+        compactions: this.#compactions,
+        contextPeakPercent: Math.round(this.#contextPeakPercent * 10) / 10,
+        outcome: failure?.reason ?? "completed",
+      },
+      failure === undefined ? undefined : { status: "error", error: { name: failure.reason, message: failure.error.slice(0, 300) } },
+    );
+  }
+
   #end(failure: { reason: JobFailureReason; error: string } | undefined): void {
     if (this.#ended) return;
     this.#ended = true;
+    void this.#finalize(failure);
+  }
+
+  /** Settles the spans first, so every `span` event precedes `usage` and the end event. */
+  async #finalize(failure: { reason: JobFailureReason; error: string } | undefined): Promise<void> {
+    this.#closeSpans(failure);
+    await this.#telemetry.whenIdle();
     this.events.push({
       type: "usage",
       jobId: this.jobId,
@@ -202,6 +402,11 @@ export class KernelJob implements JobHandle {
       inputTokens: this.#inputTokens,
       outputTokens: this.#outputTokens,
       costUsd: this.#costUsd,
+      cacheReadTokens: this.#cacheReadTokens,
+      cacheWriteTokens: this.#cacheWriteTokens,
+      turns: this.#turns,
+      compactions: this.#compactions,
+      contextPeakPercent: Math.round(this.#contextPeakPercent * 10) / 10,
     });
     const event: JobEnd =
       failure === undefined

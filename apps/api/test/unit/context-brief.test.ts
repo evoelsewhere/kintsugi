@@ -6,7 +6,7 @@ const source: SnapshotSource = {
   sourceId: "src_large_design",
   role: "detailed-design",
   repositoryId: "project-docs",
-  path: "applications/billing/units/invoices/tax/design.md",
+  path: "10-applications/billing/02-modern/invoices/tax/detail/logic.md",
   commit: "a".repeat(40),
   contentHash: "sha256:" + "b".repeat(64),
   availability: "present",

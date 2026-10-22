@@ -189,7 +189,7 @@ function StageView({ results, compare, projectId, runs }: { results: StageResult
     case "map":
       return <MapResultsView results={results} compare={compare} />;
     case "extract-rules":
-      return <RulesResultsView results={results} compare={compare} />;
+      return <RulesResultsView results={results} compare={compare} projectId={projectId} />;
     case "harden":
       return <HardenResultsView results={results} compare={compare} />;
     case "understand":

@@ -21,6 +21,67 @@ function unitMarkdown(id: string): string {
 }
 
 describe("GitTaskReader", () => {
+  it("indexes README cards and derives inputs from current unit design sets", async () => {
+    const detailSet = ["---", "id: detail", "title: Detailed design", "version: 1", "appliesTo: []", "needs: []", "---", "| Path | Template | Required | When |", "| --- | --- | --- | --- |", "| logic.md | logic.md | yes | |", "| data-access.md | data-access.md | yes | |"].join("\n");
+    const appSet = ["---", "id: architecture", "title: Application architecture", "version: 1", "scope: application", "needs: []", "---", "| Path | Template | Required | When |", "| --- | --- | --- | --- |", "| overview.md | overview.md | yes | |"].join("\n");
+    const card = unitMarkdown("web/core/task").replace("assignee: alice", "links:\n  businessRules: [RULE-001]\n  mappings: [01-standards/mappings/example.md]\nwaived:\n  - \"detail/data-access.md: no data store\"\nassignee: alice");
+    const extraTemplateFiles = Array.from({ length: 40 }, (_, index) => "unused-" + index + ".md");
+    let activeTemplateReads = 0;
+    let maximumTemplateReads = 0;
+    const contents = new Map<string, string>([
+      ["01-standards/templates/architecture/set.md", appSet],
+      ["01-standards/templates/architecture/overview.md", "# Application overview"],
+      ["10-applications/web/02-modern/_design/architecture/overview.md", "# App design"],
+      ["01-standards/templates/detail/set.md", detailSet],
+      ["01-standards/templates/detail/logic.md", "# Unit logic"],
+      ["01-standards/templates/detail/data-access.md", "# Data access"],
+      ["10-applications/web/02-modern/core/task/task.md", "# Task"],
+      ["10-applications/web/01-legacy/core/task/spec.md", "# AS IS"],
+      ["10-applications/web/01-legacy/core/task/rules/RULE-001.md", "# Rule"],
+      ["01-standards/mappings/example.md", "# Mapping"],
+    ]);
+    const documents = {
+      context: async () => ({ repo: { repositoryId: "docs" }, project: { id: "shop", applications: [{ id: "web" }] } }),
+      resolve: async (_context: unknown, commit: string) => ({ commit }),
+      listNames: async (_context: unknown, _commit: string, path: string) => {
+        if (path === "10-applications") return [{ kind: "dir", name: "web" }];
+        if (path === "10-applications/web/02-modern") return [{ kind: "dir", name: "core" }];
+        if (path === "10-applications/web/02-modern/core") return [{ kind: "dir", name: "task" }];
+        if (path === "10-applications/web/02-modern/core/task") return [{ kind: "file", name: "README.md" }];
+        if (path === "01-standards/templates") return [{ kind: "dir", name: "architecture" }, { kind: "dir", name: "detail" }];
+        if (path === "01-standards/templates/architecture") return ["set.md", "overview.md"].map((name) => ({ kind: "file", name }));
+        if (path === "01-standards/templates/detail") return ["set.md", "logic.md", "data-access.md", ...extraTemplateFiles].map((name) => ({ kind: "file", name }));
+        return [];
+      },
+      readText: async (_context: unknown, _commit: string, path: string) => {
+        if (path.startsWith("01-standards/templates/detail/")) {
+          activeTemplateReads++;
+          maximumTemplateReads = Math.max(maximumTemplateReads, activeTemplateReads);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            return contents.get(path);
+          } finally {
+            activeTemplateReads--;
+          }
+        }
+        return path === "10-applications/web/02-modern/core/task/README.md" ? card : contents.get(path);
+      },
+    } as unknown as DocumentsService;
+    const reader = new GitTaskReader(documents);
+    const indexed = await reader.readProject("shop", await reader.currentRevision("shop"));
+    expect(indexed.issues).toEqual([]);
+    expect(indexed.tasks).toHaveLength(1);
+    const sources = indexed.tasks[0]?.sourceReferences ?? [];
+    expect(sources.find((source) => source.role === "task-pack")?.path).toBe("10-applications/web/02-modern/core/task/task.md");
+    expect(sources.find((source) => source.role === "as-is-specification")?.path).toBe("10-applications/web/01-legacy/core/task/spec.md");
+    expect(sources.find((source) => source.role === "basic-design")?.path).toBe("10-applications/web/02-modern/_design/architecture/overview.md");
+    expect(sources.filter((source) => source.role === "detailed-design").map((source) => source.path)).toEqual(["10-applications/web/02-modern/core/task/detail/logic.md"]);
+    expect(sources.find((source) => source.role === "business-rule")?.path).toBe("10-applications/web/01-legacy/core/task/rules/RULE-001.md");
+    expect(sources.find((source) => source.role === "mapping")?.path).toBe("01-standards/mappings/example.md");
+    expect(maximumTemplateReads).toBeLessThanOrEqual(20);
+    expect(maximumTemplateReads).toBeGreaterThan(1);
+  });
+
   it("rejects oversized directory listings before filtering their entries", async () => {
     const oversizedDirectory = Array.from({ length: 10_001 }, (_, index) => ({
       kind: "file",
@@ -33,9 +94,9 @@ describe("GitTaskReader", () => {
       })),
       resolve: vi.fn(async (_context: unknown, commit: string) => ({ commit })),
       listNames: vi.fn(async (_context: unknown, _commit: string, path: string) =>
-        path === "applications"
+        path === "10-applications"
           ? [{ kind: "dir", name: "web" }]
-          : path === "applications/web/units"
+          : path === "10-applications/web/02-modern"
             ? oversizedDirectory
             : [],
       ),
@@ -50,7 +111,7 @@ describe("GitTaskReader", () => {
   });
 
   it("rejects a project index that exceeds its aggregate source-byte budget", async () => {
-    const units = Array.from({ length: 257 }, (_, index) => "unit-" + String(index).padStart(3, "0"));
+    const units = Array.from({ length: 513 }, (_, index) => "unit-" + String(index).padStart(3, "0"));
     const largeSource = "x".repeat(64 * 1024);
     const documents = {
       context: vi.fn(async () => ({
@@ -59,14 +120,14 @@ describe("GitTaskReader", () => {
       })),
       resolve: vi.fn(async (_context: unknown, commit: string) => ({ commit })),
       listNames: vi.fn(async (_context: unknown, _commit: string, path: string) => {
-        if (path === "applications") return [{ kind: "dir", name: "web" }];
-        if (path === "applications/web/units") return [{ kind: "dir", name: "core" }];
-        if (path === "applications/web/units/core") return units.map((name) => ({ kind: "dir", name }));
-        if (path.startsWith("applications/web/units/core/unit-")) return [{ kind: "file", name: "unit.md" }];
+        if (path === "10-applications") return [{ kind: "dir", name: "web" }];
+        if (path === "10-applications/web/02-modern") return [{ kind: "dir", name: "core" }];
+        if (path === "10-applications/web/02-modern/core") return units.map((name) => ({ kind: "dir", name }));
+        if (path.startsWith("10-applications/web/02-modern/core/unit-")) return [{ kind: "file", name: "README.md" }];
         return [];
       }),
       readText: vi.fn(async (_context: unknown, _commit: string, path: string) =>
-        path.endsWith("/unit.md") ? unitMarkdown(path.split("/").at(-2) ? "web/core/" + path.split("/").at(-2) : "web/core/unknown") : largeSource,
+        path.endsWith("/README.md") ? unitMarkdown(path.split("/").at(-2) ? "web/core/" + path.split("/").at(-2) : "web/core/unknown") : largeSource,
       ),
     } as unknown as DocumentsService;
     const reader = new GitTaskReader(documents);
@@ -103,15 +164,15 @@ it.each([
     context: async () => ({ repo: { repositoryId: "docs" }, project: { id: "shop", applications: [{ id: "web" }] } }),
     resolve: async () => ({ commit: "a".repeat(40) }),
     listNames: async (_context: unknown, _commit: string, path: string) => {
-      if (path === "applications") return [{ kind: "dir", name: "web" }];
-      if (path === "applications/web/units") return [{ kind: "dir", name: "core" }];
-      if (path === "applications/web/units/core") return [{ kind: "dir", name: "task" }];
-      return [{ kind: "file", name: "unit.md" }];
+      if (path === "10-applications") return [{ kind: "dir", name: "web" }];
+      if (path === "10-applications/web/02-modern") return [{ kind: "dir", name: "core" }];
+      if (path === "10-applications/web/02-modern/core") return [{ kind: "dir", name: "task" }];
+      return [{ kind: "file", name: "README.md" }];
     },
     readText: async () => markdown,
   } as unknown as DocumentsService;
   const reader = new GitTaskReader(documents);
   const indexed = await reader.readProject("shop", await reader.currentRevision("shop"));
   expect(indexed.tasks).toEqual([]);
-  expect(indexed.issues).toEqual([{ path: "applications/web/units/core/task/unit.md", messages: [field + ": is too long"] }]);
+  expect(indexed.issues).toEqual([{ path: "10-applications/web/02-modern/core/task/README.md", messages: [field + ": is too long"] }]);
 });

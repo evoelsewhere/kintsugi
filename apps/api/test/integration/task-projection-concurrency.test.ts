@@ -14,7 +14,7 @@ function snapshot(commit: string, unit: string): ProjectTaskSnapshot {
   const unitId = "web/core/" + unit;
   return { projectId: "shop", repositoryId: "docs", commit: commit.repeat(40), applicationIdsFingerprint: fingerprint,
     tasks: [{ projectId: "shop", unitId, repositoryId: "docs", sourceCommit: commit.repeat(40),
-      sourcePath: "applications/web/units/core/" + unit + "/unit.md", sourceHash: "b".repeat(64),
+      sourcePath: "10-applications/web/02-modern/core/" + unit + "/README.md", sourceHash: "b".repeat(64),
       workItem: { id: unitId, application: "web", module: "core", kind: "module", title: unit,
         phase: "migrate", status: "pending" }, requiredInputs: [], sourceReferences: [], predecessorGates: [] }], issues: [] };
 }

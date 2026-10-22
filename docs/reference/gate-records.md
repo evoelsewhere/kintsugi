@@ -1,6 +1,6 @@
 # Evidence-bound gate records
 
-The authenticated gate decision API publishes unit records to `applications/<app>/units/<module>/<unit>/reviews/<gate>.md`. It always asks the document writer for `reviewAll: true`. Scaffolded gate names, a database approval, branch ancestry and an actor typed into Markdown do not establish an effective approval.
+The authenticated gate decision API publishes unit records to `10-applications/<app>/02-modern/<module>/<unit>/reviews/<gate>.md`. It always asks the document writer for `reviewAll: true`. Scaffolded gate names, a database approval, branch ancestry and an actor typed into Markdown do not establish an effective approval.
 
 A version 1 record contains a readable summary and exactly one evidence block between `<!-- kintsugi-gate-evidence:v1 -->` and `<!-- /kintsugi-gate-evidence -->`. Its JSON object carries:
 
@@ -23,4 +23,4 @@ The worker observes the gate PR through its registered provider repository ident
 
 After verification, `workflow.gate_publication` and the `gate.effective` durable event are committed through one idempotent transaction, keyed by decision and evidence hash. Continuation consumes that event in the next workflow step; publication does not invent subsequent tasks. Failed writer attempts retain the decision and durable write identity for retry. Missing provider or Git objects remain pending. Changed context or evidence is stale. A closed gate PR or invalid evidence requires repair and a new reviewed basis where appropriate.
 
-See [ADR-0043](../decisions/0043-evidence-bound-pr-continuation.md) and the [document write path](document-repo-write-path.md).
+See [ADR-0054](../decisions/0054-evidence-bound-pr-continuation.md) and the [document write path](document-repo-write-path.md).

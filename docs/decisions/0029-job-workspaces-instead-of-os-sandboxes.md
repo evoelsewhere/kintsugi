@@ -54,8 +54,9 @@ scripts a model wrote in an earlier job.
 4. **After every step**, before anything is indexed or published:
    - `out/restricted/` is stored as encrypted restricted records (`governance.restricted_record`) and
      removed from `out`; it never reaches Git, logs or summaries;
-   - credential-shaped values in `out/` are masked in place (`hooks/mask_output.py`, sharing the hook's patterns); the JobOutput hook (`hooks/job_output.py`) then checks `out/` as a script step and any remaining finding fails the step. A false positive in a note therefore never fails a run, while an unmaskable value still does
-     with a reason built from the hook's redacted report;
+   - the JobOutput hook (`hooks/job_output.py`) checks `out/` as a script step and a malformed artifact fails the step
+     with a reason built from the hook's redacted report. Credentials in `out/` are neither scanned nor masked: a pattern-based
+     rewrite corrupted generated scripts and failed runs on false positives, and the deployment relies on managed team/enterprise LLM plans;
    - the files are indexed as artifacts with their provenance.
    A top-level run then hands `out/` to the document repo writer (ADR-0019).
 5. **There is no OS-level isolation**, and the documents say so: no network blocking, and the process

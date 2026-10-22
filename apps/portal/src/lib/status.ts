@@ -2,16 +2,18 @@
 // document write, a repository mirror, a gate and a worker. Every page renders statuses through these maps
 // (components/status-badges.tsx), so a status looks the same wherever it appears.
 
-import type { StatusTone } from "@/components/ui/status-dot";
+import type { StatusBusy, StatusTone } from "@/components/ui/status-dot";
 
 export interface StatusStyle {
   tone: StatusTone;
   label: string;
+  /** Set for a status that is work in progress (spin) or waiting to start (pulse): its dot moves. */
+  busy?: StatusBusy;
 }
 
 export const RUN_STATUS: Record<string, StatusStyle> = {
-  queued: { tone: "muted", label: "Queued" },
-  running: { tone: "blue", label: "Running" },
+  queued: { tone: "muted", label: "Queued", busy: "pulse" },
+  running: { tone: "blue", label: "Running", busy: "spin" },
   succeeded: { tone: "green", label: "Succeeded" },
   failed: { tone: "red", label: "Failed" },
   cancelled: { tone: "orange", label: "Cancelled" },
@@ -19,7 +21,7 @@ export const RUN_STATUS: Record<string, StatusStyle> = {
 
 /** The derived status of a catalog item (ADR-0033). */
 export const ITEM_STATUS: Record<string, StatusStyle> = {
-  running: { tone: "blue", label: "Running" },
+  running: { tone: "blue", label: "Running", busy: "spin" },
   "in-pr": { tone: "purple-light", label: "In pull request" },
   failed: { tone: "red", label: "Failed" },
   stale: { tone: "orange", label: "Stale" },

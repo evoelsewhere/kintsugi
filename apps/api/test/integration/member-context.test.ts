@@ -77,7 +77,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
   let snapshotService: SnapshotService;
   let documentQuery: DocumentQueryService;
   const previousDataDir = process.env["KINTSUGI_DATA_DIR"];
-  const taskPath = "applications/web/units/core/invoice/task.md";
+  const taskPath = "10-applications/web/02-modern/core/invoice/task.md";
 
   beforeAll(async () => {
     database = await createTestDatabase();
@@ -85,9 +85,9 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
     process.env["KINTSUGI_DATA_DIR"] = dataDir;
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
-    await remote.commit("docs", "applications/web/units/core/invoice/unit.md", unit);
+    await remote.commit("docs", "10-applications/web/02-modern/core/invoice/README.md", unit);
     await remote.commit("docs", taskPath, taskPack("snapshot A"));
-    commitA = await remote.commit("docs", "applications/web/units/core/invoice/as-is.md", "# Current behavior\nInvoices round per line.\n");
+    commitA = await remote.commit("docs", "10-applications/web/01-legacy/core/invoice/spec.md", "# Current behavior\nInvoices round per line.\n");
     await cloneMirror(remote.baseUrl + "/docs.git", new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
     app = await startTestAppWithDatabase(database);
@@ -245,7 +245,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow immutable member context (i
 
     const oversizedUnit = unit.replace("status: pending", "status: pending\nlinks:\n  mappings:\n" +
       Array.from({ length: 100 }, (_, index) => "    - standards/mapping-" + index + ".md").join("\n"));
-    await remote.commit("docs", "applications/web/units/core/invoice/unit.md", oversizedUnit);
+    await remote.commit("docs", "10-applications/web/02-modern/core/invoice/README.md", oversizedUnit);
     await fetchMirror(new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
     const historical = await snapshotService.brief(principal, {
       projectId: brief.projectId, unitId: brief.unitId, activity: "design", snapshotId: brief.snapshotId,

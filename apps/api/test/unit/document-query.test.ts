@@ -29,7 +29,7 @@ describe("bounded snapshot search", () => {
       sourceId,
       role: "detailed-design",
       repositoryId: "docs",
-      path: "applications/web/units/core/invoice/design.md",
+      path: "10-applications/web/02-modern/core/invoice/detail/logic.md",
       commit: "a".repeat(40),
       contentHash: "sha256:" + "b".repeat(64),
       availability: "present",

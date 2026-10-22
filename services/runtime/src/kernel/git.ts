@@ -1,4 +1,4 @@
-// The kernel `git` tool (ADR-0039): git subcommands as an explicit argument list — no shell, no
+// The kernel `git` tool (ADR-0040): git subcommands as an explicit argument list — no shell, no
 // alias expansion (the first argument must be a real git command), and no option that redirects
 // the repository, loads extra configuration or starts an external helper. Read-only subcommands
 // run anywhere in the job workspace; every other subcommand runs only where the job may write
@@ -16,6 +16,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { runProcess } from "../launcher/process.js";
 import { jobEnvironment } from "../launcher/script.js";
+import { boundOutput } from "./output.js";
 import type { PathGuard } from "./paths.js";
 
 const DEFAULT_TIMEOUT_SEC = 120;
@@ -147,9 +148,9 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
       const chunks: string[] = [];
       if (result.stdout !== "") chunks.push(result.stdout);
       if (result.stderr !== "") chunks.push(result.stderr);
-      let text = chunks.join(chunks.length === 2 ? "\n" : "");
-      if (text === "") text = "(no output)";
-      const notices: string[] = [];
+      const bounded = boundOutput(chunks.join(chunks.length === 2 ? "\n" : ""), "head");
+      let text = bounded.text === "" ? "(no output)" : bounded.text;
+      const notices: string[] = bounded.notice === undefined ? [] : [bounded.notice];
       if (result.stopped === "timeout") notices.push(`git timed out after ${timeoutSec}s`);
       else if (result.stopped === "aborted") notices.push("git aborted");
       else if (result.stopped === "output-limit") notices.push("git output exceeded the capture limit");

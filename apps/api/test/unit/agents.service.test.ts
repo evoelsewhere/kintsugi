@@ -129,7 +129,7 @@ describe("agents service", () => {
     expect(format.messages.join("\n")).toMatch(/`name` must match[\s\S]*semantic version[\s\S]*instructions \(body\) are empty/);
 
     const installation = await rejection(service.create(draft({ tools: ["read", "bash"], skills: ["missing"] }), admin));
-    expect(installation.messages).toEqual([`unknown tool "bash" (available: ${KERNEL_TOOL_NAMES.join(", ")})`, 'unknown shared skill "missing"']);
+    expect(installation.messages).toEqual([`unknown tool "bash" (available: ${KERNEL_TOOL_NAMES.join(", ")}, or an MCP tool such as mcp__<server>__*)`, 'unknown shared skill "missing"']);
 
     expect(await rejection(service.create(draft({ name: "legacy-analyst" }), admin))).toMatchObject({ type: ConflictException });
     await service.create(draft(), admin);
@@ -228,11 +228,12 @@ describe("agents service", () => {
 
     await service.remove("house-reviewer", admin);
     await service.removeSkill("house-style", admin);
-    // Agent Builder exposes runtime-shared skills only; member plugin skills stay in their plugin catalog.
+    // The member connector skill stays in its own plugin; only runtime skills appear in this catalog.
     const sharedSkills = await service.listSkills();
     expect(sharedSkills.some((skill) => skill.name === "kintsugi-task")).toBe(false);
     expect(sharedSkills.map((skill) => [skill.name, skill.source, skill.usedBy])).toEqual([
-      ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "legacy-analyst"]],
+      ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "designer", "legacy-analyst"]],
+      ["understand-planning", "builtin", ["understand-planner"]],
     ]);
 
     // Each successful change is audited once; refused ones are not.

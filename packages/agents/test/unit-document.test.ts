@@ -10,6 +10,8 @@ const UNIT = [
   "title: Invoice tax",
   "phase: migrate",
   "status: pending",
+  "waived:",
+  "  - \"detail/data-access.md: no data store\"",
   "source:",
   "  - repo: legacy",
   "    paths: [src/tax.ts]",
@@ -29,6 +31,7 @@ describe("parseUnitDocument", () => {
         kind: "calculation",
         title: "Invoice tax",
         source: [{ repo: "legacy", paths: ["src/tax.ts"] }],
+        waived: ["detail/data-access.md: no data store"],
       },
     });
   });
@@ -50,6 +53,12 @@ describe("parseUnitDocument", () => {
     if (!result.ok) expect(result.issues).toContainEqual({ path: "id", message: "must match the unit path" });
   });
 
+  it("rejects gate decisions in card frontmatter", () => {
+    const withGate = UNIT.replace("status: pending", "status: pending\ngates:\n  G3:\n    status: approved");
+    const result = parseUnitDocument(withGate);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.issues).toContainEqual({ path: "gates", message: "unknown key" });
+  });
   it("rejects duplicate YAML keys and unsupported frontmatter fields", () => {
     const duplicate = parseUnitDocument(UNIT.replace("title: Invoice tax", "title: Invoice tax\ntitle: Forged"));
     const unknown = parseUnitDocument(UNIT.replace("status: pending", "status: pending\nassignment: alice"));

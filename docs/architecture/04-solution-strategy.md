@@ -20,7 +20,7 @@
 | Concern | Choice | Status |
 |---|---|---|
 | Language / monorepo | TypeScript, pnpm + Turborepo | ✅ [0002](../decisions/0002-typescript-monorepo.md) |
-| Agent runtime | pi SDK (`@earendil-works/pi-coding-agent`, exact pin, currently 1.1.0) in a Node runner | ✅ [0001](../decisions/0001-pi-as-kintsugi-runtime.md), [0004](../decisions/0004-runner-container-per-job.md), [0018](../decisions/0018-pin-pi-exact-version.md) |
+| Agent runtime | pi SDK (`@earendil-works/pi-coding-agent`, exact pin, currently 1.3.0) in a Node runner | ✅ [0001](../decisions/0001-pi-as-kintsugi-runtime.md), [0004](../decisions/0004-runner-container-per-job.md), [0018](../decisions/0018-pin-pi-exact-version.md) |
 | Orchestration | pg-boss + state machine in Postgres | ✅ [0003](../decisions/0003-postgres-job-queue.md) |
 | Data | PostgreSQL 16+ with pgvector (text KB, no graph) | ✅ [0010](../decisions/0010-postgres-only.md), [0014](../decisions/0014-no-code-graph-no-agent-config.md) |
 | Live updates | Outbox + `LISTEN/NOTIFY` → SSE | ✅ [0010](../decisions/0010-postgres-only.md) |

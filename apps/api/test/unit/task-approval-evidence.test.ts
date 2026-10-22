@@ -38,10 +38,10 @@ const record = {
   state: "effective",
   evidence,
   evidence_hash: createHash("sha256").update(gateEvidenceCanonicalJson(evidence)).digest("hex"),
-  record_path: "applications/web/units/core/invoice/reviews/G2.md",
+  record_path: "10-applications/web/02-modern/core/invoice/reviews/G2.md",
   record_commit: "f".repeat(40),
   document_repository_id: "shop-docs",
-  deliverable_path: "applications/web/units/core/invoice/design.md",
+  deliverable_path: "10-applications/web/02-modern/core/invoice/detail/logic.md",
   deliverable_revision: "e".repeat(40),
 };
 
@@ -82,7 +82,7 @@ describe("verified task approval evidence", () => {
     query.mockResolvedValue({ rows: [record] });
     const state = reader();
 
-    await expect(state.reader.sourceApproval("shop", "applications/web/units/core/invoice/design.md", "1".repeat(40))).resolves.toBe("approved");
+    await expect(state.reader.sourceApproval("shop", "10-applications/web/02-modern/core/invoice/detail/logic.md", "1".repeat(40))).resolves.toBe("approved");
     expect(query.mock.calls[0]?.[0]).toContain("deliverable.value->>'path'");
   });
 });

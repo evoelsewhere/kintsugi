@@ -36,7 +36,7 @@ src/
     utils.ts             cn() class helper
   pages/
     login.tsx            username/password sign-in (ADR-0008)
-    overview.tsx         programme health, pipeline P0–P7
+    overview.tsx         programme health, pipeline P0–P4
     admin.tsx            A1–A7
     delivery.tsx         B1–B7
     monitoring.tsx       C1–C5

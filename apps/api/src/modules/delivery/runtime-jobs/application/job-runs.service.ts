@@ -23,6 +23,10 @@ import {
 
 /** The understand stage (ADR-0033): it runs on a selection of catalog items, several runs at once. */
 const UNDERSTAND = "understand";
+/** The design stage (ADR-0049): one design set for a selection of units, several runs at once. */
+export const DESIGN = "design";
+/** Stages that run on a selection and several at a time. */
+const SCOPED_STAGES: readonly string[] = [UNDERSTAND, DESIGN];
 
 /** How often a follower looks for new events, and how many it takes at a time. */
 const FOLLOW_POLL_MS = 1000;
@@ -49,13 +53,16 @@ export class JobRunsService {
     if (stage === UNDERSTAND) {
       throw new BadRequestException(`The understand stage runs on a selection of catalog items: POST /projects/${projectId}/applications/${applicationId}/understand/runs with the items or modules`);
     }
+    if (stage === DESIGN) {
+      throw new BadRequestException(`The design stage generates one design set for a selection of units: POST /projects/${projectId}/applications/${applicationId}/design/runs with the set and the units`);
+    }
     return this.startRun(projectId, applicationId, stage, actor);
   }
 
   /**
    * Records a top-level stage run as `queued` and enqueues it. `inputs` and `sourceCommit` pin what
-   * the run reads (scope, documentsCommit, resumeOf: ADR-0033). Several understand runs may be active
-   * at once (each on its own items); any other stage runs once at a time per application.
+   * the run reads (scope, documentsCommit, resumeOf: ADR-0033). Several understand or design runs may be
+   * active at once (each on its own items or units); any other stage runs once at a time per application.
    */
   async startRun(projectId: string, applicationId: string, stage: string, actor: Actor, options: { inputs?: Record<string, unknown>; sourceCommit?: string } = {}): Promise<JobRunView> {
     const plans = this.stages.plans(applicationId);
@@ -69,7 +76,7 @@ export class JobRunsService {
     if (project.documentRepository === null) throw new ConflictException(`Project ${projectId} has no document repository`);
     const legacy = application.asIs.legacy[0];
     if (legacy === undefined) throw new ConflictException(`Application ${applicationId} has no legacy repository; register one on the application first`);
-    if (stage !== UNDERSTAND && (await this.store.hasStageRun(projectId, applicationId, stage, ["queued", "running"]))) {
+    if (!SCOPED_STAGES.includes(stage) && (await this.store.hasStageRun(projectId, applicationId, stage, ["queued", "running"]))) {
       throw new ConflictException(`A ${stage} run of ${applicationId} is already queued or running; wait for it or cancel it first`);
     }
     for (const prerequisite of plan.requires) {
@@ -120,13 +127,13 @@ export class JobRunsService {
   }
 
   /**
-   * Abandons the pull request of a succeeded understand run that was closed without merging: its
-   * items are released and can be selected again. 409 when the run has no open pull request or was
+   * Abandons the pull request of a succeeded understand or design run that was closed without merging: its
+   * items (units) are released and can be selected again. 409 when the run has no open pull request or was
    * abandoned already.
    */
   async abandon(projectId: string, id: string, actor: Actor): Promise<JobRunView> {
     const run = await this.summary(projectId, id);
-    if (run.parentId !== undefined || run.kind !== "stage" || run.name !== UNDERSTAND) throw new BadRequestException(`Job run ${id} is not an understand run`);
+    if (run.parentId !== undefined || run.kind !== "stage" || !SCOPED_STAGES.includes(run.name)) throw new BadRequestException(`Job run ${id} is not an understand or design run`);
     if (run.status !== "succeeded" || run.documentWrite?.status !== "pr-opened") throw new ConflictException(`Job run ${id} has no pull request to abandon`);
     if (!(await this.store.abandon(projectId, id, actor.username ?? actor.id))) throw new ConflictException(`Job run ${id} was abandoned already`);
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.jobRunAbandon, { projectId, subject: id, detail: { name: run.name, items: run.scope?.items.length ?? 0 } }));

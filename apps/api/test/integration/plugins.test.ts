@@ -33,20 +33,22 @@ describe.skipIf(!hasDatabase)("plugins (integration)", () => {
     const list = await client.get<Summary[]>("/admin/plugins");
     expect(list.status).toBe(200);
     expect(list.body.data!.map((plugin) => [plugin.name, plugin.audience, plugin.source])).toEqual([
-      ["understand", "runtime", "builtin"],
+      ["reverse_engineering", "runtime", "builtin"],
+      ["design", "runtime", "builtin"],
       ["modernize", "member", "builtin"],
     ]);
-    expect(list.body.data![0]!.counts).toMatchObject({ agent: 3, command: 2, workflow: 3, skill: 1 });
+    expect(list.body.data![0]!.counts).toMatchObject({ agent: 4, command: 3, workflow: 3, skill: 2 });
+    expect(list.body.data![1]!.counts).toMatchObject({ agent: 1, command: 1 });
   });
 
   it("opens a plugin and reads one of its files", async () => {
-    const detail = await admin.get<Detail>("/admin/plugins/understand");
+    const detail = await admin.get<Detail>("/admin/plugins/reverse_engineering");
     expect(detail.status).toBe(200);
     expect(detail.body.data!.files.map((file) => file.path)).toEqual(expect.arrayContaining([".claude-plugin/plugin.json", "agents/legacy-analyst.md"]));
-    const file = await admin.get<{ path: string; content: string }>("/admin/plugins/understand/file?path=agents/legacy-analyst.md");
+    const file = await admin.get<{ path: string; content: string }>("/admin/plugins/reverse_engineering/file?path=agents/legacy-analyst.md");
     expect(file.status).toBe(200);
     expect(file.body.data!.content).toContain("name: legacy-analyst");
-    expect((await admin.get("/admin/plugins/understand/file?path=commands/modernize-verify.md")).status).toBe(404);
+    expect((await admin.get("/admin/plugins/reverse_engineering/file?path=commands/modernize-design.md")).status).toBe(404);
     expect((await admin.get("/admin/plugins/missing")).status).toBe(404);
   });
 });

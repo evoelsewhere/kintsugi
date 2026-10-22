@@ -1,17 +1,18 @@
 // The topology extraction shared by the plans (commands/modernize-understand.md, ADR-0033): a
 // legacy-analyst job writes extract_topology.py and a script step runs it in the standard script
-// environment (model-written, no review gate; on failure the job gets the error once to fix it).
-// `assess` runs it; `understand` cuts the per-item fragments from the result.
+// environment (model-written, no review gate; on failure the job gets the error once to fix it). The raw
+// topology (every leaf and edge) is scratch JSON of the run; render_topology.py checks it and publishes the
+// summary, topology.md (ADR-0042), and the catalog scripts read the raw one in the same job.
 //
-// Not wired yet: persona flows, per-node descriptions (node_packets.py, merge_topology.py) and the
-// exportable Mermaid diagrams that the former `map` stage wrote, and chunked mapping of big estates.
+// Not wired yet: persona flows, per-node descriptions and chunked mapping of big estates.
 
 import type { AgentStep, ScriptStep } from "../plan.js";
-import { DOCUMENT_PATH_TOKENS, assessmentDir, assessmentFilePath, assessmentInventoryPath, assessmentTopologyPath } from "@kintsugi/domain";
+import { DOCUMENT_PATH_TOKENS, applicationInputPath, assessmentDir, assessmentInventoryPath, assessmentTopologyPath, scratchDir, scratchInventoryPath, scratchTopologyPath } from "@kintsugi/domain";
 import { CREDENTIALS, UNTRUSTED, WORKSPACE } from "./common.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
 const DIR = assessmentDir(APP_TOKEN);
+const SCRATCH = scratchDir(APP_TOKEN);
 
 const SCHEMA = `{
   "system": "<display name>",
@@ -30,7 +31,7 @@ const topologyTask = (script: string, domains: string): string => `Write the top
 ${WORKSPACE}
 
 If present, ${domains} (group modules under
-them), {in}/${assessmentInventoryPath(APP_TOKEN)} the measured inventory, and {in}/${assessmentFilePath(APP_TOKEN, "graph")}/ a dependency export a person attached
+them), {in}/${scratchInventoryPath(APP_TOKEN)} the measured inventory (every file; {in}/${assessmentInventoryPath(APP_TOKEN)} summarises it), and {in}/${applicationInputPath(APP_TOKEN, "graph")}/ a dependency export a person attached
 (a compiler index, jdeps, a call graph in JSON, CSV, DOT or GraphML): if one exists, map its nodes and edges instead of
 parsing the code, spot-check about ten edges against the source, and still add what graphs omit (entry points from
 deployment configuration, data stores).
@@ -81,12 +82,13 @@ ${CREDENTIALS}
 ${UNTRUSTED}`;
 
 /**
- * The topology extraction as two steps: a legacy-analyst job writes the extraction script at `script`
- * (a document-repo path), a script step runs it to the path returned by `assessmentTopologyPath`, and when it
- * fails the job gets the error once to fix it. `domains` tells the job where the domains found so far
- * are. Used by `assess` (ADR-0033).
+ * The topology extraction as three steps: a legacy-analyst job writes the extraction script at `script`
+ * (a document-repo path), a script step runs it to the run's scratch topology (`scratchTopologyPath`) and,
+ * when it fails, the job gets the error once to fix it; then render_topology.py checks the result and writes
+ * the summary at `assessmentTopologyPath`. `domains` tells the job where the domains found so far are. Used
+ * by `assess` (ADR-0033).
  */
-export function topologySteps(script: string, domains: string): [AgentStep, ScriptStep] {
+export function topologySteps(script: string, domains: string): [AgentStep, ScriptStep, ScriptStep] {
   return [
     { id: "topology", kind: "agent", agent: "legacy-analyst", task: topologyTask(script, domains), expects: [script] },
     {
@@ -94,9 +96,17 @@ export function topologySteps(script: string, domains: string): [AgentStep, Scri
       kind: "script",
       script,
       fromInputs: true,
-      args: ["{src}", "{out}/" + DIR],
-      expects: [assessmentTopologyPath(APP_TOKEN)],
+      args: ["{src}", "{out}/" + SCRATCH],
+      intermediate: [scratchTopologyPath(APP_TOKEN)],
+      expects: [scratchTopologyPath(APP_TOKEN)],
       repair: { id: "topology-fix", kind: "agent", agent: "legacy-analyst", task: repairTask(script), expects: [script] },
+    },
+    {
+      id: "topology-render",
+      kind: "script",
+      script: "render_topology.py",
+      args: ["{app}", "--topology", `{in}/${scratchTopologyPath(APP_TOKEN)}`, "--out", "{out}/" + DIR],
+      expects: [assessmentTopologyPath(APP_TOKEN)],
     },
   ];
 }
@@ -106,7 +116,7 @@ interface TreeNode {
   children?: unknown;
 }
 
-/** Leaf nodes of topology.json (0 when it is missing or malformed). */
+/** Leaf nodes of the raw topology.json of a run (0 when it is missing or malformed). */
 export function leafCount(topology: unknown): number {
   const walk = (node: unknown): number => {
     if (typeof node !== "object" || node === null) return 0;

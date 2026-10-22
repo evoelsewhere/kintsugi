@@ -9,6 +9,7 @@ import { CheckMark } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import type { CatalogItem, CatalogView, ItemStatus } from "@/lib/api/catalog";
+import { assetClassOf, ASSET_CLASS_LABEL } from "@/lib/catalog-batch";
 import { shortSha } from "@/lib/format";
 import { ITEM_STATUS, styleOf } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -27,9 +28,6 @@ const STATUS_ORDER: ItemStatus[] = ["running", "in-pr", "failed", "stale", "unde
 
 const plural = (count: number, noun: string): string => `${formatCount(count)} ${noun}${count === 1 ? "" : "s"}`;
 
-/** Test code: an item named like a test class, or whose files all sit in a test folder. */
-const isTestItem = (item: CatalogItem): boolean => /tests?$/i.test(item.name) || (item.files.length > 0 && item.files.every((file) => /(^|\/)tests?\//i.test(file)));
-
 /** Unassigned files grouped by their first folder (root files together), biggest group first. */
 function groupByFolder(paths: readonly string[]): Array<{ folder: string; paths: string[] }> {
   const groups = new Map<string, string[]>();
@@ -42,7 +40,7 @@ function groupByFolder(paths: readonly string[]): Array<{ folder: string; paths:
 
 export function ItemStatusBadge({ status }: { status: string }): React.JSX.Element {
   const style = styleOf(ITEM_STATUS, status);
-  return <StatusBadge tone={style.tone} label={style.label} />;
+  return <StatusBadge tone={style.tone} label={style.label} busy={style.busy} />;
 }
 
 export interface CatalogSelection {
@@ -211,11 +209,11 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                             <p className="truncate text-[13px] font-medium text-text" title={item.name}>
                               {item.name}
                               <span className="ml-1.5 font-mono text-[11px] font-normal text-text-muted">{item.id}</span>
-                              {isTestItem(item) ? (
-                                <span className="ml-1.5 rounded-full bg-hover px-1.5 py-0.5 text-[10.5px] font-normal text-text-secondary" title="Test code: counted in the size but carries no behaviour to modernise">
-                                  test
+                              {assetClassOf(item) === "code" ? null : (
+                                <span className="ml-1.5 rounded-full bg-hover px-1.5 py-0.5 text-[10.5px] font-normal text-text-secondary" title={`${ASSET_CLASS_LABEL[assetClassOf(item)]} code: counted in the size, not the first to understand`}>
+                                  {assetClassOf(item)}
                                 </span>
-                              ) : null}
+                              )}
                             </p>
                             {item.summary === "" ? null : (
                               <p className="line-clamp-2 text-[12px] text-text-secondary" title={item.summary}>
@@ -298,8 +296,8 @@ export function CatalogResults({ view, selection, children }: { view: CatalogVie
         {STATUS_ORDER.filter((status) => status !== "understood" && (view.counts[status] ?? 0) > 0).map((status) => (
           <Kpi key={status} label={styleOf(ITEM_STATUS, status).label} value={view.counts[status] ?? 0} tone={styleOf(ITEM_STATUS, status).tone} />
         ))}
-        <Kpi label="Unassigned files" value={view.catalog.unassigned.length} hint={`${formatCount(active.reduce((total, item) => total + item.files.length, 0))} files in items`} />
-        <Kpi label="Code lines" value={active.reduce((total, item) => total + item.loc, 0)} hint={`${formatCount(active.filter(isTestItem).reduce((total, item) => total + item.loc, 0))} in test items`} />
+        <Kpi label="Unassigned files" value={Math.max(view.catalog.unassignedCount, view.catalog.unassigned.length)} hint={`${formatCount(active.reduce((total, item) => total + item.files.length, 0))} files in items`} />
+        <Kpi label="Code lines" value={active.reduce((total, item) => total + item.loc, 0)} hint={`${formatCount(active.filter((item) => assetClassOf(item) !== "code").reduce((total, item) => total + item.loc, 0))} in test or generated items`} />
       </KpiRow>
       <Section
         title="Item catalog"
@@ -314,6 +312,7 @@ export function CatalogResults({ view, selection, children }: { view: CatalogVie
             <p className="text-[13px] text-text-muted">Every file is in an item.</p>
           ) : (
             <div className="max-h-72 overflow-auto">
+              {view.catalog.unassignedCount > view.catalog.unassigned.length ? <p className="px-1.5 pb-1 text-[11.5px] text-text-muted">The first {formatCount(view.catalog.unassigned.length)} of {formatCount(view.catalog.unassignedCount)} files.</p> : null}
               {groupByFolder(view.catalog.unassigned).map((group) => (
                 <details key={group.folder} open={group.paths.length <= 3}>
                   <summary className={cn("flex cursor-pointer items-center justify-between rounded-[4px] px-1.5 py-1 text-[12.5px] text-text hover:bg-hover", FOCUS)}>

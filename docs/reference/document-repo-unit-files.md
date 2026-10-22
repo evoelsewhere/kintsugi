@@ -1,27 +1,34 @@
 # Unit files
 
-> Defines the unit directory and the contract of each file in it.
+> Defines the two folders of a unit and the contract of each file in them.
 
-One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md)), at `applications/<app>/units/<module>/<unit>/`. The unit id is the full `<app>/<module>/<unit>`; `<unit>` in the path is only the last segment. A unit is created when a catalog item (`<module>/<item>`, see the [item catalog](document-repo-item-catalog.md)) is selected for migration. This reference uses **unit** and does not rename the legacy API `WorkItem`/`work-items` contracts.
+A unit has one folder in each half of its application, on the same `<module>/<unit>` path ([ADR-0051](../decisions/0051-document-repo-layout-legacy-and-modern.md)): `10-applications/<app>/01-legacy/<module>/<unit>/` holds what is known about it, `10-applications/<app>/02-modern/<module>/<unit>/` holds its card, its design and its task pack. Together they are the **Unit aggregate** of [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md), and the card `README.md` is its root. Every document is Markdown ([document formats](document-formats.md)). The unit id is the full `<app>/<module>/<unit>`; `<unit>` in the path is only the last segment. A unit is created when a catalog item (`<module>/<item>`, see the [item catalog](document-repo-item-catalog.md)) is selected for migration. This reference uses **unit** and does not rename the legacy API `WorkItem`/`work-items` contracts.
+
+In `01-legacy/<module>/<unit>/`:
 
 | File | Content | Written by |
 |---|---|---|
-| `unit.md` | the unit state (frontmatter) and gate references | the `understand` job proposes it; state changes go through the Kintsugi API; auto-committed |
-| `as-is.md` | the P1 AS-IS specification of the unit | the `understand` job |
-| `rules.json` | the P1 machine rule extraction | the extract-rules step of `understand` |
-| `rules-review.json` | the P1 human rule verdicts | the unit's reviewer, through a pull request |
-| `findings.json` | security findings | the harden step of `understand` |
-| `topology.json` | the unit's topology fragment | the map step of `understand` |
-| `trace.json` | the unit traceability record | the `understand` job |
-| `meta.json` | run metadata (`status: understood`) | the `understand` job |
-| `task.md` | the P4 task pack (transformation notes) | the `design` job; auto-committed |
-| `design.md` | the P4 unit design | planned (P4) |
-| `reviews/G4.md` | the unit's G4 gate record | the unit's reviewer, through a pull request |
-| `verify/` | P5 golden cases (`golden/`) and run evidence (`runs/<run-id>/`) | the member harness's verification plugin |
+| `spec.md` | the P1 AS-IS specification of the unit | the `understand` job |
+| `understanding.md` | the provenance record: digest, source commit, run (`status: understood`) | the `understand` job |
+| `rules.md` | the index of the unit's rules: id, name, category, priority, confidence, version, status, source and a link to each rule's file | the extract-rules step of `understand` |
+| `rules/<rule id>.md` | one rule: specification, evidence, edge cases, open questions, acceptance scenarios, version history | the extract-rules step of `understand` |
+| `data-objects.md` | the data objects of the unit | the extract-rules step of `understand` |
+| `rules-review.md` | the P1 human rule verdicts (a table) | the unit's reviewer, through a pull request |
+| `findings.md` | security findings: scorecard, table, a card per finding | the security step of `understand` |
+| `topology.md` | the unit's leaves, links to other items, data stores | the scope step of `understand` |
+| `trace.md` | the unit traceability record | the `understand` job |
 
-Format samples for `unit.md`, `rules.json`, `rules-review.json`, `trace.json` and `reviews/G4.md` live in `templates/document-repo/applications/billing-web/units/_example.example/`; they teach the formats and are not loaded.
+In `02-modern/<module>/<unit>/`:
 
-## `unit.md` frontmatter
+| File | Content | Written by |
+|---|---|---|
+| `README.md` | the unit's card: its state (frontmatter), what it is built from and into, the design files it waives | the `understand` job proposes it; state changes go through the Kintsugi API; auto-committed; `waived` is written by a person |
+| `<set>/<file>` | the unit's design: one folder per design set the project defines, one document per file of the set, from the set's template ([design templates](design-templates.md)) | the runtime `design` stage (generated from the portal), through a pull request that people review and correct |
+| `task.md` | the P4 task pack (transformation notes) | planned; auto-committed |
+
+A Git host renders a folder's `README.md` when a person opens the folder, so opening a unit's modern folder shows its card. Format samples for the card, `rules.md`, `rules/<rule id>.md`, `rules-review.md` and `trace.md` live in `templates/document-repo/10-applications/billing-web/01-legacy/_example.example/` and `02-modern/_example.example/`; they teach the formats and are not loaded.
+
+## The card's frontmatter
 
 The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-files-in-git.md)). Postgres indexes it for the board and queries, and can rebuild the index from Git.
 
@@ -34,51 +41,46 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 | `assignee`, `harness` | Who works on it, and with which member harness |
 | `dependsOn` | Unit ids (used for leaves-first ordering) |
 | `source`, `target` | `{repo, paths}` lists in the legacy (read-only) and target repos |
-| `requiredDeliverables` | Optional bounded `{id, repositoryId, path}` declarations; stable IDs appear in task briefs and evidence manifests |
-| `links` | Task pack, AS-IS doc, mappings (paths under `standards/mappings/`), business rules, pull requests |
-| `gates` | Per-gate result: `status`, `by`, `at`, and the record path (`review: reviews/G4.md`) |
+| `requiredDeliverables` | Optional bounded {id, repositoryId, path} declarations; stable IDs flow into briefs, snapshots and gate evidence |
+| `links` | Task pack, AS-IS specification, mappings (paths under `01-standards/mappings/`), business rules, pull requests |
+| `waived` | Design files the unit does not need, a list of `<set>/<file>: <reason>`; written by a person, never by an agent ([design templates](design-templates.md#conformance)) |
 
-**Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one file per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a file is left unchanged.
+Gate results are not in the card: gate decisions are recorded in the portal (Governance → Gates).
+
+**Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one card per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a card is left unchanged.
 
 **Rules**:
-
-- Document links (`taskPack`, `asIs`, `mappings`, `businessRules`) are repository-relative paths with a maximum of 1000 characters. Invalid or restricted paths are reported as task-index issues.
-- Required deliverables use structured frontmatter. For example, `requiredDeliverables: [{id: code, repositoryId: billing-api, path: src/invoice}]`. IDs are unique; paths are repository-relative. The context API does not infer declarations from prose, target paths or PR links. Older units without the field remain readable and report no declared IDs; this does not certify delivery completeness or approval. Provider matching and gate enforcement follow in later workflow tasks.
-- **Write path**: authorized portal and administrative API actions validate access-role permissions and allowed transitions, update the index, and commit as the Kintsugi bot with a Kintsugi-Actor trailer. The default unit.md and task.md paths may auto-commit; other unit documents arrive through PRs. The Coding Agent Workflow CLI/MCP connector is read-only and cannot claim or update a unit (ADRs 0041–0042).
+- **Write path**: state changes go through authorized portal or administrative API actions. The API validates the actor's effective permissions and allowed transition, updates the index, and the worker commits as the Kintsugi bot with a Kintsugi actor trailer. The Coding Agent Workflow CLI and MCP are read-only. The card and task pack are auto-commit paths; other unit documents arrive through reviewed pull requests.
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 
-## `rules.json` and `rules-review.json`
+## `rules.md`, `rules/<rule id>.md` and `rules-review.md`
 
-`rules.json` is machine output and the extraction source of truth. Its rule ids are deterministic and citation-derived — each rule carries the source citation it was derived from — so they stay stable across re-extractions. Human rule verdicts live separately in `rules-review.json`, keyed by rule id:
+`rules.md` is the **index** of the unit's rules and `rules/<rule id>.md` holds each rule ([ADR-0046](../decisions/0046-one-file-per-business-rule.md)); both are machine output and the extraction source of truth. The index is a table (`ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file`) plus a table of retired rules; the rule file has front matter and the sections of the rule (summary, Given/When/Then, and, where the analysis has evidence, decision table, parameters, inputs and outputs, evidence, edge cases, open questions, acceptance scenarios) and its version history. Rule ids are deterministic and citation-derived — each rule carries the source citation it was derived from — so they stay stable across re-extractions. A rule keeps its version while its content (`digest`) is unchanged, gets the next version when it changes, and becomes a `retired` file when a later extraction no longer finds it. Human rule verdicts live separately in `rules-review.md`, a table keyed by rule id:
 
-```json
-{
-  "RULE-invoice-amount-001": {
-    "verdict": "confirmed",
-    "approver": "dana",
-    "date": "2026-10-15"
-  }
-}
+```markdown
+| Rule | Verdict | Approver | Date |
+| --- | --- | --- | --- |
+| RULE-invoice.amount-1a2b3c4d | confirmed | dana | 2026-10-15 |
 ```
 
-A verdict is `confirmed`, `refuted` or `clarify`, with the approver and the date. A verdict whose rule id is absent from the current extraction is reported as orphaned, not silently applied.
+A verdict is `confirmed`, `refuted` or `clarify`, with the approver and the date (a `Note` column is optional). A verdict whose rule id is absent from the current extraction is reported as orphaned, not silently applied.
 
-## `trace.json`
+## `trace.md`
 
-The unit traceability record keeps the `understand` fields (`entryPoints`, `rulesApplied`, `findings`, `dependencies`, `dataObjects`, `externalSystems`, `files`, `openQuestions`) and three link arrays:
+The unit traceability record has the sections `Entry points`, `Rules applied`, `Findings`, `Dependencies` (a table `Target \| Kind \| Direction`), `Data objects`, `External systems`, `Files` and the front matter `openQuestions`, plus three sections the later phases fill in:
 
-| Field | Content |
+| Section | Content |
 |---|---|
-| `requirements` | the `REQ-…` ids of the requirements this unit implements |
-| `pullRequests` | the pull requests that migrated the unit (e.g. `#42`) |
-| `tests` | the test evidence paths, under the unit's `verify/` |
+| `Requirements` | the `REQ-…` ids of the requirements this unit implements |
+| `Pull requests` | the pull requests that migrated the unit (e.g. `#42`) |
+| `Tests` | the paths of the unit's test files in the target repository |
 
-The chain rules → requirements → trace must close: every requirement's `derivedFrom` rules are traced rules of the unit, and every requirement derived from a traced rule is listed in `trace.requirements`. Trace files without the three arrays parse as legacy files.
+The chain rules → requirements → trace must close: every requirement's `derivedFrom` rules are traced rules of the unit, and every requirement derived from a traced rule is listed under `Requirements`.
 
 ## Requirements and `derivedFrom`
 
-The requirements record is `applications/<app>/to-be/requirements.md` (planned, P2). Each requirement is a Markdown section headed `REQ-…`; the source rules are named on its `derivedFrom` line:
+The requirements record is `10-applications/<app>/02-modern/requirements.md` (planned, P2). Each requirement is a Markdown section headed `REQ-…`; the source rules are named on its `derivedFrom` line:
 
 ```markdown
 ## REQ-INV-001: Invoice search returns gross amounts
@@ -88,8 +90,4 @@ The invoice search returns amounts including tax.
 **derivedFrom:** RULE-invoice-amount-001
 ```
 
-A unit's `trace.json` links the requirement ids it implements in `trace.requirements`.
-
-## Gate records
-
-The unit's G4 record is `reviews/G4.md`, with the uniform [gate record format](document-repo.md#gate-records): decision, approvers, evidence paths, date. The `unit.md` frontmatter points to it through its `gates.G4.review` field. Gate records arrive through pull requests and are never auto-committed.
+A unit's `trace.md` links the requirement ids it implements under `Requirements`.

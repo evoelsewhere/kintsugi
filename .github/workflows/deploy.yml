@@ -43,6 +43,9 @@ jobs:
           context: .
           file: Dockerfile.${{ matrix.component }}
           push: true
+          build-args: |
+            KINTSUGI_BUILD_COMMIT=${{ github.sha }}
+            KINTSUGI_BUILD_TIME=${{ github.event.head_commit.timestamp }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -209,11 +212,54 @@ jobs:
           REMOTE
           } | sshpass -e ssh "${ssh_args[@]}" "$remote" bash -s -- "$KINTSUGI_REMOTE_DIR" "$KINTSUGI_REGISTRY" "$KINTSUGI_VERSION"
 
+      - name: Make room for the new images
+        shell: bash
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+          MIN_FREE_GB: ${{ vars.KINTSUGI_MIN_FREE_GB || '5' }}
+          IMAGE_SOURCE: https://github.com/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$MIN_FREE_GB" =~ ^[0-9]+$ ]] || { echo "KINTSUGI_MIN_FREE_GB must be a whole number of GiB" >&2; exit 1; }
+          known_hosts="$RUNNER_TEMP/kintsugi_known_hosts"
+          ssh_args=(-p "$SSH_PORT" -o BatchMode=no -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known_hosts")
+          remote="$SSH_USER@$SSH_HOST"
+          # Every deploy pulls new SHA-tagged images and the previous ones stay on the host. Pulling into a full disk fails
+          # halfway through a layer, so check first: below the minimum, remove the Kintsugi images no container uses (the
+          # label is the one the build sets) and check again; still short, stop here with the numbers.
+          sshpass -e ssh "${ssh_args[@]}" "$remote" bash -s -- "$MIN_FREE_GB" "org.opencontainers.image.source=$IMAGE_SOURCE" <<'REMOTE'
+          set -euo pipefail
+          min_kb=$(( $1 * 1024 * 1024 ))
+          label="$2"
+          roots=("$(docker info --format '{{.DockerRootDir}}')")
+          if [[ -d /var/lib/containerd ]]; then roots+=(/var/lib/containerd); fi
+          free_kb() {
+            local least="" value root
+            for root in "${roots[@]}"; do
+              value="$(df -Pk "$root" | awk 'NR==2 { print $4 }')"
+              if [[ -z "$least" || "$value" -lt "$least" ]]; then least="$value"; fi
+            done
+            echo "$least"
+          }
+          echo "Free on ${roots[*]}: $(( $(free_kb) / 1024 / 1024 )) GiB (need $1)"
+          if (( $(free_kb) < min_kb )); then
+            echo "Low on disk: removing Kintsugi images that no container uses"
+            docker image prune -af --filter "label=$label" || true
+            echo "Free now: $(( $(free_kb) / 1024 / 1024 )) GiB"
+          fi
+          if (( $(free_kb) < min_kb )); then
+            echo "Less than $1 GiB free after cleaning the old images. Free space on the host before deploying (docker system df shows what Docker holds)." >&2
+            docker system df >&2 || true
+            exit 1
+          fi
+          REMOTE
+
       - name: Pull and restart the Compose stack
         shell: bash
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
           GHCR_PULL_TOKEN: ${{ github.token }}
+          IMAGE_SOURCE: https://github.com/${{ github.repository }}
         run: |
           set -euo pipefail
           known_hosts="$RUNNER_TEMP/kintsugi_known_hosts"
@@ -228,3 +274,6 @@ jobs:
           printf '%s' "$GHCR_PULL_TOKEN" \
             | sshpass -e ssh "${ssh_args[@]}" "$remote" "docker --config '$auth_dir' login ghcr.io --username '$GHCR_USERNAME' --password-stdin" >/dev/null
           sshpass -e ssh "${ssh_args[@]}" "$remote" "cd '$KINTSUGI_REMOTE_DIR' && DOCKER_CONFIG='$auth_dir' docker compose pull && DOCKER_CONFIG='$auth_dir' docker compose up -d --remove-orphans --wait --wait-timeout 180 && docker compose ps"
+          # The stack runs on the new images: the ones it replaced are unused now. Old versions can be pulled again by tag,
+          # so they are not worth the disk. A failed cleanup never fails the deploy.
+          sshpass -e ssh "${ssh_args[@]}" "$remote" "docker image prune -af --filter 'label=org.opencontainers.image.source=$IMAGE_SOURCE'" || echo "Could not remove the old images; the next deploy retries"

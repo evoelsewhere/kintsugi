@@ -36,8 +36,7 @@ Responsibilities beyond the feature modules below:
 - Delivery → documents (session only, read-only, from the document repo mirror under
   `KINTSUGI_DATA_DIR`): `GET /api/projects/:id/documents/refs` (default branch tip plus the
   output branches of recent successful runs and writes, `merged` or `open`),
-  `GET …/documents/tree?ref&path` and `GET …/documents/file?ref&path` (text up to 2 MiB, `.json`
-  parsed; `ref` is a commit id or `refs/heads/<branch>`; never `restricted/` or `.git`).
+  `GET …/documents/tree?ref&path` and `GET …/documents/file?ref&path` (text up to 2 MiB; `ref` is a commit id or `refs/heads/<branch>`; never `restricted/` or `.git`).
   `GET /api/projects/:id/applications/:appId/stages/:stage/results?ref&compare` builds the
   results of `assess`, `map`, `extract-rules`, `harden` or `understand` (units with their work
   items, the traceability matrix, the AS-IS synthesis documents) with the parsers of
@@ -47,6 +46,11 @@ Responsibilities beyond the feature modules below:
   (`?status=queued,failed&projectId`); `GET /api/monitoring/overview` (counts, what needs
   attention, recent activity, the worker's pg-boss queue counts — `null` when unreadable) and
   `GET /api/monitoring/repositories` (sync state and project links, never credentials).
+- AI plan for understanding (ADR-0041): `GET /api/projects/:id/applications/:appId/understand/plan` (session) reads `10-applications/<app>/01-legacy/plan.md` from the default branch, with the current status of its items and `stale` when the catalog was reassessed since; a plan is made by `POST …/stages/plan-understand/run` (`jobs.run`, needs the assess catalog merged).
+- Portfolio overview (session only, read-only): `GET /api/monitoring/portfolio` (module `monitoring/portfolio`) places every
+  application in the lifecycle (phase derived from its runtime stages, the gate that closes it), lists what a person must
+  decide (pending gates, pull requests waiting for review, critical and high findings), the unit funnel of the item
+  catalogs and the riskiest units still to analyse. Parts that cannot be read for an application come back `null`.
 - Worker health (ADR-0030): `GET /api/monitoring/workers` lists worker processes from
   `workflow.worker_heartbeat` (migration `014_worker_heartbeat.sql`; up when seen < 45 s ago);
   the overview adds `worker.up`, pending gates and `gate-pending` / `worker-down` attention items.
@@ -58,6 +62,11 @@ Responsibilities beyond the feature modules below:
   (`#common/audit/audit-trail.js`, bound globally by the audit module) — never in controllers.
   `GET /api/governance/audit` (`?action=a,b&actor&subject&projectId`) and
   `GET /api/governance/audit/actions` need `audit.read`.
+- Governance → telemetry (ADR-0048): `GET /api/monitoring/telemetry/summary`, `…/runs` and `…/runs/:runId/trace` (module `monitoring/telemetry`, read model over
+  `monitoring.telemetry_span`, migration `020_telemetry.sql`) need `telemetry.view`; filters `projectId`, `agent`, `from`, `to` (ISO instants, at most 90 days).
+- Settings → MCP servers (ADR-0047): `/api/admin/mcp-servers` (module `admin/mcp-servers`, migration `021_mcp_servers.sql`) needs `mcp.manage`; header values are
+  encrypted like LLM keys and never returned; `POST …/:id/test` lists a server's tools through the runtime's MCP client; `GET …/choices` (also `agents.manage`)
+  gives an agent builder the server ids without addresses or headers.
 - Governance → restricted records: `GET /api/governance/restricted-records` (`restricted.read`)
   lists record metadata only (run, step, path, size), never content, so it is not audited;
   reading a record stays the audited per-run read above.
@@ -124,7 +133,7 @@ Rules (enforced by review — see AGENTS.md):
   (`NotFoundException`, `ConflictException`). Storage-agnostic.
 - **`infrastructure/` owns I/O**: Postgres adapters (see `admin/llm-providers`),
   in-memory adapters for skeletons. No HTTP types here.
-- **Shared vocabulary** (Phase, Disposition, ProjectRole, `ThinkingLevel`, `RuntimeAgentId`, …)
+- **Shared vocabulary** (Phase, ProjectRole, `ThinkingLevel`, `RuntimeAgentId`, …)
   comes from `@kintsugi/domain`; provider/agent contracts from `@kintsugi/runtime-sdk`.
   Never redefine them in this app.
 

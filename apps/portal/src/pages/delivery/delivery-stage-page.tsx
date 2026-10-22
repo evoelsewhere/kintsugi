@@ -12,6 +12,7 @@ import { AUDIENCE_LABEL } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { ApplicationTabs, DeliveryShell, NoApplications, WithProject } from "./delivery-shell";
 import { useApplication } from "./use-application";
+import { DesignStage } from "./design/design-stage";
 import { MemberStage, PortalStage } from "./other-stages";
 import { RuntimeStage } from "./runtime-stage";
 import { UnderstandStage } from "./understand-stage";
@@ -57,7 +58,9 @@ function StageForProject({ project, stage }: { project: ProjectDetail; stage: St
   return (
     <div className="flex flex-col gap-4">
       {project.applications.length > 1 ? <ApplicationTabs project={project} value={application.id} onChange={choose} /> : null}
-      {stage.id === "understand" ? (
+      {stage.id === "design" ? (
+        <DesignStage key={application.id} project={project} application={application} stage={stage} />
+      ) : stage.id === "understand" ? (
         <UnderstandStage key={application.id} project={project} application={application} stage={stage} />
       ) : stage.audience === "runtime" ? (
         <RuntimeStage key={`${application.id}/${stage.id}`} project={project} application={application} stage={stage} />

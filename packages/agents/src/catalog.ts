@@ -98,5 +98,5 @@ export async function resolveAgentDefinition(name: string, options: ResolveOptio
   const { agent, source, sharedSkills, problems } = resolution.value;
   if (agent.manifest.audience !== "runtime") throw new AgentResolutionError(`Agent "${name}" is a member agent; the runtime does not run it`);
   if (problems.length > 0) throw new AgentResolutionError(`Agent "${name}" cannot run: ${problems.join("; ")}`);
-  return { definition: toAgentDefinition(agent, sharedSkills), source };
+  return { definition: toAgentDefinition(agent, sharedSkills, options.knownTools), source };
 }

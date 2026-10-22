@@ -7,13 +7,15 @@ import { useMemo, useState } from "react";
 import { CitationChip, InlineText } from "@/components/results/inline-text";
 import { useDocumentLinkHandler } from "@/components/results/use-document-links";
 import { Markdown } from "@/components/results/lazy-markdown";
+import { Loaded } from "@/components/loaded";
 import { StatusBadge } from "@/components/status-badges";
 import { type Column, DataTable } from "@/components/ui/data-table";
 import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
-import type { CatalogRule, DataObject, RulesResults } from "@/lib/api/documents";
+import { type CatalogRule, type DataObject, type RulesResults, documentsApi } from "@/lib/api/documents";
 import { idOfAnchor } from "@/lib/document-links";
+import { useLoader } from "@/lib/use-loader";
 import { RulesOverview } from "./rules-overview";
 import { ConfidenceMark, CountChip, Field, Kpi, KpiRow, PriorityMark, Section, SubTabs } from "./results-parts";
 
@@ -21,7 +23,8 @@ type Tab = "overview" | "rules" | "data" | "coverage" | "document";
 
 const needsReview = (rule: CatalogRule): boolean => rule.smeQuestion !== undefined || rule.suspectedDefect !== undefined || (rule.confidence !== undefined && rule.confidence !== "High");
 
-export function RulesResultsView({ results, compare }: { results: RulesResults; compare: boolean }): React.JSX.Element {
+export function RulesResultsView({ results, compare, projectId }: { results: RulesResults; compare: boolean; projectId: string }): React.JSX.Element {
+  const commit = results.ref.commit;
   const [tab, setTab] = useState<Tab>("overview");
   const [open, setOpen] = useState<string | undefined>(undefined);
   // A RULE-xxx anchor into BUSINESS_RULES.md opens the rule's drawer.
@@ -59,7 +62,7 @@ export function RulesResultsView({ results, compare }: { results: RulesResults; 
       />
 
       {tab === "overview" ? <RulesOverview results={results} onCoverage={() => setTab("coverage")} /> : null}
-      {tab === "rules" ? <RulesTab results={results} open={open} setOpen={setOpen} /> : null}
+      {tab === "rules" ? <RulesTab results={results} open={open} setOpen={setOpen} projectId={projectId} commit={commit} /> : null}
       {tab === "data" ? <DataObjectsTab objects={results.dataObjects} rules={results.rules} /> : null}
       {tab === "coverage" ? <CoverageTab results={results} /> : null}
       {tab === "document" && results.document !== undefined ? (
@@ -82,7 +85,7 @@ interface Filters {
 
 const NO_FILTERS: Filters = { category: "", priority: "", confidence: "", status: "active", review: false, duplicates: false };
 
-function RulesTab({ results, open, setOpen }: { results: RulesResults; open: string | undefined; setOpen: (id: string | undefined) => void }): React.JSX.Element {
+function RulesTab({ results, open, setOpen, projectId, commit }: { results: RulesResults; open: string | undefined; setOpen: (id: string | undefined) => void; projectId: string; commit: string }): React.JSX.Element {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const set = (patch: Partial<Filters>): void => setFilters((previous) => ({ ...previous, ...patch }));
   const active = results.rules.filter((rule) => rule.status !== "refuted");
@@ -204,7 +207,7 @@ function RulesTab({ results, open, setOpen }: { results: RulesResults; open: str
         />
       </Section>
       <Drawer open={rule !== undefined} title={rule?.name ?? ""} subtitle={rule === undefined ? undefined : <RuleSubtitle rule={rule} />} onClose={() => setOpen(undefined)}>
-        {rule === undefined ? null : <RuleDetail rule={rule} rules={results.rules} onOpen={setOpen} />}
+        {rule === undefined ? null : <RuleDetail rule={rule} rules={results.rules} onOpen={setOpen} projectId={projectId} commit={commit} />}
       </Drawer>
     </div>
   );
@@ -217,13 +220,30 @@ function RuleSubtitle({ rule }: { rule: CatalogRule }): React.JSX.Element {
       <PriorityMark priority={rule.priority} />
       {rule.category === undefined ? null : <span>{rule.category}</span>}
       <ConfidenceMark confidence={rule.confidence} />
+      {rule.version === undefined ? null : <span className="font-mono">v{rule.version}</span>}
     </span>
   );
 }
 
-function RuleDetail({ rule, rules, onOpen }: { rule: CatalogRule; rules: CatalogRule[]; onOpen: (id: string) => void }): React.JSX.Element {
+/** The rule's own file (a rules index lists the rule; the specification, evidence and history are in its file), without its front matter. */
+function RuleFile({ projectId, commit, path }: { projectId: string; commit: string; path: string }): React.JSX.Element {
+  const file = useLoader(`rule/${projectId}/${commit}/${path}`, () => documentsApi.file(projectId, path, commit));
+  return (
+    <section className="flex flex-col gap-2">
+      <p className="font-mono text-[11px] text-text-muted">{path}</p>
+      <Loaded loader={file} rows={8}>
+        {(loaded) => <Markdown text={loaded.content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")} path={path} />}
+      </Loaded>
+    </section>
+  );
+}
+
+function RuleDetail({ rule, rules, onOpen, projectId, commit }: { rule: CatalogRule; rules: CatalogRule[]; onOpen: (id: string) => void; projectId: string; commit: string }): React.JSX.Element {
   const twins = rule.duplicateGroup === undefined ? [] : rules.filter((other) => other.duplicateGroup === rule.duplicateGroup && other.id !== rule.id);
   const hasSpec = rule.given !== undefined || rule.when !== undefined || rule.then !== undefined;
+  if (rule.file !== undefined && !hasSpec && rule.status !== "refuted") {
+    return <RuleFile projectId={projectId} commit={commit} path={rule.file} />;
+  }
   return (
     <div className="flex flex-col gap-5">
       {rule.status === "refuted" ? (
@@ -379,9 +399,9 @@ function CoverageTab({ results }: { results: RulesResults }): React.JSX.Element 
           </ul>
         )}
       </Section>
-      <Section title="Extraction stats" description={results.source === "result" ? "From rules_result.json." : "rules_result.json is missing; the rules come from BUSINESS_RULES.md."}>
+      <Section title="Rule counts" description={results.source === "markdown" ? "Counted over the rule cards of the rules document." : "No rules document at this ref."}>
         {stats.length === 0 ? (
-          <p className="text-[12px] text-text-muted">No stats at this ref.</p>
+          <p className="text-[12px] text-text-muted">No rules at this ref.</p>
         ) : (
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-3">
             {stats.map(([key, value]) => (

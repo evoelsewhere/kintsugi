@@ -20,7 +20,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Roadmap](product/roadmap.md): milestones M0–M5
 
 **Methodology**
-- [Delivery pipeline](methodology/delivery-pipeline.md): phases P0–P7, gates, 7R mapping
+- [Delivery pipeline](methodology/delivery-pipeline.md): phases P0–P4, gates, scorecard priority
 - [AI metrics](methodology/ai-metrics.md): definitions, targets, data sources
 
 **Architecture** ([index](architecture/README.md))
@@ -44,34 +44,32 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Decision register and ADR index](decisions/README.md)
 - [ADR template](decisions/template.md)
 
-**Approved design and implementation planning**
-
-- [Coding Agent Workflow design](superpowers/specs/2026-10-20-kintsugi-coding-agent-workflow-design.md): approved CLI, local MCP, task/design context and PR continuation architecture
-- [Coding Agent Workflow implementation plan](superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-implementation.md): ordered tasks, files, interfaces and acceptance gates
-- [Coding Agent Workflow testing plan](superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-testing.md): verification cases, environments and release evidence requirements
-- [Coding Agent Workflow integration review](superpowers/reviews/2026-10-20-coding-agent-workflow-integration.md): implemented scope, corrected edge cases and verification evidence
-
 **Reference**
 - [Glossary](reference/glossary.md)
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
-- [Harness integration](reference/harness-integration.md): read-only CLI and local MCP contract, snapshots, client setup and workflow
-- [Coding Agent Workflow CLI](reference/coding-agent-cli.md): build, authenticate, fetch task context, export briefs and inspect current limits
+- [Harness integration](reference/harness-integration.md): read-only CLI and local MCP, Project Access, snapshots, PR evidence and continuation
+- [Coding Agent Workflow CLI](reference/coding-agent-cli.md): install, authenticate, fetch task context and inspect current limits
+- [Coding Agent Workflow compatibility](reference/coding-agent-workflow-compatibility.md): tested client versions and setup probes
+- [Evidence-bound gate records](reference/gate-records.md): reviewed publication and effective approval
 - [Data model](reference/data-model.md)
-- [Document repository layout](reference/document-repo.md): the ADR-0038 subject and phase layout, gate records and auto-commit
+- [Document repository layout](reference/document-repo.md): the numbered layout, each application split into legacy and modern (ADR-0051), who writes what and auto-commit
+- [Document formats](reference/document-formats.md): the Markdown shapes of every committed document (front matter, tables, cards)
+- [Document repo contexts](architecture/concepts/document-repo-contexts.md): the context map, the Unit aggregate and the ubiquitous language
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`
 - [Item catalog](reference/document-repo-item-catalog.md): catalog items, stable IDs, and the units they become
-- [Evidence-bound gate records](reference/gate-records.md): schema, authenticated decisions, reviewed publication and effective approval
 - [Document write path](reference/document-repo-write-path.md): job outputs, branches and pull requests
 - [Document reads and stage results](reference/document-repo-read-path.md): file APIs and result views
 - [Commit conventions](reference/document-repo-commit-conventions.md): identity, trailers and auto-commit defaults
 - [Unit files](reference/document-repo-unit-files.md): the unit directory, unit state, rule verdicts and traceability
-- [Coding Agent Workflow compatibility](reference/coding-agent-workflow-compatibility.md): exact toolchain and client/provider probes
+- [Design templates](reference/design-templates.md): design sets, template directives, checks, conformance (ADR-0044, ADR-0045)
 - [Configuration](reference/configuration.md): installation environment variables
 
 **Guides**
 - [Install Kintsugi](guides/installation.md)
 - [Build a project (register repos, write standards)](guides/build-project.md)
+- [Define a project's design templates](guides/define-design-templates.md)
 - [Configure LLM providers for the runtime](guides/configure-llm-providers.md)
+- [Work on a migration task as a member](guides/member-workflow.md)
 - [Use a coding agent on a migration task](guides/coding-agent-workflow.md)
 
 ## Conventions

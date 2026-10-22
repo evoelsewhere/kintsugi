@@ -34,7 +34,8 @@ correct before any agent is: isolation, tool policy, limits, failure reporting a
    echoed for correlation. Higher layers (orchestrator) translate their concepts into these fields.
 5. **The kernel locks pi down:**
    - no discovery from the checkout or the host: no context files, `.pi/` resources, settings
-     files, packages, `SYSTEM.md`, MCP, codemode or tool search;
+     files, packages, `SYSTEM.md`, MCP, codemode or tool search (MCP and codemode are admitted, with
+     limits, by [ADR-0047](0047-kernel-extensions-codemode-and-http-mcp.md); nothing is discovered);
    - provider, models and credentials are registered in memory, never written to disk;
    - only tools in the agent's allowlist are created; file tools are confined to the job's
      read-only paths and output directory;

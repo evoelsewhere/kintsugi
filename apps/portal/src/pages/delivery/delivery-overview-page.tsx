@@ -12,18 +12,19 @@ import { Loaded } from "@/components/loaded";
 import { RunStatusBadge, StatusBadge } from "@/components/status-badges";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { catalogApi } from "@/lib/api/catalog";
+import { designApi } from "@/lib/api/design";
 import { documentsApi, type StageHeadline } from "@/lib/api/documents";
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
 import { formatDateTime, formatDuration, formatRelative } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
 import { isActiveStatus } from "@/lib/status";
-import { latestRun, pipelineStages, runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
+import { latestRun, pipelineStages, runBlocker, runsOfStage, runtimePipelineStages, stageLabel } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { DeliveryShell, NoApplications, WithProject } from "./delivery-shell";
 import { DocumentWritesCard } from "./document-writes-card";
-import { ActivityChart, MiniRunBars, NeedsAttention, PipelineProgress, ProjectKpis, RecentRuns } from "./overview-parts";
+import { ActivityChart, NeedsAttention, PipelineProgress, ProjectKpis, RecentRuns } from "./overview-parts";
 import { pipelineHealth } from "./pipeline-health";
 
 export function DeliveryOverviewPage(): React.JSX.Element {
@@ -82,7 +83,7 @@ function ProjectOverview({ projectId }: { projectId: string }): React.JSX.Elemen
           ) : (
             <Loaded loader={stages} rows={3}>
               {(list) => {
-                const pipeline = pipelineStages(list);
+                const pipeline = runtimePipelineStages(list);
                 const all = runs.data ?? [];
                 const health = pipelineHealth(project.applications, pipeline, all);
                 return (
@@ -93,21 +94,25 @@ function ProjectOverview({ projectId }: { projectId: string }): React.JSX.Elemen
                         <ApplicationStrip key={application.id} project={project} application={application} stages={list} runs={runs.data?.filter((run) => run.applicationId === application.id)} />
                       ))}
                     </div>
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-                      <div className="xl:col-span-3">
-                        <ActivityChart runs={all} />
-                      </div>
-                      <div className="xl:col-span-2">
-                        <NeedsAttention projectId={project.id} health={health} hasRuns={all.length > 0} />
-                      </div>
-                    </div>
-                    <RecentRuns projectId={project.id} applications={project.applications} runs={all} />
+                    <NeedsAttention projectId={project.id} health={health} hasRuns={all.length > 0} />
                   </div>
                 );
               }}
             </Loaded>
           )}
           <DocumentWritesCard loader={writes} documentRepository={project.documentRepository?.repositoryId} />
+          {project.applications.length === 0 || runs.data === undefined ? null : (
+            <details className="group rounded-xl bg-surface shadow-border-medium">
+              <summary className="flex cursor-pointer items-center justify-between rounded-xl px-4 py-3 text-[13px] font-medium text-text hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
+                Run history
+                <span className="text-[12px] font-normal text-text-muted">activity of the last two weeks and the newest stage runs · full detail in Monitoring</span>
+              </summary>
+              <div className="flex flex-col gap-4 p-4 pt-0">
+                <ActivityChart runs={runs.data} />
+                <RecentRuns projectId={project.id} applications={project.applications} runs={runs.data} />
+              </div>
+            </details>
+          )}
         </div>
       )}
     </WithProject>
@@ -138,13 +143,25 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
     catalog.data === undefined || catalog.data === null
       ? undefined
       : [`${catalog.data.counts.understood ?? 0}/${catalog.data.items.filter((item) => item.status !== "retired").length} items understood`];
-  const headlineOf = (stage: string): string[] | undefined => (stage === "understand" ? understood : headlines.data?.find((entry) => entry.stage === stage)?.headline);
+  // The design stage is tracked by its documents (ADR-0044): how many units have each design set written.
+  const design = useLoader(`overview-design/${project.id}/${application.id}`, () => (project.documentRepository === null ? Promise.resolve(null) : designApi.overview(project.id, application.id).catch(() => null)));
+  const designHeadline = (): string[] | undefined => {
+    if (design.data === undefined || design.data === null || design.data.sets.length === 0) return undefined;
+    const written = design.data.sets.map((set) => {
+      const here = design.data?.counts[set.id] ?? {};
+      const total = Object.values(here).reduce((sum, value) => sum + (value ?? 0), 0);
+      return `${set.id} ${(here.conformant ?? 0) + (here.waived ?? 0) + (here.stale ?? 0)}/${total}`;
+    });
+    return design.data.attention.length === 0 ? written : [...written, `${design.data.attention.length} to look at`];
+  };
+  const headlineOf = (stage: string): string[] | undefined => (stage === "understand" ? understood : stage === "design" ? designHeadline() : headlines.data?.find((entry) => entry.stage === stage)?.headline);
 
   const pipeline = pipelineStages(stages);
+  const tracked = runtimePipelineStages(stages);
   const statusOf = (stage: StageView): string | undefined => (stage.audience === "runtime" && runs !== undefined ? latestRun(runs, stage.id)?.status : undefined);
-  const states = pipeline.map((stage) => ({ label: stageLabel(stage.id), status: statusOf(stage) }));
+  const states = tracked.map((stage) => ({ label: stageLabel(stage.id), status: statusOf(stage) }));
   const done = states.filter((state) => state.status === "succeeded").length;
-  const next = runs === undefined ? undefined : pipeline.find((stage) => stage.audience === "runtime" && statusOf(stage) !== "succeeded");
+  const next = runs === undefined ? undefined : tracked.find((stage) => statusOf(stage) !== "succeeded");
   const nextRun = next === undefined || runs === undefined ? undefined : latestRun(runs, next.id);
   const nextLink = next === undefined ? "" : deliveryLink({ projectId: project.id, applicationId: application.id, stage: next.id });
 
@@ -185,7 +202,7 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
         <div className="flex shrink-0 items-center gap-2">
           {active === 0 ? null : <StatusBadge tone="blue" label={`${active} active run${active === 1 ? "" : "s"}`} />}
           <span className="text-[12px] text-text-secondary tabular-nums">
-            <span className="font-medium text-text">{done}</span>/{pipeline.length} stages done
+            <span className="font-medium text-text">{done}</span>/{tracked.length} stages done
           </span>
         </div>
       </CardHeader>
@@ -221,8 +238,6 @@ interface TileProps {
 /** One stage of an application's pipeline: its latest run, the bars of its recent runs and the headline numbers of its results. */
 function StageTile({ index, stage, runs, headline, to }: TileProps): React.JSX.Element {
   const last = runs?.[0];
-  const finished = runs?.filter((run) => run.status === "succeeded" || run.status === "failed") ?? [];
-  const rate = finished.length === 0 ? undefined : Math.round((finished.filter((run) => run.status === "succeeded").length / finished.length) * 100);
   let badge: React.ReactNode = null;
   if (stage.audience === "member") badge = <StatusBadge tone="muted" label="In members' harnesses" />;
   else if (stage.audience === "portal") badge = <StatusBadge tone="muted" label="Planned" />;
@@ -245,18 +260,9 @@ function StageTile({ index, stage, runs, headline, to }: TileProps): React.JSX.E
       <span className="line-clamp-2 text-[12px] text-text-secondary">{stage.description}</span>
       {headline === undefined || headline.length === 0 ? null : <span className="truncate text-[13px] font-medium text-text tabular-nums">{headline.join(" · ")}</span>}
       {runs === undefined || last === undefined ? null : (
-        <span className="flex items-end justify-between gap-3">
-          <MiniRunBars runs={runs} />
-          <span className="min-w-0 text-right text-[11px] leading-4 text-text-muted">
-            <span className="block truncate" title={formatDateTime(last.createdAt)}>
-              {formatRelative(last.createdAt)}
-              {last.startedAt === undefined ? "" : ` · ${isActiveStatus(last.status) ? "running for " : "took "}${formatDuration(last.startedAt, last.finishedAt)}`}
-            </span>
-            <span className="block truncate">
-              {runs.length} run{runs.length === 1 ? "" : "s"}
-              {rate === undefined ? "" : ` · ${rate}% succeeded`}
-            </span>
-          </span>
+        <span className="truncate text-[11px] text-text-muted" title={formatDateTime(last.createdAt)}>
+          {formatRelative(last.createdAt)}
+          {last.startedAt === undefined ? "" : ` · ${isActiveStatus(last.status) ? "running for " : "took "}${formatDuration(last.startedAt, last.finishedAt)}`}
         </span>
       )}
     </Link>

@@ -12,6 +12,7 @@ import { Loaded } from "@/components/loaded";
 import { Drawer } from "@/components/ui/drawer";
 import { documentsApi } from "@/lib/api/documents";
 import { resolveDocumentLink, stageOfDocument } from "@/lib/document-links";
+import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
 import { Markdown } from "./lazy-markdown";
 import { type DocumentLinkHandler, DocumentLinksContext, type DocumentTarget } from "./use-document-links";
@@ -66,12 +67,32 @@ function DocumentFile({ projectId, commit, path }: { projectId: string; commit: 
       <Loaded loader={file} rows={8}>
         {(loaded) =>
           /\.md$/i.test(path) ? (
-            <Markdown text={loaded.content} path={path} />
+            <DocumentText text={loaded.content} path={path} />
           ) : (
             <pre className="overflow-x-auto rounded-lg bg-recessed p-3 font-mono text-[12px] leading-5 text-text-secondary">{loaded.content}</pre>
           )
         }
       </Loaded>
+    </div>
+  );
+}
+
+/** A Markdown document: its front matter (the facts the scripts record) as a compact list, then the text. */
+function DocumentText({ text, path }: { text: string; path: string }): React.JSX.Element {
+  const { fields, body } = splitFrontMatter(text);
+  return (
+    <div className="flex flex-col gap-3">
+      {fields.length === 0 ? null : (
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 rounded-lg bg-recessed p-3 text-[12px]">
+          {fields.map(([key, value]) => (
+            <div key={key} className="contents">
+              <dt className="text-text-muted">{key}</dt>
+              <dd className="min-w-0 break-words text-text-secondary">{value === "" ? "—" : value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <Markdown text={body} path={path} />
     </div>
   );
 }

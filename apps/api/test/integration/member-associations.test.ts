@@ -26,7 +26,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow PR associations (integratio
       `insert into delivery.member_task_projection
          (project_id, application_id, unit_id, repository_id, source_commit, source_path, source_hash,
           work_item, required_inputs, source_references, predecessor_gates)
-       values ($1, 'billing-api', $2, 'association-docs-repo', $3, 'applications/billing-api/units/invoice/unit.md', $4,
+       values ($1, 'billing-api', $2, 'association-docs-repo', $3, '10-applications/billing-api/02-modern/invoice/README.md', $4,
          $5::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)`,
       [projectId, unitId, "b".repeat(40), "c".repeat(64), JSON.stringify({
         id: unitId,
@@ -87,7 +87,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow PR associations (integratio
       `insert into delivery.member_task_projection
          (project_id, application_id, unit_id, repository_id, source_commit, source_path, source_hash,
           work_item, required_inputs, source_references, predecessor_gates)
-       values ($1, 'billing-api', $2, 'association-docs-repo', $3, 'applications/billing-api/units/invoice/unit.md', $4,
+       values ($1, 'billing-api', $2, 'association-docs-repo', $3, '10-applications/billing-api/02-modern/invoice/README.md', $4,
          $5::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)`,
       [projectId, unitId, "f".repeat(40), "d".repeat(64), JSON.stringify({
         id: unitId,

@@ -1,9 +1,9 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "plugins/understand/hooks/reader",
+    "rootDir": "plugins/reverse_engineering/hooks/reader",
     "outDir": "../dist/reader",
     "types": []
   },
-  "include": ["plugins/understand/hooks/reader/**/*.ts"]
+  "include": ["plugins/reverse_engineering/hooks/reader/**/*.ts"]
 }

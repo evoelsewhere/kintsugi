@@ -16,9 +16,9 @@ let docsCommit: string;
 const codeRepositoryId = "review-code";
 const docsRepositoryId = "review-docs";
 const design = "# Approved design\n\nTax rounding uses decimal arithmetic.\n";
-const designPath = "applications/billing/units/tax/design.md";
+const designPath = "10-applications/billing/02-modern/core/tax/detail/logic.md";
 const taskPack = "# Tax task\n\n## Objective\nUse decimal arithmetic.\n\n## Acceptance criteria\n- Round half up\n2. Keep the API stable\n";
-const taskPackPath = "applications/billing/units/tax/task.md";
+const taskPackPath = "10-applications/billing/02-modern/core/tax/task.md";
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "kintsugi-review-inputs-"));

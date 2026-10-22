@@ -16,7 +16,11 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
+import { CODEMODE_TOOL, createCodemodeExtensions } from "./codemode.js";
+import { compactionBudget, stableSessionId } from "./context.js";
+import { createMcpKernel } from "./mcp.js";
 import { composeSystemPrompt } from "./policy.js";
+import { normalizeTools } from "./tool-names.js";
 import { createTools, type ToolContext } from "./tools.js";
 
 type ThinkingLevelOption = NonNullable<NonNullable<Parameters<typeof createAgentSession>[0]>["thinkingLevel"]>;
@@ -31,6 +35,8 @@ export interface CreateJobSessionOptions {
   spec: JobSpec;
   modelRuntime: ModelRuntime;
   extensions: ExtensionFactory[];
+  /** Reports a call a policy refused (a script calling a tool it may not). */
+  onBlocked?: (tool: string, reason: string, input: unknown) => void;
   onOutput: ToolContext["onOutput"];
 }
 
@@ -47,11 +53,19 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
   const cleanup = (): void => rmSync(agentDir, { recursive: true, force: true });
 
   try {
+    // Compaction starts early enough for the window (context.ts), and cache warming stays off: its extra
+    // requests would bill tokens the job never asked for. Retention comes from the provider (PI_CACHE_RETENTION).
     const settingsManager = SettingsManager.inMemory(
-      { compaction: { enabled: true }, retry: { enabled: true, maxRetries: 2 } },
+      { compaction: { enabled: true, ...compactionBudget(model.contextWindow) }, retry: { enabled: true, maxRetries: 2 }, cacheWarming: "off" },
       { projectTrusted: false },
     );
     const systemPrompt = composeSystemPrompt(spec.agent, spec.workspace);
+    // codemode only for an agent that lists it (an agent without a tool list has every kernel tool).
+    const onBlocked = options.onBlocked ?? (() => undefined);
+    const hasCodemode = spec.agent.tools.includes(CODEMODE_TOOL);
+    const mcpServers = spec.mcp?.servers ?? [];
+    const mcp = mcpServers.length === 0 ? undefined : createMcpKernel({ servers: mcpServers, codemode: hasCodemode, onBlocked });
+    const codemode = hasCodemode ? createCodemodeExtensions({ onBlocked, ...(mcp === undefined ? {} : { allowsNestedTool: mcp.allows }) }) : [];
     const resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir,
@@ -63,10 +77,12 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       noContextFiles: true,
       appendSystemPrompt: [],
       systemPromptOverride: () => systemPrompt,
-      extensionFactories: options.extensions,
+      extensionFactories: [...options.extensions, ...codemode, ...(mcp?.factories ?? [])],
     });
     await resourceLoader.reload();
 
+    // The same tools in the same order for every job of the agent: tool definitions open the cached prefix.
+    const tools = normalizeTools(spec.agent.tools);
     const toolContext: ToolContext = { cwd, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput };
     const { session } = await createAgentSession({
       cwd,
@@ -75,13 +91,15 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       model,
       thinkingLevel: (spec.model.thinking ?? spec.agent.thinking ?? "off") as ThinkingLevelOption,
       // The allowlist covers built-in, custom and extension tools alike; [] means no tools.
-      tools: [...spec.agent.tools],
-      ...(spec.agent.tools.length === 0 ? { noTools: "all" as const } : {}),
-      customTools: createTools(spec.agent.tools, toolContext),
+      tools,
+      ...(tools.length === 0 ? { noTools: "all" as const } : {}),
+      customTools: createTools(tools, toolContext),
       resourceLoader,
       settingsManager,
-      sessionManager: SessionManager.inMemory(cwd),
+      sessionManager: SessionManager.inMemory(cwd, { id: stableSessionId(spec) }),
     });
+    // session_start is what connects the MCP servers (in the background: a script or the first prompt waits for the ones it needs).
+    if (mcp !== undefined) await session.bindExtensions({});
 
     return {
       session,

@@ -1,0 +1,12 @@
+{
+  "name": "reverse-engineering",
+  "version": "1.0.0",
+  "description": "Read the legacy code, catalog it and write the AS-IS specification per item: assessment, topology, business rules, security findings and work items. Runs as Kintsugi runtime jobs, read-only.",
+  "author": {
+    "name": "Kintsugi"
+  },
+  "keywords": [
+    "kintsugi",
+    "runtime"
+  ]
+}

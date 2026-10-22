@@ -5,8 +5,6 @@
 // Runtime values of index.ts are only read inside functions (import cycle, see project.ts).
 
 import {
-  DISPOSITIONS,
-  type Disposition,
   type MemberHarnessId,
   MEMBER_HARNESSES,
   PHASES,
@@ -34,7 +32,6 @@ export interface ManifestRepository extends ManifestRepositoryRef {
 export interface ManifestApplication {
   id: string;
   name?: string;
-  disposition: Disposition;
   pipeline?: string;
   repos: ManifestRepository[];
 }
@@ -235,7 +232,7 @@ function readRef(read: Reader, value: unknown, path: string, keys: readonly stri
 }
 
 function readApplication(read: Reader, value: unknown, path: string, used: Map<string, string>, ids: Set<string>): ManifestApplication | undefined {
-  const data = read.object(value, path, ["id", "name", "disposition", "pipeline", "repos"]);
+  const data = read.object(value, path, ["id", "name", "pipeline", "repos"]);
   if (data === undefined) return undefined;
   const id = read.id(data["id"], `${path}.id`);
   if (id !== undefined) {
@@ -243,7 +240,6 @@ function readApplication(read: Reader, value: unknown, path: string, used: Map<s
     ids.add(id);
   }
   const name = data["name"] === undefined ? undefined : read.string(data["name"], `${path}.name`);
-  const disposition = read.oneOf(data["disposition"], `${path}.disposition`, DISPOSITIONS);
   const pipeline = data["pipeline"] === undefined ? undefined : read.id(data["pipeline"], `${path}.pipeline`);
 
   const repos: ManifestRepository[] = [];
@@ -276,22 +272,14 @@ function readApplication(read: Reader, value: unknown, path: string, used: Map<s
     repos.push({ ...ref, role, ...(component === undefined ? {} : { component }) });
   });
 
-  if (id === undefined || disposition === undefined) return undefined;
-  return { id, ...(name === undefined ? {} : { name }), disposition, ...(pipeline === undefined ? {} : { pipeline }), repos };
+  if (id === undefined) return undefined;
+  return { id, ...(name === undefined ? {} : { name }), ...(pipeline === undefined ? {} : { pipeline }), repos };
 }
 
 function readPipeline(read: Reader, value: unknown, path: string): PipelineDefinition | undefined {
-  const data = read.object(value, path, ["id", "appliesTo", "phases", "gates"]);
+  const data = read.object(value, path, ["id", "phases", "gates"]);
   if (data === undefined) return undefined;
   const id = read.id(data["id"], `${path}.id`);
-
-  let appliesTo: PipelineDefinition["appliesTo"];
-  if (data["appliesTo"] !== undefined) {
-    const appliesData = read.object(data["appliesTo"], `${path}.appliesTo`, ["dispositions"]);
-    const list = appliesData?.["dispositions"] === undefined ? [] : read.array(appliesData["dispositions"], `${path}.appliesTo.dispositions`);
-    const dispositions = (list ?? []).map((entry, index) => read.oneOf(entry, `${path}.appliesTo.dispositions[${index}]`, DISPOSITIONS));
-    appliesTo = { dispositions: dispositions.filter((entry): entry is Disposition => entry !== undefined) };
-  }
 
   const phases: PipelineDefinition["phases"] = [];
   read.array(data["phases"], `${path}.phases`, { nonEmpty: true })?.forEach((entry, index) => {
@@ -310,12 +298,15 @@ function readPipeline(read: Reader, value: unknown, path: string): PipelineDefin
     const stages: PipelineDefinition["phases"][number]["stages"] = [];
     read.array(phase["stages"], `${at}.stages`, { nonEmpty: true })?.forEach((stageEntry, stageIndex) => {
       const stageAt = `${at}.stages[${stageIndex}]`;
-      const stage = read.object(stageEntry, stageAt, ["id", "performer", "gate"]);
+      const stage = read.object(stageEntry, stageAt, ["id", "performer", "gate", "produces"]);
       if (stage === undefined) return;
       const stageId = read.id(stage["id"], `${stageAt}.id`);
       const performer = readPerformer(read, stage["performer"], `${stageAt}.performer`);
       const gate = stage["gate"] === undefined ? undefined : read.string(stage["gate"], `${stageAt}.gate`);
-      if (stageId !== undefined && performer !== undefined) stages.push({ id: stageId, performer, ...(gate === undefined ? {} : { gate }) });
+      const produces = stage["produces"] === undefined ? undefined : read.id(stage["produces"], `${stageAt}.produces`);
+      if (stageId !== undefined && performer !== undefined) {
+        stages.push({ id: stageId, performer, ...(gate === undefined ? {} : { gate }), ...(produces === undefined ? {} : { produces }) });
+      }
     });
     if (phaseId !== undefined) {
       phases.push({ id: phaseId, ...(category === undefined ? {} : { category }), ...(perUnit === undefined ? {} : { perUnit }), stages });
@@ -336,7 +327,7 @@ function readPipeline(read: Reader, value: unknown, path: string): PipelineDefin
   }
 
   if (id === undefined) return undefined;
-  return { id, ...(appliesTo === undefined ? {} : { appliesTo }), phases, ...(gates === undefined ? {} : { gates }) };
+  return { id, phases,...(gates === undefined ? {} : { gates }) };
 }
 
 function readPerformer(read: Reader, value: unknown, path: string): StagePerformer | undefined {

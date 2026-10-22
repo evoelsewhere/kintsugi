@@ -3,6 +3,7 @@
 
 import { statSync } from "node:fs";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
+import { isMcpToolEntry, mcpHeaderValueProblem, mcpServerOfEntry, MCP_SERVER_ID_PATTERN } from "@kintsugi/domain";
 import { isKernelToolName, KERNEL_TOOL_NAMES } from "./tool-names.js";
 
 const SKILL_NAME = /^[a-z][a-z0-9-]*$/;
@@ -16,8 +17,20 @@ export function validateJobSpec(spec: JobSpec): void {
   if (agent.instructions.trim() === "") problems.push("agent.instructions is empty");
   if (spec.task.trim() === "") problems.push("task is empty");
 
+  const servers = new Map((spec.mcp?.servers ?? []).map((server) => [server.name, server]));
   for (const tool of agent.tools) {
-    if (!isKernelToolName(tool)) problems.push(`unknown tool "${tool}" (available: ${KERNEL_TOOL_NAMES.join(", ")})`);
+    if (isMcpToolEntry(tool)) {
+      const named = mcpServerOfEntry(tool)!;
+      if (!servers.has(named)) problems.push(`tool "${tool}" names the MCP server "${named}", which the job was not given`);
+    } else if (!isKernelToolName(tool)) problems.push(`unknown tool "${tool}" (available: ${KERNEL_TOOL_NAMES.join(", ")}, or an MCP tool such as mcp__<server>__*)`);
+  }
+  for (const server of servers.values()) {
+    if (!MCP_SERVER_ID_PATTERN.test(server.name)) problems.push(`MCP server id "${server.name}" is not valid`);
+    if (!/^https?:\/\/\S+$/.test(server.url)) problems.push(`MCP server "${server.name}" must have an http(s) URL`);
+    for (const [name, value] of Object.entries(server.headers)) {
+      const problem = mcpHeaderValueProblem(value);
+      if (problem !== undefined) problems.push(`MCP server "${server.name}", header "${name}": ${problem}`);
+    }
   }
   const skillNames = new Set<string>();
   for (const skill of agent.skills ?? []) {

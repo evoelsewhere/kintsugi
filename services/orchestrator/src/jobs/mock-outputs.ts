@@ -42,9 +42,6 @@ def main():
 main()
 `;
 
-/** 63 lowercase words: passes merge_topology's 55–90 word and names-in-packet checks. */
-const DESCRIPTION = Array.from({ length: 4 }, () => "this node was described by the mock agent backend without reading any packet at all").join(" and ") + ".\n";
-
 /** SECURITY_FINDINGS.md in the harden layout, saying plainly that nothing was reviewed. */
 const MOCK_SECURITY_FINDINGS = (agent: string, app: string): string => `# Security findings — ${app}
 
@@ -83,22 +80,19 @@ Mock run: no assessment highlight was settled.
 
 /** The sections of an AS-IS unit specification (understand stage), each with a stub line. */
 const SPEC_SECTIONS = ["Purpose", "Entry points", "Main flows", "Dependencies", "Data objects", "Business rules applied", "Security findings and risks", "Configuration", "Error handling", "Source references", "Open questions"];
-const UNIT_SPEC = /^knowledge\/as-is\/[^/]+\/[^/]+\/[^/]+\.md$/;
+const UNIT_SPEC = /^10-applications\/[^/]+\/01-legacy\/[a-z0-9][^/]*\/[^/]+\/spec\.md$/;
 
 function mockFile(path: string, agent: string, app: string): string {
   const name = path.split("/").at(-1) ?? path;
   if (name === "extract_topology.py") return EXTRACT_TOPOLOGY(app);
-  if (name === "flows.json") return `${JSON.stringify({ flows: [], observations: [`mock observation of ${app}`] }, null, 2)}\n`;
-  if (path.includes("/node-descriptions/")) return DESCRIPTION;
   if (UNIT_SPEC.test(path)) {
     const sections = SPEC_SECTIONS.map((section) => `## ${section}\n\nMock output of ${agent} for ${app} (the mock agent backend calls no LLM).\n`);
-    return `# ${name.slice(0, -3)}\n\n${sections.join("\n")}`;
+    return `# ${path.split("/").slice(-3, -1).join("/")}\n\n${sections.join("\n")}`;
   }
   // A diagram that passes scripts/mermaid_lint.py: quoted labels on sanitized ids.
   if (name.endsWith(".mmd")) return `flowchart TD\n    n_agent["${agent}"] --> n_output["${name}"]\n`;
   if (name === "SECURITY_FINDINGS.md") return MOCK_SECURITY_FINDINGS(agent, app);
   if (name.endsWith(".patch")) return `# mock remediation patch of ${app}: no hunks (written by the mock agent backend)\n`;
-  if (name.endsWith(".json")) return "{}\n";
   return `# ${name}\n\nMock output of ${agent} for ${app} (the mock agent backend calls no LLM).\n`;
 }
 
