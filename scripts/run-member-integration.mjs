@@ -15,6 +15,10 @@ const apiFiles = [
   "test/integration/member-associations.test.ts",
   "test/integration/github-webhook.test.ts",
   "test/integration/member-events.test.ts",
+  "test/integration/coding-agent-oauth.test.ts",
+  "test/integration/installation-settings.test.ts",
+  "test/integration/task-projection-concurrency.test.ts",
+  "test/integration/member-upgrade.test.ts",
   "test/integration/gate-publication.test.ts",
   "test/integration/stage-decisions.test.ts",
 ];
@@ -30,6 +34,8 @@ const workerFiles = [
   "test/gate-effective.test.ts",
   "test/stage-decisions.test.ts",
   "test/member-event-retention.test.ts",
+  "test/continuation.test.ts",
+  "test/continuation-replay.test.ts",
 ];
 
 export function parseSuiteArgs(args) {

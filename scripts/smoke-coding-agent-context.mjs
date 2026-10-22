@@ -2,7 +2,7 @@
 // Requires KINTSUGI_TEST_DATABASE_URL on a loopback Postgres server; creates its own DB.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
@@ -207,28 +207,57 @@ async function smoke() {
     assert.equal((await request("GET", "/health")).status, 200);
     assert.equal((await request("POST", "/auth/login", { username: "smoke-admin", password })).status, 200);
     const me = (await request("GET", "/auth/me")).body.data;
+    await pool.query("insert into core.role_permission (role_id, permission_code) values ('admin', 'member.read') on conflict do nothing");
     const { startGitHttpServer } = await compiled("packages/git/dist/testing.js");
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
-    await remote.commit("docs", "applications/billing/units/core/invoice/unit.md", [
+    await remote.commit("docs", "10-applications/billing/02-modern/core/invoice/README.md", [
       "---", "id: billing/core/invoice", "application: billing", "module: core", "kind: module",
       "title: Smoke invoice", "phase: migrate", "status: pending", "assignee: smoke-admin",
       "requiredDeliverables:", "  - id: code", "    repositoryId: billing-api", "    path: src/invoice",
       "  - id: design", "    repositoryId: smoke-docs", "    path: applications/billing/units/core/invoice/design.md",
       "---", "Smoke unit.", "",
     ].join("\n"));
-    await remote.commit("docs", "applications/billing/units/core/invoice/task.md", "# Task\n\n## Objective\nSmoke invoice processing.\n\n## Acceptance criteria\n- Preserve rounding.\n");
-    const sourcePath = "applications/billing/units/core/invoice/as-is.md";
+    await remote.commit("docs", "10-applications/billing/02-modern/core/invoice/task.md", "# Task\n\n## Objective\nSmoke invoice processing.\n\n## Acceptance criteria\n- Preserve rounding.\n");
+    const sourcePath = "10-applications/billing/01-legacy/core/invoice/spec.md";
     const commitA = await remote.commit("docs", sourcePath, "# Evidence\nSmoke invoice evidence revision A.\n");
     await pool.query("insert into admin.git_server(id,kind,name,base_url,auth_type) values('local','plain-git','Smoke',$1,'none')", [remote.baseUrl]);
     await pool.query("insert into admin.git_repository(id,server_id,url,default_branch) values('smoke-docs','local',$1,'main')", [remote.baseUrl + "/docs.git"]);
     assert.equal((await request("POST", "/admin/projects", { id: "smoke", name: "Smoke", documentRepositoryId: "smoke-docs" })).status, 201);
     assert.equal((await request("POST", "/admin/projects/smoke/applications", { id: "billing", name: "Billing", disposition: "refactor" })).status, 201);
     assert.equal((await request("PUT", `/admin/project-access/smoke/${me.id}`, {})).status, 204);
-    const issued = await request("POST", "/auth/member-tokens", { name: "Smoke", projectIds: ["smoke"], expiresAt: new Date(Date.now() + 300_000).toISOString() });
-    assert.equal(issued.status, 201);
-    const token = issued.body.data.token;
-    diagnosticSecrets.push(token);
+    const codeVerifier = randomBytes(32).toString("base64url");
+    const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+    const oauthState = randomBytes(32).toString("base64url");
+    const redirectUri = `http://127.0.0.1:${await reservePort()}/oauth/callback`;
+    const authorized = await request("POST", "/auth/coding-agent/authorize", {
+      projectId: "smoke",
+      clientName: "coding-agent-workflow-smoke",
+      redirectUri,
+      state: oauthState,
+      codeChallenge,
+      codeChallengeMethod: "S256",
+    });
+    assert.equal(authorized.status, 201, "browser consent must create a one-time project-scoped authorization code");
+    const callback = new URL(authorized.body.data.redirectTo);
+    assert.equal(callback.origin + callback.pathname, redirectUri);
+    assert.equal(callback.searchParams.get("state"), oauthState);
+    const authorizationCode = callback.searchParams.get("code");
+    assert.match(authorizationCode, /^knt_ac_[A-Za-z0-9_-]{43}$/);
+    diagnosticSecrets.push(codeVerifier, oauthState, authorizationCode);
+    const issued = await request("POST", "/auth/coding-agent/token", {
+      grantType: "authorization_code",
+      code: authorizationCode,
+      codeVerifier,
+      redirectUri,
+    });
+    assert.equal(issued.status, 200, "a valid PKCE exchange must issue short-lived and renewable credentials");
+    let accessToken = issued.body.data.accessToken;
+    let refreshToken = issued.body.data.refreshToken;
+    const connectionId = issued.body.data.connectionId;
+    assert.equal(issued.body.data.expiresIn, 300);
+    assert.deepEqual(issued.body.data.projectIds, ["smoke"]);
+    diagnosticSecrets.push(accessToken, refreshToken);
 
     workerProcess = start("worker", processOptions, processes);
     assert(workerProcess.processHandle.pid !== undefined);
@@ -240,12 +269,12 @@ async function smoke() {
       "worker Git sync A", [workerProcess]);
 
     const selector = (path, query) => path + "?" + new URLSearchParams(query);
-    assert.equal((await request("GET", "/member/v1/projects", undefined, token)).body.data.items.length, 1);
-    const tasks = await request("GET", selector("/member/v1/tasks", { projectId: "smoke", mine: "true" }), undefined, token);
+    assert.equal((await request("GET", "/member/v1/projects", undefined, accessToken)).body.data.items.length, 1);
+    const tasks = await request("GET", selector("/member/v1/tasks", { projectId: "smoke", mine: "true" }), undefined, accessToken);
     assert.equal(tasks.status, 200);
     assert.equal(tasks.body.data.items[0].unitId, "billing/core/invoice");
     const query = { projectId: "smoke", unitId: "billing/core/invoice", activity: "design" };
-    const briefResponse = await request("GET", selector("/member/v1/task-brief", query), undefined, token);
+    const briefResponse = await request("GET", selector("/member/v1/task-brief", query), undefined, accessToken);
     assert.equal(briefResponse.status, 200);
     const brief = briefResponse.body.data;
     assert.deepEqual(brief.requiredDeliverableIds, ["code", "design"]);
@@ -254,13 +283,30 @@ async function smoke() {
     const source = brief.sources.find((item) => item.role === "as-is-specification");
     assert(source, "AS-IS source must be registered");
     const documentQuery = { projectId: "smoke", unitId: query.unitId, snapshotId: brief.snapshotId, sourceId: source.sourceId };
-    const doc = await request("GET", selector("/member/v1/documents", documentQuery), undefined, token);
+    const doc = await request("GET", selector("/member/v1/documents", documentQuery), undefined, accessToken);
     assert.equal(doc.status, 200);
     assert.match(doc.body.data.text, /revision A/);
-    const search = await request("GET", selector("/member/v1/search", { ...documentQuery, query: "invoice" }), undefined, token);
+    const search = await request("GET", selector("/member/v1/search", { ...documentQuery, query: "invoice" }), undefined, accessToken);
     assert.equal(search.status, 400, "search must reject a source selector it does not support");
     const searchQuery = { projectId: "smoke", unitId: query.unitId, snapshotId: brief.snapshotId, query: "invoice" };
-    assert((await request("GET", selector("/member/v1/search", searchQuery), undefined, token)).body.data.items.length > 0);
+    assert((await request("GET", selector("/member/v1/search", searchQuery), undefined, accessToken)).body.data.items.length > 0);
+
+    const connectionList = await request("GET", "/auth/member-connections");
+    assert.equal(connectionList.status, 200);
+    assert(connectionList.body.data.items.some((item) => item.id === connectionId && item.projectIds.includes("smoke")));
+    const connectionMetadata = JSON.stringify(connectionList.body.data);
+    assert(!connectionMetadata.includes(accessToken), "connection metadata must not expose access credentials");
+    assert(!connectionMetadata.includes(refreshToken), "connection metadata must not expose refresh credentials");
+
+    const rotated = await request("POST", "/auth/coding-agent/token", { grantType: "refresh_token", refreshToken });
+    assert.equal(rotated.status, 200, "the connection must refresh before its policy expiry");
+    assert.equal(rotated.body.data.connectionId, connectionId);
+    assert.notEqual(rotated.body.data.accessToken, accessToken);
+    assert.notEqual(rotated.body.data.refreshToken, refreshToken);
+    accessToken = rotated.body.data.accessToken;
+    refreshToken = rotated.body.data.refreshToken;
+    diagnosticSecrets.push(accessToken, refreshToken);
+    assert.equal((await request("GET", "/member/v1/projects", undefined, accessToken)).status, 200);
 
     const commitB = await remote.commit("docs", sourcePath, "# Evidence\nSmoke invoice evidence revision B.\n");
     await eventually(async () => (await pool.query("select last_commit from admin.git_repository where id='smoke-docs'")).rows[0]?.last_commit === commitB,
@@ -272,20 +318,22 @@ async function smoke() {
     await startApiProcess();
     assert.equal((await request("POST", "/auth/login", { username: "smoke-admin", password })).status, 200);
     assert.equal((await request("GET", "/auth/me")).status, 200);
-    assert.match((await request("GET", selector("/member/v1/documents", documentQuery), undefined, token)).body.data.text, /revision A/);
-    const oldBrief = await request("GET", selector("/member/v1/task-brief", { ...query, snapshotId: brief.snapshotId }), undefined, token);
+    assert.match((await request("GET", selector("/member/v1/documents", documentQuery), undefined, accessToken)).body.data.text, /revision A/);
+    const oldBrief = await request("GET", selector("/member/v1/task-brief", { ...query, snapshotId: brief.snapshotId }), undefined, accessToken);
     assert.equal(oldBrief.status, 200);
     assert.equal(oldBrief.body.data.freshness.isCurrent, false);
     const { CheckoutStorage, resolveCommit } = await compiled("packages/git/dist/index.js");
     const { snapshotPinRef } = await compiled("services/orchestrator/dist/git-sync/retention.js");
     assert.equal(await resolveCommit(new CheckoutStorage(dataDir).mirror("local", "smoke-docs"), snapshotPinRef(brief.snapshotId, "smoke-docs")), commitA);
-    assert.equal((await request("GET", "/auth/me", undefined, token)).status, 403);
-    assert.equal((await request("POST", "/admin/projects", { id: "forbidden", name: "Forbidden" }, token)).status, 403);
-    const unknownReview = await request("GET", selector("/member/v1/reviews/review-smoke", { projectId: "smoke" }), undefined, token);
+    assert.equal((await request("GET", "/auth/me", undefined, accessToken)).status, 403);
+    assert.equal((await request("POST", "/admin/projects", { id: "forbidden", name: "Forbidden" }, accessToken)).status, 403);
+    const unknownReview = await request("GET", selector("/member/v1/reviews/review-smoke", { projectId: "smoke" }), undefined, accessToken);
     assert.equal(unknownReview.status, 404);
     assert.equal(unknownReview.body.success, false);
     assert.equal((await request("DELETE", `/admin/project-access/smoke/${me.id}`)).status, 204);
-    assert.equal((await request("GET", selector("/member/v1/documents", documentQuery), undefined, token)).status, 403);
+    assert.equal((await request("GET", selector("/member/v1/documents", documentQuery), undefined, accessToken)).status, 403);
+    assert.equal((await request("POST", "/auth/coding-agent/revoke", { refreshToken })).status, 204);
+    assert.equal((await request("GET", "/member/v1/projects", undefined, accessToken)).status, 401);
     passed = true;
   } catch (error) {
     smokeError = error;
@@ -322,7 +370,7 @@ async function smoke() {
   if (smokeError !== undefined) failures.push(`Smoke failed: ${safeError(smokeError)}`);
   failures.push(...cleanupErrors);
   if (failures.length > 0) throw new Error(failures.join("\n"));
-  if (passed) console.log("PASS: deployed API + worker entrypoints, migrations, Git sync A/B, API restart, scoped token, task/deliverables, pinned brief/document/search, stale freshness, legacy/write denial, unknown review lookup, live access revocation, process shutdown");
+  if (passed) console.log("PASS: API + worker entrypoints, migrations, PKCE browser-consent exchange, 5-minute project-scoped access, task/document/search reads, refresh rotation, safe connection metadata, Git sync A/B, API restart, stale-snapshot detection, write denial, live Project Access revocation, connection revocation, process shutdown");
 }
 
 try {

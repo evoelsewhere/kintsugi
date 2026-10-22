@@ -8,9 +8,12 @@ on:
       - "apps/portal/**"
       - "packages/**"
       - "services/orchestrator/**"
+      - "services/harness-hub/**"
       - "scripts/**"
       - "test/coding-agent-workflow/**"
+      - ".github/workflows/coding-agent-workflow-checks.yml"
       - "docs/guides/coding-agent-workflow.md"
+      - "docs/guides/coding-agent-workflow-quickstart.html"
       - "docs/reference/coding-agent-*.md"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -72,6 +75,7 @@ jobs:
       - run: pnpm exec turbo run build --filter=@kintsugi/api --filter=@kintsugi/orchestrator
       - run: pnpm run test:coding-agent:runner
       - run: pnpm run test:coding-agent:integration
+      - run: pnpm run test:coding-agent:smoke
       - uses: actions/upload-artifact@v4
         if: always()
         with:
