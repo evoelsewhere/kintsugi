@@ -22,8 +22,10 @@ import { MCP_TOOL_PREFIX } from "./mcp.js";
 import type { KernelToolName } from "./tool-names.js";
 
 export interface ToolContext {
-  /** Working directory: the first read-only root. */
+  /** Working directory: the job workspace root (ADR-0055); a relative path is resolved against it. */
   cwd: string;
+  /** Where ls, grep and find look when given no path: the first read-only root (the as-is code). */
+  searchDir: string;
   readOnly: readonly string[];
   outDir: string;
   /** Scratch directory: HOME, TEMP and TMPDIR of every child process the tools start. */
@@ -53,14 +55,24 @@ const readTool: ToolFactory = (context) => {
   );
 };
 
-const lsTool: ToolFactory = (context) => erase(createKernelLsTool(context.cwd, readGuard(context)));
+const lsTool: ToolFactory = (context) => erase(createKernelLsTool(context.cwd, readGuard(context), context.searchDir));
 
 // grep searches in-process (grep.ts): pi's grep needs ripgrep, which a job has no way to get.
-const grepTool: ToolFactory = (context) => erase(createKernelGrepTool(context.cwd, readGuard(context)));
+const grepTool: ToolFactory = (context) => erase(createKernelGrepTool(context.cwd, readGuard(context), context.searchDir));
+
+// pi's find searches the working directory when given no path; here that is the workspace root, which is not
+// readable as a whole, so a call without a path searches the first read-only root instead.
+const searchingIn = (tool: ToolDefinition, dir: string): ToolDefinition => ({
+  ...tool,
+  execute: (toolCallId, params, signal, onUpdate, ctx) => {
+    const given = params as { path?: string };
+    return tool.execute(toolCallId, { ...given, path: given.path ?? dir } as typeof params, signal, onUpdate, ctx);
+  },
+});
 
 const findTool: ToolFactory = (context) => {
   const guard = readGuard(context);
-  return erase(
+  return searchingIn(erase(
     createFindToolDefinition(context.cwd, {
       operations: {
         exists: async (path) => {
@@ -83,7 +95,7 @@ const findTool: ToolFactory = (context) => {
         },
       },
     }),
-  );
+  ), context.searchDir);
 };
 
 // write and edit are pi's own tools, working in the job's output directory: a relative path is

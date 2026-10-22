@@ -47,6 +47,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 **Reference**
 - [Glossary](reference/glossary.md)
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
+- [Job workspace](reference/job-workspace.md): the layout of a job's workspace, the guide, attempts, the ledger and the lifecycle (ADR-0055)
 - [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
 - [Data model](reference/data-model.md)
 - [Document repository layout](reference/document-repo.md): the numbered layout, each application split into legacy and modern (ADR-0051), who writes what and auto-commit

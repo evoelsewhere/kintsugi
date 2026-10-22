@@ -45,7 +45,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
   const model = modelRuntime.getModel(spec.model.provider, spec.model.id);
   if (model === undefined) throw new Error(`model ${spec.model.provider}/${spec.model.id} is not registered`);
 
-  const cwd = spec.workspace.readOnly[0]!;
+  const cwd = spec.workspace.root;
   // pi needs an agent directory; a fresh empty one per job means nothing is read from the host.
   const agentDir = mkdtempSync(join(tmpdir(), "kintsugi-job-"));
   const scratch = join(agentDir, "tmp");
@@ -83,7 +83,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
 
     // The same tools in the same order for every job of the agent: tool definitions open the cached prefix.
     const tools = normalizeTools(spec.agent.tools);
-    const toolContext: ToolContext = { cwd, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput };
+    const toolContext: ToolContext = { cwd, searchDir: spec.workspace.readOnly[0]!, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput };
     const { session } = await createAgentSession({
       cwd,
       agentDir,

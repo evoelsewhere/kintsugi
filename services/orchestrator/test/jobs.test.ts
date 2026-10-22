@@ -49,14 +49,15 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  function setup(files: AgentFiles, mockOutputs?: boolean): { store: MemoryJobStore; runner: JobRunner; writes: Array<{ repository: string; request: DocumentWriteRequest }>; agents: ReturnType<typeof writingAgentRuntime> } {
+  function setup(files: AgentFiles, mockOutputs?: boolean): { store: MemoryJobStore; runner: JobRunner; writes: Array<{ repository: string; request: DocumentWriteRequest }>; agents: ReturnType<typeof writingAgentRuntime>; checkouts: LocalCheckouts } {
     const store = new MemoryJobStore();
     const writes: Array<{ repository: string; request: DocumentWriteRequest }> = [];
     const agents = writingAgentRuntime(files);
+    const checkouts = new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare });
     const runner = new JobRunner({
       store,
       storage,
-      checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
+      checkouts,
       agents,
       agentDefinitions: builtinAgents(),
       interpreters: interpretersFromEnv(),
@@ -66,7 +67,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       },
       log: () => undefined,
     });
-    return { store, runner, writes, agents };
+    return { store, runner, writes, agents, checkouts };
   }
 
   const assess = async (store: MemoryJobStore): Promise<string> => {
@@ -179,10 +180,12 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     });
     expect(run?.documentWriteId).toBe(writes[0]?.request.writeId);
 
-    // The checkout, inputs, scratch, the intermediate outputs and the steps' workspaces are gone; out/ stays for the writer.
+    // The checkout, inputs, scratch, the intermediate outputs and the steps' folders are gone; out/ stays for the writer,
+    // with the manifest, the guide and the ledger that say what the workspace was.
     const left = await readdir(storage.job(id).root);
-    expect(left).toEqual(["out"]);
-    for (const child of store.children(id)) expect(existsSync(storage.job(child.id).root)).toBe(false);
+    expect(left.sort()).toEqual([".state", "WORKSPACE.md", "out", "workspace.json"]);
+    expect(JSON.parse(readFileSync(storage.job(id).manifest, "utf8"))).toMatchObject({ jobId: id, attempt: 1, state: "published", sources: [{ repositoryId: "legacy", role: "legacy" }] });
+    expect(existsSync(storage.job(id).steps)).toBe(false);
   });
 
   const BAD_TOPOLOGY = { "10-applications/demo/01-legacy/topology.md": "# Topology without front matter\n" };
@@ -237,28 +240,38 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(0);
   });
 
-  it("resumes a failed stage: keeps work/, skips the agent jobs that succeeded, reruns the scripts and the failed step", async () => {
+  it("retries a failed job in its own workspace: keeps work/ and the checkouts, skips the steps that did not change, reruns the scripts and the failed step", async () => {
     let fail = true;
-    const { store, runner, writes } = setup({
+    const { store, runner, writes, checkouts } = setup({
       "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? (fail ? BAD_TOPOLOGY : { "10-applications/demo/01-legacy/assessment.md": "# Assessment\n" }) : {}),
     });
-    const first = await assess(store);
-    expect((await runner.run(first))?.status).toBe("failed");
-    // The failed run keeps its steps in the summary, and work/ beside out/.
-    const failed = await store.get(first);
+    const id = await assess(store);
+    expect((await runner.run(id))?.status).toBe("failed");
+    // The failed job keeps its steps in the summary, work/ beside out/, its checkouts, and says it can be retried.
+    const failed = await store.get(id);
     const steps = (failed?.outputSummary?.["steps"] ?? []) as Array<{ id: string; status: string }>;
     expect(steps.map((step) => [step.id, step.status]).at(-1)).toEqual(["synthesis", "failed"]);
     expect(failed?.outputSummary?.["documentsCommit"]).toMatch(/^[0-9a-f]{40}$/);
-    expect(existsSync(join(storage.job(first).root, "work", "10-applications", "demo", "01-legacy", "_analysis"))).toBe(true);
+    const paths = storage.job(id);
+    expect(existsSync(join(paths.work, "10-applications", "demo", "01-legacy", "_analysis"))).toBe(true);
+    expect(existsSync(join(paths.asIs, "legacy", "src", "main.c"))).toBe(true);
+    expect(JSON.parse(readFileSync(paths.manifest, "utf8"))).toMatchObject({ attempt: 1, state: "parked" });
+    const ledger = JSON.parse(readFileSync(paths.ledger, "utf8")) as { entries: Record<string, { status: string; attempt: number }> };
+    expect(Object.entries(ledger.entries).filter(([, entry]) => entry.status === "succeeded" && entry.attempt === 1).map(([key]) => key)).toEqual(expect.arrayContaining(["structure", "debt", "security", "topology", "catalog-curate"]));
+    expect(ledger.entries["synthesis"]?.status).toBe("failed");
+    expect(checkouts.checkouts).toHaveLength(1);
 
+    // The same job, the next attempt.
     fail = false;
-    const second = randomUUID();
-    await store.create({ id: second, projectId: "demo", applicationId: "demo", kind: "stage", name: "assess", sourceRepositoryId: "legacy", sourceCommit: failed!.sourceCommit!, actor: "alice", inputs: { resumeOf: first } });
-    const resumed = await runner.run(second);
-    expect(resumed?.failureReason).toBeUndefined();
-    expect(resumed?.status).toBe("succeeded");
-    // Only the scripts and the synthesis ran again.
-    expect(store.children(second).map((child) => [child.kind, child.inputs["label"] ?? child.name])).toEqual([
+    const before = store.children(id).length;
+    store.requeue(id);
+    const retried = await runner.run(id);
+    expect(retried?.failureReason).toBeUndefined();
+    expect(retried?.status).toBe("succeeded");
+    expect(retried?.attempt).toBe(2);
+    // The checkout was kept; only the scripts and the synthesis ran again.
+    expect(checkouts.checkouts).toHaveLength(1);
+    expect(store.children(id).slice(before).map((child) => [child.kind, child.inputs["label"] ?? child.name])).toEqual([
       ["script", "inventory.py"],
       ["script", "extract_topology.py"],
       ["script", "render_topology.py"],
@@ -269,14 +282,31 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       ["agent", "synthesis"],
       ["script", "style_architecture.py"],
     ]);
-    const summary = resumed?.outputSummary as { resumeOf: string; steps: Array<{ id: string; reused?: boolean }> };
-    expect(summary.resumeOf).toBe(first);
+    const summary = retried?.outputSummary as { attempt: number; steps: Array<{ id: string; reused?: boolean }> };
+    expect(summary.attempt).toBe(2);
     expect(summary.steps.filter((step) => step.reused === true).map((step) => step.id).sort()).toEqual(["catalog-curate", "debt", "security", "structure", "topology"]);
-    const out = storage.job(second).out;
+    const out = paths.out;
     expect(existsSync(join(out, "10-applications", "demo", "01-legacy", "_tools", "extract_topology.py"))).toBe(true);
     expect(readFileSync(join(out, "10-applications", "demo", "01-legacy", "assessment.md"), "utf8")).toBe("# Assessment\n");
     expect(writes).toHaveLength(1);
+    // The events carry the attempt they belong to.
+    expect(store.events.filter((event) => event.kind === "status").map((event) => event.attempt)).toEqual(expect.arrayContaining([1, 2]));
   }, 120_000);
+
+  it("runs the steps again when the job is retried from scratch", async () => {
+    let fail = true;
+    const { store, runner, agents } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) && fail ? BAD_TOPOLOGY : {}) });
+    const id = await assess(store);
+    expect((await runner.run(id))?.status).toBe("failed");
+    const analysts = (): number => agents.specs.filter((spec) => spec.agent.id === "legacy-analyst" || spec.agent.id === "security-auditor").length;
+    const first = analysts();
+
+    fail = false;
+    store.requeue(id, { fresh: true });
+    expect((await runner.run(id))?.status).toBe("succeeded");
+    // The five agent steps before the synthesis run again, and the synthesis once more.
+    expect(analysts() - first).toBeGreaterThanOrEqual(6);
+  }, 180_000);
 
   it("fails clearly when an agent has no model binding on the pi runtime", async () => {
     const { store, writes } = setup({});

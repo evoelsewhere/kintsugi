@@ -1,7 +1,7 @@
 // Settings sections + navigation — macOS System-Settings style: a sidebar of icon
 // rows on the left, the active section on the right. Adding a section: append to TABS.
 
-import { Activity, Cpu, GitBranch, type LucideIcon, Palette, Plug, Settings, Shield } from "lucide-react";
+import { Activity, Box, Cpu, GitBranch, type LucideIcon, Palette, Plug, Settings, Shield } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { GitSection } from "./sections/git-section";
 import { McpServersSection } from "./sections/mcp-servers-section";
 import { PlaceholderSection } from "./sections/placeholder-section";
 import { ProvidersSection } from "./sections/providers-section";
+import { SandboxSection } from "./sections/sandbox-section";
 
 interface SettingsTab {
   id: string;
@@ -27,6 +28,7 @@ const TABS: SettingsTab[] = [
   { id: "providers", label: "Providers", icon: Cpu, component: () => <ProvidersSection />, permission: "providers.manage" },
   { id: "mcp", label: "MCP servers", icon: Plug, component: () => <McpServersSection />, permission: "mcp.manage" },
   { id: "git", label: "Git", icon: GitBranch, component: () => <GitSection />, permission: "git.manage" },
+  { id: "sandbox", label: "Sandbox", icon: Box, component: () => <SandboxSection />, permission: "sandbox.manage" },
   { id: "security", label: "Security", icon: Shield, component: () => <PlaceholderSection title="Security" description="Sessions, PAT lifetime, secret rotation and data-residency policy." /> },
   { id: "diagnostics", label: "Diagnostics", icon: Activity, component: () => <DiagnosticsSection /> },
 ];

@@ -17,8 +17,12 @@ export interface JobRunView {
   failureReason?: string;
   sourceRepositoryId?: string;
   sourceCommit?: string;
-  /** Every legacy repository the run reads, each at its commit (the first is `sourceRepositoryId`). */
-  sources?: Array<{ repositoryId: string; commit?: string }>;
+  /** Every repository the run reads, each at its commit: the legacy code (the first is `sourceRepositoryId`) and the target code, read-only (ADR-0055). */
+  sources?: Array<{ repositoryId: string; commit?: string; role?: "legacy" | "target" }>;
+  /** 1 for the first attempt; a retry of a failed stage run is the next attempt of the same run. */
+  attempt: number;
+  /** The attempts that ended, oldest first (top-level runs). */
+  attempts?: JobAttempt[];
   scriptHash?: string;
   agent?: string;
   actor?: string;
@@ -29,13 +33,20 @@ export interface JobRunView {
   cancelRequestedAt?: string;
   /** The catalog items of an understand run (ADR-0033). */
   scope?: { items: string[]; set?: string };
-  /** The failed run this one resumes. */
-  resumeOf?: string;
   /** Set when a person abandoned the run's pull request (its items are released). */
   abandonedAt?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
+}
+
+/** What one finished attempt of a job did. */
+export interface JobAttempt {
+  n: number;
+  status: "succeeded" | "failed" | "cancelled";
+  startedAt?: string;
+  finishedAt?: string;
+  reason?: string;
 }
 
 export interface JobRunDetail extends JobRunView {
@@ -50,6 +61,8 @@ export interface JobRunEvent {
   kind: "status" | "step.started" | "step.finished" | "tool" | "log";
   message: string;
   stepRunId?: string;
+  /** The attempt of the run the event belongs to. */
+  attempt?: number;
   data: Record<string, unknown>;
 }
 
@@ -132,8 +145,12 @@ export const jobRunsApi = {
   openRestricted: (projectId: string, id: string) => apiGet<RestrictedRecord[]>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/restricted`),
   get: (projectId: string, id: string) => apiGet<JobRunDetail>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}`),
   cancel: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/cancel`, "POST"),
-  /** Retries a failed stage run from what it kept (a new run). */
-  retry: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/retry`, "POST"),
+  /**
+   * Retries a failed stage run: the same run, the next attempt, from what its workspace kept. `fresh` begins from
+   * nothing (its results are discarded, its pinned commits stay).
+   */
+  retry: (projectId: string, id: string, options: { fresh?: boolean } = {}) =>
+    apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/retry`, "POST", options.fresh === true ? { fresh: true } : {}),
   /** Abandons the closed pull request of an understand run: its items are released. */
   abandon: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/abandon`, "POST"),
   /**

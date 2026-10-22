@@ -2,7 +2,7 @@
 // need jobs.run; reading runs and following their live events needs a session; restricted
 // records need restricted.read.
 
-import { Controller, Get, Headers, HttpCode, Param, Post, Query, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Req, Res } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import type { Page } from "#common/application/pagination.js";
@@ -10,7 +10,7 @@ import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decora
 import { openEventStream } from "#common/interface/sse.js";
 import { JobRunsService } from "../application/job-runs.service.js";
 import type { JobRunDetail, JobRunView, RestrictedRecordView } from "../domain/job-run.js";
-import { type JobRunEventsQuery, type ListJobRunsQuery, eventIdSchema, jobRunEventsQuerySchema, listJobRunsQuerySchema } from "./job-run.dto.js";
+import { type JobRunEventsQuery, type ListJobRunsQuery, type RetryBody, eventIdSchema, jobRunEventsQuerySchema, listJobRunsQuerySchema, retryBodySchema } from "./job-run.dto.js";
 
 @ApiTags("delivery · runtime jobs")
 @Controller("projects/:id")
@@ -52,10 +52,13 @@ export class JobRunsController {
   @RequirePermission("jobs.run")
   @Post("job-runs/:runId/retry")
   @HttpCode(202)
-  @ApiOperation({ summary: "Retry a failed stage run: a new run on the same commits and scope that skips the agent steps that succeeded (ADR-0033)" })
-  @ApiAcceptedResponse({ description: "The queued retry; 409 unless the run failed." })
-  retry(@Param("id") id: string, @Param("runId") runId: string, @CurrentActor() actor: Actor): Promise<JobRunView> {
-    return this.runs.retry(id, runId, actor);
+  @ApiOperation({
+    summary: "Retry a failed stage run: the same run goes back in the queue as its next attempt, in the same workspace, and skips the steps whose inputs did not change (ADR-0055)",
+    description: "`fresh: true` begins from nothing instead: the job's results and ledger are discarded, the pinned commits stay.",
+  })
+  @ApiAcceptedResponse({ description: "The queued run, with its attempt; 409 unless the run failed." })
+  retry(@Param("id") id: string, @Param("runId") runId: string, @Body({ schema: retryBodySchema }) body: RetryBody, @CurrentActor() actor: Actor): Promise<JobRunView> {
+    return this.runs.retry(id, runId, actor, { fresh: body.fresh === true });
   }
 
   @RequirePermission("jobs.run")

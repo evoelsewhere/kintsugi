@@ -83,13 +83,13 @@ describe("an application with two legacy repositories", () => {
     const first = await checkouts.resolve("falo-skeleton");
     const second = await checkouts.resolve("falo-unities");
     expect(run?.sources).toEqual([
-      { repositoryId: "falo-skeleton", commit: first },
-      { repositoryId: "falo-unities", commit: second },
+      { repositoryId: "falo-skeleton", commit: first, role: "legacy" },
+      { repositoryId: "falo-unities", commit: second, role: "legacy" },
     ]);
     expect(run?.sourceCommit).toBe(first);
 
     // Nothing of the checkouts is left behind.
-    expect(existsSync(storage.job(id).src)).toBe(false);
+    expect(existsSync(storage.job(id).asIs)).toBe(false);
   });
 
   it("a run pinned at commits reads exactly those, and a one-repository run still mounts its repository in its folder", async () => {
@@ -152,6 +152,6 @@ describe("an application with two legacy repositories", () => {
     expect(run?.status).toBe("failed");
     expect(run?.failureReason).toMatch(/falo-removed/);
     // The repositories that did mount are released.
-    expect(existsSync(storage.job(id).src)).toBe(false);
+    expect(existsSync(storage.job(id).asIs)).toBe(false);
   });
 });

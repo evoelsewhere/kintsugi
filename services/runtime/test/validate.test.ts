@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { validateJobSpec } from "../src/kernel/validate.js";
@@ -24,7 +25,22 @@ describe("validateJobSpec", () => {
   it("rejects an empty read-only list", () => {
     const spec = jobSpec(workspace, agent([]));
     spec.workspace.readOnly = [];
-    expect(() => validateJobSpec(spec)).toThrow(/at least one directory/);
+    expect(() => validateJobSpec(spec)).toThrow(/at least one entry/);
+  });
+
+  it("takes a file after the first read-only directory (the workspace guide), but not a missing one, and needs a root", () => {
+    const guide = join(workspace.root, "WORKSPACE.md");
+    writeFileSync(guide, "# guide\n");
+    const spec = jobSpec(workspace, agent([]));
+    spec.workspace.readOnly = [workspace.src, guide];
+    expect(() => validateJobSpec(spec)).not.toThrow();
+    spec.workspace.readOnly = [guide];
+    expect(() => validateJobSpec(spec)).toThrow(/not a directory/);
+    spec.workspace.readOnly = [workspace.src, join(workspace.root, "gone.md")];
+    expect(() => validateJobSpec(spec)).toThrow(/does not exist/);
+    spec.workspace.readOnly = [workspace.src];
+    spec.workspace.root = join(workspace.root, "missing-root");
+    expect(() => validateJobSpec(spec)).toThrow(/not a directory/);
   });
 
   it("rejects invalid and duplicate skill names", () => {

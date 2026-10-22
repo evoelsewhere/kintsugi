@@ -104,7 +104,8 @@ async function filesUnder(root: string, isFile: boolean): Promise<string[]> {
 }
 
 /** The kernel `grep` tool over the workspace's read-only roots. */
-export function createKernelGrepTool(cwd: string, guard: PathGuard): ToolDefinition {
+/** `defaultDir`: where a call without a path searches (the workspace root cannot be searched as a whole). */
+export function createKernelGrepTool(cwd: string, guard: PathGuard, defaultDir: string = cwd): ToolDefinition {
   return defineTool({
     name: "grep",
     label: "grep",
@@ -119,7 +120,7 @@ export function createKernelGrepTool(cwd: string, guard: PathGuard): ToolDefinit
       } catch (error) {
         return fail(`Invalid pattern: ${error instanceof Error ? error.message : String(error)}`);
       }
-      const searchPath = resolve(cwd, params.path ?? ".");
+      const searchPath = resolve(cwd, params.path ?? defaultDir);
       let real: string;
       let isDirectory: boolean;
       try {

@@ -275,7 +275,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     expect(view.unresolved).toEqual([{ id: "COM-MAIL-01", referencedBy: ["customers/lookup"] }]);
   });
 
-  type RunView = { id: string; name: string; status: string; scope?: { items: string[]; set?: string }; resumeOf?: string; abandonedAt?: string };
+  type RunView = { id: string; name: string; status: string; attempt: number; scope?: { items: string[]; set?: string }; abandonedAt?: string };
   type Failure = { message: string; details?: { conflicts?: Array<{ unit: string; state: string; runId?: string; needs?: string[] }>; unknown?: string[]; notApplicable?: string[] } };
   type Activity = { items: Array<{ unit: string; set: string; state: string; runId: string; pr?: { branch: string; url?: string } }> };
   const RUNS = "/projects/shop/applications/web/design/runs";
@@ -343,7 +343,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     await app.db.query("update workflow.job_run set status = 'failed', output_summary = $2 where id = $1", [tax.body.data!.id, JSON.stringify({ stage: "design", documentsCommit: "e".repeat(40), steps: [] })]);
     const resumed = await admin.request<RunView>("POST", RUNS, { body: { resumeOf: tax.body.data!.id } });
     expect(resumed.status, JSON.stringify(resumed.body)).toBe(202);
-    expect(resumed.body.data).toMatchObject({ name: "design", resumeOf: tax.body.data!.id, scope: { items: ["billing/tax"], set: "detail" } });
+    expect(resumed.body.data).toMatchObject({ id: tax.body.data!.id, name: "design", status: "queued", attempt: 2, scope: { items: ["billing/tax"], set: "detail" } });
     expect((await admin.request("POST", RUNS, { body: { resumeOf: "run-assess" } })).status).toBe(400);
   });
 

@@ -196,7 +196,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect((await admin.get(`/projects/shop/applications/web/catalog?ref=${"0".repeat(40)}`)).status).toBe(404);
   });
 
-  type RunView = { id: string; name: string; status: string; scope?: { items: string[] }; resumeOf?: string; abandonedAt?: string };
+  type RunView = { id: string; name: string; status: string; attempt: number; scope?: { items: string[] }; abandonedAt?: string };
   type Failure = { message: string; details?: { conflicts?: Array<{ item: string; runId?: string; state: string }>; unknown?: string[] } };
 
   it("starts understand on a selection, pinned to the catalog's commit, and refuses unknown, retired, blocked and oversized selections", async () => {
@@ -248,14 +248,21 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect((await admin.request("POST", "/projects/shop/job-runs/run-open/retry")).status).toBe(409);
     const retried = await admin.request<RunView>("POST", "/projects/shop/job-runs/run-failed/retry");
     expect(retried.status).toBe(202);
-    expect(retried.body.data).toMatchObject({ name: "understand", resumeOf: "run-failed", scope: { items: ["customers/update", "billing/rates"] } });
-    const inputs = await app.db.query<{ inputs: { documentsCommit: string; resumeOf: string } }>("select inputs from workflow.job_run where id = $1", [retried.body.data!.id]);
-    expect(inputs.rows[0]?.inputs).toMatchObject({ documentsCommit: "c".repeat(40), resumeOf: "run-failed" });
-    // The same through the selection endpoint.
-    await app.db.query("update workflow.job_run set status = 'cancelled' where id = $1", [retried.body.data!.id]);
+    // The same run goes back in the queue as its next attempt (ADR-0055), on the same scope and documents.
+    expect(retried.body.data).toMatchObject({ id: "run-failed", name: "understand", status: "queued", attempt: 2, scope: { items: ["customers/update", "billing/rates"] } });
+    const inputs = await app.db.query<{ inputs: { documentsCommit: string; fresh: boolean } }>("select inputs from workflow.job_run where id = $1", ["run-failed"]);
+    expect(inputs.rows[0]?.inputs).toMatchObject({ documentsCommit: "c".repeat(40), fresh: false });
+    expect((await admin.request("POST", "/projects/shop/job-runs/run-failed/retry")).status).toBe(409);
+    // The same through the selection endpoint, from scratch.
+    await app.db.query("update workflow.job_run set status = 'failed' where id = 'run-failed'");
     const resumed = await admin.request<RunView>("POST", "/projects/shop/applications/web/understand/runs", { body: { resumeOf: "run-failed" } });
     expect(resumed.status).toBe(202);
-    expect(resumed.body.data?.resumeOf).toBe("run-failed");
+    expect(resumed.body.data).toMatchObject({ id: "run-failed", attempt: 3 });
+    await app.db.query("update workflow.job_run set status = 'failed' where id = 'run-failed'");
+    const fresh = await admin.request<RunView>("POST", "/projects/shop/job-runs/run-failed/retry", { body: { fresh: true } });
+    expect(fresh.body.data).toMatchObject({ id: "run-failed", attempt: 4 });
+    expect((await app.db.query<{ inputs: { fresh: boolean } }>("select inputs from workflow.job_run where id = 'run-failed'")).rows[0]?.inputs.fresh).toBe(true);
+    await app.db.query("update workflow.job_run set status = 'cancelled' where id = 'run-failed'");
   });
 
   it("serves the understand results per view for the application (generated) or one item (its own files)", async () => {

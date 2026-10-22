@@ -25,7 +25,7 @@ describe("agent jobs in child processes", () => {
     agent,
     task: "Assess the fixture.",
     model,
-    workspace: { readOnly: [paths.src], outDir: paths.out },
+    workspace: { root: paths.src, readOnly: [paths.src], outDir: paths.out },
     limits: { timeoutSec, maxTurns: 3 },
   });
   const collect = async (events: AsyncIterable<JobEvent>): Promise<JobEvent[]> => {

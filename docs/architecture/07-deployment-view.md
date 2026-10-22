@@ -9,7 +9,7 @@ Project's Docker host
        ├── postgres + pgvector
        │
   kintsugi-worker ── pg-boss consumer, Git sync, document repo writer,
-                     job runner: job workspaces <data>/jobs/<id>/{src (ro), in (ro), out, tmp}
+                     job runner: job workspaces <data>/jobs/<id>/{as-is (ro), to-be (ro), docs (ro), out, work, steps, .state, tmp}
                      agent kernel (pi, pinned) · scripts: Python 3.12, Node 22
        │
        └──► LLM providers (as configured) · Git servers (many)            Member machines ──► kintsugi-app
@@ -31,7 +31,7 @@ There is no per-job container, no Docker socket and no egress proxy: jobs run in
 |---|---|
 | `backend` network | app, worker, postgres |
 | `pg-data` volume | Postgres data (back this up) |
-| `kintsugi-data` volume | Backed by the host directory `KINTSUGI_DATA_DIR`: Git mirrors, document repo worktrees and the job workspaces `jobs/<id>/{src,in,out,tmp}` ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md), [ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)) |
+| `kintsugi-data` volume | Backed by the host directory `KINTSUGI_DATA_DIR`: Git mirrors, document repo worktrees and the job workspaces `jobs/<id>/{as-is,to-be,docs,out,work,steps,.state,tmp}` ([ADR-0055](../decisions/0055-one-durable-workspace-per-job.md), [ADR-0025](../decisions/0025-git-core-and-checkout-storage.md), [ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)) |
 
 ## 7.3 Worker image
 

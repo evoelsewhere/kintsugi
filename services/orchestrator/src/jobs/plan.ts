@@ -1,12 +1,14 @@
 // Stage plans (ADR-0027): what a pipeline stage runs, as data. A plan is a list of steps; the
 // generic executor (executor.ts) runs them in the stage's job workspace, each leaf step as a
-// child run with its own in/out/tmp. Types and the placeholder filler only: this module is
+// child run with its own in/out/tmp folders in the job workspace. Types and the placeholder filler only: this module is
 // imported by the API too (prerequisites, `runnable`), so it pulls in nothing at run time.
 //
-// Placeholders, filled when a step starts:
+// Placeholders, filled when a step starts. Paths are relative to the job workspace, which is the working directory
+// of every process of the job (ADR-0055), so the same step has the same text in every attempt:
 //
-//   {src}    the read-only source checkouts      {in}    the step's read-only inputs
-//   {out}    the step's output directory          {tmp}   its scratch directory
+//   {src}    the read-only as-is checkouts (as-is/)     {in}    the step's read-only inputs
+//   {tobe}   the read-only to-be checkouts (to-be/)     {out}   the step's output directory
+//   {tmp}    its scratch directory
 //   {sources} the legacy repositories and their commits, `id@commit,id@commit`; {src} holds one folder
 //            per repository, named by its id (ADR-0052)
 //   {app}    the application id                 {run}   the stage run's id
@@ -19,7 +21,7 @@
 // `intermediate` are inputs for later steps only; everything else is the stage's output and goes
 // to the document repo through the writer.
 
-export const PLACEHOLDER_NAMES = ["src", "in", "out", "tmp", "sources", "app", "run", "item", "key", "round", "maxRounds", "error"] as const;
+export const PLACEHOLDER_NAMES = ["src", "tobe", "in", "out", "tmp", "sources", "app", "run", "item", "key", "round", "maxRounds", "error"] as const;
 export type PlaceholderName = (typeof PLACEHOLDER_NAMES)[number];
 export type Placeholders = Partial<Record<PlaceholderName, string>>;
 

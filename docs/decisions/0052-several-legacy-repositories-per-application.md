@@ -1,6 +1,6 @@
 # ADR-0052: A run reads every legacy repository of an application, each in its own folder
 
-- Status: Accepted (amends 0033, 0051)
+- Status: Accepted (amends 0033, 0051). The mount point `src/<repository id>/` becomes `as-is/<repository id>/` in [ADR-0055](0055-one-durable-workspace-per-job.md); citations are unchanged
 - Date: 2026-10-22
 - Decision register: D68
 
