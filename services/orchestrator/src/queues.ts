@@ -23,6 +23,12 @@ export const DOCUMENT_WRITE_QUEUE = "document-write";
  */
 export const JOB_RUN_QUEUE = "job-run";
 
+/**
+ * An admin's request to remove one job workspace (Settings -> Sandbox, ADR-0058). The API cannot write the data
+ * volume, so it asks the worker, which checks again that the run is not active before it deletes anything.
+ */
+export const WORKSPACE_CLEANUP_QUEUE = "workspace-cleanup";
+
 type QueueOptions = NonNullable<Parameters<PgBoss["createQueue"]>[1]>;
 
 export const DOCUMENT_WRITE_QUEUE_OPTIONS: QueueOptions = {
@@ -38,6 +44,20 @@ export const JOB_RUN_QUEUE_OPTIONS: QueueOptions = {
   retryLimit: 0,
   expireInSeconds: 4 * 60 * 60,
 };
+
+export const WORKSPACE_CLEANUP_QUEUE_OPTIONS: QueueOptions = {
+  policy: "standard",
+  retryLimit: 0,
+  expireInSeconds: 30 * 60,
+};
+
+/** Payload of a `workspace-cleanup` job. */
+export interface WorkspaceCleanupRequest {
+  /** The job (run) id: the folder name under `<data>/jobs/`. */
+  jobId: string;
+  /** Who asked, for the worker's log. */
+  actor?: string;
+}
 
 /** Payload of a `job-run` job; the API creates the row as `queued` first. */
 export interface JobRunRequest {
@@ -100,4 +120,14 @@ export async function ensureJobRunQueue(boss: PgBoss): Promise<void> {
 /** Enqueues a job run for the worker. */
 export async function sendJobRun(boss: PgBoss, request: JobRunRequest): Promise<void> {
   await boss.send(JOB_RUN_QUEUE, request);
+}
+
+/** Creates the workspace-cleanup queue if missing; safe on every start, from any process. */
+export async function ensureWorkspaceCleanupQueue(boss: PgBoss): Promise<void> {
+  await boss.createQueue(WORKSPACE_CLEANUP_QUEUE, WORKSPACE_CLEANUP_QUEUE_OPTIONS);
+}
+
+/** Asks the worker to remove one job workspace. */
+export async function sendWorkspaceCleanup(boss: PgBoss, request: WorkspaceCleanupRequest): Promise<void> {
+  await boss.send(WORKSPACE_CLEANUP_QUEUE, request);
 }

@@ -40,6 +40,29 @@ export async function removeJobWorkspace(storage: CheckoutStorage, jobId: string
   await removeTree(storage.job(jobId).root);
 }
 
+/** Why a workspace cannot be removed on request, or undefined when it can: the run is active, or its output is not written yet. */
+export function removalBlocker(state: WorkspaceState | undefined): string | undefined {
+  if (state === undefined) return undefined;
+  if (ACTIVE.has(state.status)) return `its run is ${state.status}`;
+  if (state.writeStatus === "queued") return "the document write of its output has not run yet";
+  return undefined;
+}
+
+export type RemovalOutcome = "removed" | "missing" | "busy";
+
+/**
+ * Removes one workspace at an admin's request (ADR-0058). The state of the run is read again here, in the process that
+ * owns the disk: a run that started after the request was made is never taken from under its processes.
+ */
+export async function removeWorkspaceOnRequest(options: { storage: CheckoutStorage; store: WorkspaceStates; jobId: string }): Promise<RemovalOutcome> {
+  const root = options.storage.job(options.jobId).root;
+  if (!(await stat(root).then((entry) => entry.isDirectory(), () => false))) return "missing";
+  const state = (await options.store.workspaceStates([options.jobId])).get(options.jobId);
+  if (removalBlocker(state) !== undefined) return "busy";
+  await removeJobWorkspace(options.storage, options.jobId);
+  return "removed";
+}
+
 export interface PruneOptions {
   storage: CheckoutStorage;
   store: WorkspaceStates;

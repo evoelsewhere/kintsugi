@@ -25,6 +25,7 @@ import { WorkItemsModule } from "./modules/delivery/workbench/work-items.module.
 import { AiMetricsModule } from "./modules/monitoring/ai-metrics/ai-metrics.module.js";
 import { CostEntriesModule } from "./modules/monitoring/cost/cost-entries.module.js";
 import { DashboardStatsModule } from "./modules/monitoring/dashboards/dashboard-stats.module.js";
+import { SandboxModule } from "./modules/monitoring/sandbox/sandbox.module.js";
 import { JobRunsModule } from "./modules/monitoring/observability/job-runs.module.js";
 import { OverviewModule } from "./modules/monitoring/overview/overview.module.js";
 import { PortfolioOverviewModule } from "./modules/monitoring/portfolio/portfolio.module.js";
@@ -80,6 +81,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     TelemetryModule,
     JobRunsModule,
     DashboardStatsModule,
+    SandboxModule,
     AiMetricsModule,
     CostEntriesModule,
     HealthChecksModule,

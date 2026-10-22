@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CheckoutStorage } from "@kintsugi/git";
 import { afterAll, describe, expect, it } from "vitest";
-import { type WorkspaceState, pruneJobWorkspaces } from "../src/jobs/cleanup.js";
+import { type WorkspaceState, pruneJobWorkspaces, removeWorkspaceOnRequest } from "../src/jobs/cleanup.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -42,5 +42,29 @@ describe("job workspace cleanup", () => {
     const removed = await pruneJobWorkspaces({ storage, store: { workspaceStates: async () => states }, retentionMs: 7 * DAY, now });
     expect(removed.sort()).toEqual(["cancelled-old", "failed-old", "orphan-old", "write-failed-old", "written"]);
     expect((await readdir(join(root, "jobs"))).sort()).toEqual(["failed-recent", "orphan-new", "running", "write-queued"]);
+  });
+
+  it("removes one workspace at an admin's request, but never one whose run is active or whose output is not written yet (ADR-0058)", async () => {
+    const storage = new CheckoutStorage(root);
+    await storage.prepare();
+    const states = new Map<string, WorkspaceState>([
+      ["asked-failed", { status: "failed", finishedAt: new Date() }],
+      ["asked-running", { status: "running" }],
+      ["asked-queued", { status: "queued" }],
+      ["asked-write-pending", { status: "succeeded", finishedAt: new Date(), writeStatus: "queued" }],
+    ]);
+    for (const id of [...states.keys(), "asked-orphan"]) {
+      mkdirSync(storage.job(id).out, { recursive: true });
+      writeFileSync(join(storage.job(id).out, "file.md"), "x");
+    }
+    const ask = (jobId: string) => removeWorkspaceOnRequest({ storage, store: { workspaceStates: async () => states }, jobId });
+    expect(await ask("asked-failed")).toBe("removed");
+    expect(await ask("asked-orphan")).toBe("removed");
+    expect(await ask("asked-running")).toBe("busy");
+    expect(await ask("asked-queued")).toBe("busy");
+    expect(await ask("asked-write-pending")).toBe("busy");
+    expect(await ask("asked-failed")).toBe("missing");
+    expect(await ask("never-existed")).toBe("missing");
+    expect((await readdir(join(root, "jobs"))).filter((name) => name.startsWith("asked-")).sort()).toEqual(["asked-queued", "asked-running", "asked-write-pending"]);
   });
 });
