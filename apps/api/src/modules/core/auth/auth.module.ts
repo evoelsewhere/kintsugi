@@ -14,6 +14,7 @@ import { AuthGuard, CsrfGuard, PermissionsGuard } from "./interface/auth.guard.j
 @Module({
   imports: [UsersModule, RolesModule],
   controllers: [AuthController],
+  exports: [AuthService],
   providers: [
     AuthService,
     LoginThrottle,

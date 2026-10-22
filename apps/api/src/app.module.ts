@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { debugMcpEnabled } from "./common/config/env.js";
 import { AgentsModule } from "./modules/admin/agents/agents.module.js";
 import { PluginsModule } from "./modules/admin/plugins/plugins.module.js";
 import { ConnectorsModule } from "./modules/admin/connectors/connectors.module.js";
@@ -34,6 +35,7 @@ import { GatesModule } from "./modules/governance/gates/gates.module.js";
 import { PoliciesModule } from "./modules/governance/policies/policies.module.js";
 import { ReviewsModule } from "./modules/governance/reviews/reviews.module.js";
 import { RisksModule } from "./modules/governance/risks/risks.module.js";
+import { DebugModule } from "./modules/system/debug/debug.module.js";
 import { HealthModule } from "./modules/system/health/health.module.js";
 
 /**
@@ -47,6 +49,8 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     AuthModule,
     // system
     HealthModule,
+    // the debug MCP server exists only on a development installation (ADR-0056)
+    ...(debugMcpEnabled() ? [DebugModule] : []),
     // admin
     ProjectsModule,
     DocumentWritesModule,

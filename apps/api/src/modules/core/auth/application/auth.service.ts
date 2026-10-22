@@ -33,7 +33,8 @@ export class AuthService implements OnApplicationBootstrap {
     await this.users.createFirstAdmin(username, password);
   }
 
-  async login(username: string, password: string): Promise<{ token: string; user: SessionUser }> {
+  /** Checks a username and password the way a sign-in does (same lockout) without creating a session. */
+  async verifyCredentials(username: string, password: string): Promise<SessionUser> {
     const retryAfter = this.throttle.retryAfter(username);
     if (retryAfter !== undefined) {
       throw new HttpException(
@@ -47,8 +48,12 @@ export class AuthService implements OnApplicationBootstrap {
       throw new UnauthorizedException("Invalid username or password");
     }
     this.throttle.recordSuccess(username);
-    const token = await this.sessions.create(user.id);
-    return { token, user: await this.sessionUser(user) };
+    return this.sessionUser(user);
+  }
+
+  async login(username: string, password: string): Promise<{ token: string; user: SessionUser }> {
+    const user = await this.verifyCredentials(username, password);
+    return { token: await this.sessions.create(user.id), user };
   }
 
   async logout(token: string): Promise<void> {

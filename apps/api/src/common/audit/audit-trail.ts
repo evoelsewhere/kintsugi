@@ -12,6 +12,7 @@ export const AUDIT_ACTIONS = {
   jobRunCancel: "job-run.cancel",
   jobRunAbandon: "job-run.abandon",
   jobRunRetry: "job-run.retry",
+  debugCall: "debug.call",
   sandboxUpdate: "sandbox.update",
   manifestPublish: "manifest.publish",
   projectCreate: "project.create",

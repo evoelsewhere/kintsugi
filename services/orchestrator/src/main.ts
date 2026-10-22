@@ -6,6 +6,7 @@
 // (how long a workspace keeps what it holds, the limits of its processes: ADR-0055) are configured in the portal.
 
 import { existsSync } from "node:fs";
+import { captureLogs, pgDebugLogSink } from "@kintsugi/domain";
 import { CheckoutStorage, checkGitVersion, dataDirFromEnv } from "@kintsugi/git";
 import { createChildAgentRuntime, interpretersFromEnv, loadProvider } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
@@ -65,6 +66,9 @@ async function main(): Promise<void> {
   const gitVersion = await checkGitVersion();
   const storage = new CheckoutStorage(dataDirFromEnv());
   const pool = new Pool({ connectionString: databaseUrl, max: 5 });
+  // A development installation mirrors what the worker prints to the database for the debug MCP server (ADR-0056).
+  const debugging = ["1", "true"].includes((process.env["KINTSUGI_DEBUG_MCP"] ?? "").trim().toLowerCase());
+  const capture = debugging ? captureLogs({ service: "worker", sink: pgDebugLogSink(pool), stdout: process.stdout, stderr: process.stderr }) : undefined;
   const interpreters = interpretersFromEnv();
   const agents = agentRuntime(databaseUrl, interpreters.node);
   const worker = await startWorker({
@@ -80,6 +84,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (): Promise<void> => {
     await worker.stop();
+    await capture?.stop();
     await pool.end();
     process.exit(0);
   };

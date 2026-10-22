@@ -25,6 +25,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_WORKFLOW_CONCURRENCY` | no | `4` | Agent jobs of one workflow running at a time |
 | `KINTSUGI_STAGE_MAX_AGENTS` | no | `200` | Agent jobs one stage run may start, workflow jobs included (a workflow in a stage gets the smaller of what is left and `KINTSUGI_WORKFLOW_MAX_AGENTS`) |
 | `KINTSUGI_STAGE_CONCURRENCY` | no | `4` | Steps of one parallel or per-item group of a stage running at a time |
+| `KINTSUGI_DEBUG_MCP` | no | unset | `1` on a **development** installation (set it for `kintsugi-app` and `kintsugi-worker`) serves the [debug MCP server](debug-mcp.md) and mirrors the API's and the worker's logs to the database ([ADR-0056](../decisions/0056-debug-mcp-for-development-installations.md)). Never set it in production |
 | `KINTSUGI_RUNTIME_MODE` | no | `pi` | `pi` runs agent jobs with the configured LLM providers; `mock` runs them without an LLM (development and demos) |
 | `KINTSUGI_PYTHON` | no | `python3` (`python` on Windows) | Python 3.12 interpreter for script steps and hooks |
 | `KINTSUGI_NODE` | no | the worker's Node | Node 22+ interpreter for `.js` script steps |

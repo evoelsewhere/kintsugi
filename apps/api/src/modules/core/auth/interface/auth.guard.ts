@@ -5,7 +5,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
-import { IS_PUBLIC_KEY, PERMISSION_KEY } from "#common/auth/decorators.js";
+import { IS_PUBLIC_KEY, PERMISSION_KEY, SKIP_CSRF_KEY } from "#common/auth/decorators.js";
 import { passesCsrfCheck, sessionToken } from "#common/auth/session-cookie.js";
 import { AuthService, type SessionUser } from "../application/auth.service.js";
 
@@ -17,7 +17,10 @@ export interface AuthenticatedRequest extends Request {
 /** Unsafe requests riding the session cookie must carry the CSRF header (see session-cookie.ts). */
 @Injectable()
 export class CsrfGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
   canActivate(context: ExecutionContext): boolean {
+    if (this.reflector.getAllAndOverride<boolean>(SKIP_CSRF_KEY, [context.getHandler(), context.getClass()]) === true) return true;
     if (!passesCsrfCheck(context.switchToHttp().getRequest<Request>())) {
       throw new ForbiddenException("Missing CSRF header");
     }

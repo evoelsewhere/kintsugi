@@ -11,8 +11,9 @@ import type { NextFunction, Request, Response } from "express";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
-import { loadEnv } from "./common/config/env.js";
-import { ensureSchema } from "./common/db/pool.js";
+import { loadEnv, debugMcpEnabled } from "./common/config/env.js";
+import { ensureSchema, getPool } from "./common/db/pool.js";
+import { captureLogs, pgDebugLogSink } from "@kintsugi/domain";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter.js";
 import { ResponseInterceptor } from "./common/interface/response.js";
 
@@ -20,6 +21,11 @@ import { ResponseInterceptor } from "./common/interface/response.js";
 if (existsSync(".env")) process.loadEnvFile(".env");
 
 async function bootstrap(): Promise<void> {
+  // A development installation mirrors what the API prints to the database for the debug MCP server (ADR-0056).
+  if (debugMcpEnabled()) {
+    const capture = captureLogs({ service: "api", sink: pgDebugLogSink({ query: (text, values) => getPool().query(text, values) }), stdout: process.stdout, stderr: process.stderr });
+    for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => void capture.stop().finally(() => process.exit(0)));
+  }
   const env = loadEnv();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: [env.logLevel] });
   // Agent packages (Agent Builder import, ADR-0026) are larger than the 100 kB default.

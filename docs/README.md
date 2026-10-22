@@ -47,6 +47,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 **Reference**
 - [Glossary](reference/glossary.md)
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
+- [Debug MCP server](reference/debug-mcp.md): the read-only tools of a development installation over runs, sandboxes, logs, queues and the database (ADR-0056)
 - [Job workspace](reference/job-workspace.md): the layout of a job's workspace, the guide, attempts, the ledger and the lifecycle (ADR-0055)
 - [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
 - [Data model](reference/data-model.md)
