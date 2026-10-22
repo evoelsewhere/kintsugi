@@ -29,6 +29,7 @@ export const AUDIT_ACTIONS = {
   gitRepositoryCreate: "git-repository.create",
   gitRepositoryUpdate: "git-repository.update",
   gitRepositoryDelete: "git-repository.delete",
+  sandboxWorkspaceRemove: "sandbox.workspace-remove",
   llmProviderCreate: "llm-provider.create",
   llmProviderUpdate: "llm-provider.update",
   llmProviderDelete: "llm-provider.delete",

@@ -15,7 +15,7 @@ import { watchPullRequests } from "./document-write/watch.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
 import { installedAgents } from "./jobs/agents.js";
-import { dropExpiredCheckouts, pruneJobWorkspaces, removeJobWorkspace } from "./jobs/cleanup.js";
+import { dropExpiredCheckouts, pruneJobWorkspaces, removeJobWorkspace, removeWorkspaceOnRequest } from "./jobs/cleanup.js";
 import { type SandboxProvider, pgSandbox } from "./sandbox.js";
 import { MirrorCheckouts } from "./jobs/checkouts.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
@@ -30,8 +30,11 @@ import {
   JOB_RUN_QUEUE,
   type JobRunRequest,
   QUEUE_SCHEMA,
+  WORKSPACE_CLEANUP_QUEUE,
+  type WorkspaceCleanupRequest,
   ensureDocumentWriteQueue,
   ensureJobRunQueue,
+  ensureWorkspaceCleanupQueue,
   sendDocumentWrite,
   sendJobRun,
 } from "./queues.js";
@@ -184,6 +187,13 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       }
     }));
   }
+  // An admin removes a job workspace from Settings -> Sandbox (ADR-0058): the API asks, this process owns the disk.
+  await ensureWorkspaceCleanupQueue(boss);
+  await boss.work<WorkspaceCleanupRequest>(WORKSPACE_CLEANUP_QUEUE, { localConcurrency: 1 }, counted(async ([job]) => {
+    if (job === undefined) return;
+    const outcome = await removeWorkspaceOnRequest({ storage: options.storage, store: jobStore, jobId: job.data.jobId });
+    log(`workspace ${job.data.jobId}: ${outcome}${job.data.actor === undefined ? "" : ` (asked by ${job.data.actor})`}`);
+  }));
   const watchCancels = async (): Promise<void> => {
     if (active.size === 0) return;
     for (const id of await jobStore.cancelRequested([...active.keys()])) active.get(id)?.abort(new JobCancelled());
@@ -249,7 +259,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
 
   const heartbeat = await startHeartbeat({
     pool: options.pool,
-    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
+    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, WORKSPACE_CLEANUP_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
     activeJobs: () => busy,
     ...(options.heartbeatSeconds === undefined ? {} : { intervalSeconds: options.heartbeatSeconds }),
     log,

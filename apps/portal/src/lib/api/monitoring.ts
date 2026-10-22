@@ -2,7 +2,7 @@
 // apps/api → modules/monitoring/overview and the cross-project lists of job runs and
 // document writes. Reads need a session only.
 
-import { apiGet, type Page } from "../api";
+import { apiGet, apiSend, type Page } from "../api";
 import { queryString } from "./job-runs";
 import type { GateStatus, ItemStatus, Phase } from "@kintsugi/domain";
 import type { DocumentWriteView } from "./projects";
@@ -163,10 +163,37 @@ export interface PortfolioOverview {
 
 export type DocumentWriteStatus = DocumentWriteView["status"];
 
+/** A job workspace on the worker's data volume with the run behind it (ADR-0058). */
+export interface SandboxWorkspace {
+  jobId: string;
+  modifiedAt: string;
+  lifecycle?: "running" | "parked" | "published";
+  attempt?: number;
+  /** `<role>:<repository id>@<short commit>` of what it mounts. */
+  sources: string[];
+  hasCheckouts: boolean;
+  /** Bytes of what a retry cannot make again; `resultsBytesTruncated`: the real size is larger. */
+  resultsBytes?: number;
+  resultsBytesTruncated?: boolean;
+  run?: { projectId: string; applicationId?: string; kind: string; name: string; status: string; attempt: number; createdAt: string; finishedAt?: string; writeStatus?: string };
+  /** When the sweep removes it; absent while it is needed. */
+  removalAt?: string;
+  /** Why it cannot be removed now. */
+  blockedBy?: string;
+}
+
+export interface SandboxWorkspaces {
+  workspaces: SandboxWorkspace[];
+  retentionDays: number;
+}
+
 export const monitoringApi = {
   overview: () => apiGet<MonitoringOverview>("/api/monitoring/overview"),
   portfolio: () => apiGet<PortfolioOverview>("/api/monitoring/portfolio"),
   repositories: () => apiGet<MonitoredRepository[]>("/api/monitoring/repositories"),
+  sandboxWorkspaces: () => apiGet<SandboxWorkspaces>("/api/monitoring/sandbox/workspaces"),
+  /** Asks the worker to remove one workspace (sandbox.manage); refused while its run is active or its write pending. */
+  removeSandboxWorkspace: (jobId: string) => apiSend<{ jobId: string; status: "queued" }>(`/api/monitoring/sandbox/workspaces/${encodeURIComponent(jobId)}`, "DELETE"),
   /** Worker processes from their heartbeats, the latest beat first. */
   workers: () => apiGet<WorkerStatus[]>("/api/monitoring/workers"),
   /** Document writes across projects, newest first. */
