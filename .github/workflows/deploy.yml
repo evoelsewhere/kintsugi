@@ -205,6 +205,8 @@ jobs:
           fi
           set_env KINTSUGI_REGISTRY "$registry"
           set_env KINTSUGI_VERSION "$version"
+          # This installation is a development one: serve the debug MCP server and mirror the API's and the worker's logs (ADR-0056).
+          set_env KINTSUGI_DEBUG_MCP 1
           chmod 600 "$install_dir/.env"
           docker version >/dev/null
           docker compose version >/dev/null

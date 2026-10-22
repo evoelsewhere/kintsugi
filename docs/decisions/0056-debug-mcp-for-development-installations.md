@@ -14,7 +14,7 @@ This is a development aid. A production installation must not expose the content
 
 ## Decision
 
-**1. A debug MCP server, off unless the installation says it is a development one.** `KINTSUGI_DEBUG_MCP=1` in the environment of `kintsugi-app` and `kintsugi-worker` turns it on. Without it the route does not exist (404), nothing is captured, and the deploy package does not set it. It is not tied to `NODE_ENV`: a development server runs the production images.
+**1. A debug MCP server, off unless the installation says it is a development one.** `KINTSUGI_DEBUG_MCP=1` in the environment of `kintsugi-app` and `kintsugi-worker` turns it on. Without it the route does not exist (404), nothing is captured, and the Compose starter does not set it. The repository's deploy workflow, which deploys the development server, sets it in that server's `.env` on every deploy. It is not tied to `NODE_ENV`: a development server runs the production images.
 
 **2. Transport and authentication.** Streamable HTTP, JSON replies, at `POST /api/debug/mcp`. The caller authenticates with an account of the installation: `Authorization: Basic <base64 username:password>`, checked like a sign-in (same lockout), and the account must hold the new permission `debug.access`, which only the `admin` role has. Every call is audited (`debug.call`: the tool and its arguments, never a result). A request with an `Authorization` header of any scheme passes the CSRF check, as a bearer one does: a browser cannot attach it across sites without a preflight the API never grants.
 
@@ -35,7 +35,7 @@ This is a development aid. A production installation must not expose the content
 ## Consequences
 
 - An agent given the administrator's credentials of a development server can follow a failure from the portal's status to the line of the worker's log and the file in the workspace that caused it, with no one relaying it. This is the point.
-- On a development server the legacy code and the logs are readable through one authenticated route; that is why it is off by default and by the deploy package, and why the account is an administrator's.
+- On a development server the legacy code and the logs are readable through one authenticated route; that is why it is off by default and in the Compose starter, why only the deploy workflow of the development server sets it, and why the account is an administrator's.
 - The capture adds a database write per second at most and a table that is pruned by the writers; with the flag off there is nothing.
 - `db.query` is powerful. It is as safe as the read-only transaction and the deny list; it is for a development database.
 - Not covered: the stdout of the agent child processes (their events and spans are in the run), the host's and the containers' own logs, and metrics over time. A person with shell access has those.
