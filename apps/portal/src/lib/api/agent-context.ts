@@ -12,6 +12,20 @@ import type {
   TaskStatus,
   TaskSummary,
 } from "@kintsugi/harness-sdk";
+import { connectionListFromApi, type CodingAgentConnectionMetadata } from "./coding-agent-security";
+
+export interface CodingAgentInstallation {
+  baseUrl: string;
+}
+
+export interface CodingAgentAuthorizeInput {
+  projectId: string;
+  clientName: string;
+  redirectUri: string;
+  state: string;
+  codeChallenge: string;
+  codeChallengeMethod: "S256";
+}
 
 export interface MemberTokenMetadata {
   id: string;
@@ -67,6 +81,14 @@ export const agentContextApi = {
   revokeProjectAccess: (projectId: string, userId: string) =>
     apiSend<void>(`/api/admin/project-access/${encodeURIComponent(projectId)}/${encodeURIComponent(userId)}`, "DELETE"),
   search: (input: DocumentSearchQuery) => apiGet<ListResult<SourceHit>>(`/api/member/v1/search?${query(input)}`),
+  installation: () => apiGet<CodingAgentInstallation>("/api/auth/coding-agent/installation"),
+  authorizeCodingAgent: (input: CodingAgentAuthorizeInput) =>
+    apiSend<{ redirectTo: string }>("/api/auth/coding-agent/authorize", "POST", input),
+  async codingAgentConnections(): Promise<CodingAgentConnectionMetadata[]> {
+    return connectionListFromApi(await apiGet<unknown>("/api/auth/member-connections"));
+  },
+  revokeCodingAgentConnection: (connectionId: string) =>
+    apiSend<void>(`/api/auth/member-connections/${encodeURIComponent(connectionId)}`, "DELETE"),
 };
 
 export interface GatePublication {

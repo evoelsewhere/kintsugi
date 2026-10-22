@@ -1,6 +1,6 @@
 import type { MemberActivity } from "@kintsugi/domain";
 import type { ReviewReport, TaskBrief, TaskSummary, TaskStatus } from "@kintsugi/harness-sdk";
-import { AlertTriangle, ArrowUpRight, ClipboardCopy, FileText, GitPullRequest, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, BookOpenText, ClipboardCopy, FileText, GitPullRequest, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -138,6 +138,7 @@ function MemberTaskContent({ projectId }: { projectId: string }): React.JSX.Elem
           <p className="mt-1 text-[13px] text-text-secondary">{project.name} · authorized task context, citations and PR evidence for your chosen coding agent.</p>
         </div>
         <div className="flex gap-2">
+          <Link to="/developer#start" className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-3 text-[13px] text-text-secondary hover:bg-hover hover:text-text"><BookOpenText className="size-4" />Setup guide</Link>
           <Link to={deliveryLink({ projectId })} className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-3 text-[13px] text-text-secondary hover:bg-hover hover:text-text"><ArrowUpRight className="size-4" />Delivery</Link>
           <Button size="icon" variant="ghost" aria-label="Refresh Coding Agent Workflow" onClick={() => { setLoading(true); void load(); }}><RefreshCw className="size-4" /></Button>
         </div>
@@ -209,9 +210,9 @@ function MemberTaskContent({ projectId }: { projectId: string }): React.JSX.Elem
         {handoffPrompt.length > 0 ? <details className="text-[12px] text-text-muted"><summary className="cursor-pointer">Preview the handoff instructions</summary><textarea className="mt-2 min-h-32 w-full rounded-md bg-recessed p-2 font-mono text-[11px] leading-5 text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]" readOnly value={handoffPrompt} aria-label="Handoff instructions for the coding agent" /></details> : null}
       </section>}
 
-      <section aria-label="Coding agent setup and access" className="shadow-border rounded-lg bg-surface p-4">
-        <div className="grid gap-5 xl:grid-cols-2">
-          <MemberTokensPanel projectId={projectId} canManage={can("tokens.manage-own")} canRead={canRead} />
+      <section aria-label="Coding agent setup and access" className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
+        <MemberTokensPanel projectId={projectId} canManage={can("tokens.manage-own")} canRead={canRead} />
+        <div className="min-w-0 xl:pl-4 xl:[box-shadow:inset_1px_0_0_rgba(0,0,0,0.06)]">
           <ProjectAccessPanel projectId={projectId} canManage={canManageAccess} />
         </div>
       </section>
