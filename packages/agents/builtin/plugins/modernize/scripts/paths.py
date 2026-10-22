@@ -41,7 +41,7 @@ def is_source_folder(name):
 
 
 def parse_sources(spec):
-    """[(repository id, commit)] of a spec `id@commit,id@commit`: one source folder under `src/` each, in order.
+    """[(repository id, commit)] of a spec `id@commit,id@commit`: one source folder under `as-is/` each, in order.
     Raises ValueError when the spec is not well formed."""
     sources = []
     for part in spec.split(','):

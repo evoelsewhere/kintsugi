@@ -315,12 +315,12 @@ class UnderstandToolsTests(unittest.TestCase):
         for bad in ('legacy', 'legacy@nothex', 'legacy@' + 'a' * 40 + ',legacy@' + 'b' * 40):
             self.assertNotEqual(run('finish_items.py', 'billing', '--catalog', catalog, '--items', 'tax/calc', '--inputs', self.finish_inputs(), '--out', self.out, '--sources', bad).returncode, 0, bad)
 
-    def test_a_citation_that_drops_the_repository_or_keeps_src_still_finds_its_item(self):
-        # Agents see `src/<repository id>/<path>` and may cite `<path>`; a path that names exactly one file resolves.
+    def test_a_citation_that_drops_the_repository_or_keeps_the_zone_folder_still_finds_its_item(self):
+        # Agents see `as-is/<repository id>/<path>` and may cite `<path>`; a path that names exactly one file resolves.
         items = [item('web/orders', ['web/src/Order.cbl', 'web/src/Shared.cbl'], ['O']), item('db/schema', ['db/schema/T.sql', 'db/src/Shared.cbl'], ['T'])]
         owner = cc.owner_of(items)
         self.assertEqual(owner.item_of('web/src/Order.cbl'), 'web/orders')
-        self.assertEqual(owner.item_of('src/web/src/Order.cbl'), 'web/orders')
+        self.assertEqual(owner.item_of('as-is/web/src/Order.cbl'), 'web/orders')
         self.assertEqual(owner.item_of('src/Order.cbl'), 'web/orders')
         self.assertEqual(owner.item_of('schema/T.sql'), 'db/schema')
         # The same path in two repositories is ambiguous, a path in no item is nothing.
@@ -340,7 +340,7 @@ class UnderstandToolsTests(unittest.TestCase):
         write(rules, {'confirmedRules': [
             {'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'legacy/src/TAXLIB.cbl:12'},
             {'name': 'Amount positive', 'category': 'Validation', 'priority': 'P1', 'source': 'src/TAX.cbl:3'},
-            {'name': 'Entry date', 'category': 'Validation', 'priority': 'P1', 'source': 'src/legacy-data/src/INV01.cbl:40'},
+            {'name': 'Entry date', 'category': 'Validation', 'priority': 'P1', 'source': 'as-is/legacy-data/src/INV01.cbl:40'},
         ], 'dataObjects': []})
         out = os.path.join(self.root, 'out-cited')
         result = run('split_rules.py', 'billing', '--rules', rules, '--catalog', catalog, '--items', 'tax/calc,invoicing/entry', '--out', out, '--date', '2026-10-22', '--sources', 'legacy@' + 'a' * 40 + ',legacy-data@' + 'b' * 40)

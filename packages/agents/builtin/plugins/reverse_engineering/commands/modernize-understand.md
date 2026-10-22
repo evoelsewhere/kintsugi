@@ -95,7 +95,7 @@ Security views read their outputs).
 
 ### Topology (the map)
 
-The code is the **legacy repositories** of `$app` (`role: legacy`), read at the commits the orchestrator pinned, one folder per repository under `src/` ([ADR-0052](../../../../../../docs/decisions/0052-several-legacy-repositories-per-application.md)); the
+The code is the **legacy repositories** of `$app` (`role: legacy`), read at the commits the orchestrator pinned, one folder per repository under `as-is/` ([ADR-0052](../../../../../../docs/decisions/0052-several-legacy-repositories-per-application.md)); the
 fragments say which repository and commit were read. Three principles hold across stacks:
 
 1. **Edges live in two places**: direct calls in source, *and* dispatcher calls whose targets are variables

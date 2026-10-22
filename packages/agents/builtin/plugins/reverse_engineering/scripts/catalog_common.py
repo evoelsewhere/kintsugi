@@ -459,13 +459,13 @@ class Owners(dict):
 
     def path_of(self, cited):
         """The catalog file a cited path names. Citations are `<repository id>/<path>` (ADR-0052); a path written with the
-        leading `src/` of the job workspace, or without its repository, still resolves when exactly one file of the items
+        leading `as-is/` of the job workspace, or without its repository, still resolves when exactly one file of the items
         has that path. None when the file is in no item or the path is ambiguous."""
         if not cited:
             return None
         if cited in self:
             return cited
-        stripped = cited[4:] if cited.startswith('src/') else None
+        stripped = cited[6:] if cited.startswith('as-is/') else None
         if stripped is not None and stripped in self:
             return stripped
         if self._rest is None:
