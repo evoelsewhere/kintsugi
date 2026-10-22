@@ -32,7 +32,7 @@ describe.skipIf(!hasDatabase)("atomic task projection replacement (PostgreSQL)",
     process.env["DATABASE_URL"] = db.url;
     await ensureSchema();
     await db.query("insert into admin.project (id, name) values ('shop', 'Shop')");
-    await db.query("insert into admin.application (project_id, id, name, disposition) values ('shop', 'web', 'Web', 'refactor')");
+    await db.query("insert into admin.application (project_id, id, name) values ('shop', 'web', 'Web')");
     await db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('local', 'plain-git', 'Local', 'http://localhost', 'none')");
     await db.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('docs', 'local', 'http://localhost/docs.git', 'main')");
   });
@@ -103,7 +103,7 @@ describe.skipIf(!hasDatabase)("atomic task projection replacement (PostgreSQL)",
   it("invalidates a same-commit index when an application is deleted and recreated", async () => {
     expect(await repository.indexRevision("shop")).toBeDefined();
     await db.query("delete from admin.application where project_id = 'shop' and id = 'web'");
-    await db.query("insert into admin.application (project_id, id, name, disposition) values ('shop', 'web', 'Web', 'refactor')");
+    await db.query("insert into admin.application (project_id, id, name) values ('shop', 'web', 'Web')");
     expect(await repository.indexRevision("shop")).toBeUndefined();
   });
 

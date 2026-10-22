@@ -126,7 +126,7 @@ function useFlowLinks(hostRef: { current: HTMLDivElement | null }, itemRefs: { c
     if (host === null) return;
     const next = readFlowLinks(host, itemRefs.current, items);
     setLinks((prev) => (sameLinks(prev, next) ? prev : next));
-  });
+  }, [hostRef, itemRefs, items]);
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (host === null) return;
@@ -137,7 +137,7 @@ function useFlowLinks(hostRef: { current: HTMLDivElement | null }, itemRefs: { c
     observer.observe(host);
     for (const item of itemRefs.current) if (item !== null) observer.observe(item);
     return () => observer.disconnect();
-  }, [items]);
+  }, [hostRef, itemRefs, items]);
   return links;
 }
 

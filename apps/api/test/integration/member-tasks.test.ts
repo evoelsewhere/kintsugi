@@ -84,7 +84,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow task index (integration)", 
       body: { id: "shop", name: "Shop", documentRepositoryId: "docs" },
     })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications", {
-      body: { id: "web", name: "Web", disposition: "refactor" },
+      body: { id: "web", name: "Web" },
     })).status).toBe(201);
 
     const alice = await memberClient(app, admin, "alice", ["user"]);
@@ -152,7 +152,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow task index (integration)", 
     expect((await taskService.list(principal, { projectId: "shop" })).items).toHaveLength(2);
     const before = await app.db.query<{ source_commit: string; application_ids_fingerprint: string }>(
       "select source_commit, application_ids_fingerprint from delivery.member_task_index where project_id = 'shop'");
-    await app.db.query("insert into admin.application (project_id, id, name, disposition) values ('shop', 'mobile', 'Mobile', 'refactor')");
+    await app.db.query("insert into admin.application (project_id, id, name) values ('shop', 'mobile', 'Mobile')");
     expect((await taskService.list(principal, { projectId: "shop" })).items.map(({ unitId }) => unitId)).toEqual([
       "mobile/core/app", "web/core/invoice", "web/core/reported",
     ]);
@@ -166,12 +166,12 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow task index (integration)", 
   it("refreshes registered applications without a Git commit change, including delete and recreate", async () => {
     const before = await taskService.get(principal, { projectId: "shop", unitId: "web/core/invoice" });
     await app.db.query("delete from admin.application where project_id = 'shop' and id = 'web'");
-    await app.db.query("insert into admin.application (project_id, id, name, disposition) values ('shop', 'web', 'Web', 'refactor')");
+    await app.db.query("insert into admin.application (project_id, id, name) values ('shop', 'web', 'Web')");
     const recreated = await taskService.get(principal, { projectId: "shop", unitId: "web/core/invoice" });
     expect(recreated.sourceCommit).toBe(before.sourceCommit);
     await app.db.query("delete from admin.application where project_id = 'shop' and id = 'web'");
     expect((await taskService.list(principal, { projectId: "shop" })).items).toEqual([]);
-    await app.db.query("insert into admin.application (project_id, id, name, disposition) values ('shop', 'web', 'Web', 'refactor')");
+    await app.db.query("insert into admin.application (project_id, id, name) values ('shop', 'web', 'Web')");
     expect((await taskService.list(principal, { projectId: "shop" })).items.map(({ unitId }) => unitId)).toEqual(["web/core/invoice", "web/core/reported"]);
   });
 

@@ -167,7 +167,7 @@ describe.skipIf(!hasDatabase)("Postgres provider sync inbox (integration)", () =
     await db.pool.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('provider-association-docs-host', 'plain-git', 'Docs', 'https://docs.example', 'none')");
     await db.pool.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('provider-association-docs-repo', 'provider-association-docs-host', 'https://docs.example/project.git', 'main')");
     await db.pool.query("insert into admin.project (id, name) values ($1, 'Provider association project')", [projectId]);
-    await db.pool.query("insert into admin.application (project_id, id, name, disposition) values ($1, 'billing-api', 'Billing API', 'refactor')", [projectId]);
+    await db.pool.query("insert into admin.application (project_id, id, name) values ($1, 'billing-api', 'Billing API')", [projectId]);
     await db.pool.query("insert into admin.project_repository (project_id, repository_id, role) values ($1, 'provider-association-docs-repo', 'document')", [projectId]);
     await db.pool.query("insert into admin.project_repository (project_id, application_id, repository_id, role, component) values ($1, 'billing-api', 'provider-sync-repo', 'target', 'billing-api')", [projectId]);
     await db.pool.query("insert into core.app_user (id, username, password_hash, password_salt) values ('association-user', 'association-user', 'test-hash', 'test-salt')");

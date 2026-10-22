@@ -89,7 +89,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
       body: { id: "shop", name: "Shop", documentRepositoryId: "docs" },
     })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications", {
-      body: { id: "web", name: "Web", disposition: "refactor" },
+      body: { id: "web", name: "Web" },
     })).status).toBe(201);
     const identity = await admin.get<{ id: string }>("/auth/me");
     memberId = identity.body.data!.id;

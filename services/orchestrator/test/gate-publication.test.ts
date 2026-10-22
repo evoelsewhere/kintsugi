@@ -274,13 +274,13 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     });
     const unitPath = "10-applications/web/02-modern/core/invoice/README.md";
     const unitText = "---\nid: web/core/invoice\napplication: web\nmodule: core\nkind: module\ntitle: Invoice\nphase: migrate\nstatus: in-progress\nrequiredDeliverables:\n  - {id: code, repositoryId: docs, path: result.md}\n---\n";
-    await remote.commit("docs", "kintsugi.yaml", "schemaVersion: 1\nproject: {id: shop, name: Shop}\ndocument: {server: github, path: org/docs}\nunitKinds: [module]\napplications:\n  - {id: web, disposition: refactor, pipeline: prepared, repos: []}\npipelines:\n  - id: prepared\n    phases:\n      - id: migrate\n        perUnit: true\n        stages:\n          - {id: approve, performer: {member: [core-team]}, gate: G4}\n      - id: verify\n        perUnit: true\n        stages:\n          - {id: test, performer: {member: [qc]}}\n");
+    await remote.commit("docs", "kintsugi.yaml", "schemaVersion: 1\nproject: {id: shop, name: Shop}\ndocument: {server: github, path: org/docs}\nunitKinds: [module]\napplications:\n  - {id: web, pipeline: prepared, repos: []}\npipelines:\n  - id: prepared\n    phases:\n      - id: migrate\n        perUnit: true\n        stages:\n          - {id: approve, performer: {member: [core-team]}, gate: G4}\n      - id: verify\n        category: migrate\n        perUnit: true\n        stages:\n          - {id: test, performer: {member: [qc]}}\n");
     const unitCommit = await remote.commit("docs", unitPath, unitText);
     const inputId=evidence.decisionId;
     await db.pool.query("insert into admin.project_access (project_id,user_id,granted_by) values ('shop','human','human') on conflict do nothing");
     await db.pool.query("insert into core.user_role (user_id,role_id) values ('human','admin') on conflict do nothing");
     await db.pool.query("insert into workflow.member_provider_actor_mapping (project_id,server_id,provider_actor_id,user_id,confirmed_by) values ('shop','github','200','human','human') on conflict do nothing");
-    await db.pool.query("insert into admin.application (project_id,id,name,disposition) values ('shop','web','Web','refactor') on conflict do nothing");
+    await db.pool.query("insert into admin.application (project_id,id,name) values ('shop','web','Web') on conflict do nothing");
     await db.pool.query("insert into delivery.member_task_projection (project_id,application_id,unit_id,repository_id,source_commit,source_path,source_hash,work_item,required_inputs,source_references,predecessor_gates) values ('shop','web','web/core/invoice','docs',$1,$2,$3,$4,'[]','[]','[]') on conflict (project_id,unit_id) do nothing", [unitCommit, unitPath, createHash("sha256").update(unitText).digest("hex"), JSON.stringify({ requiredDeliverables: [{ id: "code", repositoryId: "docs", path: "result.md" }] })]);
     const snapshotId = "ctx_" + randomUUID();
     const manifest = { policyRevision: evidence.policyRevision, sources: [{ repositoryId: "docs", path: unitPath, contentHash: "sha256:" + createHash("sha256").update(unitText).digest("hex"), availability: "present" }] };
@@ -305,7 +305,7 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     const continuationFacts={projectId:"shop",unitId:evidence.unitId,gateId:evidence.gateId,decisionId:evidence.decisionId,evidenceHash,recordCommit:gateMerge};
     const continuation=await adapter.currentContinuation(continuationFacts);
     expect(continuation).toBeDefined();
-    expect(planContinuation(continuationFacts,continuation!.plan)[0]).toMatchObject({status:"member-action",phase:"verify",stage:"test"});
+    expect(planContinuation(continuationFacts, continuation!.plan)[0]).toMatchObject({status:"member-action",phase:"verify",stage:"test"});
     await remote.commit("docs", unitPath, unitText + "Changed relevant instructions.\n");
     expect(await adapter.verification.currentContext("shop", "web/core/invoice")).toBeUndefined();
   });

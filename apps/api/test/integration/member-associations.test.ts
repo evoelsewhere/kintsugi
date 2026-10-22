@@ -14,7 +14,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow PR associations (integratio
     const actor = await app.db.query<{ id: string }>("select id from core.app_user where username = 'admin'");
     const actorId = actor.rows[0]!.id;
     await app.db.query("insert into admin.project (id, name) values ($1, 'Association project')", [projectId]);
-    await app.db.query("insert into admin.application (project_id, id, name, disposition) values ($1, 'billing-api', 'Billing API', 'refactor')", [projectId]);
+    await app.db.query("insert into admin.application (project_id, id, name) values ($1, 'billing-api', 'Billing API')", [projectId]);
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('association-docs-host', 'plain-git', 'Docs', 'https://docs.example', 'none')");
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('association-code-host', 'github', 'Code', 'https://github.com', 'none')");
     await app.db.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('association-docs-repo', 'association-docs-host', 'https://docs.example/project.git', 'main')");
