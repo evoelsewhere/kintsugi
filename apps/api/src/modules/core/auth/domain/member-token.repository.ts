@@ -17,12 +17,14 @@ export interface MemberTokenRecordInput {
   tokenHash: string;
   projectIds: string[];
   expiresAt: Date;
+  connectionId?: string;
 }
 
 export interface MemberTokenIdentity {
   tokenId: string;
   userId: string;
   projectIds: string[];
+  connectionId?: string;
 }
 
 export abstract class MemberTokenRepository {
@@ -31,5 +33,5 @@ export abstract class MemberTokenRepository {
   /** Marks a token revoked only when it belongs to the user. */
   abstract revoke(userId: string, tokenId: string): Promise<boolean>;
   /** Returns an active token identity and updates last_used_at, or undefined. */
-  abstract authenticate(tokenHash: string): Promise<MemberTokenIdentity | undefined>;
+  abstract authenticate(tokenHash: string, maxConnectionAgeDays?: 15 | 30): Promise<MemberTokenIdentity | undefined>;
 }

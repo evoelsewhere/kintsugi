@@ -8,3 +8,8 @@ export const commitIdentitySchema = z.object({
   email: z.string().trim().min(3).max(254),
 });
 export type CommitIdentityInput = z.infer<typeof commitIdentitySchema>;
+
+export const codingAgentConnectionLifetimeSchema = z.object({
+  maxAgeDays: z.union([z.literal(15), z.literal(30)]),
+});
+export type CodingAgentConnectionLifetimeInput = z.infer<typeof codingAgentConnectionLifetimeSchema>;

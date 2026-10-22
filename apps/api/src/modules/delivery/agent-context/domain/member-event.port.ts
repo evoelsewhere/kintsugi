@@ -10,8 +10,6 @@ export interface MemberEventEnvelope {
 export abstract class MemberEventReader {
   /** Returns the newest retained continuation notification for this exact task, if one exists. */
   abstract latestContinuation(projectId: string, unitId: string): Promise<TaskContinuationEvent | undefined>;
-  /** Latest project sequence at subscription start, so a new watch follows future events only. */
-  abstract latestSequence(projectId: string): Promise<string>;
   /** Resolves only a retained event from this exact project and task. */
   abstract resolveCursor(projectId: string, unitId: string, eventId: string): Promise<string | undefined>;
   /** Reads a bounded page after the internal sequence, within the seven-day replay window. */

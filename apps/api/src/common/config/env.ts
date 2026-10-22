@@ -8,13 +8,30 @@ export interface AppEnv {
   logLevel: "error" | "warn" | "log" | "debug" | "verbose";
   /** Session cookies carry `Secure` when the installation is served over HTTPS (KINTSUGI_PUBLIC_URL). */
   secureCookies: boolean;
+  /** Canonical public URL used in links and coding-agent install/auth requests. */
+  publicUrl: string;
+}
+
+function canonicalPublicUrl(): string {
+  const raw = process.env["KINTSUGI_PUBLIC_URL"] ?? "http://localhost:8080";
+  let url: URL;
+  try { url = new URL(raw); } catch { throw new Error("KINTSUGI_PUBLIC_URL must be an absolute HTTP(S) URL"); }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname.toLowerCase());
+  if ((url.protocol !== "https:" && !(url.protocol === "http:" && loopback))
+    || url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "") {
+    throw new Error("KINTSUGI_PUBLIC_URL must use HTTPS except for loopback, and cannot contain credentials, a query or a fragment");
+  }
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  return url.toString().replace(/\/$/, "");
 }
 
 export function loadEnv(): AppEnv {
+  const publicUrl = canonicalPublicUrl();
   return {
     port: Number(process.env["PORT"] ?? 3000),
     logLevel: (process.env["LOG_LEVEL"] ?? "log") as AppEnv["logLevel"],
-    secureCookies: (process.env["KINTSUGI_PUBLIC_URL"] ?? "").startsWith("https://"),
+    secureCookies: publicUrl.startsWith("https://"),
+    publicUrl,
   };
 }
 

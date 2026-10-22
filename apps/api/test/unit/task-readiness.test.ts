@@ -204,4 +204,17 @@ describe("task index refresh coordination", () => {
       "billing/invoices/a", "billing/invoices/a-b", "billing/invoices/a0",
     ]);
   });
+
+  it("computes readiness only for the requested page when no readiness filter is used", async () => {
+    const records = Array.from({ length: 25 }, (_, index) =>
+      projection(`billing/invoices/${String(index).padStart(2, "0")}`));
+    const { service, approvals } = setup(records);
+
+    const result = await service.list(principal, { projectId: "project-a", limit: 1 });
+
+    expect(result.items.map(({ unitId }) => unitId)).toEqual(["billing/invoices/00"]);
+    expect(result.nextCursor).toBeDefined();
+    expect(approvals.sourceApproval).toHaveBeenCalledTimes(2);
+    expect(approvals.predecessorStatus).toHaveBeenCalledTimes(1);
+  });
 });

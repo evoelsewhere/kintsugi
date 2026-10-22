@@ -21,7 +21,7 @@ type LoginInput = z.infer<typeof loginSchema>;
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
-  readonly #secureCookies = loadEnv().secureCookies;
+  readonly #env = loadEnv();
 
   constructor(private readonly auth: AuthService) {}
 
@@ -35,7 +35,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<{ user: SessionUser }> {
     const { token, user } = await this.auth.login(input.username, input.password);
-    setSessionCookie(response, token, { maxAgeSeconds: SESSION_TTL_SECONDS, secure: this.#secureCookies });
+    setSessionCookie(response, token, { maxAgeSeconds: SESSION_TTL_SECONDS, secure: this.#env.secureCookies });
     return { user };
   }
 
@@ -46,7 +46,15 @@ export class AuthController {
   async logout(@Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: Response): Promise<void> {
     const token = sessionToken(request);
     if (token !== undefined) await this.auth.logout(token);
-    clearSessionCookie(response, { secure: this.#secureCookies });
+    clearSessionCookie(response, { secure: this.#env.secureCookies });
+  }
+
+  @Get("coding-agent/installation")
+  @Public()
+  @ApiOperation({ summary: "Read the canonical Kintsugi installation URL for Coding Agent Workflow setup" })
+  @ApiOkResponse({ description: "The configured public URL; never derived from request headers." })
+  codingAgentInstallation(): { baseUrl: string } {
+    return { baseUrl: this.#env.publicUrl };
   }
 
   @Get("me")

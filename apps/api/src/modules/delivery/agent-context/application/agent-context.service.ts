@@ -60,7 +60,7 @@ export class AgentContextService implements AuthenticatedCodingAgentWorkflowPort
   ) {}
 
   async listProjects(principal: MemberPrincipal, query: ProjectQuery): Promise<ListResult<ProjectSummary>> {
-    if (principal.projectIds.length === 0 || principal.projectIds.length > MAX_PROJECTS_PER_TOKEN) {
+    if (principal.projectIds.length > MAX_PROJECTS_PER_TOKEN) {
       throw new ForbiddenException("The token has no valid project scope");
     }
     const limit = this.validateLimit(query.limit);

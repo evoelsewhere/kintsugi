@@ -36,11 +36,24 @@ export class TaskQueryService {
     const records = (await this.projections.list(query.projectId)).sort((left, right) =>
       left.unitId < right.unitId ? -1 : left.unitId > right.unitId ? 1 : 0);
     const items: TaskSummary[] = [];
+    let hasMore = false;
     for (const record of records) {
       if (afterUnitId !== undefined && record.unitId <= afterUnitId) continue;
       if (query.mine === true && record.assignedUserId !== principal.userId) continue;
+
+      // Without a readiness filter, ordering and assignment are already known from
+      // the projection. Stop as soon as the page has one extra eligible record;
+      // readiness performs evidence queries and is only needed for returned rows.
+      if (query.readyFor === undefined && items.length >= limit) {
+        hasMore = true;
+        break;
+      }
       const readiness = await this.readiness(record);
       if (query.readyFor !== undefined && !readiness.byActivity[query.readyFor].ready) continue;
+      if (items.length >= limit) {
+        hasMore = true;
+        break;
+      }
       items.push({
         projectId: record.projectId,
         unitId: record.unitId,
@@ -52,12 +65,10 @@ export class TaskQueryService {
       });
     }
 
-    const page = items.slice(0, limit);
-    const hasMore = items.length > limit;
-    const last = page[page.length - 1];
+    const last = items[items.length - 1];
     return {
       schemaVersion: "1",
-      items: page,
+      items,
       limit,
       ...(hasMore && last !== undefined ? { nextCursor: this.encodeCursor(last.unitId) } : {}),
     };
