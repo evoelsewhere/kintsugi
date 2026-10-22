@@ -18,6 +18,7 @@ import type { JobRunView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { shortSha } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
+import { GapsResultsView } from "./gaps-results";
 import { HardenResultsView } from "./harden-results";
 import { MapResultsView } from "./map-results";
 import { OutputFiles, Section } from "./results-parts";
@@ -30,6 +31,7 @@ const VIEWS: Array<{ id: UnderstandView; label: string }> = [
   { id: "map", label: "Topology" },
   { id: "extract-rules", label: "Rules" },
   { id: "harden", label: "Security" },
+  { id: "gaps", label: "Gaps" },
 ];
 
 const isView = (value: string | null): value is UnderstandView => VIEWS.some((view) => view.id === value);
@@ -118,7 +120,7 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
               </Card>
             ) : (
               <>
-                <ResultsView results={loaded} projectId={project.id} />
+                <ResultsView results={loaded} projectId={project.id} onOpenItem={(id) => update("item", id)} />
                 <Section title="Files" description={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}.`}>
                   <OutputFiles files={loaded.files} />
                 </Section>
@@ -131,7 +133,7 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
   );
 }
 
-function ResultsView({ results, projectId }: { results: StageResults; projectId: string }): React.JSX.Element | null {
+function ResultsView({ results, projectId, onOpenItem }: { results: StageResults; projectId: string; onOpenItem: (item: string) => void }): React.JSX.Element | null {
   switch (results.stage) {
     case "map":
       return <MapResultsView results={results} compare={false} />;
@@ -141,6 +143,8 @@ function ResultsView({ results, projectId }: { results: StageResults; projectId:
       return <HardenResultsView results={results} compare={false} />;
     case "understand":
       return <UnderstandResultsView results={results} compare={false} projectId={projectId} />;
+    case "gaps":
+      return <GapsResultsView results={results} onOpenItem={onOpenItem} />;
     default:
       return null;
   }

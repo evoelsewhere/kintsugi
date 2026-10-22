@@ -91,6 +91,21 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     });
     for (const [path, text] of Object.entries({ ...invoice, ...understoodUnit("web", "billing/rates", { digest: "sha256:old", commit: "b".repeat(40), runId: "run-merged" }) })) await remote.commit("docs", path, text);
     await remote.commit("docs", "10-applications/web/01-legacy/billing/invoice/findings.md", findingsDocument("billing/invoice", [{ id: "SEC-billing.invoice-01", cwe: "CWE-89", severity: "High", source: "src/Invoice.java:9", title: "SQL built from input" }]));
+    // The invoice specification lists two gaps (ADR-0057); the rates specification predates the table. The application's GAPS.md joins them.
+    const gapsTable = [
+      "| ID | Kind | Question | Where | Impact |",
+      "| --- | --- | --- | --- | --- |",
+      "| GAP-billing.invoice-01 | missing-source | What does copybook TAXTAB hold? | `legacy/src/Invoice.java:41` | blocking |",
+      "| GAP-billing.invoice-02 | ambiguous | Why is the rate 8.25%? | RULE-billing.invoice-1a2b3c4d | risk |",
+    ];
+    await remote.commit("docs", "10-applications/web/01-legacy/billing/invoice/spec.md", ["# billing/invoice", "", "## Gaps and questions", "", ...gapsTable, ""].join("\n"));
+    await remote.commit(
+      "docs",
+      "10-applications/web/_generated/GAPS.md",
+      ["---", 'app: "web"', "gaps: 2", "---", "# Gaps and questions - web", "", "| Item | ID | Kind | Impact | Question | Where |", "| --- | --- | --- | --- | --- | --- |",
+        "| billing/invoice | GAP-billing.invoice-01 | missing-source | blocking | What does copybook TAXTAB hold? | `legacy/src/Invoice.java:41` |",
+        "| billing/invoice | GAP-billing.invoice-02 | ambiguous | risk | Why is the rate 8.25%? | RULE-billing.invoice-1a2b3c4d |", ""].join("\n"),
+    );
     // The topology the assessment summarised, on main.
     await remote.commit(
       "docs",
@@ -288,6 +303,20 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect(map.body.data).toMatchObject({ stage: "map", empty: false, scope: {} });
     expect(map.body.data?.topology?.nodes.map((node) => node.id)).toContain("INV");
     expect((await admin.get<Results>(`${base}?view=extract-rules`)).body.data?.empty).toBe(true);
+    type GapsView = Results & { gaps: Array<{ id: string; kind: string; impact: string; item?: string; where: string }>; gapCounts: { total: number; units: number; byImpact: Record<string, number> }; noSection?: boolean };
+    const gaps = await admin.get<GapsView>(`${base}?view=gaps`);
+    expect(gaps.body.data).toMatchObject({ stage: "gaps", empty: false, scope: {}, gapCounts: { total: 2, units: 1, byImpact: { blocking: 1, risk: 1, note: 0 } } });
+    expect(gaps.body.data?.gaps.map((gap) => [gap.item, gap.id, gap.kind, gap.impact])).toEqual([
+      ["billing/invoice", "GAP-billing.invoice-01", "missing-source", "blocking"],
+      ["billing/invoice", "GAP-billing.invoice-02", "ambiguous", "risk"],
+    ]);
+    const ownGaps = await admin.get<GapsView>(`${base}?view=gaps&item=billing/invoice`);
+    expect(ownGaps.body.data).toMatchObject({ stage: "gaps", empty: false, scope: { item: "billing/invoice" }, gapCounts: { total: 2 } });
+    expect(ownGaps.body.data?.gaps[0]).toMatchObject({ id: "GAP-billing.invoice-01", item: "billing/invoice", where: "legacy/src/Invoice.java:41" });
+    expect(ownGaps.body.data?.noSection).toBeUndefined();
+    // A specification written before the table has no section: no gaps, and the view says so.
+    const oldGaps = await admin.get<GapsView>(`${base}?view=gaps&item=billing/rates`);
+    expect(oldGaps.body.data).toMatchObject({ gaps: [], noSection: true, gapCounts: { total: 0 } });
     expect((await admin.get(`${base}?view=assess`)).status).toBe(400);
     expect((await admin.get(`${base}?view=map&item=..%2Fx`)).status).toBe(400);
   });

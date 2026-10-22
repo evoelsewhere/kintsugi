@@ -7,12 +7,15 @@ import { posix } from "node:path";
 import {
   buildTraceability,
   bulletsIn,
+  countGaps,
   findingsOfTable,
   leftOutTotal,
   paragraphsIn,
+  parseGaps,
   parseInventory,
   parseItemCatalog,
   parseSecurityFindings,
+  parseSpecGaps,
   parseTopology,
   parseTraceSummary,
   parseUnitTrace,
@@ -36,7 +39,7 @@ import {
 import { DOCUMENT_PATH_TOKENS, assessmentCatalogDir, assessmentDir, catalogPath, generatedDir, unitAsIsPath, unitModernDir, unitRulesPath, unitRulesReviewPath, unitStatePath, unitTracePath, unitUnderstandingPath } from "@kintsugi/domain";
 import { chunk } from "#common/util/async.js";
 import { itemUnitFacts } from "./item-results.js";
-import type { AsIsDocument, AssessResults, HardenResults, MapDiagram, MapNode, MapResults, ResultStage, RulesResults, StageFile, UnderstandResults, UnderstandUnit } from "../domain/document.js";
+import type { AsIsDocument, AssessResults, GapsResults, HardenResults, MapDiagram, MapNode, MapResults, ResultStage, RulesResults, StageFile, UnderstandResults, UnderstandUnit } from "../domain/document.js";
 
 /** The stage's output directory at one commit: what is there, and a reader for a file in it. */
 export interface StageSource {
@@ -78,6 +81,7 @@ export const STAGE_OUTPUTS: Record<ResultStage, { dir?: string; files: readonly 
     main: "README.md",
     countsFrom: ["traceability.md"],
   },
+  gaps: { dir: generatedDir(APP_TOKEN), files: ["GAPS.md"], main: "GAPS.md", countsFrom: ["GAPS.md"] },
 };
 
 /** The directory a stage writes its outputs to, for one application. */
@@ -299,6 +303,39 @@ export async function hardenResults(source: StageSource, appDir: string): Promis
 export async function hardenHeadline(source: StageSource): Promise<Pick<Built, "counts" | "headline">> {
   const text = await source.read("SECURITY_FINDINGS.md");
   return hardenCounts(text === null ? null : parseSecurityFindings(text));
+}
+
+// ---- gaps (ADR-0057) ------------------------------------------------------------------------
+
+function gapsCounts(gaps: GapsResults["gaps"]): Pick<Built, "counts" | "headline"> & { gapCounts: GapsResults["gapCounts"] } {
+  const gapCounts = countGaps(gaps);
+  return {
+    gapCounts,
+    counts: { gaps: gapCounts.total, units: gapCounts.units, blocking: gapCounts.byImpact.blocking, risk: gapCounts.byImpact.risk, note: gapCounts.byImpact.note },
+    headline: gapCounts.total === 0 ? [] : [plural(gapCounts.total, "gap"), ...(gapCounts.byImpact.blocking > 0 ? [`${gapCounts.byImpact.blocking} blocking`] : [])],
+  };
+}
+
+/**
+ * The gaps of the application (`GAPS.md` of the generated views), or of one unit when `item` is given: the source then
+ * serves that unit's specification under the name `GAPS.md`, and its own `Gaps and questions` table is read.
+ */
+export async function gapsResults(source: StageSource, appDir: string, item?: string): Promise<Omit<Full<GapsResults>, "gapCounts"> & Pick<GapsResults, "gapCounts">> {
+  const markdown = await source.read("GAPS.md");
+  const own = markdown === null || item === undefined ? undefined : parseSpecGaps(markdown, item);
+  const gaps = markdown === null ? [] : item === undefined ? parseGaps(markdown).gaps : (own ?? []);
+  return {
+    gaps,
+    ...(item !== undefined && markdown !== null && own === null ? { noSection: true } : {}),
+    ...gapsCounts(gaps),
+    ...(markdown === null || item !== undefined ? {} : { document: { path: `${appDir}/GAPS.md`, markdown } }),
+  };
+}
+
+export async function gapsHeadline(source: StageSource): Promise<Pick<Built, "counts" | "headline">> {
+  const markdown = await source.read("GAPS.md");
+  const { counts, headline } = gapsCounts(markdown === null ? [] : parseGaps(markdown).gaps);
+  return { counts, headline };
 }
 
 /// ---- understand -----------------------------------------------------------------------------
