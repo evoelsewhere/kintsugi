@@ -70,7 +70,10 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Define a project's design templates](guides/define-design-templates.md)
 - [Configure LLM providers for the runtime](guides/configure-llm-providers.md)
 - [Work on a migration task as a member](guides/member-workflow.md)
-- [Use a coding agent on a migration task](guides/coding-agent-workflow.md)
+- [Test the Coding Agent Workflow locally](guides/coding-agent-workflow-pilot.md): automated smoke, plugin sign-in, synthetic context, and GitHub PR pilot
+- **Interactive Coding Agent Workflow guide**: in the portal, open Workspace → AI workflow (`/coding-agent-workflow`)
+- [Coding Agent Workflow architecture and current limits](guides/coding-agent-workflow.md)
+- [Extend the Coding Agent Workflow CLI and harness plugins](guides/coding-agent-workflow-contributing.md)
 
 ## Conventions
 

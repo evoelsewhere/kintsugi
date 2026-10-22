@@ -19,7 +19,7 @@
 | **Pilot unit** | A unit flagged `pilot: true`, run first to check the project's standards before work at scale |
 | **Project build** | Setting a project up: create or join the document repo, register the AS-IS and TO-BE repos, write the standards |
 | **Project role** | RACI responsibility from `@kintsugi/domain`, such as `pm`, `architect`, `dev`, `qc` or `ai-champion`; pipelines may name their own; assignment per project membership is planned with M0 project persistence |
-| **PAT** | Personal Access Token, used by the CLI and MCP clients |
+| **PAT** | Personal Access Token. Existing member PATs are retained only for migration compatibility; new Coding Agent Workflow connections use browser authorization. |
 | **Rebuild** | What Kintsugi does with every application: it is re-created on a new architecture from what its legacy system does (reverse engineering first, then the later phases). There is no per-application choice of strategy |
 | **Runtime agent** | A platform agent executed by the runtime kernel: an agent definition (instructions, skills, tool allowlist) supplied with each job. Built-in agents cover the understanding phases (legacy-analyst, business-rules-extractor, architecture-critic, security-auditor); admins create more in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
 | **Scorecard** | Weighted assessment of an application across business, technical, feasibility, cost and risk criteria |

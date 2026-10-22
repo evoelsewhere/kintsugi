@@ -1,35 +1,46 @@
 # Use a coding agent on a migration task
 
-See the [CLI and MCP flow diagram](coding-agent-workflow-flow.html) for the local bridge, read-only context path, PR observation and separate SSE watch channel.
+The interactive setup and workflow guide is part of the Kintsugi portal: open **Workspace → AI workflow** (`/coding-agent-workflow`). This page records the architecture and operational limits behind that guide.
 
-> Implementation status: the typed client, read-only CLI, local stdio MCP bridge, generated Coding Agent Workflow packages, GitHub/GHES PR observation, review findings, event replay, evidence-bound gate publication and durable effective-gate continuation guidance are implemented on the unreleased feature branch. The access plugin and CLI consume continuation events; the portal shows the latest retained event as dated advice and keeps current task status separate. The portal also includes task handoff, one-time token setup, Project Access controls and durable gate-publication status. T16 browser/keyboard QA and T17 native authenticated client, live provider/model, crash/recovery, rollback and upgrade pilots remain release gates. See the [implementation plan](../superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-implementation.md) and [CLI reference](../reference/coding-agent-cli.md) for current evidence and setup behavior.
+> Implementation status: the typed client, read-only CLI, local stdio MCP bridge, generated Coding Agent Workflow packages, browser authorization with rotating credentials, administrator-controlled connection age, GitHub PR observation/review components, event replay, evidence-bound gate publication and durable effective-gate continuation are implemented on the unreleased feature branch. The portal provides project plugin setup, connection revocation, Project Access controls, task handoff and durable gate-publication status. A synthetic API/worker smoke passed PKCE exchange, project-scoped reads, refresh rotation, Project Access revocation and connection revocation. Authenticated MCP calls through live Claude/Codex clients, authenticated GitHub provider flows (including webhooks and permissions), a tested GHES version, live provider/model behavior, crash recovery, rollback and upgrade pilots remain release gates. See the [implementation plan](../superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-implementation.md), [CLI reference](../reference/coding-agent-cli.md) and [compatibility evidence](../reference/coding-agent-workflow-compatibility.md) for current results.
 
-You work in your chosen AI harness and keep using your existing model subscription. Kintsugi supplies the authorized task and design context, then follows your normal pull request through review and the human gate. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
+You prompt and work in your chosen AI harness and keep using its existing model subscription. The Kintsugi skill guides the AI to call context tools when your request concerns a Kintsugi task, design, standards, readiness, PR, review, or gate. In the current local setup, the AI client launches the installed Kintsugi CLI as its stdio MCP bridge; the CLI handles authentication and access to Kintsugi, while your usual coding tools make changes and open the PR. Kintsugi then follows that PR through review and the human gate. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
+
+Reading task context needs a registered document repository and `member.read` plus Project Access. A configured GitHub provider is needed only when Kintsugi should observe and reconcile the PR. Your AI client needs its own repository authorization to push changes or open a PR. The current unreleased preview requires a local CLI build and a compatible local AI client; hosted chat clients need a future remote MCP connection.
 
 ## Connect once
 
-1. Install the Kintsugi CLI using the release instructions for your operating system.
-2. Open the project's **Work in your AI** page and create a project-scoped token. Copy it once, then sign in to your Kintsugi installation. The CLI asks for it privately and stores it in the operating system credential manager. Tokens expire after seven days in the portal flow and can be revoked from that project page.
+1. For the local workspace preview, build the CLI from the Kintsugi repository root:
 
    ~~~sh
-   kintsugi auth login --url https://kintsugi.example.internal --profile work
-   kintsugi auth status --profile work
+   corepack pnpm --filter @kintsugi/cli... build
+   pnpm kintsugi --help
    ~~~
 
-3. List your projects and choose the one you are working in.
+   The root `pnpm kintsugi` script launches the compiled CLI. Use the published package-manager install instructions after a CLI release.
+
+2. In the project, open **Work in your AI**, choose your supported client and terminal, and copy the generated plugin setup command. It already includes the configured installation URL and project ID. Run it in a terminal; during the local preview, prefix it with `pnpm` from the Kintsugi repository root.
 
    ~~~sh
-   kintsugi project list --profile work
-   kintsugi project use modernization --profile work
+   pnpm kintsugi plugins setup --harness claude-code --url https://kintsugi.example.internal --project modernization
    ~~~
 
-4. Generate a local Coding Agent Workflow plugin package for a tested AI client. It gives the AI read-only Kintsugi tools and a short guide for retrieving complete cited context. The CLI prints the client's native marketplace/install commands; run those commands yourself to change client settings. Package generation does not install a Kintsugi assistant or run hooks.
+   The command installs the native plugin and creates a nonsecret local profile. It does not issue or save a credential. Start a new Claude Code or Codex session after it finishes.
 
-   ~~~sh
-   kintsugi plugins setup --harness claude-code --profile work
-   ~~~
+3. On the first Kintsugi context request, the CLI opens a browser. Sign in, review the project, and approve access. The CLI completes a PKCE authorization through a temporary local callback, keeps five-minute access credentials in memory, and saves the rotating refresh credential in the OS credential store. Kintsugi enforces the administrator's 15- or 30-day maximum connection age. You do not create or paste a token.
 
-   The native package lifecycle has been probed with Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2. These probes do not yet verify an authenticated MCP tool call against a live Kintsugi installation. Copilot packages can be generated, but setup stays disabled until a native version is tested. To use an AI chat without MCP tools, export a brief and paste it into the conversation; export is a copy and cannot be recalled after it leaves Kintsugi.
+4. Prompt your AI as usual. The plugin helps it retrieve task context, approved designs, standards, acceptance criteria, readiness, PR status and evidence through read-only MCP tools. Your AI uses its normal GitHub access to commit and create the PR; Kintsugi observes it through its separately configured provider connection.
+
+For direct CLI commands outside an AI client, start browser sign-in for the selected profile:
+
+~~~sh
+kintsugi auth login --url https://kintsugi.example.internal --project modernization --profile work
+kintsugi auth status --profile work
+kintsugi project list --profile work
+kintsugi project use modernization --profile work
+~~~
+
+The native package lifecycle has been probed with Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2. These probes do not yet verify an authenticated MCP tool call from either live AI client. Copilot packages can be generated for tests, but native setup is disabled until a native version is tested. To use an AI chat without local MCP support, export a brief and paste it into the conversation; the export is a copy and cannot be recalled after it leaves Kintsugi.
 
 ## Work on a task
 
@@ -64,7 +75,7 @@ You work in your chosen AI harness and keep using your existing model subscripti
 
 6. Complete provider-required human reviews and merge each required code and document deliverable. The unit's effective gate is recorded separately: an authorized human decision is published as a gate-record PR that must merge and validate against the exact delivered revisions. Kintsugi continues the workflow only after that evidence is effective.
 
-The CLI and API stream task events over authorized SSE and resume from the last delivered event ID. The server retains seven days of replay; an older or invalid cursor asks the AI to fetch current task status and start a new watch. The event stream is a view of workflow progress; it does not trigger provider reconciliation or continuation. Kintsugi observes provider pull requests through webhooks and polling, then continues only after the required evidence and human gate become effective.
+The CLI and API stream task events over authorized SSE and resume from the last delivered event ID. A first watch replays retained events for that task; the server retains seven days. An older or invalid cursor asks the AI to fetch current task status and start a new watch. The event stream is a view of workflow progress; it does not trigger provider reconciliation or continuation. Kintsugi observes provider pull requests through webhooks and polling, then continues only after the required evidence and human gate become effective.
 
 ~~~sh
 kintsugi task status billing/invoices/tax --profile work
@@ -72,3 +83,5 @@ kintsugi task watch billing/invoices/tax --profile work
 ~~~
 
 See the exact [commands and MCP tools](../reference/harness-integration.md), and the [client/provider compatibility evidence](../reference/coding-agent-workflow-compatibility.md).
+
+For future harness work, read the [contributor handoff](coding-agent-workflow-contributing.md) before extending native plugin generation or setup.

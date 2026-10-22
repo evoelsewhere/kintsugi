@@ -1,42 +1,20 @@
 # Work on a migration task as a member
 
-> **Planned behavior.** This applies once the Harness Hub is implemented (milestone M2).
+Use your own coding agent, such as Claude Code or Codex. Kintsugi gives that agent authorized task context and records pull request progress; it does not run the member's coding session. See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md) for the system boundary.
 
-You implement units in **your own AI harness** (Claude Code, GitHub Copilot or ChatGPT/Codex). Kintsugi gives you the context and reviews the result. Background: [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
+## Connect your coding agent once
 
-## One-time setup
+1. Make sure your Kintsugi administrator has granted you `member.read` and Project Access for the project. The project must have its document repository configured. Install Node.js 22.19 or newer and a supported AI client.
+2. Open the project's **Coding Agent Workflow** section in Kintsugi and copy the generated setup command. It includes the configured installation URL and project ID.
+3. Install the Kintsugi CLI if it is not already available, then run the setup command. It installs the project plugin and saves only a nonsecret local profile; it does not require a personal token.
+4. Start a new AI client session. The first time the agent requests Kintsugi context, the CLI opens a browser for Kintsugi sign-in and project consent. Kintsugi issues short-lived access and rotating refresh credentials. Access is limited by current permission, Project Access, and the administrator's 15- or 30-day connection policy.
 
-1. In the portal, create a **Personal Access Token** (Profile → Access tokens).
-2. Install the CLI and sign in:
-   ```bash
-   kintsugi login --url https://kintsugi.example.internal --token <PAT>
-   ```
-3. Install the project's plugins. They include the built-in `kintsugi` plugin (task workflow, Kintsugi MCP server, guardrail hooks) and the project's stack plugins.
-   ```bash
-   kintsugi plugins setup --harness <claude-code|copilot|codex|chatgpt>
-   ```
-   This adds the document repo as a plugin marketplace and installs from it with your harness's own commands. In Claude Code you can also run `/plugin marketplace add <document-repo-url>` and `/plugin install kintsugi@<project>`.
+For the unpublished local preview, build the CLI from the Kintsugi repository root and run `pnpm kintsugi plugins setup ...`; after publication, use the command copied from the portal.
 
-   When prompted, enter the Kintsugi URL and your PAT. The PAT is stored in the harness's secure storage. Harnesses without plugin support get an equivalent rendering of skills and MCP, without hooks.
+## Work through the task and pull request
 
-## For each unit
+Ask your agent to find your Kintsugi tasks or explain the design, standards, acceptance criteria, and evidence for a task. Its plugin tells it when to retrieve Kintsugi context through read-only MCP tools. The agent reads cited documents, then uses its normal coding tools in your code repository.
 
-1. **Start the task.**
-   ```bash
-   kintsugi task start <unit-id>
-   ```
-   This claims the unit for you, so the board shows you as assignee. It also creates a branch in the target repo and fetches the task pack (`tasks/<id>.md` in the document repo).
-2. **Work in your harness.** Point it at the task pack. Follow the standards it cites (conventions, mappings, review rules in `01-standards/`), use the suggested skills, and query the KB through MCP (`kb.search`, `kb.ask`). If a rule is missing or wrong, propose a PR to `01-standards/` in the document repo instead of deciding locally.
-   - **Design comes before code.** A unit has a design for each design set its kind needs (`01-standards/templates/`, [design templates](../reference/design-templates.md)). If one is missing, it is generated from the portal's Design page (the runtime writes it from the template and the unit's understanding, and a person reviews the pull request); correct what a review finds in that pull request, and `python3 scripts/check_design.py <app> <module/unit>` lists what is left (the portal's Design view shows the same). Then build the unit with `/kintsugi:modernize-implement <app> <module/unit>`; if the code has to differ from the detail design, correct the design in the same pull request.
-3. **Commit.**
-   - Put code in the target repo. Source (legacy) repos are read-only.
-   - Put deliverables (the unit's design documents under `design/<set>/`, test report…) in the document repo, at the paths listed in the task pack.
-   - Add `Assisted-by: <harness>` to AI-assisted commits.
-4. **Open PRs.** Reference the unit id and fill in the AI-usage section of the PR template.
-5. **Register deliverables.**
-   ```bash
-   kintsugi artifact register <path> --type <type>
-   ```
-6. **Review.** `gate-reviewer` comments on your PR. Address the findings; a human reviewer approves and merges.
+Commit and open the pull request with your usual GitHub account and client. Kintsugi's separate GitHub provider connection observes the PR and reviews. The agent can retrieve current findings and task status from Kintsugi, and Kintsugi can continue the workflow when its configured gates become effective. Human approvals remain in Kintsugi. The MCP connection cannot edit tasks, documents, repositories, approve gates, or merge pull requests.
 
-Exact tool and command lists: [harness integration reference](../reference/harness-integration.md).
+Direct CLI commands are available for task/context retrieval, review findings, and task-event watch. They use the same project authorization. Run `kintsugi --help` or read the [Coding Agent Workflow CLI reference](../reference/coding-agent-cli.md) for commands. GitLab, Bitbucket, AWS-hosted repositories, Copilot CLI, and hosted AI chats remain separate compatibility or provider milestones.
