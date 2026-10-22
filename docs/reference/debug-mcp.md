@@ -1,6 +1,6 @@
 # Debug MCP server
 
-A development installation can serve a read-only MCP server that lets an agent follow a run from the portal's status to the line of a log and the file in the job's sandbox that caused it ([ADR-0056](../decisions/0056-debug-mcp-for-development-installations.md)). **It is off unless the installation says it is a development one**: set `KINTSUGI_DEBUG_MCP=1` in the environment of `kintsugi-app` **and** `kintsugi-worker`. Without it the route answers 404, nothing is captured, and the deploy package does not set it. Never set it on a production installation: the tools read the legacy code in the workspaces, the logs and the database.
+A development installation can serve a read-only MCP server that lets an agent follow a run from the portal's status to the line of a log and the file in the job's sandbox that caused it ([ADR-0056](../decisions/0056-debug-mcp-for-development-installations.md)). **It is off unless the installation says it is a development one**: set `KINTSUGI_DEBUG_MCP=1` in the environment of `kintsugi-app` **and** `kintsugi-worker`. Without it the route answers 404, nothing is captured, and the Compose starter does not set it (the repository's deploy workflow sets it for the development server it deploys to). Never set it on a production installation: the tools read the legacy code in the workspaces, the logs and the database.
 
 ## Connecting
 
