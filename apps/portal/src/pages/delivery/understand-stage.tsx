@@ -50,6 +50,7 @@ const UNDERSTAND_RUNS: ScopedRunsLabels = {
   emptyTitle: "No understand run yet",
   emptyDescription: "Select items on the Catalog tab and run understand on them.",
   noun: "item",
+  stage: "understand",
 };
 
 const agentEstimate = (items: number): number => (items === 0 ? 0 : items * 4 + 10);
@@ -63,6 +64,8 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
   });
   const understandRuns = runs.data === undefined ? undefined : runsOfStage(runs.data, "understand");
   const rebuilds = runs.data === undefined ? [] : runsOfStage(runs.data, "rebuild");
+  // The Runs tab lists every job of this page: planning and rebuild runs are jobs with logs like any other.
+  const pageRuns = runs.data === undefined ? undefined : runs.data.filter((run) => run.kind === "stage" && (run.name === "understand" || run.name === "plan-understand" || run.name === "rebuild"));
   const version = (understandRuns ?? []).map((run) => `${run.id}:${run.status}:${run.documentWrite?.status ?? ""}:${run.abandonedAt ?? ""}`).join(",");
   const catalog = useLoader(`catalog/${project.id}/${application.id}/${version}`, () =>
     catalogApi.get(project.id, application.id).catch((error: unknown) => {
@@ -135,7 +138,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
         onChange={(next) => setParam({ tab: next })}
         tabs={[
           { id: "catalog", label: "Catalog", ...(total === 0 ? {} : { count: total }) },
-          { id: "runs", label: "Runs", ...(understandRuns === undefined ? {} : { count: understandRuns.length }) },
+          { id: "runs", label: "Runs", ...(pageRuns === undefined ? {} : { count: pageRuns.length }) },
           { id: "results", label: "Overview" },
         ]}
       />
@@ -156,7 +159,6 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
                 planRuns={runs.data === undefined ? [] : runsOfStage(runs.data, "plan-understand")}
                 canRun={can("jobs.run")}
                 blocked={blocked}
-                onRunsChanged={runs.reload}
                 disabledReason={runDisabled}
                 onStarted={async (run) => {
                   setParam({ tab: "runs", run: run.id });
@@ -172,7 +174,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
       {tab === "runs" ? (
         <ScopedRunsPanel
           project={project}
-          runs={understandRuns}
+          runs={pageRuns}
           loader={runs}
           canRun={can("jobs.run")}
           initialRun={params.get("run") ?? undefined}
@@ -205,13 +207,12 @@ interface CatalogTabProps {
   planRuns: JobRunView[];
   canRun: boolean;
   blocked: string | undefined;
-  onRunsChanged(): Promise<void>;
   disabledReason: string | undefined;
   onStarted(run: JobRunView): Promise<void>;
   onChanged(): Promise<void>;
 }
 
-function CatalogTab({ project, application, view, runs, planRuns, canRun, blocked, onRunsChanged, disabledReason, onStarted, onChanged }: CatalogTabProps): React.JSX.Element {
+function CatalogTab({ project, application, view, runs, planRuns, canRun, blocked, disabledReason, onStarted, onChanged }: CatalogTabProps): React.JSX.Element {
   const toast = useToast();
   const { can } = useAuth();
   const [search, setSearch] = useState("");
@@ -312,7 +313,7 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
           setSelected(new Set(ids));
           setConflicts([]);
         }}
-        onRunsChanged={onRunsChanged}
+        onOpenRun={onStarted}
       />
       <CatalogResults view={filtered} selection={selection}>
         <div className="mb-3 flex flex-wrap items-center gap-2">
