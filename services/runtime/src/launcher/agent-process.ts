@@ -43,7 +43,8 @@ export interface ChildAgentRuntimeOptions {
    * Seconds without any line from the child (events, or its liveness lines while the model thinks
    * or streams tool-call arguments) before the job counts as
    * stalled and its process tree is killed: a provider that drops a streaming response leaves the
-   * child waiting with no connection. Defaults to 300; 0 turns the watchdog off.
+   * child waiting with no connection. Defaults to 300; 0 turns the watchdog off. A job's own
+   * `limits.idleTimeoutSec` takes precedence.
    */
   idleTimeoutSec?: number;
   /** Disables Node's permission model for the child (diagnostics only). */
@@ -229,7 +230,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
               ...[...(await childCodeRoots()), entry, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
               ...[spec.workspace.outDir, tmp].map((path) => `--allow-fs-write=${path}`),
             ];
-      const job = new ChildAgentJob(randomUUID(), idleTimeoutSec);
+      const job = new ChildAgentJob(randomUUID(), spec.limits.idleTimeoutSec ?? idleTimeoutSec);
       const timeoutSec = spec.limits.timeoutSec;
       void runProcess({
         command: options.node ?? process.execPath,

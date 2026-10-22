@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSourceSpec, sourceFolder, sourcePath, sourceSpec, splitSourcePath } from "../src/source.js";
+import { SOURCE_ZONES, legacySources, parseSourceSpec, sourceFolder, sourcePath, sourceRole, sourceSpec, splitSourcePath, targetSources } from "../src/source.js";
 
 const A = "a".repeat(40);
 const B = "b".repeat(40);
@@ -7,13 +7,13 @@ const B = "b".repeat(40);
 describe("source repositories of a run (ADR-0052)", () => {
   it("writes and reads a spec, in order", () => {
     const spec = sourceSpec([
-      { repositoryId: "falo-skeleton", commit: A },
-      { repositoryId: "falo-unities", commit: B },
+      { repositoryId: "falo-skeleton", commit: A, role: "legacy" },
+      { repositoryId: "falo-unities", commit: B, role: "legacy" },
     ]);
     expect(spec).toBe(`falo-skeleton@${A},falo-unities@${B}`);
     expect(parseSourceSpec(spec)).toEqual([
-      { repositoryId: "falo-skeleton", commit: A },
-      { repositoryId: "falo-unities", commit: B },
+      { repositoryId: "falo-skeleton", commit: A, role: "legacy" },
+      { repositoryId: "falo-unities", commit: B, role: "legacy" },
     ]);
   });
 
@@ -33,5 +33,13 @@ describe("source repositories of a run (ADR-0052)", () => {
     expect(splitSourcePath("db/schema/a.sql", sources)).toEqual({ repositoryId: "db", path: "schema/a.sql" });
     expect(splitSourcePath("other/a.sql", sources)).toBeUndefined();
     expect(splitSourcePath("a.sql", sources)).toBeUndefined();
+  });
+
+  it("tells the as-is from the to-be by role, and reads a source without a role as legacy", () => {
+    const sources = [{ repositoryId: "old" }, { repositoryId: "new-api", role: "target" as const }, { repositoryId: "old-2", role: "legacy" as const }];
+    expect(sources.map(sourceRole)).toEqual(["legacy", "target", "legacy"]);
+    expect(legacySources(sources).map((source) => source.repositoryId)).toEqual(["old", "old-2"]);
+    expect(targetSources(sources).map((source) => source.repositoryId)).toEqual(["new-api"]);
+    expect(SOURCE_ZONES).toEqual({ legacy: "as-is", target: "to-be" });
   });
 });

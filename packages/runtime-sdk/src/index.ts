@@ -36,6 +36,11 @@ export interface AgentDefinition {
 
 export interface JobLimits {
   timeoutSec: number;
+  /**
+   * Seconds without a sign of life from the model before the job counts as stalled and is stopped; 0 turns the
+   * watchdog off. Absent: the launcher's own default.
+   */
+  idleTimeoutSec?: number;
   /** Maximum assistant turns (one LLM response plus its tool calls). */
   maxTurns?: number;
   maxCostUsd?: number;
@@ -65,7 +70,12 @@ export interface JobSpec {
   /** provider refers to an LlmProviderConfig id; thinking overrides the agent's default. */
   model: { provider: string; id: string; thinking?: ThinkingLevel };
   workspace: {
-    /** Directories the agent may read; the first one is its working directory. */
+    /** The job workspace (ADR-0055): the agent's working directory, so a relative path is read against it. */
+    root: string;
+    /**
+     * Directories and files the agent may read, in the order the kernel offers them: the first directory is
+     * where a search without a path looks (the as-is code). Paths are absolute; the agent sees them relative to `root`.
+     */
     readOnly: string[];
     /** The only directory the agent may write to. */
     outDir: string;

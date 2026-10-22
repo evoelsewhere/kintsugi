@@ -25,27 +25,32 @@ describe("composeSystemPrompt", () => {
       ].join("\n\n"),
     );
     // Two jobs of one agent differ only after the shared part (the paths of their workspaces).
-    const first = composeSystemPrompt(agent, { readOnly: ["/job-1/src"], outDir: "/job-1/out" });
-    const second = composeSystemPrompt(agent, { readOnly: ["/job-2/src"], outDir: "/job-2/out" });
+    const first = composeSystemPrompt(agent, { root: "/job-1", readOnly: ["/job-1/as-is"], outDir: "/job-1/out" });
+    const second = composeSystemPrompt(agent, { root: "/job-2", readOnly: ["/job-2/as-is"], outDir: "/job-2/out" });
     const shared = [agent.instructions, '<skill name="diagrams">', "Draw Mermaid.", '<skill name="plain">'];
     for (const text of shared) expect(first.indexOf(text)).toBeLessThan(first.indexOf("<workspace>"));
     expect(first.slice(0, first.indexOf("<workspace>"))).toBe(second.slice(0, second.indexOf("<workspace>")));
     expect(first.indexOf("<workspace>")).toBeLessThan(first.indexOf("<skill-files>"));
+    // The workspaces are told apart by their paths relative to the root, so the same layout gives the same text.
+    expect(first).toBe(second);
   });
 
-  it("tells the agent where reads resolve and where writes land", () => {
-    const workspace = { readOnly: ["/job/src", "/job/in"], outDir: "/job/out" };
+  it("tells the agent where reads resolve, what to read first and where writes land", () => {
+    const workspace = { root: "/job", readOnly: ["/job/as-is", "/job/to-be", "/job/steps/design/in", "/job/WORKSPACE.md"], outDir: "/job/steps/design/out" };
     const prompt = composeSystemPrompt({ id: "a", version: "1", instructions: "Be brief.", tools: ["read", "write"] }, workspace);
     expect(prompt.startsWith("Be brief.\n\n<workspace>\n")).toBe(true);
-    expect(prompt).toContain("resolve a relative path against the source checkout (/job/src)");
-    expect(prompt).toContain("Other readable locations, by absolute path: /job/in.");
-    expect(prompt).toContain("never prefixed with the checkout's name or `src/`");
-    expect(prompt).not.toContain("/job/out");
+    expect(prompt).toContain("resolve a relative path against it; a call without a path looks in as-is.");
+    expect(prompt).toContain("Readable locations (relative to the working directory): as-is, to-be, steps/design/in, WORKSPACE.md.");
+    expect(prompt).toContain("Read WORKSPACE.md first");
+    expect(prompt).toContain("never prefixed with the name of a repository or a workspace folder");
+    expect(prompt).not.toContain("/job/");
+    expect(prompt).not.toContain("steps/design/out");
   });
 
   it("leaves out the write rules for an agent that cannot write", () => {
-    const note = describeWorkspace({ readOnly: ["/job/src"], outDir: "/job/out" }, ["read", "grep"]);
-    expect(note).toContain("/job/src");
+    const note = describeWorkspace({ root: "/job", readOnly: ["/job/as-is"], outDir: "/job/out" }, ["read", "grep"]);
+    expect(note).toContain("looks in as-is");
+    expect(note).not.toContain("Read WORKSPACE.md");
     expect(note).not.toContain("write and edit");
   });
 });

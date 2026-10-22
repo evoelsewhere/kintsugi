@@ -41,15 +41,18 @@ export function formatBytes(bytes: number | undefined): string {
 }
 
 /** The first 12 characters of a commit id. */
-/** One legacy repository a run read, at a commit (ADR-0052). */
+/** One repository a run read, at a commit: the legacy code, or the target code beside it (ADR-0052, ADR-0055). */
 export interface SourceRepo {
   repositoryId: string;
   commit?: string;
+  role?: "legacy" | "target";
 }
 
-/** `repo@abc1234` of each source, comma separated; a source whose commit is not known yet shows its id alone. */
+/** `repo@abc1234` of each source, comma separated; a source whose commit is not known yet shows its id alone, and a target repository (the to-be) says so. */
 export function sourcesLabel(sources: readonly SourceRepo[] | undefined): string {
-  return (sources ?? []).map((source) => (source.commit === undefined ? source.repositoryId : `${source.repositoryId}@${source.commit.slice(0, 12)}`)).join(", ");
+  return (sources ?? [])
+    .map((source) => `${source.commit === undefined ? source.repositoryId : `${source.repositoryId}@${source.commit.slice(0, 12)}`}${source.role === "target" ? " (to-be)" : ""}`)
+    .join(", ");
 }
 
 /** The `<repository id>@<commit>` entries of an inventory or catalog, shortened the same way. */

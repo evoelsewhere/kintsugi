@@ -1,13 +1,32 @@
-// The legacy repositories a run reads (ADR-0052). An application may link several `legacy`
-// repositories; a run mounts each one read-only in its own folder under `src/`, named by the
-// repository's id, so a file is cited as `<repository id>/<path in the repository>` and the folder
-// of one repository never hides a file of another. A run pins the commit of every repository.
+// The repositories a run reads (ADR-0052, ADR-0055). An application may link several `legacy`
+// repositories (the as-is) and several `target` ones (the to-be); a run mounts each one read-only
+// in its own folder, `as-is/<repository id>/` or `to-be/<repository id>/`, so a file is cited as
+// `<repository id>/<path in the repository>` and the folder of one repository never hides a file of
+// another. A run pins the commit of every repository.
 
-/** One legacy repository of a run; `commit` is known once the run has resolved it. */
+/** What a repository of a run is: the code being replaced, or the code that replaces it. */
+export type SourceRole = "legacy" | "target";
+
+/** One repository of a run; `commit` is known once the run has resolved it. A source recorded without a role is `legacy`. */
 export interface SourceRepo {
   repositoryId: string;
   commit?: string;
+  role?: SourceRole;
 }
+
+/** The zone folder of a workspace a role is mounted under. */
+export const SOURCE_ZONES = { legacy: "as-is", target: "to-be" } as const satisfies Record<SourceRole, string>;
+
+/** A source whose commit is resolved and whose role is explicit. */
+export type PinnedSource = Required<SourceRepo>;
+
+export const sourceRole = (source: SourceRepo): SourceRole => source.role ?? "legacy";
+
+/** The legacy repositories of a run, in mount order. */
+export const legacySources = <T extends SourceRepo>(sources: readonly T[]): T[] => sources.filter((source) => sourceRole(source) === "legacy");
+
+/** The target repositories of a run, in mount order. */
+export const targetSources = <T extends SourceRepo>(sources: readonly T[]): T[] => sources.filter((source) => sourceRole(source) === "target");
 
 /** A repository id is also the folder it is mounted in: one safe path segment. */
 export const SOURCE_FOLDER_PATTERN = /^[a-z0-9][a-z0-9._-]{0,127}$/i;
@@ -34,13 +53,13 @@ export function sourceSpec(sources: readonly SourceRepo[]): string {
 }
 
 /** The sources of a spec; undefined when the text is not a well-formed spec. */
-export function parseSourceSpec(text: string): Array<Required<SourceRepo>> | undefined {
-  const sources: Array<Required<SourceRepo>> = [];
+export function parseSourceSpec(text: string): PinnedSource[] | undefined {
+  const sources: PinnedSource[] = [];
   for (const part of text.split(",")) {
     const [repositoryId, commit, ...rest] = part.trim().split("@");
     if (rest.length > 0 || repositoryId === undefined || commit === undefined || !SOURCE_FOLDER_PATTERN.test(repositoryId) || !COMMIT.test(commit)) return undefined;
     if (sources.some((source) => source.repositoryId === repositoryId)) return undefined;
-    sources.push({ repositoryId, commit });
+    sources.push({ repositoryId, commit, role: "legacy" });
   }
   return sources.length === 0 ? undefined : sources;
 }

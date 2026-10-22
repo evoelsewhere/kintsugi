@@ -1,19 +1,26 @@
-// Job workspace cleanup (ADR-0029). A top-level run leaves only <data>/jobs/<id>/out behind,
-// for the document repo writer (a failed stage also its work/, so it can be resumed, ADR-0033). It is deleted as soon as the write of that output reaches a
-// final state (committed, pr-opened, merged, closed, unchanged). Outputs of failed or cancelled runs and of
-// failed writes stay for a retention period (KINTSUGI_JOB_RETENTION_DAYS, default 7) so they can
-// be inspected or the write retried; a periodic sweep of the worker removes them afterwards,
-// along with workspaces no run refers to any more.
+// Job workspace cleanup (ADR-0029, ADR-0055). A job workspace outlives its attempts. What can be made again from
+// the pins in its manifest (the checkouts of the repositories, the documents) goes first: when an attempt ends well
+// or is cancelled at once, and for a job that failed after `KINTSUGI_JOB_CHECKOUT_HOURS` (dropExpiredCheckouts). What
+// cannot (out/, work/, .state/) stays for the retries of a failed job and for the document repo writer: out/ is
+// deleted as soon as the write of that output reaches a final state (committed, pr-opened, merged, closed,
+// unchanged). Outputs of failed or cancelled runs and of failed writes stay for a retention period
+// (KINTSUGI_JOB_RETENTION_DAYS, default 7) so they can be inspected, the job retried or the write retried; a
+// periodic sweep of the worker removes them afterwards, along with workspaces no run refers to.
 
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { CheckoutStorage } from "@kintsugi/git";
 import { removeTree } from "@kintsugi/runtime/launcher";
+import { readManifest } from "../workspace/manifest.js";
+import { dropCheckouts } from "../workspace/provision.js";
+import type { SourceCheckouts } from "./model.js";
 
 /** Document write statuses after which a job's output is no longer needed. */
 export const FINAL_WRITE_STATUSES: readonly string[] = ["committed", "pr-opened", "merged", "closed", "unchanged"];
 
 export const DEFAULT_JOB_RETENTION_DAYS = 7;
+/** Hours the checkouts of a failed job are kept for a retry before the sweep drops them. */
+export const DEFAULT_JOB_CHECKOUT_HOURS = 24;
 
 /** What the sweep needs to know about the run behind a workspace. */
 export interface WorkspaceState {
@@ -79,4 +86,42 @@ export async function pruneJobWorkspaces(options: PruneOptions): Promise<string[
     }
   }
   return removed;
+}
+
+export interface DropCheckoutsOptions {
+  storage: CheckoutStorage;
+  store: WorkspaceStates;
+  checkouts: SourceCheckouts;
+  checkoutMs: number;
+  now?: Date;
+}
+
+/**
+ * Drops the checkouts of the jobs that failed (or were cancelled) more than `checkoutMs` ago: the next attempt of a
+ * job makes them again from the pins in its manifest. Returns the ids dropped; a job already dropped is skipped.
+ */
+export async function dropExpiredCheckouts(options: DropCheckoutsOptions): Promise<string[]> {
+  const jobsDir = join(options.storage.root, "jobs");
+  const ids = await readdir(jobsDir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return [] as string[];
+    throw error;
+  });
+  if (ids.length === 0) return [];
+  const states = await options.store.workspaceStates(ids);
+  const cutoff = (options.now ?? new Date()).getTime() - options.checkoutMs;
+  const dropped: string[] = [];
+  for (const id of ids) {
+    const state = states.get(id);
+    if (state === undefined || ACTIVE.has(state.status) || state.finishedAt === undefined || state.finishedAt.getTime() >= cutoff) continue;
+    const paths = options.storage.job(id);
+    const manifest = await readManifest(paths.manifest);
+    if (manifest === undefined || manifest.checkoutsDroppedAt !== undefined) continue;
+    try {
+      await dropCheckouts(options.checkouts, paths, manifest);
+      dropped.push(id);
+    } catch {
+      // Next sweep.
+    }
+  }
+  return dropped;
 }

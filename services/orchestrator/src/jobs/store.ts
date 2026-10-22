@@ -17,6 +17,7 @@ interface RunRow {
   kind: JobKind;
   name: string;
   status: JobStatus;
+  attempt: number;
   failure_reason: string | null;
   source_repository_id: string | null;
   source_commit: string | null;
@@ -36,13 +37,20 @@ const MAX_REASON = 2000;
 function sourcesOf(row: RunRow): SourceRepo[] | undefined {
   if (Array.isArray(row.sources)) {
     const list = row.sources.flatMap((entry: unknown): SourceRepo[] => {
-      const { repositoryId, commit } = (entry ?? {}) as { repositoryId?: unknown; commit?: unknown };
-      return typeof repositoryId === "string" ? [{ repositoryId, ...(typeof commit === "string" ? { commit } : {}) }] : [];
+      const { repositoryId, commit, role } = (entry ?? {}) as { repositoryId?: unknown; commit?: unknown; role?: unknown };
+      return typeof repositoryId === "string" ? [{ repositoryId, ...(typeof commit === "string" ? { commit } : {}), ...(role === "legacy" || role === "target" ? { role } : {}) }] : [];
     });
     if (list.length > 0) return list;
   }
   return row.source_repository_id === null ? undefined : [{ repositoryId: row.source_repository_id, ...(row.source_commit === null ? {} : { commit: row.source_commit }) }];
 }
+
+/**
+ * The run's history with the attempt that just ended added (top-level runs only): its number, when it started and
+ * ended, how, and, for a failure, why (the statement's second parameter).
+ */
+const attemptsWith = (status: string, withReason: boolean): string =>
+  `case when parent_id is null then attempts || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('n', attempt, 'startedAt', started_at, 'finishedAt', now(), 'status', '${status}', 'reason', ${withReason ? "left($2, 500)" : "null"}))) else attempts end`;
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
@@ -55,6 +63,7 @@ function toRun(row: RunRow): JobRun {
     kind: row.kind,
     name: row.name,
     status: row.status,
+    attempt: row.attempt,
     ...optional("failureReason", row.failure_reason),
     ...optional("sourceRepositoryId", row.source_repository_id),
     ...optional("sourceCommit", row.source_commit),
@@ -117,20 +126,23 @@ export class PgJobStore implements JobStore, WorkspaceStates {
 
   async succeed(id: string, summary: Record<string, unknown>): Promise<void> {
     await this.pool.query(
-      "update workflow.job_run set status = 'succeeded', failure_reason = null, output_summary = $2, finished_at = now() where id = $1",
+      `update workflow.job_run set status = 'succeeded', failure_reason = null, output_summary = $2, finished_at = now(), attempts = ${attemptsWith("succeeded", false)} where id = $1`,
       [id, JSON.stringify(summary)],
     );
   }
 
   async fail(id: string, reason: string, summary?: Record<string, unknown>): Promise<void> {
     await this.pool.query(
-      "update workflow.job_run set status = 'failed', failure_reason = $2, output_summary = coalesce($3, output_summary), finished_at = now() where id = $1",
+      `update workflow.job_run set status = 'failed', failure_reason = $2, output_summary = coalesce($3, output_summary), finished_at = now(), attempts = ${attemptsWith("failed", true)} where id = $1`,
       [id, reason.slice(0, MAX_REASON), summary === undefined ? null : JSON.stringify(summary)],
     );
   }
 
   async cancel(id: string): Promise<void> {
-    await this.pool.query("update workflow.job_run set status = 'cancelled', finished_at = now() where id = $1 and status in ('queued', 'running')", [id]);
+    await this.pool.query(
+      `update workflow.job_run set status = 'cancelled', finished_at = now(), attempts = ${attemptsWith("cancelled", false)} where id = $1 and status in ('queued', 'running')`,
+      [id],
+    );
   }
 
   async cancelRequested(ids: readonly string[]): Promise<string[]> {
@@ -141,12 +153,13 @@ export class PgJobStore implements JobStore, WorkspaceStates {
 
   async addEvent(event: JobEventRecord): Promise<void> {
     await this.pool
-      .query("insert into workflow.job_event (job_run_id, step_run_id, kind, message, data) values ($1, $2, $3, $4, $5)", [
+      .query("insert into workflow.job_event (job_run_id, step_run_id, kind, message, data, attempt) values ($1, $2, $3, $4, $5, $6)", [
         event.runId,
         event.stepId ?? null,
         event.kind,
         event.message.slice(0, MAX_REASON),
         JSON.stringify(event.data ?? {}),
+        event.attempt ?? 1,
       ])
       .catch(() => undefined);
   }
@@ -163,8 +176,8 @@ export class PgJobStore implements JobStore, WorkspaceStates {
     await this.pool
       .query(
         `insert into monitoring.telemetry_span
-           (job_run_id, step_run_id, project_id, application_id, agent, provider, model, attempt, span_id, parent_span_id, name, started_at, duration_ms, status, error, attributes)
-         select * from unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::int[], $9::text[], $10::text[], $11::text[], $12::timestamptz[], $13::int[], $14::text[], $15::text[], $16::jsonb[])`,
+           (job_run_id, step_run_id, project_id, application_id, agent, provider, model, attempt, span_id, parent_span_id, name, started_at, duration_ms, status, error, attributes, run_attempt)
+         select * from unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::int[], $9::text[], $10::text[], $11::text[], $12::timestamptz[], $13::int[], $14::text[], $15::text[], $16::jsonb[], $17::int[])`,
         [
           spans.map((entry) => entry.runId),
           spans.map((entry) => entry.stepId ?? null),
@@ -182,6 +195,7 @@ export class PgJobStore implements JobStore, WorkspaceStates {
           spans.map((entry) => entry.span.status),
           spans.map((entry) => entry.span.error ?? null),
           spans.map((entry) => JSON.stringify(entry.span.attributes)),
+          spans.map((entry) => entry.runAttempt ?? 1),
         ],
       )
       .catch(() => undefined);

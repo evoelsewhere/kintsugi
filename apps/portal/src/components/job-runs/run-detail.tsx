@@ -425,6 +425,39 @@ function CopyPath({ path }: { path: string }): React.JSX.Element {
   );
 }
 
+/** The attempts of a job that was retried: how each ended and why (ADR-0055). */
+function RunAttempts({ run }: { run: JobRunDetail }): React.JSX.Element | null {
+  const now = useNow(false);
+  const attempts = run.attempts ?? [];
+  if (attempts.length === 0 && run.attempt <= 1) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">Attempts</h5>
+      <ul className="flex flex-col">
+        {attempts.map((attempt) => (
+          <li key={attempt.n} className="flex flex-wrap items-baseline gap-x-2 text-[11.5px]">
+            <span className="w-14 shrink-0 text-text">attempt {attempt.n}</span>
+            <RunStatusBadge status={attempt.status} />
+            {attempt.startedAt === undefined ? null : <span className="tabular-nums text-text-muted">{formatDuration(attempt.startedAt, attempt.finishedAt, now)}</span>}
+            {attempt.reason === undefined ? null : (
+              <span className="min-w-0 flex-1 truncate text-[var(--ds-status-red)]" title={attempt.reason}>
+                {attempt.reason}
+              </span>
+            )}
+          </li>
+        ))}
+        {isActiveStatus(run.status) ? (
+          <li className="flex items-baseline gap-x-2 text-[11.5px]">
+            <span className="w-14 shrink-0 text-text">attempt {run.attempt}</span>
+            <RunStatusBadge status={run.status} />
+            <span className="text-text-muted">in progress</span>
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
+}
+
 /** The artifacts, the document write that carries them, the source commit and the restricted records. */
 function RunOutput({ run }: { run: JobRunDetail }): React.JSX.Element {
   const { can } = useAuth();
@@ -523,6 +556,7 @@ function RunOutput({ run }: { run: JobRunDetail }): React.JSX.Element {
           (read-only)
         </p>
       )}
+      <RunAttempts run={run} />
       {restricted === 0 ? null : (
         <p className="flex flex-wrap items-center gap-1.5 text-text-muted">
           <ShieldAlert className="size-3.5" strokeWidth={1.75} />

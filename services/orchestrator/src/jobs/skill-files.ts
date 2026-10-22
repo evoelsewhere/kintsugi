@@ -11,7 +11,7 @@ import type { AgentDefinition } from "@kintsugi/runtime-sdk";
 /** Folder of the job inputs that holds the skills' files. */
 export const SKILLS_DIR = ".skills";
 
-export async function materializeSkillFiles(definition: AgentDefinition, inputsDir: string): Promise<AgentDefinition> {
+export async function materializeSkillFiles(definition: AgentDefinition, inputsDir: string, options: { readOnly?: boolean } = {}): Promise<AgentDefinition> {
   if (definition.skills === undefined || !definition.skills.some((skill) => skill.files !== undefined)) return definition;
   // Inputs are locked after they are populated. Skill files are worker-managed inputs too:
   // briefly unlock them for materialization, then restore the read-only boundary before an
@@ -38,6 +38,6 @@ export async function materializeSkillFiles(definition: AgentDefinition, inputsD
     }
     return { ...definition, skills };
   } finally {
-    await makeReadOnly(inputsDir);
+    if (options.readOnly !== false) await makeReadOnly(inputsDir);
   }
 }

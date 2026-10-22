@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { addWorktree, removeWorktree, resolveCommit, runGit } from "@kintsugi/git";
+import { addWorktree, removeWorktree, resolveCommit, runGit, worktreeIsAt } from "@kintsugi/git";
 import { createAgentRuntime } from "@kintsugi/runtime";
 import { makeReadOnly, makeWritable } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
@@ -28,7 +28,15 @@ export class MemoryJobStore implements JobStore {
     return run === undefined ? undefined : structuredClone(run);
   }
   async create(run: NewJobRun): Promise<void> {
-    this.runs.set(run.id, { ...run, status: "queued", inputs: run.inputs ?? {}, limits: run.limits ?? {} });
+    this.runs.set(run.id, { ...run, status: "queued", attempt: 1, inputs: run.inputs ?? {}, limits: run.limits ?? {} });
+  }
+  /** What the API does for a retry of a failed run: the same run goes back in the queue as the next attempt (ADR-0055). */
+  requeue(id: string, inputs?: Record<string, unknown>): void {
+    const run = this.runs.get(id)!;
+    run.status = "queued";
+    run.attempt += 1;
+    delete run.failureReason;
+    if (inputs !== undefined) run.inputs = { ...run.inputs, ...inputs };
   }
   readonly events: JobEventRecord[] = [];
   readonly cancelRequests = new Set<string>();
@@ -118,9 +126,15 @@ export class LocalCheckouts implements SourceCheckouts {
   async resolve(id: string): Promise<string> {
     return resolveCommit(this.#mirror(id), "refs/heads/main");
   }
-  async checkout(id: string, commit: string, dest: string): Promise<void> {
+  /** The checkouts made, for tests that look at how often a workspace mounts again. */
+  readonly checkouts: Array<{ id: string; commit: string; dest: string }> = [];
+  async checkout(id: string, commit: string, dest: string, options: { readOnly?: boolean } = {}): Promise<void> {
     await addWorktree(this.#mirror(id), dest, commit);
-    await makeReadOnly(dest);
+    if (options.readOnly !== false) await makeReadOnly(dest);
+    this.checkouts.push({ id, commit, dest });
+  }
+  async isCurrent(dest: string, commit: string): Promise<boolean> {
+    return worktreeIsAt(dest, commit);
   }
   async readDocument(id: string, commit: string, path: string): Promise<string | undefined> {
     return runGit(["--git-dir", this.#mirror(id), "show", `${commit}:${path}`]).then(

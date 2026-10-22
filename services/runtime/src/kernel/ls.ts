@@ -26,7 +26,8 @@ function clampDepth(depth: number | undefined): number {
   return Math.min(Math.max(Math.round(depth), 1), MAX_TREE_DEPTH);
 }
 
-export function createKernelLsTool(cwd: string, guard: PathGuard): ToolDefinition {
+/** `defaultDir`: where a call without a path lists (the workspace root cannot be read as a whole). */
+export function createKernelLsTool(cwd: string, guard: PathGuard, defaultDir: string = cwd): ToolDefinition {
   const flat = createLsToolDefinition(cwd, {
     operations: {
       exists: async (path) => {
@@ -53,9 +54,9 @@ export function createKernelLsTool(cwd: string, guard: PathGuard): ToolDefinitio
     ): Promise<unknown> => {
       const tree = params.tree === true || params.depth !== undefined;
       if (!tree) {
-        return flat.execute(toolCallId, params as never, signal, onUpdate as never, ctx as never);
+        return flat.execute(toolCallId, { ...params, path: params.path ?? defaultDir } as never, signal, onUpdate as never, ctx as never);
       }
-      const root = params.path ?? cwd;
+      const root = params.path ?? defaultDir;
       guard.check(root);
       const depth = clampDepth(params.depth);
       const lines: string[] = [`${root.replace(/[\\/]+$/, "")}/`];

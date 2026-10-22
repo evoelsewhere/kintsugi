@@ -15,7 +15,8 @@ import { watchPullRequests } from "./document-write/watch.js";
 import { writeDocument } from "./document-write/writer.js";
 import { RepositoryStore } from "./git-sync/repositories.js";
 import { installedAgents } from "./jobs/agents.js";
-import { DEFAULT_JOB_RETENTION_DAYS, pruneJobWorkspaces, removeJobWorkspace } from "./jobs/cleanup.js";
+import { dropExpiredCheckouts, pruneJobWorkspaces, removeJobWorkspace } from "./jobs/cleanup.js";
+import { type SandboxProvider, pgSandbox } from "./sandbox.js";
 import { MirrorCheckouts } from "./jobs/checkouts.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
 import { JobCancelled } from "./jobs/model.js";
@@ -50,8 +51,8 @@ export interface WorkerOptions {
   /** For tests: the HTTP client of the pull-request adapters. */
   fetch?: typeof fetch;
   log?: (message: string) => void;
-  /** Days the output of a failed run or write is kept (KINTSUGI_JOB_RETENTION_DAYS, default 7). */
-  jobRetentionDays?: number;
+  /** The sandbox settings (Settings → Sandbox, ADR-0055); default: read from the database. */
+  sandbox?: SandboxProvider;
   /** Days the spans of agent jobs are kept (KINTSUGI_TELEMETRY_RETENTION_DAYS, default 30). */
   telemetryRetentionDays?: number;
   /** Seconds between looks at pull requests awaiting review, to record a merge or a close (default 60). */
@@ -89,6 +90,8 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const log = options.log ?? ((message: string) => console.log(`[worker] ${message}`));
   const store = new RepositoryStore(options.pool);
   const jobStore = new PgJobStore(options.pool);
+  const checkouts = new MirrorCheckouts({ repositories: store, storage: options.storage });
+  const sandbox = options.sandbox ?? pgSandbox(options.pool);
   const deps = { store, storage: options.storage };
   const writerDeps = {
     writes: new DocumentWriteStore(options.pool, store),
@@ -159,12 +162,13 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     const runner = new JobRunner({
       store: jobStore,
       storage: options.storage,
-      checkouts: new MirrorCheckouts({ repositories: store, storage: options.storage }),
+      checkouts,
       agents: options.jobs.agents,
       agentDefinitions: installedAgents({ pool: options.pool }),
       mcpServers: (ids) => loadMcpServers(ids, options.databaseUrl),
       interpreters: options.jobs.interpreters ?? interpretersFromEnv(),
       ...(options.jobs.defaults === undefined ? {} : { defaults: options.jobs.defaults }),
+      sandbox,
       requestWrite,
       log,
     });
@@ -219,11 +223,16 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     const outcome = await watchPullRequests({ ...writerDeps, log });
     if (outcome.merged.length + outcome.closed.length > 0) log(`review watch: ${outcome.merged.length} merged, ${outcome.closed.length} closed`);
   });
-  const retentionMs = (options.jobRetentionDays ?? DEFAULT_JOB_RETENTION_DAYS) * 24 * 60 * 60 * 1000;
   const checkCancels = tick("cancel check", watchCancels);
   const pruneJobs = tick("job workspace cleanup", async () => {
+    const settings = await sandbox();
+    const retentionMs = settings.retentionDays * 24 * 60 * 60 * 1000;
+    const checkoutMs = settings.checkoutHours * 60 * 60 * 1000;
+    const dropped = await dropExpiredCheckouts({ storage: options.storage, store: jobStore, checkouts, checkoutMs });
+    if (dropped.length > 0) log(`dropped the checkouts of ${dropped.length} failed job(s) (they are made again by a retry)`);
     const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
     if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
+    await checkouts.pruneWorktrees();
     const spans = await jobStore.pruneTelemetry(options.telemetryRetentionDays ?? 30);
     if (spans > 0) log(`removed ${spans} expired telemetry span(s)`);
   });

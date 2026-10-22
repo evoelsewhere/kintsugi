@@ -1,9 +1,10 @@
-// Read-only source checkouts for job runs (ADR-0025, ADR-0029): the registered repository's
+// Read-only source checkouts for job runs (ADR-0025, ADR-0029, ADR-0055): the registered repository's
 // mirror is brought up to date, the job's commit is checked out as a detached worktree and
-// every file is marked read-only. The worktree is removed when the run ends.
+// every file is marked read-only. A job workspace keeps its worktrees across attempts and
+// drops them (release) when the job ends or its checkouts expire.
 
 import { rm } from "node:fs/promises";
-import { CheckoutStorage, addWorktree, assertSafeRepoPath, removeWorktree, runGit } from "@kintsugi/git";
+import { CheckoutStorage, addWorktree, assertSafeRepoPath, pruneWorktrees, removeWorktree, runGit, worktreeIsAt } from "@kintsugi/git";
 import { makeReadOnly, makeWritable } from "@kintsugi/runtime/launcher";
 import type { RepositoryStore } from "../git-sync/repositories.js";
 import { remoteOptions, syncRepository } from "../git-sync/sync.js";
@@ -18,11 +19,29 @@ export class MirrorCheckouts implements SourceCheckouts {
     return result.commit;
   }
 
-  async checkout(repositoryId: string, commit: string, dest: string): Promise<void> {
+  async checkout(repositoryId: string, commit: string, dest: string, options: { readOnly?: boolean } = {}): Promise<void> {
     const target = await this.deps.repositories.target(repositoryId);
     if (target === undefined) throw new JobFailure(`Repository ${repositoryId} is no longer registered`);
     await addWorktree(this.deps.storage.mirror(target.serverId, target.id), dest, commit, remoteOptions(target));
-    await makeReadOnly(dest);
+    if (options.readOnly !== false) await makeReadOnly(dest);
+  }
+
+  /** Forgets the worktrees whose folder is gone (a removed workspace) in every mirror; returns how many mirrors were visited. */
+  async pruneWorktrees(): Promise<number> {
+    let visited = 0;
+    for (const repositoryId of await this.deps.repositories.ids()) {
+      const target = await this.deps.repositories.target(repositoryId);
+      if (target === undefined) continue;
+      await pruneWorktrees(this.deps.storage.mirror(target.serverId, target.id)).then(
+        () => (visited += 1),
+        () => undefined,
+      );
+    }
+    return visited;
+  }
+
+  isCurrent(dest: string, commit: string): Promise<boolean> {
+    return worktreeIsAt(dest, commit);
   }
 
   async readDocument(repositoryId: string, commit: string, path: string): Promise<string | undefined> {

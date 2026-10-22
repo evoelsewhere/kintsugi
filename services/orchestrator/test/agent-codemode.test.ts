@@ -66,7 +66,7 @@ describe("a codemode job in a child process", () => {
       agent,
       task: "Summarise the notes.",
       model: { provider: "local", id: "m" },
-      workspace: { readOnly: [join(job, "src")], outDir: join(job, "out") },
+      workspace: { root: join(job, "src"), readOnly: [join(job, "src")], outDir: join(job, "out") },
       limits: { timeoutSec: 90 },
     };
     const runtime = createChildAgentRuntime({
