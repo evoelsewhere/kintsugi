@@ -70,7 +70,9 @@ describe("access plugin handoff guidance", () => {
     expect(skill).toMatch(/keep nullable values and missing fields as such[\s\S]*do not invent provenance/i);
     expect(skill).toMatch(/the four event `status` values are guidance only/i);
     expect(skill).toMatch(/not as a live update delivered to this plugin or a command to begin work/i);
-    expect(skill).toMatch(/top-level `status` and `nextAction` are current[\s\S]*embedded continuation event is historical/i);
+    expect(skill).toContain("latestContinuation");
+    expect(skill).toContain("top-level `status` and `nextAction` are current");
+    expect(skill).toContain("embedded continuation event is historical");
   });
 
   it("hands implementation and PR creation to the chosen AI and reports only Kintsugi-observed provider state", async () => {
