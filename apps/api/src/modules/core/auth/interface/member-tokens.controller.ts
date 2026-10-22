@@ -1,17 +1,9 @@
 // Interface layer for the current user's Coding Agent Workflow tokens.
 
-import { Body, Controller, Delete, Get, HttpCode, Param, Post } from "@nestjs/common";
-import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { z } from "zod";
+import { Controller, Delete, Get, HttpCode, Param } from "@nestjs/common";
+import { ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { MemberTokenService } from "../application/member-token.service.js";
-
-const issueTokenSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  projectIds: z.array(z.string().trim().min(1).max(200)).min(1).max(100).refine((ids) => new Set(ids).size === ids.length),
-  expiresAt: z.string().datetime({ offset: true }),
-}).strict();
-type IssueTokenBody = z.infer<typeof issueTokenSchema>;
 
 @ApiTags("auth · Coding Agent Workflow tokens")
 @Controller("auth/member-tokens")
@@ -24,13 +16,6 @@ export class MemberTokensController {
   @ApiOkResponse({ description: "Safe token metadata; raw token values are never returned." })
   async list(@CurrentActor() actor: Actor) {
     return { items: await this.tokens.listOwn(actor) };
-  }
-
-  @Post()
-  @ApiOperation({ summary: "Issue a personal, project-scoped read token" })
-  @ApiCreatedResponse({ description: "The raw token is returned once with safe metadata." })
-  issue(@Body({ schema: issueTokenSchema }) input: IssueTokenBody, @CurrentActor() actor: Actor) {
-    return this.tokens.issue(actor, { ...input, expiresAt: new Date(input.expiresAt) });
   }
 
   @Delete(":tokenId")

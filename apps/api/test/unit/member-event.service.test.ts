@@ -25,7 +25,6 @@ describe("MemberEventService", () => {
   it("uses Last-Event-ID instead of the query cursor before opening the stream", async () => {
     const resolveCursor = vi.fn(async (_projectId: string, _unitId: string, eventId: string) => eventId === "evt_header" ? "12" : "11");
     const reader = {
-      latestSequence: vi.fn(async () => "0"),
       resolveCursor,
       readAfter: vi.fn(async () => []),
     } as unknown as MemberEventReader;
@@ -43,9 +42,8 @@ describe("MemberEventService", () => {
     expect(prepared.sequence).toBe("12");
   });
 
-  it("revalidates authorization and emits only matching task events up to the requested limit", async () => {
+  it("replays retained task events and emits only matching events up to the requested limit", async () => {
     const reader = {
-      latestSequence: vi.fn(async () => "4"),
       resolveCursor: vi.fn(),
       readAfter: vi.fn(async () => [{ event, sequence: "5" }]),
     } as unknown as MemberEventReader;
@@ -58,12 +56,11 @@ describe("MemberEventService", () => {
 
     expect(received).toEqual([event]);
     expect(authorization.revalidate).toHaveBeenCalledWith(principal, "shop", "knt_pat_secret");
-    expect(reader.readAfter).toHaveBeenCalledWith("shop", "web/core/invoice", "4", 1);
+    expect(reader.readAfter).toHaveBeenCalledWith("shop", "web/core/invoice", "0", 1);
   });
 
   it("does not read events after the member token or project access is revoked", async () => {
     const reader = {
-      latestSequence: vi.fn(async () => "4"),
       resolveCursor: vi.fn(),
       readAfter: vi.fn(async () => [{ event, sequence: "5" }]),
     } as unknown as MemberEventReader;
@@ -81,7 +78,6 @@ describe("MemberEventService", () => {
 
   it("rejects a missing or out-of-scope replay cursor before opening the stream", async () => {
     const reader = {
-      latestSequence: vi.fn(async () => "4"),
       resolveCursor: vi.fn(async () => undefined),
       readAfter: vi.fn(async () => []),
     } as unknown as MemberEventReader;
@@ -96,7 +92,6 @@ describe("MemberEventService", () => {
 
   it("compares monotonic cursors numerically and stops on a corrupt or repeated event", async () => {
     const reader = {
-      latestSequence: vi.fn(async () => "9"),
       resolveCursor: vi.fn(),
       readAfter: vi.fn(async () => [{ event, sequence: "10" }, { event: { ...event, id: "evt_0002" }, sequence: "9" }]),
     } as unknown as MemberEventReader;
@@ -104,6 +99,7 @@ describe("MemberEventService", () => {
     const authorization = { revalidate: vi.fn(async () => undefined) } as unknown as MemberEventPrincipalRevalidator;
     const service = new MemberEventService(reader, access, authorization);
     const prepared = await service.prepare(principal, { projectId: "shop", unitId: "web/core/invoice", limit: 2 });
+    expect(prepared.sequence).toBe("0");
     const received: TaskEvent[] = [];
 
     await expect(async () => {

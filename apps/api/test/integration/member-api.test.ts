@@ -16,6 +16,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { hasDatabase, createTestDatabase, type TestDatabase } from "../support/database.js";
 import { adminClient, Client, startTestAppWithDatabase, type TestApp } from "../support/app.js";
+import { seedLegacyMemberToken } from "../support/legacy-member-token.js";
 
 const unit = [
   "---",
@@ -96,11 +97,8 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     expect((await admin.request("PUT", `/admin/project-access/shop/${memberId}`, { body: {} })).status).toBe(204);
     await app.db.query("insert into admin.project (id, name) values ('hidden', 'Hidden')");
     expect((await admin.request("PUT", `/admin/project-access/hidden/${memberId}`, { body: {} })).status).toBe(204);
-    const issued = await admin.request<{ token: string }>("POST", "/auth/member-tokens", {
-      body: { name: "api test", projectIds: ["shop"], expiresAt: new Date(Date.now() + 60_000).toISOString() },
-    });
-    expect(issued.status).toBe(201);
-    token = issued.body.data!.token;
+    const issued = await seedLegacyMemberToken(app, { userId: memberId, name: "api test", projectIds: ["shop"] });
+    token = issued.token;
 
     for (const [reviewId, projectId, key, currentness] of [
       [currentReviewId, "shop", "a", "current"],

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { adminClient, startTestAppWithDatabase, type TestApp } from "../support/app.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "../support/database.js";
+import { seedLegacyMemberToken } from "../support/legacy-member-token.js";
 
 const projectId = "member-event-shop";
 const unitId = "web/core/invoice";
@@ -21,11 +22,12 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow task event stream (integrat
     await db.query("insert into admin.project (id, name) values ($1, 'Member event test project')", [projectId]);
     const identity = await admin.get<{ id: string }>("/auth/me");
     await admin.request("PUT", `/admin/project-access/${projectId}/${identity.body.data!.id}`, { body: {} });
-    const issued = await admin.request<{ token: string }>("POST", "/auth/member-tokens", {
-      body: { name: "event stream test", projectIds: [projectId], expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    const issued = await seedLegacyMemberToken(app, {
+      userId: identity.body.data!.id,
+      name: "event stream test",
+      projectIds: [projectId],
     });
-    expect(issued.status).toBe(201);
-    token = issued.body.data!.token;
+    token = issued.token;
 
     for (const [transitionKey, eventId, sequence, kind, createdAt] of [
       ["event-transition-one", firstEventId, 1, "task.started", "now()"],
@@ -64,6 +66,16 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow task event stream (integrat
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(text).toContain(`id: ${secondEventId}\nevent: task-event\ndata: {"schemaVersion":"1","projectId":"${projectId}","unitId":"${unitId}","id":"${secondEventId}"`);
+  });
+
+  it("replays retained task history when the first stream disconnects before delivering an event id", async () => {
+    const response = await fetch(`${app.baseUrl}/member/v1/task-events?${new URLSearchParams({ projectId, unitId, limit: "1" })}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).toContain(`id: ${firstEventId}\nevent: task-event\ndata: {"schemaVersion":"1","projectId":"${projectId}","unitId":"${unitId}","id":"${firstEventId}"`);
   });
 
   it("returns a normal 409 envelope before streaming when the replay cursor expired", async () => {

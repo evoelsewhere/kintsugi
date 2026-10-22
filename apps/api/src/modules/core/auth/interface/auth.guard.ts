@@ -8,7 +8,7 @@ import { IS_PUBLIC_KEY, MEMBER_READ_SCOPE_KEY, PERMISSION_KEY, SIGNED_WEBHOOK_KE
 import { bearerToken, passesCsrfCheck, sessionToken } from "#common/auth/session-cookie.js";
 import { ProjectAccessService } from "#modules/admin/project-access/index.js";
 import { AuthService, type SessionUser } from "../application/auth.service.js";
-import { MEMBER_TOKEN_PREFIX, MemberTokenService, type MemberPrincipal } from "../application/member-token.service.js";
+import { isMemberTokenCredential, MemberTokenService, type MemberPrincipal } from "../application/member-token.service.js";
 
 /** Request carrying the authenticated user and optional restricted member principal. */
 export interface AuthenticatedRequest extends Request {
@@ -45,7 +45,7 @@ export class AuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const bearer = bearerToken(request);
-    if (bearer?.startsWith(MEMBER_TOKEN_PREFIX)) {
+    if (bearer !== undefined && isMemberTokenCredential(bearer)) {
       const principal = await this.memberTokens.authenticateMemberToken(bearer);
       if (principal === undefined) throw new UnauthorizedException("Invalid or expired token");
       const user = await this.auth.authenticateUser(principal.userId);
@@ -88,7 +88,7 @@ export class PermissionsGuard implements CanActivate {
       if (!user.permissions.includes("member.read")) throw new ForbiddenException("Missing permission: member.read");
       if (required?.some((code) => code !== "member.read")) throw new ForbiddenException("Coding Agent Workflow tokens cannot satisfy installation permissions");
       if (scope.projectIdFrom === "token-projects") {
-        if (request.memberPrincipal === undefined || request.memberPrincipal.projectIds.length === 0) {
+        if (request.memberPrincipal === undefined) {
           throw new ForbiddenException("A project-scoped Coding Agent Workflow token is required");
         }
       } else {

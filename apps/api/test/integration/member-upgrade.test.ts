@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "../support/database.js";
 import { adminClient, Client, startTestAppWithDatabase, type TestApp } from "../support/app.js";
+import { seedLegacyMemberToken } from "../support/legacy-member-token.js";
 
 describe.skipIf(!hasDatabase)("Coding Agent Workflow existing-installation upgrade", () => {
   let database: TestDatabase;
@@ -33,13 +34,17 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow existing-installation upgra
     const admin = await adminClient(app);
     expect((await admin.get("/admin/projects/existing-project")).status).toBe(200);
     const me = await admin.get<{ id: string }>("/auth/me");
-    const input = { name: "upgrade check", projectIds: ["existing-project"], expiresAt: new Date(Date.now() + 60_000).toISOString() };
-    expect((await admin.request("POST", "/auth/member-tokens", { body: input })).status).toBe(403);
+    expect((await admin.request("POST", "/auth/member-tokens", {
+      body: { name: "upgrade check", projectIds: ["existing-project"], expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    })).status).toBe(404);
     expect((await admin.request("PUT", "/admin/project-access/existing-project/" + me.body.data!.id, { body: {} })).status).toBe(204);
-    const token = await admin.request<{ token: string }>("POST", "/auth/member-tokens", { body: input });
-    expect(token.status).toBe(201);
+    const token = await seedLegacyMemberToken(app, {
+      userId: me.body.data!.id,
+      name: "upgrade fixture",
+      projectIds: ["existing-project"],
+    });
     const result = await new Client(app).request<{ items: Array<{ projectId: string }> }>("GET", "/member/v1/projects", {
-      headers: { authorization: "Bearer " + token.body.data!.token },
+      headers: { authorization: "Bearer " + token.token },
     });
     expect(result.status).toBe(200);
     expect(result.body.data!.items.map((project) => project.projectId)).toEqual(["existing-project"]);

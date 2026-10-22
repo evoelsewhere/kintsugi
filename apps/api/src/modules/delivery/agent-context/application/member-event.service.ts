@@ -25,7 +25,9 @@ export class MemberEventService {
     await this.projectAccess.requireRead(principal.userId, parsed.projectId);
 
     const sequence = parsed.afterEventId === undefined
-      ? await this.events.latestSequence(parsed.projectId)
+      // A first connection replays the retained task history. This also makes a
+      // reconnect safe if the transport fails before the client receives an ID.
+      ? "0"
       : await this.events.resolveCursor(parsed.projectId, parsed.unitId, parsed.afterEventId);
     if (sequence === undefined) {
       throw new ConflictException({

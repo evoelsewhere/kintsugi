@@ -1,4 +1,8 @@
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { newId } from "../../src/common/domain/ids.js";
+import { hashToken } from "../../src/common/security/token-hash.js";
+import { MEMBER_TOKEN_PREFIX } from "../../src/modules/core/auth/application/member-token.service.js";
 import { hasDatabase } from "../support/database.js";
 import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
 import { MemberContextProbeModule } from "../support/member-context-probe.js";
@@ -19,12 +23,20 @@ async function grantProjectAccess(admin: Client, projectId: string, userId: stri
   expect(response.status).toBe(204);
 }
 
-async function issue(admin: Client, projectIds: string[], name = "coding agent"): Promise<IssuedToken> {
-  const response = await admin.request<IssuedToken>("POST", "/auth/member-tokens", {
-    body: { name, projectIds, expiresAt: new Date(Date.now() + 60_000).toISOString() },
-  });
-  expect(response.status).toBe(201);
-  return response.body.data!;
+async function issue(app: TestApp, admin: Client, projectIds: string[], name = "coding agent"): Promise<IssuedToken> {
+  const user = (await admin.get<{ id: string }>("/auth/me")).body.data!;
+  const token = MEMBER_TOKEN_PREFIX + randomBytes(32).toString("base64url");
+  const id = newId();
+  const expiresAt = new Date(Date.now() + 60_000);
+  await app.db.query(
+    "insert into core.member_token (id, user_id, name, token_hash, expires_at) values ($1, $2, $3, $4, $5)",
+    [id, user.id, name, hashToken(token), expiresAt],
+  );
+  await app.db.query(
+    "insert into core.member_token_project (token_id, project_id) select $1, project_id from unnest($2::text[]) as project_id",
+    [id, projectIds],
+  );
+  return { token, metadata: { id, name, projectIds, expiresAt: expiresAt.toISOString() } };
 }
 
 async function probe(app: TestApp, token: string, projectId: string) {
@@ -50,7 +62,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow tokens (integration)", () =
     const me = (await admin.get<{ id: string }>("/auth/me")).body.data!;
     await grantProjectAccess(admin, "auth-one", me.id);
 
-    const issued = await issue(admin, ["auth-one"]);
+    const issued = await issue(app, admin, ["auth-one"]);
     expect(issued.token).toMatch(/^knt_[A-Za-z0-9_-]{40,}$/);
     expect(issued.metadata.projectIds).toEqual(["auth-one"]);
     expect(issued.metadata).not.toHaveProperty("token");
@@ -58,9 +70,6 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow tokens (integration)", () =
     const stored = await app.db.query<{ token_hash: string }>("select token_hash from core.member_token where id = $1", [issued.metadata.id]);
     expect(stored.rows[0]?.token_hash).not.toBe(issued.token);
     expect(stored.rows[0]?.token_hash).toMatch(/^[a-f0-9]{64}$/);
-    const audit = await app.db.query<{ detail: string }>("select detail::text as detail from governance.audit_event where action = 'member-token.issue' and subject = $1", [issued.metadata.id]);
-    expect(audit.rows[0]?.detail).not.toContain(issued.token);
-
     const listed = await admin.get<{ items: TokenMetadata[] }>("/auth/member-tokens");
     expect(listed.status).toBe(200);
     expect(listed.raw).not.toContain(issued.token);
@@ -75,18 +84,18 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow tokens (integration)", () =
     const me = (await admin.get<{ id: string }>("/auth/me")).body.data!;
     await grantProjectAccess(admin, "auth-two", me.id);
 
-    const revoked = await issue(admin, ["auth-two"], "revoked");
+    const revoked = await issue(app, admin, ["auth-two"], "revoked");
     expect((await admin.request("DELETE", `/auth/member-tokens/${revoked.metadata.id}`)).status).toBe(204);
     expect((await probe(app, revoked.token, "auth-two")).status).toBe(401);
 
-    const expired = await issue(admin, ["auth-two"], "expired");
+    const expired = await issue(app, admin, ["auth-two"], "expired");
     await app.db.query("update core.member_token set created_at = now() - interval '2 seconds', expires_at = now() - interval '1 second' where id = $1", [expired.metadata.id]);
     expect((await probe(app, expired.token, "auth-two")).status).toBe(401);
 
     await app.db.query("insert into core.role_permission (role_id, permission_code) values ('user', 'member.read'), ('user', 'tokens.manage-own') on conflict do nothing");
     const { client: disabledClient, id: disabledUserId } = await memberClient(app, admin, "auth-disabled", ["user"]);
     await grantProjectAccess(admin, "auth-two", disabledUserId);
-    const disabled = await issue(disabledClient, ["auth-two"], "disabled");
+    const disabled = await issue(app, disabledClient, ["auth-two"], "disabled");
     await app.db.query("update core.app_user set enabled = false where id = $1", [disabledUserId]);
     const response = await probe(app, disabled.token, "auth-two");
     expect(response.status).toBe(401);
@@ -101,7 +110,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow tokens (integration)", () =
     const me = (await admin.get<{ id: string }>("/auth/me")).body.data!;
     await grantProjectAccess(admin, "auth-three-a", me.id);
     await grantProjectAccess(admin, "auth-three-b", me.id);
-    const issued = await issue(admin, ["auth-three-a"]);
+    const issued = await issue(app, admin, ["auth-three-a"]);
 
     expect((await probe(app, issued.token, "auth-three-a")).status).toBe(200);
     await app.db.query("delete from core.role_permission where role_id = 'admin' and permission_code = 'member.read'");
@@ -123,7 +132,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow tokens (integration)", () =
     await setupProject(app, "auth-four");
     const me = (await admin.get<{ id: string }>("/auth/me")).body.data!;
     await grantProjectAccess(admin, "auth-four", me.id);
-    const issued = await issue(admin, ["auth-four"]);
+    const issued = await issue(app, admin, ["auth-four"]);
 
     const unknown = await probe(app, issued.token, "guessed-project");
     expect(unknown.status).toBe(403);
@@ -137,7 +146,7 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow tokens (integration)", () =
     await setupProject(app, "auth-five");
     const me = (await admin.get<{ id: string }>("/auth/me")).body.data!;
     await grantProjectAccess(admin, "auth-five", me.id);
-    const issued = await issue(admin, ["auth-five"]);
+    const issued = await issue(app, admin, ["auth-five"]);
     const bearer = { authorization: `Bearer ${issued.token}` };
 
     for (const [method, path, body] of [
@@ -163,11 +172,10 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow tokens (integration)", () =
   it("AUTH-06 does not infer Project Access from the administrator's assignment or installation role", async () => {
     const admin = await adminClient(app);
     await setupProject(app, "auth-six");
-    const response = await admin.request("POST", "/auth/member-tokens", {
-      body: { name: "ungranted", projectIds: ["auth-six"], expiresAt: new Date(Date.now() + 60_000).toISOString() },
-    });
+    const seededLegacyToken = await issue(app, admin, ["auth-six"], "ungranted");
+    const response = await probe(app, seededLegacyToken.token, "auth-six");
     expect(response.status).toBe(403);
-    expect(response.raw).not.toContain("knt_");
+    expect(response.raw).not.toContain("PRIVATE_CONTEXT_MARKER");
   });
 
   it("AUTH-08 denies token and Project Access mutations through a read token", async () => {
@@ -176,12 +184,26 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow tokens (integration)", () =
     await setupProject(app, "auth-seven");
     const me = (await admin.get<{ id: string }>("/auth/me")).body.data!;
     await grantProjectAccess(admin, "auth-seven", me.id);
-    const issued = await issue(admin, ["auth-seven"]);
+    const issued = await issue(app, admin, ["auth-seven"]);
     const headers = { authorization: `Bearer ${issued.token}` };
 
     expect((await new Client(app).get("/__test/member-context?projectId=auth-seven")).status).toBe(401);
     expect((await new Client(app).request("GET", "/auth/member-tokens", { csrf: false, headers })).status).toBe(403);
     expect((await new Client(app).request("DELETE", `/auth/member-tokens/${issued.metadata.id}`, { csrf: false, headers })).status).toBe(403);
     expect((await new Client(app).request("PUT", `/admin/project-access/auth-seven/${me.id}`, { body: {}, csrf: false, headers })).status).toBe(403);
+  });
+
+  it("AUTH-09 no longer issues new manual personal tokens", async () => {
+    const admin = await adminClient(app);
+    await enableAdminMemberRead(app);
+    await setupProject(app, "auth-nine");
+    const me = (await admin.get<{ id: string }>("/auth/me")).body.data!;
+    await grantProjectAccess(admin, "auth-nine", me.id);
+
+    const response = await admin.request("POST", "/auth/member-tokens", {
+      body: { name: "manual token", projectIds: ["auth-nine"], expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    });
+    expect(response.status).toBe(404);
+    expect(response.raw).not.toContain("knt_pat_");
   });
 });

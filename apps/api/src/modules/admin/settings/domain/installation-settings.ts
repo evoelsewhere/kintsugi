@@ -14,6 +14,18 @@ export interface CommitIdentityView extends CommitIdentity {
   updatedAt?: string;
 }
 
+export type CodingAgentConnectionLifetime = 15 | 30;
+
+export interface CodingAgentConnectionLifetimeView {
+  maxAgeDays: CodingAgentConnectionLifetime;
+  isDefault: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export const CODING_AGENT_CONNECTION_LIFETIME_SETTING = "coding-agent-connection-lifetime";
+export const DEFAULT_CODING_AGENT_CONNECTION_LIFETIME: CodingAgentConnectionLifetime = 15;
+
 export interface StoredSetting<T> {
   value: T;
   updatedBy?: string;

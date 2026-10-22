@@ -12,6 +12,13 @@ interface IdentityView {
   updatedBy?: string;
 }
 
+interface CodingAgentConnectionLifetimeView {
+  maxAgeDays: 15 | 30;
+  isDefault: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
 describe.skipIf(!hasDatabase)("installation settings: commit identity (integration)", () => {
   let app: TestApp;
   let admin: Client;
@@ -49,5 +56,32 @@ describe.skipIf(!hasDatabase)("installation settings: commit identity (integrati
       expect(refused.body).toMatchObject({ success: false, statusCode: 400 });
     }
     expect((await admin.get<IdentityView>("/admin/settings/commit-identity")).body.data?.name).toBe("Modernization Bot");
+  });
+
+  it("defaults the Coding Agent Workflow connection age to 15 days and requires security.manage", async () => {
+    const current = await admin.get<CodingAgentConnectionLifetimeView>("/admin/settings/coding-agent-connection-lifetime");
+    expect(current.body.data).toEqual({ maxAgeDays: 15, isDefault: true });
+
+    const { client } = await memberClient(app, admin, "connection-lifetime-reader", ["user"]);
+    expect((await client.get("/admin/settings/coding-agent-connection-lifetime")).status).toBe(403);
+    expect((await client.request("PUT", "/admin/settings/coding-agent-connection-lifetime", { body: { maxAgeDays: 30 } })).status).toBe(403);
+  });
+
+  it("stores a 30-day connection age and refuses values outside 15 or 30", async () => {
+    const saved = await admin.request<CodingAgentConnectionLifetimeView>("PUT", "/admin/settings/coding-agent-connection-lifetime", { body: { maxAgeDays: 30 } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data).toMatchObject({ maxAgeDays: 30, isDefault: false, updatedBy: "admin" });
+    expect(saved.body.data).not.toHaveProperty("token");
+    expect(saved.body.data).not.toHaveProperty("secret");
+
+    const row = await app.db.query<{ value: { maxAgeDays: number } }>("select value from admin.installation_setting where key = 'coding-agent-connection-lifetime'");
+    expect(row.rows[0]?.value).toEqual({ maxAgeDays: 30 });
+
+    for (const body of [{ maxAgeDays: 14 }, { maxAgeDays: 31 }, { maxAgeDays: 15.5 }, { maxAgeDays: "30" }, {}]) {
+      const refused = await admin.request("PUT", "/admin/settings/coding-agent-connection-lifetime", { body });
+      expect(refused.status).toBe(400);
+      expect(refused.body).toMatchObject({ success: false, statusCode: 400 });
+    }
+    expect((await admin.get<CodingAgentConnectionLifetimeView>("/admin/settings/coding-agent-connection-lifetime")).body.data?.maxAgeDays).toBe(30);
   });
 });
