@@ -12,9 +12,10 @@ const launcher = {
   cliVersion: "0.1.0",
 };
 const getGenerate = () => (hub as unknown as { generateAccessPlugin?: (input: typeof launcher & { target: "claude" | "codex" | "copilot" }) => { pluginName: string; files: Record<string, string> } }).generateAccessPlugin;
-const getMarketplace = () => (hub as unknown as { generateAccessMarketplace?: (target: "claude" | "codex" | "copilot", version: string) => { path: string; content: string } }).generateAccessMarketplace;
+const getMarketplace = () => (hub as unknown as { generateAccessMarketplace?: (target: "claude" | "codex" | "copilot", version: string, profileId?: string) => { path: string; content: string } }).generateAccessMarketplace;
 const getPlan = () => (hub as unknown as { planClientSetup?: (input: typeof launcher & { target: "claude" | "codex" | "copilot"; clientVersion: string; artifactRoot: string }) => Array<{ root: string; relativePath: string; content: string; target: string; pluginName: string; marketplaceName: string }> }).planClientSetup;
-const getApply = () => (hub as unknown as { applyClientSetup?: (changes: Array<{ root: string; relativePath: string; content: string }>) => Promise<{ artifactRoot: string; pluginRoot: string; unchanged: string[]; written: string[]; installCommands: string[]; rollbackCommands: string[] }> }).applyClientSetup;
+type NativeCommand = { executable: "claude" | "codex" | "copilot"; args: string[] };
+const getApply = () => (hub as unknown as { applyClientSetup?: (changes: Array<{ root: string; relativePath: string; content: string }>) => Promise<{ artifactRoot: string; pluginRoot: string; marketplaceName: string; unchanged: string[]; written: string[]; installCommands: string[]; rollbackCommands: string[]; installSteps: NativeCommand[]; rollbackSteps: NativeCommand[] }> }).applyClientSetup;
 async function temp(): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), "kintsugi-plugins-"));
   temporary.push(path);
@@ -75,17 +76,19 @@ describe("Coding Agent Workflow plugin generation", () => {
   it("generates each client marketplace layout from the same plugin identity", () => {
     const generateMarketplace = getMarketplace();
     if (generateMarketplace === undefined) { expect(generateMarketplace).toBeTypeOf("function"); return; }
-    const claude = generateMarketplace("claude", "0.1.0");
-    const codex = generateMarketplace("codex", "0.1.0");
-    const copilot = generateMarketplace("copilot", "0.1.0");
+    const claude = generateMarketplace("claude", "0.1.0", "work");
+    const codex = generateMarketplace("codex", "0.1.0", "work");
+    const copilot = generateMarketplace("copilot", "0.1.0", "work");
+    const secondProfile = generateMarketplace("claude", "0.1.0", "other");
     expect(claude.path).toBe(".claude-plugin/marketplace.json");
     expect(codex.path).toBe(".agents/plugins/marketplace.json");
     expect(copilot.path).toBe(".github/plugin/marketplace.json");
     for (const marketplace of [claude, codex, copilot]) {
       const parsed = JSON.parse(marketplace.content) as { name: string; plugins: Array<{ name: string; version?: string; source?: unknown }> };
-      expect(parsed.name).toBe("kintsugi-coding-agent-workflow");
+      expect(parsed.name).toMatch(/^kintsugi-coding-agent-workflow-work-[a-f0-9]{12}$/);
       expect(parsed.plugins[0]).toMatchObject({ name: "kintsugi-coding-agent-workflow", version: "0.1.0" });
     }
+    expect(JSON.parse(secondProfile.content).name).not.toBe(JSON.parse(claude.content).name);
     expect(JSON.parse(claude.content).plugins[0].source).toBe("./plugins/claude/kintsugi-coding-agent-workflow");
     expect(JSON.parse(codex.content).plugins[0].source.path).toBe("./plugins/codex/kintsugi-coding-agent-workflow");
     expect(JSON.parse(copilot.content).plugins[0].source).toBe("./plugins/copilot/kintsugi-coding-agent-workflow");
@@ -135,7 +138,7 @@ describe("Coding Agent Workflow plugin generation", () => {
         target: "claude",
         clientVersion: "2.1.278",
         marketplaceAdd: "claude plugin marketplace add --scope user ",
-        install: "claude plugin install --scope user kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow",
+        install: "claude plugin install --scope user --yes ",
         rollback: [
           "claude plugin uninstall --scope user kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow",
           "claude plugin marketplace remove --scope user kintsugi-coding-agent-workflow",
@@ -145,7 +148,7 @@ describe("Coding Agent Workflow plugin generation", () => {
         target: "codex",
         clientVersion: "0.163.0-alpha.10.2",
         marketplaceAdd: "codex plugin marketplace add ",
-        install: "codex plugin add kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow",
+        install: "codex plugin add ",
         rollback: ["codex plugin remove kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow", "codex plugin marketplace remove kintsugi-coding-agent-workflow"],
       },
     ] as const;
@@ -166,14 +169,49 @@ describe("Coding Agent Workflow plugin generation", () => {
       expect(report.artifactRoot).toContain("'");
       expect(report.installCommands).toEqual([
         testCase.marketplaceAdd + quotePath(report.artifactRoot),
-        testCase.install,
+        testCase.install + `kintsugi-coding-agent-workflow@${report.marketplaceName}`,
       ]);
-      expect(report.rollbackCommands).toEqual(testCase.rollback);
+      expect(report.rollbackCommands).toEqual([
+        testCase.rollback[0]!.replace("kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow", `kintsugi-coding-agent-workflow@${report.marketplaceName}`),
+        testCase.rollback[1]!.replace("kintsugi-coding-agent-workflow", report.marketplaceName),
+      ]);
       for (const command of report.rollbackCommands) {
         expect(command).not.toContain(report.artifactRoot);
         expect(command).not.toContain("O'Brien");
       }
     }
+  });
+
+  it("returns allowlisted native commands as literal argv and renders shell-safe Windows and POSIX previews", async () => {
+    const plan = getPlan();
+    const apply = getApply();
+    const setupModule = await import("../src/plugins/setup.js");
+    const format = (setupModule as unknown as { formatNativeCommand?: (command: NativeCommand, platform: NodeJS.Platform) => string }).formatNativeCommand;
+    expect([plan, apply, format].every((value) => typeof value === "function")).toBe(true);
+    if (plan === undefined || apply === undefined || format === undefined) return;
+
+    const root = join(await temp(), "Kintsugi artifacts O'Brien & $HOME");
+    const claude = await apply(plan({ ...launcher, target: "claude", clientVersion: "2.1.278", artifactRoot: root }));
+    expect(claude.installSteps).toEqual([
+      { executable: "claude", args: ["plugin", "marketplace", "add", "--scope", "user", root] },
+      { executable: "claude", args: ["plugin", "install", "--scope", "user", "--yes", `kintsugi-coding-agent-workflow@${claude.marketplaceName}`] },
+    ]);
+    expect(claude.rollbackSteps).toEqual([
+      { executable: "claude", args: ["plugin", "uninstall", "--scope", "user", `kintsugi-coding-agent-workflow@${claude.marketplaceName}`] },
+      { executable: "claude", args: ["plugin", "marketplace", "remove", "--scope", "user", claude.marketplaceName] },
+    ]);
+    expect(format(claude.installSteps[0]!, "win32")).toContain(`'${root.replace(/'/g, "''")}'`);
+    expect(format(claude.installSteps[0]!, "linux")).toContain(`'${root.replace(/'/g, "'\\''")}'`);
+
+    const codex = await apply(plan({ ...launcher, target: "codex", clientVersion: "0.163.0-alpha.10.2", artifactRoot: root + " codex" }));
+    expect(codex.installSteps).toEqual([
+      { executable: "codex", args: ["plugin", "marketplace", "add", root + " codex"] },
+      { executable: "codex", args: ["plugin", "add", `kintsugi-coding-agent-workflow@${codex.marketplaceName}`] },
+    ]);
+    expect(codex.rollbackSteps).toEqual([
+      { executable: "codex", args: ["plugin", "remove", `kintsugi-coding-agent-workflow@${codex.marketplaceName}`] },
+      { executable: "codex", args: ["plugin", "marketplace", "remove", codex.marketplaceName] },
+    ]);
   });
   it("refuses to replace an unowned native marketplace file", async () => {
     const plan = getPlan();

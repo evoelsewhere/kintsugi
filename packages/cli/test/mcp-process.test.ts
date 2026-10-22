@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,14 +16,24 @@ afterEach(async () => {
 });
 
 describe("compiled CLI MCP bridge process", () => {
-  it("serves protocol calls through the selected installation and observes server-side revocation per call", async () => {
+  it.each([false, true])("serves protocol calls and observes revocation; first-use browser auth: %s", async (browserAuth) => {
     directory = await mkdtemp(join(tmpdir(), "kintsugi-cli-mcp-"));
     const tokenFile = join(directory, "token");
-    await writeFile(tokenFile, "TEST-mcp-process-token");
+    await writeFile(tokenFile, browserAuth ? "" : "TEST-mcp-process-token");
+    const bearer = browserAuth ? "knt_caw_process-test" : "TEST-mcp-process-token";
+    let tokenExchanges = 0;
     let requestCount = 0;
     const observedAuthorizations: Array<string | undefined> = [];
     let revoked = false;
     const api = createServer((request, response) => {
+      if (request.url === "/api/auth/coding-agent/token") {
+        tokenExchanges++;
+        expect(request.headers["x-kintsugi-csrf"]).toBe("1");
+        expect(request.headers.cookie).toBeUndefined();
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ success: true, data: { accessToken: bearer, refreshToken: "knt_crt_process-test", expiresIn: 300, connectionId: "test-connection", projectIds: ["shop"] } }));
+        return;
+      }
       requestCount += 1;
       observedAuthorizations.push(request.headers.authorization);
       response.writeHead(revoked ? 401 : 200, { "content-type": "application/json" });
@@ -47,7 +57,8 @@ describe("compiled CLI MCP bridge process", () => {
 
     const client = new Client(
       { name: "kintsugi-cli-integration-test", version: "1.0.0" },
-      { versionNegotiation: { mode: "auto" } },
+      // Isolate one process: auto negotiation creates a disposable sibling whose stderr is discarded.
+      { versionNegotiation: { mode: "legacy" } },
     );
     const transport = new StdioClientTransport({
       command: process.execPath,
@@ -56,8 +67,12 @@ describe("compiled CLI MCP bridge process", () => {
         ...process.env,
         KINTSUGI_TEST_BASE_URL: "http://127.0.0.1:" + address.port,
         KINTSUGI_TEST_TOKEN_FILE: tokenFile,
+        KINTSUGI_TEST_BROWSER_AUTH: browserAuth ? "1" : "0",
       },
+      stderr: "pipe",
     });
+    let stderr = "";
+    transport.stderr?.on("data", (value) => { stderr += String(value); });
 
     try {
       await client.connect(transport);
@@ -66,15 +81,24 @@ describe("compiled CLI MCP bridge process", () => {
       const first = await client.callTool({ name: "project_list", arguments: {} });
       expect(first.isError).not.toBe(true);
       expect(first.structuredContent).toMatchObject({ items: [{ projectId: "shop" }] });
-      expect(observedAuthorizations).toEqual(["Bearer TEST-mcp-process-token"]);
+      expect(observedAuthorizations).toEqual([`Bearer ${bearer}`]);
       expect(requestCount).toBe(1);
+      expect(tokenExchanges, stderr).toBe(browserAuth ? 1 : 0);
+      if (browserAuth) {
+        expect(stderr).toContain("Sign in to Kintsugi");
+        const envelope = await readFile(tokenFile, "utf8");
+        expect(envelope).toContain("knt_crt_process-test");
+        expect(envelope).not.toContain(bearer);
+      }
+      expect(stderr).not.toContain(bearer);
+      expect(stderr).not.toContain("knt_crt_process-test");
 
       revoked = true;
       const afterRevocation = await client.callTool({ name: "project_list", arguments: {} });
       expect(afterRevocation.isError).toBe(true);
       expect(JSON.stringify(afterRevocation)).toContain("TOKEN_REVOKED");
       expect(JSON.stringify(afterRevocation)).not.toContain("TEST-mcp-process-token");
-      expect(observedAuthorizations).toEqual(["Bearer TEST-mcp-process-token", "Bearer TEST-mcp-process-token"]);
+      expect(observedAuthorizations).toEqual([`Bearer ${bearer}`, `Bearer ${bearer}`]);
       expect(requestCount).toBe(2);
     } finally {
       await client.close().catch(() => undefined);

@@ -1,5 +1,5 @@
 import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { assertClientCompatibility } from "./compatibility.js";
 import { CODING_AGENT_WORKFLOW_PLUGIN_NAME, generateAccessPlugin, PluginSetupError, type AccessPluginInput, type CodingAgentClient } from "./generate.js";
@@ -19,6 +19,12 @@ export interface SetupChange {
   marketplaceName: string;
 }
 
+/** A native client invocation represented as executable plus literal argv. */
+export interface NativeClientCommand {
+  executable: CodingAgentClient;
+  args: string[];
+}
+
 export interface SetupReport {
   target: CodingAgentClient;
   artifactRoot: string;
@@ -26,6 +32,8 @@ export interface SetupReport {
   marketplaceName: string;
   written: string[];
   unchanged: string[];
+  installSteps: NativeClientCommand[];
+  rollbackSteps: NativeClientCommand[];
   installCommands: string[];
   rollbackCommands: string[];
 }
@@ -46,7 +54,15 @@ const FILES: SetupFileDeps = { mkdir, lstat, readFile, writeFile: async (path, d
 
 const MARKER_PATH = ".kintsugi-managed.json";
 const SETUP_MARKER = (target: CodingAgentClient) => JSON.stringify({ schemaVersion: "1", owner: "kintsugi", feature: "coding-agent-workflow", target }, null, 2) + "\n";
-const MARKETPLACE_NAME = CODING_AGENT_WORKFLOW_PLUGIN_NAME;
+
+function marketplaceNameForProfile(profileId: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(profileId)) {
+    throw new PluginSetupError("PLUGIN_PROFILE_INVALID", "Plugin marketplace profile ID is invalid");
+  }
+  const slug = profileId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "profile";
+  const suffix = createHash("sha256").update(profileId, "utf8").digest("hex").slice(0, 12);
+  return `${CODING_AGENT_WORKFLOW_PLUGIN_NAME}-${slug}-${suffix}`;
+}
 
 function within(root: string, child: string): boolean {
   const path = relative(root, child);
@@ -59,17 +75,18 @@ function assertRelativeFile(path: string): void {
   }
 }
 
-export function generateAccessMarketplace(target: CodingAgentClient, version: string): { path: string; content: string } {
+export function generateAccessMarketplace(target: CodingAgentClient, version: string, profileId = "default"): { path: string; content: string } {
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     throw new PluginSetupError("PLUGIN_VERSION_INVALID", "Plugin marketplace version must be an exact semantic version");
   }
   const pluginName = CODING_AGENT_WORKFLOW_PLUGIN_NAME;
+  const marketplaceName = marketplaceNameForProfile(profileId);
   const pluginPath = `./plugins/${target}/${pluginName}`;
   if (target === "claude") {
     return {
       path: ".claude-plugin/marketplace.json",
       content: `${JSON.stringify({
-        name: MARKETPLACE_NAME,
+        name: marketplaceName,
         description: "Local Kintsugi Coding Agent Workflow plugins.",
         owner: { name: "Kintsugi" },
         plugins: [{ name: pluginName, source: pluginPath, description: "Read-only Kintsugi task context and workflow evidence.", version }],
@@ -80,7 +97,7 @@ export function generateAccessMarketplace(target: CodingAgentClient, version: st
     return {
       path: ".agents/plugins/marketplace.json",
       content: `${JSON.stringify({
-        name: MARKETPLACE_NAME,
+        name: marketplaceName,
         interface: { displayName: "Kintsugi Coding Agent Workflow" },
         plugins: [{
           name: pluginName,
@@ -95,7 +112,7 @@ export function generateAccessMarketplace(target: CodingAgentClient, version: st
   return {
     path: ".github/plugin/marketplace.json",
     content: `${JSON.stringify({
-      name: MARKETPLACE_NAME,
+      name: marketplaceName,
       owner: { name: "Kintsugi" },
       metadata: { description: "Local Kintsugi Coding Agent Workflow plugins.", version },
       plugins: [{ name: pluginName, source: pluginPath, description: "Read-only Kintsugi task context and workflow evidence.", version }],
@@ -107,17 +124,59 @@ function quotePowerShell(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-function nativeCommands(target: CodingAgentClient, root: string, pluginName: string, marketplaceName: string): { install: string[]; rollback: string[] } {
-  const pathArg = process.platform === "win32" ? quotePowerShell(root) : `'${root.replace(/'/g, "'\\''")}'`;
-  const installByClient: Record<CodingAgentClient, string[]> = {
-    claude: [`claude plugin marketplace add --scope user ${pathArg}`, `claude plugin install --scope user ${pluginName}@${marketplaceName}`],
-    codex: [`codex plugin marketplace add ${pathArg}`, `codex plugin add ${pluginName}@${marketplaceName}`],
-    copilot: [`copilot plugin marketplace add ${pathArg}`, `copilot plugin install ${pluginName}@${marketplaceName}`],
+function quotePosix(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function safeUnquotedArgument(value: string): boolean {
+  return /^[A-Za-z0-9_./:@+=-]+$/.test(value);
+}
+
+function hasControlCharacters(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+  });
+}
+
+function formatArgument(value: string, platform: NodeJS.Platform): string {
+  if (safeUnquotedArgument(value)) return value;
+  return platform === "win32" ? quotePowerShell(value) : quotePosix(value);
+}
+
+/** Render a copyable command for the current user's shell; execution still uses argv. */
+export function formatNativeCommand(command: NativeClientCommand, platform: NodeJS.Platform = process.platform): string {
+  return [command.executable, ...command.args.map((argument) => formatArgument(argument, platform))].join(" ");
+}
+
+function nativeCommands(target: CodingAgentClient, root: string, pluginName: string, marketplaceName: string): { install: NativeClientCommand[]; rollback: NativeClientCommand[] } {
+  const installByClient: Record<CodingAgentClient, NativeClientCommand[]> = {
+    claude: [
+      { executable: "claude", args: ["plugin", "marketplace", "add", "--scope", "user", root] },
+      { executable: "claude", args: ["plugin", "install", "--scope", "user", "--yes", `${pluginName}@${marketplaceName}`] },
+    ],
+    codex: [
+      { executable: "codex", args: ["plugin", "marketplace", "add", root] },
+      { executable: "codex", args: ["plugin", "add", `${pluginName}@${marketplaceName}`] },
+    ],
+    copilot: [
+      { executable: "copilot", args: ["plugin", "marketplace", "add", root] },
+      { executable: "copilot", args: ["plugin", "install", `${pluginName}@${marketplaceName}`] },
+    ],
   };
-  const rollbackByClient: Record<CodingAgentClient, string[]> = {
-    claude: [`claude plugin uninstall --scope user ${pluginName}@${marketplaceName}`, `claude plugin marketplace remove --scope user ${marketplaceName}`],
-    codex: [`codex plugin remove ${pluginName}@${marketplaceName}`, `codex plugin marketplace remove ${marketplaceName}`],
-    copilot: [`copilot plugin uninstall ${pluginName}`, `copilot plugin marketplace remove ${marketplaceName}`],
+  const rollbackByClient: Record<CodingAgentClient, NativeClientCommand[]> = {
+    claude: [
+      { executable: "claude", args: ["plugin", "uninstall", "--scope", "user", `${pluginName}@${marketplaceName}`] },
+      { executable: "claude", args: ["plugin", "marketplace", "remove", "--scope", "user", marketplaceName] },
+    ],
+    codex: [
+      { executable: "codex", args: ["plugin", "remove", `${pluginName}@${marketplaceName}`] },
+      { executable: "codex", args: ["plugin", "marketplace", "remove", marketplaceName] },
+    ],
+    copilot: [
+      { executable: "copilot", args: ["plugin", "uninstall", pluginName] },
+      { executable: "copilot", args: ["plugin", "marketplace", "remove", marketplaceName] },
+    ],
   };
   return { install: installByClient[target], rollback: rollbackByClient[target] };
 }
@@ -126,9 +185,11 @@ function nativeCommands(target: CodingAgentClient, root: string, pluginName: str
 export function planClientSetup(input: SetupInput): SetupChange[] {
   assertClientCompatibility(input.target, input.clientVersion);
   if (!isAbsolute(input.artifactRoot)) throw new PluginSetupError("SETUP_ROOT_INVALID", "The Kintsugi plugin artifact root must be an absolute path");
+  if (hasControlCharacters(input.artifactRoot)) throw new PluginSetupError("SETUP_ROOT_INVALID", "The Kintsugi plugin artifact root cannot contain control characters");
   const root = resolve(input.artifactRoot);
   const generated = generateAccessPlugin(input);
-  const marketplace = generateAccessMarketplace(input.target, input.cliVersion);
+  const marketplaceName = marketplaceNameForProfile(input.profileId);
+  const marketplace = generateAccessMarketplace(input.target, input.cliVersion, input.profileId);
   const entries: Array<[string, string]> = [
     [MARKER_PATH, SETUP_MARKER(input.target)],
     [marketplace.path, marketplace.content],
@@ -138,7 +199,7 @@ export function planClientSetup(input: SetupInput): SetupChange[] {
     assertRelativeFile(relativePath);
     const destination = resolve(root, relativePath);
     if (!within(root, destination)) throw new PluginSetupError("SETUP_PATH_INVALID", "A generated path escaped the Kintsugi artifact root");
-    return { root, relativePath, content, target: input.target, pluginName: generated.pluginName, marketplaceName: MARKETPLACE_NAME };
+    return { root, relativePath, content, target: input.target, pluginName: generated.pluginName, marketplaceName };
   });
 }
 
@@ -243,7 +304,9 @@ export async function applyClientSetup(changes: readonly SetupChange[], deps: Se
     marketplaceName: metadata.marketplaceName,
     written,
     unchanged,
-    installCommands: commands.install,
-    rollbackCommands: commands.rollback,
+    installSteps: commands.install,
+    rollbackSteps: commands.rollback,
+    installCommands: commands.install.map((command) => formatNativeCommand(command)),
+    rollbackCommands: commands.rollback.map((command) => formatNativeCommand(command)),
   };
 }

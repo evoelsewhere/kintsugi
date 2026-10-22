@@ -2,11 +2,11 @@ import { Command, CommanderError } from "commander";
 import { serveCodingAgentStdio } from "@kintsugi/harness-hub";
 import type { CodingAgentClient } from "@kintsugi/harness-hub";
 import type { CodingAgentWorkflowCapabilities, CodingAgentWorkflowPort } from "@kintsugi/harness-sdk";
-import { execFile } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { emitKeypressEvents } from "node:readline";
-import { promisify } from "node:util";
 import { CodingAgentClientError } from "@kintsugi/kintsugi-client";
+import { getNativeClientVersion } from "./client-version.js";
+import { runNativeClientCommand } from "./client-command.js";
 import type { CredentialStore } from "./credential-store.js";
 import { NativeCredentialStore } from "./credential-store.js";
 import { registerAuthCommands } from "./commands/auth.js";
@@ -20,13 +20,17 @@ import { validateFormat } from "./commands/shared.js";
 import { CliError, FileProfileStore, profileConfigPathFromEnv, type ProfileStore } from "./profile.js";
 import { KINTSUGI_CLI_VERSION } from "./version.js";
 
-const execFileAsync = promisify(execFile);
+export interface OAuthLoopbackCallback {
+  redirectUri: string;
+  waitForCode(): Promise<{ code: string; state: string }>;
+  close(): Promise<void>;
+}
 
-const NATIVE_CLIENT_COMMANDS: Record<CodingAgentClient, string> = {
-  claude: "claude",
-  codex: "codex",
-  copilot: "copilot",
-};
+export interface NativeClientCommandResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
 
 export interface CliDeps {
   profiles: ProfileStore;
@@ -46,6 +50,11 @@ export interface CliDeps {
   signal?: AbortSignal;
   /** Subscription lifetime, independent of the ordinary request deadline. */
   watchSignal?: AbortSignal;
+  /** Browser launch and loopback callback are injectable so auth tests never open a real browser or listener. */
+  openBrowser?: (url: string) => Promise<void>;
+  createOAuthCallback?: (options: { state: string; signal?: AbortSignal }) => Promise<OAuthLoopbackCallback>;
+  /** Native harness process execution is injectable and must use argument-safe spawning. */
+  runClientCommand?: (executable: string, args: readonly string[]) => Promise<NativeClientCommandResult>;
 }
 
 function sleepWithSignal(milliseconds: number, signal?: AbortSignal): Promise<void> {
@@ -83,12 +92,14 @@ export function createDefaultCliDeps(): CliDeps {
       cliEntrypointPath: entrypoint === undefined ? process.execPath : realpathSync(entrypoint),
       cliVersion: KINTSUGI_CLI_VERSION,
     },
-    getClientVersion: async (target) => {
-      const { stdout, stderr } = await execFileAsync(NATIVE_CLIENT_COMMANDS[target], ["--version"], { timeout: 5_000, windowsHide: true });
-      const match = /\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/.exec(`${stdout}\n${stderr}`);
-      if (match?.[0] === undefined) throw new Error("Native client did not report a semantic version");
-      return match[0];
-    },
+    getClientVersion: getNativeClientVersion,
+    runClientCommand: (executable, args) => runNativeClientCommand(executable, args, {
+      cwd: process.cwd(),
+      env: process.env,
+      // Keep JSON/text reports on stdout; native client progress belongs on stderr.
+      stdout: process.stderr,
+      stderr: process.stderr,
+    }),
     cwd: process.cwd(),
     env: process.env,
     isTTY: Boolean(process.stdin.isTTY),
@@ -124,8 +135,25 @@ export function createDefaultCliDeps(): CliDeps {
     stdout: process.stdout,
     stderr: process.stderr,
     sleep: sleepWithSignal,
-    signal: AbortSignal.timeout(60_000),
   };
+}
+
+/** Scope native termination signals to this invocation and release listeners afterwards. */
+export async function runCliWithSignals(
+  argv: readonly string[],
+  deps: CliDeps,
+  signals: Pick<NodeJS.Process, "on" | "removeListener"> = process,
+): Promise<number> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signals.on("SIGINT", abort);
+  signals.on("SIGTERM", abort);
+  const signal = deps.signal === undefined ? controller.signal : AbortSignal.any([controller.signal, deps.signal]);
+  try { return await runCli(argv, { ...deps, signal }); }
+  finally {
+    signals.removeListener("SIGINT", abort);
+    signals.removeListener("SIGTERM", abort);
+  }
 }
 
 function errorFields(error: unknown): { code: string; status?: number; message: string; details?: unknown } {

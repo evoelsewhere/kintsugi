@@ -42,6 +42,12 @@ const READ_ONLY = {
   idempotentHint: true,
 } as const;
 
+const READ_ONLY_SNAPSHOT = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: false,
+} as const;
+
 function toolFailure(error: unknown) {
   const candidate = error !== null && typeof error === "object" ? error as { code?: unknown } : {};
   const code = typeof candidate.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(candidate.code)
@@ -88,10 +94,10 @@ export function registerCodingAgentWorkflowTools(
 
   server.registerTool("task_brief", {
     title: "Read a task brief",
-    description: "Prepare or retrieve a task brief and its immutable context snapshot. Pass its snapshotId to later document reads and searches.",
+    description: "Prepare or retrieve a task brief and its immutable context snapshot. Preparing a brief stores a temporary snapshot. Pass its snapshotId to later document reads and searches.",
     inputSchema: taskBriefQuerySchema,
     outputSchema: taskBriefSchema,
-    annotations: READ_ONLY,
+    annotations: READ_ONLY_SNAPSHOT,
   }, (query) => invokeRead(() => access.briefTask(query)));
 
   server.registerTool("document_get", {

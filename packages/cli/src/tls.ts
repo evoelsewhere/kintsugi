@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
+import { Readable } from "node:stream";
 import { rootCertificates } from "node:tls";
 import { CliError } from "./profile.js";
 
@@ -22,14 +23,15 @@ export async function createFetchWithPrivateCa(path: string): Promise<typeof fet
         rejectUnauthorized: true,
         ...(signal === undefined ? {} : { signal }),
       }, (response) => {
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk: Buffer) => chunks.push(chunk));
-        response.on("end", () => resolve(new Response(Buffer.concat(chunks), {
-          status: response.statusCode ?? 500,
+        const status = response.statusCode ?? 500;
+        const body = init?.method?.toUpperCase() === "HEAD" || status === 204 || status === 304
+          ? null
+          : Readable.toWeb(response) as unknown as BodyInit;
+        resolve(new Response(body, {
+          status,
           statusText: response.statusMessage,
           headers: response.headers as HeadersInit,
-        })));
-        response.on("error", reject);
+        }));
       });
       request.on("error", reject);
       request.end();

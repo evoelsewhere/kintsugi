@@ -1,7 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultCliDeps, runCli } from "../src/cli.js";
+import { getNativeClientVersion } from "../src/client-version.js";
 import { formatResult } from "../src/render.js";
+import { EventEmitter } from "node:events";
+import * as cliModule from "../src/cli.js";
 import type { CodingAgentWorkflowCapabilities, CodingAgentWorkflowPort } from "@kintsugi/harness-sdk";
+
+describe("native client version detection", () => {
+  it("uses the Windows command shell for npm .cmd client shims", async () => {
+    const execute = vi.fn(async () => ({ stdout: "2.1.278\n", stderr: "" }));
+
+    await expect(getNativeClientVersion("claude", "win32", execute as never)).resolves.toBe("2.1.278");
+    expect(execute).toHaveBeenCalledWith("claude", ["--version"], expect.objectContaining({ shell: true }));
+  });
+
+  it("keeps direct execution on Unix", async () => {
+    const execute = vi.fn(async () => ({ stdout: "0.163.0-alpha.10.2\n", stderr: "" }));
+
+    await expect(getNativeClientVersion("codex", "linux", execute as never)).resolves.toBe("0.163.0-alpha.10.2");
+    expect(execute).toHaveBeenCalledWith("codex", ["--version"], expect.not.objectContaining({ shell: true }));
+  });
+});
 
 type Config = { schemaVersion: "1"; activeProfile?: string; profiles: Record<string, { id: string; baseUrl: string; projectId?: string; caFile?: string }> };
 
@@ -43,6 +62,86 @@ function harness(fetch: typeof globalThis.fetch, options: { profile?: boolean; t
 function ok(data: unknown): Response { return Response.json({ success: true, data }); }
 
 describe("kintsugi CLI", () => {
+  it.each(["SIGINT", "SIGTERM"])("cancels browser sign-in on %s and cleans up process signal listeners", async (signal) => {
+    const state = harness(async () => ok({}), { profile: true });
+    const signals = new EventEmitter();
+    let closed = false;
+    const deps = { ...state.deps,
+      openBrowser: async () => { signals.emit(signal); },
+      createOAuthCallback: async () => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: () => new Promise<{ code: string; state: string }>(() => undefined), close: async () => { closed = true; } }),
+    };
+    const entrypoint = (cliModule as unknown as { runCliWithSignals: (argv: string[], deps: typeof state.deps, signals: EventEmitter) => Promise<number> }).runCliWithSignals;
+    expect(typeof entrypoint).toBe("function");
+    expect(await entrypoint(["mcp", "serve"], deps, signals)).toBe(2);
+    expect(closed).toBe(true);
+    expect(state.output().stdout).toBe("");
+    expect(state.output().stderr).toContain("CANCELLED");
+    expect(signals.listenerCount("SIGINT") + signals.listenerCount("SIGTERM")).toBe(0);
+  });
+  it("authenticates through browser PKCE and stores only a refresh envelope", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const state = harness(async (input, init) => {
+      requests.push({ url: String(input), init });
+      return ok({ accessToken: "knt_caw_test", refreshToken: "knt_crt_test", expiresIn: 300, connectionId: "connection-1", projectIds: ["shop"] });
+    });
+    let authorization: URL | undefined;
+    let closed = false;
+    const deps = { ...state.deps,
+      openBrowser: async (url: string) => { authorization = new URL(url); },
+      createOAuthCallback: async ({ state: nonce }: { state: string }) => ({
+        redirectUri: "http://127.0.0.1:45678/oauth/callback",
+        waitForCode: async () => ({ code: "server-code", state: nonce }),
+        close: async () => { closed = true; },
+      }),
+    };
+    expect(await runCli(["auth", "login", "--url", "https://kintsugi.example", "--project", "shop"], deps)).toBe(0);
+    expect(authorization?.pathname).toBe("/coding-agent/authorize");
+    expect(authorization?.searchParams.get("projectId")).toBe("shop");
+    expect(authorization?.searchParams.get("codeChallengeMethod")).toBe("S256");
+    expect(requests[0]?.url).toBe("https://kintsugi.example/api/auth/coding-agent/token");
+    expect(new Headers(requests[0]?.init?.headers).get("x-kintsugi-csrf")).toBe("1");
+    expect(JSON.parse(state.credentials.values.get("work")!)).toMatchObject({ version: 1, refreshToken: "knt_crt_test", connectionId: "connection-1", projectIds: ["shop"] });
+    expect(state.credentials.values.get("work")).not.toContain("knt_caw_test");
+    expect(state.output().stdout + state.output().stderr).not.toContain("knt_crt_test");
+    expect(closed).toBe(true);
+  });
+
+  it("reopens browser consent when MCP refresh is rejected at the connection-age cap", async () => {
+    const state = harness(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as { grantType: string };
+      if (body.grantType === "refresh_token") return Response.json({ success: false }, { status: 401 });
+      return ok({ accessToken: "knt_caw_after-consent", refreshToken: "knt_crt_after-consent", expiresIn: 300, connectionId: "renewed", projectIds: ["shop"] });
+    }, { profile: true, token: JSON.stringify({ version: 1, baseUrl: "https://kintsugi.example", refreshToken: "knt_crt_expired", connectionId: "expired", projectIds: ["shop"] }) });
+    let opened = 0;
+    let served = false;
+    const deps = { ...state.deps,
+      openBrowser: async () => { opened++; },
+      createOAuthCallback: async ({ state: nonce }: { state: string }) => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: async () => ({ code: "renewal-code", state: nonce }), close: async () => undefined }),
+      serveMcp: async () => { served = true; },
+    };
+    expect(await runCli(["mcp", "serve"], deps)).toBe(0);
+    expect(opened).toBe(1);
+    expect(served).toBe(true);
+    expect(state.output().stdout).toBe("");
+    expect(state.output().stderr).toContain("Sign in to Kintsugi");
+    expect(state.deps.promptSecret).not.toHaveBeenCalled();
+    expect(state.deps.readStdin).not.toHaveBeenCalled();
+    expect(JSON.parse(state.credentials.values.get("work")!).connectionId).toBe("renewed");
+  });
+
+  it("shows only safe OAuth metadata in auth status", async () => {
+    const state = harness(async () => ok({}), { profile: true, token: JSON.stringify({ version: 1, baseUrl: "https://kintsugi.example", refreshToken: "knt_crt_status-secret", connectionId: "conn", projectIds: ["shop"] }) });
+    expect(await runCli(["auth", "status", "--json"], state.deps as never)).toBe(0);
+    expect(JSON.parse(state.output().stdout)).toMatchObject({ authenticated: true, authentication: "browser", connectionId: "conn", projectIds: ["shop"] });
+    expect(state.output().stdout + state.output().stderr).not.toContain("knt_crt_");
+  });
+
+  it.each(["knt_caw_access", "knt_crt_refresh"])("never persists a raw OAuth secret through legacy token-stdin: %s", async (token) => {
+    const state = harness(async () => ok({}), { readStdin: async () => token });
+    expect(await runCli(["auth", "login", "--url", "https://kintsugi.example", "--token-stdin"], state.deps as never)).toBe(2);
+    expect(state.credentials.values.size).toBe(0);
+    expect(state.output().stdout + state.output().stderr).not.toContain(token);
+  });
   it("cleans up abort listeners after retry sleeps complete", async () => {
     const signal = new AbortController().signal;
     const remove = vi.spyOn(signal, "removeEventListener");
@@ -253,14 +352,15 @@ describe("kintsugi CLI", () => {
     expect(state.credentials.set).not.toHaveBeenCalled();
   });
 
-  it("stores the token in the injected secure store while profile JSON contains no secret", async () => {
+  it("requires explicit project consent instead of a hidden token prompt", async () => {
     const prompt = vi.fn(async () => "TEST-login-secret");
     const state = harness(async () => ok({ schemaVersion: "1", items: [], limit: 25 }), { promptSecret: prompt });
     state.deps.isTTY = true;
     const code = await runCli(["auth", "login", "--url", "https://kintsugi.example", "--profile", "work"], state.deps as never);
-    expect(code).toBe(0);
-    expect(prompt).toHaveBeenCalledOnce();
-    expect(state.credentials.values.get("work")).toBe("TEST-login-secret");
+    expect(code).toBe(2);
+    expect(prompt).not.toHaveBeenCalled();
+    expect(state.credentials.values.get("work")).toBeUndefined();
+    expect(state.output().stderr).toContain("PROJECT_REQUIRED");
     expect(JSON.stringify(state.profiles.value)).not.toContain("TEST-login-secret");
     expect(state.output().stdout + state.output().stderr).not.toContain("TEST-login-secret");
   });

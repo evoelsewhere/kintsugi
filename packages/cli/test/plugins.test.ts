@@ -1,33 +1,77 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli, type CliDeps } from "../src/cli.js";
+import { FileProfileStore } from "../src/profile.js";
 
 const folders: string[] = [];
-async function createDeps(version = "2.1.278") {
+
+function artifactRoot(root: string, harness: string, profileId: string): string {
+  const namespace = `profile-${createHash("sha256").update(profileId, "utf8").digest("hex").slice(0, 16)}`;
+  return join(root, "Kintsugi config", "plugins", "coding-agent-workflow", namespace, harness);
+}
+
+interface SetupState {
+  root: string;
+  configPath: string;
+  stdout: string[];
+  stderr: string[];
+  profiles: FileProfileStore;
+  getClientVersion: ReturnType<typeof vi.fn>;
+  getCredential: ReturnType<typeof vi.fn>;
+  setCredential: ReturnType<typeof vi.fn>;
+  deleteCredential: ReturnType<typeof vi.fn>;
+  runClientCommand: ReturnType<typeof vi.fn>;
+  deps: CliDeps;
+}
+
+async function createState(options: {
+  clientVersion?: string;
+  commandResults?: Array<{ exitCode: number; stdout: string; stderr: string }>;
+  initialConfig?: string;
+} = {}): Promise<SetupState> {
   const root = await mkdtemp(join(tmpdir(), "kintsugi-cli-plugins-"));
   folders.push(root);
+  const configPath = join(root, "Kintsugi config", "config.json");
+  const unrelatedPath = join(root, "unrelated-client-settings.json");
+  await mkdir(join(root, "Kintsugi config"), { recursive: true });
+  await writeFile(unrelatedPath, '{"preserve":"yes"}\n', "utf8");
+  await writeFile(configPath, options.initialConfig ?? JSON.stringify({
+    schemaVersion: "1",
+    activeProfile: "work",
+    profiles: {
+      work: { id: "work", baseUrl: "https://old.example", projectId: "old-project", caFile: "C:/certs/tenant-ca.pem" },
+      other: { id: "other", baseUrl: "https://other.example", projectId: "other-project" },
+    },
+  }, null, 2) + "\n", "utf8");
   const stdout: string[] = [];
   const stderr: string[] = [];
-  const getToken = vi.fn(async () => "TEST-plugin-token");
-  const getClientVersion = vi.fn(async () => version);
+  const getCredential = vi.fn(async () => "TEST-never-read");
+  const setCredential = vi.fn(async () => undefined);
+  const deleteCredential = vi.fn(async () => undefined);
+  const getClientVersion = vi.fn(async () => options.clientVersion ?? "2.1.278");
+  const commandResults = [...(options.commandResults ?? [])];
+  const runClientCommand = vi.fn(async () => commandResults.shift() ?? { exitCode: 0, stdout: "done", stderr: "" });
   const deps = {
-    profiles: {
-      load: async () => ({
-        schemaVersion: "1" as const,
-        profiles: { work: { id: "work", baseUrl: "https://kintsugi.example" } },
-      }),
-    },
+    profiles: new FileProfileStore(configPath),
+    credentials: { get: getCredential, set: setCredential, delete: deleteCredential },
+    fetch: globalThis.fetch,
+    serveMcp: async () => undefined,
     cwd: root,
-    env: { KINTSUGI_CONFIG: "config.json" },
-    credentials: { get: getToken, set: vi.fn(), delete: vi.fn() },
-    launcher: { launcherPath: process.execPath, cliEntrypointPath: process.execPath, cliVersion: "0.1.0" },
-    getClientVersion,
+    env: { KINTSUGI_CONFIG: configPath },
+    isTTY: false,
+    promptSecret: async () => "TEST-prompt-must-not-run",
+    readStdin: async () => "TEST-stdin-must-not-run",
     stdout: { write: (value: string) => { stdout.push(value); } },
     stderr: { write: (value: string) => { stderr.push(value); } },
+    sleep: async () => undefined,
+    launcher: { launcherPath: process.execPath, cliEntrypointPath: process.execPath, cliVersion: "0.1.0" },
+    getClientVersion,
+    runClientCommand,
   } as unknown as CliDeps;
-  return { root, stdout, stderr, getClientVersion, getToken, deps };
+  return { root, configPath, stdout, stderr, profiles: deps.profiles as FileProfileStore, getClientVersion, getCredential, setCredential, deleteCredential, runClientCommand, deps };
 }
 
 afterEach(async () => {
@@ -35,74 +79,169 @@ afterEach(async () => {
 });
 
 describe("plugins setup command", () => {
-  it("uses the stable harness id and reports package changes and rollback without touching credentials or unrelated config", async () => {
-    const state = await createDeps();
-    const configPath = join(state.root, "config.json");
-    const unrelatedConfig = JSON.stringify({ nativeClientSettings: { preserve: true } });
-    await writeFile(configPath, unrelatedConfig, "utf8");
-    const result = await runCli(["plugins", "setup", "--harness", "claude-code", "--profile", "work"], state.deps);
+  it("installs the project plugin without credentials and saves only the nonsecret profile fields", async () => {
+    const state = await createState();
+    const unrelatedPath = join(state.root, "unrelated-client-settings.json");
+    const unrelatedBefore = await readFile(unrelatedPath, "utf8");
+    const result = await runCli([
+      "plugins", "setup", "--harness", "claude-code", "--url", "https://kintsugi.example/", "--project", "shop & payments", "--profile", "work",
+    ], state.deps);
+
+    expect(result, state.stderr.join("")).toBe(0);
     expect(state.stderr.join("")).toBe("");
-    expect(result).toBe(0);
     expect(state.getClientVersion).toHaveBeenCalledWith("claude");
-    const packageRoot = join(state.root, "plugins", "coding-agent-workflow", "claude-code", "plugins", "claude", "kintsugi-coding-agent-workflow");
-    const config = JSON.parse(await readFile(join(packageRoot, ".mcp.json"), "utf8")) as { mcpServers: { kintsugi: { args: string[] } } };
-    expect(config.mcpServers.kintsugi.args).toEqual([process.execPath, "mcp", "serve", "--profile", "work"]);
-    expect(state.stdout.join("")).toContain("Harness: claude-code");
-    expect(state.stdout.join("")).toContain("Package files created or updated:");
-    expect(state.stdout.join("")).toContain(".mcp.json");
-    expect(state.stdout.join("")).toContain("Package files unchanged:");
-    expect(state.stdout.join("")).toContain("claude plugin marketplace add");
-    expect(state.stdout.join("")).toContain("claude plugin uninstall");
-    expect(state.stdout.join("")).toContain("Rollback");
-    expect(state.getToken).not.toHaveBeenCalled();
-    expect(await readFile(configPath, "utf8")).toBe(unrelatedConfig);
-    expect(state.stdout.join("") + state.stderr.join("")).not.toContain("TEST-plugin-token");
-    expect(state.stderr.join("")).toBe("");
-  });
-
-  it("renders package setup commands as Markdown when requested globally", async () => {
-    const state = await createDeps();
-    const result = await runCli(["plugins", "setup", "--harness", "claude-code", "--profile", "work", "--format", "markdown"], state.deps);
-    expect(state.stderr.join("")).toBe("");
-    expect(result).toBe(0);
-    expect(state.stdout.join("")).toContain("# Coding Agent Workflow plugin");
-    expect(state.stdout.join("")).toContain("Harness: **claude-code**");
-    expect(state.stdout.join("")).toContain("## Package files created or updated");
-    expect(state.stdout.join("")).toContain("## Rollback");
-    expect(state.stdout.join("")).toContain("## Install");
-    expect(state.stdout.join("")).toContain("claude plugin marketplace add");
-    expect(state.stdout.join("")).toContain("claude plugin uninstall");
-    expect(state.stdout.join("")).not.toContain("TEST-plugin-token");
-  });
-
-  it("includes the stable harness id and setup report in JSON", async () => {
-    const state = await createDeps();
-    const result = await runCli(["plugins", "setup", "--harness", "claude-code", "--profile", "work", "--json"], state.deps);
-    expect(state.stderr.join("")).toBe("");
-    expect(result).toBe(0);
-    expect(JSON.parse(state.stdout.join("")).data).toMatchObject({
-      harness: "claude-code",
-      target: "claude",
-      written: expect.arrayContaining([expect.stringContaining(".mcp.json")]),
-      unchanged: [],
-      rollbackCommands: expect.arrayContaining([expect.stringContaining("claude plugin uninstall")]),
+    const marketplace = JSON.parse(await readFile(join(artifactRoot(state.root, "claude-code", "work"), ".claude-plugin", "marketplace.json"), "utf8")) as { name: string };
+    expect(state.runClientCommand.mock.calls).toEqual([
+      ["claude", ["plugin", "marketplace", "add", "--scope", "user", artifactRoot(state.root, "claude-code", "work")]],
+      ["claude", ["plugin", "install", "--scope", "user", "--yes", `kintsugi-coding-agent-workflow@${marketplace.name}`]],
+    ]);
+    const saved = await state.profiles.load();
+    expect(saved).toMatchObject({
+      activeProfile: "work",
+      profiles: {
+        work: { id: "work", baseUrl: "https://kintsugi.example", projectId: "shop & payments", caFile: "C:/certs/tenant-ca.pem" },
+        other: { id: "other", baseUrl: "https://other.example", projectId: "other-project" },
+      },
     });
-    expect(state.stdout.join("") + state.stderr.join("")).not.toContain("TEST-plugin-token");
+    const pluginRoot = join(artifactRoot(state.root, "claude-code", "work"), "plugins", "claude", "kintsugi-coding-agent-workflow");
+    const manifest = JSON.parse(await readFile(join(pluginRoot, ".mcp.json"), "utf8")) as { mcpServers: { kintsugi: { args: string[] } } };
+    expect(manifest.mcpServers.kintsugi.args).toEqual([process.execPath, "mcp", "serve", "--profile", "work"]);
+    expect(state.stdout.join("")).toContain("Planned native commands:");
+    expect(state.stdout.join("")).toContain("Rollback commands:");
+    expect(state.stdout.join("")).toContain("Restart or reload Claude Code");
+    expect(await readFile(unrelatedPath, "utf8")).toBe(unrelatedBefore);
+    expect(state.getCredential).not.toHaveBeenCalled();
+    expect(state.setCredential).not.toHaveBeenCalled();
+    expect(state.deleteCredential).not.toHaveBeenCalled();
+    expect(state.stdout.join("") + state.stderr.join("")).not.toContain("TEST-never-read");
   });
 
-  it("rejects an untested native version before writing package files", async () => {
-    const state = await createDeps("99.0.0");
-    const result = await runCli(["plugins", "setup", "--harness", "claude-code", "--profile", "work"], state.deps);
-    expect(result).toBe(2);
-    await expect(stat(join(state.root, "plugins", "coding-agent-workflow", "claude-code"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect(state.stderr.join(" ")).toMatch(/untested/i);
+  it("uses a stable project-specific profile when one is not supplied", async () => {
+    const state = await createState({ clientVersion: "0.163.0-alpha.10.2", initialConfig: '{"schemaVersion":"1","profiles":{}}\n' });
+    const result = await runCli(["plugins", "setup", "--harness", "codex", "--url", "https://kintsugi.example", "--project", "project/with spaces"], state.deps);
+    expect(result, state.stderr.join("")).toBe(0);
+
+    const config = await state.profiles.load();
+    const [profileId, profile] = Object.entries(config.profiles)[0] ?? [];
+    expect(profileId).toMatch(/^kintsugi-[a-f0-9]{12}$/);
+    expect(profile).toMatchObject({ id: profileId, baseUrl: "https://kintsugi.example", projectId: "project/with spaces" });
+    const pluginRoot = join(artifactRoot(state.root, "codex", profileId!), "plugins", "codex", "kintsugi-coding-agent-workflow");
+    const manifest = JSON.parse(await readFile(join(pluginRoot, "mcp.json"), "utf8")) as { mcpServers: { kintsugi: { args: string[] } } };
+    expect(manifest.mcpServers.kintsugi.args).toEqual([process.execPath, "mcp", "serve", "--profile", profileId]);
+    const marketplace = JSON.parse(await readFile(join(artifactRoot(state.root, "codex", profileId!), ".agents", "plugins", "marketplace.json"), "utf8")) as { name: string };
+    expect(state.runClientCommand.mock.calls.map(([executable, args]) => [executable, args])).toEqual([
+      ["codex", ["plugin", "marketplace", "add", artifactRoot(state.root, "codex", profileId!)]],
+      ["codex", ["plugin", "add", `kintsugi-coding-agent-workflow@${marketplace.name}`]],
+    ]);
+    expect(config.activeProfile).toBeUndefined();
   });
 
-  it("does not guess support for a client without a native probe", async () => {
-    const state = await createDeps("1.0.0");
-    const result = await runCli(["plugins", "setup", "--harness", "copilot-cli", "--profile", "work"], state.deps);
+  it("prints the planned commands before invoking the native client", async () => {
+    const state = await createState();
+    const outputAtInvocation: string[] = [];
+    state.runClientCommand.mockImplementation(async () => {
+      outputAtInvocation.push(state.stdout.join(""));
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+    expect(await runCli(["plugins", "setup", "--harness", "claude-code", "--url", "https://kintsugi.example", "--project", "shop", "--profile", "work"], state.deps)).toBe(0);
+    expect(outputAtInvocation).toHaveLength(2);
+    expect(outputAtInvocation.every((output) => output.includes("Planned native commands:") && output.includes("claude plugin install"))).toBe(true);
+  });
+
+  it("reports rollback guidance after a partial native install without running destructive rollback commands", async () => {
+    const state = await createState({ commandResults: [
+      { exitCode: 0, stdout: "", stderr: "" },
+      { exitCode: 1, stdout: "", stderr: "native install failed" },
+    ] });
+    const result = await runCli(["plugins", "setup", "--harness", "claude-code", "--url", "https://kintsugi.example", "--project", "shop", "--profile", "work"], state.deps);
     expect(result).toBe(2);
-    await expect(stat(resolve(state.root, "plugins", "coding-agent-workflow", "copilot-cli"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect(state.stderr.join(" ")).toMatch(/not enabled until an exact client version is tested/i);
+    expect(state.runClientCommand).toHaveBeenCalledTimes(2);
+    expect(state.stderr.join("")).toContain("PLUGIN_SETUP_COMMAND_FAILED");
+    expect(state.stderr.join("")).toContain("Completed 1 of 2");
+    expect(state.stderr.join("")).toContain("claude plugin marketplace remove");
+    expect(state.stderr.join("")).toContain("generated package directory");
+    expect(state.stderr.join("")).not.toContain("native install failed");
+  });
+
+  it.each([
+    ["invalid URL", "--url", "http://remote.example", "--project", "shop"],
+    ["credential-bearing URL", "--url", "https://user:pass@kintsugi.example", "--project", "shop"],
+    ["empty project", "--url", "https://kintsugi.example", "--project", ""],
+    ["control character project", "--url", "https://kintsugi.example", "--project", "shop\n--profile attacker"],
+  ])("rejects %s before writing a package or invoking a client", async (_name, urlFlag, url, projectFlag, project) => {
+    const state = await createState();
+    const result = await runCli(["plugins", "setup", "--harness", "claude-code", urlFlag, url, projectFlag, project, "--profile", "work"], state.deps);
+    expect(result).toBe(2);
+    expect(state.runClientCommand).not.toHaveBeenCalled();
+    expect(state.stderr.join("")).toMatch(/URL|PROJECT/i);
+    await expect(stat(artifactRoot(state.root, "claude-code", "work"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects an unsupported harness before checking or writing client setup", async () => {
+    const state = await createState();
+    expect(await runCli(["plugins", "setup", "--harness", "copilot-cli", "--url", "https://kintsugi.example", "--project", "shop"], state.deps)).toBe(2);
+    expect(state.getClientVersion).not.toHaveBeenCalled();
+    expect(state.runClientCommand).not.toHaveBeenCalled();
+    expect(state.stderr.join("")).toContain("PLUGIN_HARNESS_INVALID");
+  });
+
+  it("does not rewrite unchanged package files when setup is repeated", async () => {
+    const state = await createState();
+    const args = ["plugins", "setup", "--harness", "claude-code", "--url", "https://kintsugi.example", "--project", "shop", "--profile", "work"];
+    expect(await runCli(args, state.deps)).toBe(0);
+    const pluginRoot = artifactRoot(state.root, "claude-code", "work");
+    const manifestPath = join(pluginRoot, "plugins", "claude", "kintsugi-coding-agent-workflow", ".mcp.json");
+    const before = await readFile(manifestPath);
+    const mtimeBefore = (await stat(manifestPath)).mtimeMs;
+    state.stdout.length = 0;
+    expect(await runCli(args, state.deps)).toBe(0);
+    expect(await readFile(manifestPath)).toEqual(before);
+    expect((await stat(manifestPath)).mtimeMs).toBe(mtimeBefore);
+    expect(state.stdout.join("")).toContain("No package files needed changes.");
+    expect(state.runClientCommand).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps different project profiles in separate package roots and marketplaces", async () => {
+    const state = await createState();
+    const resultA = await runCli(["plugins", "setup", "--harness", "claude-code", "--url", "https://kintsugi.example", "--project", "shop", "--profile", "work"], state.deps);
+    expect(resultA, state.stderr.join("")).toBe(0);
+    const workRoot = artifactRoot(state.root, "claude-code", "work");
+    const workManifest = JSON.parse(await readFile(join(workRoot, "plugins", "claude", "kintsugi-coding-agent-workflow", ".mcp.json"), "utf8")) as { mcpServers: { kintsugi: { args: string[] } } };
+    const workMarketplace = JSON.parse(await readFile(join(workRoot, ".claude-plugin", "marketplace.json"), "utf8")) as { name: string };
+
+    state.stdout.length = 0;
+    const resultB = await runCli(["plugins", "setup", "--harness", "claude-code", "--url", "https://kintsugi.example", "--project", "billing", "--profile", "other"], state.deps);
+    expect(resultB, state.stderr.join("")).toBe(0);
+    const otherRoot = artifactRoot(state.root, "claude-code", "other");
+    const otherManifest = JSON.parse(await readFile(join(otherRoot, "plugins", "claude", "kintsugi-coding-agent-workflow", ".mcp.json"), "utf8")) as { mcpServers: { kintsugi: { args: string[] } } };
+    const otherMarketplace = JSON.parse(await readFile(join(otherRoot, ".claude-plugin", "marketplace.json"), "utf8")) as { name: string };
+
+    expect(workRoot).not.toBe(otherRoot);
+    expect(workManifest.mcpServers.kintsugi.args).toEqual([process.execPath, "mcp", "serve", "--profile", "work"]);
+    expect(otherManifest.mcpServers.kintsugi.args).toEqual([process.execPath, "mcp", "serve", "--profile", "other"]);
+    expect(workMarketplace.name).not.toBe(otherMarketplace.name);
+    expect(await readFile(join(workRoot, ".kintsugi-managed.json"), "utf8")).toContain('"target": "claude"');
+    expect(await readFile(join(otherRoot, ".kintsugi-managed.json"), "utf8")).toContain('"target": "claude"');
+  });
+
+  it("keeps the same project ID on separate Kintsugi installations in separate profiles", async () => {
+    const state = await createState();
+    expect(await runCli(["plugins", "setup", "--harness", "claude-code", "--url", "https://one.example", "--project", "shared-project"], state.deps)).toBe(0);
+    expect(await runCli(["plugins", "setup", "--harness", "claude-code", "--url", "https://two.example", "--project", "shared-project"], state.deps)).toBe(0);
+
+    const config = await state.profiles.load();
+    const generatedProfiles = Object.values(config.profiles).filter((profile) => profile.id.startsWith("kintsugi-"));
+    expect(generatedProfiles).toHaveLength(2);
+    expect(generatedProfiles.map((profile) => profile.baseUrl).sort()).toEqual(["https://one.example", "https://two.example"]);
+    expect(state.runClientCommand).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps an explicit Windows-reserved profile name out of the generated filesystem path", async () => {
+    const state = await createState();
+    const result = await runCli(["plugins", "setup", "--harness", "claude-code", "--url", "https://kintsugi.example", "--project", "shop", "--profile", "CON"], state.deps);
+    expect(result, state.stderr.join("")).toBe(0);
+    const root = artifactRoot(state.root, "claude-code", "CON");
+    expect(root.toLowerCase()).not.toContain("\\con\\");
+    await expect(stat(join(root, ".kintsugi-managed.json"))).resolves.toBeDefined();
   });
 });
