@@ -227,7 +227,10 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
               "--allow-child-process",
               "--allow-worker",
               "--disable-warning=SecurityWarning",
-              ...[...(await childCodeRoots()), entry, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
+              // The workspace root is readable as a whole: the model cannot grant a folder without what is in it, and the kernel
+              // (not the process) decides which of it an agent's tools reach. Without it the child's own check of the job (and
+              // pi's working directory) finds the root denied.
+              ...[...(await childCodeRoots()), entry, spec.workspace.root, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
               ...[spec.workspace.outDir, tmp].map((path) => `--allow-fs-write=${path}`),
             ];
       const job = new ChildAgentJob(randomUUID(), spec.limits.idleTimeoutSec ?? idleTimeoutSec);
