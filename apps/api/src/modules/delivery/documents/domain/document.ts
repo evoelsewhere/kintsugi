@@ -3,7 +3,7 @@
 // results of a stage built from the files it wrote. Never read from anywhere but the mirror;
 // never `restricted/` (restricted records are not committed, ADR-0029) or `.git`. Pure types.
 
-import type { CatalogRule, DataObject, Finding, Inventory, SecurityReport, Table, TopoDomainEdge, TopoEdge, TopoFlow, TraceUnit } from "@kintsugi/agents/reader";
+import type { CatalogRule, DataObject, Finding, Gap, GapCounts, Inventory, SecurityReport, Table, TopoDomainEdge, TopoEdge, TopoFlow, TraceUnit } from "@kintsugi/agents/reader";
 import type { RuleId, RulesReviewRecord } from "@kintsugi/domain";
 
 /** The mirror of a project's document repository (ADR-0025). */
@@ -90,7 +90,7 @@ export type FileRead =
 export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 
 /** Stages with a results view. */
-export const RESULT_STAGES = ["assess", "map", "extract-rules", "harden", "understand"] as const;
+export const RESULT_STAGES = ["assess", "map", "extract-rules", "harden", "understand", "gaps"] as const;
 export type ResultStage = (typeof RESULT_STAGES)[number];
 
 /** A stage output file found at the ref. */
@@ -196,6 +196,18 @@ export interface HardenResults extends StageResultsBase {
   runId?: string;
 }
 
+/**
+ * The gaps of the legacy understanding (ADR-0057): the application's `GAPS.md` (the units' `Gaps and questions` tables
+ * joined), or one unit's own table. Not a stage: a view of the understand stage's documents.
+ */
+export interface GapsResults extends StageResultsBase {
+  stage: "gaps";
+  gaps: Gap[];
+  gapCounts: GapCounts;
+  /** One unit's view: its specification has no `Gaps and questions` section (written before ADR-0057). */
+  noSection?: boolean;
+}
+
 /** A unit of the understand stage: its row of the traceability matrix and its work item, when one is at the ref. */
 export interface UnderstandUnit extends TraceUnit {
   /**
@@ -241,7 +253,7 @@ export interface UnderstandResults extends StageResultsBase {
   missingInputs: Array<{ path: string; stage: string }>;
 }
 
-export type StageResults = AssessResults | MapResults | RulesResults | HardenResults | UnderstandResults;
+export type StageResults = AssessResults | MapResults | RulesResults | HardenResults | UnderstandResults | GapsResults;
 
 /** Headline numbers of every result stage of one application, for the Delivery overview. */
 export interface StageHeadline {

@@ -20,6 +20,7 @@ import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { formatDateTime, formatRelative, shortSha } from "@/lib/format";
 import { useLoader } from "@/lib/use-loader";
 import { AssessResultsView } from "./assess-results";
+import { GapsResultsView } from "./gaps-results";
 import { HardenResultsView } from "./harden-results";
 import { MapResultsView } from "./map-results";
 import { OutputFiles } from "./results-parts";
@@ -194,5 +195,7 @@ function StageView({ results, compare, projectId, runs }: { results: StageResult
       return <HardenResultsView results={results} compare={compare} />;
     case "understand":
       return <UnderstandResultsView results={results} compare={compare} projectId={projectId} />;
+    case "gaps":
+      return <GapsResultsView results={results} />;
   }
 }

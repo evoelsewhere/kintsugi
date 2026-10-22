@@ -30,7 +30,7 @@ export type ResultsQuery = z.infer<typeof resultsQuerySchema>;
 
 /** `?view&item&ref` of the understand results: the view, and one catalog item or the whole application. */
 export const understandResultsQuerySchema = z.object({
-  view: z.enum(["map", "extract-rules", "harden", "understand"]).default("understand"),
+  view: z.enum(["map", "extract-rules", "harden", "understand", "gaps"]).default("understand"),
   item: z.string().min(3).max(130).optional(),
   ref: refSchema,
 });
