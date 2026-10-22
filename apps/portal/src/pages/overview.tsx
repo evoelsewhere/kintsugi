@@ -118,7 +118,7 @@ function attentionLink(item: AttentionItem): string {
     case "run-failed":
       return deliveryLink({ projectId: item.projectId, applicationId: item.applicationId, runId: item.jobRunId });
     case "run-stuck":
-      return monitoringLink("worker");
+      return monitoringLink("runtime");
     case "write-failed":
       return deliveryLink({ projectId: item.projectId, section: "writes" });
     case "repository-error":
@@ -126,7 +126,7 @@ function attentionLink(item: AttentionItem): string {
     case "gate-pending":
       return governanceLink("gates", "pending");
     case "worker-down":
-      return monitoringLink("worker");
+      return monitoringLink("runtime");
   }
 }
 
@@ -237,7 +237,7 @@ function SystemCard({ overview }: { overview: MonitoringOverview | undefined }):
           <CardTitle>System</CardTitle>
           <CardDescription>API, worker and the portal itself.</CardDescription>
         </div>
-        <Link to={monitoringLink("worker")} className="shrink-0 text-[12px] text-accent hover:underline">
+        <Link to={monitoringLink("runtime")} className="shrink-0 text-[12px] text-accent hover:underline">
           Details
         </Link>
       </CardHeader>

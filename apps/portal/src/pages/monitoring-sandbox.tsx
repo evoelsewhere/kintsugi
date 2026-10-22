@@ -1,4 +1,4 @@
-// Monitoring → Sandbox (ADR-0058): the job workspaces on the worker's data volume, each with its run, its state, what it
+// Monitoring → Runtime (ADR-0058): the job workspaces on the worker's data volume, each with its run, its state, what it
 // holds that a retry cannot make again, and when the sweep removes it. An admin (sandbox.manage) removes one that is
 // no longer needed; the worker deletes it, and never one whose run is active or whose output is not written yet.
 

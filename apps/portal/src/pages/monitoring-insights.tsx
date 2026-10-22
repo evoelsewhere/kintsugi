@@ -19,7 +19,7 @@ import { MiniRunBars } from "./delivery/overview-parts";
 import { countBy, formatCount, segmentsOf } from "./delivery/results/results-format";
 import { Kpi, KpiRow, Section } from "./delivery/results/results-parts";
 
-export function MonitoringInsights({ tab }: { tab: "runs" | "repositories" | "writes" | "worker" | "sandbox" }): React.JSX.Element | null {
+export function MonitoringInsights({ tab }: { tab: "runs" | "repositories" | "writes" | "runtime" }): React.JSX.Element {
   switch (tab) {
     case "runs":
       return <RunsInsights />;
@@ -27,10 +27,8 @@ export function MonitoringInsights({ tab }: { tab: "runs" | "repositories" | "wr
       return <RepositoriesInsights />;
     case "writes":
       return <WritesInsights />;
-    case "worker":
+    case "runtime":
       return <WorkerInsights />;
-    case "sandbox":
-      return null;
   }
 }
 
