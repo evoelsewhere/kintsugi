@@ -14,8 +14,9 @@ job is holding, or when it goes, and had no way to free a disk before the sweep.
 
 ## Decision
 
-**1. Monitoring gets a Sandbox tab**, beside Job runs, Repositories, Document writes and Worker: it is live state of the
-installation, not a setting. It lists every workspace on the data volume with its job id, its run (stage, project,
+**1. Monitoring lists the workspaces in its Runtime tab**, under the workers and their queues: both answer whether the
+environment jobs run in is healthy, and the worker owns the workspaces (the queue `workspace-cleanup` is in the same
+page). It is live state of the installation, not a setting. It lists every workspace on the data volume with its job id, its run (stage, project,
 application, attempt, status), the lifecycle in its manifest (`running`, `parked`, `published`), whether its checkouts
 are still on disk, the size of what a retry cannot make again, and when the sweep removes it. Settings → Sandbox keeps
 the settings only.

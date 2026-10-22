@@ -22,7 +22,7 @@ export function deliveryLink(target: {
   return `${path}${query({ project: target.projectId, app: target.applicationId, run: target.runId, section: target.section })}`;
 }
 
-export type MonitoringTab = "runs" | "repositories" | "writes" | "worker" | "sandbox";
+export type MonitoringTab = "runs" | "repositories" | "writes" | "runtime";
 
 export function monitoringLink(tab: MonitoringTab, filter?: string): string {
   return `/monitoring${query({ tab, status: filter })}`;

@@ -1,7 +1,8 @@
 // Monitoring — live state across all projects, refreshing on its own: job runs (status and
 // project filters, durations, the agent or script that ran), the sync status of every
-// registered repository, document writes, and the workers (heartbeats) and their queues.
-// URL: /monitoring?tab=runs|repositories|writes|worker|sandbox&status=<filter>
+// registered repository, document writes, and the runtime: the workers (heartbeats) with their queues and the
+// job workspaces on disk (ADR-0058).
+// URL: /monitoring?tab=runs|repositories|writes|runtime&status=<filter>
 
 import { Activity, FolderGit2, GitCommitHorizontal, Play, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -35,8 +36,7 @@ const TABS: { id: MonitoringTab; label: string }[] = [
   { id: "runs", label: "Job runs" },
   { id: "repositories", label: "Repositories" },
   { id: "writes", label: "Document writes" },
-  { id: "worker", label: "Worker" },
-  { id: "sandbox", label: "Sandbox" },
+  { id: "runtime", label: "Runtime" },
 ];
 
 const PAGE_SIZE = 25;
@@ -67,8 +67,12 @@ export function MonitoringPage(): React.JSX.Element {
       {tab === "runs" ? <RunsView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
       {tab === "repositories" ? <RepositoriesView /> : null}
       {tab === "writes" ? <WritesView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
-      {tab === "worker" ? <WorkerView /> : null}
-      {tab === "sandbox" ? <SandboxView /> : null}
+      {tab === "runtime" ? (
+        <>
+          <WorkerView />
+          <SandboxView />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -327,7 +331,7 @@ const QUEUE_PURPOSE: Record<string, string> = {
   "job-run": "Runtime job runs (stages, scripts, agent jobs)",
   "document-write": "Commits and pull requests to document repos",
   "git-sync": "Clones and fetches of registered repositories",
-  "workspace-cleanup": "Removal of a job workspace asked for in Monitoring → Sandbox",
+  "workspace-cleanup": "Removal of a job workspace asked for in Monitoring → Runtime",
 };
 
 function WorkerView(): React.JSX.Element {
