@@ -2,7 +2,7 @@
 // document's path in the document repo; a link that leaves the repo, points under restricted/
 // or .git, or uses a non-web scheme is never followed.
 
-import { applicationsDir, assessmentFilePath, generatedFilePath } from "@kintsugi/domain";
+import { applicationsDir, assessmentFilePath, assessmentSynthesisPath, generatedFilePath } from "@kintsugi/domain";
 
 export type LinkTarget =
   /** A web page: opens in a new tab. */
@@ -66,9 +66,9 @@ function applicationIdOf(path: string): string | undefined {
   return root === applicationsDir() && app !== undefined && rest.length >= 2 ? app : undefined;
 }
 
-/** Stage main documents, built through the domain path helpers (ADR-0038). */
+/** Stage main documents, built through the domain path helpers (ADR-0051). */
 const MAIN_DOCUMENT_STAGES: ReadonlyArray<readonly [(app: string) => string, string]> = [
-  [(app) => assessmentFilePath(app, "ASSESSMENT.md"), "assess"],
+  [(app) => assessmentSynthesisPath(app), "assess"],
   [(app) => assessmentFilePath(app, "SECURITY_FINDINGS.md"), "harden"],
   [(app) => assessmentFilePath(app, "BUSINESS_RULES.md"), "extract-rules"],
   [(app) => generatedFilePath(app, "README.md"), "understand"],

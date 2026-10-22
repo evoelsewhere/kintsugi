@@ -4,17 +4,17 @@
     python3 rebuild_aggregates.py <app> --docs DIR --out DIR
 
 --docs is the document repository at the default branch tip (read-only): the catalog
-applications/<app>/assessment/catalog/ and, per unit, the documents of
-applications/<app>/units/<module>/<unit>/understanding/ (rules.md and its rules/<id>.md files,
-data-objects.md, findings.md, trace.md, understanding.md, as-is.md). --out is the document-repository root the views are written
+10-applications/<app>/01-legacy/_catalog/ and, per unit, the documents of
+10-applications/<app>/01-legacy/<module>/<unit>/ (rules.md and its rules/<id>.md files,
+data-objects.md, findings.md, trace.md, understanding.md, spec.md). --out is the document-repository root the views are written
 under; they are never written by a run's pull request, only by this script (auto-committed):
 
-- applications/<app>/generated/BUSINESS_RULES.md - the index of every unit's rules (one row per rule,
+- 10-applications/<app>/_generated/BUSINESS_RULES.md - the index of every unit's rules (one row per rule,
   under its item-namespaced id, with its version and a link to the rule's own file); DATA_OBJECTS.md -
   every unit's data objects;
-- applications/<app>/generated/SECURITY_FINDINGS.md - the scorecard and every unit's findings;
-- applications/<app>/generated/traceability.md - the totals (front matter) and one row per understood unit;
-- applications/<app>/generated/README.md - the index of the specifications.
+- 10-applications/<app>/_generated/SECURITY_FINDINGS.md - the scorecard and every unit's findings;
+- 10-applications/<app>/_generated/traceability.md - the totals (front matter) and one row per understood unit;
+- 10-applications/<app>/_generated/README.md - the index of the specifications.
 
 Deterministic: the same inputs give the same files. Standard library only.
 """
@@ -95,7 +95,7 @@ def business_rules(app, rule_rows):
                      row.get('status', ''), row.get('source', ''), f"[{row.get('id', '')}]({link})"])
     doc = [docmd.front_matter({'app': app, 'generatedBy': 'rebuild_aggregates.py', 'rules': len(ordered), 'p0': sum(1 for row in ordered if row.get('priority') == 'P0'), 'units': len({row['item'] for row in ordered})}),
            f'# Business Rules - {rr.one_line(app, 80)}', '',
-           f'Generated from the rules indexes of {len({row["item"] for row in ordered})} understood item(s) ({paths.units_dir(app)}/*/*/understanding/rules.md); do not edit by hand. '
+           f'Generated from the rules indexes of {len({row["item"] for row in ordered})} understood item(s) ({paths.legacy_dir(app)}/*/*/rules.md); do not edit by hand. '
            "Each row links to the rule's own file, which holds the specification, evidence and version history.", '',
            docmd.table(rd.index_headers(with_item=True), rows).rstrip('\n'), '']
     if not ordered:
@@ -114,7 +114,7 @@ def data_objects(app, objects):
 
 def security_findings(app, finding_rows):
     counts = {severity: sum(1 for row in finding_rows if row.get('severity') == severity) for severity in SEVERITIES}
-    doc = [f'# Security findings - {rr.one_line(app, 80)}', '', f'Generated from the findings of the understood units ({paths.units_dir(app)}/*/*/understanding/findings.md); do not edit by hand.', '',
+    doc = [f'# Security findings - {rr.one_line(app, 80)}', '', f'Generated from the findings of the understood units ({paths.legacy_dir(app)}/*/*/findings.md); do not edit by hand.', '',
            '## Scorecard', '', '| Severity | Count |', '|---|---|']
     doc += [f'| {severity} | {count} |' for severity, count in counts.items()]
     doc += [f'| **Total** | **{len(finding_rows)}** |', '', '## Findings by severity', '']
@@ -166,7 +166,7 @@ def readme(app, active, rows):
             doc += ['', f'## {module}', '', '| Item | Kind | Specification |', '|---|---|---|']
         row = understood.get(item['id'])
         doc.append(f"| {cc.clean_text(item.get('name'), cc.MAX_NAME) or item['id']} `{item['id']}` | {item.get('kind') or 'module'} | "
-                   + (f"[{item['id']}](../units/{item['id']}/understanding/as-is.md)" if row else 'not understood yet') + ' |')
+                   + (f"[{item['id']}]({os.path.relpath(row['spec'], paths.generated_dir(app)).replace(os.sep, '/')})" if row else 'not understood yet') + ' |')
     return '\n'.join(doc).rstrip() + '\n'
 
 

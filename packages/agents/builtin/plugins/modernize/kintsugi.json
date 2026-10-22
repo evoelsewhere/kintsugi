@@ -2,6 +2,7 @@
   "title": "Modernize",
   "audience": "member",
   "requires": [
-    "reverse_engineering"
+    "reverse_engineering",
+    "design"
   ]
 }

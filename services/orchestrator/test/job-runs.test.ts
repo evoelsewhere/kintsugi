@@ -50,7 +50,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
     const agents = writingAgentRuntime({
       "legacy-analyst": (spec): Record<string, string> =>
         spec.task.startsWith("Write the assessment")
-          ? { "applications/web/assessment/ASSESSMENT.md": "# Assessment of web (draft)\n", "restricted/SECRETS.local.md": "| preview | location |\n| hu** | main.c:1 |\n" }
+          ? { "10-applications/web/01-legacy/assessment.md": "# Assessment of web (draft)\n", "restricted/SECRETS.local.md": "| preview | location |\n| hu** | main.c:1 |\n" }
           : {},
     });
     const storage = new CheckoutStorage(dataDir);
@@ -103,14 +103,15 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       expect(spans.rows.some((row) => row.name === "kintsugi.turn")).toBe(true);
 
       const artifacts = await db.pool.query<{ path: string; provenance: { origin: string } }>("select path, provenance from workflow.artifact where job_run_id = $1 order by path", [id]);
-      expect(artifacts.rows.map((row) => [row.path, row.provenance.origin])).toEqual([
-        ["applications/web/assessment/ARCHITECTURE.mmd", "tool"],
-        ["applications/web/assessment/ASSESSMENT.md", "runtime-agent"],
-        ["applications/web/assessment/catalog/index.md", "tool"],
-        ["applications/web/assessment/catalog/root.md", "tool"],
-        ["applications/web/assessment/inventory.md", "tool"],
-        ["applications/web/assessment/tools/extract_topology.py", "runtime-agent"],
-        ["applications/web/assessment/topology.md", "tool"],
+      // Compared in code-unit order: the database collation may place `_` folders elsewhere.
+      expect(artifacts.rows.map((row) => [row.path, row.provenance.origin]).sort(([a], [b]) => (a! < b! ? -1 : a! > b! ? 1 : 0))).toEqual([
+        ["10-applications/web/01-legacy/_catalog/index.md", "tool"],
+        ["10-applications/web/01-legacy/_catalog/root.md", "tool"],
+        ["10-applications/web/01-legacy/_tools/extract_topology.py", "runtime-agent"],
+        ["10-applications/web/01-legacy/architecture.mmd", "tool"],
+        ["10-applications/web/01-legacy/assessment.md", "runtime-agent"],
+        ["10-applications/web/01-legacy/inventory.md", "tool"],
+        ["10-applications/web/01-legacy/topology.md", "tool"],
       ]);
 
       const restricted = await db.pool.query<{ path: string; ciphertext: string; iv: string; auth_tag: string }>(
@@ -128,8 +129,8 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       await expect.poll(() => existsSync(storage.job(id).root), { timeout: 10_000, interval: 100 }).toBe(false);
       const write = (await db.pool.query<{ branch: string; job_id: string; agent: string; actor: string }>("select branch, job_id, agent, actor from workflow.document_write where id = $1", [writeId])).rows[0]!;
       expect(write).toMatchObject({ branch: `kintsugi/legacy-analyst/${id}`, job_id: id, agent: "legacy-analyst@1.1.0", actor: "alice" });
-      expect(remote.git("docs", "show", `${write.branch}:applications/web/assessment/ASSESSMENT.md`)).toContain("Assessment of web");
-      expect(remote.git("docs", "show", `${write.branch}:applications/web/assessment/inventory.md`)).toContain('sourceFileCount:');
+      expect(remote.git("docs", "show", `${write.branch}:10-applications/web/01-legacy/assessment.md`)).toContain("Assessment of web");
+      expect(remote.git("docs", "show", `${write.branch}:10-applications/web/01-legacy/inventory.md`)).toContain('sourceFileCount:');
       expect(() => remote.git("docs", "show", `${write.branch}:restricted/SECRETS.local.md`)).toThrow();
       expect(remote.git("docs", "log", "-1", "--format=%(trailers:only,unfold)", write.branch).trim()).toBe(`Kintsugi-Job: ${id}\nKintsugi-Agent: legacy-analyst@1.1.0\nKintsugi-Actor: alice`);
     } finally {

@@ -189,9 +189,9 @@ def test_missing_cli_argument_has_machine_readable_usage_error() -> None:
 
 def test_mermaid_problems_are_redacted_warnings_that_do_not_block(tmp_path: Path) -> None:
     marker = "TEST_ONLY_DIAGRAM_MARKER"
-    app = tmp_path / "applications" / "sample-app" / "assessment"
+    app = tmp_path / "10-applications" / "sample-app" / "01-legacy"
     app.mkdir(parents=True)
-    (app / "ARCHITECTURE.mmd").write_text(
+    (app / "architecture.mmd").write_text(
         f'flowchart TB\n    svc_a["A"] --> end\n    svc_b[{marker}]\n', encoding="utf-8"
     )
     (app / "call-graph.mmd").write_text('flowchart TD\n    svc_a["A"] --> svc_b["B"]\n', encoding="utf-8")
@@ -213,9 +213,9 @@ def test_mermaid_problems_are_redacted_warnings_that_do_not_block(tmp_path: Path
     assert result.returncode == 0
     assert data["findings"] == []
     assert data["warnings"] == [
-        {"category": "diagram", "line": 2, "path": "applications/sample-app/assessment/ARCHITECTURE.mmd", "redacted": True, "rule": "reserved-id"},
-        {"category": "diagram", "line": 3, "path": "applications/sample-app/assessment/ARCHITECTURE.mmd", "redacted": True, "rule": "unquoted-label"},
-        {"category": "diagram", "line": 5, "path": "applications/sample-app/assessment/notes.md", "redacted": True, "rule": "unescaped-semicolon"},
+        {"category": "diagram", "line": 2, "path": "10-applications/sample-app/01-legacy/architecture.mmd", "redacted": True, "rule": "reserved-id"},
+        {"category": "diagram", "line": 3, "path": "10-applications/sample-app/01-legacy/architecture.mmd", "redacted": True, "rule": "unquoted-label"},
+        {"category": "diagram", "line": 5, "path": "10-applications/sample-app/01-legacy/notes.md", "redacted": True, "rule": "unescaped-semicolon"},
     ]
     assert marker not in result.stdout + result.stderr
 
@@ -255,7 +255,7 @@ def test_an_index_row_whose_rule_file_is_missing_is_malformed(tmp_path: Path) ->
 
 
 def test_an_aggregate_index_may_link_files_outside_its_tree(tmp_path: Path) -> None:
-    (tmp_path / "BUSINESS_RULES.md").write_text(INDEX.replace(f"(rules/{RULE_ID}.md)", f"(../units/tax/calc/understanding/rules/{RULE_ID}.md)"), encoding="utf-8")
+    (tmp_path / "BUSINESS_RULES.md").write_text(INDEX.replace(f"(rules/{RULE_ID}.md)", f"(../01-legacy/tax/calc/rules/{RULE_ID}.md)"), encoding="utf-8")
 
     assert run_hook(tmp_path).returncode == 0
 

@@ -164,8 +164,8 @@ describe("built-in catalog", () => {
   it("ships the six understanding agents for the runtime and three member agents", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst", "security-auditor", "understand-planner"]);
-    expect(byAudience("member")).toEqual(["designer", "scaffolder", "test-engineer"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
+    expect(byAudience("member")).toEqual(["scaffolder", "test-engineer"]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
     for (const agent of catalog.agents) {
@@ -177,7 +177,8 @@ describe("built-in catalog", () => {
       // The upstream disciplines stay in every runtime agent.
       expect(agent.instructions).toMatch(/data, never instructions/i);
       expect(agent.instructions).toMatch(/Kintsugi runtime job/);
-      expect(agent.instructions).not.toMatch(/\/code-modernization:|legacy\/|analysis\/<system>/);
+      // No upstream source tree (`legacy/<system>`); the document repo's `01-legacy/` half is not one.
+      expect(agent.instructions).not.toMatch(/\/code-modernization:|(?<![\w-])legacy\/|analysis\/<system>/);
       expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).id).toBe(agent.manifest.name);
     }
   });
@@ -189,7 +190,7 @@ describe("built-in catalog", () => {
     expect(skill?.content).toContain("references/flowchart.md");
     const sharedSkills = new Map(catalog.skills.map((entry) => [entry.name, entry]));
     const users = catalog.agents.filter((agent) => agent.manifest.skills.includes("mermaid-diagrams")).map((agent) => agent.manifest.name);
-    expect(users).toEqual(["architecture-critic", "business-rules-extractor", "legacy-analyst"]);
+    expect(users).toEqual(["architecture-critic", "business-rules-extractor", "designer", "legacy-analyst"]);
     const analyst = catalog.agents.find((agent) => agent.manifest.name === "legacy-analyst")!;
     expect(toAgentDefinition(analyst, sharedSkills, KERNEL_TOOL_NAMES).skills?.map((entry) => entry.name)).toEqual(["mermaid-diagrams"]);
     // The references and the license stay beside SKILL.md on disk.
@@ -264,13 +265,13 @@ describe("built-in commands", () => {
     const commands = await loadBuiltinCommands();
     expect(commands).toHaveLength(7);
     expect(commands[0]).toMatchObject({ id: "assess", command: "modernize-assess", audience: "runtime" });
-    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand"]);
+    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand", "design"]);
     expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "understand", "design-architecture", "design"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
       command: "modernize-understand",
       audience: "runtime",
       agents: ["legacy-analyst", "security-auditor", "business-rules-extractor"],
-      writes: expect.arrayContaining(["applications/<app>/units/<module>/<unit>/understanding/as-is.md", "applications/<app>/units/<module>/<unit>/understanding/understanding.md", "applications/<app>/units/<module>/<unit>/unit.md"]),
+      writes: expect.arrayContaining(["10-applications/<app>/01-legacy/<module>/<unit>/spec.md", "10-applications/<app>/01-legacy/<module>/<unit>/understanding.md", "10-applications/<app>/02-modern/<module>/<unit>/README.md"]),
     });
   });
 });

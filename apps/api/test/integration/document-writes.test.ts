@@ -96,11 +96,13 @@ describe.skipIf(!hasDatabase)("document writes (integration)", () => {
     // The manifest is rendered and replaces; everything else only fills in what is missing.
     expect(data.files.find((file) => file.path === "kintsugi.yaml")?.createOnly).toBeUndefined();
     expect(data.files.filter((file) => file.path !== "kintsugi.yaml").every((file) => file.createOnly === true)).toBe(true);
-    expect(paths).toEqual(expect.arrayContaining(["program/charter.md", "standards/review-rules.md", "architecture/blueprint.md", "gates/G0.md", "portfolio/scorecard.md", "applications/README.md"]));
+    expect(paths).toEqual(expect.arrayContaining(["00-project/charter.md", "00-project/glossary.md", "01-standards/review-rules.md", "02-architecture/blueprint.md", "03-transition/README.md", "00-project/portfolio/scorecard.md", "10-applications/README.md"]));
+    // Gate decisions live in the portal: the starter has no gate records (ADR-0051).
+    expect(paths.some((path) => /(^|\/)gates\//.test(path))).toBe(false);
     // The template's sample application becomes this project's application; samples and the sample's own name do not travel.
-    expect(paths).toEqual(expect.arrayContaining(["applications/web/README.md", "applications/web/assessment/README.md", "applications/web/units/README.md", "applications/web/gates/G1.md"]));
+    expect(paths).toEqual(expect.arrayContaining(["10-applications/web/README.md", "10-applications/web/01-legacy/README.md", "10-applications/web/02-modern/README.md", "10-applications/web/_generated/README.md"]));
     expect(paths.some((path) => path.includes("billing-web") || path.includes(".example"))).toBe(false);
-    expect(data.files.filter((file) => file.path.startsWith("applications/web/")).some((file) => file.content.includes("billing-web"))).toBe(false);
+    expect(data.files.filter((file) => file.path.startsWith("10-applications/web/")).some((file) => file.content.includes("billing-web"))).toBe(false);
     expect(new Set(paths).size).toBe(paths.length);
   });
 });

@@ -1,7 +1,7 @@
 // The `understand` stage (commands/modernize-understand.md, ADR-0033, ADR-0042): runs on a selection of
 // catalog items (inputs.scope, resolved by the API through assessmentCatalogPath). One run is
 // one pull request that touches only the paths of its own items, so concurrent runs never conflict. The
-// documents of an item are Markdown in its understanding/ folder; what the steps pass to each other is scratch
+// documents of an item are Markdown in its folder on the legacy side (01-legacy/<module>/<item>/), its card on the modern side; what the steps pass to each other is scratch
 // JSON (intermediate):
 //
 //   scope_items.py      per item: topology.md (published), brief and rule shard (scratch)
@@ -12,7 +12,7 @@
 //   finish_items.py     per item: checked trace.md, understanding.md (understood) and the work item
 //
 // Whole-application views (topology, rules, findings, traceability) are not written here: the
-// aggregate rebuild regenerates them under generated/ after a merge. The application overview
+// aggregate rebuild regenerates them under _generated/ after a merge. The application overview
 // documents are an on-demand run of their own.
 //
 // Not wired yet: per-node descriptions and persona flows of the scoped map (the fragments are
@@ -24,16 +24,16 @@ import {
   assessmentBriefPath,
   assessmentCatalogDir,
   assessmentCatalogPath,
-  assessmentFilePath,
-  assessmentInventoryPath,
+  assessmentSynthesisPath,
   assessmentTopologyPath,
+  legacyDir,
+  modernDir,
   understandRunDir,
   understandRunFilePath,
   understandScopePath,
   understandTraceDraftPath,
   unitKeyAsIsPath,
-  unitKeyUnderstandingPath,
-  unitsDir,
+  unitKeyLegacyPath,
 } from "@kintsugi/domain";
 import { CREDENTIALS, HEADER, UNTRUSTED, WORKSPACE } from "./common.js";
 
@@ -74,10 +74,10 @@ ${WORKSPACE}
 
 Your brief is {in}/{item} (read-only): the item's id, name, kind and summary from the catalog, its source files, its
 size, its topology leaves and entry points, the items it depends on and that use it, the data stores it reads and
-writes. Also under {in}: the item's topology ${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "topology.md")}, its business rules
-${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "rules.md")} (the index of its rules, ids RULE-<module>.<unit>-<hash>, derived from the canonical citation and stable across reruns, each citation checked by a second agent; one file per rule in ${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "rules")}/), its security
-findings ${unitKeyUnderstandingPath(APP_TOKEN, "{key}", "findings.md")} (ids SEC-<module>.<item>-NN), ${assessmentCatalogPath(APP_TOKEN)} and the module documents next to it (every item of the
-application) and ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")}. Read the item's source files and follow its calls only as far as needed to
+writes. Also under {in}: the item's topology ${unitKeyLegacyPath(APP_TOKEN, "{key}", "topology.md")}, its business rules
+${unitKeyLegacyPath(APP_TOKEN, "{key}", "rules.md")} (the index of its rules, ids RULE-<module>.<unit>-<hash>, derived from the canonical citation and stable across reruns, each citation checked by a second agent; one file per rule in ${unitKeyLegacyPath(APP_TOKEN, "{key}", "rules")}/), its security
+findings ${unitKeyLegacyPath(APP_TOKEN, "{key}", "findings.md")} (ids SEC-<module>.<item>-NN), ${assessmentCatalogPath(APP_TOKEN)} and the module documents next to it (every item of the
+application) and ${assessmentSynthesisPath(APP_TOKEN)}. Read the item's source files and follow its calls only as far as needed to
 describe it; the other items have their own specifications.
 
 Write ${unitKeyAsIsPath(APP_TOKEN, "{key}")} with write, with exactly these sections, in this order:
@@ -134,7 +134,8 @@ export function understandMessage(app: string, scope?: StageScope): string {
 export const UNDERSTAND: StagePlan = {
   id: "understand",
   message: understandMessage,
-  documents: ["kintsugi.yaml", `${assessmentCatalogDir(APP_TOKEN)}/`, assessmentInventoryPath(APP_TOKEN), assessmentTopologyPath(APP_TOKEN), assessmentFilePath(APP_TOKEN, "ASSESSMENT.md"), `${unitsDir(APP_TOKEN)}/`],
+  // The legacy half (catalog, assessment, what earlier runs understood) and the unit cards of the modern half.
+  documents: ["kintsugi.yaml", `${legacyDir(APP_TOKEN)}/`, `${modernDir(APP_TOKEN)}/`],
   requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   reviewAll: true,
   steps: [
@@ -216,7 +217,7 @@ export const UNDERSTAND: StagePlan = {
         "--repo",
         "{repo}",
         "--existing",
-        "{in}/" + unitsDir(APP_TOKEN),
+        "{in}/" + modernDir(APP_TOKEN),
         "--out",
         "{out}",
       ],

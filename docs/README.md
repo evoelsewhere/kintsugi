@@ -49,7 +49,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
 - [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
 - [Data model](reference/data-model.md)
-- [Document repository layout](reference/document-repo.md): the layout by subject and bounded context (ADR-0038, ADR-0042), gate records and auto-commit
+- [Document repository layout](reference/document-repo.md): the numbered layout, each application split into legacy and modern (ADR-0051), who writes what and auto-commit
 - [Document formats](reference/document-formats.md): the Markdown shapes of every committed document (front matter, tables, cards)
 - [Document repo contexts](architecture/concepts/document-repo-contexts.md): the context map, the Unit aggregate and the ubiquitous language
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`

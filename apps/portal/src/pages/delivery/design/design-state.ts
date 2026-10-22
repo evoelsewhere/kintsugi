@@ -1,5 +1,5 @@
 // What the Design view says about a state, a set and a unit, without any component: the labels, the
-// order, the command a member runs and the filters of the Units table.
+// order and the filters of the Units table.
 
 import type { DesignState, UnitDesignRow } from "@/lib/api/design";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -34,11 +34,6 @@ export const STATE_MEANING: Record<DesignState, string> = {
 
 /** The order states are listed in: the ones that need work first. */
 export const STATE_ORDER: readonly DesignState[] = ["problems", "missing", "stale", "conformant", "waived"];
-
-/** The command a member runs in their harness to write one set of one unit. */
-export function designCommand(applicationId: string, unitKey: string, set: string): string {
-  return `/kintsugi:modernize-design ${applicationId} ${unitKey} ${set}`;
-}
 
 /** One line for a list of set ids with the version, in the order they are written. */
 export function setLabel(set: { id: string; version: number }): string {

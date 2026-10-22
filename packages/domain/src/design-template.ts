@@ -18,15 +18,22 @@ export type DesignReferenceSource = (typeof DESIGN_REFERENCE_SOURCES)[number];
 /** The variables a scaffold substitutes in a template. */
 export const DESIGN_TEMPLATE_VARIABLES = ["unit.id", "unit.title", "app.id", "kind", "set.id", "set.version"] as const;
 
-/** A set id is also its folder name under `standards/design/`. */
+/** What a design set is written for: each unit (the default), or the application as a whole (ADR-0050). */
+export const DESIGN_SCOPES = ["unit", "application"] as const;
+export type DesignScope = (typeof DESIGN_SCOPES)[number];
+
+/** The key of the application where a unit key goes: the scope items of a design run, the manifest, the report. */
+export const APPLICATION_UNIT_KEY = "@app";
+
+/** A set id is also its folder name under `01-standards/templates/`. */
 export const DESIGN_SET_ID_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 
-/** A common component id, the file name of `architecture/common/<id>.md`. */
+/** A common component id, the file name of `02-architecture/common/<id>.md`. */
 export const COMPONENT_ID_PATTERN = /^COM-[A-Z0-9][A-Z0-9-]{0,38}$/;
 
 /** One document of a set: a row of the files table in `set.md`. */
 export interface DesignFileSpec {
-  /** Relative to the unit's `design/<set>/`. */
+  /** Relative to the unit's `<set>/` folder on the modern side. */
   path: string;
   /** A file in the set's folder. */
   template: string;
@@ -40,13 +47,19 @@ export interface DesignSet {
   title: string;
   /** Raised on a change that affects existing designs. */
   version: number;
-  /** Unit kinds the set is for; empty means every kind. */
+  /** `unit`: a design per unit; `application`: one design for the whole application. */
+  scope: DesignScope;
+  /** Unit kinds the set is for; empty means every kind (and always empty for an application set). */
   appliesTo: string[];
   /** Sets that must exist before this one. */
   needs: string[];
   /** The pipeline stage that produces it. */
   stage?: string;
+  /** Documents the designer reads besides the ones every design run sees (`{app}` allowed). */
+  reads: string[];
   files: DesignFileSpec[];
+  /** The `## Instructions` section of `set.md`, for the designer. */
+  instructions: string;
 }
 
 export type DesignCheck =
@@ -112,7 +125,7 @@ export function parseDesignTemplateRef(value: string): { set: string; version: n
   return match === null ? undefined : { set: match[1] as string, version: Number(match[2]) };
 }
 
-/** A waiver in the `waived` list of `unit.md`: `<set>/<file>: <reason>`. */
+/** A waiver in the `waived` list of the unit card (`README.md`): `<set>/<file>: <reason>`. */
 export function parseDesignWaiver(value: string): { set: string; file: string; reason: string } | undefined {
   const match = /^([a-z][a-z0-9-]{0,39})\/([^:\s][^:]*?):\s*(.+)$/.exec(value.trim());
   return match === null ? undefined : { set: match[1] as string, file: (match[2] as string).trim(), reason: (match[3] as string).trim() };

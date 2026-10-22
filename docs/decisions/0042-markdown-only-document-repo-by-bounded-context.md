@@ -1,6 +1,6 @@
 # ADR-0042: A Markdown-only document repo, organized by bounded context
 
-- Status: Accepted (Modernization context refined by 0044 and 0045)
+- Status: Accepted (Modernization context refined by 0044 and 0045; the tree and the paths of decisions 4 and 5 are superseded by [ADR-0051](0051-document-repo-layout-legacy-and-modern.md))
 - Date: 2026-10-21
 - Decision register: D58
 

@@ -6,7 +6,7 @@
 --topology is the topology.json the model-written extraction script wrote (scratch, never committed):
 the tree system -> domain -> leaf, the edges between leaves, the entry points, the dead ends, the
 observations and the flows. It is checked against the schema first (a failure names what is wrong and
-fails the step). --out is the folder topology.md is written to (applications/<app>/assessment/): the
+fails the step). --out is the folder topology.md is written to (10-applications/<app>/01-legacy/): the
 modules and the edges between them, the largest leaves and the edges between those, the entry points,
 the observations and the flows, with a diagram. Per-leaf and per-edge detail beyond the caps below stays
 in the run; the catalog (render_catalog.py) keeps the links between items. Standard library only.

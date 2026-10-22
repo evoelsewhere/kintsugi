@@ -26,11 +26,11 @@ import {
 } from '../hooks/reader/design.js'
 
 /**
- * The fixtures are shared with `modernize/scripts/tests/test_design.py`: the two checkers (this one, which the API runs,
+ * The fixtures are shared with `design/scripts/tests/test_design.py`: the two checkers (this one, which the API runs,
  * and `scripts/design_lib.py`, which the member's harness runs) must give the same answers for the same files.
  * UPDATE_DESIGN_FIXTURES=1 rewrites `expected.json` from this implementation; read the diff before committing it.
  */
-const DIR = fileURLToPath(new URL('../../modernize/scripts/tests/fixtures/design/', import.meta.url))
+const DIR = fileURLToPath(new URL('../../design/scripts/tests/fixtures/design/', import.meta.url))
 const read = (...parts: string[]): string => readFileSync(join(DIR, ...parts), 'utf8')
 
 function sourcesOf(group: string): DesignSetSource[] {
@@ -49,14 +49,19 @@ function sourcesOf(group: string): DesignSetSource[] {
 
 const cases = JSON.parse(read('cases.json')) as {
   context: DesignContext
+  appContext: DesignContext
   unitKinds: string[]
   cases: { file: string; set: string; template: string }[]
+  appCases: { file: string; set: string; template: string }[]
 }
 
 function actual() {
   const good = loadDesignSets(sourcesOf('sets'), { unitKinds: cases.unitKinds })
   const bad = loadDesignSets(sourcesOf('bad-sets'), { unitKinds: cases.unitKinds })
+  const appGood = loadDesignSets(sourcesOf('app-sets'), { unitKinds: cases.unitKinds })
+  const appBad = loadDesignSets(sourcesOf('bad-app-sets'), { unitKinds: cases.unitKinds })
   const designs: Record<string, { problems: { code: string; section?: string; message: string }[]; stale: boolean }> = {}
+  const appDesigns: typeof designs = {}
 
   for (const item of cases.cases) {
     const loaded = good.sets.find(candidate => candidate.set.id === item.set)
@@ -72,9 +77,31 @@ function actual() {
     }
   }
 
+  for (const item of cases.appCases) {
+    const loaded = appGood.sets.find(candidate => candidate.set.id === item.set)
+    const template = loaded?.templates[item.template]
+
+    if (loaded === undefined || template === undefined) throw new Error(`fixture ${item.file}: no template ${item.set}/${item.template}`)
+
+    const text = read('designs', item.file)
+
+    appDesigns[item.file] = {
+      problems: checkDesignDocument(template, loaded.set, text, cases.appContext).map(problem => ({ code: problem.code, ...(problem.section === undefined ? {} : { section: problem.section }), message: problem.message })),
+      stale: designIsStale(text, loaded.set),
+    }
+  }
+
   return {
-    validate: { sets: good.problems, 'bad-sets': bad.problems, 'bad-set-ids': bad.sets.map(loaded => loaded.set.id) },
+    validate: {
+      sets: good.problems,
+      'bad-sets': bad.problems,
+      'bad-set-ids': bad.sets.map(loaded => loaded.set.id),
+      'app-sets': appGood.problems,
+      'bad-app-sets': appBad.problems,
+      'bad-app-set-ids': appBad.sets.map(loaded => loaded.set.id),
+    },
     designs,
+    appDesigns,
   }
 }
 
@@ -90,6 +117,45 @@ describe('design sets: the shared fixtures', () => {
 
   test('the starter-shaped sets are valid', () => {
     expect(loadDesignSets(sourcesOf('sets'), { unitKinds: cases.unitKinds }).problems).toEqual([])
+  })
+})
+
+describe('design sets: scope, reads and instructions (ADR-0050)', () => {
+  const arch = (): NonNullable<ReturnType<typeof parseDesignSet>['set']> => {
+    const { set, problems } = parseDesignSet(read('app-sets', 'arch', 'set.md'), 'arch')
+
+    expect(problems).toEqual([])
+
+    if (set === undefined) throw new Error('no set')
+
+    return set
+  }
+
+  test('a set is for units unless it says application', () => {
+    expect(parseDesignSet(read('sets', 'basic', 'set.md'), 'basic').set).toMatchObject({ scope: 'unit', reads: [], instructions: '' })
+    expect(arch()).toMatchObject({ scope: 'application', appliesTo: [], needs: [], reads: ['10-applications/{app}/01-legacy/', '02-architecture/'], stage: 'architecture-design' })
+  })
+
+  test('the Instructions section is for the designer and leaves the description', () => {
+    expect(arch().instructions).toBe('Describe the target in terms of the common components.\nCite the assessment for what the legacy system does today.')
+    expect(arch().description).toBe('How the application is built as a whole, written once for the application.')
+  })
+
+  test('an application set has files and no unit kind', () => {
+    expect(designFilesFor(arch(), null).map(file => file.path)).toEqual(['overview.md'])
+    expect(designFilesFor(arch(), 'screen')).toEqual([])
+    const unitSet = parseDesignSet(read('sets', 'basic', 'set.md'), 'basic').set
+
+    if (unitSet === undefined) throw new Error('no set')
+
+    expect(designFilesFor(unitSet, null)).toEqual([])
+  })
+
+  test('a unit set may need an application set and the items of the application resolve for it', () => {
+    const loaded = loadDesignSets(sourcesOf('app-sets'), { unitKinds: cases.unitKinds })
+
+    expect(loaded.problems).toEqual([])
+    expect(loaded.sets.map(entry => [entry.set.id, entry.set.scope, entry.set.needs])).toEqual([['arch', 'application', []], ['dbunit', 'unit', ['arch']]])
   })
 })
 

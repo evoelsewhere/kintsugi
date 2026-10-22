@@ -4,7 +4,7 @@ import { baseName, norm } from './paths.js'
 
 /**
  * A topology document: the application's `assessmentTopologyPath` (written by `scripts/render_topology.py` from
- * the extraction script's output) or one unit's `understanding/topology.md` (`scripts/scope_items.py`). Front
+ * the extraction script's output) or one unit's `topology.md` (`scripts/scope_items.py`). Front
  * matter with the counts, then the domains, the edges between them, the largest leaves with their entry
  * points and dead ends, the edges between those, the observations and the flows.
  *

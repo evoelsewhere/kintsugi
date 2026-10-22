@@ -4,7 +4,7 @@ import { sectionsOf, tablesIn } from './markdown.js'
 import { resolveDots } from './paths.js'
 
 /**
- * Traceability (ADR-0033, ADR-0042). The unit is the aggregate: its `understanding/trace.md` (written by
+ * Traceability (ADR-0033, ADR-0042). The unit is the aggregate: its `trace.md` in `01-legacy/<module>/<unit>/` (written by
  * `scripts/finish_items.py`) holds what the specification recorded about it - entry points, the rules and findings
  * it applies, its dependencies, data objects, files, and the requirements, pull requests and tests the later phases
  * add. The application's matrix (units, reverse indexes) is built from those documents and the catalog

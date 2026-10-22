@@ -1,28 +1,34 @@
 # Unit files
 
-> Defines the unit directory and the contract of each file in it.
+> Defines the two folders of a unit and the contract of each file in them.
 
-One directory per unit ([ADR-0038](../decisions/0038-document-repo-layout-by-subject-and-sdlc-phase.md)), at `applications/<app>/units/<module>/<unit>/`; it is the **Unit aggregate** of [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md): `unit.md` is its root and each context writes into its own subfolder (`understanding/` and `design/`). Every document is Markdown ([document formats](document-formats.md)). The unit id is the full `<app>/<module>/<unit>`; `<unit>` in the path is only the last segment. A unit is created when a catalog item (`<module>/<item>`, see the [item catalog](document-repo-item-catalog.md)) is selected for migration. This reference uses **unit** and does not rename the legacy API `WorkItem`/`work-items` contracts.
+A unit has one folder in each half of its application, on the same `<module>/<unit>` path ([ADR-0051](../decisions/0051-document-repo-layout-legacy-and-modern.md)): `10-applications/<app>/01-legacy/<module>/<unit>/` holds what is known about it, `10-applications/<app>/02-modern/<module>/<unit>/` holds its card, its design and its task pack. Together they are the **Unit aggregate** of [ADR-0042](../decisions/0042-markdown-only-document-repo-by-bounded-context.md), and the card `README.md` is its root. Every document is Markdown ([document formats](document-formats.md)). The unit id is the full `<app>/<module>/<unit>`; `<unit>` in the path is only the last segment. A unit is created when a catalog item (`<module>/<item>`, see the [item catalog](document-repo-item-catalog.md)) is selected for migration. This reference uses **unit** and does not rename the legacy API `WorkItem`/`work-items` contracts.
+
+In `01-legacy/<module>/<unit>/`:
 
 | File | Content | Written by |
 |---|---|---|
-| `unit.md` | the unit state (frontmatter) and gate references | the `understand` job proposes it; state changes go through the Kintsugi API; auto-committed |
-| `understanding/as-is.md` | the P1 AS-IS specification of the unit | the `understand` job |
-| `understanding/understanding.md` | the provenance record: digest, source commit, run (`status: understood`) | the `understand` job |
-| `understanding/rules.md` | the index of the unit's rules: id, name, category, priority, confidence, version, status, source and a link to each rule's file | the extract-rules step of `understand` |
-| `understanding/rules/<rule id>.md` | one rule: specification, evidence, edge cases, open questions, acceptance scenarios, version history | the extract-rules step of `understand` |
-| `understanding/data-objects.md` | the data objects of the unit | the extract-rules step of `understand` |
-| `understanding/rules-review.md` | the P1 human rule verdicts (a table) | the unit's reviewer, through a pull request |
-| `understanding/findings.md` | security findings: scorecard, table, a card per finding | the security step of `understand` |
-| `understanding/topology.md` | the unit's leaves, links to other items, data stores | the scope step of `understand` |
-| `understanding/trace.md` | the unit traceability record | the `understand` job |
-| `design/<set>/<file>` | the unit's design: one folder per design set the project defines, one document per file of the set, from the set's template ([design templates](design-templates.md)) | the member's harness with `/kintsugi:modernize-design`, through a pull request |
-| `task.md` | the P4 task pack (transformation notes) | the `design` job; auto-committed |
-| `reviews/G4.md` | the unit's G4 gate record | the unit's reviewer, through a pull request |
+| `spec.md` | the P1 AS-IS specification of the unit | the `understand` job |
+| `understanding.md` | the provenance record: digest, source commit, run (`status: understood`) | the `understand` job |
+| `rules.md` | the index of the unit's rules: id, name, category, priority, confidence, version, status, source and a link to each rule's file | the extract-rules step of `understand` |
+| `rules/<rule id>.md` | one rule: specification, evidence, edge cases, open questions, acceptance scenarios, version history | the extract-rules step of `understand` |
+| `data-objects.md` | the data objects of the unit | the extract-rules step of `understand` |
+| `rules-review.md` | the P1 human rule verdicts (a table) | the unit's reviewer, through a pull request |
+| `findings.md` | security findings: scorecard, table, a card per finding | the security step of `understand` |
+| `topology.md` | the unit's leaves, links to other items, data stores | the scope step of `understand` |
+| `trace.md` | the unit traceability record | the `understand` job |
 
-Format samples for `unit.md`, `rules.md`, `rules/<rule id>.md`, `rules-review.md`, `trace.md` and `reviews/G4.md` live in `templates/document-repo/applications/billing-web/units/_example.example/`; they teach the formats and are not loaded.
+In `02-modern/<module>/<unit>/`:
 
-## `unit.md` frontmatter
+| File | Content | Written by |
+|---|---|---|
+| `README.md` | the unit's card: its state (frontmatter), what it is built from and into, the design files it waives | the `understand` job proposes it; state changes go through the Kintsugi API; auto-committed; `waived` is written by a person |
+| `<set>/<file>` | the unit's design: one folder per design set the project defines, one document per file of the set, from the set's template ([design templates](design-templates.md)) | the runtime `design` stage (generated from the portal), through a pull request that people review and correct |
+| `task.md` | the P4 task pack (transformation notes) | planned; auto-committed |
+
+A Git host renders a folder's `README.md` when a person opens the folder, so opening a unit's modern folder shows its card. Format samples for the card, `rules.md`, `rules/<rule id>.md`, `rules-review.md` and `trace.md` live in `templates/document-repo/10-applications/billing-web/01-legacy/_example.example/` and `02-modern/_example.example/`; they teach the formats and are not loaded.
+
+## The card's frontmatter
 
 The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-files-in-git.md)). Postgres indexes it for the board and queries, and can rebuild the index from Git.
 
@@ -35,14 +41,15 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 | `assignee`, `harness` | Who works on it, and with which member harness |
 | `dependsOn` | Unit ids (used for leaves-first ordering) |
 | `source`, `target` | `{repo, paths}` lists in the legacy (read-only) and target repos |
-| `links` | Task pack, AS-IS doc, mappings (paths under `standards/mappings/`), business rules, pull requests |
-| `gates` | Per-gate result: `status`, `by`, `at`, and the record path (`review: reviews/G4.md`) |
+| `links` | Task pack, AS-IS specification, mappings (paths under `01-standards/mappings/`), business rules, pull requests |
 | `waived` | Design files the unit does not need, a list of `<set>/<file>: <reason>`; written by a person, never by an agent ([design templates](design-templates.md#conformance)) |
 
-**Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one file per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a file is left unchanged.
+Gate results are not in the card: gate decisions are recorded in the portal (Governance → Gates).
+
+**Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one card per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a card is left unchanged.
 
 **Rules**:
-- **Write path**: state changes go through the Kintsugi API (portal, CLI, MCP, runtime agents). The API validates the actor's effective access-role permissions and the allowed transition, updates the index, and the worker commits as `kintsugi-bot` with `Kintsugi-Actor`. `unit.md` and `task.md` are auto-commit paths; every other file in the unit directory arrives as a pull request.
+- **Write path**: state changes go through the Kintsugi API (portal, CLI, MCP, runtime agents). The API validates the actor's effective access-role permissions and the allowed transition, updates the index, and the worker commits as `kintsugi-bot` with `Kintsugi-Actor`. The card and `task.md` are auto-commit paths; every other file of the unit's two folders arrives as a pull request.
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 
@@ -72,7 +79,7 @@ The chain rules → requirements → trace must close: every requirement's `deri
 
 ## Requirements and `derivedFrom`
 
-The requirements record is `applications/<app>/to-be/requirements.md` (planned, P2). Each requirement is a Markdown section headed `REQ-…`; the source rules are named on its `derivedFrom` line:
+The requirements record is `10-applications/<app>/02-modern/requirements.md` (planned, P2). Each requirement is a Markdown section headed `REQ-…`; the source rules are named on its `derivedFrom` line:
 
 ```markdown
 ## REQ-INV-001: Invoice search returns gross amounts
@@ -83,7 +90,3 @@ The invoice search returns amounts including tax.
 ```
 
 A unit's `trace.md` links the requirement ids it implements under `Requirements`.
-
-## Gate records
-
-The unit's G4 record is `reviews/G4.md`, with the uniform [gate record format](document-repo.md#gate-records): decision, approvers, evidence paths, date. The `unit.md` frontmatter points to it through its `gates.G4.review` field. Gate records arrive through pull requests and are never auto-committed.

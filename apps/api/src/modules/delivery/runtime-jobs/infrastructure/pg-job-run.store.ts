@@ -44,6 +44,7 @@ interface RunRow {
   created_at: Date;
   cancel_requested_at: Date | null;
   scope_items: unknown;
+  scope_set: string | null;
   resume_of: string | null;
   abandoned_at: Date | null;
   write_id: string | null;
@@ -58,7 +59,7 @@ const SELECT = `
   select r.id, r.project_id, r.application_id, r.parent_id, r.kind, r.name, r.status, r.failure_reason,
          r.source_repository_id, r.source_commit, r.script_hash, r.agent, r.actor, r.output_summary,
          r.started_at, r.finished_at, r.created_at, r.cancel_requested_at,
-         r.inputs->'scope'->'items' as scope_items, r.inputs->>'resumeOf' as resume_of, r.abandoned_at,
+         r.inputs->'scope'->'items' as scope_items, r.inputs->'scope'->>'set' as scope_set, r.inputs->>'resumeOf' as resume_of, r.abandoned_at,
          w.id as write_id, w.status as write_status, w.branch as write_branch, w.pr_url as write_pr_url, w.error as write_error,
          (select count(*)::int from governance.restricted_record x where x.job_run_id = r.id) as restricted_records
     from workflow.job_run r
@@ -95,7 +96,7 @@ function toView(row: RunRow): JobRunView {
         }),
     restrictedRecords: row.restricted_records,
     ...optional("cancelRequestedAt", row.cancel_requested_at?.toISOString() ?? null),
-    ...(Array.isArray(row.scope_items) ? { scope: { items: row.scope_items.filter((item): item is string => typeof item === "string") } } : {}),
+    ...(Array.isArray(row.scope_items) ? { scope: { items: row.scope_items.filter((item): item is string => typeof item === "string"), ...(row.scope_set === null ? {} : { set: row.scope_set }) } } : {}),
     ...optional("resumeOf", row.resume_of),
     ...optional("abandonedAt", row.abandoned_at?.toISOString() ?? null),
     ...optional("startedAt", row.started_at?.toISOString() ?? null),

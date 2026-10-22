@@ -27,7 +27,7 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 | A3 Connectors | Git servers (any number and kind), Jira / Confluence / SharePoint, source databases (read-only), observability tools | Credentials encrypted in Postgres |
 | A4 LLM Providers & Harness Registry | Runtime LLM providers (every pi provider + custom), credentials, test connection, model binding per runtime agent id, allowlist, budget; Agent Builder: built-in and custom agents, shared skills, versions, import and export ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)); member harness registry (plugin support per harness, built-in + installation fallback renderers, transformer plugins) | [LLM configuration](concepts/llm-configuration.md) |
 | A7 Extension Allowlists | Runner image allowlist; harness transformer plugins | [Security](concepts/security.md) |
-| A5 Templates | SDLC / pipeline templates, deliverable templates, RACI templates, the document repo starter template | Shipped stack-agnostic; project specifics go into the project's document repo (`standards/`, `plugins/`) |
+| A5 Templates | SDLC / pipeline templates, deliverable templates, RACI templates, the document repo starter template | Shipped stack-agnostic; project specifics go into the project's document repo (`01-standards/`, `plugins/`) |
 | A6 Project Build | Create / join a document repo; register per application the AS-IS repos (`legacy`, `legacy-data`) and TO-BE repos (`target` per architecture component); choose or declare pipelines | [Build a project](../guides/build-project.md) |
 
 ### B. Delivery
@@ -38,7 +38,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | B1 Portfolio & Assessment | P1 | Inventory and unit files (proposed by `assessment`, confirmed by people), unit dependencies (`dependsOn`), weighted scorecard, wave planning. `assessment` and `wave-planner` draft; the architect approves |
 | B2 Architecture Studio | P2 | AS-IS vs TO-BE architecture, ADRs, gap list, co-existence strategy, POC plan, cost-benefit, ARB review. Supported by `to-be-analyst` |
 | B3 Factory Setup | P3 | Base source, IaC, CI/CD; select or author agent plugins and task-pack templates; configure `gate-reviewer` rules; pilot on 1–2 features |
-| B4 Migration Workbench | P4 | Board of units (index of `applications/*/units/**`) × stages; `task-planner` produces task packs; assignment / claiming; PR tracking; `gate-reviewer` review; design ↔ code sync |
+| B4 Migration Workbench | P4 | Board of units (index of the unit cards `10-applications/*/02-modern/*/*/README.md`) × stages; `task-planner` produces task packs; assignment / claiming; PR tracking; `gate-reviewer` review; design ↔ code sync |
 
 ### C. Monitoring
 
@@ -65,7 +65,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 |---|---|
 | E1 Workflow Orchestrator | pg-boss job queue + phase / stage / gate state machine driven by the application's **pipeline definition** (built-in, or declared in `kintsugi.yaml`). Transitions are validated by the API, persisted as unit-file commits and indexed in Postgres (ADR-0012); retries; fan-out per wave |
 | E2 Knowledge Hub | AS-IS / TO-BE KB: sources in Git, text chunks + embeddings (pgvector) in Postgres, no code graph; ingestion; search API |
-| E3 Standards & Assets | Reads `kintsugi.yaml`, `standards/` and `plugins/` from the document repo at a fixed commit, and combines them with built-in assets for runtime jobs and harness rendering ([document repository](../reference/document-repo.md)) |
+| E3 Standards & Assets | Reads `kintsugi.yaml`, `01-standards/` and `plugins/` from the document repo at a fixed commit, and combines them with built-in assets for runtime jobs and harness rendering ([document repository](../reference/document-repo.md)) |
 | E4 Kintsugi Runtime (pi) | Generic agent kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)): runs one agent job whose [agent definition](../reference/runtime-agents.md) is supplied with the job, in the job's workspace ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)); knows no agent. Built-in and custom agents are installation data managed in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
 | E5 Harness Hub | MCP server, CLI backend, plugin validation and **marketplace generation** (generated built-in plugin + project plugins, all under the document repo's `plugins/`), fallback rendering, policy distribution, telemetry ingest ([harness integration](../reference/harness-integration.md)) |
 | E6 Git Sync & Writer | Sync many repos across many Git servers; the writer, the only component that commits to project repos: commits / PRs runtime results, unit state changes and portal-published files (e.g. `kintsugi.yaml`) to the document repo through the `document-write` queue, one write per repository at a time (fetch → rebase → retry, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
@@ -102,5 +102,5 @@ Shared libraries and assets:
 | `packages/git` | Git core: system `git` CLI wrapper with per-call credentials, checkout storage layout, provider REST adapters ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
 | `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `AgentDefinition`, `JobEvent`, LLM provider configuration types |
 | `packages/harness-sdk` | `TaskPack`, `AssetRenderer`, `HarnessActivity`, `HarnessPolicy` |
-| `templates/document-repo` | Document repo starter template: `kintsugi.yaml`, neutral `standards/` and `plugins/` samples |
+| `templates/document-repo` | Document repo starter template: `kintsugi.yaml`, neutral `01-standards/` and `plugins/` samples |
 | `deploy/compose` | The Docker Compose package |

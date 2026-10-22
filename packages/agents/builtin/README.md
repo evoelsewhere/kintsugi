@@ -9,16 +9,16 @@ Kintsugi ships this modernization method as data and scripts in `@kintsugi/agent
 | Scope | Confirm the application, source revision, access boundaries, target and constraints; surface missing inputs before work begins. | Portal task and runtime job; a person supplies or confirms project-specific answers. |
 | Understand | Assess the source, identify architecture and data flows, map units, extract business rules, and record security findings. | Runtime jobs using the five read-only built-in analysis agents and deterministic scripts. Source is mounted read-only. |
 | Decide | Review rule candidates and security findings, and approve the requirements, the capabilities that matter and the target architecture. | Human through portal tasks and gates; runtime agents provide evidence, not approval. |
-| Design | The common design (architecture and common components), the skeleton of the target repositories, then each unit's basic and detail design from the project's own templates (`standards/design/`, ADR-0044, ADR-0045). | Member harness with the member agents (`designer`, `scaffolder`, `architecture-critic`); the foundation team for the common design. Kintsugi does not drive those harnesses or write their repository. |
+| Design | Each unit's basic and detail design, generated from the project's own templates (`01-standards/templates/`, ADR-0044, ADR-0045, ADR-0049); then the common design (architecture and common components) and the skeleton of the target repositories. | The `design` stage on the runtime (the `designer` agent), reviewed in its pull request; member harness with the member agents (`scaffolder`, `architecture-critic`) and the foundation team for the common design and the skeleton. Kintsugi does not drive those harnesses or write their repository. |
 | Implement | Build each unit from its approved detail design, with unit tests, and bring the design back in line with the code. | Member harness and member agents in the target repository. |
 | Follow progress | Read artifacts, show stage/evidence state, and link the next human or member action. | Portal. Reader logic is included here as a pure data layer; the portal owns the future progress panel. |
 
-The files under `commands/` describe individual tasks, their audience (`runtime`, `member`, or `portal`), inputs, outputs, and gates. `workflows/` describes orchestration and fan-out. `agents/` contains the runtime understanding agents (`legacy-analyst`, `business-rules-extractor`, `understand-planner`, `architecture-critic`, and `security-auditor`) and three member agents (`designer`, `test-engineer`, and `scaffolder`). The command metadata and ADR-0027 are authoritative when this overview is less specific than an individual workflow.
+The files under `commands/` describe individual tasks, their audience (`runtime`, `member`, or `portal`), inputs, outputs, and gates. `workflows/` describes orchestration and fan-out. `agents/` contains the runtime understanding agents (`legacy-analyst`, `business-rules-extractor`, `understand-planner`, `architecture-critic`, and `security-auditor`), the runtime `designer`, and two member agents (`test-engineer` and `scaffolder`). The command metadata and ADR-0027 are authoritative when this overview is less specific than an individual workflow.
 
 ### Human decision points
 
 - Confirm source scope, application identity, target, and any project constraints before work begins; no agent can widen the source scope or write to it.
-- Review extracted rules, architecture/data observations, and security findings; correct omissions and resolve critical or conflicting findings.
+- Review extracted rules, 02-architecture/data observations, and security findings; correct omissions and resolve critical or conflicting findings.
 - Approve the P0 capabilities and the architecture (the two gates of `design-architecture`), and the design of each unit at its stage gate, before member implementation proceeds.
 - Decide whether to remediate security findings, accept residual risk, or merge target changes. The hook and agents never make these approvals.
 
@@ -27,7 +27,7 @@ The files under `commands/` describe individual tasks, their audience (`runtime`
 | Location | Repository/owner | Contents and write boundary |
 | --- | --- | --- |
 | Legacy repository at the recorded job commit | Project legacy repository | Runtime jobs and readers may read it only. It is mounted read-only; no job, script, or member workflow writes or commits source changes. |
-| `applications/<app>/` | Project document repository | Durable understanding and modernization evidence: `assessment/` (assess outputs and tools), `to-be/` (requirements, the application's design), `units/<module>/<unit>/design/<set>/` (the unit's design documents), `units/<module>/<unit>/` (per-unit rules, findings, trace, reviews), `generated/` (rebuilt aggregates), `gates/`. Runtime output is collected here only after lifecycle checks and the applicable gate. |
+| `10-applications/<app>/` | Project document repository | Durable understanding and modernization evidence (ADR-0051): `01-legacy/` (the assess outputs and tools at its top; per unit `<module>/<unit>/` the specification, rules, findings and trace), `02-modern/` (the requirements and the application's design at its top; per unit `<module>/<unit>/` the card `README.md` and one folder per design set), `_generated/` (rebuilt aggregates). Gate decisions are recorded in the portal. Runtime output is collected here only after lifecycle checks and the applicable gate. |
 | Target repository | Separate project target repository | Member harnesses make target changes here. Kintsugi supplies context and ingests results; it does not edit or commit the target repository. |
 
 Paths of the document repository are built only in `packages/domain/src/document-layout.ts` (mirrored by `scripts/paths.py`). Job scripts use only their declared read-only inputs, private scratch directory, and job output directory. The JobOutput hook scans candidate output before it can be committed.
@@ -39,7 +39,8 @@ The content is a set of **plugins** (ADR-0035), one folder each under `plugins/`
 | Plugin | Audience | What it carries |
 | --- | --- | --- |
 | `understand` | runtime | Commands `assess` and `understand`; the agents `legacy-analyst`, `business-rules-extractor` and `security-auditor`; the workflows `extract-rules`, `harden-scan` and `portfolio-assess`; the item-catalog, rules, findings and work-item scripts; the JobOutput hook and the artifact readers. |
-| `modernize` | member | Commands `design-architecture`, `scaffold`, `design`, and `implement`; the agents `designer`, `test-engineer`, `scaffolder` and `architecture-critic`; the `scaffold` workflow; the design-set scripts (`scaffold_design.py`, `check_design.py`, `validate_design_templates.py`) scripts. Requires `reverse_engineering`. |
+| `design` | runtime | The command `design` and the agent `designer`: one design set for a selection of units; the design-set scripts (`scaffold_design.py`, `check_design.py`, `validate_design_templates.py`) with their shared fixtures. Requires `reverse_engineering`. |
+| `modernize` | member | Commands `design-architecture`, `scaffold` and `implement`; the agents `test-engineer`, `scaffolder` and `architecture-critic`; the `scaffold` workflow. Requires `reverse_engineering` and `design` (`implement` runs `check_design.py`). |
 
 Inside a plugin folder:
 

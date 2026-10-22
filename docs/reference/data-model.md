@@ -6,7 +6,7 @@ Entities marked *(index)* are derived from files in the document repo and can be
 
 ```
 GitServer(kind, baseUrl, credential) 1─* GitRepository(url, defaultBranch, syncStatus)          (admin.git_server, admin.git_repository)
-Project 1─* Application 1─* WorkItem (index of applications/*/units/**) 1─* StageRun ─0..1 RuntimeJob 1─* JobEvent
+Project 1─* Application 1─* WorkItem (index of the unit cards 10-applications/*/02-modern/*/*/README.md) 1─* StageRun ─0..1 RuntimeJob 1─* JobEvent
    │             │              │
    │             │              └─ TaskPack(repo@commit:path) ─ PullRequest ─ GateReview
    │             ├─ AS-IS: ProjectRepository(role legacy | legacy-data) → GitRepository  [many]

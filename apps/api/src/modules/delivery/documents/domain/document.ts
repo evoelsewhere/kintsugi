@@ -123,7 +123,7 @@ interface StageResultsBase {
 export interface AssessResults extends StageResultsBase {
   stage: "assess";
   inventory: Inventory | null;
-  /** ARCHITECTURE.mmd (Mermaid source). */
+  /** architecture.mmd, the assessment's domain diagram (Mermaid source). */
   architecture?: string;
   highlights: {
     summary?: string;
@@ -204,7 +204,7 @@ export interface UnderstandUnit extends TraceUnit {
    * the run's pull request, `statusFrom: "ref"`). At the default branch it is the item's own status.
    */
   workItem?: { path: string; status: string; complexity?: string; statusFrom?: "default-branch" | "ref" };
-  /** The unit's trace links (understanding/trace.md): what it derives from and what evidences it. */
+  /** The unit's trace links (trace.md of its legacy folder): what it derives from and what evidences it. */
   trace?: { requirements: string[]; pullRequests: string[]; tests: string[] };
   /** The verdicts of rules-review.md, and the verdict ids whose rule left rules.md. */
   rulesReview?: { verdicts: RulesReviewRecord; orphaned: RuleId[] };

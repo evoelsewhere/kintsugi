@@ -1,25 +1,39 @@
 /**
- * The document-repo path layout, grouped by bounded context (ADR-0042; it replaces the tree of
- * ADR-0038). Keep path construction here so callers never encode the layout themselves.
+ * The document-repo path layout (ADR-0051; it replaces the tree of ADR-0042). Keep path construction
+ * here so callers never encode the layout themselves.
  *
- *   applications/<app>/
- *     inputs/                what people attach
- *     assessment/            Assessment context: what the estate is (inventory, topology, catalog)
- *     understanding/         Understanding context at application level (the plan)
- *     units/<module>/<unit>/ the Unit aggregate: unit.md is its root, understanding/ holds what is known,
- *                            design/<set>/ holds its design documents (ADR-0044, ADR-0045)
- *     generated/             read models rebuilt after a merge
- *   architecture/            Design context, project level: the blueprint and common/<COM-id>.md components
- *   standards/design/<set>/  the project's design sets: a set.md and its template files (ADR-0045)
- *   scratch/<app>/           job-to-job data of one run; outside the layout, never committed
+ *   00-project/                 charter, RACI, AI strategy and policy, KPI baseline, glossary, portfolio/
+ *   01-standards/               conventions/, mappings/, review-rules.md, templates/<set>/ (the design sets)
+ *   02-architecture/            the blueprint, adr/ and common/<COM-id>.md components
+ *   03-transition/              coexistence, data migration, shared-data/
+ *   10-applications/<app>/
+ *     00-inputs/                what people attach
+ *     01-legacy/                the old system: the assessment (inventory, topology, _catalog/, plan.md)
+ *       <module>/<unit>/        what is known about a unit (spec.md, rules, findings, trace…)
+ *     02-modern/                the new system: requirements.md, _design/<set>/ (the application's design)
+ *       <module>/<unit>/        the unit's card (README.md), one folder per design set, task.md
+ *     _generated/               read models rebuilt after a merge
+ *   plugins/                    project-authored member plugins
+ *   scratch/<app>/              job-to-job data of one run; outside the layout, never committed
+ *
+ * Both halves of an application use the same `<module>/<unit>` path. A folder whose name starts with
+ * `_` is never a module: module and unit segments start with a letter or a digit.
  *
  * The document repo holds no JSON: committed files are Markdown (docs/reference/document-formats.md).
  */
-const APPLICATIONS_ROOT = "applications";
+const PROJECT_ROOT = "00-project";
+const STANDARDS_ROOT = "01-standards";
+const ARCHITECTURE_ROOT = "02-architecture";
+const TRANSITION_ROOT = "03-transition";
+const APPLICATIONS_ROOT = "10-applications";
 const SCRATCH_ROOT = "scratch";
-const ARCHITECTURE_ROOT = "architecture";
-const DESIGN_SETS_ROOT = "standards/design";
-const APP_SEGMENT_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const DESIGN_SETS_ROOT = `${STANDARDS_ROOT}/templates`;
+const INPUTS = "00-inputs";
+const LEGACY = "01-legacy";
+const MODERN = "02-modern";
+const GENERATED = "_generated";
+const UNIT_CARD = "README.md";
+const SEGMENT_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 export const DOCUMENT_PATH_TOKENS = {
   app: "{app}",
@@ -29,14 +43,44 @@ export const DOCUMENT_PATH_TOKENS = {
   run: "{run}",
 } as const;
 
-/** Paths committed straight to the default branch by kintsugi-bot (ADR-0019, ADR-0042). */
+/** Paths committed straight to the default branch by kintsugi-bot (ADR-0019, ADR-0051). */
 export const DEFAULT_DOCUMENT_AUTO_COMMIT_PATHS: readonly string[] = [
-  "applications/*/units/**/unit.md",
-  "applications/*/units/**/task.md",
-  "applications/*/generated/**",
+  `${APPLICATIONS_ROOT}/*/${MODERN}/*/*/${UNIT_CARD}`,
+  `${APPLICATIONS_ROOT}/*/${MODERN}/*/*/task.md`,
+  `${APPLICATIONS_ROOT}/*/${GENERATED}/**`,
   // The AI plan for what to understand next: advice, replaced by every planning run.
-  "applications/*/understanding/plan.md",
+  `${APPLICATIONS_ROOT}/*/${LEGACY}/plan.md`,
 ];
+
+/** Whether a folder name can be a module or a unit (folders starting with `_` belong to the application). */
+export function isUnitSegment(name: string): boolean {
+  return SEGMENT_PATTERN.test(name);
+}
+
+// ---------------------------------------------------------------------------
+// Project level
+// ---------------------------------------------------------------------------
+
+export function projectDir(): string {
+  return PROJECT_ROOT;
+}
+
+/** The project's glossary: one row per term, a column per language. */
+export function glossaryPath(): string {
+  return `${PROJECT_ROOT}/glossary.md`;
+}
+
+export function standardsDir(): string {
+  return STANDARDS_ROOT;
+}
+
+export function transitionDir(): string {
+  return TRANSITION_ROOT;
+}
+
+// ---------------------------------------------------------------------------
+// Applications
+// ---------------------------------------------------------------------------
 
 export function applicationsDir(): string {
   return APPLICATIONS_ROOT;
@@ -47,39 +91,38 @@ export function applicationDir(app: string): string {
 }
 
 export function applicationInputsDir(app: string): string {
-  return `${applicationDir(app)}/inputs`;
+  return `${applicationDir(app)}/${INPUTS}`;
 }
 
 export function applicationInputPath(app: string, file: string): string {
   return `${applicationInputsDir(app)}/${file}`;
 }
 
-export function applicationToBeDir(app: string): string {
-  return `${applicationDir(app)}/to-be`;
+/** The old system's half of an application: the assessment at its top, a folder per understood unit. */
+export function legacyDir(app: string): string {
+  return `${applicationDir(app)}/${LEGACY}`;
+}
+
+/** The new system's half of an application: requirements, the application's design, a folder per unit. */
+export function modernDir(app: string): string {
+  return `${applicationDir(app)}/${MODERN}`;
 }
 
 export function applicationRequirementsPath(app: string): string {
-  return `${applicationToBeDir(app)}/requirements.md`;
+  return `${modernDir(app)}/requirements.md`;
 }
 
+/** The application's own design, written with the common design (ADR-0044): its components, interfaces and data ownership. */
 export function applicationDesignPath(app: string): string {
-  return `${applicationToBeDir(app)}/design.md`;
-}
-
-export function applicationGatesDir(app: string): string {
-  return `${applicationDir(app)}/gates`;
-}
-
-export function applicationGatePath(app: string, gate: string): string {
-  return `${applicationGatesDir(app)}/${gate}.md`;
+  return `${modernDir(app)}/design.md`;
 }
 
 // ---------------------------------------------------------------------------
-// Assessment context
+// Assessment context: the top of the legacy half
 // ---------------------------------------------------------------------------
 
 export function assessmentDir(app: string): string {
-  return `${applicationDir(app)}/assessment`;
+  return legacyDir(app);
 }
 
 export function assessmentFilePath(app: string, file: string): string {
@@ -96,8 +139,18 @@ export function assessmentTopologyPath(app: string): string {
   return assessmentFilePath(app, "topology.md");
 }
 
+/** The synthesis of the assessment, written by the assess stage's last job. */
+export function assessmentSynthesisPath(app: string): string {
+  return assessmentFilePath(app, "assessment.md");
+}
+
+/** The domain diagram of the synthesis, one Mermaid flowchart. */
+export function assessmentDiagramPath(app: string): string {
+  return assessmentFilePath(app, "architecture.mmd");
+}
+
 export function assessmentCatalogDir(app: string): string {
-  return assessmentFilePath(app, "catalog");
+  return assessmentFilePath(app, "_catalog");
 }
 
 /** The catalog's index: its modules and items, one table row each. */
@@ -110,12 +163,13 @@ export function assessmentCatalogModulePath(app: string, module: string): string
   return `${assessmentCatalogDir(app)}/${module}.md`;
 }
 
+/** The notes of the assessment's analysis jobs (structure, debt, security). */
 export function assessmentAnalysisDir(app: string): string {
-  return assessmentFilePath(app, "analysis");
+  return assessmentFilePath(app, "_analysis");
 }
 
 export function assessmentToolsDir(app: string): string {
-  return assessmentFilePath(app, "tools");
+  return assessmentFilePath(app, "_tools");
 }
 
 export function topologyExtractorPath(app: string): string {
@@ -123,23 +177,19 @@ export function topologyExtractorPath(app: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Understanding context
+// Understanding context, application level
 // ---------------------------------------------------------------------------
-
-export function applicationUnderstandingDir(app: string): string {
-  return `${applicationDir(app)}/understanding`;
-}
 
 /** The checked plan of what to understand next, batch by batch (auto-committed advice). */
 export function understandPlanPath(app: string): string {
-  return `${applicationUnderstandingDir(app)}/plan.md`;
+  return `${legacyDir(app)}/plan.md`;
 }
 
 // ---------------------------------------------------------------------------
-// Design context (ADR-0044, ADR-0045)
+// Design context (ADR-0044, ADR-0045, ADR-0050)
 // ---------------------------------------------------------------------------
 
-/** The project-level architecture folder: the blueprint and the common components. */
+/** The project-level architecture folder: the blueprint, the ADRs and the common components. */
 export function architectureDir(): string {
   return ARCHITECTURE_ROOT;
 }
@@ -170,6 +220,20 @@ export function designSetPath(set: string): string {
 /** A template file of a set, named by the `Template` column of its files table. */
 export function designTemplatePath(set: string, template: string): string {
   return `${designSetDir(set)}/${template}`;
+}
+
+/** The design of the application as a whole, one folder per design set of scope `application` (ADR-0050). */
+export function applicationDesignDir(app: string): string {
+  return `${modernDir(app)}/_design`;
+}
+
+export function applicationDesignSetDir(app: string, set: string): string {
+  return `${applicationDesignDir(app)}/${set}`;
+}
+
+/** A design document of the application; `file` is the `Path` of the set's files table. */
+export function applicationDesignFilePath(app: string, set: string, file: string): string {
+  return `${applicationDesignSetDir(app, set)}/${file}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +290,25 @@ export function understandPlanDraftPath(app: string): string {
   return understandRunFilePath(app, "plan-draft.json");
 }
 
+/** Scratch of a design run (ADR-0049): the scaffold manifest and the check report. */
+export function designRunDir(app: string): string {
+  return scratchFilePath(app, "design");
+}
+
+export function designRunFilePath(app: string, file: string): string {
+  return `${designRunDir(app)}/${file}`;
+}
+
+/** What the scaffold step wrote for each unit of the run (intermediate). */
+export function designManifestPath(app: string): string {
+  return designRunFilePath(app, "manifest.json");
+}
+
+/** The conformance of each unit of the run after a check (intermediate). */
+export function designReportPath(app: string): string {
+  return designRunFilePath(app, "report.json");
+}
+
 export function assessmentBriefsDir(app: string): string {
   return `${understandRunDir(app)}/briefs`;
 }
@@ -244,9 +327,9 @@ export function understandTraceDraftPath(app: string, unitKey: string): string {
 // Generated read models
 // ---------------------------------------------------------------------------
 
-/** Application aggregates rebuilt from authored unit documents. */
+/** Application aggregates rebuilt from authored unit documents, and the Overview run's documents. */
 export function generatedDir(app: string): string {
-  return `${applicationDir(app)}/generated`;
+  return `${applicationDir(app)}/${GENERATED}`;
 }
 
 export function generatedFilePath(app: string, file: string): string {
@@ -254,68 +337,78 @@ export function generatedFilePath(app: string, file: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// The Unit aggregate
+// Units: the same <module>/<unit> path in both halves
 // ---------------------------------------------------------------------------
 
-/** Application id for one of the per-unit paths, if the path belongs to an application. */
+/**
+ * Application id of a per-unit path (a file under `01-legacy/<module>/<unit>/` or `02-modern/<module>/<unit>/`),
+ * if the path belongs to a unit of an application.
+ */
 export function appFromUnitPath(path: string): string | undefined {
-  const segments = path.split("/");
-  const app = segments[0] === APPLICATIONS_ROOT && segments[2] === "units" && segments.length >= 5 ? segments[1] : undefined;
-  return app !== undefined && APP_SEGMENT_PATTERN.test(app) ? app : undefined;
+  const [root, app, half, module, unit, ...rest] = path.split("/");
+  if (root !== APPLICATIONS_ROOT || (half !== LEGACY && half !== MODERN) || rest.length === 0) return undefined;
+  return app !== undefined && module !== undefined && unit !== undefined && isUnitSegment(app) && isUnitSegment(module) && isUnitSegment(unit) ? app : undefined;
 }
 
-export function unitsDir(app: string): string {
-  return `${applicationDir(app)}/units`;
+export function legacyModuleDir(app: string, module: string): string {
+  return `${legacyDir(app)}/${module}`;
 }
 
-export function unitModuleDir(app: string, module: string): string {
-  return `${unitsDir(app)}/${module}`;
-}
-
-export function unitDir(app: string, module: string, unit: string): string {
-  return `${unitModuleDir(app, module)}/${unit}`;
-}
-
-export function unitFilePath(app: string, module: string, unit: string, file: string): string {
-  return `${unitDir(app, module, unit)}/${file}`;
-}
-
-/** The aggregate root: the unit's state (front matter) and gate references. */
-export function unitStatePath(app: string, module: string, unit: string): string {
-  return unitFilePath(app, module, unit, "unit.md");
+export function modernModuleDir(app: string, module: string): string {
+  return `${modernDir(app)}/${module}`;
 }
 
 /** What is known about the unit, written by the understanding context. */
-export function unitUnderstandingDir(app: string, module: string, unit: string): string {
-  return unitFilePath(app, module, unit, "understanding");
+export function unitLegacyDir(app: string, module: string, unit: string): string {
+  return `${legacyModuleDir(app, module)}/${unit}`;
 }
 
-export function unitUnderstandingFilePath(app: string, module: string, unit: string, file: string): string {
-  return `${unitUnderstandingDir(app, module, unit)}/${file}`;
+/** What is built for the unit: its card, its design and its task pack. */
+export function unitModernDir(app: string, module: string, unit: string): string {
+  return `${modernModuleDir(app, module)}/${unit}`;
 }
 
+export function unitLegacyFilePath(app: string, module: string, unit: string, file: string): string {
+  return `${unitLegacyDir(app, module, unit)}/${file}`;
+}
+
+export function unitModernFilePath(app: string, module: string, unit: string, file: string): string {
+  return `${unitModernDir(app, module, unit)}/${file}`;
+}
+
+/** The unit's card: its state (front matter) and what it is built from and into. */
+export function unitStatePath(app: string, module: string, unit: string): string {
+  return unitModernFilePath(app, module, unit, UNIT_CARD);
+}
+
+/** `<module>/<unit>` key form of the unit's card. */
+export function unitKeyStatePath(app: string, unitKey: string): string {
+  return `${modernDir(app)}/${unitKey}/${UNIT_CARD}`;
+}
+
+/** The AS-IS specification of the unit. */
 export function unitAsIsPath(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "as-is.md");
+  return unitLegacyFilePath(app, module, unit, "spec.md");
 }
 
 /** `<module>/<unit>` key form of the AS-IS path, for plans that carry the key in a token. */
 export function unitKeyAsIsPath(app: string, unitKey: string): string {
-  return `${unitsDir(app)}/${unitKey}/understanding/as-is.md`;
+  return unitKeyLegacyPath(app, unitKey, "spec.md");
 }
 
 /** The unit's provenance record: digest, commit, run. Its presence on the default branch means "understood". */
 export function unitUnderstandingPath(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "understanding.md");
+  return unitLegacyFilePath(app, module, unit, "understanding.md");
 }
 
 /** The unit's rules index: a table of its rules, each linking its own file under `unitRulesDir`. */
 export function unitRulesPath(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "rules.md");
+  return unitLegacyFilePath(app, module, unit, "rules.md");
 }
 
 /** The folder of the unit's rule files, one `<rule id>.md` per rule. */
 export function unitRulesDir(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "rules");
+  return unitLegacyFilePath(app, module, unit, "rules");
 }
 
 export function unitRuleFilePath(app: string, module: string, unit: string, ruleId: string): string {
@@ -323,42 +416,43 @@ export function unitRuleFilePath(app: string, module: string, unit: string, rule
 }
 
 export function unitDataObjectsPath(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "data-objects.md");
+  return unitLegacyFilePath(app, module, unit, "data-objects.md");
 }
 
 /** The unit's human rule verdicts, authored through a pull request. */
 export function unitRulesReviewPath(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "rules-review.md");
+  return unitLegacyFilePath(app, module, unit, "rules-review.md");
 }
 
 export function unitFindingsPath(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "findings.md");
+  return unitLegacyFilePath(app, module, unit, "findings.md");
 }
 
 export function unitTopologyPath(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "topology.md");
+  return unitLegacyFilePath(app, module, unit, "topology.md");
 }
 
 export function unitTracePath(app: string, module: string, unit: string): string {
-  return unitUnderstandingFilePath(app, module, unit, "trace.md");
+  return unitLegacyFilePath(app, module, unit, "trace.md");
 }
 
-/** `<module>/<unit>` key form of a file of the unit's understanding folder. */
-export function unitKeyUnderstandingPath(app: string, unitKey: string, file: string): string {
-  return `${unitsDir(app)}/${unitKey}/understanding/${file}`;
+/** `<module>/<unit>` key form of a file of the unit's legacy folder. */
+export function unitKeyLegacyPath(app: string, unitKey: string, file: string): string {
+  return `${legacyDir(app)}/${unitKey}/${file}`;
 }
 
 export function unitTaskPath(app: string, module: string, unit: string): string {
-  return unitFilePath(app, module, unit, "task.md");
+  return unitModernFilePath(app, module, unit, "task.md");
 }
 
-/** The unit's design documents, one folder per design set the project defines. */
-export function unitDesignDir(app: string, module: string, unit: string): string {
-  return unitFilePath(app, module, unit, "design");
-}
-
+/** The unit's documents of one design set the project defines. */
 export function unitDesignSetDir(app: string, module: string, unit: string, set: string): string {
-  return `${unitDesignDir(app, module, unit)}/${set}`;
+  return unitModernFilePath(app, module, unit, set);
+}
+
+/** `<module>/<unit>` key form of a design set's folder. */
+export function unitKeyDesignSetDir(app: string, unitKey: string, set: string): string {
+  return `${modernDir(app)}/${unitKey}/${set}`;
 }
 
 /** A design document of the unit; `file` is the `Path` of the set's files table. */
@@ -366,32 +460,16 @@ export function unitDesignFilePath(app: string, module: string, unit: string, se
   return `${unitDesignSetDir(app, module, unit, set)}/${file}`;
 }
 
-export function unitReviewsDir(app: string, module: string, unit: string): string {
-  return unitFilePath(app, module, unit, "reviews");
-}
-
-export function unitGateReviewPath(app: string, module: string, unit: string, gate = "G4"): string {
-  return `${unitReviewsDir(app, module, unit)}/${gate}.md`;
-}
-
 export function unitId(app: string, module: string, unit: string): string {
   return `${app}/${module}/${unit}`;
 }
 
-/** Module-scoped authored notes live beside the module's units. */
+/** Module-scoped authored notes live beside the module's units on the modern side. */
 export function transformationNotesPath(app: string, module: string): string {
-  return `${unitModuleDir(app, module)}/TRANSFORMATION_NOTES.md`;
+  return `${modernModuleDir(app, module)}/TRANSFORMATION_NOTES.md`;
 }
 
-function unitKeyPath(unitKey: string, file: string): string {
-  const [module = DOCUMENT_PATH_TOKENS.module, unit = DOCUMENT_PATH_TOKENS.unit] = unitKey.split("/");
-  return unitFilePath(DOCUMENT_PATH_TOKENS.app, module, unit, file);
-}
-
+/** The task pack of a unit, with the application left as a token. */
 export function taskPackPath(unitKey: string): string {
-  return unitKeyPath(unitKey, "task.md");
-}
-
-export function reviewsDir(unitKey: string): string {
-  return unitKeyPath(unitKey, "reviews");
+  return `${modernDir(DOCUMENT_PATH_TOKENS.app)}/${unitKey}/task.md`;
 }

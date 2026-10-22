@@ -3,8 +3,8 @@ import { sectionsOf, tablesIn } from './markdown.js'
 import { resolveDots } from './paths.js'
 
 /**
- * The item catalog of the assess stage (ADR-0033, ADR-0042): `assessment/catalog/index.md` (the modules, the
- * ambiguities, the unassigned files) and one `assessment/catalog/<module>.md` per module with a card per item
+ * The item catalog of the assess stage (ADR-0033, ADR-0042): `01-legacy/_catalog/index.md` (the modules, the
+ * ambiguities, the unassigned files) and one `01-legacy/_catalog/<module>.md` per module with a card per item
  * (`scripts/render_catalog.py` writes them from the curated catalog and the extracted topology). A card holds
  * the item's facts, its leaves, the items it depends on and that use it, the data stores it touches, its parts
  * and its files. Every field is still read as optional and of unknown shape: an item without a valid id is

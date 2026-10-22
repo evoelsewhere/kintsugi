@@ -3,7 +3,7 @@
 // then the attempts that produced it, and a trace per attempt in a drawer. The view is held in the
 // URL (window, project, agent, attempts filter, open trace). Needs telemetry.view.
 
-import { Activity, RefreshCw } from "lucide-react";
+import { Activity, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
@@ -44,6 +44,7 @@ import {
   runKey,
   spanDetail,
   spanLabel,
+  type TraceNode,
   WINDOWS,
   windowRange,
   type WindowId,
@@ -352,7 +353,7 @@ function TraceBody({ run }: { run: TelemetryRun }): React.JSX.Element {
   const trace = useLoader<Trace>(`telemetry/trace/${runKey(run)}`, () => telemetryApi.trace(run.runId, { ...(run.stepRunId === null ? {} : { step: run.stepRunId }), attempt: run.attempt }));
   return (
     <div className="flex flex-col gap-4 p-4">
-      <KpiRow>
+      <KpiRow compact>
         <Kpi label="Outcome" value={undefined} display={run.outcome} tone={run.status === "ok" ? "green" : "red"} hint={run.error ?? undefined} />
         <Kpi label="Turns" value={run.turns} hint={formatMillis(run.durationMs)} />
         <Kpi label="Tokens" value={undefined} display={formatTokens(run.inputTokens + run.outputTokens + run.cacheReadTokens + run.cacheWriteTokens)} hint={`in ${formatTokens(run.inputTokens)} · out ${formatTokens(run.outputTokens)}`} />
@@ -372,7 +373,7 @@ function TraceBody({ run }: { run: TelemetryRun }): React.JSX.Element {
   );
 }
 
-const CHART = { width: 600, height: 112, left: 34, right: 8, top: 8, bottom: 18 } as const;
+const CHART = { width: 600, height: 150, left: 34, right: 8, top: 8, bottom: 18 } as const;
 
 /** How full the context window was after each turn, with the compactions that emptied it. */
 function ContextChart({ spans }: { spans: readonly TraceSpan[] }): React.JSX.Element | null {
@@ -383,7 +384,9 @@ function ContextChart({ spans }: { spans: readonly TraceSpan[] }): React.JSX.Ele
   const peak = Math.round(Math.max(...points.map((point) => point.percent)));
   return (
     <section className="flex flex-col gap-1.5">
-      <h3 className="text-[12px] font-medium text-text">Context window</h3>
+      <h3 className="text-[13px] font-medium text-text">
+        Context window <span className="ml-1 font-normal text-text-muted tabular-nums">peak {peak}%</span>
+      </h3>
       <p className="text-[12px] text-text-muted">How full the window was after each turn{markers.length === 0 ? "." : "; a dashed line marks a compaction."}</p>
       <svg viewBox={`0 0 ${CHART.width} ${CHART.height}`} role="img" aria-label={`Context window use over ${points.length} turns, peaking at ${peak}%`} className="w-full">
         {[0, 50, 100].map((tick) => (
@@ -399,8 +402,15 @@ function ContextChart({ spans }: { spans: readonly TraceSpan[] }): React.JSX.Ele
             <title>{`Compaction (${marker.reason}) at ${formatMillis(marker.offsetMs)}${marker.tokensBefore === undefined ? "" : `: ${formatTokens(marker.tokensBefore)} → ${formatTokens(marker.tokensAfter)} tokens`}`}</title>
           </line>
         ))}
+        {points.length < 2 ? null : (
+          <polygon
+            points={`${x(points[0]!.offsetMs)},${y(0)} ${points.map((point) => `${x(point.offsetMs)},${y(point.percent)}`).join(" ")} ${x(points[points.length - 1]!.offsetMs)},${y(0)}`}
+            fill={CHART_COLOR.blue}
+            fillOpacity={0.1}
+          />
+        )}
         {points.length < 2 ? null : <polyline points={points.map((point) => `${x(point.offsetMs)},${y(point.percent)}`).join(" ")} fill="none" stroke={CHART_COLOR.blue} strokeWidth={1.75} strokeLinejoin="round" />}
-        {points.map((point) => (
+        {(points.length > 24 ? [] : points).map((point) => (
           <circle key={point.turn} cx={x(point.offsetMs)} cy={y(point.percent)} r={2.75} fill={CHART_COLOR.blue}>
             <title>{`Turn ${point.turn}: ${Math.round(point.percent)}% of the window`}</title>
           </circle>
@@ -421,83 +431,130 @@ function TraceTree({ trace }: { trace: Trace }): React.JSX.Element {
   const problems = useMemo(() => problemKeys(trace.spans), [trace.spans]);
   const [onlyProblems, setOnlyProblems] = useState(false);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const rows = useMemo(() => flattenTrace(roots).filter(({ span }) => !onlyProblems || problems.has(span.spanId)), [roots, onlyProblems, problems]);
-  const toggle = (key: string): void =>
-    setExpanded((previous) => {
-      const next = new Set(previous);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
-  const grid = "grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.6fr)_56px] items-center gap-3 py-1.5 text-left text-[13px]";
+  // The calls under a turn are folded away until the turn is opened, so a long run reads as its turns.
+  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set());
+  const rows = useMemo(() => {
+    const list: TraceNode[] = [];
+    const visit = (node: TraceNode): void => {
+      if (onlyProblems && !problems.has(node.span.spanId)) return;
+      list.push(node);
+      if (node.depth === 0 || onlyProblems || unfolded.has(`${node.span.attempt}/${node.span.spanId}`)) for (const child of node.children) visit(child);
+    };
+    for (const root of roots) visit(root);
+    return list;
+  }, [roots, onlyProblems, problems, unfolded]);
+  const toggle = (set: ReadonlySet<string>, update: (next: ReadonlySet<string>) => void, key: string): void => {
+    const next = new Set(set);
+    if (!next.delete(key)) next.add(key);
+    update(next);
+  };
+  const foldable = useMemo(
+    () =>
+      flattenTrace(roots)
+        .filter((node) => node.depth > 0 && node.children.length > 0)
+        .map((node) => `${node.span.attempt}/${node.span.spanId}`),
+    [roots],
+  );
+  const grid = "grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(80px,0.6fr)_56px] items-center gap-3 py-2 text-left text-[13px]";
   return (
     <section className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-[12px] font-medium text-text">Spans</h3>
-        {problems.size === 0 ? null : (
-          <Chips
-            label="Spans shown"
-            options={[
-              { id: "all", label: "All" },
-              { id: "problems", label: "Failures and their parents" },
-            ]}
-            value={onlyProblems ? "problems" : "all"}
-            onChange={(id) => setOnlyProblems(id === "problems")}
-          />
-        )}
+        <h3 className="text-[13px] font-medium text-text">Spans</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          {foldable.length === 0 ? null : (
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-[12px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+              onClick={() => setUnfolded(unfolded.size === 0 ? new Set(foldable) : new Set())}
+            >
+              {unfolded.size === 0 ? "Show all calls" : "Fold calls"}
+            </button>
+          )}
+          {problems.size === 0 ? null : (
+            <Chips
+              label="Spans shown"
+              options={[
+                { id: "all", label: "All" },
+                { id: "problems", label: "Failures and their parents" },
+              ]}
+              value={onlyProblems ? "problems" : "all"}
+              onChange={(id) => setOnlyProblems(id === "problems")}
+            />
+          )}
+        </div>
       </div>
       {trace.truncated ? <p className="text-[12px] text-text-muted">The trace is long: only its first {formatCount(trace.spans.length)} spans are shown.</p> : null}
-      <div className="overflow-x-auto">
-        <ul aria-label="Spans of the attempt" className="min-w-[620px]">
-          {rows.map(({ span, depth, offsetMs }) => {
-            const detail = spanDetail(span);
-            const key = `${span.attempt}/${span.spanId}`;
-            const attributes = Object.entries(span.attributes).sort(([a], [b]) => a.localeCompare(b));
-            const expandable = attributes.length > 0 || span.error !== null;
-            const open = expanded.has(key);
-            const row = (
-              <>
-                <div className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * 16 }}>
+      <ul aria-label="Spans of the attempt" className="overflow-hidden rounded-xl shadow-border">
+        {rows.map(({ span, depth, offsetMs, children }) => {
+          const detail = spanDetail(span);
+          const key = `${span.attempt}/${span.spanId}`;
+          const attributes = Object.entries(span.attributes).sort(([a], [b]) => a.localeCompare(b));
+          const expandable = attributes.length > 0 || span.error !== null;
+          const open = expanded.has(key);
+          const folds = depth > 0 && children.length > 0 && !onlyProblems;
+          const row = (
+            <>
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-1.5">
                   <StatusDot tone={span.status === "ok" ? "green" : "red"} className="size-2 shrink-0" />
-                  <span className={cn("truncate", span.name === "kintsugi.job" && "font-medium")} title={spanLabel(span)}>
+                  <span className={cn("truncate", depth === 0 && "font-medium")} title={spanLabel(span)}>
                     {spanLabel(span)}
                   </span>
+                  {folds ? <span className="shrink-0 rounded-full bg-hover px-1.5 py-0.5 text-[11px] text-text-muted tabular-nums">{children.length} calls</span> : null}
                 </div>
-                <span className="truncate text-[12px] text-text-muted" title={detail}>
-                  {detail}
-                </span>
-                <div className="relative h-4 min-w-0" title={`${formatMillis(span.durationMs)} from ${formatMillis(offsetMs)}`}>
-                  <div className="absolute inset-y-1 rounded-sm bg-[var(--ds-status-blue)] opacity-70" style={{ left: `${(offsetMs / totalMs) * 100}%`, width: `${Math.max((span.durationMs / totalMs) * 100, 0.6)}%` }} />
-                </div>
-                <span className="text-right text-[12px] text-text-muted tabular-nums">{formatMillis(span.durationMs)}</span>
-              </>
-            );
-            return (
-              <li key={key} className="border-b border-[var(--ds-gray-alpha-400)]">
+                {detail === "" ? null : (
+                  <p className="mt-0.5 truncate pl-3.5 text-[11.5px] text-text-muted" title={detail}>
+                    {detail}
+                  </p>
+                )}
+              </div>
+              <div className="relative h-1.5 min-w-0 rounded-full bg-hover" title={`${formatMillis(span.durationMs)} from ${formatMillis(offsetMs)}`}>
+                <div className="absolute inset-y-0 rounded-full bg-[var(--ds-status-blue)]" style={{ left: `${(offsetMs / totalMs) * 100}%`, width: `${Math.max((span.durationMs / totalMs) * 100, 0.8)}%` }} />
+              </div>
+              <span className="text-right text-[12px] text-text-secondary tabular-nums">{formatMillis(span.durationMs)}</span>
+            </>
+          );
+          return (
+            <li key={key} className="border-b border-[var(--ds-gray-alpha-200)] last:border-b-0">
+              <div className="flex items-center gap-1 pr-3" style={{ paddingLeft: 8 + depth * 18 }}>
+                {folds ? (
+                  <button
+                    type="button"
+                    aria-expanded={unfolded.has(key)}
+                    aria-label={unfolded.has(key) ? `Fold the calls of ${spanLabel(span)}` : `Show the calls of ${spanLabel(span)}`}
+                    onClick={() => toggle(unfolded, setUnfolded, key)}
+                    className="rounded-sm text-text-muted hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+                  >
+                    {unfolded.has(key) ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                  </button>
+                ) : (
+                  <span className="size-4 shrink-0" aria-hidden />
+                )}
                 {expandable ? (
-                  <button type="button" aria-expanded={open} onClick={() => toggle(key)} className={cn(grid, "rounded-sm hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]")}>
+                  <button type="button" aria-expanded={open} onClick={() => toggle(expanded, setExpanded, key)} className={cn(grid, "rounded-sm hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]")}>
                     {row}
                   </button>
                 ) : (
                   <div className={grid}>{row}</div>
                 )}
-                {open ? (
-                  <div className="mb-2 rounded-md bg-recessed/60 p-2.5" style={{ marginLeft: depth * 16 + 14 }}>
-                    {span.error === null ? null : <p className="mb-2 font-mono text-[12px] break-words text-text">{span.error}</p>}
-                    <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 text-[12px]">
-                      {attributes.map(([name, value]) => (
-                        <div key={name} className="contents">
-                          <dt className="text-text-muted">{name}</dt>
-                          <dd className="min-w-0 font-mono break-words text-text">{formatAttribute(value)}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+              </div>
+              {open ? (
+                <div className="mr-3 mb-2 rounded-md bg-recessed/60 p-2.5" style={{ marginLeft: 8 + depth * 18 + 20 }}>
+                  {span.error === null ? null : <p className="mb-2 font-mono text-[12px] break-words text-text">{span.error}</p>}
+                  <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 text-[12px]">
+                    {attributes.map(([name, value]) => (
+                      <div key={name} className="contents">
+                        <dt className="text-text-muted">{name}</dt>
+                        <dd className="min-w-0 font-mono break-words text-text">{formatAttribute(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

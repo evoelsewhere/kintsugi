@@ -33,7 +33,7 @@ import {
   type Traceability,
   type UnitFacts,
 } from "@kintsugi/agents/reader";
-import { DOCUMENT_PATH_TOKENS, assessmentCatalogDir, assessmentDir, catalogPath, generatedDir, unitAsIsPath, unitDir, unitRulesPath, unitRulesReviewPath, unitStatePath, unitTracePath, unitUnderstandingPath } from "@kintsugi/domain";
+import { DOCUMENT_PATH_TOKENS, assessmentCatalogDir, assessmentDir, catalogPath, generatedDir, unitAsIsPath, unitModernDir, unitRulesPath, unitRulesReviewPath, unitStatePath, unitTracePath, unitUnderstandingPath } from "@kintsugi/domain";
 import { chunk } from "#common/util/async.js";
 import { itemUnitFacts } from "./item-results.js";
 import type { AsIsDocument, AssessResults, HardenResults, MapDiagram, MapNode, MapResults, ResultStage, RulesResults, StageFile, UnderstandResults, UnderstandUnit } from "../domain/document.js";
@@ -61,7 +61,7 @@ const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
 
 /** The files each stage writes (in its domain-layout directory), its main document and the files its counts need. */
 export const STAGE_OUTPUTS: Record<ResultStage, { dir?: string; files: readonly string[]; main?: string; countsFrom: readonly string[] }> = {
-  assess: { files: ["inventory.md", "ASSESSMENT.md", "ARCHITECTURE.mmd"], main: "ASSESSMENT.md", countsFrom: ["inventory.md"] },
+  assess: { files: ["inventory.md", "assessment.md", "architecture.mmd"], main: "assessment.md", countsFrom: ["inventory.md"] },
   map: {
     files: ["topology.md", "call-graph.mmd", "data-lineage.mmd", "critical-path.mmd", "extract_topology.py"],
     countsFrom: ["topology.md"],
@@ -102,7 +102,7 @@ function assessCounts(inventory: Inventory | null): Pick<Built, "counts" | "head
 }
 
 export async function assessResults(source: StageSource, appDir: string): Promise<Full<AssessResults>> {
-  const [inventoryText, markdown, architecture] = await Promise.all([source.read("inventory.md"), source.read("ASSESSMENT.md"), source.read("ARCHITECTURE.mmd")]);
+  const [inventoryText, markdown, architecture] = await Promise.all([source.read("inventory.md"), source.read("assessment.md"), source.read("architecture.mmd")]);
   const inventory = inventoryText === null ? null : parseInventory(inventoryText);
   const sections = markdown === null ? [] : sectionsOf(markdown);
   const section = (pattern: RegExp) => sectionMatching(sections, pattern);
@@ -126,7 +126,7 @@ export async function assessResults(source: StageSource, appDir: string): Promis
     },
     counts: { ...counts, debtItems: debtTable?.rows.length ?? 0, securityFindings: findings.length },
     headline,
-    ...(markdown === null ? {} : { document: { path: `${appDir}/ASSESSMENT.md`, markdown } }),
+    ...(markdown === null ? {} : { document: { path: `${appDir}/assessment.md`, markdown } }),
   };
 }
 
@@ -383,7 +383,7 @@ async function catalogOf(source: StageSource, applicationId: string): Promise<It
   return parseItemCatalog(index, modules);
 }
 
-/** What a unit's understanding folder holds that the results views read. */
+/** What a unit's legacy folder holds that the results views read. */
 interface UnitDocuments {
   trace: string | null;
   rules: string | null;
@@ -411,7 +411,7 @@ async function understoodUnits(source: StageSource, applicationId: string, items
   return found;
 }
 
-/** The unit state file of each unit that has one at the ref, by full unit id. */
+/** The card of each unit that has one at the ref, by full unit id. */
 async function workItemsOf(source: StageSource, applicationId: string, units: Traceability["units"]): Promise<Map<string, WorkItemRef>> {
   const found = new Map<string, WorkItemRef>();
   if (!UNIT_SEGMENT.test(applicationId)) return found;
@@ -421,7 +421,7 @@ async function workItemsOf(source: StageSource, applicationId: string, units: Tr
     await Promise.all(
       batch.map(async (unit) => {
         const path = unitStatePath(applicationId, unit.module, unit.unit);
-        const size = (await source.list(unitDir(applicationId, unit.module, unit.unit))).find((file) => file.path === path)?.size;
+        const size = (await source.list(unitModernDir(applicationId, unit.module, unit.unit))).find((file) => file.path === path)?.size;
         if (size === undefined) return;
         const text = await source.readPath(path, size);
         const item = text === null ? null : parseWorkItem(text);
@@ -462,7 +462,7 @@ async function currentWorkItems(source: StageSource, statusSource: StageSource |
 
 /**
  * The understood units, their traceability and their documents, built from the catalog and each unit's
- * `understanding/` folder (the unit is the aggregate; `generated/traceability.md` keeps only the totals).
+ * legacy folder (`01-legacy/<module>/<unit>/`; `_generated/traceability.md` keeps only the totals).
  * `statusSource`: the default branch tip, when the selected ref is another commit (a run's
  * branch): work-item status is read there, since members move items on the default branch.
  * `only`: one catalog item id, for the results of a single unit.

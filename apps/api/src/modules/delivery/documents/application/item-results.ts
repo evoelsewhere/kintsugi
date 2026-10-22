@@ -1,12 +1,12 @@
 // The per-unit documents of an understand run (ADR-0033, ADR-0042) read as the facts the results views show:
-// the trace links of a unit (understanding/trace.md) and the human verdicts on its rules
-// (understanding/rules-review.md) against the rules it holds (understanding/rules.md). Pure functions over
+// the trace links of a unit (trace.md in its legacy folder) and the human verdicts on its rules
+// (rules-review.md) against the rules it holds (rules.md). Pure functions over
 // Markdown; unreadable input gives nothing.
 
 import { parseLedger, parseRules, parseUnitTrace } from "@kintsugi/agents/reader";
 import { findOrphanRuleReviewIds, type RuleId, type RulesReviewRecord } from "@kintsugi/domain";
 
-/** A unit's trace links and rule verdicts: trace.md + rules.md + rules-review.md of its understanding folder. */
+/** A unit's trace links and rule verdicts: trace.md + rules.md + rules-review.md of its legacy folder. */
 export function itemUnitFacts(
   traceText: string | null,
   rulesText: string | null,

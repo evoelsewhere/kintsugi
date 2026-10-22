@@ -4,9 +4,9 @@
     python3 reconcile_catalog.py --catalog FILE --inventory FILE --out FILE [--previous DIR] [--units-dir DIR]
 
 --catalog is this run's curated catalog (scratch JSON); --inventory its per-file inventory.json; --previous
-the catalog folder (assessment/catalog/) on the document repository's default branch. Without a previous
-catalog, the old items are seeded from the work items of the understand stage: --units-dir (the
-applications/<app>/units/ work-item files), so existing unit ids are kept. Missing inputs are
+the catalog folder (01-legacy/_catalog/) on the document repository's default branch. Without a previous
+catalog, the old items are seeded from the unit cards of the understand stage: --units-dir (the
+10-applications/<app>/02-modern/ folder, a README.md per unit), so existing unit ids are kept. Missing inputs are
 skipped. --out is the reconciled catalog (scratch JSON; render_catalog.py writes the Markdown).
 
 Deterministic rules:
@@ -33,6 +33,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import paths  # noqa: E402
 
 THRESHOLD = 0.5
 MAX_UNIT_FILES = 5_000
@@ -132,15 +133,16 @@ def expand(paths, inventory):
 
 
 def old_from_units(units_dir, inventory):
-    """Seed items of the work items of the understand stage. A unit lists the files of its map leaves,
-    which may be directories: they are expanded on the inventory."""
+    """Seed items of the unit cards of the understand stage (`<module>/<unit>/README.md`; the `_` folders are
+    not units). A unit lists the files of its map leaves, which may be directories: they are expanded on the inventory."""
     seeded = {}
     if units_dir and os.path.isdir(units_dir) and not os.path.islink(units_dir):
         count = 0
         for current, directories, names in os.walk(units_dir):
-            directories[:] = sorted(name for name in directories if not os.path.islink(os.path.join(current, name)))
+            depth = os.path.relpath(current, units_dir).count(os.sep) + (0 if current == units_dir else 1)
+            directories[:] = sorted(name for name in directories if depth < 2 and paths.is_unit_segment(name) and not os.path.islink(os.path.join(current, name)))
             for name in sorted(names):
-                if not name.endswith('.md') or name.endswith('.example.md'):
+                if depth != 2 or name != paths.UNIT_CARD:
                     continue
                 count += 1
                 if count > MAX_UNIT_FILES:
@@ -271,7 +273,7 @@ def main(argv):
     ap.add_argument('--inventory', required=True, help='the per-file inventory.json of this run')
     ap.add_argument('--out', required=True, help='the reconciled catalog to write')
     ap.add_argument('--previous', help='the catalog folder on the default branch (optional)')
-    ap.add_argument('--units-dir', help='applications/<app>/units/, seeds the first reconcile (optional)')
+    ap.add_argument('--units-dir', help='10-applications/<app>/02-modern/ (the unit cards), seeds the first reconcile (optional)')
     args = ap.parse_args(argv[1:])
     try:
         inventory, _ = cc.load_inventory(args.inventory)

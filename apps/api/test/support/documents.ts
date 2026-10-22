@@ -28,7 +28,7 @@ export function catalogDocuments(
   source?: { repo: string; commit: string },
   ambiguities: string[] = [],
 ): Record<string, string> {
-  const base = `applications/${app}/assessment/catalog`;
+  const base = `10-applications/${app}/01-legacy/_catalog`;
   const documents: Record<string, string> = {};
   const active = items.filter((item) => item.status !== "retired");
 
@@ -94,11 +94,11 @@ export interface UnderstoodUnitOptions {
 
 /** The documents of one understood unit, as the understand stage commits them (a minimal rule, no findings table). */
 export function understoodUnit(app: string, item: string, options: UnderstoodUnitOptions): Record<string, string> {
-  const base = `applications/${app}/units/${item}/understanding`;
+  const base = `10-applications/${app}/01-legacy/${item}`;
   const bullets = (values: string[]): string => values.map((value) => `- \`${value}\`\n`).join("");
   const documents: Record<string, string> = {
     [`${base}/understanding.md`]: `---\napp: "${app}"\nitem: "${item}"\nstatus: "understood"\ndigest: "${options.digest}"\ncommit: "${options.commit}"\n${options.runId === undefined ? "" : `runId: "${options.runId}"\n`}---\n# Understanding record - ${item}\n`,
-    [`${base}/as-is.md`]: `# ${item}\n`,
+    [`${base}/spec.md`]: `# ${item}\n`,
     [`${base}/trace.md`]: `---\napp: "${app}"\nitem: "${item}"\nopenQuestions: ${options.openQuestions ?? 0}\n---\n# Traceability - ${item}\n\n## Rules applied\n\n${bullets(options.rule === undefined ? [] : [options.rule.id])}\n## Findings\n\n${bullets(options.findings ?? [])}\n## Dependencies\n\n${table(["Target", "Kind", "Direction"], (options.dependencies ?? []).map((dependency) => [dependency.target, dependency.kind ?? "call", "outbound"]))}\n`,
   };
 

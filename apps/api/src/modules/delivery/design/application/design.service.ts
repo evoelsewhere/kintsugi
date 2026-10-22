@@ -1,5 +1,5 @@
 // Application layer: the design of a project, read from its document repo (ADR-0044, ADR-0045): the
-// design sets the project defined under `standards/design/`, and for each unit how its design
+// design sets the project defined under `01-standards/templates/`, and for each unit how its design
 // documents stand against them. The conformance is the reader's (the checks the member's
 // `check_design.py` mirrors); what is derived here is never stored, so a design is stale or not
 // by comparing the version it names with the set's, on every read.
@@ -31,19 +31,21 @@ import {
 import {
   COMPONENT_ID_PATTERN,
   type DesignState,
+  applicationDesignFilePath,
   applicationRequirementsPath,
   commonComponentPath,
   commonComponentsDir,
   designSetDir,
   designSetPath,
   designSetsDir,
+  isUnitSegment,
+  modernDir,
+  modernModuleDir,
   parseDesignWaiver,
   parseRequirementsMarkdown,
   unitDesignFilePath,
-  unitModuleDir,
   unitRulesPath,
   unitStatePath,
-  unitsDir,
 } from "@kintsugi/domain";
 import { parseKintsugiYaml } from "@kintsugi/manifest";
 import { chunk } from "#common/util/async.js";
@@ -103,8 +105,20 @@ interface UnitScan {
   anyStale: boolean;
 }
 
+/** The application's own design (sets of scope `application`), computed once per scan. */
+interface ApplicationScan {
+  summaries: Record<string, UnitSetSummary>;
+  details: UnitSetDetail[];
+  unresolved: UnresolvedReference[];
+  componentRefs: Set<string>;
+  anyStale: boolean;
+  /** The design items of each of its sets: what a unit's design that needs one can point to. */
+  items: Record<string, string[]>;
+}
+
 interface AppScan {
   project: ProjectSets;
+  application: ApplicationScan;
   units: UnitScan[];
   components: Array<{ id: string; path: string }>;
 }
@@ -198,10 +212,13 @@ export class DesignService {
         id: set.id,
         title: set.title,
         version: set.version,
+        scope: set.scope,
         appliesTo: set.appliesTo,
         needs: set.needs,
         ...(set.stage === undefined ? {} : { stage: set.stage }),
         description: set.description,
+        reads: set.reads,
+        instructions: set.instructions,
         producedBy: project.pipelines.flatMap((pipeline) => pipeline.stages.filter((stage) => stage.produces === set.id).map((stage) => ({ pipeline: pipeline.id, stage: stage.id }))),
         files: set.files.map((file) => ({
           path: file.path,
@@ -223,6 +240,7 @@ export class DesignService {
     const scan = await this.scan(context, resolved.commit, applicationId);
     const counts: DesignOverviewView["counts"] = {};
     for (const { set } of scan.project.sets) counts[set.id] = {};
+    for (const [setId, summary] of Object.entries(scan.application.summaries)) counts[setId] = { [summary.state]: 1 };
     let ruleUnits = 0;
     let ruleTotal = 0;
     let ruleUncovered = 0;
@@ -238,17 +256,18 @@ export class DesignService {
       }
     }
     const componentIds = new Set(scan.components.map((component) => component.id));
-    const unresolvedComponents = new Set(scan.units.flatMap((unit) => [...unit.componentRefs].filter((id) => !componentIds.has(id))));
+    const unresolvedComponents = new Set([...scan.units.flatMap((unit) => [...unit.componentRefs]), ...scan.application.componentRefs].filter((id) => !componentIds.has(id)));
     const attention: DesignAttention[] = [];
     if (scan.project.problems.length > 0) attention.push({ kind: "template-error", count: scan.project.problems.length, label: `${scan.project.problems.length} problem(s) in the design templates` });
     if (unresolvedComponents.size > 0) attention.push({ kind: "unresolved-component", count: unresolvedComponents.size, label: `${unresolvedComponents.size} common component(s) named by a design and not defined` });
     const uncovered = scan.units.filter((unit) => (unit.row.rules.uncovered ?? 0) > 0).length;
     if (uncovered > 0) attention.push({ kind: "uncovered-rules", count: uncovered, label: `${uncovered} unit(s) with rules no design covers` });
-    const stale = scan.units.filter((unit) => unit.anyStale).length;
+    const stale = scan.units.filter((unit) => unit.anyStale).length + (scan.application.anyStale ? 1 : 0);
     if (stale > 0) attention.push({ kind: "stale", count: stale, label: `${stale} unit(s) with a design written against an older version of its set` });
     return {
       ref: resolved,
-      sets: scan.project.sets.map(({ set }) => ({ id: set.id, title: set.title, version: set.version, needs: set.needs })),
+      sets: scan.project.sets.map(({ set }) => ({ id: set.id, title: set.title, version: set.version, needs: set.needs, scope: set.scope })),
+      application: { sets: scan.application.summaries },
       units: scan.units.map((unit) => unit.row),
       counts,
       rules: { units: ruleUnits, total: ruleTotal, uncovered: ruleUncovered },
@@ -274,6 +293,20 @@ export class DesignService {
     };
   }
 
+  /** The application's own design: its sets of scope `application`, each file with its state and problems (ADR-0050). */
+  async applicationDesign(projectId: string, applicationId: string, ref: string | undefined): Promise<UnitDesignView> {
+    const { context, resolved } = await this.open(projectId, ref);
+    const application = context.project.applications.find((entry) => entry.id === this.application(context, applicationId));
+    const scan = await this.scan(context, resolved.commit, applicationId);
+    return {
+      ref: resolved,
+      unit: { key: "@app", module: "@app", unit: "@app", kind: "application", ...(application?.name === undefined ? {} : { title: application.name }) },
+      sets: scan.application.details,
+      coverage: [],
+      unresolved: scan.application.unresolved,
+    };
+  }
+
   /** The common components of the project and the units that name each one. */
   async common(projectId: string, applicationId: string, ref: string | undefined): Promise<CommonDesignView> {
     const { context, resolved } = await this.open(projectId, ref);
@@ -281,6 +314,7 @@ export class DesignService {
     const scan = await this.scan(context, resolved.commit, applicationId);
     const named = new Map<string, string[]>();
     for (const unit of scan.units) for (const id of unit.componentRefs) named.set(id, [...(named.get(id) ?? []), unit.row.key]);
+    for (const id of scan.application.componentRefs) named.set(id, [...(named.get(id) ?? []), "@app"]);
     const components: CommonComponentView[] = [];
     for (const group of chunk(scan.components, READS)) {
       components.push(
@@ -318,6 +352,11 @@ export class DesignService {
   }
 
   private usage(scan: AppScan, set: DesignSet): { units: number; onCurrent: number; stale: number } {
+    if (set.scope === "application") {
+      const summary = scan.application.summaries[set.id];
+      const written = summary !== undefined && summary.files.conformant + summary.files.problems > 0;
+      return { units: written ? 1 : 0, onCurrent: written && summary.files.stale === 0 ? 1 : 0, stale: written && summary.files.stale > 0 ? 1 : 0 };
+    }
     const summaries = scan.units.flatMap((unit) => (unit.row.sets[set.id] === undefined ? [] : [{ unit, summary: unit.row.sets[set.id] as UnitSetSummary }]));
     // A unit is on the current version when it has a design of the set and none of its files is stale.
     const written = summaries.filter(({ summary }) => summary.files.conformant + summary.files.problems > 0);
@@ -382,7 +421,7 @@ export class DesignService {
       const [componentNames, requirementsText, modules] = await Promise.all([
         this.documents.listNames(context, commit, commonComponentsDir()),
         this.documents.readText(context, commit, applicationRequirementsPath(applicationId), MAX_RULES_BYTES),
-        this.documents.listNames(context, commit, unitsDir(applicationId)),
+        this.documents.listNames(context, commit, modernDir(applicationId)),
       ]);
       const components = componentNames
         .filter((entry) => entry.kind === "file" && entry.name.endsWith(".md") && COMPONENT_ID_PATTERN.test(entry.name.slice(0, -3)))
@@ -390,23 +429,77 @@ export class DesignService {
         .sort((a, b) => a.id.localeCompare(b.id));
       const requirementIds = requirementsText === undefined ? [] : parseRequirementsMarkdown(requirementsText).map((requirement) => requirement.id);
       const keys: Array<{ module: string; unit: string }> = [];
-      for (const module of modules.filter((entry) => entry.kind === "dir").map((entry) => entry.name).sort()) {
-        for (const unit of (await this.documents.listNames(context, commit, unitModuleDir(applicationId, module))).filter((entry) => entry.kind === "dir").map((entry) => entry.name).sort()) {
+      // The units are the folders on the modern side; `_design/` and the other `_` folders belong to the application.
+      const unitFolders = (entries: Array<{ kind: string; name: string }>): string[] => entries.filter((entry) => entry.kind === "dir" && isUnitSegment(entry.name)).map((entry) => entry.name).sort();
+      for (const module of unitFolders(modules)) {
+        for (const unit of unitFolders(await this.documents.listNames(context, commit, modernModuleDir(applicationId, module)))) {
           if (keys.length < MAX_UNITS) keys.push({ module, unit });
         }
       }
       const shared: Omit<DesignContext, "items"> = { ruleIds: [], requirementIds, componentIds: components.map((component) => component.id) };
+      // The application's own design first: a unit's design may point to the items of the sets of the application it needs.
+      const application = await this.scanApplication(context, commit, applicationId, project, shared);
       const units: UnitScan[] = [];
       for (const group of chunk(keys, READS)) {
-        const scanned = await Promise.all(group.map((key) => this.scanUnit(context, commit, applicationId, key.module, key.unit, project, shared)));
+        const scanned = await Promise.all(group.map((key) => this.scanUnit(context, commit, applicationId, key.module, key.unit, project, shared, application)));
         units.push(...scanned.filter((unit): unit is UnitScan => unit !== undefined));
       }
-      return { project, units, components };
+      return { project, application, units, components };
     });
   }
 
+  /** The application's own design: the files of each set of scope `application` against its template, with the ids it points to. */
+  private async scanApplication(context: DocumentContext, commit: string, app: string, project: ProjectSets, shared: Omit<DesignContext, "items">): Promise<ApplicationScan> {
+    const applicable = project.sets.filter((loaded) => designFilesFor(loaded.set, null).length > 0);
+    const texts = new Map<string, string | undefined>();
+    await Promise.all(
+      applicable.flatMap((loaded) =>
+        designFilesFor(loaded.set, null).map(async (file) => {
+          texts.set(`${loaded.set.id}/${file.path}`, await this.documents.readText(context, commit, applicationDesignFilePath(app, loaded.set.id, file.path), MAX_DESIGN_BYTES));
+        }),
+      ),
+    );
+    const items: Record<string, string[]> = {};
+    for (const loaded of applicable) {
+      items[loaded.set.id] = [...new Set(designFilesFor(loaded.set, null).flatMap((file) => designItemIds(texts.get(`${loaded.set.id}/${file.path}`) ?? "")))];
+    }
+    const designContext: DesignContext = { ...shared, ruleIds: [], items };
+    const details: UnitSetDetail[] = [];
+    const summaries: Record<string, UnitSetSummary> = {};
+    const unresolved: UnresolvedReference[] = [];
+    const componentRefs = new Set<string>();
+    let anyStale = false;
+
+    for (const loaded of applicable) {
+      const { set } = loaded;
+      const files: DesignFileView[] = designFilesFor(set, null).map((file) => {
+        const text = texts.get(`${set.id}/${file.path}`);
+        const template = loaded.templates[file.template];
+        const base = { path: file.path, required: file.required, stale: false, problems: [] as DesignProblem[] };
+        if (text === undefined || template === undefined) return { ...base, state: "missing" as const };
+        const problems = checkDesignDocument(template, set, text, designContext);
+        const ref = designTemplateRefOf(text);
+        for (const mention of text.match(COMPONENT_MENTION) ?? []) componentRefs.add(mention);
+        for (const reference of designReferences(template, text, designContext)) {
+          for (const id of reference.unresolved) unresolved.push({ id, source: reference.source, set: set.id, file: file.path, section: reference.section });
+        }
+        return { ...base, state: problems.length > 0 ? ("problems" as const) : ("conformant" as const), stale: designIsStale(text, set), ...(ref === null ? {} : { template: ref }), problems };
+      });
+      if (files.some((file) => file.stale)) anyStale = true;
+      const { state, counts } = setState(files);
+      details.push({ set: set.id, title: set.title, version: set.version, state, needs: set.needs, files });
+      summaries[set.id] = { set: set.id, version: set.version, state, files: counts, ready: false };
+    }
+    for (const detail of details) {
+      const summary = summaries[detail.set] as UnitSetSummary;
+      const needsMet = detail.needs.every((need) => summaries[need] === undefined || finished((summaries[need] as UnitSetSummary).state));
+      summary.ready = needsMet && summary.state === "missing" && summary.files.conformant + summary.files.problems === 0;
+    }
+    return { summaries, details, unresolved, componentRefs, anyStale, items };
+  }
+
   /** One unit: its state file, its rules, its design documents, and what the checks say. Undefined without a unit file. */
-  private async scanUnit(context: DocumentContext, commit: string, app: string, module: string, unit: string, project: ProjectSets, shared: Omit<DesignContext, "items">): Promise<UnitScan | undefined> {
+  private async scanUnit(context: DocumentContext, commit: string, app: string, module: string, unit: string, project: ProjectSets, shared: Omit<DesignContext, "items">, application: ApplicationScan): Promise<UnitScan | undefined> {
     const stateText = await this.documents.readText(context, commit, unitStatePath(app, module, unit), MAX_DESIGN_BYTES);
     const summary = stateText === undefined ? null : parseWorkItem(stateText);
     if (stateText === undefined || summary === null || summary.kind === undefined) return undefined;
@@ -430,7 +523,8 @@ export class DesignService {
         }),
       ),
     );
-    const items: Record<string, string[]> = {};
+    // The items of the application's own sets resolve too: a unit's design may need one.
+    const items: Record<string, string[]> = { ...application.items };
     for (const loaded of applicable) {
       items[loaded.set.id] = [...new Set(designFilesFor(loaded.set, kind).flatMap((file) => designItemIds(texts.get(`${loaded.set.id}/${file.path}`) ?? "")))];
     }
@@ -478,7 +572,10 @@ export class DesignService {
     }
     for (const detail of details) {
       const summary = sets[detail.set] as UnitSetSummary;
-      const needsMet = detail.needs.every((need) => sets[need] === undefined || finished(sets[need].state));
+      const needsMet = detail.needs.every((need) => {
+        const target = sets[need] ?? application.summaries[need];
+        return target === undefined || finished(target.state);
+      });
       summary.ready = needsMet && summary.state === "missing" && summary.files.conformant + summary.files.problems === 0;
     }
     const coverage: UnitCoverageRow[] = rules

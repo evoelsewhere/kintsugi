@@ -12,7 +12,7 @@
 //                   graph can give (size, cohesion, what it still depends on); a plan with nothing
 //                   left sends the job back once with the reason
 //
-// Only plan.md (understanding/plan.md, ADR-0042) is published, and it is an auto-commit path: advice every
+// Only plan.md (01-legacy/plan.md, ADR-0051) is published, and it is an auto-commit path: advice every
 // run replaces, not a proposal a person reviews. The graph and the draft are scratch JSON (intermediate). The plugin's command
 // (commands/modernize-plan-understand.md) declares the same flow; test/flow-sync.test.ts keeps them equal.
 
@@ -21,13 +21,12 @@ import {
   DOCUMENT_PATH_TOKENS,
   assessmentCatalogDir,
   assessmentCatalogPath,
-  assessmentFilePath,
-  assessmentInventoryPath,
+  assessmentSynthesisPath,
   assessmentTopologyPath,
+  legacyDir,
   understandGraphPath,
   understandPlanDraftPath,
   understandPlanPath,
-  unitsDir,
 } from "@kintsugi/domain";
 import { CREDENTIALS, HEADER, UNTRUSTED, WORKSPACE } from "./common.js";
 
@@ -74,7 +73,7 @@ ${WORKSPACE}
 The item graph is {in}/${GRAPH}: per catalog item its size (loc), complexity, whether it is understood already, whether it is test or
 generated code (assetClass), whether it holds an entry point, the items it depends on (dependsOn, with the kinds of calls and
 how many), the items that use it (usedBy), the data stores it touches, its fan-in and fan-out, its depth (0 = it depends on no
-other item) and its cycle (items that depend on each other). Also under {in}: ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")}
+other item) and its cycle (items that depend on each other). Also under {in}: ${assessmentSynthesisPath(APP_TOKEN)}
 (the assessment: summary, rebuild outlook, risks), ${assessmentCatalogPath(APP_TOKEN)} (and the module documents next to it) and ${assessmentTopologyPath(APP_TOKEN)}.
 Read the graph and the assessment first; open source files only to settle a doubt, a few at most.
 
@@ -107,14 +106,14 @@ ${UNTRUSTED}`;
 export const PLAN_UNDERSTAND: StagePlan = {
   id: "plan-understand",
   message: (app) => `Plan which items of ${app} to understand next`,
-  documents: ["kintsugi.yaml", `${assessmentCatalogDir(APP_TOKEN)}/`, assessmentInventoryPath(APP_TOKEN), assessmentTopologyPath(APP_TOKEN), assessmentFilePath(APP_TOKEN, "ASSESSMENT.md"), `${unitsDir(APP_TOKEN)}/`],
+  documents: ["kintsugi.yaml", `${legacyDir(APP_TOKEN)}/`],
   requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   steps: [
     {
       id: "graph",
       kind: "script",
       script: "plan_graph.py",
-      args: ["{app}", "--catalog", `{in}/${assessmentCatalogDir(APP_TOKEN)}`, "--existing", `{in}/${unitsDir(APP_TOKEN)}`, "--out", "{out}"],
+      args: ["{app}", "--catalog", `{in}/${assessmentCatalogDir(APP_TOKEN)}`, "--existing", `{in}/${legacyDir(APP_TOKEN)}`, "--out", "{out}"],
       intermediate: [GRAPH],
       expects: [GRAPH],
     },

@@ -5,14 +5,13 @@
 // (map, rules, security and traceability for the whole application or one item).
 // URL: …&tab=catalog|runs|results (&run=<id> opens Runs on that run; &view, &item on Results).
 
-import { ListTree, Play, RefreshCw, RotateCcw, Sparkles, Undo2, X } from "lucide-react";
+import { ListTree, Play, RefreshCw, Sparkles, Undo2, X } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { JobRunList } from "@/components/job-runs/job-run-list";
+import { ScopedRunsPanel, type ScopedRunsLabels } from "@/components/job-runs/scoped-runs-panel";
 import { Loaded } from "@/components/loaded";
-import { RunStatusBadge, StatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -26,10 +25,9 @@ import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs"
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { ASSET_CLASS_LABEL, assetClassOf, BATCH_MAX_LOC, estimateRun, formatEstimate, recommendBatch } from "@/lib/catalog-batch";
-import { formatRelative } from "@/lib/format";
 import { isActiveStatus, ITEM_STATUS, styleOf } from "@/lib/status";
 import { runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
-import { type Loader, useLoader } from "@/lib/use-loader";
+import { useLoader } from "@/lib/use-loader";
 import { CompactFacts, StageHeader } from "./delivery-shell";
 import { PlanPanel } from "./plan-panel";
 import { CatalogResults, type CatalogSelection } from "./results/catalog-view";
@@ -46,6 +44,14 @@ const RUN_LIMIT = 50;
 const STATUSES: ItemStatus[] = ["not-analysed", "understood", "stale", "failed", "in-pr", "running", "retired"];
 
 /** A rough count of the agent jobs a selection starts: a specification per item, rule extractors and referees, security finders and judges. */
+const UNDERSTAND_RUNS: ScopedRunsLabels = {
+  title: "Understand runs",
+  description: "Each run is one pull request with the files of its own items. Retry a failed run; abandon a pull request that was closed without merging to release its items.",
+  emptyTitle: "No understand run yet",
+  emptyDescription: "Select items on the Catalog tab and run understand on them.",
+  noun: "item",
+};
+
 const agentEstimate = (items: number): number => (items === 0 ? 0 : items * 4 + 10);
 
 export function UnderstandStage({ project, application, stage }: { project: ProjectDetail; application: ApplicationView; stage: StageView }): React.JSX.Element {
@@ -163,7 +169,18 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
         </Loaded>
       ) : null}
 
-      {tab === "runs" ? <RunsTab project={project} runs={understandRuns} loader={runs} canRun={can("jobs.run")} initialRun={params.get("run") ?? undefined} onChanged={changed} onStarted={(run) => setParam({ tab: "runs", run: run.id })} /> : null}
+      {tab === "runs" ? (
+        <ScopedRunsPanel
+          project={project}
+          runs={understandRuns}
+          loader={runs}
+          canRun={can("jobs.run")}
+          initialRun={params.get("run") ?? undefined}
+          labels={UNDERSTAND_RUNS}
+          onChanged={changed}
+          onStarted={(run) => setParam({ tab: "runs", run: run.id })}
+        />
+      ) : null}
 
       {tab === "results" ? (
         <Suspense fallback={<Card><SkeletonRows rows={6} /></Card>}>
@@ -400,133 +417,5 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
         <p>Do this when the pull request of run {abandoning?.pr?.runId.slice(0, 8)} was closed without merging: every item of that run is released and can be selected again. The run and its branch stay as they are.</p>
       </ConfirmDialog>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Runs: scope, status, pull request, Retry and Abandon, then the live logs
-// ---------------------------------------------------------------------------
-
-interface RunsTabProps {
-  project: ProjectDetail;
-  runs: JobRunView[] | undefined;
-  loader: Loader<JobRunView[]>;
-  canRun: boolean;
-  initialRun: string | undefined;
-  onChanged(): Promise<void>;
-  onStarted(run: JobRunView): void;
-}
-
-function RunsTab({ project, runs, loader, canRun, initialRun, onChanged, onStarted }: RunsTabProps): React.JSX.Element {
-  const toast = useToast();
-  const [abandoning, setAbandoning] = useState<JobRunView | null>(null);
-
-  async function retry(run: JobRunView): Promise<void> {
-    try {
-      const next = await jobRunsApi.retry(project.id, run.id);
-      toast.success("Retry queued", "It skips the agent jobs that succeeded and reruns the rest.");
-      onStarted(next);
-      await onChanged();
-    } catch (failure) {
-      toast.error("Could not retry the run", failure);
-    }
-  }
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Understand runs</CardTitle>
-            <CardDescription>Each run is one pull request with the files of its own items. Retry a failed run; abandon a pull request that was closed without merging to release its items.</CardDescription>
-          </div>
-        </CardHeader>
-        <div className="mt-2">
-          <Loaded loader={loader} rows={3}>
-            {() =>
-              runs === undefined || runs.length === 0 ? (
-                <EmptyState icon={Play} title="No understand run yet" description="Select items on the Catalog tab and run understand on them." />
-              ) : (
-                <ul className="flex flex-col">
-                  {runs.map((run, index) => {
-                    const items = run.scope?.items ?? [];
-                    const openPr = run.status === "succeeded" && run.documentWrite?.status === "pr-opened" && run.abandonedAt === undefined;
-                    return (
-                      <li key={run.id} className={index > 0 ? "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)] py-2.5" : "py-2.5"}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <RunStatusBadge status={run.status} />
-                          {run.abandonedAt === undefined ? null : <StatusBadge tone="muted" label="Abandoned" />}
-                          {run.resumeOf === undefined ? null : <span className="text-[11px] text-text-muted">retry of {run.resumeOf.slice(0, 8)}</span>}
-                          <span className="font-mono text-[11px] text-text-muted">{run.id.slice(0, 8)}</span>
-                          <span className="text-[12px] text-text-muted">{formatRelative(run.createdAt)}{run.actor === undefined ? "" : ` · ${run.actor}`}</span>
-                          {run.documentWrite?.prUrl === undefined ? null : (
-                            <a className="text-[12px] underline" href={run.documentWrite.prUrl} target="_blank" rel="noreferrer">
-                              Pull request
-                            </a>
-                          )}
-                          <div className="ml-auto flex items-center gap-2">
-                            {canRun && run.status === "failed" ? (
-                              <Button size="small" variant="ghost" className="shadow-border" onClick={() => void retry(run)}>
-                                <RotateCcw className="size-3.5" />
-                                Retry
-                              </Button>
-                            ) : null}
-                            {canRun && openPr ? (
-                              <Button size="small" variant="ghost" className="shadow-border" onClick={() => setAbandoning(run)}>
-                                <Undo2 className="size-3.5" />
-                                Abandon
-                              </Button>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {items.slice(0, 8).map((item) => (
-                            <span key={item} className="rounded-full bg-recessed px-2 py-0.5 font-mono text-[11px] text-text-secondary">
-                              {item}
-                            </span>
-                          ))}
-                          {items.length > 8 ? <span className="text-[11px] text-text-muted">+{items.length - 8} more</span> : null}
-                        </div>
-                        {run.failureReason === undefined ? null : <p className="mt-1 text-[12px] text-[var(--ds-status-red)]">{run.failureReason}</p>}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )
-            }
-          </Loaded>
-        </div>
-      </Card>
-
-      {runs === undefined || runs.length === 0 ? null : (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Steps and live logs</CardTitle>
-              <CardDescription>Open a run for its steps, artifacts and live log.</CardDescription>
-            </div>
-          </CardHeader>
-          <div className="mt-2">
-            <JobRunList key={initialRun ?? "none"} runs={runs} canCancel={canRun} {...(initialRun === undefined ? {} : { initialOpen: initialRun })} onChanged={() => void onChanged()} />
-          </div>
-        </Card>
-      )}
-
-      <ConfirmDialog
-        open={abandoning !== null}
-        title="Abandon this pull request?"
-        confirmLabel="Abandon"
-        busyLabel="Abandoning…"
-        onConfirm={async () => {
-          if (abandoning === null) return;
-          await jobRunsApi.abandon(project.id, abandoning.id);
-          toast.success("Pull request abandoned", "Its items can be selected again.");
-          await onChanged();
-        }}
-        onClose={() => setAbandoning(null)}
-      >
-        <p>Do this when the pull request was closed without merging: its {abandoning?.scope?.items.length ?? 0} item(s) are released and can be selected again.</p>
-      </ConfirmDialog>
-    </>
   );
 }

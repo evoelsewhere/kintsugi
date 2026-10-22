@@ -3,7 +3,8 @@
 // design documents, derived on every read from the document repo.
 
 import type { DesignState } from "@kintsugi/domain";
-import { apiGet } from "../api";
+import { apiGet, apiSend } from "../api";
+import type { JobRunView } from "./job-runs";
 
 export type { DesignState };
 
@@ -40,10 +41,16 @@ export interface DesignSet {
   id: string;
   title: string;
   version: number;
+  /** `unit`: a design per unit; `application`: one design for the whole application (ADR-0050). */
+  scope: "unit" | "application";
   appliesTo: string[];
   needs: string[];
   stage?: string;
   description: string;
+  /** Documents the designer also reads when it generates the set (`{app}` allowed). */
+  reads: string[];
+  /** The project's instructions to the designer for this kind of design. */
+  instructions: string;
   producedBy: Array<{ pipeline: string; stage: string }>;
   files: DesignSetFile[];
   usage?: { units: number; onCurrent: number; stale: number };
@@ -84,7 +91,9 @@ export interface DesignAttention {
 
 export interface DesignOverview {
   ref: { ref: string; commit: string };
-  sets: Array<{ id: string; title: string; version: number; needs: string[] }>;
+  sets: Array<{ id: string; title: string; version: number; needs: string[]; scope: "unit" | "application" }>;
+  /** Where the application's own design stands, per set of scope `application`. */
+  application: { sets: Record<string, UnitSetSummary> };
   units: UnitDesignRow[];
   counts: Record<string, Partial<Record<DesignState, number>>>;
   rules: { units: number; total: number; uncovered: number };
@@ -139,6 +148,28 @@ const project = (projectId: string): string => `/api/projects/${encodeURICompone
 const application = (projectId: string, applicationId: string): string => `${project(projectId)}/applications/${encodeURIComponent(applicationId)}/design`;
 const refQuery = (ref: string | undefined): string => (ref === undefined || ref === "" ? "" : `?ref=${encodeURIComponent(ref)}`);
 
+/** A unit whose design set a run is generating or a pull request carries (ADR-0049). */
+export interface UnitSetActivity {
+  /** `<module>/<unit>`. */
+  unit: string;
+  set: string;
+  state: "running" | "in-pr";
+  runId: string;
+  pr?: { branch: string; url?: string };
+}
+
+export interface DesignActivity {
+  items: UnitSetActivity[];
+}
+
+/** A conflict of a refused selection (409): a unit that has the set, lacks one it needs, or is running or in a pull request. */
+export interface DesignConflict {
+  unit: string;
+  state: "running" | "in-pr" | "written" | "needs";
+  runId?: string;
+  needs?: string[];
+}
+
 export const designApi = {
   /** The design sets of the project; with an application, how its units stand with each. */
   sets: (projectId: string, options: { app?: string; ref?: string } = {}) => {
@@ -150,5 +181,11 @@ export const designApi = {
   },
   overview: (projectId: string, applicationId: string, ref?: string) => apiGet<DesignOverview>(`${application(projectId, applicationId)}${refQuery(ref)}`),
   unit: (projectId: string, applicationId: string, key: string, ref?: string) => apiGet<UnitDesign>(`${application(projectId, applicationId)}/units/${key.split("/").map(encodeURIComponent).join("/")}${refQuery(ref)}`),
+  /** The application's own design (its sets of scope `application`), shaped like a unit's; the unit is `@app`. */
+  application: (projectId: string, applicationId: string, ref?: string) => apiGet<UnitDesign>(`${application(projectId, applicationId)}/application${refQuery(ref)}`),
+  /** The units a run is generating or a pull request carries (what a new selection cannot take). */
+  activity: (projectId: string, applicationId: string) => apiGet<DesignActivity>(`${application(projectId, applicationId)}/activity`),
+  /** Generates one design set for units (202); 409 with details.conflicts when some cannot be designed now. */
+  generate: (projectId: string, applicationId: string, selection: { set: string; units: string[] }) => apiSend<JobRunView>(`${application(projectId, applicationId)}/runs`, "POST", selection),
   common: (projectId: string, applicationId: string, ref?: string) => apiGet<CommonDesign>(`${application(projectId, applicationId)}/common${refQuery(ref)}`),
 };

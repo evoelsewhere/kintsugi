@@ -39,12 +39,12 @@ Deliverables are **never uploaded** to Kintsugi:
 ## What Postgres keeps
 
 - **Operational state**: users, memberships, job queue and executions, events, usage/cost, audit.
-- **Indexes rebuildable from Git**: units and their status / gate results (from `applications/*/units/**`, [ADR-0012](../../decisions/0012-work-items-as-files-in-git.md)), KB chunks/embeddings, file → artifact mapping.
+- **Indexes rebuildable from Git**: units and their status / gate results (from the unit cards `10-applications/*/02-modern/*/*/README.md`, [ADR-0012](../../decisions/0012-work-items-as-files-in-git.md)), KB chunks/embeddings, file → artifact mapping.
 - **Not** the primary copy of any document. If the DB is lost, the KB can be rebuilt from Git; only operational history is lost.
 
 ## Unit state
 
-Each unit is a directory, `applications/<app>/units/<module>/<unit>/`, whose `unit.md` frontmatter holds its state ([format](../../reference/document-repo-unit-files.md)).
+Each unit has a card, `10-applications/<app>/02-modern/<module>/<unit>/README.md`, whose frontmatter holds its state ([format](../../reference/document-repo-unit-files.md)).
 
 - **One write path**:
   1. Portal, CLI, MCP and runtime agents call the Kintsugi API.

@@ -5,6 +5,7 @@
 
 import type { StagePlan, StagePrerequisite } from "./plan.js";
 import { ASSESS } from "./plans/assess.js";
+import { DESIGN } from "./plans/design.js";
 import { PLAN_UNDERSTAND } from "./plans/plan-understand.js";
 import { REBUILD } from "./plans/rebuild.js";
 import { UNDERSTAND } from "./plans/understand.js";
@@ -13,6 +14,7 @@ export const STAGES: Readonly<Record<string, StagePlan>> = {
   assess: ASSESS,
   understand: UNDERSTAND,
   "plan-understand": PLAN_UNDERSTAND,
+  design: DESIGN,
   rebuild: REBUILD,
 };
 

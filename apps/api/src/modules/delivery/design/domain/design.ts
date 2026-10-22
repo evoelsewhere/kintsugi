@@ -40,10 +40,16 @@ export interface DesignSetView {
   id: string;
   title: string;
   version: number;
+  /** `unit`: a design per unit; `application`: one design for the whole application (ADR-0050). */
+  scope: "unit" | "application";
   appliesTo: string[];
   needs: string[];
   stage?: string;
   description: string;
+  /** Documents the designer also reads when it generates the set (`{app}` allowed). */
+  reads: string[];
+  /** The project's instructions to the designer for this kind of design. */
+  instructions: string;
   /** The pipeline stages of the manifest that produce this set (`produces`). */
   producedBy: Array<{ pipeline: string; stage: string }>;
   files: DesignSetFileView[];
@@ -106,7 +112,9 @@ export interface DesignAttention {
 export interface DesignOverviewView {
   ref: { ref: string; commit: string };
   /** The sets of the project, in the order they are written (a set after the ones it needs). */
-  sets: Array<{ id: string; title: string; version: number; needs: string[] }>;
+  sets: Array<{ id: string; title: string; version: number; needs: string[]; scope: "unit" | "application" }>;
+  /** Where the application's own design stands, per set of scope `application` (ADR-0050). */
+  application: { sets: Record<string, UnitSetSummary> };
   units: UnitDesignRow[];
   /** Units per state, for each set. */
   counts: Record<string, Partial<Record<DesignState, number>>>;
@@ -161,4 +169,18 @@ export interface CommonDesignView {
   components: CommonComponentView[];
   /** `COM-` ids that designs name and no component document defines. */
   unresolved: Array<{ id: string; referencedBy: string[] }>;
+}
+
+/** A unit whose design set a run is generating or a pull request is carrying (ADR-0049). */
+export interface UnitSetActivity {
+  /** `<module>/<unit>`. */
+  unit: string;
+  set: string;
+  state: "running" | "in-pr";
+  runId: string;
+  pr?: { branch: string; url?: string };
+}
+
+export interface DesignActivityView {
+  items: UnitSetActivity[];
 }

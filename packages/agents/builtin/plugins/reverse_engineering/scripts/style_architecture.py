@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Give an agent-written flowchart (ARCHITECTURE.mmd) the house style of the mermaid-diagrams skill.
+"""Give an agent-written flowchart (architecture.mmd) the house style of the mermaid-diagrams skill.
 
 Usage: style_architecture.py --input FILE --out FILE
 

@@ -27,7 +27,7 @@ const LEGACY_FILES = {
 };
 const DOCUMENT_FILES = {
   "kintsugi.yaml": "version: 1\nproject: { id: demo }\n",
-  "applications/demo/assessment/INTENT.md": "Move to a supported platform.\n",
+  "10-applications/demo/00-inputs/INTENT.md": "Move to a supported platform.\n",
 };
 
 describe("job runs in job workspaces (mock agent, fixture repositories)", () => {
@@ -82,11 +82,11 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const seen: { inventory?: { sourceFileCount: number }; intent?: string; structure?: string; srcWritable?: boolean } = {};
     const { store, runner, writes, agents } = setup({
       "legacy-analyst": (spec: JobSpec): Record<string, string> => {
-        if (!synthesis(spec)) return spec.task.startsWith("Build the structural map") ? { "applications/demo/assessment/analysis/structure.md": "# Structure\n\n| domain | files |\n" } : {};
+        if (!synthesis(spec)) return spec.task.startsWith("Build the structural map") ? { "10-applications/demo/01-legacy/_analysis/structure.md": "# Structure\n\n| domain | files |\n" } : {};
         const [src, inputs] = spec.workspace.readOnly as [string, string];
-        seen.structure = readFileSync(join(inputs, "applications", "demo", "assessment", "analysis", "structure.md"), "utf8");
-        seen.inventory = documentOf(readFileSync(join(inputs, "applications", "demo", "assessment", "inventory.md"), "utf8")).data as unknown as { sourceFileCount: number };
-        seen.intent = readFileSync(join(inputs, "applications", "demo", "assessment", "INTENT.md"), "utf8");
+        seen.structure = readFileSync(join(inputs, "10-applications", "demo", "01-legacy", "_analysis", "structure.md"), "utf8");
+        seen.inventory = documentOf(readFileSync(join(inputs, "10-applications", "demo", "01-legacy", "inventory.md"), "utf8")).data as unknown as { sourceFileCount: number };
+        seen.intent = readFileSync(join(inputs, "10-applications", "demo", "00-inputs", "INTENT.md"), "utf8");
         try {
           writeFileSync(join(src, "src", "main.c"), "tampered");
           seen.srcWritable = true;
@@ -94,7 +94,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
           seen.srcWritable = false;
         }
         return {
-          "applications/demo/assessment/ASSESSMENT.md": `# Assessment (draft)\n\n${seen.inventory.sourceFileCount} source files.\n`,
+          "10-applications/demo/01-legacy/assessment.md": `# Assessment (draft)\n\n${seen.inventory.sourceFileCount} source files.\n`,
           "restricted/SECRETS.local.md": "| preview | location |\n|---|---|\n| hu** | src/main.c:2 |\n",
         };
       },
@@ -136,18 +136,18 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     if (process.platform === "win32" || process.getuid?.() !== 0) expect(seen.srcWritable).toBe(false);
     const spec = agents.specs.find(synthesis)!;
     expect(spec.model).toEqual({ provider: "mock", id: "mock" });
-    expect(spec.task).toContain("applications/demo/assessment/ASSESSMENT.md");
+    expect(spec.task).toContain("10-applications/demo/01-legacy/assessment.md");
     expect(spec.task).not.toMatch(/\{(app|repo|commit|in)\}/);
 
     // out/ holds what goes to Git (not the intermediate notes); restricted/ went to the restricted record only.
     const out = storage.job(id).out;
-    expect(existsSync(join(out, "applications", "demo", "assessment", "inventory.md"))).toBe(true);
-    expect(readFileSync(join(out, "applications", "demo", "assessment", "ASSESSMENT.md"), "utf8")).toContain("3 source files");
-    expect(existsSync(join(out, "applications", "demo", "assessment", "analysis"))).toBe(false);
+    expect(existsSync(join(out, "10-applications", "demo", "01-legacy", "inventory.md"))).toBe(true);
+    expect(readFileSync(join(out, "10-applications", "demo", "01-legacy", "assessment.md"), "utf8")).toContain("3 source files");
+    expect(existsSync(join(out, "10-applications", "demo", "01-legacy", "_analysis"))).toBe(false);
     // The per-file inventory, the raw topology and the catalog drafts are scratch of the run: not in out/.
     expect(existsSync(join(out, "scratch"))).toBe(false);
     // The item catalog: every inventory file in one item or unassigned (mock topology: one module per top folder).
-    const catalogDir = join(out, "applications", "demo", "assessment", "catalog");
+    const catalogDir = join(out, "10-applications", "demo", "01-legacy", "_catalog");
     const catalogIndex = readFileSync(join(catalogDir, "index.md"), "utf8");
     const catalog = parseItemCatalog(catalogIndex, { src: readFileSync(join(catalogDir, "src.md"), "utf8") })!;
     expect(documentOf(catalogIndex).data["generatedBy"]).toBe("reconcile_catalog.py");
@@ -161,16 +161,16 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     // Artifact index with provenance per producer.
     const artifacts = store.artifacts.get(id) ?? [];
     expect(artifacts.map((entry) => entry.path).sort()).toEqual([
-      "applications/demo/assessment/ARCHITECTURE.mmd",
-      "applications/demo/assessment/ASSESSMENT.md",
-      "applications/demo/assessment/catalog/index.md",
-      "applications/demo/assessment/catalog/src.md",
-      "applications/demo/assessment/inventory.md",
-      "applications/demo/assessment/tools/extract_topology.py",
-      "applications/demo/assessment/topology.md",
+      "10-applications/demo/01-legacy/_catalog/index.md",
+      "10-applications/demo/01-legacy/_catalog/src.md",
+      "10-applications/demo/01-legacy/_tools/extract_topology.py",
+      "10-applications/demo/01-legacy/architecture.mmd",
+      "10-applications/demo/01-legacy/assessment.md",
+      "10-applications/demo/01-legacy/inventory.md",
+      "10-applications/demo/01-legacy/topology.md",
     ]);
     expect(artifacts.find((entry) => entry.path.endsWith("inventory.md"))?.provenance).toMatchObject({ origin: "tool" });
-    expect(artifacts.find((entry) => entry.path.endsWith("ASSESSMENT.md"))?.provenance).toMatchObject({ origin: "runtime-agent", runtimeAgent: "legacy-analyst", model: "mock/mock" });
+    expect(artifacts.find((entry) => entry.path.endsWith("assessment.md"))?.provenance).toMatchObject({ origin: "runtime-agent", runtimeAgent: "legacy-analyst", model: "mock/mock" });
 
     // Handed to the writer: the stage's out/, with job, agent and actor provenance.
     expect(writes).toHaveLength(1);
@@ -186,19 +186,19 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     for (const child of store.children(id)) expect(existsSync(storage.job(child.id).root)).toBe(false);
   });
 
-  const BAD_TOPOLOGY = { "applications/demo/assessment/topology.md": "# Topology without front matter\n" };
+  const BAD_TOPOLOGY = { "10-applications/demo/01-legacy/topology.md": "# Topology without front matter\n" };
   const GOOD_TOPOLOGY = '---\napp: "demo"\nsystem: "demo"\n---\n# Topology of demo\n\n## Domains\n\n| Domain | Leaves | Data stores | LOC |\n| --- | --- | --- | --- |\n| Core | 1 | 0 | 5 |\n';
 
   it("keeps a credential an agent left in its files as written", async () => {
     const { store, runner, writes, agents } = setup({
-      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": "Config: password = hunter2hunter2\n" } : {}),
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "10-applications/demo/01-legacy/assessment.md": "Config: password = hunter2hunter2\n" } : {}),
     });
     const id = await assess(store);
     const run = await runner.run(id);
     expect(run?.status).toBe("succeeded");
     expect(agents.specs.filter(synthesis)).toHaveLength(1);
     expect(writes).toHaveLength(1);
-    const text = readFileSync(join(storage.job(id).out, "applications", "demo", "assessment", "ASSESSMENT.md"), "utf8");
+    const text = readFileSync(join(storage.job(id).out, "10-applications", "demo", "01-legacy", "assessment.md"), "utf8");
     expect(text).toBe("Config: password = hunter2hunter2\n");
     expect(store.events.some((event) => event.message.startsWith("masked "))).toBe(false);
   });
@@ -208,7 +208,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const id = await assess(store);
     const run = await runner.run(id);
     expect(run?.status).toBe("failed");
-    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: malformed artifact found — invalid_topology_document at applications\/demo\/assessment\/topology\.md:1/);
+    expect(run?.failureReason).toMatch(/^Step synthesis failed: JobOutput hook blocked the output: malformed artifact found — invalid_topology_document at 10-applications\/demo\/01-legacy\/topology\.md:1/);
     expect(writes).toHaveLength(0);
     expect(store.children(id).map((child) => child.status)).toEqual([...Array<string>(12).fill("succeeded"), "failed"]);
   });
@@ -217,7 +217,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const { store, runner, writes, agents } = setup({
       "legacy-analyst": (spec): Record<string, string> => {
         if (!synthesis(spec)) return {};
-        return spec.task.includes("The output checks rejected the files you wrote") ? { "applications/demo/assessment/topology.md": GOOD_TOPOLOGY } : BAD_TOPOLOGY;
+        return spec.task.includes("The output checks rejected the files you wrote") ? { "10-applications/demo/01-legacy/topology.md": GOOD_TOPOLOGY } : BAD_TOPOLOGY;
       },
     });
     const id = await assess(store);
@@ -226,7 +226,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(1);
     const attempts = agents.specs.filter(synthesis);
     expect(attempts).toHaveLength(2);
-    expect(attempts[1]?.task).toMatch(/- invalid_topology_document at applications\/demo\/assessment\/topology\.md:1\n/);
+    expect(attempts[1]?.task).toMatch(/- invalid_topology_document at 10-applications\/demo\/01-legacy\/topology\.md:1\n/);
   });
 
   it("fails after the one retry when the agent keeps the artifact malformed", async () => {
@@ -241,7 +241,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   it("resumes a failed stage: keeps work/, skips the agent jobs that succeeded, reruns the scripts and the failed step", async () => {
     let fail = true;
     const { store, runner, writes } = setup({
-      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? (fail ? BAD_TOPOLOGY : { "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n" }) : {}),
+      "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? (fail ? BAD_TOPOLOGY : { "10-applications/demo/01-legacy/assessment.md": "# Assessment\n" }) : {}),
     });
     const first = await assess(store);
     expect((await runner.run(first))?.status).toBe("failed");
@@ -250,7 +250,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const steps = (failed?.outputSummary?.["steps"] ?? []) as Array<{ id: string; status: string }>;
     expect(steps.map((step) => [step.id, step.status]).at(-1)).toEqual(["synthesis", "failed"]);
     expect(failed?.outputSummary?.["documentsCommit"]).toMatch(/^[0-9a-f]{40}$/);
-    expect(existsSync(join(storage.job(first).root, "work", "applications", "demo", "assessment", "analysis"))).toBe(true);
+    expect(existsSync(join(storage.job(first).root, "work", "10-applications", "demo", "01-legacy", "_analysis"))).toBe(true);
 
     fail = false;
     const second = randomUUID();
@@ -274,8 +274,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(summary.resumeOf).toBe(first);
     expect(summary.steps.filter((step) => step.reused === true).map((step) => step.id).sort()).toEqual(["catalog-curate", "debt", "security", "structure", "topology"]);
     const out = storage.job(second).out;
-    expect(existsSync(join(out, "applications", "demo", "assessment", "tools", "extract_topology.py"))).toBe(true);
-    expect(readFileSync(join(out, "applications", "demo", "assessment", "ASSESSMENT.md"), "utf8")).toBe("# Assessment\n");
+    expect(existsSync(join(out, "10-applications", "demo", "01-legacy", "_tools", "extract_topology.py"))).toBe(true);
+    expect(readFileSync(join(out, "10-applications", "demo", "01-legacy", "assessment.md"), "utf8")).toBe("# Assessment\n");
     expect(writes).toHaveLength(1);
   }, 120_000);
 
@@ -300,7 +300,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   });
 
   describe("an agent that misplaces an expected file", () => {
-    const EXPECTED = "applications/demo/assessment/ASSESSMENT.md";
+    const EXPECTED = "10-applications/demo/01-legacy/assessment.md";
     const agentRun = async (files: AgentFiles) => {
       const { store, agents } = setup(files);
       const runner = new JobRunner({
@@ -321,17 +321,17 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     };
 
     it("moves a bare-named file into place without asking the agent again", async () => {
-      const { id, run, agents, logs } = await agentRun({ "legacy-analyst": () => ({ "ASSESSMENT.md": "# Assessment\n" }) });
+      const { id, run, agents, logs } = await agentRun({ "legacy-analyst": () => ({ "assessment.md": "# Assessment\n" }) });
       expect(run?.status).toBe("succeeded");
       expect(agents.specs).toHaveLength(1);
       expect(logs.some((line) => line.includes("moved into place"))).toBe(true);
       expect(readFileSync(join(storage.job(id).out, ...EXPECTED.split("/")), "utf8")).toBe("# Assessment\n");
-      expect(existsSync(join(storage.job(id).out, "ASSESSMENT.md"))).toBe(false);
+      expect(existsSync(join(storage.job(id).out, "assessment.md"))).toBe(false);
     });
 
     it("picks, among several files of the expected name, the one whose path matches best", async () => {
       const { id, run, agents } = await agentRun({
-        "legacy-analyst": () => ({ "assessment/ASSESSMENT.md": "# Right\n", "other/ASSESSMENT.md": "# Wrong\n" }),
+        "legacy-analyst": () => ({ "01-legacy/assessment.md": "# Right\n", "other/assessment.md": "# Wrong\n" }),
       });
       expect(run?.status).toBe("succeeded");
       expect(agents.specs).toHaveLength(1);
@@ -373,7 +373,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   it("runs a model-written script from the inputs the same way as a built-in one", async () => {
     const { store, writes } = setup({});
     // A previous job's output, published to the document repo, becomes this step's input.
-    const scriptRepo = fixtureRepository({ "applications/demo/assessment/extract_topology.py": "import json, os, sys\nos.makedirs(sys.argv[1], exist_ok=True)\njson.dump({'ok': True}, open(os.path.join(sys.argv[1], 'nodes.json'), 'w'))\n" });
+    const scriptRepo = fixtureRepository({ "10-applications/demo/01-legacy/extract_topology.py": "import json, os, sys\nos.makedirs(sys.argv[1], exist_ok=True)\njson.dump({'ok': True}, open(os.path.join(sys.argv[1], 'nodes.json'), 'w'))\n" });
     try {
       const runnerWithDocs = new JobRunner({
         store,
@@ -395,7 +395,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
         kind: "script",
         name: "extract_topology.py",
         sourceRepositoryId: "legacy",
-        inputs: { documents: ["applications/{app}/assessment/extract_topology.py"], scriptFromInputs: "applications/demo/assessment/extract_topology.py", args: ["{out}/applications/{app}/assessment/scratch"] },
+        inputs: { documents: ["10-applications/{app}/01-legacy/extract_topology.py"], scriptFromInputs: "10-applications/demo/01-legacy/extract_topology.py", args: ["{out}/applications/{app}/assessment/scratch"] },
       });
       const run = await runnerWithDocs.run(id);
       expect(run?.failureReason).toBeUndefined();
@@ -444,7 +444,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
       return { run: await runner.run(id), agents };
     };
 
-    const folder = await run(() => ({ "applications/alpha/assessment/result.json": result }));
+    const folder = await run(() => ({ "10-applications/alpha/01-legacy/result.json": result }));
     expect(folder.run?.status).toBe("succeeded");
     expect(folder.agents.specs).toHaveLength(1);
 
@@ -468,13 +468,13 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     };
 
     // Root file and a stray copy in a folder: the root one is the result, and nothing is left behind.
-    const both = await run(() => ({ "result.json": good, "applications/alpha/assessment/result.json": "not json" }));
+    const both = await run(() => ({ "result.json": good, "10-applications/alpha/01-legacy/result.json": "not json" }));
     expect(both.run?.status).toBe("succeeded");
     expect(both.agents.specs).toHaveLength(1);
     expect(both.left).toEqual([]);
 
     // A valid file in a folder wins over an invalid root file.
-    const folder = await run(() => ({ "result.json": "{", "applications/alpha/assessment/result.json": good }));
+    const folder = await run(() => ({ "result.json": "{", "10-applications/alpha/01-legacy/result.json": good }));
     expect(folder.run?.status).toBe("succeeded");
     expect(folder.agents.specs).toHaveLength(1);
 
@@ -491,7 +491,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   });
 
   it("records the run's live events: status, steps and agent tool calls, without file content", async () => {
-    const { store, runner } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "applications/demo/assessment/ASSESSMENT.md": "# Draft with private detail\n" } : {}) });
+    const { store, runner } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) ? { "10-applications/demo/01-legacy/assessment.md": "# Draft with private detail\n" } : {}) });
     const id = await assess(store);
     await runner.run(id);
     const events = store.events.filter((event) => event.runId === id);
@@ -520,6 +520,11 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(summarizeToolCall("edit", { path: "assessment/x.md", edits: [{ oldText: "secret", newText: "body" }] }, roots)).toBe("edit assessment/x.md");
     expect(summarizeToolCall("grep", { path: roots.src, pattern: "TODO" }, roots)).toBe('grep src "TODO"');
     expect(summarizeToolCall("read", { path: join(tmpdir(), "elsewhere.txt") }, roots)).toBe("read (outside the workspace)");
+    const script = ['// @options: {"timeout_ms": 1000}', 'const files = await ls({ path: "src" });', "console.log(files);"].join("\n");
+    expect(summarizeToolCall("codemode", { code: script }, roots)).toBe('codemode const files = await ls({ path: "src" }); …');
+    expect(summarizeToolCall("shell", { command: "wc -l src/*.c\nrm tmp" }, roots)).toBe("shell wc -l src/*.c …");
+    expect(summarizeToolCall("git", { args: ["log", "--oneline", "-5"] }, roots)).toBe("git log --oneline -5");
+    expect(summarizeToolCall("mcp__tracker__search", { query: "login", limit: 5, body: { text: "private" } }, roots)).toBe("mcp__tracker__search query=login limit=5");
   });
 
   it("does not start a run that was cancelled while queued", async () => {

@@ -1,4 +1,4 @@
-// Markdown written by an agent (ASSESSMENT.md, BUSINESS_RULES.md, …), rendered with GitHub
+// Markdown written by an agent (assessment.md, BUSINESS_RULES.md, …), rendered with GitHub
 // tables. Raw HTML is dropped, link targets are sanitized (react-markdown's default URL
 // transform); web links open in a new tab, relative links resolve against the document's repo
 // path and open inside the portal (DocumentLink); ```mermaid fences become diagrams.

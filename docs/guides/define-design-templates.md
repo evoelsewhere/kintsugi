@@ -1,6 +1,6 @@
 # Define a project's design templates
 
-> How to describe the design documents your project wants, so members write them, the checks verify them and the portal shows them. Reference: [Design templates](../reference/design-templates.md). Decisions: [ADR-0044](../decisions/0044-design-phase-common-basic-detail.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md).
+> How to describe the design documents your project wants, so the runtime generates them, the checks verify them and the portal shows them. Reference: [Design templates](../reference/design-templates.md). Decisions: [ADR-0044](../decisions/0044-design-phase-common-basic-detail.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md).
 
 Who: the architects and the foundation team, with the customer's format at hand. When: in P2, before the basic design of the first unit; refine it in the P3 pilot. Everything is Markdown in the project's document repo and changes by pull request.
 
@@ -12,10 +12,12 @@ A **design set** is a group of documents written together for a unit. Start from
 |---|---|
 | How many levels of design are there, and which unit kinds does each cover? | basic design for every kind; detail design per kind |
 | Which one needs which? | detail needs basic |
-| Who writes and who reviews each? | an analyst writes the basic design, a developer the detail design |
+| Who reviews each? | an analyst reviews the basic design, a developer the detail design |
 | Which pipeline stage produces each? | `basic-design`, `detail-design` |
 
-The starter in `standards/design/` has `basic` and `detail` for every unit kind. Copy and change it, or add sets (`db`, `screen`, `report`).
+The starter in `01-standards/templates/` has `basic` and `detail` for every unit kind. Copy and change it, or add sets (`db`, `screen`, `report`): a new folder with a `set.md` and its templates, merged by pull request, appears on the Design page with its own Generate button.
+
+Some designs belong to the whole application, not to a unit (an architecture overview, an interface list). Give such a set `scope: application` in its `set.md`: it is written once under `10-applications/<app>/02-modern/_design/<set>/`, generated for the application, and a unit set can `need` it, so a detail design can point to its identifiers. Use `reads:` to name documents the designer should also read, and a `## Instructions` section for what is specific to that kind of design (see the [reference](../reference/design-templates.md)).
 
 ## 2. Write `set.md`
 
@@ -30,7 +32,7 @@ Start from the document the customer expects, in Markdown. Keep its headings. Un
 - `check:` for what a script can verify: `no-placeholder` almost everywhere, `covers-rules(Column)` where every business rule must appear, `refs-resolve(Column -> source)` where ids point to rules, requirements, common components or an earlier set, `id-pattern` for ids of a fixed shape, `one-of` for a fixed vocabulary, `max-length` to keep a summary short;
 - `guidance:` in one or two sentences: what a good section says. The agent that writes the section reads it as its instruction.
 
-Put ids where you want traceability. A column named `ID` in a table makes its cells **design items** that a later set can point to (`refs-resolve(Function -> basic)`); a common component is a file `architecture/common/COM-<AREA>-<NN>.md`.
+Put ids where you want traceability. A column named `ID` in a table makes its cells **design items** that a later set can point to (`refs-resolve(Function -> basic)`); a common component is a file `02-architecture/common/COM-<AREA>-<NN>.md`.
 
 ## 4. Validate
 
@@ -38,15 +40,15 @@ Put ids where you want traceability. A column named `ID` in a table makes its ce
 python3 scripts/validate_design_templates.py
 ```
 
-Run it in the document repo checkout, and on every pull request that changes `standards/design/`. It lists each fault with its path.
+Run it in the document repo checkout, and on every pull request that changes `01-standards/templates/`. It lists each fault with its path.
 
 ## 5. Pilot it
 
-Take one or two units through the whole flow with `/kintsugi:modernize-design <app> <module/unit> <set>`: the scaffold writes the drafts, the agent fills them, `check_design.py` verifies them. Where the check is too strict or too loose, change the template, not the designs:
+Take one or two units through the whole flow on the Design page of the portal: generate the set for them, and look at the pull request: the scaffold wrote the drafts, the designer filled them from your guidance, `check_design.py` verified them. Where the generated design is poor, the check is too strict or too loose, change the template, not the designs:
 
 | Symptom | Change |
 |---|---|
-| Authors keep writing a section in a different shape | the `table:` columns or the heading are wrong for the work |
+| Generated or corrected sections keep coming out in a different shape | the `table:` columns or the heading are wrong for the work, or the `guidance:` does not say what it should |
 | A check fails on correct content | loosen the `id-pattern` or the options |
 | Nothing fails on a poor document | add `required`, `covers-rules` or `refs-resolve` where it matters |
 
@@ -58,7 +60,7 @@ Customers often supply a spreadsheet or a document as the format. Convert it onc
 
 ## A unit that does not need a file
 
-A unit may leave out a required file when it does not apply (a screen with no data access). A person records it in the front matter of the unit's `unit.md`:
+A unit may leave out a required file when it does not apply (a screen with no data access). A person records it in the front matter of the unit's card, `10-applications/<app>/02-modern/<module>/<unit>/README.md`:
 
 ```markdown
 waived:

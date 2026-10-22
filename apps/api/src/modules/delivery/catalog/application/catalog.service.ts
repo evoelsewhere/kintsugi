@@ -6,7 +6,7 @@
 
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { type ItemCatalog, documentOf, parseItemCatalog, parsePlan, textOf } from "@kintsugi/agents/reader";
-import { type ItemStatus, assessmentCatalogDir, assessmentCatalogModulePath, catalogPath, classifyItem, understandPlanPath, unitModuleDir, unitUnderstandingPath } from "@kintsugi/domain";
+import { type ItemStatus, assessmentCatalogDir, assessmentCatalogModulePath, catalogPath, classifyItem, legacyModuleDir, understandPlanPath, unitUnderstandingPath } from "@kintsugi/domain";
 import { type DocumentContext, DocumentsService } from "#modules/delivery/documents/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { type CatalogItemView, type CatalogView, type ItemMeta, type UnderstandPlanView, type UnderstandRunFacts, deriveItemStatus } from "../domain/catalog.js";
@@ -137,7 +137,7 @@ export class CatalogService {
     const modules = new Set(catalog.items.map((item) => item.id.split("/")[0]!));
     await Promise.all(
       [...modules].map(async (module) => {
-        const present = new Set((await this.documents.listNames(context, commit, unitModuleDir(applicationId, module))).filter((entry) => entry.kind === "dir").map((entry) => entry.name));
+        const present = new Set((await this.documents.listNames(context, commit, legacyModuleDir(applicationId, module))).filter((entry) => entry.kind === "dir").map((entry) => entry.name));
         await Promise.all(
           catalog.items
             .filter((item) => item.id.startsWith(`${module}/`) && present.has(item.id.slice(module.length + 1)))

@@ -350,8 +350,8 @@ export class StagePlanExecutor {
           kind: "agent",
           name: step.agent,
           inputs: {
-            task: partial(step.task),
-            ...(step.documents === undefined ? {} : { documents: step.documents.map(partial) }),
+            task: partial(await this.#resolve(step.task)),
+            ...(step.documents === undefined ? {} : { documents: (await this.#resolve(step.documents)).map(partial) }),
             ...(step.schema === undefined ? {} : { schema: step.schema, resultFile: true }),
             ...(step.resultTo === undefined ? {} : { resultTo: partial(step.resultTo) }),
             ...(expects.length === 0 ? {} : { expects }),
