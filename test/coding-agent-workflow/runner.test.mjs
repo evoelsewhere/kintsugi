@@ -34,6 +34,24 @@ test("suite selection and child env are fixed and credentials stay out of comman
   assert.throws(() => commandForSuite("pilot", "report.json"), /separate release gate/);
 });
 
+test("required database suites include continuation, replay, projection concurrency and upgrade coverage", () => {
+  const apiArgs = commandForSuite("api", "api.json").args;
+  const workerArgs = commandForSuite("worker", "worker.json").args;
+  for (const file of ["test/integration/task-projection-concurrency.test.ts", "test/integration/member-upgrade.test.ts"]) {
+    assert.ok(apiArgs.includes(file), `${file} must run in the API suite`);
+  }
+  for (const file of ["test/continuation.test.ts", "test/continuation-replay.test.ts"]) {
+    assert.ok(workerArgs.includes(file), `${file} must run in the worker suite`);
+  }
+});
+
+test("required API suite exercises plugin-first OAuth and connection lifetime contracts", () => {
+  const apiArgs = commandForSuite("api", "api.json").args;
+  for (const file of ["test/integration/coding-agent-oauth.test.ts", "test/integration/installation-settings.test.ts"]) {
+    assert.ok(apiArgs.includes(file), `${file} must run in the required API suite`);
+  }
+});
+
 test("required report rejects zero cases and any skipped test and redacts connection URLs", () => {
   const report = {
     numTotalTests: 2,
