@@ -136,6 +136,20 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     });
   });
 
+  it("puts the description a stage wrote between the message and the file list of the pull request", async () => {
+    const write = request("docs", {
+      message: "Design web: detail of auth",
+      description: "## Review of the design run: detail\n\n1 unit(s): 1 ready.",
+      files: [{ path: "10-applications/web/02-modern/auth/login/detail/logic.md", content: "# Logic\n" }],
+      reviewAll: true,
+    });
+    expect(await writeDocument(deps, write)).toMatchObject({ status: "pr-opened" });
+    const body = String((requests[requests.length - 1]?.body as { description?: unknown }).description);
+    expect(body.split("\n")).toEqual(expect.arrayContaining(["Design web: detail of auth", "## Review of the design run: detail", "Files:"]));
+    expect(body.indexOf("Design web: detail of auth")).toBeLessThan(body.indexOf("## Review of the design run"));
+    expect(body.indexOf("## Review of the design run")).toBeLessThan(body.indexOf("Files:"));
+  });
+
   it("puts auto-commit paths in the pull request too when the write asks for review of everything", async () => {
     const write = request("docs", {
       reviewAll: true,

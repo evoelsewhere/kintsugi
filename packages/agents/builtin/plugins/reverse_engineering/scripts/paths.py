@@ -157,6 +157,10 @@ def design_template_path(set_id, template):
     return f'{design_set_dir(set_id)}/{template}'
 
 
+def design_profile_path(set_id, kind):
+    return f'{design_set_dir(set_id)}/{kind}/profile.md'
+
+
 def application_design_dir(app):
     return f'{modern_dir(app)}/_design'
 
@@ -264,6 +268,19 @@ def design_run_dir(app):
 
 def design_manifest_path(app):
     return f'{design_run_dir(app)}/manifest.json'
+
+
+def design_review_path(app, unit_key):
+    name = '_application' if unit_key == '@app' else unit_key
+    return f'{design_run_dir(app)}/review/{name}.md'
+
+
+def design_review_report_path(app):
+    return f'{design_run_dir(app)}/review-report.json'
+
+
+def design_summary_path(app):
+    return f'{design_run_dir(app)}/review.md'
 
 
 def design_report_path(app):

@@ -1,6 +1,6 @@
 # ADR-0050: Design sets can be scoped to the application and carry their own instructions
 
-- Status: Accepted (extends [ADR-0045](0045-design-templates-are-project-data.md) and [ADR-0049](0049-design-sets-generated-by-the-runtime.md); the application design folder is `10-applications/<app>/02-modern/_design/<set>/` since [ADR-0051](0051-document-repo-layout-legacy-and-modern.md))
+- Status: Accepted (extends [ADR-0045](0045-design-templates-are-project-data.md) and [ADR-0049](0049-design-sets-generated-by-the-runtime.md); the application design folder is `10-applications/<app>/02-modern/_design/<set>/` since [ADR-0051](0051-document-repo-layout-legacy-and-modern.md); `appliesTo` and `When` are replaced by profiles in [ADR-0053](0053-design-template-profiles-by-unit-kind.md))
 - Date: 2026-10-21
 - Decision register: D66
 

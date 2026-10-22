@@ -3,7 +3,7 @@
 // designs are the shared fixtures of the design-set checkers (the reader the API runs, the script the
 // member runs); the mirror is a real bare clone of a fixture repository served by a local Git server.
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +16,8 @@ import { Client, adminClient, memberClient, startTestApp, type TestApp } from ".
 
 const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/design/scripts/tests/fixtures/design/", import.meta.url));
 const fixture = (...parts: string[]): string => readFileSync(join(FIXTURES, ...parts), "utf8");
+/** Every file under a fixture folder, as paths relative to it (a set holds kind folders, ADR-0053). */
+const filesUnder = (dir: string, prefix = ""): string[] => readdirSync(join(FIXTURES, dir, prefix)).flatMap((name) => (statSync(join(FIXTURES, dir, prefix, name)).isDirectory() ? filesUnder(dir, `${prefix}${name}/`) : [`${prefix}${name}`]));
 
 const MANIFEST = [
   "schemaVersion: 1",
@@ -25,7 +27,7 @@ const MANIFEST = [
   "document:",
   "  server: local",
   "  path: docs",
-  "unitKinds: [screen, api]",
+  "unitKinds: [screen, api, batch]",
   "applications:",
   "  - id: web",
   "    repos:",
@@ -46,8 +48,8 @@ const RULES = ["# Rules", "", "### R-001: Total is computed", "", "### R-002: Ro
 
 const FUNCTIONS_OK = ["---", 'template: "basic@3"', "---", "# Functions", "", "## Functions", "", "| ID | Function | Priority |", "| --- | --- | --- |", "| F-001 | Compute | high |", "| F-002 | Print | low |", ""].join("\n");
 
-const unitFile = (module: string, unit: string, waived: string[] = []): string =>
-  ["---", `id: "web/${module}/${unit}"`, 'application: "web"', `module: "${module}"`, 'kind: "screen"', `title: "${unit}"`, "wave: 2", 'assignee: "an"', ...(waived.length === 0 ? [] : ["waived:", ...waived.map((entry) => `  - "${entry}"`)]), "---", ""].join("\n");
+const unitFile = (module: string, unit: string, waived: string[] = [], kind = "screen"): string =>
+  ["---", `id: "web/${module}/${unit}"`, 'application: "web"', `module: "${module}"`, `kind: "${kind}"`, `title: "${unit}"`, "wave: 2", 'assignee: "an"', ...(waived.length === 0 ? [] : ["waived:", ...waived.map((entry) => `  - "${entry}"`)]), "---", ""].join("\n");
 
 // A unit's files (ADR-0051): its card and its design sets on the modern side, what is known about it on the legacy side.
 const modernPath = (module: string, unit: string, file: string): string => `10-applications/web/02-modern/${module}/${unit}/${file}`;
@@ -67,7 +69,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     await remote.createRepository("docs");
     const put = (path: string, text: string): Promise<unknown> => remote.commit("docs", path, text);
     await put("kintsugi.yaml", MANIFEST);
-    for (const set of ["basic", "detail"]) for (const name of readdirSync(join(FIXTURES, "sets", set))) await put(`01-standards/templates/${set}/${name}`, fixture("sets", set, name));
+    for (const set of ["basic", "detail"]) for (const name of filesUnder(`sets/${set}`)) await put(`01-standards/templates/${set}/${name}`, fixture("sets", set, ...name.split("/")));
     await put("02-architecture/common/COM-LOG-01.md", '---\nid: "COM-LOG-01"\ntitle: "Audit log"\nstatus: "approved"\n---\n# COM-LOG-01\n');
     await put("02-architecture/common/COM-AUTH-01.md", "# COM-AUTH-01\n");
     // invoice: everything written and conformant.
@@ -75,7 +77,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     await put(legacyPath("billing", "invoice", "rules.md"), RULES);
     await put(modernPath("billing", "invoice", "basic/overview.md"), fixture("designs", "basic-overview-ok.md"));
     await put(modernPath("billing", "invoice", "basic/functions.md"), FUNCTIONS_OK);
-    await put(modernPath("billing", "invoice", "detail/logic.md"), fixture("designs", "detail-ok.md"));
+    await put(modernPath("billing", "invoice", "detail/logic.md"), fixture("designs", "detail-screen-ok.md"));
     // tax: its basic design was written against an older version; the detail design is next.
     await put(modernPath("billing", "tax", "README.md"), unitFile("billing", "tax"));
     await put(legacyPath("billing", "tax", "rules.md"), RULES);
@@ -85,15 +87,15 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     await put(modernPath("customers", "report", "README.md"), unitFile("customers", "report", ["detail/logic.md: not built yet"]));
     await put(legacyPath("customers", "report", "rules.md"), RULES);
     await put(modernPath("customers", "report", "basic/overview.md"), fixture("designs", "basic-overview-todo.md"));
-    // lookup: no basic design, a detail design that names things that do not exist.
-    await put(modernPath("customers", "lookup", "README.md"), unitFile("customers", "lookup"));
+    // lookup (an api, which has the set's own logic template and an optional sql.md): no basic design, a detail design that names things that do not exist.
+    await put(modernPath("customers", "lookup", "README.md"), unitFile("customers", "lookup", [], "api"));
     await put(legacyPath("customers", "lookup", "rules.md"), RULES);
     await put(modernPath("customers", "lookup", "detail/logic.md"), fixture("designs", "detail-bad.md"));
     // A directory without a unit card is not a unit, and a `_` folder is the application's.
     await put(modernPath("customers", "draft", "notes.md"), "# Notes\n");
     await put("10-applications/web/02-modern/_design/notes/README.md", '---\nid: "web/_design/notes"\nkind: "screen"\n---\n');
     // A design run's pull request, open: the detail design of tax is in it.
-    await remote.commit("docs", modernPath("billing", "tax", "detail/logic.md"), fixture("designs", "detail-ok.md"), "kintsugi/designer/run-dopen");
+    await remote.commit("docs", modernPath("billing", "tax", "detail/logic.md"), fixture("designs", "detail-screen-ok.md"), "kintsugi/designer/run-dopen");
     await cloneMirror(`${remote.baseUrl}/docs.git`, new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
     app = await startTestApp();
@@ -122,7 +124,16 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
 
   type SetsView = {
     ref: { ref: string };
-    sets: Array<{ id: string; version: number; needs: string[]; producedBy: Array<{ pipeline: string; stage: string }>; files: Array<{ path: string; sections: Array<{ heading: string; required: boolean; checks: string[]; table?: string[] }> }>; usage?: { units: number; onCurrent: number; stale: number } }>;
+    sets: Array<{
+      id: string;
+      version: number;
+      appliesTo: string[];
+      needs: string[];
+      producedBy: Array<{ pipeline: string; stage: string }>;
+      files: Array<{ path: string; ref: string; sections: Array<{ heading: string; required: boolean; checks: string[]; table?: string[] }> }>;
+      profiles: Array<{ kind: string; version: number; removes: string[]; instructions: string; examples: string[]; files: Array<{ path: string; ref: string; profile?: string; example?: string; sections: Array<{ heading: string }> }> }>;
+      usage?: { units: number; onCurrent: number; stale: number };
+    }>;
     problems: Array<{ path: string; message: string }>;
   };
 
@@ -139,6 +150,20 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     expect(logic?.sections.map((section) => [section.heading, section.required])).toEqual([["Business rules", true], ["Error handling", true], ["Dependencies", false]]);
     expect(logic?.sections[0]?.checks).toEqual(["covers-rules(Rule)", "refs-resolve(Function -> basic)", "no-placeholder"]);
     expect(logic?.sections[0]?.table).toEqual(["Rule", "Logic", "Function"]);
+    // The profiles of a set: the screen has its own logic template (and example), the api adds its queries, the batch replaces the logic.
+    const detail = view.sets[1]!;
+    expect(detail.appliesTo).toEqual([]);
+    expect(detail.profiles.map((profile) => [profile.kind, profile.version, profile.removes, profile.files.map((file) => [file.path, file.ref])])).toEqual([
+      ["api", 1, [], [["logic.md", "detail@2"], ["sql.md", "detail/api@1"]]],
+      ["batch", 1, ["logic.md"], [["job.md", "detail/batch@1"]]],
+      ["screen", 3, [], [["logic.md", "detail/screen@3"]]],
+    ]);
+    const screen = detail.profiles.find((profile) => profile.kind === "screen")!;
+    expect(screen.instructions).toBe("List the events in the order the user meets them.");
+    expect(screen.examples).toEqual(["logic.md"]);
+    expect(screen.files[0]).toMatchObject({ profile: "screen", example: "screen/_examples/logic.md" });
+    expect(screen.files[0]?.sections.map((section) => section.heading)).toEqual(["Business rules", "Screen events"]);
+    expect(view.sets[0]?.profiles).toEqual([]);
     // The manifest names a stage that produces a set that does not exist.
     expect(view.problems).toEqual([{ path: "kintsugi.yaml", message: 'pipeline "custom", stage "ghost-design" produces "ghost", which is not a design set' }]);
   });
@@ -199,7 +224,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
 
   type UnitView = {
     unit: { key: string; kind: string };
-    sets: Array<{ set: string; state: string; files: Array<{ path: string; state: string; stale: boolean; template?: string; problems: Array<{ code: string; section?: string; message: string }>; waiver?: string }> }>;
+    sets: Array<{ set: string; state: string; files: Array<{ path: string; state: string; stale: boolean; template?: string; expected: string; problems: Array<{ code: string; section?: string; message: string }>; waiver?: string }> }>;
     coverage: Array<{ rule: string; coveredBy: Array<{ set: string; file: string; section: string }> }>;
     unresolved: Array<{ id: string; source: string; set: string; file: string; section: string }>;
   };
@@ -207,15 +232,15 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
   it("serves one unit's documents with their problems, the rules each design covers and the references that do not resolve", async () => {
     const lookup = (await admin.get<UnitView>("/projects/shop/applications/web/design/units/customers/lookup")).body.data!;
     const detail = lookup.sets.find((set) => set.set === "detail")!;
-    expect(detail.files[0]).toMatchObject({ path: "logic.md", state: "problems", stale: false, template: "detail@2" });
+    expect(detail.files[0]).toMatchObject({ path: "logic.md", state: "problems", stale: false, template: "detail@2", expected: "detail@2" });
     expect(detail.files[0]?.problems.map((problem) => problem.message)).toEqual([
       "rules without a design item: R-002",
       "references that do not resolve to basic: F-001, F-009",
       "values that do not match ERR-[0-9]{4}: E12",
       "references that do not resolve to components: COM-MAIL-01",
     ]);
-    // sql.md is for the unit kind api: a screen has one file in the set.
-    expect(detail.files.map((file) => file.path)).toEqual(["logic.md"]);
+    // The api profile adds sql.md (optional, not written); a screen has one file in the set, written with its own template.
+    expect(detail.files.map((file) => [file.path, file.state])).toEqual([["logic.md", "problems"], ["sql.md", "missing"]]);
     // Nothing of the basic design is written, so every function the detail design names is unresolved.
     expect(lookup.unresolved).toEqual([
       { id: "F-001", source: "basic", set: "detail", file: "logic.md", section: "Business rules" },
@@ -231,6 +256,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
 
     const invoice = (await admin.get<UnitView>("/projects/shop/applications/web/design/units/billing/invoice")).body.data!;
     expect(invoice.unresolved).toEqual([]);
+    expect(invoice.sets.find((set) => set.set === "detail")?.files).toMatchObject([{ path: "logic.md", state: "conformant", template: "detail/screen@3", expected: "detail/screen@3" }]);
     expect(invoice.coverage.every((row) => row.coveredBy.length === 2)).toBe(true);
 
     expect((await admin.get("/projects/shop/applications/web/design/units/customers/draft")).status).toBe(404);

@@ -164,7 +164,7 @@ describe("built-in catalog", () => {
   it("ships the six understanding agents for the runtime and three member agents", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
     expect(byAudience("member")).toEqual(["scaffolder", "test-engineer"]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
@@ -190,7 +190,7 @@ describe("built-in catalog", () => {
     expect(skill?.content).toContain("references/flowchart.md");
     const sharedSkills = new Map(catalog.skills.map((entry) => [entry.name, entry]));
     const users = catalog.agents.filter((agent) => agent.manifest.skills.includes("mermaid-diagrams")).map((agent) => agent.manifest.name);
-    expect(users).toEqual(["architecture-critic", "business-rules-extractor", "designer", "legacy-analyst"]);
+    expect(users).toEqual(["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]);
     const analyst = catalog.agents.find((agent) => agent.manifest.name === "legacy-analyst")!;
     expect(toAgentDefinition(analyst, sharedSkills, KERNEL_TOOL_NAMES).skills?.map((entry) => entry.name)).toEqual(["mermaid-diagrams"]);
     // The references and the license stay beside SKILL.md on disk.

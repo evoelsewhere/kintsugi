@@ -230,7 +230,7 @@ describe("agents service", () => {
     await service.removeSkill("house-style", admin);
     // Only the built-in shared skills remain, used by the built-in agents that draw diagrams and plan.
     expect((await service.listSkills()).map((skill) => [skill.name, skill.source, skill.usedBy])).toEqual([
-      ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "designer", "legacy-analyst"]],
+      ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]],
       ["understand-planning", "builtin", ["understand-planner"]],
     ]);
 

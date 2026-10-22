@@ -11,16 +11,21 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import {
   type DesignContext,
   type DesignProblem,
+  type DesignProfileSource,
   type DesignSection,
   type DesignSet,
   type LoadedDesignSet,
   type DesignSetSource,
+  type ResolvedDesignFile,
   checkDesignDocument,
+  designBaseFiles,
   designCoverage,
   designFilesFor,
   designIsStale,
   designItemIds,
   designReferences,
+  designRefText,
+  designTemplateOf,
   designTemplateRefOf,
   documentOf,
   loadDesignSets,
@@ -30,6 +35,8 @@ import {
 } from "@kintsugi/agents/reader";
 import {
   COMPONENT_ID_PATTERN,
+  DESIGN_EXAMPLES_DIR,
+  DESIGN_PROFILE_FILE,
   type DesignState,
   applicationDesignFilePath,
   applicationRequirementsPath,
@@ -56,7 +63,9 @@ import type {
   DesignAttention,
   DesignFileView,
   DesignOverviewView,
+  DesignProfileView,
   DesignSectionView,
+  DesignSetFileView,
   DesignSetView,
   DesignSetsView,
   DesignTemplateProblemView,
@@ -208,25 +217,43 @@ export class DesignService {
     const sets = project.sets.map((loaded): DesignSetView => {
       const { set } = loaded;
       const usage = scan === undefined ? undefined : this.usage(scan, set);
+      const fileView = (loadedSet: LoadedDesignSet, file: ResolvedDesignFile): DesignSetFileView => ({
+        path: file.path,
+        template: file.template,
+        required: file.required,
+        ...(file.profile === null ? {} : { profile: file.profile }),
+        ref: designRefText(file.ref),
+        ...(file.example === null ? {} : { example: file.example }),
+        sections: (designTemplateOf(loadedSet, file)?.sections ?? []).map(sectionView),
+      });
+      const profiles = Object.keys(loaded.profiles)
+        .sort()
+        .map((kind): DesignProfileView => {
+          const entry = loaded.profiles[kind] as NonNullable<(typeof loaded.profiles)[string]>;
+          return {
+            kind,
+            version: entry.profile.version,
+            removes: entry.profile.removes,
+            instructions: entry.profile.instructions,
+            files: designFilesFor(loaded, kind).map((file) => fileView(loaded, file)),
+            examples: entry.examples,
+          };
+        });
       return {
         id: set.id,
         title: set.title,
         version: set.version,
         scope: set.scope,
-        appliesTo: set.appliesTo,
+        // Every kind when the set has files of its own; else the kinds whose profile leaves it a file.
+        appliesTo: set.scope === "application" || set.files.length > 0 ? [] : profiles.filter((profile) => profile.files.length > 0).map((profile) => profile.kind),
         needs: set.needs,
         ...(set.stage === undefined ? {} : { stage: set.stage }),
         description: set.description,
         reads: set.reads,
         instructions: set.instructions,
         producedBy: project.pipelines.flatMap((pipeline) => pipeline.stages.filter((stage) => stage.produces === set.id).map((stage) => ({ pipeline: pipeline.id, stage: stage.id }))),
-        files: set.files.map((file) => ({
-          path: file.path,
-          template: file.template,
-          required: file.required,
-          when: file.when,
-          sections: (loaded.templates[file.template]?.sections ?? []).map(sectionView),
-        })),
+        files: designBaseFiles(loaded).map((file) => fileView(loaded, file)),
+        profiles,
         ...(usage === undefined ? {} : { usage }),
       };
     });
@@ -383,13 +410,32 @@ export class DesignService {
         sources.push(
           ...(await Promise.all(
             group.map(async (folder): Promise<DesignSetSource> => {
-              const files = (await this.documents.listNames(context, commit, designSetDir(folder))).filter((entry) => entry.kind === "file" && entry.name.endsWith(".md")).map((entry) => entry.name);
-              const read = async (name: string): Promise<string | undefined> => this.documents.readText(context, commit, `${designSetDir(folder)}/${name}`, MAX_TEMPLATE_BYTES);
-              const entries = await Promise.all(files.filter((name) => name !== "set.md").map(async (name) => [name, await read(name)] as const));
+              const dir = designSetDir(folder);
+              const entries = await this.documents.listNames(context, commit, dir);
+              const markdown = (names: Array<{ kind: string; name: string }>): string[] => names.filter((entry) => entry.kind === "file" && entry.name.endsWith(".md")).map((entry) => entry.name);
+              const read = async (path: string): Promise<string | undefined> => this.documents.readText(context, commit, path, MAX_TEMPLATE_BYTES);
+              const readAll = async (path: string, names: string[]): Promise<Record<string, string>> => {
+                const found = await Promise.all(names.map(async (name) => [name, await read(`${path}/${name}`)] as const));
+                return Object.fromEntries(found.filter((entry): entry is [string, string] => entry[1] !== undefined));
+              };
+              const examples = async (path: string): Promise<string[]> => markdown(await this.documents.listNames(context, commit, `${path}/${DESIGN_EXAMPLES_DIR}`));
+              const files = markdown(entries);
+              // A folder that does not start with `_` is the profile of the unit kind it is named after (ADR-0053).
+              const profiles: Record<string, DesignProfileSource> = {};
+              for (const kind of entries.filter((entry) => entry.kind === "dir" && !entry.name.startsWith("_")).map((entry) => entry.name)) {
+                const inside = markdown(await this.documents.listNames(context, commit, `${dir}/${kind}`));
+                profiles[kind] = {
+                  profileText: inside.includes(DESIGN_PROFILE_FILE) ? await read(`${dir}/${kind}/${DESIGN_PROFILE_FILE}`) : undefined,
+                  templates: await readAll(`${dir}/${kind}`, inside.filter((name) => name !== DESIGN_PROFILE_FILE)),
+                  examples: await examples(`${dir}/${kind}`),
+                };
+              }
               return {
                 folder,
-                setText: files.includes("set.md") ? await this.documents.readText(context, commit, designSetPath(folder), MAX_TEMPLATE_BYTES) : undefined,
-                templates: Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== undefined)),
+                setText: files.includes("set.md") ? await read(designSetPath(folder)) : undefined,
+                templates: await readAll(dir, files.filter((name) => name !== "set.md")),
+                examples: await examples(dir),
+                profiles,
               };
             }),
           )),
@@ -450,18 +496,18 @@ export class DesignService {
 
   /** The application's own design: the files of each set of scope `application` against its template, with the ids it points to. */
   private async scanApplication(context: DocumentContext, commit: string, app: string, project: ProjectSets, shared: Omit<DesignContext, "items">): Promise<ApplicationScan> {
-    const applicable = project.sets.filter((loaded) => designFilesFor(loaded.set, null).length > 0);
+    const applicable = project.sets.filter((loaded) => designFilesFor(loaded, null).length > 0);
     const texts = new Map<string, string | undefined>();
     await Promise.all(
       applicable.flatMap((loaded) =>
-        designFilesFor(loaded.set, null).map(async (file) => {
+        designFilesFor(loaded, null).map(async (file) => {
           texts.set(`${loaded.set.id}/${file.path}`, await this.documents.readText(context, commit, applicationDesignFilePath(app, loaded.set.id, file.path), MAX_DESIGN_BYTES));
         }),
       ),
     );
     const items: Record<string, string[]> = {};
     for (const loaded of applicable) {
-      items[loaded.set.id] = [...new Set(designFilesFor(loaded.set, null).flatMap((file) => designItemIds(texts.get(`${loaded.set.id}/${file.path}`) ?? "")))];
+      items[loaded.set.id] = [...new Set(designFilesFor(loaded, null).flatMap((file) => designItemIds(texts.get(`${loaded.set.id}/${file.path}`) ?? "")))];
     }
     const designContext: DesignContext = { ...shared, ruleIds: [], items };
     const details: UnitSetDetail[] = [];
@@ -472,18 +518,18 @@ export class DesignService {
 
     for (const loaded of applicable) {
       const { set } = loaded;
-      const files: DesignFileView[] = designFilesFor(set, null).map((file) => {
+      const files: DesignFileView[] = designFilesFor(loaded, null).map((file) => {
         const text = texts.get(`${set.id}/${file.path}`);
-        const template = loaded.templates[file.template];
-        const base = { path: file.path, required: file.required, stale: false, problems: [] as DesignProblem[] };
+        const template = designTemplateOf(loaded, file);
+        const base = { path: file.path, required: file.required, expected: designRefText(file.ref), stale: false, problems: [] as DesignProblem[] };
         if (text === undefined || template === undefined) return { ...base, state: "missing" as const };
-        const problems = checkDesignDocument(template, set, text, designContext);
+        const problems = checkDesignDocument(template, file.ref, text, designContext);
         const ref = designTemplateRefOf(text);
         for (const mention of text.match(COMPONENT_MENTION) ?? []) componentRefs.add(mention);
         for (const reference of designReferences(template, text, designContext)) {
           for (const id of reference.unresolved) unresolved.push({ id, source: reference.source, set: set.id, file: file.path, section: reference.section });
         }
-        return { ...base, state: problems.length > 0 ? ("problems" as const) : ("conformant" as const), stale: designIsStale(text, set), ...(ref === null ? {} : { template: ref }), problems };
+        return { ...base, state: problems.length > 0 ? ("problems" as const) : ("conformant" as const), stale: designIsStale(text, file.ref), ...(ref === null ? {} : { template: ref }), problems };
       });
       if (files.some((file) => file.stale)) anyStale = true;
       const { state, counts } = setState(files);
@@ -512,13 +558,13 @@ export class DesignService {
     const rulesText = await this.documents.readText(context, commit, unitRulesPath(app, module, unit), MAX_RULES_BYTES);
     const rules = rulesText === undefined ? [] : ruleCardsOf(rulesText);
     const kind = summary.kind;
-    const applicable = project.sets.filter((loaded) => designFilesFor(loaded.set, kind).length > 0);
+    const applicable = project.sets.filter((loaded) => designFilesFor(loaded, kind).length > 0);
 
     // Read every document of every applicable set first: a design points to the design items of the sets it needs.
     const texts = new Map<string, string | undefined>();
     await Promise.all(
       applicable.flatMap((loaded) =>
-        designFilesFor(loaded.set, kind).map(async (file) => {
+        designFilesFor(loaded, kind).map(async (file) => {
           texts.set(`${loaded.set.id}/${file.path}`, await this.documents.readText(context, commit, unitDesignFilePath(app, module, unit, loaded.set.id, file.path), MAX_DESIGN_BYTES));
         }),
       ),
@@ -526,7 +572,7 @@ export class DesignService {
     // The items of the application's own sets resolve too: a unit's design may need one.
     const items: Record<string, string[]> = { ...application.items };
     for (const loaded of applicable) {
-      items[loaded.set.id] = [...new Set(designFilesFor(loaded.set, kind).flatMap((file) => designItemIds(texts.get(`${loaded.set.id}/${file.path}`) ?? "")))];
+      items[loaded.set.id] = [...new Set(designFilesFor(loaded, kind).flatMap((file) => designItemIds(texts.get(`${loaded.set.id}/${file.path}`) ?? "")))];
     }
     const context2: DesignContext = { ...shared, ruleIds: rules.map((rule) => rule.id), items };
 
@@ -541,16 +587,16 @@ export class DesignService {
 
     for (const loaded of applicable) {
       const { set } = loaded;
-      const files: DesignFileView[] = designFilesFor(set, kind).map((file) => {
+      const files: DesignFileView[] = designFilesFor(loaded, kind).map((file) => {
         const key = `${set.id}/${file.path}`;
         const text = texts.get(key);
         const waiver = waived.get(key);
-        const template = loaded.templates[file.template];
-        const base = { path: file.path, required: file.required, stale: false, problems: [] as DesignProblem[] };
+        const template = designTemplateOf(loaded, file);
+        const base = { path: file.path, required: file.required, expected: designRefText(file.ref), stale: false, problems: [] as DesignProblem[] };
         if (waiver !== undefined) return { ...base, state: "waived" as const, waiver };
         if (text === undefined || template === undefined) return { ...base, state: "missing" as const };
-        const problems = checkDesignDocument(template, set, text, context2);
-        const stale = designIsStale(text, set);
+        const problems = checkDesignDocument(template, file.ref, text, context2);
+        const stale = designIsStale(text, file.ref);
         const ref = designTemplateRefOf(text);
         for (const mention of text.match(COMPONENT_MENTION) ?? []) componentRefs.add(mention);
         for (const section of designCoverage(template, text, context2.ruleIds)) {

@@ -21,7 +21,8 @@
   },
   "unitKinds": [
     "screen",
-    "api"
+    "api",
+    "batch"
   ],
   "cases": [
     {
@@ -88,6 +89,30 @@
       "file": "detail-bad.md",
       "set": "detail",
       "template": "logic.md"
+    },
+    {
+      "file": "detail-screen-ok.md",
+      "set": "detail",
+      "template": "logic.md",
+      "kind": "screen"
+    },
+    {
+      "file": "detail-screen-stale.md",
+      "set": "detail",
+      "template": "logic.md",
+      "kind": "screen"
+    },
+    {
+      "file": "detail-screen-base-ref.md",
+      "set": "detail",
+      "template": "logic.md",
+      "kind": "screen"
+    },
+    {
+      "file": "detail-batch-ok.md",
+      "set": "detail",
+      "template": "job.md",
+      "kind": "batch"
     }
   ],
   "appContext": {
@@ -127,5 +152,11 @@
       "set": "dbunit",
       "template": "data.md"
     }
+  ],
+  "resolveKinds": [
+    "screen",
+    "api",
+    "batch",
+    "other"
   ]
 }

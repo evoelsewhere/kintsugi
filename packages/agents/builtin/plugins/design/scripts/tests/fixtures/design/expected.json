@@ -71,14 +71,6 @@
         "message": "file \"b.md\": template \"missing.md\" does not exist in the set folder"
       },
       {
-        "path": "01-standards/templates/alpha/set.md",
-        "message": "unit kind \"widget\" in appliesTo is not declared in unitKinds"
-      },
-      {
-        "path": "01-standards/templates/alpha/set.md",
-        "message": "file \"c.md\": kind \"api\" in When is not one the set applies to"
-      },
-      {
         "path": "01-standards/templates/delta/set.md",
         "message": "is missing"
       },
@@ -95,8 +87,60 @@
         "message": "version must be a positive integer"
       },
       {
-        "path": "01-standards/templates/gamma/set.md",
-        "message": "has no files table (columns Path | Template | Required | When)"
+        "path": "01-standards/templates/legacy/set.md",
+        "message": "appliesTo is replaced by a folder per unit kind with a profile.md (ADR-0053)"
+      },
+      {
+        "path": "01-standards/templates/legacy/set.md",
+        "message": "the When column is replaced by a folder per unit kind with a profile.md (ADR-0053)"
+      },
+      {
+        "path": "01-standards/templates/nofiles/set.md",
+        "message": "has no files: list them in a table (Path | Template | Required) or add a folder per unit kind with a profile.md"
+      },
+      {
+        "path": "01-standards/templates/omega/Bad_Kind/profile.md",
+        "message": "\"Bad_Kind\" is not a lowercase name (letters, digits, hyphens) for a unit kind"
+      },
+      {
+        "path": "01-standards/templates/omega/api/profile.md",
+        "message": "is missing"
+      },
+      {
+        "path": "01-standards/templates/omega/batch/profile.md",
+        "message": "kind \"job\" does not match its folder \"batch\""
+      },
+      {
+        "path": "01-standards/templates/omega/batch/profile.md",
+        "message": "version must be a positive integer"
+      },
+      {
+        "path": "01-standards/templates/omega/batch/profile.md",
+        "message": "removes \"not-md\" must be a relative .md path with no \"..\""
+      },
+      {
+        "path": "01-standards/templates/omega/screen/profile.md",
+        "message": "removes \"nope.md\" is not a file of the set"
+      },
+      {
+        "path": "01-standards/templates/omega/screen/profile.md",
+        "message": "file \"keep.md\" is both removed and defined"
+      },
+      {
+        "path": "01-standards/templates/omega/screen/profile.md",
+        "message": "file \"extra.md\": template \"gone.md\" exists neither in the profile folder nor in the set folder"
+      },
+      {
+        "path": "01-standards/templates/omega/screen/own.md",
+        "message": "section \"One\": unknown directive \"mystery\""
+      },
+      {
+        "path": "01-standards/templates/omega/screen/stray.md",
+        "message": "is not used by any file of the kind \"screen\""
+      },
+      {
+        "path": "01-standards/templates/omega/widget/profile.md",
+        "message": "unit kind \"widget\" is not declared in unitKinds"
       },
       {
         "path": "01-standards/templates/alpha/set.md",
@@ -113,7 +157,14 @@
     ],
     "bad-set-ids": [
       "alpha",
-      "beta"
+      "beta",
+      "legacy",
+      "nofiles",
+      "omega"
+    ],
+    "bad-profile-kinds": [
+      "screen",
+      "widget"
     ],
     "app-sets": [],
     "bad-app-sets": [
@@ -134,14 +185,6 @@
         "message": "reads \"/abs\" must be a relative path with no \"..\" (only {app} may be used as a variable)"
       },
       {
-        "path": "01-standards/templates/zeta/set.md",
-        "message": "an application set cannot have appliesTo: an application has no unit kind"
-      },
-      {
-        "path": "01-standards/templates/zeta/set.md",
-        "message": "file \"a.md\": When must be empty in an application set"
-      },
-      {
         "path": "01-standards/templates/zeta/a.md",
         "message": "variable \"{{unit.id}}\" is for unit sets"
       },
@@ -156,6 +199,10 @@
       {
         "path": "01-standards/templates/zeta/a.md",
         "message": "section \"One\": refs-resolve source \"rules\" is for unit sets"
+      },
+      {
+        "path": "01-standards/templates/zeta/screen/profile.md",
+        "message": "an application set cannot have profiles: an application has no unit kind"
       },
       {
         "path": "01-standards/templates/zeta/set.md",
@@ -210,7 +257,7 @@
       "problems": [
         {
           "code": "wrong-template-ref",
-          "message": "template reference \"detail@2\" does not name this set (expected basic@3)"
+          "message": "template reference \"detail@2\" does not name this template (expected basic@3)"
         }
       ],
       "stale": false
@@ -313,6 +360,27 @@
         }
       ],
       "stale": false
+    },
+    "detail-screen-ok.md": {
+      "problems": [],
+      "stale": false
+    },
+    "detail-screen-stale.md": {
+      "problems": [],
+      "stale": true
+    },
+    "detail-screen-base-ref.md": {
+      "problems": [
+        {
+          "code": "wrong-template-ref",
+          "message": "template reference \"detail@2\" does not name this template (expected detail/screen@3)"
+        }
+      ],
+      "stale": false
+    },
+    "detail-batch-ok.md": {
+      "problems": [],
+      "stale": false
     }
   },
   "appDesigns": {
@@ -359,5 +427,140 @@
       ],
       "stale": false
     }
+  },
+  "resolved": {
+    "basic/screen": [
+      {
+        "path": "overview.md",
+        "template": "overview.md",
+        "required": true,
+        "templateFile": "overview.md",
+        "ref": "basic@3",
+        "profile": null,
+        "example": null
+      },
+      {
+        "path": "functions.md",
+        "template": "functions.md",
+        "required": true,
+        "templateFile": "functions.md",
+        "ref": "basic@3",
+        "profile": null,
+        "example": null
+      }
+    ],
+    "basic/api": [
+      {
+        "path": "overview.md",
+        "template": "overview.md",
+        "required": true,
+        "templateFile": "overview.md",
+        "ref": "basic@3",
+        "profile": null,
+        "example": null
+      },
+      {
+        "path": "functions.md",
+        "template": "functions.md",
+        "required": true,
+        "templateFile": "functions.md",
+        "ref": "basic@3",
+        "profile": null,
+        "example": null
+      }
+    ],
+    "basic/batch": [
+      {
+        "path": "overview.md",
+        "template": "overview.md",
+        "required": true,
+        "templateFile": "overview.md",
+        "ref": "basic@3",
+        "profile": null,
+        "example": null
+      },
+      {
+        "path": "functions.md",
+        "template": "functions.md",
+        "required": true,
+        "templateFile": "functions.md",
+        "ref": "basic@3",
+        "profile": null,
+        "example": null
+      }
+    ],
+    "basic/other": [
+      {
+        "path": "overview.md",
+        "template": "overview.md",
+        "required": true,
+        "templateFile": "overview.md",
+        "ref": "basic@3",
+        "profile": null,
+        "example": null
+      },
+      {
+        "path": "functions.md",
+        "template": "functions.md",
+        "required": true,
+        "templateFile": "functions.md",
+        "ref": "basic@3",
+        "profile": null,
+        "example": null
+      }
+    ],
+    "detail/screen": [
+      {
+        "path": "logic.md",
+        "template": "logic.md",
+        "required": true,
+        "templateFile": "screen/logic.md",
+        "ref": "detail/screen@3",
+        "profile": "screen",
+        "example": "screen/_examples/logic.md"
+      }
+    ],
+    "detail/api": [
+      {
+        "path": "logic.md",
+        "template": "logic.md",
+        "required": true,
+        "templateFile": "logic.md",
+        "ref": "detail@2",
+        "profile": null,
+        "example": "_examples/logic.md"
+      },
+      {
+        "path": "sql.md",
+        "template": "sql.md",
+        "required": false,
+        "templateFile": "api/sql.md",
+        "ref": "detail/api@1",
+        "profile": "api",
+        "example": null
+      }
+    ],
+    "detail/batch": [
+      {
+        "path": "job.md",
+        "template": "job.md",
+        "required": true,
+        "templateFile": "batch/job.md",
+        "ref": "detail/batch@1",
+        "profile": "batch",
+        "example": null
+      }
+    ],
+    "detail/other": [
+      {
+        "path": "logic.md",
+        "template": "logic.md",
+        "required": true,
+        "templateFile": "logic.md",
+        "ref": "detail@2",
+        "profile": null,
+        "example": "_examples/logic.md"
+      }
+    ]
   }
 }
