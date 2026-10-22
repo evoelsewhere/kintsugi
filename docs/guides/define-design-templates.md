@@ -15,13 +15,25 @@ A **design set** is a group of documents written together for a unit. Start from
 | Who reviews each? | an analyst reviews the basic design, a developer the detail design |
 | Which pipeline stage produces each? | `basic-design`, `detail-design` |
 
-The starter in `01-standards/templates/` has `basic` and `detail` for every unit kind. Copy and change it, or add sets (`db`, `screen`, `report`): a new folder with a `set.md` and its templates, merged by pull request, appears on the Design page with its own Generate button.
+The starter in `01-standards/templates/` has `basic` for every unit kind and `detail` with a profile for screens, batch jobs, database objects and reports, plus an `api` set for units of kind `api` and a `test` set. Copy and change it, or add sets (`db`, `report`): a new folder with a `set.md` and its templates, merged by pull request, appears on the Design page with its own Generate button.
+
+Units of different kinds usually need different documents and different sections. Do not make a set per kind: give the set a **profile** per kind (step 2b).
 
 Some designs belong to the whole application, not to a unit (an architecture overview, an interface list). Give such a set `scope: application` in its `set.md`: it is written once under `10-applications/<app>/02-modern/_design/<set>/`, generated for the application, and a unit set can `need` it, so a detail design can point to its identifiers. Use `reads:` to name documents the designer should also read, and a `## Instructions` section for what is specific to that kind of design (see the [reference](../reference/design-templates.md)).
 
 ## 2. Write `set.md`
 
-Give it an id (the folder name), a title, a version (start at 1), the unit kinds it applies to, the sets it needs and the stage that produces it. List the documents in the table: a path, the template file, whether it is required, and the kinds that need it. See the [reference](../reference/design-templates.md#setmd).
+Give it an id (the folder name), a title, a version (start at 1), the sets it needs and the stage that produces it. List in the table the documents every kind has: a path, the template file and whether it is required. See the [reference](../reference/design-templates.md#setmd).
+
+## 2b. Add a profile for the kinds that differ
+
+For each unit kind (a value of `unitKinds` in `kintsugi.yaml`) whose design differs, add a folder named after it next to `set.md`:
+
+- `profile.md` with `kind`, `version` and, if the kind lacks some base files, `removes: ["data-access.md"]`; a table of the files it adds; and a `## Instructions` section for what is specific to that kind.
+- A template of the same name as a base one (for example `logic.md`) when the kind needs different sections: it replaces the base **as a whole file**, so copy the base and change it.
+- `_examples/logic.md`: a finished document of a real unit, so the designer sees the depth you expect. It is read, not checked.
+
+A kind without a folder gets the base files and templates. A set with no files table is only for the kinds that have a profile. Raise the `version` in `profile.md` when you change that kind's templates in a way that affects designs already written: only that kind's designs become stale.
 
 ## 3. Write a template per document
 
@@ -52,7 +64,7 @@ Take one or two units through the whole flow on the Design page of the portal: g
 | A check fails on correct content | loosen the `id-pattern` or the options |
 | Nothing fails on a poor document | add `required`, `covers-rules` or `refs-resolve` where it matters |
 
-When a change affects designs already written, raise `version` in `set.md`: the designs written against the older version show as **stale** in the portal, and the team decides whether to bring them up to date.
+When a change affects designs already written, raise `version` in `set.md` (or in the kind's `profile.md` for a change to its templates): the designs written against the older version show as **stale** in the portal, and the team decides whether to bring them up to date.
 
 ## If the customer has its own format
 

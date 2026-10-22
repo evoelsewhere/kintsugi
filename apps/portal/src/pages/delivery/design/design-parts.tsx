@@ -44,15 +44,16 @@ export function CopyButton({ text, label, what, size = "small" }: { text: string
   );
 }
 
-/** `<set>@<version>` written in a design. */
-export function TemplateRef({ value, current }: { value: string | undefined; current?: number }): React.JSX.Element {
+/** `<set>@<version>` (or `<set>/<kind>@<version>`) written in a design; `expected` is the reference of the template in use. */
+export function TemplateRef({ value, expected }: { value: string | undefined; expected?: string }): React.JSX.Element {
   if (value === undefined) return <span className="text-text-muted">no template reference</span>;
   const version = Number(value.split("@")[1]);
-  const behind = current !== undefined && Number.isFinite(version) && version < current;
+  const current = Number(expected?.split("@")[1]);
+  const behind = expected !== undefined && Number.isFinite(version) && Number.isFinite(current) && value.split("@")[0] === expected.split("@")[0] && version < current;
   return (
     <span className="font-mono text-[11.5px] text-text-secondary">
       {value}
-      {behind ? <span className="ml-1 font-sans text-[var(--ds-status-orange)]">· current is @{current}</span> : null}
+      {behind ? <span className="ml-1 font-sans text-[var(--ds-status-orange)]">· current is {expected}</span> : null}
     </span>
   );
 }

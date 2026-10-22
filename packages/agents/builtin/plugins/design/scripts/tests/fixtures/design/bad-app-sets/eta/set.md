@@ -7,6 +7,6 @@ reads: "10-applications/{app}/00-inputs/"
 ---
 # Wrong scope
 
-| Path | Template | Required | When |
-| --- | --- | --- | --- |
-| ok.md | ok.md | yes | |
+| Path | Template | Required |
+| --- | --- | --- |
+| ok.md | ok.md | yes |

@@ -78,6 +78,8 @@ export interface DocumentWriteRequest {
   unit?: string;
   /** Every file goes to the pull request, auto-commit paths included (a stage's proposals). */
   reviewAll?: boolean;
+  /** Markdown a stage wrote for the pull request description, shown between the message and the file list (ADR-0054). */
+  description?: string;
 }
 
 /** Creates the queue if missing; safe on every start, from any process. */

@@ -1,6 +1,6 @@
 # ADR-0045: Design templates are project data, kept in the document repo
 
-- Status: Accepted (the agent instruction of decision 5 is the runtime `design` stage since [ADR-0049](0049-design-sets-generated-by-the-runtime.md); the design sets live in `01-standards/templates/<set>/` since [ADR-0051](0051-document-repo-layout-legacy-and-modern.md); the rest stands)
+- Status: Accepted (the agent instruction of decision 5 is the runtime `design` stage since [ADR-0049](0049-design-sets-generated-by-the-runtime.md); the design sets live in `01-standards/templates/<set>/` since [ADR-0051](0051-document-repo-layout-legacy-and-modern.md); kinds are profile folders since [ADR-0053](0053-design-template-profiles-by-unit-kind.md); the rest stands)
 - Date: 2026-10-21
 - Decision register: D61
 

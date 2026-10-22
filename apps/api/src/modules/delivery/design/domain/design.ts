@@ -32,8 +32,27 @@ export interface DesignSetFileView {
   path: string;
   template: string;
   required: boolean;
-  when: string[];
+  /** The unit kind whose profile folder holds the template; absent when the file uses the set's own template (ADR-0053). */
+  profile?: string;
+  /** What a document of the file names in its `template:` front matter: `detail@2`, or `detail/screen@3` for a profile's template. */
+  ref: string;
+  /** A finished example for the designer, relative to the set folder. */
+  example?: string;
   sections: DesignSectionView[];
+}
+
+/** The variation of a set for one unit kind (ADR-0053). */
+export interface DesignProfileView {
+  kind: string;
+  version: number;
+  /** Paths of the set's files this kind does not have. */
+  removes: string[];
+  /** The profile's instructions to the designer, read after the set's. */
+  instructions: string;
+  /** The files of the set for this kind, with the template each is written with. */
+  files: DesignSetFileView[];
+  /** The names in the profile's `_examples/` folder. */
+  examples: string[];
 }
 
 export interface DesignSetView {
@@ -42,6 +61,7 @@ export interface DesignSetView {
   version: number;
   /** `unit`: a design per unit; `application`: one design for the whole application (ADR-0050). */
   scope: "unit" | "application";
+  /** The unit kinds the set is for: none when it has files every kind has; else the kinds with a profile that leaves it files. */
   appliesTo: string[];
   needs: string[];
   stage?: string;
@@ -52,7 +72,10 @@ export interface DesignSetView {
   instructions: string;
   /** The pipeline stages of the manifest that produce this set (`produces`). */
   producedBy: Array<{ pipeline: string; stage: string }>;
+  /** The files every kind has unless its profile changes them. */
   files: DesignSetFileView[];
+  /** One profile per unit kind that has a folder in the set (ADR-0053). */
+  profiles: DesignProfileView[];
   /** How the units of the application stand with the set; present when an application was asked for. */
   usage?: { units: number; onCurrent: number; stale: number };
 }
@@ -72,8 +95,10 @@ export interface DesignFileView {
   required: boolean;
   state: DesignFileState;
   stale: boolean;
-  /** `<set>@<version>` the design was written against. */
+  /** What the design names in its front matter (`<set>@<version>` or `<set>/<kind>@<version>`). */
   template?: string;
+  /** What a design of this file must name: the template of the unit's kind in its current version. */
+  expected: string;
   problems: DesignProblemView[];
   waiver?: string;
 }

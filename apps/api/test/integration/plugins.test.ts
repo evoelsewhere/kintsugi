@@ -38,7 +38,7 @@ describe.skipIf(!hasDatabase)("plugins (integration)", () => {
       ["modernize", "member", "builtin"],
     ]);
     expect(list.body.data![0]!.counts).toMatchObject({ agent: 4, command: 3, workflow: 3, skill: 2 });
-    expect(list.body.data![1]!.counts).toMatchObject({ agent: 1, command: 1 });
+    expect(list.body.data![1]!.counts).toMatchObject({ agent: 2, command: 1 });
   });
 
   it("opens a plugin and reads one of its files", async () => {

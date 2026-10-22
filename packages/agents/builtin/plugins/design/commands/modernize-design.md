@@ -4,7 +4,7 @@ argument-hint: <app>
 arguments: app
 metadata:
   audience: runtime
-  agents: [designer]
+  agents: [designer, design-reviewer]
   skills: [mermaid-diagrams]
   reads: [01-standards/templates/, 01-standards/conventions/, 02-architecture/, 03-transition/, 10-applications/<app>/02-modern/requirements.md, 10-applications/<app>/02-modern/design.md, 10-applications/<app>/01-legacy/_catalog/, 10-applications/<app>/01-legacy/<module>/<unit>/, 10-applications/<app>/02-modern/<module>/<unit>/, 10-applications/<app>/02-modern/_design/]
   writes: [10-applications/<app>/02-modern/<module>/<unit>/<set>/, 10-applications/<app>/02-modern/_design/<set>/]
@@ -18,16 +18,24 @@ metadata:
         as: the documents of the set
     - script: check_design
       as: what is left to fix
-    - each: unit with problems
+    - each: selected unit
+      do:
+        agent: design-reviewer
+        as: findings against the unit's specification (scratch)
+    - script: check_review
+      as: the findings per unit
+    - each: unit with problems or with a blocker or major finding
       do:
         agent: designer
-        as: fix what the check found
+        as: fix what the check and the reviewer found
     - script: check_design
       as: the result
+    - script: render_design_review
+      as: the description of the pull request
     - gate: a person reviews and merges the pull request
 ---
 
-**This stage runs as Kintsugi runtime jobs and script steps** (ADR-0049), started by the orchestrator from the Design page of the portal on **one design set and a selection of units**. What a set is, which documents it holds and what each must contain is the **project's** decision, written in `01-standards/templates/<set>/` (ADR-0045): this stage follows that definition and adds nothing of its own. `$app` is the application id from `kintsugi.yaml`.
+**This stage runs as Kintsugi runtime jobs and script steps** (ADR-0049), started by the orchestrator from the Design page of the portal on **one design set and a selection of units**. What a set is, which documents it holds and what each must contain is the **project's** decision, written in `01-standards/templates/<set>/` (ADR-0045): this stage follows that definition and adds nothing of its own. A set may hold a profile per unit kind, `<set>/<kind>/` (ADR-0053): the unit's kind decides the documents (the set's files, plus the profile's, minus what it removes), the template of each (the profile folder's replaces the set's of the same name), the reference its front matter names (`<set>@<n>` or `<set>/<kind>@<n>`) and the example the designer reads. `$app` is the application id from `kintsugi.yaml`.
 
 One run is **one pull request** that touches only the `<set>/` folders of its own units (in `10-applications/$app/02-modern/<module>/<unit>/`), so several runs (other sets, other units) can be open and reviewed at the same time without conflicts. Members review the pull request and correct it like any document of the repository: the design is generated, not authored from nothing, and what a person changes in the pull request stays.
 

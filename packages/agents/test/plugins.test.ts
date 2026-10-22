@@ -22,13 +22,13 @@ describe("built-in plugins", () => {
       expect.arrayContaining([PLUGIN_MANIFEST_FILE, "skills/mermaid-diagrams/references/c4.md", "hooks/job_output.py", "scripts/inventory.py"]),
     );
     expect(plugins[1]!.components.filter((component) => component.kind === "command").map((component) => component.name)).toEqual(["design"]);
-    expect(plugins[1]!.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["designer"]);
+    expect(plugins[1]!.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["design-reviewer", "designer"]);
     expect(plugins[2]!.components.filter((component) => component.kind === "command").map((component) => component.name)).toEqual(["design-architecture", "scaffold", "implement"]);
   });
 
   it("covers every agent, command and workflow exactly once", async () => {
     const plugins = await loadBuiltinPlugins();
-    for (const [kind, count] of [["agent", 8], ["command", 7], ["workflow", 4]] as const) {
+    for (const [kind, count] of [["agent", 9], ["command", 7], ["workflow", 4]] as const) {
       const all = plugins.flatMap((plugin) => plugin.components.filter((component) => component.kind === kind).map((component) => component.path));
       expect(all.length, kind).toBe(count);
       expect(new Set(all).size, kind).toBe(count);
@@ -88,6 +88,6 @@ describe("plugin flows", () => {
     // The design command runs the design-set scripts, in the order its text names them.
     const design = flow(designPlugin, "design");
     expect(design.steps.filter((step) => step.kind === "script").map((step) => step.name)).toEqual(["validate_design_templates", "scaffold_design", "check_design"]);
-    expect(design.steps.filter((step) => step.kind === "agent").map((step) => step.name)).toEqual(["designer"]);
+    expect(design.steps.filter((step) => step.kind === "agent").map((step) => step.name)).toEqual(["designer", "design-reviewer"]);
   });
 });

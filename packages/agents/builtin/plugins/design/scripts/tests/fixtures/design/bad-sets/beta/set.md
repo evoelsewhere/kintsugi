@@ -6,6 +6,6 @@ needs: ["alpha"]
 ---
 # Beta
 
-| Path | Template | Required | When |
-| --- | --- | --- | --- |
-| ok.md | ok.md | yes | |
+| Path | Template | Required |
+| --- | --- | --- |
+| ok.md | ok.md | yes |

@@ -11,9 +11,9 @@ stage: architecture-design
 
 How the application is built as a whole, written once for the application.
 
-| Path | Template | Required | When |
-| --- | --- | --- | --- |
-| overview.md | overview.md | yes | |
+| Path | Template | Required |
+| --- | --- | --- |
+| overview.md | overview.md | yes |
 
 ## Instructions
 

@@ -10,6 +10,10 @@ import { linesOf } from './text.js'
  * template is Markdown; under a heading, an HTML comment holds that section's contract, one directive per line:
  * `required`, `table: A | B`, `seed: rules`, `check: name(args)` (repeatable) and `guidance: text`.
  *
+ * A set may hold a profile per unit kind (ADR-0053): a folder named after the kind, with a `profile.md` (its version, the
+ * files it adds or removes, its instructions), templates that replace the set's own of the same name as whole files, and
+ * `_examples/` for the designer. A document names the template it was written with: `set@n`, or `set/kind@n` for a profile's.
+ *
  * `design/scripts/design_lib.py` does the same for the member's harness. The two are held to the fixtures in
  * `design/scripts/tests/fixtures/design/`, so every message below is written exactly as the Python side writes it.
  */
@@ -26,7 +30,10 @@ const UNIT_VARIABLES = ['unit.id', 'unit.title', 'kind'] as const
 /** A document the designer also reads: relative, no `..`, `{app}` the only variable. */
 const READ_PATH = /^[A-Za-z0-9{][A-Za-z0-9._/{}-]{0,159}$/
 const SET_ID = /^[a-z][a-z0-9-]{0,39}$/
-const TEMPLATE_REF = /^([a-z][a-z0-9-]{0,39})@([1-9][0-9]{0,8})$/
+/** `set@n` or `set/kind@n`: the first group is the id of the template in use (`set` or `set/kind`). */
+const TEMPLATE_REF = /^([a-z][a-z0-9-]{0,39}(?:\/[a-z][a-z0-9-]{0,39})?)@([1-9][0-9]{0,8})$/
+const PROFILE_FILE = 'profile.md'
+const EXAMPLES_DIR = '_examples'
 const FILE_PATH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}\.md$/
 const PLACEHOLDER = /\b(?:TODO|TBD)\b/g
 const SHOWN = 10
@@ -49,7 +56,7 @@ export type DesignSection = {
   guidance?: string
 }
 
-export type DesignFile = { path: string; template: string; required: boolean; when: string[] }
+export type DesignFile = { path: string; template: string; required: boolean }
 
 export type DesignScope = (typeof DESIGN_SCOPES)[number]
 
@@ -59,11 +66,11 @@ export type DesignSet = {
   version: number
   /** `unit`: a design per unit (the default); `application`: one design for the whole application. */
   scope: DesignScope
-  appliesTo: string[]
   needs: string[]
   stage?: string
   /** Documents the designer reads besides the ones every design run sees (`{app}` allowed). */
   reads: string[]
+  /** The files every unit kind has unless its profile changes them; none when the set is only for kinds with a profile. */
   files: DesignFile[]
   /** The text of `set.md` below its files table, for people (without the Instructions section). */
   description: string
@@ -71,7 +78,33 @@ export type DesignSet = {
   instructions: string
 }
 
+/** The variation of a set for one unit kind (ADR-0053), read from `<set>/<kind>/profile.md`. */
+export type DesignProfile = {
+  kind: string
+  version: number
+  /** Files added to the set's, or redefining the set's file of the same path. */
+  files: DesignFile[]
+  /** Paths of the set's files this kind does not have. */
+  removes: string[]
+  /** The `## Instructions` section of `profile.md`, read after the set's. */
+  instructions: string
+}
+
 export type DesignTemplate = { sections: DesignSection[] }
+
+/** What a document names in its `template:` reference: `id@version`, the id being `set` or `set/kind`. */
+export type DesignTemplateRef = { id: string; version: number }
+
+/** A file of a set for one kind: which template it is written with, the reference its documents carry, and its example. */
+export type ResolvedDesignFile = DesignFile & {
+  /** The kind whose folder holds the template; null for the set's own template. */
+  profile: string | null
+  ref: DesignTemplateRef
+  /** The template, relative to the set folder (`logic.md`, or `screen/logic.md` for a profile's). */
+  templateFile: string
+  /** The finished example for the designer, relative to the set folder, or null. */
+  example: string | null
+}
 
 export type DesignProblemCode =
   | 'missing-template-ref'
@@ -97,16 +130,30 @@ export type DesignContext = {
   items: Readonly<Record<string, readonly string[]>>
 }
 
+/** A kind folder of a set: its `profile.md` (undefined when it has none), its template files and the names in its `_examples/`. */
+export type DesignProfileSource = {
+  profileText: string | undefined
+  templates: Readonly<Record<string, string>>
+  examples?: readonly string[]
+}
+
 export type DesignSetSource = {
   /** The set's folder name under `01-standards/templates/`. */
   folder: string
   /** The text of `set.md`; undefined when the folder has none. */
   setText: string | undefined
-  /** The template files of the folder by file name. */
+  /** The template files of the folder by file name (not `set.md`). */
   templates: Readonly<Record<string, string>>
+  /** The file names in the set's `_examples/` folder. */
+  examples?: readonly string[]
+  /** The kind folders of the set by folder name. */
+  profiles?: Readonly<Record<string, DesignProfileSource>>
 }
 
-export type LoadedDesignSet = { set: DesignSet; templates: Record<string, DesignTemplate> }
+export type LoadedDesignProfile = { profile: DesignProfile; templates: Record<string, DesignTemplate>; examples: string[] }
+
+/** `templates` are the set's own templates in use; a profile's `templates` are the ones in its folder that its files use. */
+export type LoadedDesignSet = { set: DesignSet; templates: Record<string, DesignTemplate>; examples: string[]; profiles: Record<string, LoadedDesignProfile> }
 
 export type DesignTemplateProblem = { path: string; message: string }
 
@@ -315,6 +362,53 @@ const stringList = (value: unknown): string[] | null => {
   return Array.isArray(value) && value.every(item => typeof item === 'string') ? (value as string[]).map(item => item.trim()).filter(item => item !== '') : null
 }
 
+/** The files table of `set.md` or `profile.md`; `retired` when it still has the `When` column that profiles replaced (ADR-0053). */
+function readFilesTable(body: string, problems: string[]): { files: DesignFile[]; found: boolean; retired: boolean } {
+  const files: DesignFile[] = []
+  const table = tablesIn(body).find(candidate => candidate.header.some(cell => norm(cell) === 'path') && candidate.header.some(cell => norm(cell) === 'template'))
+
+  if (table === undefined) return { files, found: false, retired: false }
+
+  const column = (name: string): number => table.header.findIndex(cell => norm(cell) === name)
+  const [pathAt, templateAt, requiredAt] = [column('path'), column('template'), column('required')]
+
+  for (const row of table.rows) {
+    const path = (row[pathAt] ?? '').replace(/`/g, '').trim()
+    const template = (row[templateAt] ?? '').replace(/`/g, '').trim()
+    const required = norm(row[requiredAt] ?? '')
+    const at = `file "${path}"`
+
+    if (!FILE_PATH.test(path) || path.split('/').includes('..')) {
+      problems.push(`${at}: path must be a relative .md path with no ".."`)
+      continue
+    }
+
+    if (files.some(known => known.path === path)) {
+      problems.push(`${at} is listed twice`)
+      continue
+    }
+
+    if (required !== 'yes' && required !== 'no') problems.push(`${at}: Required must be yes or no`)
+
+    files.push({ path, template, required: required === 'yes' })
+  }
+
+  return { files, found: table.rows.length > 0, retired: column('when') >= 0 }
+}
+
+/** The `## Instructions` section of a set or profile body, for the designer, and the rest of the body. */
+function splitInstructions(body: string): { instructions: string; rest: string[] } {
+  const bodyLines = body.split('\n')
+  const instructionsAt = bodyLines.findIndex(line => /^##\s+Instructions\s*$/i.test(line.trim()))
+
+  if (instructionsAt < 0) return { instructions: '', rest: bodyLines }
+
+  const end = bodyLines.findIndex((line, index) => index > instructionsAt && /^#{1,2}\s/.test(line.trim()))
+  const stop = end < 0 ? bodyLines.length : end
+
+  return { instructions: bodyLines.slice(instructionsAt + 1, stop).join('\n').trim(), rest: [...bodyLines.slice(0, instructionsAt), ...bodyLines.slice(stop)] }
+}
+
 /** One set, read from its `set.md`; `set` is absent when the file cannot give a usable identity. */
 export function parseDesignSet(text: string, folder: string): { set?: DesignSet; problems: string[] } {
   const problems: string[] = []
@@ -325,7 +419,6 @@ export function parseDesignSet(text: string, folder: string): { set?: DesignSet;
   const id = typeof front.data.id === 'string' ? front.data.id.trim() : ''
   const title = typeof front.data.title === 'string' ? front.data.title.trim() : ''
   const version = front.data.version
-  const appliesTo = stringList(front.data.appliesTo)
   const needs = stringList(front.data.needs)
 
   if (!SET_ID.test(id)) problems.push('id is missing or not a lowercase name (letters, digits, hyphens)')
@@ -335,7 +428,9 @@ export function parseDesignSet(text: string, folder: string): { set?: DesignSet;
 
   if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) problems.push('version must be a positive integer')
 
-  if (appliesTo === null) problems.push('appliesTo must be a list of unit kinds')
+  if (front.data.appliesTo !== undefined && front.data.appliesTo !== null && front.data.appliesTo !== '' && !(Array.isArray(front.data.appliesTo) && front.data.appliesTo.length === 0)) {
+    problems.push('appliesTo is replaced by a folder per unit kind with a profile.md (ADR-0053)')
+  }
 
   if (needs === null) problems.push('needs must be a list of set ids')
 
@@ -356,82 +451,108 @@ export function parseDesignSet(text: string, folder: string): { set?: DesignSet;
     }
   }
 
-  if (scope === 'application' && appliesTo !== null && appliesTo.length > 0) problems.push('an application set cannot have appliesTo: an application has no unit kind')
-
   const stage = typeof front.data.stage === 'string' && front.data.stage.trim() !== '' ? front.data.stage.trim() : undefined
-  const files: DesignFile[] = []
-  const table = tablesIn(front.body).find(candidate => candidate.header.some(cell => norm(cell) === 'path') && candidate.header.some(cell => norm(cell) === 'template'))
+  const table = readFilesTable(front.body, problems)
+  const files = table.files
 
-  if (table === undefined) {
-    problems.push('has no files table (columns Path | Template | Required | When)')
-  } else {
-    const column = (name: string): number => table.header.findIndex(cell => norm(cell) === name)
-    const [pathAt, templateAt, requiredAt, whenAt] = [column('path'), column('template'), column('required'), column('when')]
+  if (table.retired) problems.push('the When column is replaced by a folder per unit kind with a profile.md (ADR-0053)')
 
-    for (const row of table.rows) {
-      const path = (row[pathAt] ?? '').replace(/`/g, '').trim()
-      const template = (row[templateAt] ?? '').replace(/`/g, '').trim()
-      const required = norm(row[requiredAt] ?? '')
-      const at = `file "${path}"`
+  // A unit set may have no files of its own when every kind has a profile: the loader decides. An application set has no profiles.
+  if (scope === 'application' && !table.found) problems.push('has no files table (columns Path | Template | Required)')
 
-      if (!FILE_PATH.test(path) || path.split('/').includes('..')) {
-        problems.push(`${at}: path must be a relative .md path with no ".."`)
-        continue
-      }
-
-      if (files.some(known => known.path === path)) {
-        problems.push(`${at} is listed twice`)
-        continue
-      }
-
-      if (required !== 'yes' && required !== 'no') problems.push(`${at}: Required must be yes or no`)
-
-      const when = whenAt < 0 ? [] : (row[whenAt] ?? '').split(/[,\s]+/).map(kind => kind.replace(/`/g, '').trim()).filter(kind => kind !== '')
-
-      if (scope === 'application' && when.length > 0) problems.push(`${at}: When must be empty in an application set`)
-
-      files.push({ path, template, required: required === 'yes', when })
-    }
-
-    if (table.rows.length === 0) problems.push('has no files table (columns Path | Template | Required | When)')
-  }
-
-  if (!SET_ID.test(id) || typeof version !== 'number' || !Number.isInteger(version) || version < 1 || title === '' || appliesTo === null || needs === null) {
+  if (!SET_ID.test(id) || typeof version !== 'number' || !Number.isInteger(version) || version < 1 || title === '' || needs === null) {
     return { problems }
   }
 
   // The Instructions section is for the designer, not for people reading the description.
-  const bodyLines = front.body.split('\n')
-  const instructionsAt = bodyLines.findIndex(line => /^##\s+Instructions\s*$/i.test(line.trim()))
-  let instructions = ''
-  let rest = bodyLines
-
-  if (instructionsAt >= 0) {
-    const end = bodyLines.findIndex((line, index) => index > instructionsAt && /^#{1,2}\s/.test(line.trim()))
-    const stop = end < 0 ? bodyLines.length : end
-
-    instructions = bodyLines.slice(instructionsAt + 1, stop).join('\n').trim()
-    rest = [...bodyLines.slice(0, instructionsAt), ...bodyLines.slice(stop)]
-  }
-
+  const { instructions, rest } = splitInstructions(front.body)
   const after = rest.filter(line => !line.trim().startsWith('|') && !line.trim().startsWith('#')).join('\n')
 
-  return { set: { id, title, version, scope, appliesTo, needs, ...(stage === undefined ? {} : { stage }), reads, files, description: after.trim(), instructions }, problems }
+  return { set: { id, title, version, scope, needs, ...(stage === undefined ? {} : { stage }), reads, files, description: after.trim(), instructions }, problems }
+}
+
+/** One profile, read from `<set>/<kind>/profile.md`; `profile` is absent when the file cannot give a usable identity. */
+export function parseDesignProfile(text: string, folder: string): { profile?: DesignProfile; problems: string[] } {
+  const problems: string[] = []
+  const front = frontmatterOf(text)
+
+  if (front === null) return { problems: ['has no front matter'] }
+
+  const kind = typeof front.data.kind === 'string' ? front.data.kind.trim() : ''
+  const version = front.data.version
+  const removes = stringList(front.data.removes)
+
+  if (!SET_ID.test(kind)) problems.push('kind is missing or not a lowercase name (letters, digits, hyphens)')
+  else if (kind !== folder) problems.push(`kind "${kind}" does not match its folder "${folder}"`)
+
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) problems.push('version must be a positive integer')
+
+  if (removes === null) problems.push('removes must be a list of file paths')
+
+  for (const entry of removes ?? []) {
+    if (!FILE_PATH.test(entry) || entry.split('/').includes('..')) problems.push(`removes "${entry}" must be a relative .md path with no ".."`)
+  }
+
+  const table = readFilesTable(front.body, problems)
+
+  if (table.retired) problems.push('the When column is not used in a profile: the profile is the kind')
+
+  if (!SET_ID.test(kind) || kind !== folder || typeof version !== 'number' || !Number.isInteger(version) || version < 1 || removes === null) return { problems }
+
+  return { profile: { kind, version, files: table.files, removes, instructions: splitInstructions(front.body).instructions }, problems }
+}
+
+/** The files of a set for a unit kind, before their templates are located: the set's, with the profile's removed, redefined and added. */
+function effectiveFiles(set: DesignSet, profile: DesignProfile | undefined): DesignFile[] {
+  if (profile === undefined) return set.files
+
+  const own = new Map(profile.files.map(file => [file.path, file] as const))
+  const kept = set.files.filter(file => !profile.removes.includes(file.path)).map(file => own.get(file.path) ?? file)
+
+  return [...kept, ...profile.files.filter(file => !set.files.some(known => known.path === file.path))]
 }
 
 /**
- * The files of a set that a unit of `kind` needs; none when the set is not for that kind. A set of the application is not for any
+ * The files of a set that a unit of `kind` needs, each with the template it is written with; none when the set is not for that
+ * kind. The set's files are the base ones, with the kind's profile applied (ADR-0053). A set of the application is not for any
  * unit: its files are asked for with a `null` kind.
  */
-export function designFilesFor(set: DesignSet, kind: string | null): DesignFile[] {
-  if (set.scope === 'application') return kind === null ? set.files : []
+export function designFilesFor(loaded: LoadedDesignSet, kind: string | null): ResolvedDesignFile[] {
+  if (loaded.set.scope === 'application' ? kind !== null : kind === null) return []
 
-  if (kind === null) return []
-
-  if (set.appliesTo.length > 0 && !set.appliesTo.includes(kind)) return []
-
-  return set.files.filter(file => file.when.length === 0 || file.when.includes(kind))
+  return resolveFiles(loaded, kind === null ? undefined : loaded.profiles[kind])
 }
+
+/** The files of a set as a kind without a profile has them (the files of an application set): what `set.md` lists. */
+export function designBaseFiles(loaded: LoadedDesignSet): ResolvedDesignFile[] {
+  return resolveFiles(loaded, undefined)
+}
+
+function resolveFiles(loaded: LoadedDesignSet, profile: LoadedDesignProfile | undefined): ResolvedDesignFile[] {
+  const { set } = loaded
+  const kind = profile?.profile.kind
+
+  return effectiveFiles(set, profile?.profile).map(file => {
+    const inProfile = profile !== undefined && file.template in profile.templates
+    const example = profile !== undefined && profile.examples.includes(file.template) ? `${kind}/${EXAMPLES_DIR}/${file.template}` : loaded.examples.includes(file.template) ? `${EXAMPLES_DIR}/${file.template}` : null
+
+    return {
+      ...file,
+      profile: inProfile ? (kind ?? null) : null,
+      ref: inProfile ? { id: `${set.id}/${kind}`, version: profile.profile.version } : { id: set.id, version: set.version },
+      templateFile: inProfile ? `${kind}/${file.template}` : file.template,
+      example,
+    }
+  })
+}
+
+/** The parsed template a resolved file is written with. */
+export function designTemplateOf(loaded: LoadedDesignSet, file: ResolvedDesignFile): DesignTemplate | undefined {
+  return file.profile === null ? loaded.templates[file.template] : loaded.profiles[file.profile]?.templates[file.template]
+}
+
+/** The text a document carries in its `template:` front matter for a reference. */
+export const designRefText = (ref: DesignTemplateRef): string => `${ref.id}@${ref.version}`
 
 /** Where a project's design sets live: `designSetsDir()` of the domain layout (a test keeps them equal; the reader imports nothing). */
 export const DESIGN_SETS_PREFIX = '01-standards/templates'
@@ -439,7 +560,8 @@ const designPrefix = DESIGN_SETS_PREFIX
 
 /**
  * Every set of the project and the faults of their definitions: unique ids that match their folders, existing
- * template files, known checks with valid parameters, `needs` without a cycle, kinds the project declares.
+ * template files, known checks with valid parameters, `needs` without a cycle, kinds the project declares, and
+ * profiles (ADR-0053) that name their kind, add and remove real files and leave no template unused.
  * A set that cannot give a usable identity is left out; the others are returned, with their problems listed.
  */
 export function loadDesignSets(sources: readonly DesignSetSource[], options: { unitKinds?: readonly string[] } = {}): { sets: LoadedDesignSet[]; problems: DesignTemplateProblem[] } {
@@ -448,7 +570,8 @@ export function loadDesignSets(sources: readonly DesignSetSource[], options: { u
   const report = (path: string, message: string): void => void problems.push({ path, message })
 
   for (const source of [...sources].sort((a, b) => a.folder.localeCompare(b.folder))) {
-    const setPath = `${designPrefix}/${source.folder}/set.md`
+    const setDir = `${designPrefix}/${source.folder}`
+    const setPath = `${setDir}/set.md`
 
     if (source.setText === undefined) {
       report(setPath, 'is missing')
@@ -461,26 +584,12 @@ export function loadDesignSets(sources: readonly DesignSetSource[], options: { u
 
     if (read.set === undefined) continue
 
+    const { set } = read
     const templates: Record<string, DesignTemplate> = {}
 
-    for (const file of read.set.files) {
-      const templatePath = `${designPrefix}/${source.folder}/${file.template}`
-      const text = source.templates[file.template]
-
-      if (text === undefined) {
-        report(setPath, `file "${file.path}": template "${file.template}" does not exist in the set folder`)
-        continue
-      }
-
-      if (file.template in templates) continue
-
-      const parsed = parseDesignTemplate(text)
-
-      templates[file.template] = parsed.template
-
-      for (const message of parsed.problems) report(templatePath, message)
-
-      if (read.set.scope === 'application') {
+    /** What a template says about itself that depends on the set: the unit-only features, and the sources its references may name. */
+    const analyse = (text: string, parsed: { template: DesignTemplate }, templatePath: string): void => {
+      if (set.scope === 'application') {
         for (const name of unique([...text.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].map(match => match[1] ?? ''))) {
           if ((UNIT_VARIABLES as readonly string[]).includes(name)) report(templatePath, `variable "{{${name}}}" is for unit sets`)
         }
@@ -498,28 +607,108 @@ export function loadDesignSets(sources: readonly DesignSetSource[], options: { u
 
       for (const section of parsed.template.sections) {
         for (const check of section.checks) {
-          if (check.name === 'refs-resolve' && !(REFERENCE_SOURCES as readonly string[]).includes(check.source) && !read.set.needs.includes(check.source)) {
+          if (check.name === 'refs-resolve' && !(REFERENCE_SOURCES as readonly string[]).includes(check.source) && !set.needs.includes(check.source)) {
             report(templatePath, `section "${section.heading}": refs-resolve source "${check.source}" is not rules, requirements, components or a set in needs`)
           }
         }
       }
     }
 
-    for (const kind of read.set.appliesTo) {
-      if (options.unitKinds !== undefined && !options.unitKinds.includes(kind)) report(setPath, `unit kind "${kind}" in appliesTo is not declared in unitKinds`)
+    /** Reads a template of the set's own folder once; false when the folder has none of that name. */
+    const useOwn = (name: string): boolean => {
+      const text = source.templates[name]
+
+      if (text === undefined) return false
+
+      if (!(name in templates)) {
+        const parsed = parseDesignTemplate(text)
+
+        templates[name] = parsed.template
+
+        for (const message of parsed.problems) report(`${setDir}/${name}`, message)
+
+        analyse(text, parsed, `${setDir}/${name}`)
+      }
+
+      return true
     }
 
-    for (const file of read.set.files) {
-      for (const kind of file.when) {
-        if (read.set.appliesTo.length > 0) {
-          if (!read.set.appliesTo.includes(kind)) report(setPath, `file "${file.path}": kind "${kind}" in When is not one the set applies to`)
-        } else if (options.unitKinds !== undefined && !options.unitKinds.includes(kind)) {
-          report(setPath, `file "${file.path}": kind "${kind}" in When is not declared in unitKinds`)
+    for (const file of set.files) {
+      if (!useOwn(file.template)) report(setPath, `file "${file.path}": template "${file.template}" does not exist in the set folder`)
+    }
+
+    const profiles: Record<string, LoadedDesignProfile> = {}
+
+    for (const kind of Object.keys(source.profiles ?? {}).sort()) {
+      const profileSource = (source.profiles ?? {})[kind] as DesignProfileSource
+      const profileDir = `${setDir}/${kind}`
+      const profilePath = `${profileDir}/${PROFILE_FILE}`
+
+      if (set.scope === 'application') {
+        report(profilePath, 'an application set cannot have profiles: an application has no unit kind')
+        continue
+      }
+
+      if (!SET_ID.test(kind)) {
+        report(profilePath, `"${kind}" is not a lowercase name (letters, digits, hyphens) for a unit kind`)
+        continue
+      }
+
+      if (options.unitKinds !== undefined && !options.unitKinds.includes(kind)) report(profilePath, `unit kind "${kind}" is not declared in unitKinds`)
+
+      if (profileSource.profileText === undefined) {
+        report(profilePath, 'is missing')
+        continue
+      }
+
+      const parsedProfile = parseDesignProfile(profileSource.profileText, kind)
+
+      for (const message of parsedProfile.problems) report(profilePath, message)
+
+      if (parsedProfile.profile === undefined) continue
+
+      const { profile } = parsedProfile
+
+      for (const path of profile.removes) {
+        if (!set.files.some(file => file.path === path)) report(profilePath, `removes "${path}" is not a file of the set`)
+
+        if (profile.files.some(file => file.path === path)) report(profilePath, `file "${path}" is both removed and defined`)
+      }
+
+      const own: Record<string, DesignTemplate> = {}
+      const listed = new Set(profile.files.map(file => file.path))
+      const effective = effectiveFiles(set, profile)
+
+      for (const file of effective) {
+        const text = profileSource.templates[file.template]
+
+        if (text !== undefined) {
+          if (!(file.template in own)) {
+            const parsed = parseDesignTemplate(text)
+
+            own[file.template] = parsed.template
+
+            for (const message of parsed.problems) report(`${profileDir}/${file.template}`, message)
+
+            analyse(text, parsed, `${profileDir}/${file.template}`)
+          }
+        } else if (listed.has(file.path) && !useOwn(file.template)) {
+          report(profilePath, `file "${file.path}": template "${file.template}" exists neither in the profile folder nor in the set folder`)
         }
       }
+
+      for (const name of Object.keys(profileSource.templates).sort()) {
+        if (!effective.some(file => file.template === name)) report(`${profileDir}/${name}`, `is not used by any file of the kind "${kind}"`)
+      }
+
+      profiles[kind] = { profile, templates: own, examples: [...(profileSource.examples ?? [])].sort() }
     }
 
-    sets.push({ set: read.set, templates })
+    if (set.scope === 'unit' && set.files.length === 0 && Object.keys(source.profiles ?? {}).length === 0) {
+      report(setPath, 'has no files: list them in a table (Path | Template | Required) or add a folder per unit kind with a profile.md')
+    }
+
+    sets.push({ set, templates, examples: [...(source.examples ?? [])].sort(), profiles })
   }
 
   const known = new Set(sets.map(loaded => loaded.set.id))
@@ -597,23 +786,23 @@ export function designItemIds(text: string): string[] {
   return unique(ids)
 }
 
-/** The `template: <set>@<version>` reference of a design document, or null when it has none. */
+/** The `template: <set>@<version>` (or `<set>/<kind>@<version>`) reference of a design document, or null when it has none. */
 export function designTemplateRefOf(text: string): string | null {
   const value = frontmatterOf(text)?.data.template
 
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
 }
 
-/** Whether the design was written against an older version of its set. */
-export function designIsStale(text: string, set: Pick<DesignSet, 'id' | 'version'>): boolean {
-  const ref = designTemplateRefOf(text)
-  const match = ref === null ? null : TEMPLATE_REF.exec(ref)
+/** Whether the design was written against an older version of its template (`ref`: the template in use, ADR-0053). */
+export function designIsStale(text: string, ref: DesignTemplateRef): boolean {
+  const named = designTemplateRefOf(text)
+  const match = named === null ? null : TEMPLATE_REF.exec(named)
 
-  return match !== null && match[1] === set.id && Number(match[2]) < set.version
+  return match !== null && match[1] === ref.id && Number(match[2]) < ref.version
 }
 
 /** The faults of one design document against its template and set; an empty list means it conforms. */
-export function checkDesignDocument(template: DesignTemplate, set: Pick<DesignSet, 'id' | 'version'>, text: string, context: DesignContext): DesignProblem[] {
+export function checkDesignDocument(template: DesignTemplate, expected: DesignTemplateRef, text: string, context: DesignContext): DesignProblem[] {
   const problems: DesignProblem[] = []
   const ref = designTemplateRefOf(text)
 
@@ -622,7 +811,7 @@ export function checkDesignDocument(template: DesignTemplate, set: Pick<DesignSe
   } else {
     const match = TEMPLATE_REF.exec(ref)
 
-    if (match === null || match[1] !== set.id) problems.push({ code: 'wrong-template-ref', message: `template reference "${ref}" does not name this set (expected ${set.id}@${set.version})` })
+    if (match === null || match[1] !== expected.id) problems.push({ code: 'wrong-template-ref', message: `template reference "${ref}" does not name this template (expected ${designRefText(expected)})` })
   }
 
   const body = frontmatterOf(text)?.body ?? text

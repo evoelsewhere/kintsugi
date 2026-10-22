@@ -107,7 +107,8 @@ async function autoCommitPaths(mirror: string, commit: string, options: RemoteOp
 }
 
 function pullRequestBody(request: DocumentWriteRequest, files: readonly FileWrite[]): string {
-  const lines = [request.message.trim(), "", "Files:", ...files.map((file) => `- \`${file.path}\``), "", "Opened by kintsugi-bot (ADR-0019)."];
+  const description = request.description?.trim();
+  const lines = [request.message.trim(), "", ...(description === undefined || description === "" ? [] : [description, ""]), "Files:", ...files.map((file) => `- \`${file.path}\``), "", "Opened by kintsugi-bot (ADR-0019)."];
   for (const trailer of writerTrailers(request)) lines.push(`${trailer.key}: ${trailer.value}`);
   return lines.join("\n");
 }

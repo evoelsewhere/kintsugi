@@ -46,7 +46,7 @@ import {
   type StepLimits,
   isCancelled,
 } from "./model.js";
-import { type Placeholders, type StageScope, fill } from "./plan.js";
+import { type Placeholders, type StagePlan, type StageScope, fill } from "./plan.js";
 import { STAGES } from "./stages.js";
 import { type AgentCallOptions, type WorkflowBudgets, loadWorkflow, runWorkflow } from "./workflow.js";
 
@@ -147,6 +147,8 @@ interface StepOutcome {
   stdout?: string;
   /** Agent jobs a workflow started. */
   agents?: number;
+  /** What a stage wrote for the pull request description (ADR-0054), read before its work area is removed. */
+  description?: string;
 }
 
 /** A failed script step, with the end of its error output (redacted) for a repair job. */
@@ -175,6 +177,8 @@ const MAX_FOLDER_DOCUMENTS = 5000;
 /** A relative document-repo path without traversal. */
 const SAFE_OUTPUT_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9._/-]+$/;
 const MAX_RESTRICTED_FILES = 100;
+/** The most of a stage's description that goes into a pull request (ADR-0054). */
+const MAX_DESCRIPTION_CHARS = 60_000;
 const MAX_RESTRICTED_BYTES = 1024 * 1024;
 const RESULT_FILE = "result.json";
 
@@ -872,6 +876,7 @@ export class JobRunner {
         ...(resume === undefined ? {} : { completed: resume.completed, gateChoices: resume.gateChoices }),
       });
       const outcome = await executor.run();
+      const description = await this.#description(plan, run.applicationId, work);
       // work/ goes only when the stage succeeds: a failed run keeps it beside out/ for a resume
       // (same retention, cleanup.ts).
       await removeTree(work).catch(() => undefined);
@@ -882,6 +887,7 @@ export class JobRunner {
           ...(resume === undefined ? {} : { resumeOf: resume.from }),
         },
         ...(agent === undefined ? {} : { agent }),
+        ...(description === undefined ? {} : { description }),
         provenance,
       };
     } catch (error) {
@@ -1030,6 +1036,15 @@ export class JobRunner {
     }
   }
 
+  /** The pull-request description a stage wrote in its work area (ADR-0054): bounded and redacted; undefined when it wrote none. */
+  async #description(plan: StagePlan, app: string, work: string): Promise<string | undefined> {
+    const path = plan.description?.(app);
+    if (path === undefined) return undefined;
+    const text = await readFile(join(work, ...path.split("/")), "utf8").catch(() => undefined);
+    if (text === undefined || text.trim() === "") return undefined;
+    return redactText(text.length > MAX_DESCRIPTION_CHARS ? `${text.slice(0, MAX_DESCRIPTION_CHARS)}\n\n... (cut)` : text);
+  }
+
   /** A top-level run's out/ goes to the document repo through the writer; returns the write id. */
   async #publish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<string | undefined> {
     if (run.parentId !== undefined) return undefined;
@@ -1037,6 +1052,7 @@ export class JobRunner {
     const repository = await this.#deps.store.documentRepository(run.projectId);
     if (repository === undefined) throw new JobFailure(`Project ${run.projectId} has no document repository`);
     const plan = run.kind === "stage" ? STAGES[run.name] : undefined;
+    const description = outcome.description;
     const request: DocumentWriteRequest = {
       writeId: randomUUID(),
       projectId: run.projectId,
@@ -1045,6 +1061,7 @@ export class JobRunner {
       outputOfJob: run.id,
       jobId: run.id,
       ...(plan?.reviewAll === true ? { reviewAll: true } : {}),
+      ...(description === undefined ? {} : { description }),
       ...(outcome.agent === undefined ? {} : { agent: outcome.agent }),
       ...(run.actor === undefined ? {} : { actor: run.actor }),
     };

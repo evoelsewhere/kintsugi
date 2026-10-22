@@ -5,9 +5,9 @@
 
 Run from the root of the document repository checkout (or name it with --root). For each document the set lists for the
 unit's kind (the required ones, all of them with --all, or the one named by --file), this writes
-`10-applications/<app>/02-modern/<module>/<unit>/<set>/<path>` from the document's template: the front matter names the
+`10-applications/<app>/02-modern/<module>/<unit>/<set>/<path>` from the document's template (the one in the unit kind's profile folder when it has one of that name, else the set's): the front matter names the
 template and its version, the variables ({{unit.id}}, {{unit.title}}, {{app.id}}, {{kind}}, {{set.id}}, {{set.version}})
-are filled in, a section that lists the unit's rules is seeded from its `rules.md` (in `01-legacy/<module>/<unit>/`), and every section the
+are filled in (`{{set.version}}` is the version of the template in use), a section that lists the unit's rules is seeded from its `rules.md` (in `01-legacy/<module>/<unit>/`), and every section the
 author must write holds a TODO until they do. A file that already exists is never overwritten.
 
 Several units can be named at once (comma-separated): a unit that cannot be used is reported and skipped, the others are written.
@@ -15,7 +15,8 @@ A design set of scope `application` (ADR-0050) is written for the application it
 `10-applications/<app>/02-modern/_design/<set>/`; a set of scope `unit` is never written for `@app`.
 With --out the files go there instead of --root (which is then only read: a portal run reads its inputs and writes its
 outputs elsewhere); an existing file is looked for in both. --manifest writes a JSON summary: the set, and per unit its kind,
-title, the documents it holds (path, template, required, whether this run wrote it) and the reason a unit was skipped.
+title, the profile of its kind (ADR-0053), the documents it holds (path, template, the template file and the reference it names, the example
+for the designer, required, whether this run wrote it) and the reason a unit was skipped.
 
 Exit 0 when the files were written or already existed (a list: at least one unit could be used), 2 for input that cannot be used.
 Standard library only.
@@ -35,6 +36,12 @@ import docmd  # noqa: E402
 import paths  # noqa: E402
 
 APP = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
+
+
+def _manifest_entry(set_id, relative, file):
+    """One document in the manifest: its path, the template it is written with (a path in the repository), the reference it names and its example."""
+    return {'path': relative, 'template': file['template'], 'required': file['required'], 'templateFile': paths.design_template_path(set_id, file['templateFile']),
+            'ref': dl.ref_text(file['ref']), 'example': paths.design_template_path(set_id, file['example']) if file['example'] else None}
 
 
 def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False, out=None, info=None):
@@ -58,7 +65,7 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
         raise docmd.DataError(f'the design set "{set_id}" is for units, not for the application')
     if not for_application and set_['scope'] == 'application':
         raise docmd.DataError(f'the design set "{set_id}" is for the application: name {dl.APPLICATION_KEY} instead of a unit')
-    files = dl.files_for(set_, unit['kind'])
+    files = dl.files_for(loaded, unit['kind'])
     subject = 'the application' if for_application else f'a unit of kind "{unit["kind"]}"'
     if not files:
         raise docmd.DataError(f'the design set "{set_id}" does not apply to {subject}')
@@ -71,11 +78,13 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
     rules = [] if for_application else dl.rules_of(root, app, unit_key)
     created, notes = [], []
     if info is not None:
-        info.update({'kind': unit['kind'], 'title': unit['title'], 'scope': set_['scope'], 'reads': set_['reads'], 'files': []})
+        profile = unit['kind'] in loaded['profiles'] if unit['kind'] is not None else False
+        info.update({'kind': unit['kind'], 'title': unit['title'], 'scope': set_['scope'], 'reads': set_['reads'],
+                     'profile': paths.design_profile_path(set_id, unit['kind']) if profile else None, 'files': []})
     for need in set_['needs']:
         needed = next((candidate for candidate in sets if candidate['set']['id'] == need), None)
         needed_kind = None if needed is not None and needed['set']['scope'] == 'application' else unit['kind']
-        for file in (dl.files_for(needed['set'], needed_kind) if needed else []):
+        for file in (dl.files_for(needed, needed_kind) if needed else []):
             relative = dl.design_file_path(app, unit_key, needed, file['path'])
             if file['required'] and (need, file['path']) not in unit['waived'] and not os.path.isfile(os.path.join(root, *relative.split('/'))):
                 notes.append(f'the set "{need}", which "{set_id}" needs, has no {relative} yet')
@@ -86,15 +95,15 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
         if os.path.lexists(path) or os.path.lexists(existing):
             notes.append(f'{relative} exists and was left as it is')
             if info is not None:
-                info['files'].append({'path': relative, 'template': file['template'], 'required': file['required'], 'written': False})
+                info['files'].append({**_manifest_entry(set_id, relative, file), 'written': False})
             continue
-        template = loaded['templates'][file['template']]
-        text = dl.scaffold_text(docmd.read_text(os.path.join(root, *paths.design_template_path(set_id, file['template']).split('/'))),
-                                template['sections'], set_, None if for_application else f'{app}/{unit_key}', unit['title'], app, unit['kind'], rules)
+        template = dl.template_of(loaded, file)
+        text = dl.scaffold_text(docmd.read_text(os.path.join(root, *paths.design_template_path(set_id, file['templateFile']).split('/'))),
+                                template['sections'], set_id, file['ref'], None if for_application else f'{app}/{unit_key}', unit['title'], app, unit['kind'], rules)
         docmd.write_text(path, text)
         created.append(relative)
         if info is not None:
-            info['files'].append({'path': relative, 'template': file['template'], 'required': file['required'], 'written': True})
+            info['files'].append({**_manifest_entry(set_id, relative, file), 'written': True})
     return created, notes
 
 

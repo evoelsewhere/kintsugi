@@ -176,6 +176,11 @@ export interface StagePlan {
   id: string;
   /** Commit message of the stage's document write (first line = pull-request title); `scope` for a scoped run. */
   message(app: string, scope?: StageScope): string;
+  /**
+   * The document-repo path (intermediate, never published) of a Markdown file the stage writes for the pull request
+   * description; the runner reads it when the stage is done (ADR-0054).
+   */
+  description?(app: string): string;
   /** Document-repo files (or folders, ending in "/") every step sees under {in}; missing ones are skipped. */
   documents?: readonly string[];
   /** Files that must exist on the document repo's default branch before the stage starts. */
