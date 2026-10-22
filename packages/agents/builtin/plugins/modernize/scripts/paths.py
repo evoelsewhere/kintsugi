@@ -35,6 +35,11 @@ _SOURCE_FOLDER = re.compile(r'^[a-z0-9][a-z0-9._-]{0,127}$', re.IGNORECASE)
 _COMMIT = re.compile(r'^[0-9a-f]{40}([0-9a-f]{24})?$')
 
 
+def is_source_folder(name):
+    """Whether `name` can be the id (the mount folder) of a legacy repository: one safe path segment."""
+    return bool(_SOURCE_FOLDER.match(name))
+
+
 def parse_sources(spec):
     """[(repository id, commit)] of a spec `id@commit,id@commit`: one source folder under `src/` each, in order.
     Raises ValueError when the spec is not well formed."""

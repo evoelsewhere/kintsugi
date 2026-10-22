@@ -20,7 +20,9 @@ Giving the run both repositories raises three questions: where they are mounted,
 
 **4. Provenance is the list of `<repository id>@<commit>`.** The `{sources}` placeholder (replacing `{repo}` and `{commit}`) is `id@commit,id@commit`; scripts take it as `--sources` (`inventory.py`, `finish_items.py`, `split_rules.py`, `render_rules.py`). The inventory and the catalog index carry `sources:` in their front matter, the understanding record carries `sources:`, the plan carries `catalogSources`, and a plan is stale when the catalog's sources differ from its own. The rule files keep their `Commit` column and `sourceCommit` field, which hold the same spec.
 
-**5. `legacy-data` repositories are not mounted.** They stay as they were: linked to the application and listed, not read by the runtime stages. Reading them is a separate decision.
+**5. The plugins follow.** A citation that drops the repository, or keeps the `src/` of the job workspace, still finds its item when exactly one catalog file has that path (`Owners.path_of` in `catalog_common.py`: a rule or finding is not lost to a model's habit); an ambiguous path is left out as before. A unit card's `source` paths are read back under their repository when the catalog is seeded from the cards (`reconcile_catalog.py`). `inventory.py` refuses a `--sources` entry that is not a folder of the measured tree. The three analysis jobs of `assess` each name the repositories they read, and the synthesis reports a repository nobody read as a gap. The topology job is told that edges may cross repositories. The member workflow `scaffold` takes `sourceDirs`, one clone per legacy repository (`sourceDir` stays for one).
+
+**6. `legacy-data` repositories are not mounted.** They stay as they were: linked to the application and listed, not read by the runtime stages. Reading them is a separate decision.
 
 ## Consequences
 

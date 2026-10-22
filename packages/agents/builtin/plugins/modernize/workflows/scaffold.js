@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Phase B of /kintsugi:modernize-scaffold: scaffold every approved component in parallel — no cap; the runtime queues agents against its concurrency limit',
   whenToUse:
-    'Invoked by /kintsugi:modernize-scaffold (Kintsugi member plugin) AFTER the architecture approval gate of /kintsugi:modernize-design-architecture is approved in the portal. Requires args {app, services: [{name, responsibilities}], sourceDir, targetDir, workspaceDir?} — sourceDir is the read-only local clone of the source repository (never written), targetDir the working copy of the target repository on the branch of the member, workspaceDir the document repository checkout holding 02-architecture/ and 10-applications/<app>/ (default: the session working directory). Scaffolding agents write only under <targetDir>/<service>/ — disjoint directories, so no worktree isolation is needed.',
+    'Invoked by /kintsugi:modernize-scaffold (Kintsugi member plugin) AFTER the architecture approval gate of /kintsugi:modernize-design-architecture is approved in the portal. Requires args {app, services: [{name, responsibilities}], sourceDirs, targetDir, workspaceDir?} — sourceDirs lists the read-only local clones of the legacy repositories of the application, one per repository (never written; sourceDir, one clone, is accepted for an application with one), targetDir the working copy of the target repository on the branch of the member, workspaceDir the document repository checkout holding 02-architecture/ and 10-applications/<app>/ (default: the session working directory). Scaffolding agents write only under <targetDir>/<service>/ — disjoint directories, so no worktree isolation is needed.',
   phases: [{ title: 'Scaffold', detail: 'one agent per approved service' }],
 }
 
@@ -15,9 +15,9 @@ const ARGS = typeof args === 'string' ? (() => { try { return JSON.parse(args) }
 
 const app = ARGS && ARGS.app
 const services = ARGS && ARGS.services
-if (!app || !Array.isArray(services) || services.length === 0 || !(ARGS && ARGS.sourceDir) || !(ARGS && ARGS.targetDir)) {
+if (!app || !Array.isArray(services) || services.length === 0 || !(ARGS && ((Array.isArray(ARGS.sourceDirs) && ARGS.sourceDirs.length > 0) || ARGS.sourceDir)) || !(ARGS && ARGS.targetDir)) {
   throw new Error(
-    'kintsugi:modernize-scaffold requires args: {app: "<application id from kintsugi.yaml>", services: [{name: "...", responsibilities: "..."}], sourceDir: "<read-only source clone>", targetDir: "<target repository working copy>", workspaceDir?: "<document repository checkout>"} — run it only after the architecture is approved',
+    'kintsugi:modernize-scaffold requires args: {app: "<application id from kintsugi.yaml>", services: [{name: "...", responsibilities: "..."}], sourceDirs: ["<read-only clone of each legacy repository>", ...], targetDir: "<target repository working copy>", workspaceDir?: "<document repository checkout>"} — run it only after the architecture is approved',
   )
 }
 
@@ -28,9 +28,9 @@ if (!SAFE_NAME.test(app)) {
   throw new Error(`Unsafe application id ${JSON.stringify(app)} — must match ${SAFE_NAME}`)
 }
 // The checkouts land in agent prompts as read and write boundaries: reject
-// prompt-breakout and shell-expansion characters. sourceDir is the read-only
-// clone of the source repository (the member hooks of Kintsugi refuse writes to
-// it); targetDir is the working copy of the target repository, the only place
+// prompt-breakout and shell-expansion characters. sourceDirs are the read-only
+// clones of the legacy repositories of the application (the member hooks of Kintsugi
+// refuse writes to them); targetDir is the working copy of the target repository, the only place
 // code is written; workspaceDir holds 10-applications/<app>/01-legacy/.
 const safeDir = (v, k) => {
   if (typeof v !== 'string' || !v.trim() || v.length > 400 || v !== v.trim() || /[\x00-\x1f\x7f`"'$]/.test(v) || v.startsWith('-')) {
@@ -38,15 +38,17 @@ const safeDir = (v, k) => {
   }
   return v.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
 }
-const sourceDir = safeDir(ARGS.sourceDir, 'sourceDir')
+const sourceDirs = (Array.isArray(ARGS.sourceDirs) && ARGS.sourceDirs.length > 0 ? ARGS.sourceDirs : [ARGS.sourceDir]).map((dir, index) => safeDir(dir, `sourceDirs[${index}]`))
 const targetDir = safeDir(ARGS.targetDir, 'targetDir')
 const workspaceDir = ARGS.workspaceDir == null || ARGS.workspaceDir === '' ? '' : safeDir(ARGS.workspaceDir, 'workspaceDir')
 {
-  // The working copy must never be the source clone or overlap it.
-  const a = sourceDir.toLowerCase()
+  // The working copy must never be a source clone or overlap one.
   const b = targetDir.toLowerCase()
-  if (a === b || a.startsWith(b + '/') || b.startsWith(a + '/')) {
-    throw new Error(`targetDir ${JSON.stringify(targetDir)} overlaps sourceDir ${JSON.stringify(sourceDir)} — the source clone is read-only; scaffold into a separate working copy of the target repository`)
+  for (const sourceDir of sourceDirs) {
+    const a = sourceDir.toLowerCase()
+    if (a === b || a.startsWith(b + '/') || b.startsWith(a + '/')) {
+      throw new Error(`targetDir ${JSON.stringify(targetDir)} overlaps sourceDirs entry ${JSON.stringify(sourceDir)} — the source clones are read-only; scaffold into a separate working copy of the target repository`)
+    }
   }
 }
 const designRoot = workspaceDir ? `${workspaceDir}/` : ''

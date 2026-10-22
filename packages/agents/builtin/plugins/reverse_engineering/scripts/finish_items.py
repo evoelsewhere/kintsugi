@@ -114,6 +114,7 @@ def render_trace(app, item_id, checked):
 def finish(app, items, chosen, inputs, sources, run, existing):
     revision = paths.sources_spec(sources)
     texts, done, missing, new_units = {}, [], [], 0
+    owners = cc.owner_of(items.values())
     for item in chosen:
         item_id = item['id']
         spec = paths.unit_key_as_is_path(app, item_id)
@@ -143,7 +144,8 @@ def finish(app, items, chosen, inputs, sources, run, existing):
             'requirements': strings(trace.get('requirements')),
             'pullRequests': strings(trace.get('pullRequests')),
             'tests': strings(trace.get('tests')),
-            'files': sorted({rel for rel in (cc.norm_path(value) for value in strings(trace.get('files'))) if rel}),
+            # Files as the agent cited them, put right when they name a catalog file (`src/` or the repository left out).
+            'files': sorted({owners.path_of(rel) or rel for rel in (cc.norm_path(value) for value in strings(trace.get('files'))) if rel}),
             'openQuestions': trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) and not isinstance(trace.get('openQuestions'), bool) else 0,
         }
         texts[paths.unit_trace_path(app, *item_id.split('/'))] = render_trace(app, item_id, checked)

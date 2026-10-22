@@ -37,7 +37,7 @@ One run is **one pull request** that touches only the `<set>/` folders of its ow
 - The set must have no fault in its definition (`validate_design_templates.py` is clean), apply to the unit's kind, and the sets it `needs` must already be on the default branch for the unit (generate the basic design and merge it before the detail design).
 - Only a unit **without** that set is selected: an existing design is never overwritten (a person deletes it first if it must start over).
 - A set of scope `application` (`scope: application` in its `set.md`, ADR-0050) is generated for the application itself: the selection is the application (`@app`), the documents go to `10-applications/$app/02-modern/_design/<set>/`, and the designer reads the assessment, the rebuilt views and the documents the set's `reads` names instead of one unit's folders. The `Instructions` section of the set's `set.md` is the project's guidance to the designer.
-- The application must have a legacy repository (`role: legacy`): the designer reads it **read-only** to cite what the code does.
+- The application must have at least one legacy repository (`role: legacy`): the designer reads every one **read-only** to cite what the code does, as `<repository id>/<path>:line`.
 
 ## Steps
 

@@ -112,6 +112,8 @@ class InventoryTests(unittest.TestCase):
 
     def test_sources_are_recorded_in_order_and_validated(self):
         first, second = 'a' * 40, 'b' * 40
+        for repo in ('billing-service', 'billing-db'):
+            os.makedirs(os.path.join(self.source, repo))
         result = self.inventory('--sources', f'billing-service@{first},billing-db@{second}')
         self.assertEqual(result.returncode, 0, result.stderr)
         front, body = docmd.split_front_matter(docmd.read_text(os.path.join(self.out, 'inventory.md')))
@@ -120,6 +122,10 @@ class InventoryTests(unittest.TestCase):
         self.assertIn(f'`billing-service@{first}`, `billing-db@{second}`', body)
         for bad in ('bad', f'x@{first}@y', f'x@{first},x@{second}', 'x@' + 'z' * 40, f'../x@{first}'):
             self.assertEqual(run('inventory.py', 'billing', '--sources', bad).returncode, 2, bad)
+        # A source that is not a folder of the measured tree is refused, not recorded.
+        result = self.inventory('--sources', f'billing-service@{first},missing@{second}')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('missing', result.stderr)
 
     def test_a_source_folder_with_one_folder_per_repository_is_inventoried_as_one_tree(self):
         for repo, name in (('billing-service', 'main.py'), ('billing-db', 'schema.py')):
