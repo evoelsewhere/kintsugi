@@ -315,6 +315,40 @@ class UnderstandToolsTests(unittest.TestCase):
         for bad in ('legacy', 'legacy@nothex', 'legacy@' + 'a' * 40 + ',legacy@' + 'b' * 40):
             self.assertNotEqual(run('finish_items.py', 'billing', '--catalog', catalog, '--items', 'tax/calc', '--inputs', self.finish_inputs(), '--out', self.out, '--sources', bad).returncode, 0, bad)
 
+    def test_a_citation_that_drops_the_repository_or_keeps_src_still_finds_its_item(self):
+        # Agents see `src/<repository id>/<path>` and may cite `<path>`; a path that names exactly one file resolves.
+        items = [item('web/orders', ['web/src/Order.cbl', 'web/src/Shared.cbl'], ['O']), item('db/schema', ['db/schema/T.sql', 'db/src/Shared.cbl'], ['T'])]
+        owner = cc.owner_of(items)
+        self.assertEqual(owner.item_of('web/src/Order.cbl'), 'web/orders')
+        self.assertEqual(owner.item_of('src/web/src/Order.cbl'), 'web/orders')
+        self.assertEqual(owner.item_of('src/Order.cbl'), 'web/orders')
+        self.assertEqual(owner.item_of('schema/T.sql'), 'db/schema')
+        # The same path in two repositories is ambiguous, a path in no item is nothing.
+        self.assertIsNone(owner.item_of('src/Shared.cbl'))
+        self.assertIsNone(owner.item_of('src/Missing.cbl'))
+        self.assertIsNone(owner.item_of(''))
+        self.assertIsNone(owner.item_of(None))
+        self.assertEqual(owner.path_of('schema/T.sql'), 'db/schema/T.sql')
+
+    def test_split_rules_and_findings_place_citations_without_the_repository(self):
+        two = {**CATALOG, 'items': [item('tax/calc', ['legacy/src/TAX.cbl', 'legacy/src/TAXLIB.cbl'], ['TAX']), item('invoicing/entry', ['legacy-data/src/INV01.cbl'], ['INV01'])]}
+        docs = os.path.join(self.root, 'docs-cited')
+        for path, text in cc.render_catalog('billing', two, cc.item_graph(two['items'], TOPOLOGY)).items():
+            write(os.path.join(docs, *path.split('/')), text)
+        catalog = os.path.join(docs, *cc.paths.assessment_catalog_dir('billing').split('/'))
+        rules = os.path.join(self.root, 'rules-cited.json')
+        write(rules, {'confirmedRules': [
+            {'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'legacy/src/TAXLIB.cbl:12'},
+            {'name': 'Amount positive', 'category': 'Validation', 'priority': 'P1', 'source': 'src/TAX.cbl:3'},
+            {'name': 'Entry date', 'category': 'Validation', 'priority': 'P1', 'source': 'src/legacy-data/src/INV01.cbl:40'},
+        ], 'dataObjects': []})
+        out = os.path.join(self.root, 'out-cited')
+        result = run('split_rules.py', 'billing', '--rules', rules, '--catalog', catalog, '--items', 'tax/calc,invoicing/entry', '--out', out, '--date', '2026-10-22', '--sources', 'legacy@' + 'a' * 40 + ',legacy-data@' + 'b' * 40)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('3 rule(s) split over 2 item(s); 0 left out', result.stdout)
+        tax = rr.unit_rule_rows(docmd.read_text(unit_file(out, 'tax/calc', 'rules.md')))
+        self.assertEqual(sorted(row['name'] for row in tax), ['Amount positive', 'Tax rounding'])
+
     def test_rebuild_aggregates_merges_the_units_into_markdown_read_models(self):
         docs = os.path.join(self.root, 'docs')
         inputs = self.finish_inputs()

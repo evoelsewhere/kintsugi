@@ -249,7 +249,7 @@ const LEADS = [
 const found = activeClasses.length === 0 ? [] : await parallel(
   activeClasses.map(c => () =>
     agent(
-      `Adversarially audit the source repository of ${app} for ONE class of security vulnerability: ${c.brief}
+      `Adversarially audit the source of ${app} for ONE class of security vulnerability: ${c.brief}
 Cover only what applies to the detected stack (web items don't apply to a batch system). Every finding needs a precise file:line citation you actually read, its path relative to the source tree (the repository's folder first), a CWE ID, a confidence, and a one-sentence exploit scenario.
 
 No SAST, dependency-audit or secret-scanning tool runs in this job: your manual review IS the scan. Use grep for the known-bad patterns of your class, then read every entry point, every data access and every file grep points to. List every file you read in reviewed, and in toolsNotRun the scanners that would apply to this repository, each with the reason.

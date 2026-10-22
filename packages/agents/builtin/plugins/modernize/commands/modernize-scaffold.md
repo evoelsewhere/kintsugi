@@ -15,7 +15,7 @@ domain model, API stubs that match the interface contracts, and **executable acc
 design assigns to the component. This is the skeleton the units are later implemented in; it holds no unit's logic.
 
 This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **document repository**
-(`02-architecture/`, `10-applications/$app/02-modern/`, `01-standards/`); the **legacy repository** of `$app` is your local clone, **read-only**
+(`02-architecture/`, `10-applications/$app/02-modern/`, `01-standards/`); the **legacy repositories** of `$app` (one or several) are your local clones, **read-only**
 (Kintsugi's member hooks refuse writes to it); the skeletons go to the **target repositories** of `$app`, one per component
 (the portal lists them), on your own branch, committed with an `Assisted-by: <harness>` trailer. If the architecture approval gate
 is not approved in the portal, stop and say so: scaffold nothing before it. Run every subagent in the foreground and wait for its
@@ -37,7 +37,7 @@ call it by name; Kintsugi's orchestrator runs `workflows/scaffold.js`, one agent
 Workflow({
   name: "kintsugi:modernize-scaffold",
   args: { app: "$app",
-          sourceDir: "<path of the pinned source checkout, read-only>",
+          sourceDirs: ["<path of the pinned checkout of each legacy repository, read-only>", ...],
           targetDir: "<path of the working copy in the target repository>",
           workspaceDir: "<document repository root that holds 02-architecture/ and 10-applications/$app/>",
           services: [

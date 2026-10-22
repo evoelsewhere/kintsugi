@@ -82,13 +82,13 @@ def split(app, result, chosen, docs='', date='', commit=''):
     per_item = {item['id']: {'rules': [], 'dataObjects': []} for item in chosen}
     unplaced = 0
     for rule in result.get('confirmedRules') or []:
-        item_id = owner.get(primary_file(rule.get('source')) or '')
+        item_id = owner.item_of(primary_file(rule.get('source')))
         if item_id is None:
             unplaced += 1
             continue
         per_item[item_id]['rules'].append(rule)
     for obj in result.get('dataObjects') or []:
-        item_id = owner.get(primary_file(obj.get('source')) or '') if isinstance(obj, dict) else None
+        item_id = owner.item_of(primary_file(obj.get('source'))) if isinstance(obj, dict) else None
         if item_id is not None:
             per_item[item_id]['dataObjects'].append(obj)
     outputs = {}

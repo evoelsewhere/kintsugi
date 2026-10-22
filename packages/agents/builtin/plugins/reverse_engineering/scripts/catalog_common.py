@@ -452,9 +452,41 @@ def selected(items, value):
     return [items[item_id] for item_id in ids]
 
 
+class Owners(dict):
+    """{file: item id}, with the lookup of a file as an agent cites it."""
+
+    _rest = None
+
+    def path_of(self, cited):
+        """The catalog file a cited path names. Citations are `<repository id>/<path>` (ADR-0052); a path written with the
+        leading `src/` of the job workspace, or without its repository, still resolves when exactly one file of the items
+        has that path. None when the file is in no item or the path is ambiguous."""
+        if not cited:
+            return None
+        if cited in self:
+            return cited
+        stripped = cited[4:] if cited.startswith('src/') else None
+        if stripped is not None and stripped in self:
+            return stripped
+        if self._rest is None:
+            self._rest = {}
+            for full in self:
+                self._rest.setdefault(full.partition('/')[2], []).append(full)
+        for path in (cited, stripped):
+            matches = self._rest.get(path, []) if path is not None else []
+            if len(matches) == 1:
+                return matches[0]
+        return None
+
+    def item_of(self, cited):
+        """The item that owns the file a citation names, or None."""
+        path = self.path_of(cited)
+        return None if path is None else self[path]
+
+
 def owner_of(items):
     """{file: item id} over the given items."""
-    owner = {}
+    owner = Owners()
     for item in items:
         for rel in item['files']:
             owner.setdefault(rel, item['id'])

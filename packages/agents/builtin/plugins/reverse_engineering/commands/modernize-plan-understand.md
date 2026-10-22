@@ -31,7 +31,7 @@ best in one run. This stage proposes that order.
 - **Required** on the document repository's default branch: the catalog `10-applications/$app/01-legacy/_catalog/` (run
   `assess` and merge its pull request). Its cards carry the relationships between items (computed from the topology
   of the same run); without them the plan can only go by module, size and the assessment, and says so.
-- The application must have a legacy repository (`role: legacy`), like every runtime stage.
+- The application must have at least one legacy repository (`role: legacy`), like every runtime stage.
 
 ## Steps
 

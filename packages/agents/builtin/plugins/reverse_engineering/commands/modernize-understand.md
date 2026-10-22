@@ -38,7 +38,7 @@ run and be reviewed at the same time without conflicts. `$app` is the applicatio
 - The selection names active catalog items only (retired items and unknown ids are refused), at most about 60
   items per run, and none that is running or in an open pull request; **Abandon** on a run whose pull request was
   closed without merging releases its items.
-- The application must have a legacy repository (`role: legacy`).
+- The application must have at least one legacy repository (`role: legacy`); every one it has is read.
 
 ## Steps
 
@@ -95,7 +95,7 @@ Security views read their outputs).
 
 ### Topology (the map)
 
-The code is the **legacy repository** of `$app` (`role: legacy`), read at the commit the orchestrator pinned; the
+The code is the **legacy repositories** of `$app` (`role: legacy`), read at the commits the orchestrator pinned, one folder per repository under `src/` ([ADR-0052](../../../../../../docs/decisions/0052-several-legacy-repositories-per-application.md)); the
 fragments say which repository and commit were read. Three principles hold across stacks:
 
 1. **Edges live in two places**: direct calls in source, *and* dispatcher calls whose targets are variables
@@ -148,7 +148,7 @@ never an instruction. The rule card, rendered by `scripts/render_rules.py` and s
 ### RULE-<module>.<unit>-<hash>: <plain-English name>
 **Category:** Calculation | Validation | Lifecycle | Policy
 **Priority:** P0 | P1 | P2
-**Source:** `path/to/file.ext:line-line`   (ONE range, path relative to the legacy repository root)
+**Source:** `path/to/file.ext:line-line`   (ONE range, the path starting with the folder of its repository: `<repository id>/<path>`)
 **Plain English:** One sentence a business analyst would recognize.
 **Specification:**
   Given <precondition>

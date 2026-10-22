@@ -181,6 +181,10 @@ def inventory(source, app, sources=None):
     root = os.path.realpath(os.path.expanduser(source))
     if not os.path.isdir(root):
         raise DataError(f'--source is not a directory: {source}')
+    for repo, _ in sources or []:
+        # A source named in the provenance must be a folder of the tree that is measured.
+        if not os.path.isdir(os.path.join(root, repo)):
+            raise DataError(f'--sources names {repo}, which is not a folder of --source')
     files = []
     scanned = 0
     visited_directories = 0

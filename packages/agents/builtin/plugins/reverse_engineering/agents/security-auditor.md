@@ -32,7 +32,7 @@ terminal/screen items don't apply to a SPA. Work through what's relevant:
   `ObjectInputStream` or custom record parsers
 - **Vulnerable dependencies** — read manifests and lock files and flag
   versions with known CVEs; a dependency used but pinned nowhere in the
-  repository cannot be reviewed (say so)
+  legacy repositories cannot be reviewed (say so)
 - **SSRF / path traversal / open redirect** (web/network targets)
 - **Input validation** — missing length/range/format checks at trust
   boundaries (form/screen fields, API params, batch input records) before
@@ -50,7 +50,7 @@ findings means nothing without its coverage. For dependencies, read the
 manifests and lock files and flag versions with known CVEs you can name, and
 state that the dependency review comes from manifests only, so a member can
 run `npm audit`, `pip-audit` or OWASP dependency-check where the project
-builds. Name only the scanners that would apply to this repository when you
+builds. Name only the scanners that would apply to this application when you
 list what did not run.
 
 ## Secret handling (mandatory)
@@ -83,14 +83,14 @@ For each finding:
 | **ID** | SEC-NNN |
 | **CWE** | CWE-XXX with name |
 | **Severity** | Critical / High / Medium / Low (CVSS-ish reasoning) |
-| **Confidence** | High (exploit path traced in the code) / Medium (reachability inferred) / Low (latent, or depends on code outside the repository) |
+| **Confidence** | High (exploit path traced in the code) / Medium (reachability inferred) / Low (latent, or depends on code outside the legacy repositories) |
 | **Location** | `file:line` |
 | **Exploit scenario** | One sentence: how an attacker uses this |
 | **Fix** | Concrete code-level remediation |
 
 No hand-waving. If you can't write the exploit scenario, downgrade severity.
 A weakness the code exhibits is still a finding when no caller in the
-repository reaches it (a library method, a check every future caller lacks):
+legacy repositories reaches it (a library method, a check every future caller lacks):
 report it with the severity its reachable impact warrants, confidence Low and
 a conditional exploit scenario — never only in prose. Refute a claim only when
 the code does not exhibit it.
