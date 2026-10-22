@@ -27,6 +27,38 @@ UNIT_CARD = 'README.md'
 _SEGMENT = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
 
 
+# ---------------------------------------------------------------------------
+# The legacy repositories of a run (ADR-0052), mirroring packages/domain/src/source.ts
+# ---------------------------------------------------------------------------
+
+_SOURCE_FOLDER = re.compile(r'^[a-z0-9][a-z0-9._-]{0,127}$', re.IGNORECASE)
+_COMMIT = re.compile(r'^[0-9a-f]{40}([0-9a-f]{24})?$')
+
+
+def parse_sources(spec):
+    """[(repository id, commit)] of a spec `id@commit,id@commit`: one source folder under `src/` each, in order.
+    Raises ValueError when the spec is not well formed."""
+    sources = []
+    for part in spec.split(','):
+        pieces = part.strip().split('@')
+        if len(pieces) != 2 or not _SOURCE_FOLDER.match(pieces[0]) or not _COMMIT.match(pieces[1]):
+            raise ValueError(f'not a source "<repository id>@<commit>": {part.strip()[:80]}')
+        if any(repo == pieces[0] for repo, _ in sources):
+            raise ValueError(f'repository {pieces[0]} is listed twice')
+        sources.append((pieces[0], pieces[1]))
+    return sources
+
+
+def sources_spec(sources):
+    return ','.join(f'{repo}@{commit}' for repo, commit in sources)
+
+
+def split_source_path(cited, sources):
+    """(repository id, path inside it) of a cited `<repository id>/<path>`, None when its first segment is not one of `sources`."""
+    repo, slash, path = cited.partition('/')
+    return (repo, path) if slash and any(repo == known for known, _ in sources) else None
+
+
 def split_unit_key(unit_key):
     """(module, unit) of a `<module>/<unit>` key."""
     module, unit = unit_key.split('/', 1)

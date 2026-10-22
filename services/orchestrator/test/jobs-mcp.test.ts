@@ -42,7 +42,6 @@ describe("MCP servers of an agent job", () => {
 
   async function run(tools: string[], mcpServers?: (ids: readonly string[]) => Promise<McpServerSpec[]>) {
     const store = new MemoryJobStore();
-    store.legacy = { demo: "legacy" };
     const agents = writingAgentRuntime({ "tracker-agent": () => ({}) });
     const runner = new JobRunner({
       store,

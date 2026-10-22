@@ -106,7 +106,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       // Compared in code-unit order: the database collation may place `_` folders elsewhere.
       expect(artifacts.rows.map((row) => [row.path, row.provenance.origin]).sort(([a], [b]) => (a! < b! ? -1 : a! > b! ? 1 : 0))).toEqual([
         ["10-applications/web/01-legacy/_catalog/index.md", "tool"],
-        ["10-applications/web/01-legacy/_catalog/root.md", "tool"],
+        ["10-applications/web/01-legacy/_catalog/legacy.md", "tool"],
         ["10-applications/web/01-legacy/_tools/extract_topology.py", "runtime-agent"],
         ["10-applications/web/01-legacy/architecture.mmd", "tool"],
         ["10-applications/web/01-legacy/assessment.md", "runtime-agent"],

@@ -44,7 +44,7 @@ Then write ${script} with write, early, and refine it with edit rather than rewr
 standard library only. You cannot run it (no shell): a script step runs it after you finish and gives you its error once
 to fix, so do not re-read your own output to check it. It is run as
 \`python extract_topology.py <source dir> <output dir>\`: it reads only the source directory, uses no network, writes <output dir>/topology.json and prints a summary (at most about 200 lines) headed by
-"Legacy repository {repo} at {commit}". It runs in a sandboxed script environment with a time limit, so keep it simple
+"Legacy sources {sources}". It runs in a sandboxed script environment with a time limit, so keep it simple
 and bounded: a few hundred lines of general patterns (regular expressions over the files it walks, one function per
 reference pattern), never a list of this repository's files or classes written out by hand.
 

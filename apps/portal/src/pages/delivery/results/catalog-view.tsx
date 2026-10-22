@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import type { CatalogItem, CatalogView, ItemStatus } from "@/lib/api/catalog";
 import { assetClassOf, ASSET_CLASS_LABEL } from "@/lib/catalog-batch";
-import { shortSha } from "@/lib/format";
+import { shortSha, sourceEntriesLabel } from "@/lib/format";
 import { ITEM_STATUS, styleOf } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { formatCount } from "./results-format";
@@ -301,7 +301,7 @@ export function CatalogResults({ view, selection, children }: { view: CatalogVie
       </KpiRow>
       <Section
         title="Item catalog"
-        description={`Module → item, from the extracted topology and the curation pass${view.catalog.source.commit === undefined ? "" : ` · source ${shortSha(view.catalog.source.commit)}`} · read at ${shortSha(view.ref.commit)}`}
+        description={`Module → item, from the extracted topology and the curation pass${view.catalog.source.sources.length === 0 ? "" : ` · source ${sourceEntriesLabel(view.catalog.source.sources)}`} · read at ${shortSha(view.ref.commit)}`}
       >
         {children}
         <CatalogTree view={view} {...(selection === undefined ? {} : { selection })} />

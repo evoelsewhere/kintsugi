@@ -192,4 +192,42 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     expect(await missing.json()).toMatchObject({ success: false, statusCode: 404 });
     expect((await fetch(`${app.baseUrl}/projects/billing/job-runs/${runId}/events`)).status).toBe(401);
   });
+
+  it("records every legacy repository of an application on its run, in the order they were linked, and a retry keeps their commits", async () => {
+    // Two legacy repositories on one application (ADR-0052): the run reads both, not just the first.
+    for (const id of ["multi-skeleton", "multi-unities"]) {
+      await app.db.query("insert into admin.git_repository (id, server_id, url) values ($1, 'github', $2)", [id, `https://github.example.invalid/org/${id}.git`]);
+    }
+    expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "multi", name: "multi" } })).status).toBe(201);
+    for (const repositoryId of ["multi-skeleton", "multi-unities"]) {
+      expect((await admin.request("POST", "/admin/projects/billing/applications/multi/repositories", { body: { repositoryId, role: "legacy" } })).status).toBe(201);
+    }
+    const started = await admin.request<RunView & { sources?: Array<{ repositoryId: string; commit?: string }>; sourceRepositoryId?: string }>("POST", "/projects/billing/applications/multi/stages/assess/run");
+    expect(started.status).toBe(202);
+    const run = started.body.data!;
+    expect(run.sourceRepositoryId).toBe("multi-skeleton");
+    expect(run.sources).toEqual([{ repositoryId: "multi-skeleton" }, { repositoryId: "multi-unities" }]);
+    const stored = await app.db.query<{ sources: unknown; source_repository_id: string }>("select sources, source_repository_id from workflow.job_run where id = $1", [run.id]);
+    expect(stored.rows[0]).toEqual({ sources: [{ repositoryId: "multi-skeleton" }, { repositoryId: "multi-unities" }], source_repository_id: "multi-skeleton" });
+
+    // The worker resolves the commits and the run fails: a retry reads the same commits of both repositories.
+    const first = "a".repeat(40);
+    const second = "b".repeat(40);
+    await app.db.query("update workflow.job_run set status = 'failed', failure_reason = 'x', source_commit = $2, sources = $3::jsonb where id = $1", [
+      run.id,
+      first,
+      JSON.stringify([{ repositoryId: "multi-skeleton", commit: first }, { repositoryId: "multi-unities", commit: second }]),
+    ]);
+    const retried = await admin.request<RunView & { sources?: Array<{ repositoryId: string; commit?: string }> }>("POST", `/projects/billing/job-runs/${run.id}/retry`);
+    expect(retried.status).toBe(202);
+    expect(retried.body.data?.sources).toEqual([
+      { repositoryId: "multi-skeleton", commit: first },
+      { repositoryId: "multi-unities", commit: second },
+    ]);
+
+    // A run recorded before the list existed shows its one repository.
+    await app.db.query("insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, source_commit, status) values ('old-run', 'billing', 'web', 'stage', 'assess', 'billing-legacy', $1, 'succeeded')", [first]);
+    const old = await admin.get<RunView & { sources?: Array<{ repositoryId: string; commit?: string }> }>("/projects/billing/job-runs/old-run");
+    expect(old.body.data?.sources).toEqual([{ repositoryId: "billing-legacy", commit: first }]);
+  });
 });

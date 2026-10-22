@@ -25,7 +25,8 @@ export function catalogDocuments(
   modules: Array<{ id: string; name: string }>,
   items: CatalogItemFixture[],
   unassigned: string[] = [],
-  source?: { repo: string; commit: string },
+  /** The `<repository id>@<commit>` entries the catalog was built from (ADR-0052). */
+  sources?: string[],
   ambiguities: string[] = [],
 ): Record<string, string> {
   const base = `10-applications/${app}/01-legacy/_catalog`;
@@ -36,7 +37,7 @@ export function catalogDocuments(
     "---",
     `app: "${app}"`,
     'generatedBy: "reconcile_catalog.py"',
-    ...(source === undefined ? [] : [`sourceRepository: "${source.repo}"`, `sourceCommit: "${source.commit}"`]),
+    ...(sources === undefined ? [] : ["sources:", ...sources.map((entry) => `  - "${entry}"`)]),
     `modules: ${modules.length}`,
     `items: ${active.length}`,
     `retired: ${items.length - active.length}`,
@@ -97,7 +98,7 @@ export function understoodUnit(app: string, item: string, options: UnderstoodUni
   const base = `10-applications/${app}/01-legacy/${item}`;
   const bullets = (values: string[]): string => values.map((value) => `- \`${value}\`\n`).join("");
   const documents: Record<string, string> = {
-    [`${base}/understanding.md`]: `---\napp: "${app}"\nitem: "${item}"\nstatus: "understood"\ndigest: "${options.digest}"\ncommit: "${options.commit}"\n${options.runId === undefined ? "" : `runId: "${options.runId}"\n`}---\n# Understanding record - ${item}\n`,
+    [`${base}/understanding.md`]: `---\napp: "${app}"\nitem: "${item}"\nstatus: "understood"\ndigest: "${options.digest}"\nsources:\n  - "legacy@${options.commit}"\n${options.runId === undefined ? "" : `runId: "${options.runId}"\n`}---\n# Understanding record - ${item}\n`,
     [`${base}/spec.md`]: `# ${item}\n`,
     [`${base}/trace.md`]: `---\napp: "${app}"\nitem: "${item}"\nopenQuestions: ${options.openQuestions ?? 0}\n---\n# Traceability - ${item}\n\n## Rules applied\n\n${bullets(options.rule === undefined ? [] : [options.rule.id])}\n## Findings\n\n${bullets(options.findings ?? [])}\n## Dependencies\n\n${table(["Target", "Kind", "Direction"], (options.dependencies ?? []).map((dependency) => [dependency.target, dependency.kind ?? "call", "outbound"]))}\n`,
   };

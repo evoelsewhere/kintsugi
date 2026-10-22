@@ -2,6 +2,7 @@
 // governance.restricted_record (migration 010_job_runs.sql), plus the project facts a job
 // needs (its legacy and document repositories, the agent's model binding).
 
+import type { SourceRepo } from "@kintsugi/domain";
 import { encryptSecret } from "@kintsugi/secrets";
 import type { Pool } from "pg";
 import type { DocumentWriteRequest } from "../queues.js";
@@ -19,6 +20,7 @@ interface RunRow {
   failure_reason: string | null;
   source_repository_id: string | null;
   source_commit: string | null;
+  sources: unknown;
   inputs: Record<string, unknown>;
   limits: Partial<StepLimits>;
   script_hash: string | null;
@@ -29,6 +31,18 @@ interface RunRow {
 }
 
 const MAX_REASON = 2000;
+
+/** The sources of a row: the recorded list, else the one repository a run recorded before the list existed. */
+function sourcesOf(row: RunRow): SourceRepo[] | undefined {
+  if (Array.isArray(row.sources)) {
+    const list = row.sources.flatMap((entry: unknown): SourceRepo[] => {
+      const { repositoryId, commit } = (entry ?? {}) as { repositoryId?: unknown; commit?: unknown };
+      return typeof repositoryId === "string" ? [{ repositoryId, ...(typeof commit === "string" ? { commit } : {}) }] : [];
+    });
+    if (list.length > 0) return list;
+  }
+  return row.source_repository_id === null ? undefined : [{ repositoryId: row.source_repository_id, ...(row.source_commit === null ? {} : { commit: row.source_commit }) }];
+}
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
@@ -44,6 +58,7 @@ function toRun(row: RunRow): JobRun {
     ...optional("failureReason", row.failure_reason),
     ...optional("sourceRepositoryId", row.source_repository_id),
     ...optional("sourceCommit", row.source_commit),
+    ...optional("sources", sourcesOf(row) ?? null),
     inputs: row.inputs,
     limits: row.limits,
     ...optional("scriptHash", row.script_hash),
@@ -65,8 +80,8 @@ export class PgJobStore implements JobStore, WorkspaceStates {
 
   async create(run: NewJobRun): Promise<void> {
     await this.pool.query(
-      `insert into workflow.job_run (id, project_id, application_id, parent_id, kind, name, source_repository_id, source_commit, inputs, limits, actor)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `insert into workflow.job_run (id, project_id, application_id, parent_id, kind, name, source_repository_id, source_commit, sources, inputs, limits, actor)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         run.id,
         run.projectId,
@@ -76,6 +91,7 @@ export class PgJobStore implements JobStore, WorkspaceStates {
         run.name,
         run.sourceRepositoryId ?? null,
         run.sourceCommit ?? null,
+        run.sources === undefined ? null : JSON.stringify(run.sources),
         JSON.stringify(run.inputs ?? {}),
         JSON.stringify(run.limits ?? {}),
         run.actor ?? null,
@@ -88,12 +104,14 @@ export class PgJobStore implements JobStore, WorkspaceStates {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async update(id: string, patch: { sourceCommit?: string; scriptHash?: string; agent?: string }): Promise<void> {
+  async update(id: string, patch: { sources?: SourceRepo[]; scriptHash?: string; agent?: string }): Promise<void> {
+    // The first source is the one `source_repository_id` and `source_commit` keep.
     await this.pool.query(
       `update workflow.job_run
-          set source_commit = coalesce($2, source_commit), script_hash = coalesce($3, script_hash), agent = coalesce($4, agent)
+          set sources = coalesce($2::jsonb, sources), source_commit = coalesce($3, source_commit),
+              script_hash = coalesce($4, script_hash), agent = coalesce($5, agent)
         where id = $1`,
-      [id, patch.sourceCommit ?? null, patch.scriptHash ?? null, patch.agent ?? null],
+      [id, patch.sources === undefined ? null : JSON.stringify(patch.sources), patch.sources?.[0]?.commit ?? null, patch.scriptHash ?? null, patch.agent ?? null],
     );
   }
 
@@ -213,16 +231,6 @@ export class PgJobStore implements JobStore, WorkspaceStates {
         { status: row.status, ...(row.finished_at === null ? {} : { finishedAt: row.finished_at }), ...(row.write_status === null ? {} : { writeStatus: row.write_status }) },
       ]),
     );
-  }
-
-  async legacyRepository(projectId: string, applicationId: string): Promise<string | undefined> {
-    const result = await this.pool.query<{ repository_id: string }>(
-      `select repository_id from admin.project_repository
-        where project_id = $1 and application_id = $2 and role = 'legacy'
-        order by created_at, repository_id limit 1`,
-      [projectId, applicationId],
-    );
-    return result.rows[0]?.repository_id;
   }
 
   async documentRepository(projectId: string): Promise<string | undefined> {

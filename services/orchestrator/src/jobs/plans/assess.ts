@@ -48,7 +48,7 @@ const DIAGRAM = assessmentDiagramPath(APP_TOKEN);
 const INVENTORY_FIRST = `The inventory measured by the script step is at {in}/${assessmentInventoryPath(APP_TOKEN)} (languages, directories, the most complex files);
 {in}/${scratchInventoryPath(APP_TOKEN)} lists every file. Read the summary first. Its figures (lines, files, complexity, index) are the figures of record; do not re-measure them.`;
 
-const STRUCTURE_TASK = `Build the structural map of the legacy repository of {app}.
+const STRUCTURE_TASK = `Build the structural map of the legacy source of {app} (every legacy repository linked to it).
 
 ${WORKSPACE}
 
@@ -70,7 +70,7 @@ ${HEADER}
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
-const DEBT_TASK = `Identify the technical debt of the legacy repository of {app}.
+const DEBT_TASK = `Identify the technical debt of the legacy source of {app} (every legacy repository linked to it).
 
 ${WORKSPACE}
 
@@ -84,7 +84,7 @@ ${HEADER}
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
-const SECURITY_TASK = `Scan the legacy repository of {app} for vulnerabilities.
+const SECURITY_TASK = `Scan the legacy source of {app} (every legacy repository linked to it) for vulnerabilities.
 
 ${WORKSPACE}
 
@@ -180,8 +180,8 @@ Your inputs, read-only:
 
 Write ${SYNTHESIS} with write, a fact-grounded brief a VP of Engineering could take into a
 budget meeting, with these sections: Executive Summary (3–4 sentences: what it is, how big, how risky, the headline
-recommendation) · System Inventory (from inventory.md, naming the method that measured it, and the legacy repository
-and commit read) · Architecture at a Glance (the domain table; refer to architecture.mmd) · Production Runtime
+recommendation) · System Inventory (from inventory.md, naming the method that measured it, and the legacy repositories
+and their commits read) · Architecture at a Glance (the domain table; refer to architecture.mmd) · Production Runtime
 Profile (p50/p95/p99 per key job or route, the highest-variance domain as the operational risk; or "no telemetry
 available") · Technical Debt (top 10, file:line) · Security Findings (CWE table, file:line, severity) ·
 Documentation Gaps (compare what the code does with what README, docs and comments say: the top 5 behaviors or
@@ -227,7 +227,7 @@ export const ASSESS: StagePlan = {
       id: "inventory",
       kind: "script",
       script: "inventory.py",
-      args: ["{app}", "--source", "{src}", "--source-repo", "{repo}", "--source-commit", "{commit}", "--out", "{out}/" + DIR, "--scratch", "{out}/" + SCRATCH],
+      args: ["{app}", "--source", "{src}", "--sources", "{sources}", "--out", "{out}/" + DIR, "--scratch", "{out}/" + SCRATCH],
       intermediate: [scratchInventoryPath(APP_TOKEN)],
       expects: [assessmentInventoryPath(APP_TOKEN), scratchInventoryPath(APP_TOKEN)],
     },

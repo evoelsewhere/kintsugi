@@ -11,6 +11,7 @@ import { addWorktree, removeWorktree, resolveCommit, runGit } from "@kintsugi/gi
 import { createAgentRuntime } from "@kintsugi/runtime";
 import { makeReadOnly, makeWritable } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
+import type { SourceRepo } from "@kintsugi/domain";
 import type { ArtifactEntry, JobEventRecord, JobRun, JobStore, ModelBinding, NewJobRun, SourceCheckouts, SpanRecord } from "../../src/jobs/model.js";
 import type { DocumentWriteRequest } from "../../src/queues.js";
 
@@ -19,7 +20,6 @@ export class MemoryJobStore implements JobStore {
   readonly artifacts = new Map<string, ArtifactEntry[]>();
   readonly restricted = new Map<string, Map<string, string>>();
   readonly writes: Array<{ runId: string; request: DocumentWriteRequest }> = [];
-  legacy: Record<string, string> = {};
   document: string | undefined = "docs";
   bindings: Record<string, ModelBinding> = {};
 
@@ -52,8 +52,10 @@ export class MemoryJobStore implements JobStore {
   async addSpans(spans: readonly SpanRecord[]): Promise<void> {
     this.spans.push(...spans);
   }
-  async update(id: string, patch: { sourceCommit?: string; scriptHash?: string; agent?: string }): Promise<void> {
-    Object.assign(this.runs.get(id)!, patch);
+  async update(id: string, patch: { sources?: SourceRepo[]; scriptHash?: string; agent?: string }): Promise<void> {
+    const run = this.runs.get(id)!;
+    Object.assign(run, patch);
+    if (patch.sources?.[0]?.commit !== undefined) run.sourceCommit = patch.sources[0].commit;
   }
   async succeed(id: string, summary: Record<string, unknown>): Promise<void> {
     Object.assign(this.runs.get(id)!, { status: "succeeded", outputSummary: summary });
@@ -72,9 +74,6 @@ export class MemoryJobStore implements JobStore {
   async recordDocumentWrite(id: string, request: DocumentWriteRequest): Promise<void> {
     this.writes.push({ runId: id, request });
     this.runs.get(id)!.documentWriteId = request.writeId;
-  }
-  async legacyRepository(_projectId: string, applicationId: string): Promise<string | undefined> {
-    return this.legacy[applicationId];
   }
   async documentRepository(): Promise<string | undefined> {
     return this.document;

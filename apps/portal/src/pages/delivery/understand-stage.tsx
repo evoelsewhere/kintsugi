@@ -395,7 +395,7 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
         onClose={() => setConfirming(false)}
       >
         <p>
-          The worker reads {application.asIs.legacy[0]?.repositoryId ?? "the legacy repo"} read-only and proposes, in one pull request to {project.documentRepository?.repositoryId ?? "the document repo"}, per item:
+          The worker reads {application.asIs.legacy.length === 0 ? "the legacy repo" : application.asIs.legacy.map((repo) => repo.repositoryId).join(", ")} read-only and proposes, in one pull request to {project.documentRepository?.repositoryId ?? "the document repo"}, per item:
           its topology fragment, business rules, security findings, AS-IS specification, traceability and work item. About {agentEstimate(chosen.length)} agent jobs{estimate === undefined ? "" : `, roughly ${formatEstimate(estimate.totalMs)} from earlier runs`}.
         </p>
         <p className="mt-2 font-mono text-[12px] text-text-secondary">{chosen.slice(0, 12).join(", ")}{chosen.length > 12 ? ` +${chosen.length - 12}` : ""}</p>

@@ -35,7 +35,7 @@ def item(item_id, files, leaves, **extra):
 # web/entry -> core/service -> core/base; core/service -> ds:ORDERS; web/entry also calls core/base.
 # batch/a <-> batch/b call each other. core/tests holds only tests. core/old is retired.
 CATALOG = {
-    'app': 'shop', 'source': {'repo': 'legacy', 'commit': 'a' * 40},
+    'app': 'shop', 'sources': ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40],
     'modules': [{'id': 'web', 'name': 'Web', 'summary': ''}, {'id': 'core', 'name': 'Core', 'summary': ''}, {'id': 'batch', 'name': 'Batch', 'summary': ''}],
     'items': [
         item('web/entry', ['src/Entry.java'], ['ENTRY'], complexity='medium', loc=300, entryPoints=['ENTRY']),
@@ -129,7 +129,7 @@ class PlanToolsTests(unittest.TestCase):
         self.assertEqual(by_id['batch/a']['cycle'], ['batch/a', 'batch/b'])
         self.assertEqual(by_id['batch/a']['depth'], by_id['batch/b']['depth'])
         self.assertEqual(by_id['core/tests']['assetClass'], 'test')
-        self.assertEqual(graph['source'], {'repo': 'legacy', 'commit': 'a' * 40})
+        self.assertEqual(graph['sources'], ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40])
         self.assertIn('5 open code item(s)', stdout)
 
     def test_graph_marks_items_with_an_understanding_record_as_understood(self):
@@ -175,7 +175,7 @@ class PlanToolsTests(unittest.TestCase):
         self.assertEqual(second['risk'], 'medium')
         self.assertEqual(second['cohesion'], 0.0)
         self.assertEqual(second['dependsOutside'], [])
-        self.assertEqual((plan['front']['catalogCommit'], plan['front']['items'], plan['front']['open']), ('a' * 40, 6, 5))
+        self.assertEqual((plan['front']['catalogSources'], plan['front']['items'], plan['front']['open']), ('legacy@' + 'a' * 40 + ',legacy-data@' + 'b' * 40, 6, 5))
         self.assertEqual(plan['leftOut'], [{'item': 'batch/a', 'reason': 'Low value.'}])
         self.assertEqual((plan['front']['batches'], plan['front']['planned']), (2, 3))
         self.assertNotIn('.json', docmd.read_text(self.plan_path))

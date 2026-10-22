@@ -5,9 +5,10 @@
 //
 // Placeholders, filled when a step starts:
 //
-//   {src}    the read-only source checkout        {in}    the step's read-only inputs
+//   {src}    the read-only source checkouts      {in}    the step's read-only inputs
 //   {out}    the step's output directory          {tmp}   its scratch directory
-//   {commit} the source commit                    {repo}  the source repository id
+//   {sources} the legacy repositories and their commits, `id@commit,id@commit`; {src} holds one folder
+//            per repository, named by its id (ADR-0052)
 //   {app}    the application id                 {run}   the stage run's id
 //   {item} {key}         the current item of a forEach step
 //   {round} {maxRounds}  the current round of a repeat step
@@ -18,7 +19,7 @@
 // `intermediate` are inputs for later steps only; everything else is the stage's output and goes
 // to the document repo through the writer.
 
-export const PLACEHOLDER_NAMES = ["src", "in", "out", "tmp", "commit", "repo", "app", "run", "item", "key", "round", "maxRounds", "error"] as const;
+export const PLACEHOLDER_NAMES = ["src", "in", "out", "tmp", "sources", "app", "run", "item", "key", "round", "maxRounds", "error"] as const;
 export type PlaceholderName = (typeof PLACEHOLDER_NAMES)[number];
 export type Placeholders = Partial<Record<PlaceholderName, string>>;
 
@@ -51,8 +52,8 @@ export interface StageScope {
 /** What a plan's dynamic parts (conditions, arguments, items) can look at while the stage runs. */
 export interface StageContext {
   readonly app: string;
-  readonly repo: string;
-  readonly commit: string;
+  /** The legacy repositories and their commits, `id@commit,id@commit` (the `{sources}` placeholder). */
+  readonly sources: string;
   /** The selection of a scoped run (understand); undefined for a whole-application stage. */
   readonly scope: StageScope | undefined;
   /** The current round of the enclosing repeat step (1-based); 0 outside one. */

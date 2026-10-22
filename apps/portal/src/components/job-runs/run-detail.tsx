@@ -15,7 +15,7 @@ import { RUN_COLOR } from "@/components/results/status-colors";
 import { useToast } from "@/components/ui/toast";
 import { type JobRunDetail, jobRunsApi } from "@/lib/api/job-runs";
 import { useAuth } from "@/lib/auth";
-import { formatBytes, formatDuration, shortSha } from "@/lib/format";
+import { formatBytes, formatDuration, shortSha, sourcesLabel } from "@/lib/format";
 import { telemetryTraceLink } from "@/lib/links";
 import { isActiveStatus } from "@/lib/status";
 import {
@@ -516,10 +516,10 @@ function RunOutput({ run }: { run: JobRunDetail }): React.JSX.Element {
           )}
         </p>
       )}
-      {run.sourceCommit === undefined ? null : (
+      {run.sources === undefined && run.sourceCommit === undefined ? null : (
         <p className="text-text-muted">
-          Source: {run.sourceRepositoryId ?? "legacy repo"} @{" "}
-          <span className="font-mono">{shortSha(run.sourceCommit)}</span>{" "}
+          {run.sources !== undefined && run.sources.length > 1 ? "Sources" : "Source"}:{" "}
+          <span className="font-mono">{run.sources === undefined ? `${run.sourceRepositoryId ?? "legacy repo"}@${shortSha(run.sourceCommit)}` : sourcesLabel(run.sources)}</span>{" "}
           (read-only)
         </p>
       )}

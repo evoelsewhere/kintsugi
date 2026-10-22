@@ -20,7 +20,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { findBuiltinFile } from "@kintsugi/agents";
-import { mcpServersNamedBy, THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
+import { mcpServersNamedBy, sourceFolder, sourceSpec, THINKING_LEVELS, type Provenance, type SourceRepo, type ThinkingLevel } from "@kintsugi/domain";
 import type { CheckoutStorage } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec } from "@kintsugi/runtime-sdk";
@@ -105,7 +105,8 @@ interface StepWorkspace {
   in: string;
   out: string;
   tmp: string;
-  commit?: string;
+  /** The legacy repositories mounted under `src/`, each at its commit (ADR-0052). */
+  sources?: Array<Required<SourceRepo>>;
   /** The document-repo commit declared documents are read at (pinned for a whole run, ADR-0033). */
   documentsCommit?: string;
 }
@@ -118,6 +119,12 @@ interface ResumeState {
 }
 
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/** The legacy repositories a run reads: its list, else the one repository a run recorded before the list existed. */
+function sourcesOf(run: JobRun): SourceRepo[] {
+  if (run.sources !== undefined && run.sources.length > 0) return run.sources;
+  return run.sourceRepositoryId === undefined ? [] : [{ repositoryId: run.sourceRepositoryId, ...(run.sourceCommit === undefined ? {} : { commit: run.sourceCommit }) }];
+}
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** inputs.scope of a scoped run: catalog item ids (or units) and their files, and the design set of a design run; undefined when absent or malformed. */
@@ -270,17 +277,24 @@ export class JobRunner {
     const paths = storage.job(id);
     const ws: StepWorkspace = { rootId: id, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp };
     await this.#event(ws, undefined, "status", `${run.kind} ${run.name} started`, { status: "running" });
-    let checkedOut = false;
+    // The legacy repositories checked out so far, to release even when a later one fails to mount.
+    const mounted: string[] = [];
     try {
       for (const dir of [paths.in, paths.out, paths.tmp]) await mkdir(dir, { recursive: true });
-      if (run.sourceRepositoryId !== undefined) {
-        const commit = run.sourceCommit ?? (await checkouts.resolve(run.sourceRepositoryId));
-        if (run.sourceCommit === undefined) await store.update(id, { sourceCommit: commit });
-        run.sourceCommit = commit;
-        await checkouts.checkout(run.sourceRepositoryId, commit, paths.src);
-        checkedOut = true;
+      const requested = sourcesOf(run);
+      if (requested.length > 0) {
+        // Every repository at its pinned commit, else at its current one (recorded so a retry reads the same).
+        const sources: Array<Required<SourceRepo>> = [];
+        for (const source of requested) sources.push({ repositoryId: source.repositoryId, commit: source.commit ?? (await checkouts.resolve(source.repositoryId)) });
+        if (requested.some((source) => source.commit === undefined)) await store.update(id, { sources });
+        run.sources = sources;
+        run.sourceCommit = sources[0]!.commit;
+        for (const source of sources) {
+          await checkouts.checkout(source.repositoryId, source.commit, join(paths.src, sourceFolder(source.repositoryId)));
+          mounted.push(source.repositoryId);
+        }
         ws.src = paths.src;
-        ws.commit = commit;
+        ws.sources = sources;
       }
       const pinned = run.inputs["documentsCommit"];
       if (typeof pinned === "string" && COMMIT.test(pinned)) ws.documentsCommit = pinned;
@@ -308,7 +322,8 @@ export class JobRunner {
     } finally {
       await removeTree(paths.tmp).catch(() => undefined);
       await removeTree(paths.in).catch(() => undefined);
-      if (checkedOut && run.sourceRepositoryId !== undefined) await checkouts.release(run.sourceRepositoryId, paths.src).catch(() => undefined);
+      for (const repositoryId of mounted) await checkouts.release(repositoryId, join(paths.src, sourceFolder(repositoryId))).catch(() => undefined);
+      if (mounted.length > 0) await removeTree(paths.src).catch(() => undefined);
     }
     return store.get(id);
   }
@@ -354,8 +369,7 @@ export class JobRunner {
       out: ws.out,
       tmp: ws.tmp,
       ...(ws.src === undefined ? {} : { src: ws.src }),
-      ...(ws.commit === undefined ? {} : { commit: ws.commit }),
-      ...(run.sourceRepositoryId === undefined ? {} : { repo: run.sourceRepositoryId }),
+      ...(ws.sources === undefined ? {} : { sources: sourceSpec(ws.sources) }),
       ...(run.applicationId === undefined ? {} : { app: run.applicationId }),
     };
   }
@@ -820,7 +834,7 @@ export class JobRunner {
   async #stage(run: JobRun, ws: StepWorkspace, signal?: AbortSignal, resume?: ResumeState): Promise<StepOutcome> {
     const plan = STAGES[run.name];
     if (plan === undefined) throw new JobFailure(`Unknown stage "${run.name}"`);
-    if (run.applicationId === undefined || run.sourceRepositoryId === undefined || ws.commit === undefined) throw new JobFailure(`Stage ${run.name} needs an application with a legacy repository`);
+    if (run.applicationId === undefined || ws.sources === undefined) throw new JobFailure(`Stage ${run.name} needs an application with a legacy repository`);
     const work = join(ws.root, "work");
     await mkdir(work, { recursive: true });
     const scope = scopeOf(run.inputs);
@@ -844,7 +858,7 @@ export class JobRunner {
       const executor = new StagePlanExecutor({
         plan,
         run: { id: run.id, projectId: run.projectId, applicationId: run.applicationId },
-        values: { app: run.applicationId, repo: run.sourceRepositoryId, commit: ws.commit },
+        values: { app: run.applicationId, sources: sourceSpec(ws.sources) },
         dirs: { root: ws.root, in: ws.in, work, out: ws.out },
         limits: this.#defaults.stage,
         gates: this.#deps.gates ?? DEFAULT_GATE_DECIDER,
@@ -899,7 +913,7 @@ export class JobRunner {
       kind: spec.kind,
       name: spec.name,
       ...(parent.sourceRepositoryId === undefined ? {} : { sourceRepositoryId: parent.sourceRepositoryId }),
-      ...(parentWs.commit === undefined ? {} : { sourceCommit: parentWs.commit }),
+      ...(parentWs.sources === undefined ? {} : { sourceCommit: parentWs.sources[0]!.commit, sources: parentWs.sources }),
       inputs: spec.inputs ?? {},
       limits: parent.limits,
       ...(parent.actor === undefined ? {} : { actor: parent.actor }),
@@ -908,7 +922,7 @@ export class JobRunner {
     const run = (await store.get(id))!;
     const paths = storage.job(id);
     await this.#event(parentWs, id, "step.started", `${spec.kind} ${spec.name} started`, { kind: spec.kind, name: spec.name });
-    const ws: StepWorkspace = { rootId: parentWs.rootId, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp, ...(parentWs.src === undefined ? {} : { src: parentWs.src }), ...(parentWs.commit === undefined ? {} : { commit: parentWs.commit }), ...(parentWs.documentsCommit === undefined ? {} : { documentsCommit: parentWs.documentsCommit }) };
+    const ws: StepWorkspace = { rootId: parentWs.rootId, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp, ...(parentWs.src === undefined ? {} : { src: parentWs.src }), ...(parentWs.sources === undefined ? {} : { sources: parentWs.sources }), ...(parentWs.documentsCommit === undefined ? {} : { documentsCommit: parentWs.documentsCommit }) };
     try {
       if (signal?.aborted === true) throw new JobFailure("aborted");
       for (const dir of [paths.in, paths.out, paths.tmp]) await mkdir(dir, { recursive: true });

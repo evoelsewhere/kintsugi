@@ -16,7 +16,7 @@ import { type Column, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { AssessResults, Finding, Inventory, InventoryFile, InventoryLanguage } from "@/lib/api/documents";
 import type { JobRunView } from "@/lib/api/job-runs";
-import { shortSha } from "@/lib/format";
+import { sourceEntriesLabel } from "@/lib/format";
 import { directoryRollup, inventorySignals, sizeDistribution, tableColumnCounts } from "./assess-analytics";
 import { LatestRunNotice, MonitoringTab, RunSnapshot } from "./run-monitoring";
 import { domainColors, formatCount, PRIORITY_COLOR, percentOf, SEVERITY_COLOR, SEVERITY_RANK } from "./results-format";
@@ -112,7 +112,7 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
       {highlights.summary === undefined && highlights.outlook === undefined ? null : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {highlights.summary === undefined ? null : (
-            <Section title="Executive summary" className="lg:col-span-2" description={inventory?.sourceRepository === undefined ? undefined : `${inventory.sourceRepository} at ${shortSha(inventory.sourceCommit)}`}>
+            <Section title="Executive summary" className="lg:col-span-2" description={inventory === null || inventory === undefined || inventory.sources.length === 0 ? undefined : sourceEntriesLabel(inventory.sources)}>
               <ClampedText text={highlights.summary} />
             </Section>
           )}
@@ -374,7 +374,7 @@ function InventoryTab({ results }: { results: AssessResults }): React.JSX.Elemen
   const rows = language === undefined ? inventory.files : inventory.files.filter((file) => file.language === language);
   const languages = [...inventory.languages].sort((a, b) => b.files - a.files);
   return (
-    <Section title="Most complex files" description={`${formatCount(inventory.files.length)} of ${formatCount(inventory.sourceFileCount)} source files measured in ${inventory.sourceRepository ?? "the legacy repo"}${inventory.sourceCommit === undefined ? "" : ` at ${shortSha(inventory.sourceCommit)}`}; the inventory keeps the roll-ups, not every file.`}>
+    <Section title="Most complex files" description={`${formatCount(inventory.files.length)} of ${formatCount(inventory.sourceFileCount)} source files measured in ${inventory.sources.length === 0 ? "the legacy repo" : sourceEntriesLabel(inventory.sources)}; the inventory keeps the roll-ups, not every file.`}>
       <DataTable
         label="Hotspots"
         rows={rows}

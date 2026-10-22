@@ -8,8 +8,9 @@ import { ITEM_ID, parseItemCatalog } from '../hooks/reader/item-catalog.js'
 const INDEX = `---
 app: "billing"
 generatedBy: "reconcile_catalog.py"
-sourceRepository: "legacy"
-sourceCommit: "${'a'.repeat(40)}"
+sources:
+  - "legacy@${'a'.repeat(40)}"
+  - "legacy-data@${'b'.repeat(40)}"
 modules: 2
 items: 1
 retired: 1
@@ -123,7 +124,7 @@ describe('item catalog reader', () => {
   test('reads items, modules, coverage and ambiguities defensively', () => {
     const catalog = parseItemCatalog(INDEX, { invoicing: INVOICING, tax: TAX })!
     expect(catalog.app).toBe('billing')
-    expect(catalog.source).toEqual({ repo: 'legacy', commit: 'a'.repeat(40) })
+    expect(catalog.source).toEqual({ sources: ['legacy@' + 'a'.repeat(40), 'legacy-data@' + 'b'.repeat(40)] })
     expect(catalog.items.map(item => item.id)).toEqual(['invoicing/invoice-entry', 'tax/tax-calc'])
     const [entry, tax] = catalog.items
     expect(entry).toMatchObject({ module: 'invoicing', kind: 'screen', name: 'Invoice entry', summary: 'Captures invoices.', loc: 1840, complexity: 'medium', status: 'active', aliases: ['Invoices'], digest: 'sha256:abc' })

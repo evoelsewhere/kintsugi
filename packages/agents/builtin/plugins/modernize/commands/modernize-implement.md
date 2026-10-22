@@ -19,8 +19,8 @@ This command runs in your own harness through Kintsugi's member plugin. Inputs c
 to the target repository: the unit's design set folders in `10-applications/$app/02-modern/<module>/<unit>/` (the contract), what is
 known about it in `10-applications/$app/01-legacy/<module>/<unit>/`, the common components in
 `02-architecture/common/`, and `01-standards/`. The **legacy repository** of `$app` is your local clone, **read-only** (Kintsugi's member
-hooks refuse writes to it). Before you start, say in one line which source commit you read: the one the assessment recorded for `$app`
-(`sourceCommit` in `10-applications/$app/01-legacy/inventory.md`, and in the portal); check out exactly that commit. If you have no clone
+hooks refuse writes to it). Before you start, say in one line which source commits you read: the ones the assessment recorded for `$app`
+(`sources` in `10-applications/$app/01-legacy/inventory.md`, and in the portal); check out exactly those commits. If you have no clone
 of the legacy repository, stop and say so: nothing can run without the code, and the fix is to clone the repositories the portal lists
 for `$app`. What you write in the document repository (`TRANSFORMATION_NOTES.md` and design corrections) goes on your own branch of the document repository and reaches the project through a
 pull request. Run every subagent in the foreground and wait for its result: never end your turn while one is still running. Stop any

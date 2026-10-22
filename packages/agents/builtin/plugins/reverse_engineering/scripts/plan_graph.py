@@ -84,7 +84,7 @@ def components(nodes, edges):
     return owner, result
 
 
-def build(app, catalog_items, understood, catalog_origin):
+def build(app, catalog_items, understood, sources):
     active = [item for item in catalog_items.values() if item.get('status') != 'retired']
     depends, stores = {}, {}
     for item in active:
@@ -142,7 +142,7 @@ def build(app, catalog_items, understood, catalog_origin):
     return {
         'app': app,
         'generatedBy': 'plan_graph.py',
-        'source': catalog_origin,
+        'sources': sources,
         'items': items,
         'cycles': cycles,
         'stats': {
@@ -171,7 +171,7 @@ def main(argv):
                 module, unit = paths.split_unit_key(item_id)
                 if os.path.isfile(os.path.join(args.existing, module, unit, 'understanding.md')):
                     understood.add(item_id)
-        graph = build(args.app, items, understood, catalog.get('source') if isinstance(catalog.get('source'), dict) else {})
+        graph = build(args.app, items, understood, cc.sources_of(catalog.get('sources')))
         docmd.write_json(os.path.join(os.path.abspath(args.out), *paths.understand_graph_path(args.app).split('/')), graph)
     except (cc.DataError, OSError, RecursionError) as error:
         print(f'plan_graph.py: {error}', file=sys.stderr)

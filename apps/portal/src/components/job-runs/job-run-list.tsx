@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { isActive, jobRunsApi, type JobRunView } from "@/lib/api/job-runs";
-import { formatDateTime, formatDuration, formatRelative, shortSha } from "@/lib/format";
+import { formatDateTime, formatDuration, formatRelative, shortSha, sourcesLabel } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
@@ -126,8 +126,7 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
                       {run.agent === undefined ? null : <span className="rounded-full bg-hover px-1.5 py-0.5">{run.agent}</span>}
                       {run.sourceCommit === undefined ? null : (
                         <span className="rounded-full bg-hover px-1.5 py-0.5 font-mono">
-                          {run.sourceRepositoryId === undefined ? "" : `${run.sourceRepositoryId}@`}
-                          {shortSha(run.sourceCommit)}
+                          {run.sources === undefined ? `${run.sourceRepositoryId === undefined ? "" : `${run.sourceRepositoryId}@`}${shortSha(run.sourceCommit)}` : sourcesLabel(run.sources)}
                         </span>
                       )}
                       {run.outputSummary?.files === undefined ? null : (

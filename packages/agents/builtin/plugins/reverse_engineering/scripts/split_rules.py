@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Split a scoped run's extract-rules result into one rules file per selected item (ADR-0033).
 
-    python3 split_rules.py <app> --rules FILE --catalog DIR --items ID,ID,... --out DIR [--docs DIR] [--date YYYY-MM-DD] [--source-commit SHA]
+    python3 split_rules.py <app> --rules FILE --catalog DIR --items ID,ID,... --out DIR [--docs DIR] [--date YYYY-MM-DD] [--sources SPEC]
 
 --rules is the rules_result.json the extract-rules workflow returned for the run's shards (scratch);
 --catalog the application's catalog folder (assessment/catalog/); --items the run's items. --out is the
@@ -110,7 +110,7 @@ def main(argv):
     ap.add_argument('--out', required=True)
     ap.add_argument('--docs', default='', help='the document repository as it is now (read-only): keeps the versions of rules that are already there')
     ap.add_argument('--date', default='', help='the date written in version histories (default: today, UTC)')
-    ap.add_argument('--source-commit', default='', help='the commit of the analysed source, written in version histories')
+    ap.add_argument('--sources', default='', help='the legacy repositories and their commits (`id@commit,id@commit`), written in version histories')
     args = ap.parse_args(argv[1:])
     try:
         if not cc.APP_RE.match(args.app):
@@ -120,7 +120,11 @@ def main(argv):
         raw = cc.read_optional_json(args.rules)
         result = rr.validate_result(raw if isinstance(raw, dict) else {})
         date = args.date or datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
-        outputs, unplaced = split(args.app, result, chosen, os.path.realpath(args.docs) if args.docs else '', date, args.source_commit)
+        try:
+            revision = paths.sources_spec(paths.parse_sources(args.sources)) if args.sources else ''
+        except ValueError as error:
+            raise cc.DataError(f'--sources: {error}') from error
+        outputs, unplaced = split(args.app, result, chosen, os.path.realpath(args.docs) if args.docs else '', date, revision)
         root = os.path.abspath(args.out)
         for path, value in outputs.items():
             docmd.write_text(os.path.join(root, *path.split('/')), value['text'])
