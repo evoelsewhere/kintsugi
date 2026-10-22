@@ -30,7 +30,7 @@ Use the full `application/module/unit` identity in `unitId`, encoded as a query 
 
 Current `TaskStatus.evidenceAvailability` reports both pull-request and review readers as `available`; empty arrays mean no matching confirmed PR or current review was returned. Each gate status carries its authoritative `unitId` and `gateId`, with publication states kept separate from the decision result. A missing publication remains `unknown`; source approval is fail-closed until trustworthy evidence readers exist.
 
-When a `task.continuation` event remains within the seven-day retention window, `TaskStatus.latestContinuation` returns the newest event for that exact task. It is a historical workflow notification: `TaskStatus.status` and `TaskStatus.nextAction` provide current workflow status; the task brief provides cited context. Clients should identify the event time and ask the developer to refresh task context before acting; continuation guidance never grants approval or creates a task.
+When a `task.continuation` event remains within the seven-day retention window, `TaskStatus.latestContinuation` returns the newest event for that exact task. It is a historical workflow notification: `TaskStatus.status` and `TaskStatus.nextAction` provide current workflow status; the task brief provides cited context. The portal and client should identify the event time and ask the developer to refresh task context before acting; continuation guidance never grants approval or creates a task.
 
 Snapshot failures put a stable code and `snapshotId` in the error envelope's `details`:
 
