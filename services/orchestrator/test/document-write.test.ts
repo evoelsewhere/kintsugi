@@ -108,17 +108,17 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     }
   });
 
-  it("auto-commits units/** to main and proposes kintsugi.yaml in a pull request", async () => {
+  it("auto-commits unit cards to main and proposes kintsugi.yaml in a pull request", async () => {
     const write = request("docs", {
       files: [
         { path: "kintsugi.yaml", content: "schemaVersion: 1\n" },
-        { path: "applications/web/units/auth/login/unit.md", content: "---\nid: web/auth/login\n---\n" },
+        { path: "10-applications/web/02-modern/auth/login/README.md", content: "---\nid: web/auth/login\n---\n" },
       ],
     });
     const outcome = await writeDocument(deps, write);
     expect(outcome).toMatchObject({ status: "pr-opened", branch: `kintsugi/alice/${write.writeId}`, prUrl: "https://gitlab.example.invalid/docs/-/merge_requests/1" });
 
-    expect(remote.git("docs", "show", "main:applications/web/units/auth/login/unit.md")).toContain("web/auth/login");
+    expect(remote.git("docs", "show", "main:10-applications/web/02-modern/auth/login/README.md")).toContain("web/auth/login");
     expect(() => remote.git("docs", "show", "main:kintsugi.yaml")).toThrow();
     expect(remote.git("docs", "show", `kintsugi/alice/${write.writeId}:kintsugi.yaml`)).toBe("schemaVersion: 1\n");
     expect(remote.git("docs", "log", "-1", "--format=%an <%ae>%n%(trailers:only,unfold)", "main").trim()).toBe(`${BOT_NAME} <${BOT_EMAIL}>\nKintsugi-Actor: alice`);
@@ -140,16 +140,16 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     const write = request("docs", {
       reviewAll: true,
       files: [
-        { path: "applications/web/units/auth/login/as-is.md", content: "# Login\n" },
-        { path: "applications/web/units/auth/proposed/unit.md", content: "---\nid: web/auth/proposed\n---\n" },
+        { path: "10-applications/web/01-legacy/auth/login/spec.md", content: "# Login\n" },
+        { path: "10-applications/web/02-modern/auth/proposed/README.md", content: "---\nid: web/auth/proposed\n---\n" },
       ],
     });
     const before = remote.git("docs", "rev-parse", "main").trim();
     expect(await writeDocument(deps, write)).toMatchObject({ status: "pr-opened", branch: `kintsugi/alice/${write.writeId}` });
     expect(remote.git("docs", "rev-parse", "main").trim()).toBe(before);
-    expect(() => remote.git("docs", "show", "main:applications/web/units/auth/proposed/unit.md")).toThrow();
-    expect(remote.git("docs", "show", `kintsugi/alice/${write.writeId}:applications/web/units/auth/proposed/unit.md`)).toContain("web/auth/proposed");
-    expect(remote.git("docs", "show", `kintsugi/alice/${write.writeId}:applications/web/units/auth/login/as-is.md`)).toBe("# Login\n");
+    expect(() => remote.git("docs", "show", "main:10-applications/web/02-modern/auth/proposed/README.md")).toThrow();
+    expect(remote.git("docs", "show", `kintsugi/alice/${write.writeId}:10-applications/web/02-modern/auth/proposed/README.md`)).toContain("web/auth/proposed");
+    expect(remote.git("docs", "show", `kintsugi/alice/${write.writeId}:10-applications/web/01-legacy/auth/login/spec.md`)).toBe("# Login\n");
   });
 
   it("follows autoCommitPaths from kintsugi.yaml on the default branch", async () => {
@@ -167,15 +167,15 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     expect(await writeDocument(deps, write)).toMatchObject({ status: "committed" });
     expect(remote.git("docs", "show", "main:notes/a.md")).toBe("a\n");
 
-    const units = request("docs", { files: [{ path: "applications/web/units/core/b/unit.md", content: "b\n" }] });
+    const units = request("docs", { files: [{ path: "10-applications/web/02-modern/core/b/README.md", content: "b\n" }] });
     expect(await writeDocument(deps, units)).toMatchObject({ status: "pr-opened" });
-    expect(() => remote.git("docs", "show", "main:applications/web/units/core/b/unit.md")).toThrow();
+    expect(() => remote.git("docs", "show", "main:10-applications/web/02-modern/core/b/README.md")).toThrow();
   });
 
   it("writes a runtime job's /out with job and agent trailers", async () => {
     const out = deps.storage.job("job-42").out;
-    await mkdir(join(out, "assessment", "web"), { recursive: true });
-    await writeFile(join(out, "assessment", "web", "ASSESSMENT.md"), "# Assessment\n");
+    await mkdir(join(out, "10-applications", "web", "01-legacy"), { recursive: true });
+    await writeFile(join(out, "10-applications", "web", "01-legacy", "assessment.md"), "# Assessment\n");
     const write = request("docs", { kind: "job-output", message: "Assessment of web", outputOfJob: "job-42", jobId: "job-42", agent: "legacy-analyst@1.0.0", actor: undefined });
     delete write.actor;
     expect(await writeDocument(deps, write)).toMatchObject({ status: "pr-opened", branch: "kintsugi/legacy-analyst/job-42" });
@@ -213,12 +213,12 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
   it("the worker runs queued writes, one per repository at a time", async () => {
     const worker = await startWorker({ databaseUrl: db.url, pool: db.pool, storage: deps.storage, pollIntervalSeconds: 3600, log: () => undefined });
     try {
-      const writes = [1, 2, 3].map((n) => request("plain-docs", { kind: "state-change", message: `Unit ${n}`, files: [{ path: `applications/demo/units/core/u${n}/unit.md`, content: `${n}\n` }] }));
+      const writes = [1, 2, 3].map((n) => request("plain-docs", { kind: "state-change", message: `Unit ${n}`, files: [{ path: `10-applications/demo/02-modern/core/u${n}/README.md`, content: `${n}\n` }] }));
       for (const write of writes) await worker.requestWrite("plain-docs", write);
       for (const write of writes) {
         await expect.poll(async () => (await row(write.writeId))?.status, { timeout: 30_000, interval: 250 }).toBe("committed");
       }
-      for (const n of [1, 2, 3]) expect(remote.git("plain-docs", "show", `main:applications/demo/units/core/u${n}/unit.md`)).toBe(`${n}\n`);
+      for (const n of [1, 2, 3]) expect(remote.git("plain-docs", "show", `main:10-applications/demo/02-modern/core/u${n}/README.md`)).toBe(`${n}\n`);
     } finally {
       await worker.stop();
     }
@@ -230,7 +230,7 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
         files: [
           { path: "kintsugi.yaml", content: "schemaVersion: 1\nproject: {}\n" },
           { path: "README.md", content: "starter readme\n", createOnly: true },
-          { path: "program/charter.md", content: "# Charter\n", createOnly: true },
+          { path: "00-project/charter.md", content: "# Charter\n", createOnly: true },
         ],
         reviewAll: true,
       });
@@ -238,10 +238,10 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
       const branch = `kintsugi/alice/${write.writeId}`;
       expect(outcome).toMatchObject({ status: "pr-opened", branch });
       // One pull request holds the manifest and the missing starter file; README.md was on main, so it is left alone.
-      expect(remote.git("docs", "show", `${branch}:program/charter.md`)).toBe("# Charter\n");
+      expect(remote.git("docs", "show", `${branch}:00-project/charter.md`)).toBe("# Charter\n");
       expect(remote.git("docs", "show", `${branch}:README.md`)).toBe("docs\n");
       expect(remote.git("docs", "show", `${branch}:kintsugi.yaml`)).toBe("schemaVersion: 1\nproject: {}\n");
-      expect(() => remote.git("docs", "show", "main:program/charter.md")).toThrow();
+      expect(() => remote.git("docs", "show", "main:00-project/charter.md")).toThrow();
     });
 
     it("is unchanged when every create-only file is already there", async () => {

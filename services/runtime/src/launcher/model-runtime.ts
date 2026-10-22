@@ -31,6 +31,8 @@ export interface StoredProviderConfig {
   auth: StoredAuth;
   piProvider?: string;
   enabledModels?: string[];
+  /** Prompt-cache lifetime (ADR-0048); the child gets it as PI_CACHE_RETENTION. */
+  cacheRetention?: "short" | "long";
   api?: string;
   baseUrl?: string;
   headers?: Record<string, string | { secretId: string }>;

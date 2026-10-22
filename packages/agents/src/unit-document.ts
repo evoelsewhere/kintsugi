@@ -4,7 +4,7 @@ import { splitFrontmatter } from "./format.js";
 export const MAX_UNIT_DOCUMENT_BYTES = 256 * 1024;
 
 /**
- * Strictly parses the authoritative unit.md frontmatter with the shared domain schema.
+ * Strictly parses the authoritative unit-card README.md frontmatter with the shared domain schema.
  * The optional path identity prevents a valid file from being indexed under another unit.
  */
 export function parseUnitDocument(markdown: string, expectedUnitId?: string): ValidationResult<WorkItemFile> {
@@ -12,7 +12,7 @@ export function parseUnitDocument(markdown: string, expectedUnitId?: string): Va
     return { ok: false, issues: [{ path: "", message: "unit document exceeds the 262144-byte limit" }] };
   }
 
-  const document = splitFrontmatter(markdown, "unit.md");
+  const document = splitFrontmatter(markdown, "README.md");
   if (typeof document === "string") {
     return {
       ok: false,

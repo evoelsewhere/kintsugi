@@ -20,16 +20,17 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { findBuiltinFile } from "@kintsugi/agents";
-import { THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
+import { mcpServersNamedBy, THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
 import type { CheckoutStorage } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
-import type { AgentRuntime, JobEvent, JobSpec } from "@kintsugi/runtime-sdk";
+import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 import type { AgentResolver } from "./agents.js";
 import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepRecord, stepKey } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
-import { maskJobOutput, runJobOutputHook } from "./hook.js";
+import { runJobOutputHook } from "./hook.js";
+import { shapeProblem } from "./result-shape.js";
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
@@ -40,6 +41,7 @@ import {
   type JobStore,
   type NewJobRun,
   type SourceCheckouts,
+  type SpanRecord,
   type StepLimits,
   isCancelled,
 } from "./model.js";
@@ -74,6 +76,8 @@ export interface JobRunnerDeps {
   /** pi in production; the mock backend in tests and mock-mode development. */
   agents: AgentRuntime;
   agentDefinitions: AgentResolver;
+  /** The MCP servers (with decrypted headers) an agent names in its tools; absent when the installation has no registry. */
+  mcpServers?: (ids: readonly string[]) => Promise<McpServerSpec[]>;
   interpreters: Interpreters;
   defaults?: JobDefaults;
   /** Hands a write to the document repo writer (queue `document-write`). */
@@ -114,12 +118,12 @@ interface ResumeState {
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** inputs.scope of a scoped run: catalog item ids and their files; undefined when absent or malformed. */
+/** inputs.scope of a scoped run: catalog item ids (or units) and their files, and the design set of a design run; undefined when absent or malformed. */
 export function scopeOf(inputs: Record<string, unknown>): StageScope | undefined {
   const scope = inputs["scope"];
   if (!isRecord(scope) || !Array.isArray(scope["items"])) return undefined;
   const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
-  return { items: strings(scope["items"]), files: strings(scope["files"]) };
+  return { items: strings(scope["items"]), files: strings(scope["files"]), ...(typeof scope["set"] === "string" ? { set: scope["set"] } : {}) };
 }
 
 interface StepOutcome {
@@ -157,7 +161,7 @@ interface ChildPlacement {
 const BUILTIN_SCRIPT = /^[a-z][a-z0-9_-]{0,63}\.(py|js|mjs)$/;
 const MAX_STDOUT = 20_000;
 const MAX_DETAIL_LINES = 40;
-/** Files of one declared document folder ("standards/", an application's items) a step gets at most. */
+/** Files of one declared document folder ("01-standards/", a half of an application) a step gets at most. */
 const MAX_FOLDER_DOCUMENTS = 5000;
 /** A relative document-repo path without traversal. */
 const SAFE_OUTPUT_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9._/-]+$/;
@@ -168,8 +172,7 @@ const RESULT_FILE = "result.json";
 /** Appended to an agent's task when the output checks flagged its files: what to fix, never the offending content. */
 const outputFixNote = (findings: readonly string[]): string =>
   `\n\nThe output checks rejected the files you wrote (rule at path:line, paths relative to the output directory):\n${findings.map((finding) => `- ${finding}`).join("\n")}\n` +
-  "Open each of those files with edit and fix the cited lines. A credential-shaped value (password, key, token, connection string, even in a quoted excerpt) must not appear in any output: " +
-  "name the credential and cite its file:line, with at most a 2-4 character preview followed by ****, and no full value. " +
+  "Open each of those files with edit and fix the cited lines. " +
   "Change only what was flagged, check every other line of those files for the same problem, then stop.";
 
 /** Appended to an agent's task when files it had to write are missing: the exact paths, and what it wrote instead (names only). */
@@ -178,6 +181,12 @@ const missingFilesNote = (missing: readonly string[], written: readonly string[]
   `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
   "write and edit take paths relative to the output directory, not to the repository: give the full path above, never a bare file name. " +
   "Write each missing file at exactly that path (reuse what you already wrote), then stop.";
+
+/** Appended to an agent's task when its structured result is missing or not JSON: where it goes, never what was in it. */
+const resultFileNote = (problem: string, written: readonly string[]): string =>
+  `\n\nThe step needs your structured result and ${problem}. ` +
+  `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
+  `Write the JSON result with write to the bare path "${RESULT_FILE}" (no folder, the one exception to the full-path rule), matching the schema above, nothing else in that file, then stop.`;
 
 const sha256 = (content: Buffer): string => createHash("sha256").update(content).digest("hex");
 
@@ -213,6 +222,28 @@ export function summarizeToolCall(tool: string, input: unknown, roots: Record<st
   const path = shown(args["path"]);
   if (path !== undefined) parts.push(path);
   if ((tool === "grep" || tool === "find") && typeof args["pattern"] === "string") parts.push(`"${args["pattern"].slice(0, 80)}"`);
+  const firstLine = (text: string, ignoreComments: boolean): { line: string; more: boolean } | undefined => {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== "" && !(ignoreComments && line.startsWith("//")));
+    return lines[0] === undefined ? undefined : { line: lines[0].slice(0, 100), more: lines.length > 1 };
+  };
+  // What the command or script is after, redacted with the rest of the line. A codemode script only reads (the
+  // kernel blocks anything else), shell and git are the model's own words about what it runs.
+  if (tool === "codemode" && typeof args["code"] === "string") {
+    const first = firstLine(args["code"], true);
+    if (first !== undefined) parts.push(`${first.line}${first.more ? " …" : ""}`);
+  } else if (tool === "shell" && typeof args["command"] === "string") {
+    const first = firstLine(args["command"], false);
+    if (first !== undefined) parts.push(`${first.line}${first.more ? " …" : ""}`);
+  } else if (tool === "git" && Array.isArray(args["args"])) {
+    parts.push(args["args"].filter((arg): arg is string => typeof arg === "string").join(" ").slice(0, 100));
+  } else if (tool.startsWith("mcp__")) {
+    // Scalar arguments only, as name=value, so a query is visible and a document body is not.
+    const scalars = Object.entries(args)
+      .filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+      .slice(0, 3)
+      .map(([name, value]) => `${name}=${String(value).slice(0, 40)}`);
+    if (scalars.length > 0) parts.push(scalars.join(" "));
+  }
   return redactText(parts.join(" ")).slice(0, MAX_EVENT_TEXT);
 }
 
@@ -433,22 +464,36 @@ export class JobRunner {
 
   /**
    * An agent that wrote an expected file under the right name but in the wrong folder (a bare
-   * "ASSESSMENT.md" for "applications/<app>/assessment/ASSESSMENT.md") keeps its work: when exactly one
-   * stray file has the missing file's name, it is moved into place. Returns whether files are still missing.
+   * "assessment.md" for "10-applications/<app>/01-legacy/assessment.md") keeps its work: the stray file with
+   * the missing file's name (the best path match when several) is moved into place. A file under another name is
+   * never guessed (it may be notes): that is the repair attempt's job. Returns whether files are still missing.
    */
   async #recoverExpected(run: JobRun, ws: StepWorkspace, stepId: string | undefined): Promise<boolean> {
     const missing = await this.#missingExpected(run, ws);
     if (missing.length === 0) return false;
     const expected = new Set(this.#expects(run, ws));
-    const stray = (await listFiles(ws.out)).filter((entry) => !expected.has(entry.path) && !entry.path.startsWith("restricted/"));
-    for (const path of missing) {
-      const candidates = stray.filter((entry) => basename(entry.path) === basename(path));
-      const [only] = candidates;
-      if (candidates.length !== 1 || only === undefined) continue;
+    const stray = (await listFiles(ws.out)).filter((entry) => !expected.has(entry.path) && !entry.path.startsWith("restricted/") && basename(entry.path) !== RESULT_FILE);
+    const moveInto = async (entry: (typeof stray)[number], path: string): Promise<void> => {
       const target = join(ws.out, ...path.split("/"));
       await mkdir(dirname(target), { recursive: true });
-      await rename(only.full, target);
-      await this.#event(ws, stepId, "log", `${run.name} wrote ${only.path} instead of ${path}: moved into place`);
+      await rename(entry.full, target);
+      stray.splice(stray.indexOf(entry), 1);
+      await this.#event(ws, stepId, "log", `${run.name} wrote ${entry.path} instead of ${path}: moved into place`);
+    };
+    // Same name: the only one, or, among several (an index.md per folder), the one whose path ends most like the expected path.
+    const sharedSuffix = (a: string, b: string): number => {
+      const left = a.split("/").reverse();
+      const right = b.split("/").reverse();
+      let count = 0;
+      while (count < left.length && count < right.length && left[count] === right[count]) count += 1;
+      return count;
+    };
+    for (const path of missing) {
+      const candidates = stray.filter((entry) => basename(entry.path) === basename(path));
+      const ranked = candidates.map((entry) => ({ entry, score: sharedSuffix(entry.path, path) })).sort((a, b) => b.score - a.score);
+      const [best, next] = ranked;
+      if (best === undefined || (next !== undefined && next.score === best.score)) continue;
+      await moveInto(best.entry, path);
     }
     return (await this.#missingExpected(run, ws)).length > 0;
   }
@@ -514,13 +559,24 @@ export class JobRunner {
     if (typeof task !== "string" || task.trim() === "") throw new JobFailure("inputs.task is missing");
     const limits = this.#limits(run, "agent");
     const agentId = `${definition.id}@${definition.version}`;
+    // The MCP servers the agent names in its tools: resolved here, where the registry and its secrets are, and handed to the job's child.
+    const mcpIds = mcpServersNamedBy(definition.tools);
+    let mcp: JobSpec["mcp"];
+    if (mcpIds.length > 0) {
+      if (this.#deps.mcpServers === undefined) throw new JobFailure(`Agent ${run.name} names MCP servers (${mcpIds.join(", ")}) but this worker has no MCP registry`);
+      try {
+        mcp = { servers: await this.#deps.mcpServers(mcpIds) };
+      } catch (error) {
+        throw new JobFailure(`Agent ${run.name}: ${redactText(message(error)).slice(0, 300)}`);
+      }
+    }
     const thinking = (THINKING_LEVELS as readonly string[]).includes(binding.thinking ?? "") ? (binding.thinking as ThinkingLevel) : undefined;
     await this.#deps.store.update(run.id, { agent: agentId });
 
     const schema = run.inputs["schema"];
     const schemaNote =
       typeof schema === "object" && schema !== null
-        ? `\n\nReturn your result as JSON matching this schema, written with write to ${RESULT_FILE} (nothing else in that file):\n${JSON.stringify(schema)}`
+        ? `\n\nReturn your result as JSON matching this schema, written with write to the bare path "${RESULT_FILE}" at the root of the output directory, with no folder (the one exception to the full-path rule; nothing else in that file):\n${JSON.stringify(schema)}`
         : "";
     const spec: JobSpec = {
       agent: definition,
@@ -533,12 +589,22 @@ export class JobRunner {
         ...(limits.maxTurns === undefined ? {} : { maxTurns: limits.maxTurns }),
         ...(limits.maxCostUsd === undefined ? {} : { maxCostUsd: limits.maxCostUsd }),
       },
+      ...(mcp === undefined ? {} : { mcp }),
       metadata: { jobRunId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }) },
     };
-    const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0 };
+    const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0, cacheReadTokens: 0, cacheWriteTokens: 0, compactions: 0 };
     const stepId = run.id === ws.rootId ? undefined : run.id;
     const roots = { src: ws.src, in: ws.in, out: ws.out };
+    // The job's spans (ADR-0048) are stored in batches as they arrive; each run of the agent is an attempt.
+    let attempts = 0;
+    let spans: SpanRecord[] = [];
+    const flushSpans = async (): Promise<void> => {
+      const batch = spans;
+      spans = [];
+      await this.#deps.store.addSpans(batch);
+    };
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
+      attempts += 1;
       const handle = await this.#deps.agents.startJob({ ...spec, task });
       const onAbort = (): void => void handle.abort(isCancelled(signal) ? "cancelled" : "the worker is stopping");
       if (signal?.aborted === true) onAbort();
@@ -546,7 +612,20 @@ export class JobRunner {
       try {
         for await (const event of handle.events) {
           this.#count(event, usage);
-          if (event.type === "progress") {
+          if (event.type === "span") {
+            spans.push({
+              runId: ws.rootId,
+              ...(stepId === undefined ? {} : { stepId }),
+              projectId: run.projectId,
+              ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }),
+              agent: agentId,
+              provider: binding.provider,
+              model: binding.model,
+              attempt: attempts,
+              span: event.span,
+            });
+            if (spans.length >= 100) await flushSpans();
+          } else if (event.type === "progress") {
             const kb = (chars: number): string => (chars < 1000 ? `${chars}` : `${(chars / 1000).toFixed(1)}k`);
             await this.#event(ws, stepId, "log", `model working: turn ${event.turn}, thinking ${kb(event.thinkingChars)} chars, tool arguments ${kb(event.toolArgsChars)}, text ${kb(event.textChars)}`, {
               turn: event.turn,
@@ -562,6 +641,7 @@ export class JobRunner {
         }
       } finally {
         signal?.removeEventListener("abort", onAbort);
+        await flushSpans();
       }
       return handle.done;
     };
@@ -586,10 +666,9 @@ export class JobRunner {
     };
     await writeMock();
 
-    // The output checks (#finish) are fail-closed. An agent that slipped a credential or a malformed
-    // artifact into its files gets the redacted findings (rule, path, line: never content) and one
-    // chance to fix just those lines, in the out/ it already wrote.
-    const maskedByAgent = await this.#maskCredentials(ws, stepId, run.name);
+    // The output checks (#finish) are fail-closed. An agent that wrote a malformed artifact gets the
+    // findings (rule, path, line: never content) and one chance to fix just those lines, in the out/
+    // it already wrote.
     const flagged = await this.#flaggedOutput(ws);
     if (flagged !== undefined && signal?.aborted !== true) {
       await this.#event(ws, stepId, "log", `output checks flagged ${flagged.length} finding${flagged.length === 1 ? "" : "s"} in the files of ${run.name}: ${flagged.join("; ")}; asking it to fix them once`);
@@ -600,15 +679,49 @@ export class JobRunner {
 
     let result: unknown;
     if (run.inputs["resultFile"] === true) {
-      const file = join(ws.out, RESULT_FILE);
-      const text = await readFile(file, "utf8").catch(() => undefined);
-      await rm(file, { force: true });
-      if (text === undefined) throw new JobFailure(`Agent ${run.name} wrote no ${RESULT_FILE}`);
-      try {
-        result = JSON.parse(text) as unknown;
-      } catch {
-        throw new JobFailure(`Agent ${run.name} wrote an invalid ${RESULT_FILE}`);
+      const take = async (): Promise<{ ok: true; value: unknown } | { ok: false; missing: boolean; problem: string }> => {
+        // The workspace rule asks for full document-repository paths, so a model may put the result in a folder: the
+        // root file comes first, then the shallowest folder. The first one that parses and fits the schema is the result.
+        const found = (await listFiles(ws.out))
+          .filter((entry) => basename(entry.path) === RESULT_FILE && !entry.path.startsWith("restricted/"))
+          .sort((a, b) => a.path.split("/").length - b.path.split("/").length || a.path.localeCompare(b.path));
+        let missing = true;
+        let problem = `${RESULT_FILE} is not in the output directory`;
+        let value: unknown;
+        let ok = false;
+        for (const entry of found) {
+          const text = await readFile(entry.full, "utf8").catch(() => undefined);
+          if (text === undefined) continue;
+          missing = false;
+          try {
+            const parsed = JSON.parse(text) as unknown;
+            const wrong = shapeProblem(schema, parsed);
+            if (wrong === undefined) {
+              value = parsed;
+              ok = true;
+              break;
+            }
+            problem = `${RESULT_FILE} does not match the schema (${wrong})`;
+          } catch {
+            problem = `${RESULT_FILE} is not valid JSON`;
+          }
+        }
+        // Taken or not, no copy stays in the output: it is a result, never a document.
+        for (const entry of found) await rm(entry.full, { force: true });
+        return ok ? { ok: true, value } : { ok: false, missing, problem };
+      };
+      let taken = await take();
+      // One repair attempt, like the missing expected files below: a rerun of the whole job costs far more.
+      if (!taken.ok && signal?.aborted !== true) {
+        await this.#event(ws, stepId, "log", `agent ${run.name}: ${taken.problem}; asking it to write the result once`);
+        const written = (await listFiles(ws.out)).map((entry) => entry.path);
+        done = await attempt(`${spec.task}${resultFileNote(taken.problem, written)}`);
+        if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
+        await writeMock();
+        taken = await take();
       }
+      if (!taken.ok) throw new JobFailure(`Agent ${run.name} wrote ${taken.missing ? "no" : "an invalid"} ${RESULT_FILE}${taken.missing ? "" : `: ${taken.problem}`}`);
+      result = taken.value;
       if (run.inputs["resultTo"] !== undefined) await this.#saveResult(run, ws, result);
     }
     // Missing expected files: a file written under the right name in the wrong folder is moved into place;
@@ -621,12 +734,16 @@ export class JobRunner {
       if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
       await writeMock();
       await this.#recoverExpected(run, ws, stepId);
+      // The repair run repeats the task, so it may have written the result again: it is already taken, never a document.
+      if (run.inputs["resultFile"] === true) {
+        for (const entry of await listFiles(ws.out)) if (basename(entry.path) === RESULT_FILE) await rm(entry.full, { force: true });
+      }
     }
     await this.#checkExpected(run, ws, `Agent ${run.name}`);
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
     const files = await listFiles(ws.out);
     return {
-      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary, ...(maskedByAgent === 0 ? {} : { maskedCredentials: maskedByAgent }) },
+      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary },
       agent: agentId,
       provenance: new Map(files.filter((entry) => !entry.path.startsWith("restricted/")).map((entry) => [entry.path, provenance])),
       ...(result === undefined ? {} : { result }),
@@ -640,11 +757,17 @@ export class JobRunner {
     await writeFile(target, `${JSON.stringify(result ?? null, null, 2)}\n`, "utf8");
   }
 
-  #count(event: JobEvent, usage: { inputTokens: number; outputTokens: number; costUsd: number; toolCalls: number; blocked: number }): void {
+  #count(
+    event: JobEvent,
+    usage: { inputTokens: number; outputTokens: number; costUsd: number; toolCalls: number; blocked: number; cacheReadTokens: number; cacheWriteTokens: number; compactions: number },
+  ): void {
     if (event.type === "usage") {
       usage.inputTokens += event.inputTokens;
       usage.outputTokens += event.outputTokens;
       usage.costUsd += event.costUsd ?? 0;
+      usage.cacheReadTokens += event.cacheReadTokens ?? 0;
+      usage.cacheWriteTokens += event.cacheWriteTokens ?? 0;
+      usage.compactions += event.compactions ?? 0;
     } else if (event.type === "tool.call") {
       usage.toolCalls += 1;
       if (event.decision === "blocked") usage.blocked += 1;
@@ -842,20 +965,6 @@ export class JobRunner {
   }
 
   /**
-   * Masks credential-shaped values in out/ (a preview and `****`) so a stray value in an analysis note
-   * never fails a run; the hook after it stays the fail-closed check for whatever could not be masked.
-   * Logs rule, file and line of each masking, never a value. Returns how many values were masked.
-   */
-  async #maskCredentials(ws: StepWorkspace, stepId: string | undefined, who: string): Promise<number> {
-    const outcome = await maskJobOutput({ outDir: ws.out, cwd: ws.root, tmp: ws.tmp, interpreters: this.#deps.interpreters });
-    if (outcome.count > 0) {
-      const more = outcome.count > outcome.first.length ? ` (+${outcome.count - outcome.first.length} more)` : "";
-      await this.#event(ws, stepId, "log", `masked ${outcome.count} credential-shaped value${outcome.count === 1 ? "" : "s"} in ${outcome.files} file${outcome.files === 1 ? "" : "s"} of ${who}: ${outcome.first.join("; ")}${more}`);
-    }
-    return outcome.count;
-  }
-
-  /**
    * The JobOutput hook's redacted findings (`rule at path:line`) over an agent's out/ so far, or
    * undefined when it is clean or the hook could not report. restricted/ is left to #finish, which
    * stores it before the check.
@@ -869,7 +978,6 @@ export class JobRunner {
   /** restricted/ → encrypted records; the JobOutput hook over out/; the artifact index. */
   async #finish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<Record<string, unknown>> {
     const restricted = await this.#storeRestricted(run, ws);
-    const masked = await this.#maskCredentials(ws, run.id === ws.rootId ? undefined : run.id, run.name);
     const hook = await this.#hook(ws);
     if (!hook.ok) throw new JobFailure(hook.reason ?? "JobOutput hook blocked the output");
     const files = await listFiles(ws.out);
@@ -883,7 +991,6 @@ export class JobRunner {
       files: entries.length,
       bytes: entries.reduce((total, entry) => total + entry.size, 0),
       restrictedFiles: restricted,
-      ...(masked === 0 ? {} : { maskedCredentials: masked + (typeof outcome.summary["maskedCredentials"] === "number" ? outcome.summary["maskedCredentials"] : 0) }),
       jobOutputHook: {
         checkedFiles: hook.checked.files,
         checkedBytes: hook.checked.bytes,

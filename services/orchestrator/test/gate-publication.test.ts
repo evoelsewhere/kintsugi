@@ -18,7 +18,7 @@ import { publishGate } from "../src/gates/publish.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
 
 const sha = (c: string) => c.repeat(40);
-const path = "applications/web/units/core/invoice/reviews/G4.md";
+const path = "10-applications/web/02-modern/core/invoice/reviews/G4.md";
 
 describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer and Postgres", () => {
   let db: TestDatabase;
@@ -272,7 +272,7 @@ describe.skipIf(!hasDatabase)("gate publication reconciliation with real writer 
     const { evidence, evidenceHash } = await seed(item => {
       item.deliverables[0] = {...item.deliverables[0]!,repositoryId:"docs",pullRequestId:"7",reviewResultId:"rev_"+randomUUID()};
     });
-    const unitPath = "applications/web/units/core/invoice/unit.md";
+    const unitPath = "10-applications/web/02-modern/core/invoice/README.md";
     const unitText = "---\nid: web/core/invoice\napplication: web\nmodule: core\nkind: module\ntitle: Invoice\nphase: migrate\nstatus: in-progress\nrequiredDeliverables:\n  - {id: code, repositoryId: docs, path: result.md}\n---\n";
     await remote.commit("docs", "kintsugi.yaml", "schemaVersion: 1\nproject: {id: shop, name: Shop}\ndocument: {server: github, path: org/docs}\nunitKinds: [module]\napplications:\n  - {id: web, disposition: refactor, pipeline: prepared, repos: []}\npipelines:\n  - id: prepared\n    phases:\n      - id: migrate\n        perUnit: true\n        stages:\n          - {id: approve, performer: {member: [core-team]}, gate: G4}\n      - id: verify\n        perUnit: true\n        stages:\n          - {id: test, performer: {member: [qc]}}\n");
     const unitCommit = await remote.commit("docs", unitPath, unitText);

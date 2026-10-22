@@ -101,6 +101,12 @@ describe("member task contract", () => {
 
 
 describe("strict task wire boundaries", () => {
+  it("preserves valid design waivers from the unit card", () => {
+    const waived = ["detail/data-access.md: no data store"];
+    expect(parseWorkItemFile({ ...workItem, waived })).toEqual({ ok: true, value: { ...workItem, waived } });
+    expect(parseWorkItemFile({ ...workItem, waived: ["malformed waiver"] }).ok).toBe(false);
+  });
+
   it.each([
     { title: "x".repeat(501) },
     { assignee: "x".repeat(201) },
@@ -119,7 +125,7 @@ describe("strict task wire boundaries", () => {
   it("preserves explicit deliverables and leaves undeclared units absent", () => {
     const requiredDeliverables = [
       { id: "code", repositoryId: "billing-api", path: "src/billing/tax.ts" },
-      { id: "design", repositoryId: "project-docs", path: "applications/billing/units/invoices/tax/design.md" },
+      { id: "design", repositoryId: "project-docs", path: "10-applications/billing/02-modern/invoices/tax/detail/logic.md" },
     ];
     expect(parseWorkItemFile({ ...workItem, requiredDeliverables })).toEqual({ ok: true, value: { ...workItem, requiredDeliverables } });
     const old = parseWorkItemFile(workItem);

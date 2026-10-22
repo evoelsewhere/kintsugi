@@ -32,7 +32,7 @@ export class DocumentsController {
   }
 
   @Get("documents/file")
-  @ApiOperation({ summary: "Read a text file of the document repo at a ref (up to 2 MiB; .json is parsed too); never restricted/ or .git" })
+  @ApiOperation({ summary: "Read a text file of the document repo at a ref (up to 2 MiB); never restricted/ or .git" })
   @ApiOkResponse({ description: "The file content; 413 when larger than 2 MiB, 415 when binary." })
   file(@Param("id") id: string, @Query({ schema: fileQuerySchema }) query: FileQuery): Promise<DocumentFile> {
     return this.documents.file(id, query.ref, query.path);

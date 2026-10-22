@@ -104,7 +104,7 @@ REST retains `{success:true,data}` and the established error envelope. CLI JSON 
 
 ## 5. Authoritative tasks, design roles and readiness
 
-Read `unit.md` as `WorkItemFile`, validate with shared domain schemas, resolve `task.md` and explicit design/evidence references through shared layout helpers, then build a rebuildable task projection. There is one Git task identity per full project/application/module/unit. The in-memory Workbench API is not the source.
+Read `10-applications/<app>/02-modern/<module>/<unit>/README.md` as `WorkItemFile`, validate with shared domain schemas, resolve `task.md` and explicit design/evidence references through shared layout helpers, then build a rebuildable task projection. There is one Git task identity per full project/application/module/unit. The in-memory Workbench API is not the source.
 
 `task list --mine` matches an authenticated immutable user identity against a validated assignment. Normalize legacy names explicitly; an ambiguous username is not an identity match. Unassigned ready tasks can be listed and selected, but reading one does not claim it. Assignment writes and task generation remain outside the member token's scope.
 
@@ -148,7 +148,7 @@ Illustrative payload inside the ordinary REST envelope:
       "role": "detailed-design",
       "repositoryId": "project-docs",
       "commit": "<full SHA>",
-      "path": "applications/billing/units/invoices/tax/design.md",
+      "path": "10-applications/billing/02-modern/invoices/tax/detail/logic.md",
       "contentHash": "sha256:<hash>",
       "approval": {"status": "approved", "recordId": "<immutable evidence reference>"}
     }

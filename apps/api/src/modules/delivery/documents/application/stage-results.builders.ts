@@ -1,17 +1,21 @@
 // The results of each stage with a results view, built from its plan-owned document paths with
-// the parsers of @kintsugi/agents/reader (never parsed again here).
+// the parsers of @kintsugi/agents/reader (never parsed again here). The documents are Markdown (ADR-0042).
 // Each stage has a full build (the results tab) and a counts build that reads as little as
 // possible (the Delivery overview's headline numbers and the comparison with the previous run).
 
+import { posix } from "node:path";
 import {
+  buildTraceability,
   bulletsIn,
   findingsOfTable,
   leftOutTotal,
   paragraphsIn,
   parseInventory,
+  parseItemCatalog,
   parseSecurityFindings,
   parseTopology,
-  parseTraceability,
+  parseTraceSummary,
+  parseUnitTrace,
   parseWorkItem,
   patchSummary,
   ruleCatalog,
@@ -20,12 +24,16 @@ import {
   tablesIn,
   UNIT_SEGMENT,
   type Inventory,
+  type ItemCatalog,
+  type ItemCatalogItem,
   type RuleCatalog,
   type SecurityReport,
   type Topology,
+  type TraceSummary,
   type Traceability,
+  type UnitFacts,
 } from "@kintsugi/agents/reader";
-import { DOCUMENT_PATH_TOKENS, assessmentDir, knowledgeAsIsDir, unitDir, unitRulesPath, unitRulesReviewPath, unitStatePath, unitTracePath } from "@kintsugi/domain";
+import { DOCUMENT_PATH_TOKENS, assessmentCatalogDir, assessmentDir, catalogPath, generatedDir, unitAsIsPath, unitModernDir, unitRulesPath, unitRulesReviewPath, unitStatePath, unitTracePath, unitUnderstandingPath } from "@kintsugi/domain";
 import { chunk } from "#common/util/async.js";
 import { itemUnitFacts } from "./item-results.js";
 import type { AsIsDocument, AssessResults, HardenResults, MapDiagram, MapNode, MapResults, ResultStage, RulesResults, StageFile, UnderstandResults, UnderstandUnit } from "../domain/document.js";
@@ -53,22 +61,22 @@ const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
 
 /** The files each stage writes (in its domain-layout directory), its main document and the files its counts need. */
 export const STAGE_OUTPUTS: Record<ResultStage, { dir?: string; files: readonly string[]; main?: string; countsFrom: readonly string[] }> = {
-  assess: { files: ["inventory.json", "ASSESSMENT.md", "ARCHITECTURE.mmd"], main: "ASSESSMENT.md", countsFrom: ["inventory.json"] },
+  assess: { files: ["inventory.md", "assessment.md", "architecture.mmd"], main: "assessment.md", countsFrom: ["inventory.md"] },
   map: {
-    files: ["topology.json", "topology.summary.txt", "call-graph.mmd", "data-lineage.mmd", "critical-path.mmd", "extract_topology.py", "TOPOLOGY_SCRIPT.md"],
-    countsFrom: ["topology.json"],
+    files: ["topology.md", "call-graph.mmd", "data-lineage.mmd", "critical-path.mmd", "extract_topology.py"],
+    countsFrom: ["topology.md"],
   },
   "extract-rules": {
-    files: ["rules_result.json", "BUSINESS_RULES.md", "DATA_OBJECTS.md", "extract-rules.modules.json"],
+    files: ["BUSINESS_RULES.md", "DATA_OBJECTS.md"],
     main: "BUSINESS_RULES.md",
-    countsFrom: ["rules_result.json", "BUSINESS_RULES.md"],
+    countsFrom: ["BUSINESS_RULES.md"],
   },
   harden: { files: ["SECURITY_FINDINGS.md", "security_remediation.patch"], main: "SECURITY_FINDINGS.md", countsFrom: ["SECURITY_FINDINGS.md"] },
   understand: {
-    dir: knowledgeAsIsDir(APP_TOKEN),
-    files: ["traceability.json", "traceability.md", "README.md", "architecture.md", "data-model.md", "integrations.md"],
+    dir: generatedDir(APP_TOKEN),
+    files: ["traceability.md", "README.md", "architecture.md", "data-model.md", "integrations.md"],
     main: "README.md",
-    countsFrom: ["traceability.json"],
+    countsFrom: ["traceability.md"],
   },
 };
 
@@ -94,7 +102,7 @@ function assessCounts(inventory: Inventory | null): Pick<Built, "counts" | "head
 }
 
 export async function assessResults(source: StageSource, appDir: string): Promise<Full<AssessResults>> {
-  const [inventoryText, markdown, architecture] = await Promise.all([source.read("inventory.json"), source.read("ASSESSMENT.md"), source.read("ARCHITECTURE.mmd")]);
+  const [inventoryText, markdown, architecture] = await Promise.all([source.read("inventory.md"), source.read("assessment.md"), source.read("architecture.mmd")]);
   const inventory = inventoryText === null ? null : parseInventory(inventoryText);
   const sections = markdown === null ? [] : sectionsOf(markdown);
   const section = (pattern: RegExp) => sectionMatching(sections, pattern);
@@ -105,25 +113,25 @@ export async function assessResults(source: StageSource, appDir: string): Promis
   const findings = security === undefined ? [] : tablesIn(security.body).flatMap((table) => findingsOfTable(table));
   const debtTable = debt === undefined ? null : (tablesIn(debt.body)[0] ?? null);
   const summary = section(/executive summary|summary/i);
-  const recommendation = section(/recommend/i);
+  const outlook = section(/outlook/i);
   return {
     inventory,
     ...(architecture === null ? {} : { architecture }),
     highlights: {
       ...(summary === undefined || paragraphsIn(summary.body)[0] === undefined ? {} : { summary: paragraphsIn(summary.body)[0] }),
-      ...(recommendation === undefined || paragraphsIn(recommendation.body)[0] === undefined ? {} : { recommendation: paragraphsIn(recommendation.body)[0] }),
+      ...(outlook === undefined || paragraphsIn(outlook.body)[0] === undefined ? {} : { outlook: paragraphsIn(outlook.body)[0] }),
       debt: debtTable,
       security: findings,
       gaps: [...new Set(gaps)],
     },
     counts: { ...counts, debtItems: debtTable?.rows.length ?? 0, securityFindings: findings.length },
     headline,
-    ...(markdown === null ? {} : { document: { path: `${appDir}/ASSESSMENT.md`, markdown } }),
+    ...(markdown === null ? {} : { document: { path: `${appDir}/assessment.md`, markdown } }),
   };
 }
 
 export async function assessHeadline(source: StageSource): Promise<Pick<Built, "counts" | "headline">> {
-  const text = await source.read("inventory.json");
+  const text = await source.read("inventory.md");
   return assessCounts(text === null ? null : parseInventory(text));
 }
 
@@ -174,9 +182,8 @@ const DIAGRAMS: Array<Omit<MapDiagram, "path" | "source">> = [
 ];
 
 export async function mapResults(source: StageSource, appDir: string): Promise<Full<MapResults>> {
-  const [topologyText, summary, ...diagramSources] = await Promise.all([
-    source.read("topology.json"),
-    source.read("topology.summary.txt"),
+  const [topologyText, ...diagramSources] = await Promise.all([
+    source.read("topology.md"),
     ...DIAGRAMS.map((diagram) => source.read(`${diagram.id}.mmd`)),
   ]);
   const topology = topologyText === null ? null : parseTopology(topologyText);
@@ -196,15 +203,16 @@ export async function mapResults(source: StageSource, appDir: string): Promise<F
             flows: topology.flows,
             observations: topology.observations,
             domains: [...new Set(nodes.map((node) => node.domain).filter((domain): domain is string => domain !== undefined))],
+            domainEdges: topology.domainEdges,
+            totals: topology.totals,
           },
     diagrams,
-    ...(summary === null ? {} : { summary }),
     ...mapCounts(topology),
   };
 }
 
 export async function mapHeadline(source: StageSource): Promise<Pick<Built, "counts" | "headline">> {
-  const text = await source.read("topology.json");
+  const text = await source.read("topology.md");
   return mapCounts(text === null ? null : parseTopology(text));
 }
 
@@ -230,14 +238,20 @@ function rulesCounts(catalog: RuleCatalog): Pick<Built, "counts" | "headline"> {
 }
 
 export async function rulesResults(source: StageSource, appDir: string): Promise<Full<RulesResults>> {
-  const [result, markdown, dataObjects] = await Promise.all([source.read("rules_result.json"), source.read("BUSINESS_RULES.md"), source.read("DATA_OBJECTS.md")]);
-  const catalog = ruleCatalog(result, markdown, dataObjects);
+  const [markdown, dataObjects] = await Promise.all([source.read("BUSINESS_RULES.md"), source.read("DATA_OBJECTS.md")]);
+  const catalog = ruleCatalog(markdown, dataObjects);
   const gaps = markdown === null ? undefined : sectionMatching(sectionsOf(markdown), /coverage gaps/i);
   return {
-    rules: catalog.rules,
+    // A rules index links each rule's own file relative to itself; the portal reads the file by its repository path.
+    rules: catalog.rules.map((rule) => {
+      if (rule.file === undefined) return rule;
+      const { file, ...rest } = rule;
+      const path = posix.normalize(`${appDir}/${file}`);
+      return path.startsWith("..") ? rest : { ...rest, file: path };
+    }),
     dataObjects: catalog.dataObjects,
-    stats: catalog.stats,
-    coverageGaps: [...new Set([...(gaps === undefined ? [] : bulletsIn(gaps.body)), ...catalog.skippedPhases])],
+    stats: rulesCounts(catalog).counts,
+    coverageGaps: [...new Set(gaps === undefined ? [] : bulletsIn(gaps.body))],
     source: catalog.source,
     ...rulesCounts(catalog),
     ...(markdown === null ? {} : { document: { path: `${appDir}/BUSINESS_RULES.md`, markdown } }),
@@ -245,9 +259,7 @@ export async function rulesResults(source: StageSource, appDir: string): Promise
 }
 
 export async function rulesHeadline(source: StageSource): Promise<Pick<Built, "counts" | "headline">> {
-  const result = await source.read("rules_result.json");
-  // The Markdown is read only when there is no structured result.
-  return rulesCounts(ruleCatalog(result, result === null ? await source.read("BUSINESS_RULES.md") : null, null));
+  return rulesCounts(ruleCatalog(await source.read("BUSINESS_RULES.md"), null));
 }
 
 // ---- harden ---------------------------------------------------------------------------------
@@ -289,7 +301,7 @@ export async function hardenHeadline(source: StageSource): Promise<Pick<Built, "
   return hardenCounts(text === null ? null : parseSecurityFindings(text));
 }
 
-// ---- understand -----------------------------------------------------------------------------
+/// ---- understand -----------------------------------------------------------------------------
 
 function understandCounts(matrix: Traceability | null, workItems = 0): Pick<Built, "counts" | "headline"> {
   if (matrix === null) return { counts: {}, headline: [] };
@@ -317,6 +329,31 @@ function understandCounts(matrix: Traceability | null, workItems = 0): Pick<Buil
   };
 }
 
+/** The same counts from the totals the generated traceability.md keeps in its front matter (one small read). */
+function understandSummaryCounts(summary: TraceSummary | null): Pick<Built, "counts" | "headline"> {
+  if (summary === null) return { counts: {}, headline: [] };
+  return {
+    counts: {
+      units: summary.units,
+      modules: summary.modules,
+      specified: summary.specified,
+      notWritten: summary.units - summary.specified,
+      entryPoints: summary.entryPoints,
+      rulesCovered: summary.rulesCovered,
+      rulesUncovered: 0,
+      findingsMapped: summary.findingsMapped,
+      findingsUnmapped: 0,
+      files: summary.files,
+      dataStores: summary.dataStores,
+      cycles: 0,
+      openQuestions: summary.openQuestions,
+      leftOut: 0,
+      workItems: 0,
+    },
+    headline: [plural(summary.units, "unit"), plural(summary.modules, "module")],
+  };
+}
+
 const AS_IS_DOCUMENTS: Array<Omit<AsIsDocument, "path" | "markdown"> & { file: string }> = [
   { id: "readme", title: "Overview", file: "README.md" },
   { id: "architecture", title: "Architecture", file: "architecture.md" },
@@ -326,10 +363,55 @@ const AS_IS_DOCUMENTS: Array<Omit<AsIsDocument, "path" | "markdown"> & { file: s
 
 type WorkItemRef = NonNullable<UnderstandUnit["workItem"]>;
 
-/** Work-item files read at once. */
+/** Unit documents read at once. */
 const WORK_ITEM_READS = 8;
 
-/** The unit state file of each unit that has one at the ref, by full unit id. */
+/** The catalog of the application at the source's commit (its index and the document of each module); null without an index. */
+async function catalogOf(source: StageSource, applicationId: string): Promise<ItemCatalog | null> {
+  const index = await source.readPath(catalogPath(applicationId));
+  if (index === null) return null;
+  const documents = (await source.list(assessmentCatalogDir(applicationId))).filter((file) => file.path.endsWith(".md") && !file.path.endsWith("/index.md"));
+  const modules: Record<string, string> = {};
+  for (const batch of chunk(documents, WORK_ITEM_READS)) {
+    await Promise.all(
+      batch.map(async (file) => {
+        const text = await source.readPath(file.path, file.size);
+        if (text !== null) modules[file.path.slice(file.path.lastIndexOf("/") + 1, -3)] = text;
+      }),
+    );
+  }
+  return parseItemCatalog(index, modules);
+}
+
+/** What a unit's legacy folder holds that the results views read. */
+interface UnitDocuments {
+  trace: string | null;
+  rules: string | null;
+  review: string | null;
+}
+
+/** The documents of every unit that is understood at the ref (its understanding record is there), by item id. */
+async function understoodUnits(source: StageSource, applicationId: string, items: readonly ItemCatalogItem[]): Promise<Map<string, UnitDocuments>> {
+  const found = new Map<string, UnitDocuments>();
+  for (const batch of chunk(items, WORK_ITEM_READS)) {
+    await Promise.all(
+      batch.map(async (item) => {
+        const [module = "", unit = ""] = item.id.split("/");
+        if (!UNIT_SEGMENT.test(module) || module === "restricted" || !UNIT_SEGMENT.test(unit)) return;
+        if ((await source.readPath(unitUnderstandingPath(applicationId, module, unit))) === null) return;
+        const [trace, rules, review] = await Promise.all([
+          source.readPath(unitTracePath(applicationId, module, unit)),
+          source.readPath(unitRulesPath(applicationId, module, unit)),
+          source.readPath(unitRulesReviewPath(applicationId, module, unit)),
+        ]);
+        found.set(item.id, { trace, rules, review });
+      }),
+    );
+  }
+  return found;
+}
+
+/** The card of each unit that has one at the ref, by full unit id. */
 async function workItemsOf(source: StageSource, applicationId: string, units: Traceability["units"]): Promise<Map<string, WorkItemRef>> {
   const found = new Map<string, WorkItemRef>();
   if (!UNIT_SEGMENT.test(applicationId)) return found;
@@ -339,30 +421,11 @@ async function workItemsOf(source: StageSource, applicationId: string, units: Tr
     await Promise.all(
       batch.map(async (unit) => {
         const path = unitStatePath(applicationId, unit.module, unit.unit);
-        const size = (await source.list(unitDir(applicationId, unit.module, unit.unit))).find((file) => file.path === path)?.size;
+        const size = (await source.list(unitModernDir(applicationId, unit.module, unit.unit))).find((file) => file.path === path)?.size;
         if (size === undefined) return;
         const text = await source.readPath(path, size);
         const item = text === null ? null : parseWorkItem(text);
         found.set(unit.id, { path, status: item?.status ?? "unknown", ...(item?.complexity === undefined ? {} : { complexity: item.complexity }) });
-      }),
-    );
-  }
-  return found;
-}
-
-/** The trace links (trace.json) and rule verdicts (rules.json + rules-review.json) of each unit, by full unit id. */
-async function unitFactsOf(source: StageSource, applicationId: string, units: Traceability["units"]): Promise<Map<string, Pick<UnderstandUnit, "trace" | "rulesReview">>> {
-  const found = new Map<string, Pick<UnderstandUnit, "trace" | "rulesReview">>();
-  for (const batch of chunk(units, WORK_ITEM_READS)) {
-    await Promise.all(
-      batch.map(async (unit) => {
-        const [trace, rules, review] = await Promise.all([
-          source.readPath(unitTracePath(applicationId, unit.module, unit.unit)),
-          source.readPath(unitRulesPath(applicationId, unit.module, unit.unit)),
-          source.readPath(unitRulesReviewPath(applicationId, unit.module, unit.unit)),
-        ]);
-        const facts = itemUnitFacts(trace, rules, review);
-        if (facts.trace !== undefined || facts.rulesReview !== undefined) found.set(unit.id, facts);
       }),
     );
   }
@@ -398,8 +461,11 @@ async function currentWorkItems(source: StageSource, statusSource: StageSource |
 }
 
 /**
+ * The understood units, their traceability and their documents, built from the catalog and each unit's
+ * legacy folder (`01-legacy/<module>/<unit>/`; `_generated/traceability.md` keeps only the totals).
  * `statusSource`: the default branch tip, when the selected ref is another commit (a run's
  * branch): work-item status is read there, since members move items on the default branch.
+ * `only`: one catalog item id, for the results of a single unit.
  */
 export async function understandResults(
   source: StageSource,
@@ -407,26 +473,37 @@ export async function understandResults(
   applicationId: string,
   missingInputs: UnderstandResults["missingInputs"],
   statusSource?: StageSource,
+  only?: string,
 ): Promise<Full<UnderstandResults>> {
-  const [traceText, ...texts] = await Promise.all([source.read("traceability.json"), ...AS_IS_DOCUMENTS.map((document) => source.read(document.file))]);
-  const matrix = traceText === null ? null : parseTraceability(traceText);
+  const [catalog, summaryText, ...texts] = await Promise.all([catalogOf(source, applicationId), source.read("traceability.md"), ...AS_IS_DOCUMENTS.map((document) => source.read(document.file))]);
+  const summary = summaryText === null ? null : parseTraceSummary(summaryText);
+  const items = (catalog?.items ?? []).filter((item) => item.status !== "retired" && (only === undefined || item.id === only));
+  const documents = catalog === null ? new Map<string, UnitDocuments>() : await understoodUnits(source, applicationId, items);
+  const facts: UnitFacts[] = items.flatMap((item) => {
+    const unit = documents.get(item.id);
+    if (unit === undefined) return [];
+    const [module = "", name = ""] = item.id.split("/");
+    return [{ item, trace: unit.trace === null ? null : parseUnitTrace(unit.trace), spec: unitAsIsPath(applicationId, module, name) }];
+  });
+  const matrix = catalog === null || (facts.length === 0 && summary === null) ? null : buildTraceability(applicationId, facts, summary?.inputs ?? { businessRules: facts.length > 0, securityFindings: facts.length > 0 }, new Set(catalog.items.filter((item) => item.status !== "retired").map((item) => item.id)));
   const workItems = matrix === null ? new Map<string, WorkItemRef>() : await currentWorkItems(source, statusSource, applicationId, matrix.units);
-  const facts = matrix === null ? new Map<string, Pick<UnderstandUnit, "trace" | "rulesReview">>() : await unitFactsOf(source, applicationId, matrix.units);
-  const documents: AsIsDocument[] = AS_IS_DOCUMENTS.flatMap(({ file, ...document }, index) => {
+  const asIsDocuments: AsIsDocument[] = AS_IS_DOCUMENTS.flatMap(({ file, ...document }, index) => {
     const markdown = texts[index];
     return markdown === null || markdown === undefined ? [] : [{ ...document, path: `${appDir}/${file}`, markdown }];
   });
-  const readme = documents.find((document) => document.id === "readme");
+  const readme = asIsDocuments.find((document) => document.id === "readme");
   return {
     units: (matrix?.units ?? []).map((unit) => {
       const workItem = workItems.get(unit.id);
-      return { ...unit, ...(workItem === undefined ? {} : { workItem }), ...(facts.get(unit.id) ?? {}) };
+      const unitDocuments = documents.get(unit.key);
+      const unitFacts = unitDocuments === undefined ? {} : itemUnitFacts(unitDocuments.trace, unitDocuments.rules, unitDocuments.review);
+      return { ...unit, ...(workItem === undefined ? {} : { workItem }), ...unitFacts };
     }),
     matrix:
       matrix === null
         ? null
         : {
-            path: `${appDir}/traceability.json`,
+            path: `${appDir}/traceability.md`,
             inputs: matrix.inputs,
             rulesCovered: Object.keys(matrix.rules),
             findingsMapped: Object.keys(matrix.findings),
@@ -436,7 +513,7 @@ export async function understandResults(
             cycles: matrix.cycles,
             notes: matrix.notes,
           },
-    documents,
+    documents: asIsDocuments,
     missingInputs,
     ...understandCounts(matrix, workItems.size),
     ...(readme === undefined ? {} : { document: { path: readme.path, markdown: readme.markdown } }),
@@ -444,6 +521,6 @@ export async function understandResults(
 }
 
 export async function understandHeadline(source: StageSource): Promise<Pick<Built, "counts" | "headline">> {
-  const text = await source.read("traceability.json");
-  return understandCounts(text === null ? null : parseTraceability(text));
+  const text = await source.read("traceability.md");
+  return understandSummaryCounts(text === null ? null : parseTraceSummary(text));
 }

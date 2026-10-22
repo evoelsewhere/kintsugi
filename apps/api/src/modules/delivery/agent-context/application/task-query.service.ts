@@ -138,7 +138,7 @@ export class TaskQueryService {
 
     const predecessorGates: PredecessorGate[] = await Promise.all(record.predecessorGates.map(async (gate) => ({
       ...gate,
-      // Gate text in unit.md is a scaffold, never evidence of a human decision.
+      // Gate status is derived from evidence-bound records, never from unit-card frontmatter.
       status: await this.approvals.predecessorStatus(record.projectId, gateUnitId(record, gate), gate.gateId, record.sourceCommit),
     })));
     return evaluateReadiness({ workItem: record.workItem, requiredInputs, predecessorGates });

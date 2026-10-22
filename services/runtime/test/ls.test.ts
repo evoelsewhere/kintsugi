@@ -1,4 +1,4 @@
-// The kernel ls tool (ADR-0039): pi's flat listing unchanged, plus a guarded `tree`/`depth` mode.
+// The kernel ls tool (ADR-0040): pi's flat listing unchanged, plus a guarded `tree`/`depth` mode.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

@@ -9,7 +9,12 @@ RUN pnpm install --frozen-lockfile \
 
 FROM node:22-trixie-slim
 
+ARG KINTSUGI_BUILD_COMMIT=unknown
+ARG KINTSUGI_BUILD_TIME=
+
 ENV NODE_ENV=production \
+    KINTSUGI_BUILD_COMMIT=$KINTSUGI_BUILD_COMMIT \
+    KINTSUGI_BUILD_TIME=$KINTSUGI_BUILD_TIME \
     PORT=3000 \
     KINTSUGI_PORTAL_DIR=/app/apps/portal/dist
 

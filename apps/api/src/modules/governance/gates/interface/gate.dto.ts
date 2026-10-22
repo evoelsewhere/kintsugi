@@ -7,7 +7,7 @@ import { pageQuerySchema } from "#common/interface/pagination.js";
 import { GATE_KEY_PATTERN, GATE_STATUSES, type GateStatus } from "../domain/gate.js";
 
 const id = z.string().min(1).max(128);
-const gateKey = z.string().regex(GATE_KEY_PATTERN, "must be G0–G6 or a lowercase stage gate key such as stage:assess");
+const gateKey = z.string().regex(GATE_KEY_PATTERN, "must be G0–G4 or a lowercase stage gate key such as stage:assess");
 
 /** `?projectId&applicationId&gateKey&status=pending,approved&limit&offset`. */
 export const listGatesQuerySchema = pageQuerySchema.extend({

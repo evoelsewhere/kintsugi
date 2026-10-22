@@ -142,8 +142,7 @@ function ApplicationForm({ application, existingIds, onClose, onSubmit }: Applic
     if (name.trim() === "") return setError("Enter a name.");
     const effectiveId = application?.id ?? uniqueId(name, existingIds);
     if (effectiveId === "") return setError("The name needs at least one letter or digit.");
-    // Every application is rebuilt: the disposition is not a choice.
-    void run(() => onSubmit(effectiveId, { name: name.trim(), disposition: "rebuild" }));
+    void run(() => onSubmit(effectiveId, { name: name.trim() }));
   }
 
   return (

@@ -128,7 +128,7 @@ describe("session lockdown", () => {
     const { done, events } = await runJob(runtime, spec);
     expect(done.type).toBe("job.completed");
     const preamble = probe.first()[0]?.sections?.["preamble"];
-    expect(preamble).toBe(`You are a test agent.\n\n${describeWorkspace(spec.workspace, [])}\n\n<skill name="style">\nBe terse.\n</skill>`);
+    expect(preamble).toBe(`You are a test agent.\n\n<skill name="style">\nBe terse.\n</skill>\n\n${describeWorkspace(spec.workspace, [])}`);
     const everything = JSON.stringify(probe.first()) + JSON.stringify(events);
     expect(everything).not.toMatch(/MARKER_(AGENTS_MD|SYSTEM_MD|EXTENSION_LOADED)/);
   });

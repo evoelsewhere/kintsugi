@@ -68,6 +68,7 @@ In the GitHub repository, open **Settings → Secrets and variables → Actions*
 | `KINTSUGI_HTTP_PORT` | Optional; host port exposed by Compose. Defaults to `8080` |
 | `KINTSUGI_DATA_DIR` | Optional; host data directory, set on first install only. Defaults to `<KINTSUGI_REMOTE_DIR>/data` |
 | `KINTSUGI_BOOTSTRAP_ADMIN_USER` | Optional; first admin username. Defaults to `admin` |
+| `KINTSUGI_MIN_FREE_GB` | Optional; whole GiB that must be free on the host's image storage before a deploy pulls images. Defaults to `5` |
 
 Add these repository secrets:
 
@@ -78,6 +79,8 @@ Add these repository secrets:
 | `KINTSUGI_SECRET_KEY` | Optional; base64-encoded 32-byte encryption key for first install |
 | `POSTGRES_PASSWORD` | Optional; at least 32 hexadecimal characters for first install |
 | `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` | Optional; at least 8 letters, digits, dots, underscores, or hyphens for first install |
+
+Each deploy pulls new images tagged with the commit. Before pulling, the workflow checks the free space where Docker keeps its images (`KINTSUGI_MIN_FREE_GB`); below it, it removes the Kintsugi images no container uses and checks again, and stops with the numbers when it is still short. After a successful start it removes the images the stack no longer uses (only those carrying this repository's `org.opencontainers.image.source` label, never other images on the host); an older version is pulled again by its tag.
 
 Enter secret values directly in GitHub's secret editor. The three Kintsugi secrets are read only when `.env` is first created; later deployments preserve their stored values so the database password or encryption key cannot be rotated accidentally. If these secrets are unset, the workflow generates them on the server. Anyone who can deploy through Actions can trigger deployment, but secret values are not included in workflow output. Do not add passwords or tokens as repository variables, commit them, or paste them into workflow files.
 

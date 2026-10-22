@@ -11,9 +11,6 @@
   (code + workspace     │                              │
    repos, PRs)          │                              │◄───► Trackers / wikis (Jira, Confluence,
                         └──────────────────────────────┘      Azure DevOps, SharePoint)
-                                       ▲
-                                       └──── Observability of the target system (P6–P7):
-                                             Datadog / New Relic / Splunk / PagerDuty
 ```
 
 | Partner | Input to Kintsugi | Output from Kintsugi |

@@ -1,5 +1,5 @@
 // The item catalog with derived item status (ADR-0033): the catalog assess merged on the default
-// branch, meta.json of understood items, and the understand runs the worker records (running,
+// branch, the understanding records of understood items, and the understand runs the worker records (running,
 // in an open pull request, failed, abandoned). The mirror is a real bare clone of a fixture
 // repository served by a local Git server.
 
@@ -10,46 +10,61 @@ import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
-import { type Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { catalogDocuments, findingsDocument, understoodUnit } from "../support/documents.js";
 
-const item = (id: string, files: string[], extra: Record<string, unknown> = {}): Record<string, unknown> => ({
-  id,
-  module: id.split("/")[0],
-  kind: "program",
-  name: id,
-  summary: "",
-  files,
-  leaves: [],
-  entryPoints: [],
-  loc: 10,
-  complexity: "low",
-  digest: `sha256:${id.replace(/[^a-z]/g, "")}`,
-  status: "active",
-  aliases: [],
-  parts: [],
-  ...extra,
-});
+/** The catalog assess merged (ADR-0042): an index and one document per module. */
+export const CATALOG = catalogDocuments(
+  "web",
+  [
+    { id: "billing", name: "Billing" },
+    { id: "customers", name: "Customers" },
+  ],
+  [
+    { id: "billing/invoice", files: ["src/Invoice.java"] },
+    { id: "billing/rates", files: ["src/Rates.java"] },
+    { id: "billing/tax", files: ["src/Tax.java"] },
+    { id: "customers/update", files: ["src/Update.java"] },
+    { id: "customers/report", files: ["src/Report.java"] },
+    { id: "customers/lookup", files: ["src/Lookup.java"] },
+    { id: "customers/gone", files: ["src/Gone.java"], status: "retired" },
+  ],
+  ["README.md"],
+  { repo: "legacy", commit: "a".repeat(40) },
+  ["src/X.java is claimed by 2 leaves"],
+);
 
-export const CATALOG = {
-  schemaVersion: 1,
-  app: "web",
-  source: { repo: "legacy", commit: "a".repeat(40) },
-  modules: [
-    { id: "billing", name: "Billing", summary: "" },
-    { id: "customers", name: "Customers", summary: "" },
-  ],
-  items: [
-    item("billing/invoice", ["src/Invoice.java"]),
-    item("billing/rates", ["src/Rates.java"]),
-    item("billing/tax", ["src/Tax.java"]),
-    item("customers/update", ["src/Update.java"]),
-    item("customers/report", ["src/Report.java"]),
-    item("customers/lookup", ["src/Lookup.java"]),
-    item("customers/gone", ["src/Gone.java"], { status: "retired" }),
-  ],
-  unassigned: ["README.md"],
-  ambiguities: ["src/X.java is claimed by 2 leaves"],
-};
+/** The checked plan of a planning run (ADR-0041), at the catalog's source commit. */
+const PLAN = [
+  "---",
+  "version: 1",
+  'app: "web"',
+  `catalogCommit: "${"a".repeat(40)}"`,
+  "items: 7",
+  "open: 5",
+  "batches: 1",
+  "planned: 3",
+  "---",
+  "# Plan to understand web",
+  "",
+  "Billing first.",
+  "",
+  "## Batch 1: Billing",
+  "",
+  "Foundation.",
+  "",
+  "- **risk:** high",
+  "- **loc:** 30",
+  "- **high complexity:** 0",
+  "- **cohesion:** 1.0",
+  "",
+  "### Items",
+  "",
+  "- `billing/invoice`",
+  "- `billing/tax`",
+  "- `customers/gone`",
+  "",
+].join("\n");
 
 describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
   let app: TestApp;
@@ -63,22 +78,27 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     process.env["KINTSUGI_DATA_DIR"] = dataDir;
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
-    await remote.commit("docs", "applications/web/assessment/catalog.json", JSON.stringify(CATALOG));
+    for (const [path, text] of Object.entries(CATALOG)) await remote.commit("docs", path, text);
+    await remote.commit("docs", "10-applications/web/01-legacy/plan.md", PLAN);
     // Understood on main: invoice at the catalog's digest, rates at an older one (stale).
-    await remote.commit("docs", "applications/web/units/billing/invoice/meta.json", JSON.stringify({ digest: "sha256:billinginvoice", commit: "b".repeat(40), runId: "run-merged" }));
-    await remote.commit("docs", "applications/web/units/billing/rates/meta.json", JSON.stringify({ digest: "sha256:old", runId: "run-merged" }));
-    // The per-item files of invoice and the generated views, on main.
-    await remote.commit("docs", "applications/web/units/billing/invoice/rules.json", JSON.stringify({ rules: [{ id: "RULE-billing.invoice-01", name: "Invoice total", category: "Calculation", priority: "P0", source: "src/Invoice.java:3", confidence: "High" }] }));
-    await remote.commit("docs", "applications/web/units/billing/invoice/findings.json", JSON.stringify({ findings: [{ id: "SEC-billing.invoice-01", cwe: "CWE-89", severity: "High", source: "src/Invoice.java:9", title: "SQL built from input" }], filesReviewed: ["src/Invoice.java"] }));
-    await remote.commit("docs", "applications/web/units/billing/invoice/trace.json", JSON.stringify({ rulesApplied: ["RULE-billing.invoice-01"], findings: ["SEC-billing.invoice-01"], dependencies: [{ target: "billing/rates", kind: "call", direction: "outbound" }] }));
-    await remote.commit("docs", "applications/web/units/billing/invoice/as-is.md", "# Invoice\n");
+    const invoice = understoodUnit("web", "billing/invoice", {
+      digest: "sha256:invoice",
+      commit: "b".repeat(40),
+      runId: "run-merged",
+      rule: { id: "RULE-billing.invoice-1a2b3c4d", name: "Invoice total", source: "src/Invoice.java:3" },
+      findings: ["SEC-billing.invoice-01"],
+      dependencies: [{ target: "billing/rates" }],
+    });
+    for (const [path, text] of Object.entries({ ...invoice, ...understoodUnit("web", "billing/rates", { digest: "sha256:old", commit: "b".repeat(40), runId: "run-merged" }) })) await remote.commit("docs", path, text);
+    await remote.commit("docs", "10-applications/web/01-legacy/billing/invoice/findings.md", findingsDocument("billing/invoice", [{ id: "SEC-billing.invoice-01", cwe: "CWE-89", severity: "High", source: "src/Invoice.java:9", title: "SQL built from input" }]));
+    // The topology the assessment summarised, on main.
     await remote.commit(
       "docs",
-      "applications/web/generated/topology.json",
-      JSON.stringify({ system: "web", root: { id: "sys", name: "web", kind: "system", children: [{ id: "dom:billing", name: "Billing", kind: "domain", children: [{ id: "INV", name: "Invoice", kind: "module", file: "src/Invoice.java" }] }] }, edges: [], entryPoints: ["INV"], deadEnds: [], observations: [], flows: [] }),
+      "10-applications/web/01-legacy/topology.md",
+      '---\nsystem: "web"\n---\n# Topology of web\n\n## Domains\n\n| Domain | Leaves | Data stores | LOC |\n| --- | --- | --- | --- |\n| Billing | 1 | 0 | 10 |\n\n## Leaves\n\n| Leaf | Name | Kind | Domain | File | LOC | Entry point | Dead end |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| INV | Invoice | module | Billing | src/Invoice.java | 10 | yes |  |\n',
     );
-    await remote.commit("docs", "applications/web/units/billing/tax/as-is.md", "# Tax\n", "kintsugi/legacy-analyst/run-open");
-    await remote.commit("docs", "applications/web/units/customers/report/as-is.md", "# Report\n", "kintsugi/legacy-analyst/run-abandoned");
+    await remote.commit("docs", "10-applications/web/01-legacy/billing/tax/spec.md", "# Tax\n", "kintsugi/legacy-analyst/run-open");
+    await remote.commit("docs", "10-applications/web/01-legacy/customers/report/spec.md", "# Report\n", "kintsugi/legacy-analyst/run-abandoned");
     await cloneMirror(`${remote.baseUrl}/docs.git`, new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
     app = await startTestApp();
@@ -86,7 +106,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('local', 'plain-git', 'Local', $1, 'none')", [remote.baseUrl]);
     await app.db.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('docs', 'local', $1, 'main'), ('legacy', 'local', $2, 'main')", [`${remote.baseUrl}/docs.git`, `${remote.baseUrl}/legacy.git`]);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "shop", name: "Shop", documentRepositoryId: "docs" } })).status).toBe(201);
-    expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web", disposition: "refactor" } })).status).toBe(201);
+    expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications/web/repositories", { body: { repositoryId: "legacy", role: "legacy" } })).status).toBe(201);
 
     await app.db.query(
@@ -133,6 +153,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect(data.ref.ref).toBe("refs/heads/main");
     expect(data.catalog.items).toBeUndefined();
     expect(data.catalog.unassigned).toEqual(["README.md"]);
+    expect(data.catalog.ambiguities).toEqual(["src/X.java is claimed by 2 leaves"]);
     const status = Object.fromEntries(data.items.map((entry) => [entry.id, entry.status]));
     expect(status).toEqual({
       "billing/invoice": "understood",
@@ -147,10 +168,25 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
       "customers/gone": "retired",
     });
     const byId = new Map(data.items.map((entry) => [entry.id, entry]));
+    expect(data.items.every((entry) => (entry as { assetClass?: string }).assetClass === "code")).toBe(true);
     expect(byId.get("billing/tax")?.pr).toEqual({ runId: "run-open", branch: "kintsugi/legacy-analyst/run-open", url: "https://git.example/pr/1" });
     expect(byId.get("billing/invoice")?.understood).toEqual({ commit: "b".repeat(40), runId: "run-merged" });
     expect(byId.get("billing/rates")?.lastRun?.id).toBe("run-failed");
     expect(data.counts).toEqual({ understood: 1, failed: 3, "in-pr": 1, "not-analysed": 1, retired: 1 });
+  });
+
+  it("serves the AI plan with where its items stand now", async () => {
+    const { client } = await memberClient(app, admin, "plan-reader", ["user"]);
+    const response = await client.get<{ plan: { strategy: string; batches: Array<{ items: string[] }> } | null; stale: boolean; status: Record<string, string> }>("/projects/shop/applications/web/understand/plan");
+    expect(response.status).toBe(200);
+    const view = response.body.data!;
+    expect(view.plan?.strategy).toBe("Billing first.");
+    expect(view.plan?.batches[0]?.items).toEqual(["billing/invoice", "billing/tax", "customers/gone"]);
+    // The catalog was not reassessed since: the plan fits; its items carry their status as of now.
+    expect(view.stale).toBe(false);
+    expect(view.status).toEqual({ "billing/invoice": "understood", "billing/tax": "in-pr", "customers/gone": "retired" });
+    expect((await admin.get("/projects/shop/applications/nope/understand/plan")).status).toBe(404);
+    expect((await new Client(app).get("/projects/shop/applications/web/understand/plan")).status).toBe(401);
   });
 
   it("is 404 without a catalog or for an unknown application, 400 for a bad ref", async () => {
@@ -236,11 +272,11 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     const rules = await admin.get<Results>(`${base}?view=extract-rules&item=billing/invoice`);
     expect(rules.status).toBe(200);
     expect(rules.body.data).toMatchObject({ stage: "extract-rules", empty: false, scope: { item: "billing/invoice" } });
-    expect(rules.body.data?.rules?.map((rule) => rule.id)).toEqual(["RULE-billing.invoice-01"]);
+    expect(rules.body.data?.rules?.map((rule) => rule.id)).toEqual(["RULE-billing.invoice-1a2b3c4d"]);
     const findings = await admin.get<Results>(`${base}?view=harden&item=billing/invoice`);
     expect(findings.body.data?.report?.findings.map((finding) => finding.id)).toEqual(["SEC-billing.invoice-01"]);
     const trace = await admin.get<Results>(`${base}?view=understand&item=billing/invoice`);
-    expect(trace.body.data?.units?.map((unit) => [unit.id, unit.spec, unit.dependsOn, unit.rules])).toEqual([["web/billing/invoice", "applications/web/units/billing/invoice/as-is.md", ["web/billing/rates"], ["RULE-billing.invoice-01"]]]);
+    expect(trace.body.data?.units?.map((unit) => [unit.id, unit.spec, unit.dependsOn, unit.rules])).toEqual([["web/billing/invoice", "10-applications/web/01-legacy/billing/invoice/spec.md", ["web/billing/rates"], ["RULE-billing.invoice-1a2b3c4d"]]]);
     const map = await admin.get<Results>(`${base}?view=map`);
     expect(map.body.data).toMatchObject({ stage: "map", empty: false, scope: {} });
     expect(map.body.data?.topology?.nodes.map((node) => node.id)).toContain("INV");

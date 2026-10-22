@@ -7,6 +7,8 @@ export interface SupportedModel {
   contextWindow?: number;
   maxTokens?: number;
   reasoning?: boolean;
+  /** The thinking levels pi accepts for this model, weakest first (`["off"]` when it does not reason). */
+  thinkingLevels: string[];
 }
 
 export interface SupportedBuiltinProvider {

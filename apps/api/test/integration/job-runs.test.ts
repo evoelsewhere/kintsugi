@@ -37,7 +37,7 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     }
     expect((await admin.request("POST", "/admin/projects", { body: { id: "billing", name: "Billing", documentRepositoryId: "billing-docs" } })).status).toBe(201);
     for (const id of ["web", "batch"]) {
-      expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id, name: id, disposition: "refactor" } })).status).toBe(201);
+      expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id, name: id } })).status).toBe(201);
     }
     expect((await admin.request("POST", "/admin/projects/billing/applications/web/repositories", { body: { repositoryId: "billing-legacy", role: "legacy" } })).status).toBe(201);
   });
@@ -79,7 +79,7 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
   it("shows the worker's record: steps, artifacts, document write and restricted records", async () => {
     // What the worker writes when the stage has run.
     await app.db.query("insert into workflow.job_run (id, project_id, application_id, parent_id, kind, name, status, agent) values ('step-2', 'billing', 'web', $1, 'agent', 'legacy-analyst', 'succeeded', 'legacy-analyst@1.0.0')", [runId]);
-    await app.db.query("insert into workflow.artifact (job_run_id, path, sha256, size, provenance) values ($1, 'applications/web/assessment/ASSESSMENT.md', 'abc', 12, '{\"origin\":\"runtime-agent\"}')", [runId]);
+    await app.db.query("insert into workflow.artifact (job_run_id, path, sha256, size, provenance) values ($1, '10-applications/web/01-legacy/assessment.md', 'abc', 12, '{\"origin\":\"runtime-agent\"}')", [runId]);
     const secret = encryptSecret("| hu** | main.c:1 |");
     await app.db.query("insert into governance.restricted_record (job_run_id, path, ciphertext, iv, auth_tag, size) values ('step-2', 'SECRETS.local.md', $1, $2, $3, 19)", [secret.ciphertext, secret.iv, secret.authTag]);
     await app.db.query("insert into workflow.document_write (id, project_id, kind, message, status, pr_url) values ('w1', 'billing', 'job-output', 'Assess web', 'pr-opened', 'https://github.example.invalid/org/billing-docs/pull/7')");
@@ -90,7 +90,7 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
 
     const detail = (await admin.get<RunView>(`/projects/billing/job-runs/${runId}`)).body.data!;
     expect(detail.steps?.map((step) => [step.name, step.status, step.restrictedRecords])).toEqual([["legacy-analyst", "succeeded", 1]]);
-    expect(detail.artifacts).toEqual([{ path: "applications/web/assessment/ASSESSMENT.md", sha256: "abc", size: 12, provenance: { origin: "runtime-agent" } }]);
+    expect(detail.artifacts).toEqual([{ path: "10-applications/web/01-legacy/assessment.md", sha256: "abc", size: 12, provenance: { origin: "runtime-agent" } }]);
     expect(JSON.stringify(detail)).not.toContain("hu**");
     expect((await admin.get("/projects/billing/job-runs/missing")).status).toBe(404);
 

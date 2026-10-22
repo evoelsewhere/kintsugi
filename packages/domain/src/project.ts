@@ -1,10 +1,10 @@
 // Projects, applications and their repositories (ADR-0028). Pure types and rules: the API
 // persists them, the portal shows them, kintsugi.yaml declares them.
 //
-// Runtime values of index.ts (DISPOSITIONS, REPOSITORY_ROLES, …) are only read inside
+// Runtime values of index.ts (REPOSITORY_ROLES, …) are only read inside
 // functions: index.ts re-exports this module, so top-level reads would hit the import cycle.
 
-import { type Disposition, REPOSITORY_ROLES, type RepositoryRole } from "./index.js";
+import { REPOSITORY_ROLES, type RepositoryRole } from "./index.js";
 
 /** One problem found by a validator; `path` locates it (e.g. `applications[0].repos[1].component`). */
 export interface ValidationProblem {
@@ -21,13 +21,12 @@ export interface Project {
   documentRepositoryId: string;
 }
 
-/** An application in scope of a project, with its 7R strategy and pipeline. */
+/** An application in scope of a project (every application is rebuilt), with its pipeline. */
 export interface Application {
   id: string;
   projectId: string;
   name: string;
-  disposition: Disposition;
-  /** A built-in pipeline id, or the id of a pipeline declared in kintsugi.yaml. */
+  /** The id of a pipeline declared in kintsugi.yaml. */
   pipeline?: string;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG_ITEM_ID_PATTERN, ITEM_SEGMENT_PATTERN, catalogPath, itemMetaPath, workItemIdOf } from "../src/index.js";
+import { CATALOG_ITEM_ID_PATTERN, ITEM_SEGMENT_PATTERN, catalogPath, classifyItem, itemUnderstandingPath, workItemIdOf } from "../src/index.js";
 
 describe("item catalog vocabulary", () => {
   it("accepts <module>/<item> ids of kebab-case segments only", () => {
@@ -11,7 +11,20 @@ describe("item catalog vocabulary", () => {
 
   it("names the work item and the document-repo paths of an item", () => {
     expect(workItemIdOf("billing", "invoicing/invoice-entry")).toBe("billing/invoicing/invoice-entry");
-    expect(catalogPath("billing")).toBe("applications/billing/assessment/catalog.json");
-    expect(itemMetaPath("billing", "invoicing/invoice-entry")).toBe("applications/billing/units/invoicing/invoice-entry/meta.json");
+    expect(catalogPath("billing")).toBe("10-applications/billing/01-legacy/_catalog/index.md");
+    expect(itemUnderstandingPath("billing", "invoicing/invoice-entry")).toBe("10-applications/billing/01-legacy/invoicing/invoice-entry/understanding.md");
+  });
+});
+
+describe("item asset class", () => {
+  it("calls an item a test or generated only when every file is", () => {
+    expect(classifyItem(["src/test/java/org/OrganizationRegisterConsumerTest.java", "src/test/resources/x.json"])).toBe("test");
+    expect(classifyItem(["web/app.test.ts", "web/util.spec.ts"])).toBe("test");
+    expect(classifyItem(["pkg/a_test.go"])).toBe("test");
+    expect(classifyItem(["src/main/java/Invoice.java", "src/test/java/InvoiceTest.java"])).toBe("code");
+    expect(classifyItem(["build/gen/Api.java", "src/generated/Model.java"])).toBe("generated");
+    expect(classifyItem(["static/app.min.js"])).toBe("generated");
+    expect(classifyItem(["src/main/java/Invoice.java"])).toBe("code");
+    expect(classifyItem([])).toBe("code");
   });
 });

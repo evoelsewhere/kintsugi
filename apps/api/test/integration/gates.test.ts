@@ -34,7 +34,7 @@ describe.skipIf(!hasDatabase)("gates (integration)", () => {
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('github', 'github', 'GitHub', 'https://github.example.invalid', 'none')");
     await app.db.query("insert into admin.git_repository (id, server_id, url, sync_status) values ('alpha-docs', 'github', 'https://github.example.invalid/org/alpha-docs.git', 'ready')");
     expect((await admin.request("POST", "/admin/projects", { body: { id: "alpha", name: "Alpha", documentRepositoryId: "alpha-docs" } })).status).toBe(201);
-    expect((await admin.request("POST", "/admin/projects/alpha/applications", { body: { id: "web", name: "Web", disposition: "refactor" } })).status).toBe(201);
+    expect((await admin.request("POST", "/admin/projects/alpha/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
   });
   afterAll(async () => {
     await app?.close();

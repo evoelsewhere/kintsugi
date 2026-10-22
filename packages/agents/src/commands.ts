@@ -40,14 +40,13 @@ export interface BuiltinCommand {
 
 /** Pipeline order of the stages; unknown ids follow alphabetically. */
 export const COMMAND_ORDER: readonly string[] = [
-  "preflight",
   "assess",
-  "brief",
   "understand",
-  "transform",
-  "uplift",
-  "reimagine",
-  "verify",
+  "plan-understand",
+  "design-architecture",
+  "scaffold",
+  "design",
+  "implement",
 ];
 
 const PREFIX = "modernize-";

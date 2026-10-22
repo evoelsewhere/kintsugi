@@ -23,6 +23,7 @@ export interface LlmProviderView {
   piProvider?: string;
   enabledModels?: string[];
   modelOverrides?: Record<string, unknown>;
+  cacheRetention?: "short" | "long";
   api?: string;
   baseUrl?: string;
   headers?: Record<string, string>;
@@ -44,6 +45,7 @@ function toView(record: LlmProviderRecord): LlmProviderView {
     hasApiKey: record.hasApiKey,
     envKeys: record.envKeys,
     updatedAt: record.updatedAt,
+    ...(config.cacheRetention === undefined ? {} : { cacheRetention: config.cacheRetention }),
     ...(config.kind === "builtin"
       ? { piProvider: config.piProvider, enabledModels: config.enabledModels, modelOverrides: config.modelOverrides as Record<string, unknown> | undefined }
       : {

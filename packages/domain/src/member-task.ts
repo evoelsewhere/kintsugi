@@ -1,5 +1,4 @@
 import {
-  GATE_KEY_PATTERN,
   PHASES,
   WORK_ITEM_STATUSES,
   type GateId,
@@ -8,6 +7,7 @@ import {
   type WorkItemStatus,
 } from "./index.js";
 import { ITEM_SEGMENT_PATTERN } from "./catalog.js";
+import { parseDesignWaiver } from "./design-template.js";
 import { DELIVERABLE_ID_PATTERN, IDENTIFIER_MAX_LENGTH, IDENTIFIER_PATTERN, MAX_REQUIRED_DELIVERABLES, MAX_REPOSITORY_PATH_LENGTH, MAX_TASK_ASSIGNEE_LENGTH, MAX_TASK_TITLE_LENGTH, isSafeRepositoryPath, DomainValidationReader, type ValidationResult } from "./validation.js";
 
 /** Shared snapshot policy identity for API creation and worker gate validation. */
@@ -89,7 +89,8 @@ export function parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile
   const reader = new DomainValidationReader();
   const keys = [
     "id", "application", "module", "kind", "title", "wave", "pilot", "phase", "stage", "status",
-    "assignee", "harness", "complexity", "dependsOn", "source", "target", "links", "gates", "requiredDeliverables",
+    "assignee", "harness", "complexity", "dependsOn", "source", "target", "links", "requiredDeliverables",
+    "waived",
   ];
   const source = reader.object(value, "", keys);
   if (source === undefined) return reader.result({} as WorkItemFile);
@@ -134,7 +135,7 @@ export function parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile
   const links = source["links"] === undefined ? undefined : parseWorkItemLinks(reader, source["links"]);
   const requiredDeliverables = source["requiredDeliverables"] === undefined
     ? undefined : parseRequiredDeliverables(reader, source["requiredDeliverables"]);
-  const gates = source["gates"] === undefined ? undefined : parseWorkItemGates(reader, source["gates"]);
+  const waived = source["waived"] === undefined ? undefined : parseDesignWaivers(reader, source["waived"]);
 
   const workItem: WorkItemFile = {
     id: id ?? "",
@@ -154,10 +155,28 @@ export function parseWorkItemFile(value: unknown): ValidationResult<WorkItemFile
     ...(sourceRefs !== undefined ? { source: sourceRefs } : {}),
     ...(targetRefs !== undefined ? { target: targetRefs } : {}),
     ...(links !== undefined ? { links } : {}),
-    ...(gates !== undefined ? { gates } : {}),
     ...(requiredDeliverables !== undefined ? { requiredDeliverables } : {}),
+    ...(waived !== undefined ? { waived } : {}),
   };
   return reader.result(workItem);
+}
+
+
+function parseDesignWaivers(reader: DomainValidationReader, value: unknown): string[] | undefined {
+  const entries = reader.strings(value, "waived", { unique: true, maxLength: 100, itemMaxLength: MAX_REPOSITORY_PATH_LENGTH });
+  if (entries === undefined) return undefined;
+  const seenFiles = new Set<string>();
+  entries.forEach((entry, index) => {
+    const parsed = parseDesignWaiver(entry);
+    if (parsed === undefined || !isSafeRepositoryPath(parsed.file)) {
+      reader.problem("waived[" + index + "]", "must be a safe <set>/<file>: <reason> design waiver");
+      return;
+    }
+    const key = parsed.set + "/" + parsed.file;
+    if (seenFiles.has(key)) reader.problem("waived[" + index + "]", "must not waive the same design file more than once");
+    seenFiles.add(key);
+  });
+  return entries;
 }
 
 function parseRequiredDeliverables(
@@ -219,34 +238,6 @@ function parseWorkItemLinks(
     ...(businessRules !== undefined ? { businessRules } : {}),
     ...(pullRequests !== undefined ? { pullRequests } : {}),
   };
-}
-
-function parseWorkItemGates(
-  reader: DomainValidationReader,
-  value: unknown,
-): NonNullable<WorkItemFile["gates"]> | undefined {
-  const entries = reader.record(value, "gates");
-  if (entries === undefined) return undefined;
-  const result: Record<string, { status: "pending" | "approved" | "rejected"; by?: string; at?: string; review?: string }> = {};
-  for (const [gateId, raw] of Object.entries(entries)) {
-    const at = "gates." + gateId;
-    if (!GATE_KEY_PATTERN.test(gateId)) reader.problem(at, "has an invalid gate key");
-    const entry = reader.object(raw, at, ["status", "by", "at", "review"]);
-    if (entry === undefined) continue;
-    const gateStatus = reader.oneOf(entry["status"], at + ".status", ["pending", "approved", "rejected"] as const);
-    const by = reader.optionalString(entry["by"], at + ".by");
-    const date = reader.optionalString(entry["at"], at + ".at");
-    const review = reader.optionalString(entry["review"], at + ".review");
-    if (gateStatus !== undefined) {
-      result[gateId] = {
-        status: gateStatus,
-        ...(by !== undefined ? { by } : {}),
-        ...(date !== undefined ? { at: date } : {}),
-        ...(review !== undefined ? { review } : {}),
-      };
-    }
-  }
-  return result;
 }
 
 /** Computes entry readiness without treating publication, task status or an exit gate as approval. */

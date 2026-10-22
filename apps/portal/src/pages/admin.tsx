@@ -29,7 +29,7 @@ const AREAS = [
   },
   {
     title: "A5 · Templates",
-    description: "SDLC / pipeline templates per 7R, deliverable and RACI templates, the document repo starter template.",
+    description: "SDLC / pipeline templates, deliverable and RACI templates, the document repo starter template.",
     status: "not implemented yet",
     tone: "muted",
   },

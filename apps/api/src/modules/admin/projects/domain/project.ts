@@ -5,7 +5,6 @@
 import type {
   Application,
   ApplicationRepositoryRole,
-  Disposition,
   Project,
   ProjectRepositoryLink,
   RepositoryGroups,
@@ -41,14 +40,12 @@ export interface UpdateProject {
 export interface CreateApplication {
   id: string;
   name: string;
-  disposition: Disposition;
   pipeline?: string;
 }
 
 /** `pipeline: null` clears it. */
 export interface UpdateApplication {
   name?: string;
-  disposition?: Disposition;
   pipeline?: string | null;
 }
 

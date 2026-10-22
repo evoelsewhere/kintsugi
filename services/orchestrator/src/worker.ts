@@ -12,7 +12,7 @@ import {
   GitHubProviderCredentialProvider,
   GitHubPullRequestObserver,
 } from "@kintsugi/git";
-import { type Interpreters, interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { type Interpreters, interpretersFromEnv, loadMcpServers } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { PgBoss } from "pg-boss";
 import { Pool } from "pg";
@@ -86,6 +86,8 @@ export interface WorkerOptions {
   log?: (message: string) => void;
   /** Days the output of a failed run or write is kept (KINTSUGI_JOB_RETENTION_DAYS, default 7). */
   jobRetentionDays?: number;
+  /** Days the spans of agent jobs are kept (KINTSUGI_TELEMETRY_RETENTION_DAYS, default 30). */
+  telemetryRetentionDays?: number;
   /** Seconds between looks at pull requests awaiting review, to record a merge or a close (default 60). */
   reviewWatchSeconds?: number;
   /** Seconds between scans for confirmed open pull requests that need a Kintsugi review (default 30). */
@@ -264,6 +266,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       gates: createPersistedGateDecider({ db: options.pool }),
       agents: options.jobs.agents,
       agentDefinitions,
+      mcpServers: (ids) => loadMcpServers(ids, options.databaseUrl),
       interpreters: options.jobs.interpreters ?? interpretersFromEnv(),
       ...(options.jobs.defaults === undefined ? {} : { defaults: options.jobs.defaults }),
       requestWrite,
@@ -434,6 +437,8 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const pruneJobs = tick("job workspace cleanup", async () => {
     const removed = await pruneJobWorkspaces({ storage: options.storage, store: jobStore, retentionMs });
     if (removed.length > 0) log(`removed ${removed.length} expired job workspace(s)`);
+    const spans = await jobStore.pruneTelemetry(options.telemetryRetentionDays ?? 30);
+    if (spans > 0) log(`removed ${spans} expired telemetry span(s)`);
   });
   const pruneMemberEventLog = tick("member event cleanup", async () => {
     const removed = await pruneMemberEvents(options.pool);

@@ -18,8 +18,7 @@ unitKinds: [module]         # TODO e.g. [screen, api, batch-job, db-object]
 applications:
   - id: billing-web         # one entry per application in scope (kebab-case)
     name: Billing web       # optional display name
-    disposition: refactor   # 7R: retire | retain | rehost | replatform | refactor | rearchitect | rebuild | repurchase
-    pipeline: refactor      # a built-in pipeline id, or the id of a pipeline declared under `pipelines:` below
+    # pipeline: custom-rebuild   # optional: the id of a pipeline declared under `pipelines:` below
     repos:
       # AS-IS: read-only for Kintsugi.
       - server: my-git-server
@@ -38,10 +37,9 @@ applications:
         role: target
         component: api
 
-# Optional: project pipelines, declared here instead of choosing a built-in one.
+# Optional: a project pipeline, declared here and chosen per application with `pipeline:`.
 pipelines: []
-#  - id: refactor-custom
-#    appliesTo: {dispositions: [refactor]}
+#  - id: custom-rebuild
 #    phases:
 #      - id: migrate
 #        perUnit: true

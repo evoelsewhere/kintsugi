@@ -85,11 +85,11 @@ describe.skipIf(!hasDatabase)("projects (integration)", () => {
 
   it("groups an application's repositories into AS-IS and TO-BE", async () => {
     const application = await admin.request("POST", "/admin/projects/billing/applications", {
-      body: { id: "billing-web", name: "Billing web", disposition: "refactor", pipeline: "refactor" },
+      body: { id: "billing-web", name: "Billing web", pipeline: "custom" },
     });
     expect(application.status).toBe(201);
-    expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "billing-web", name: "x", disposition: "retain" } })).status).toBe(409);
-    expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "x", name: "x", disposition: "lift" } })).status).toBe(400);
+    expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "billing-web", name: "x" } })).status).toBe(409);
+    expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "Not An Id", name: "x" } })).status).toBe(400);
 
     const base = "/admin/projects/billing/applications/billing-web/repositories";
     expect((await admin.request("POST", base, { body: { repositoryId: "web-legacy", role: "legacy" } })).status).toBe(201);
@@ -138,7 +138,7 @@ describe.skipIf(!hasDatabase)("projects (integration)", () => {
     expect(messages(sharedAsDocument.body)).toMatch(/document repository belongs to one project only/);
 
     expect((await admin.request("POST", "/admin/projects", { body: { id: "payroll", name: "Payroll", documentRepositoryId: "payroll-docs" } })).status).toBe(201);
-    expect((await admin.request("POST", "/admin/projects/payroll/applications", { body: { id: "batch", name: "Batch", disposition: "rearchitect" } })).status).toBe(201);
+    expect((await admin.request("POST", "/admin/projects/payroll/applications", { body: { id: "batch", name: "Batch" } })).status).toBe(201);
     const base = "/admin/projects/payroll/applications/batch/repositories";
     expect((await admin.request("POST", base, { body: { repositoryId: "web-db", role: "legacy-data" } })).status).toBe(201);
     const otherDocument = await admin.request("POST", base, { body: { repositoryId: "billing-docs", role: "legacy" } });
@@ -154,9 +154,9 @@ describe.skipIf(!hasDatabase)("projects (integration)", () => {
     expect(renamed.body.data).toMatchObject({ name: "Billing", documentRepositoryId: "billing-docs" });
     expect(renamed.body.data).not.toHaveProperty("description");
 
-    const application = await admin.request("PATCH", "/admin/projects/billing/applications/billing-web", { body: { disposition: "replatform", pipeline: null } });
+    const application = await admin.request("PATCH", "/admin/projects/billing/applications/billing-web", { body: { pipeline: null } });
     expect(application.status).toBe(200);
-    expect(application.body.data).toMatchObject({ disposition: "replatform" });
+    expect(application.body.data).toMatchObject({ id: "billing-web", name: "Billing web" });
     expect(application.body.data).not.toHaveProperty("pipeline");
     expect((await admin.request("PATCH", "/admin/projects/billing/applications/missing", { body: { name: "x" } })).status).toBe(404);
   });
@@ -174,7 +174,6 @@ describe.skipIf(!hasDatabase)("projects (integration)", () => {
       {
         id: "billing-web",
         name: "Billing web",
-        disposition: "replatform",
         repos: [
           { server: "github", path: "org/web-legacy", role: "legacy" },
           { server: "github", path: "org/web-db", role: "legacy-data" },

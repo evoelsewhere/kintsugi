@@ -6,22 +6,23 @@ Entities marked *(index)* are derived from files in the document repo and can be
 
 ```
 GitServer(kind, baseUrl, credential) 1─* GitRepository(url, defaultBranch, syncStatus)          (admin.git_server, admin.git_repository)
-Project 1─* Application 1─* WorkItem (index of applications/*/units/**) 1─* StageRun ─0..1 RuntimeJob 1─* JobEvent
+Project 1─* Application 1─* WorkItem (index of the unit cards 10-applications/*/02-modern/*/*/README.md) 1─* StageRun ─0..1 RuntimeJob 1─* JobEvent
    │             │              │
    │             │              └─ TaskPack(repo@commit:path) ─ PullRequest ─ GateReview
    │             ├─ AS-IS: ProjectRepository(role legacy | legacy-data) → GitRepository  [many]
    │             ├─ TO-BE: ProjectRepository(role target, component) → GitRepository  [many]
-   │             └─ Scorecard, Disposition (7R), Wave       (primary copy: files in the document repo)
+   │             └─ Scorecard, Wave       (primary copy: files in the document repo)
    ├─ ProjectRepository(role document, no application) → GitRepository  [exactly one] ─ GitSyncState(last seen commit per repo)
    │     └─ HarnessRendererConfig
    ├─ PipelineTemplate (phase/stage/gate) ─ GateDecision (index of unit frontmatter `gates`)
-   ├─ Gate(gateKey G0–G6 | stage:<id>, status, requested/decided by, note)        (governance.gate)
+   ├─ Gate(gateKey G0–G4 | stage:<id>, status, requested/decided by, note)        (governance.gate)
    └─ ProjectMembership(user, projectRole, harnesses[]) — planned with M0 project persistence
 User · AccessRole(core.role/core.user_role) · Permission(core.permission) · Session · AccessToken · AuthIdentity(provider: local | entra-id)
 LlmProvider(config, secretRef) · LlmModel · AgentModelBinding(agent → provider/model)
 Agent(custom; built-ins from the release) 1─* AgentVersion(package files) · SharedSkill(SKILL.md)   (admin.agent, admin.agent_version, admin.agent_skill)
 KbDocument(repo@commit:path) ─* KbChunk(text, embedding)          (no code graph, ADR-0014)
-Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord · AuditEvent (append-only)
+Artifact(type, repo@commit:path, provenance) · HarnessActivity · UsageRecord (the spans of monitoring.telemetry_span) · AuditEvent (append-only)
+McpServer(url, headers as secretRef, allowedTools)  (admin.mcp_server, admin.mcp_secret)
 WorkerHeartbeat(host, pid, version, lastSeenAt, activeJobs, queues)          (workflow.worker_heartbeat)
 ```
 
@@ -29,7 +30,7 @@ WorkerHeartbeat(host, pid, version, lastSeenAt, activeJobs, queues)          (wo
 
 | Package | Main types |
 |---|---|
-| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `Disposition`, `ProjectRole` (open), `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `GATE_IDS`, `GateStatus`, `GateDecision`, `GATE_KEY_PATTERN`, `ScorecardCriterion`, `RepositoryRole`, `StagePerformer`, `PipelineDefinition`, `CompareReport`, `Project`, `Application`, `ProjectRepositoryLink`, `projectRepositoryProblems`, `groupRepositories`, `KintsugiManifest`, `validateManifest`, `manifestFromProject`, `repositoryPath` |
+| [`packages/domain`](../../packages/domain/src/index.ts) | `Phase`, `ProjectRole` (open), `Performer`, `MemberHarnessId`, `RuntimeAgentId` (open), `ThinkingLevel`, `WorkItemFile`, `WorkItemStatus`, `WorkItem` (index), `StageRun`, `ArtifactRef`, `GitLocation`, `GitServer`, `Repository`, `Provenance`, `GateId`, `GATE_IDS`, `GateStatus`, `GateDecision`, `GATE_KEY_PATTERN`, `ScorecardCriterion`, `RepositoryRole`, `StagePerformer`, `PipelineDefinition`, `CompareReport`, `Project`, `Application`, `ProjectRepositoryLink`, `projectRepositoryProblems`, `groupRepositories`, `KintsugiManifest`, `validateManifest`, `manifestFromProject`, `repositoryPath`, `DesignSet`, `DesignSection`, `DesignCheck`, `DESIGN_CHECKS`, `DesignProblem`, `DesignState` |
 | [`packages/manifest`](../../packages/manifest/src/index.ts) | `parseKintsugiYaml`, `renderKintsugiYaml` |
 | [`packages/runtime-sdk`](../../packages/runtime-sdk/src/index.ts) | `JobSpec`, `AgentDefinition`, `AgentSkill`, `JobLimits`, `JobEvent`, `JobFailureReason`, `JobHandle`, `AgentRuntime`, `LlmProviderConfig`, `AgentModelBinding` |
 | [`packages/harness-sdk`](../../packages/harness-sdk/src/index.ts) | `TaskPack`, `PluginManifest`, `PublishedPlugin`, `MarketplaceFile`, `HarnessPluginSupport`, `MarketplaceGenerator`, `HarnessRendererConfig`, `AssetRenderer`, `HarnessActivity`, `TelemetryNormalizer`, `HarnessPolicy` |
@@ -41,7 +42,7 @@ Persisted by the API in the `admin` schema (migration [`008_projects.sql`](../..
 | Table | Key | Content |
 |---|---|---|
 | `admin.project` | `id` (kebab-case) | `name`, `description` |
-| `admin.application` | (`project_id`, `id`) | `name`, `disposition` (7R), `pipeline` (optional id) |
+| `admin.application` | (`project_id`, `id`) | `name`, `pipeline` (optional id) |
 | `admin.project_repository` | (`project_id`, `repository_id`) | `application_id` (null only for the document repo), `role`, `component` (targets only); `repository_id` references `admin.git_repository` (on delete restrict) |
 
 Rules, checked by `projectRepositoryProblems` (400 with every problem) and, where SQL can, by constraints:
@@ -108,13 +109,34 @@ Recorded actions (see [security → audit coverage](../architecture/concepts/sec
 
 `detail` names what changed (field names, ids, a gate's decision and note, roles or permissions added and removed), never credential, key or password values. The log is listed with `GET /api/governance/audit` (`?action=a,b&actor&subject&projectId`) and its actions with `GET /api/governance/audit/actions`; both need `audit.read` (added by migration 011, granted to `admin`).
 
-## Gates
+## Telemetry
 
-Quality gates G0–G6 ([delivery pipeline](../methodology/delivery-pipeline.md)) and stage gates (`stage:<id>`), migration [`013_gates.sql`](../../apps/api/migrations/013_gates.sql). A gate is requested by a person (`gates.request`) or by the worker when a stage plan reaches it (`services/orchestrator/src/gates.ts`). It stays `pending` until a holder of `gates.decide` approves, rejects or waives it. A decision is final; asking again creates a new row, so the rows of one key are its history.
+Spans of runtime agent jobs ([ADR-0048](../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)), migration [`020_telemetry.sql`](../../apps/api/migrations/020_telemetry.sql). Counts, sizes and names only; no prompt, tool argument or output.
 
 | Table | Key | Content |
 |---|---|---|
-| `governance.gate` | `id` | `project_id` (cascade on project delete), `application_id` (optional), `gate_key` (`G0`–`G6` or a lowercase stage gate key), `title`, `status` (`pending`, `approved`, `rejected`, `waived`), `subject` (what it is about, e.g. a job run id), `detail` (jsonb, small context), `requested_by` + `requested_at`, `decided_by` + `decided_at`, `note` (required to reject or waive) |
+| `monitoring.telemetry_span` | `id` (increasing) | `job_run_id` (the top-level run, cascade), `step_run_id` (the agent step), `project_id` (cascade), `application_id`, `agent` (`<agent>@<version>`), `provider`, `model`, `attempt` (a retry or repair run of the step is another attempt), `span_id` and `parent_span_id` (a tree within one attempt), `name` (`kintsugi.job`, `.turn`, `.tool`, `.codemode`, `.mcp`, `.compaction`, `.retry`), `started_at`, `duration_ms`, `status` (`ok`, `error`), `error`, `attributes` (jsonb of scalars: tokens, cost, tool, reason, …) |
+
+Rows are pruned after `KINTSUGI_TELEMETRY_RETENTION_DAYS` (30). Reading needs `telemetry.view` (seeded in migration 002): `GET /api/monitoring/telemetry/summary`, `…/runs` and `…/runs/:runId/trace`.
+
+## MCP servers
+
+The HTTP MCP servers the runtime may give to agents ([ADR-0047](../decisions/0047-kernel-extensions-codemode-and-http-mcp.md)), migration [`021_mcp_servers.sql`](../../apps/api/migrations/021_mcp_servers.sql).
+
+| Table | Key | Content |
+|---|---|---|
+| `admin.mcp_server` | `id` (the server's name in an agent's tools: `mcp__<id>__*`) | `url` (http or https), `description`, `enabled`, `timeout_sec`, `allowed_tools` (name patterns allowed besides the tools the server marks read-only), `headers` (header name → `{ secretId }`), `created_by`, `updated_by`, timestamps |
+| `admin.mcp_secret` | `secret_id` | `server_id` (cascade), `ciphertext`, `iv`, `auth_tag`: a header value encrypted with `KINTSUGI_SECRET_KEY`; never returned |
+
+Permission added by the migration: `mcp.manage` (every route of `/api/admin/mcp-servers`; the `choices` list also for `agents.manage`), granted to `admin`. Audit actions: `mcp-server.create`, `mcp-server.update`, `mcp-server.delete` (host and field names only).
+
+## Gates
+
+Quality gates G0–G4 ([delivery pipeline](../methodology/delivery-pipeline.md)) and stage gates (`stage:<id>`), migration [`013_gates.sql`](../../apps/api/migrations/013_gates.sql). A gate is requested by a person (`gates.request`) or by the worker when a stage plan reaches it (`services/orchestrator/src/gates.ts`). It stays `pending` until a holder of `gates.decide` approves, rejects or waives it. A decision is final; asking again creates a new row, so the rows of one key are its history.
+
+| Table | Key | Content |
+|---|---|---|
+| `governance.gate` | `id` | `project_id` (cascade on project delete), `application_id` (optional), `gate_key` (`G0`–`G4` or a lowercase stage gate key), `title`, `status` (`pending`, `approved`, `rejected`, `waived`), `subject` (what it is about, e.g. a job run id), `detail` (jsonb, small context), `requested_by` + `requested_at`, `decided_by` + `decided_at`, `note` (required to reject or waive) |
 
 At most one gate is pending per project, application, key and subject (partial unique index), which makes the worker's request idempotent. Endpoints: `GET /api/governance/gates` (`?projectId&applicationId&gateKey&status=pending,approved`), `GET …/:id` and `GET …/:id/history` need a session; `POST /api/governance/gates` needs `gates.request` or `gates.decide`; `POST …/:id/decision` needs `gates.decide`. Both permissions are added by the migration and granted to `admin`. The monitoring overview counts and lists pending gates. Gate decisions in unit frontmatter (`GateDecision`, [ADR-0012](../decisions/0012-work-items-as-files-in-git.md)) remain the per-work-item record in Git.
 

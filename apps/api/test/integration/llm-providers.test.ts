@@ -50,6 +50,40 @@ describe.skipIf(!hasDatabase)("llm providers (integration)", () => {
     }
   });
 
+  it("tells the portal which thinking levels each built-in model supports and accepts every pi level in a binding", async () => {
+    const supported = await call("GET", "/admin/llm-providers/supported");
+    expect(supported.status).toBe(200);
+    const data = supported.body.data as { builtin: Array<{ id: string; models: Array<{ id: string; reasoning?: boolean; thinkingLevels: string[] }> }> };
+    const models = data.builtin.flatMap((provider) => provider.models);
+    expect(models.length).toBeGreaterThan(0);
+    for (const model of models) {
+      expect(model.thinkingLevels.length, model.id).toBeGreaterThan(0);
+      if (model.reasoning !== true) expect(model.thinkingLevels, model.id).toEqual(["off"]);
+    }
+    expect(models.some((model) => model.thinkingLevels.includes("max"))).toBe(true);
+    expect(models.some((model) => model.thinkingLevels.length === 1)).toBe(true);
+    expect(models.some((model) => !model.thinkingLevels.includes("off"))).toBe(true);
+
+    await call("POST", "/admin/llm-providers", { kind: "custom", id: "gw-thinking", api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", models: [{ id: "m1", reasoning: true }] });
+    const bound = await call("PUT", "/admin/llm-providers/model-bindings", [{ agent: "some-agent", provider: "gw-thinking", model: "m1", thinking: "max" }]);
+    expect(bound.status).toBe(200);
+    expect((await call("PUT", "/admin/llm-providers/model-bindings", [{ agent: "some-agent", provider: "gw-thinking", model: "m1", thinking: "extreme" }])).status).toBe(400);
+    await call("PUT", "/admin/llm-providers/model-bindings", []);
+    await call("DELETE", "/admin/llm-providers/gw-thinking");
+  });
+
+  it("keeps the prompt-cache lifetime of a provider and rejects an unknown one", async () => {
+    const created = await call("POST", "/admin/llm-providers", { kind: "custom", id: "gw-cache", api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", models: [{ id: "m1" }], cacheRetention: "long" });
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({ id: "gw-cache", cacheRetention: "long" });
+    const replaced = await call("PATCH", "/admin/llm-providers/gw-cache", { kind: "custom", api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", models: [{ id: "m1" }], cacheRetention: "short" });
+    expect(replaced.status).toBe(200);
+    expect(replaced.body.data).toMatchObject({ cacheRetention: "short" });
+    const unknown = await call("POST", "/admin/llm-providers", { kind: "custom", id: "gw-cache-2", api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", models: [{ id: "m1" }], cacheRetention: "forever" });
+    expect(unknown.status).toBe(400);
+    await call("DELETE", "/admin/llm-providers/gw-cache");
+  });
+
   it("stores credentials encrypted and never returns them", async () => {
     const created = await call("POST", "/admin/llm-providers", {
       kind: "custom",

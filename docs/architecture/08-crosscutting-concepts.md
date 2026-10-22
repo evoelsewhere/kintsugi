@@ -9,4 +9,4 @@
 | [LLM configuration](concepts/llm-configuration.md) | Provider registry for the runtime, model binding, budgets |
 | [Observability and telemetry](concepts/observability-and-telemetry.md) | Runtime events and cost, member-harness activity, AI metrics inputs |
 
-The shared domain vocabulary (phases, 7R, project roles, work items, provenance) is defined in [`packages/domain`](../../packages/domain/src/index.ts) and described in the [data model](../reference/data-model.md). Installation access roles are a separate identity-and-access concept.
+The shared domain vocabulary (phases, project roles, work items, provenance) is defined in [`packages/domain`](../../packages/domain/src/index.ts) and described in the [data model](../reference/data-model.md). Installation access roles are a separate identity-and-access concept.

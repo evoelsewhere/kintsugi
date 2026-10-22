@@ -43,8 +43,11 @@ export interface AgentManifest {
   /** Semantic version of this definition. */
   version: string;
   description: string;
-  /** Runtime: kernel tool allowlist ([] = no tools). Member: harness tool names. */
-  tools: string[];
+  /**
+   * Runtime: kernel tool allowlist; absent = every kernel tool, [] = no tools. Member: harness tool names;
+   * absent = all the harness offers (Claude Code's own rule for an agent file without `tools`).
+   */
+  tools?: string[];
   /** Shared skills from the skill library, by name. */
   skills: string[];
   thinking?: ThinkingLevel;
@@ -78,8 +81,8 @@ const MAX_DESCRIPTION = 1024;
 const REFUSED_AGENT_FIELDS: Record<string, string> = {
   model: "the model is bound per agent in Settings → Providers",
   hooks: "the runtime kernel runs no hooks",
-  mcpServers: "the runtime kernel connects to no MCP servers",
-  "mcp-servers": "the runtime kernel connects to no MCP servers",
+  mcpServers: "an agent names MCP servers in `tools` (mcp__<server>__*); administrators register them (ADR-0047)",
+  "mcp-servers": "an agent names MCP servers in `tools` (mcp__<server>__*); administrators register them (ADR-0047)",
   permissionMode: "the kernel has no permission modes; use the tools allowlist",
   "permission-mode": "the kernel has no permission modes; use the tools allowlist",
   disallowedTools: "list the allowed tools instead",
@@ -244,7 +247,8 @@ export function parseAgentFile(text: string, file: string, localSkills: SkillPac
   const description = data["description"];
   if (!isString(description) || description.trim() === "") problems.push(`${file}: \`description\` is required`);
   else if (description.length > MAX_DESCRIPTION) problems.push(`${file}: \`description\` is longer than ${MAX_DESCRIPTION} characters`);
-  const tools = stringList(data["tools"], "tools", file, problems);
+  // No `tools` key: every tool. An explicit list, even an empty one, restricts.
+  const tools = data["tools"] === undefined || data["tools"] === null ? undefined : stringList(data["tools"], "tools", file, problems);
   const skills = stringList(data["skills"], "skills", file, problems);
   const thinking = data["thinking"];
   if (thinking !== undefined && !(isString(thinking) && (THINKING_LEVELS as readonly string[]).includes(thinking))) {
@@ -263,7 +267,7 @@ export function parseAgentFile(text: string, file: string, localSkills: SkillPac
         audience: audience as AgentAudience,
         version: version as string,
         description: (description as string).trim(),
-        tools,
+        ...(tools === undefined ? {} : { tools }),
         skills,
         ...(thinking === undefined ? {} : { thinking: thinking as ThinkingLevel }),
         ...(denyCommandPatterns.length === 0 ? {} : { denyCommandPatterns }),
@@ -316,7 +320,7 @@ export function serializeAgentPackage(agent: AgentPackage): Map<string, string> 
         name: manifest.name,
         version: manifest.version,
         description: manifest.description,
-        tools: manifest.tools,
+        ...(manifest.tools === undefined ? {} : { tools: manifest.tools }),
         ...(manifest.skills.length === 0 ? {} : { skills: manifest.skills }),
         ...(manifest.thinking === undefined ? {} : { thinking: manifest.thinking }),
         ...(manifest.denyCommandPatterns === undefined ? {} : { "deny-command-patterns": manifest.denyCommandPatterns }),

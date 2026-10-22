@@ -2,31 +2,15 @@
 // Source of truth for the concepts described in docs/methodology/delivery-pipeline.md
 // and docs/reference/data-model.md.
 
-/** Pipeline phases P0–P7. */
+/** Pipeline phases P0–P4. */
 export const PHASES = [
   "mobilize",
   "discover-assess",
   "define-to-be",
   "prepare-factory",
   "migrate",
-  "verify",
-  "cutover",
-  "hypercare-operate",
 ] as const;
 export type Phase = (typeof PHASES)[number];
-
-/** 7R transformation strategy (Retire/Retain + the classic Rs + Repurchase). */
-export const DISPOSITIONS = [
-  "retire",
-  "retain",
-  "rehost",
-  "replatform",
-  "refactor",
-  "rearchitect",
-  "rebuild",
-  "repurchase",
-] as const;
-export type Disposition = (typeof DISPOSITIONS)[number];
 
 /**
  * Project roles: RACI responsibilities named in pipelines (stage performers, gate owners).
@@ -53,7 +37,7 @@ export type MemberHarnessId = (typeof MEMBER_HARNESSES)[number] | (string & {});
 export type RuntimeAgentId = string;
 
 /** Reasoning effort for a runtime agent's model (mirrors pi's thinking levels). */
-export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 /** Work item status as stored in the unit file frontmatter. */
@@ -83,6 +67,8 @@ export interface WorkItemFile {
   target?: { repo: string; paths: string[] }[];
   /** Authoritative declarations only; never inferred from prose or observed pull requests. */
   requiredDeliverables?: { id: string; repositoryId: string; path: string }[];
+  /** Design-set files a person explicitly waived for this unit. */
+  waived?: string[];
   links?: {
     taskPack?: string;
     asIs?: string;
@@ -90,7 +76,6 @@ export interface WorkItemFile {
     businessRules?: string[];
     pullRequests?: string[];
   };
-  gates?: Partial<Record<GateId | string, { status: "pending" | "approved" | "rejected"; by?: string; at?: string; review?: string }>>;
 }
 
 /** Index row derived from a unit file; rebuildable from Git. */
@@ -191,17 +176,17 @@ export interface Provenance {
   reviewedBy?: string;
 }
 
-/** Quality gates G0–G6 plus per-work-item gates. */
-export type GateId = "G0" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6";
+/** Quality gates G0–G4 plus per-work-item gates. */
+export type GateId = "G0" | "G1" | "G2" | "G3" | "G4";
 
 /** The pipeline gates, in order (docs/methodology/delivery-pipeline.md). */
-export const GATE_IDS: readonly GateId[] = ["G0", "G1", "G2", "G3", "G4", "G5", "G6"];
+export const GATE_IDS: readonly GateId[] = ["G0", "G1", "G2", "G3", "G4"];
 
 /**
- * A gate key: a pipeline gate (G0–G6) or a stage gate such as `stage:assess` — lowercase,
+ * A gate key: a pipeline gate (G0–G4) or a stage gate such as `stage:assess` — lowercase,
  * starting with a letter or digit, up to 100 characters.
  */
-export const GATE_KEY_PATTERN = /^(G[0-6]|[a-z0-9][a-z0-9:._-]{0,99})$/;
+export const GATE_KEY_PATTERN = /^(G[0-4]|[a-z0-9][a-z0-9:._-]{0,99})$/;
 
 /** The state of a persisted gate: waiting for a decision, or decided. */
 export type GateStatus = "pending" | "approved" | "rejected" | "waived";
@@ -211,7 +196,7 @@ export const GATE_STATUSES: readonly GateStatus[] = ["pending", "approved", "rej
 export type GateDecision = "approve" | "reject" | "waive";
 export const GATE_DECISION_STATUS: Readonly<Record<GateDecision, Exclude<GateStatus, "pending">>> = { approve: "approved", reject: "rejected", waive: "waived" };
 
-/** Transformation scorecard. Weights sum to 1. */
+/** Assessment scorecard. Weights sum to 1. */
 export interface ScorecardCriterion {
   key: string;
   group: "business" | "technical" | "feasibility" | "cost" | "risk";
@@ -223,17 +208,11 @@ export function weightedScore(criteria: ScorecardCriterion[]): number {
   return criteria.reduce((sum, c) => sum + c.weight * (c.score ?? 0), 0);
 }
 
-/** Total weighted score → priority band and candidate dispositions. */
-export function recommendDispositions(total: number): {
-  priority: "low" | "medium" | "high";
-  candidates: Disposition[];
-} {
-  if (total >= 7) return { priority: "low", candidates: ["retain", "rehost"] };
-  if (total >= 4) return { priority: "medium", candidates: ["rehost", "refactor"] };
-  return {
-    priority: "high",
-    candidates: ["retire", "rearchitect", "rebuild", "repurchase"],
-  };
+/** Total weighted score → rebuild priority band (a low total means a high priority). */
+export function scorecardPriority(total: number): "low" | "medium" | "high" {
+  if (total >= 7) return "low";
+  if (total >= 4) return "medium";
+  return "high";
 }
 
 // ---------------------------------------------------------------------------
@@ -246,13 +225,13 @@ export type StagePerformer =
 
 export interface PipelineDefinition {
   id: string;
-  appliesTo?: { dispositions?: Disposition[] };
   phases: {
     id: Phase | (string & {});
     /** Required for custom phases: built-in phase used for reporting. */
     category?: Phase;
     perUnit?: boolean;
-    stages: { id: string; performer: StagePerformer; gate?: GateId | (string & {}) }[];
+    /** `produces` names the design set (01-standards/templates/<set>) the stage writes (ADR-0045). */
+    stages: { id: string; performer: StagePerformer; gate?: GateId | (string & {}); produces?: string }[];
   }[];
   gates?: Record<string, { require: string[] }>;
 }
@@ -280,5 +259,7 @@ export * from "./manifest.js";
 // Application and per-unit document-repo paths (ADR-0038), with catalog vocabulary (ADR-0033).
 export * from "./document-layout.js";
 export * from "./catalog.js";
+export * from "./design-template.js";
 export * from "./traceability.js";
 export * from "./gate-record.js";
+export * from "./mcp.js";

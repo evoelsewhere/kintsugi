@@ -45,10 +45,9 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow existing-installation upgra
     expect(result.body.data!.items.map((project) => project.projectId)).toEqual(["existing-project"]);
 
     const versions = await database.query<{ version: string }>("select version from core.schema_migrations order by version");
-    expect(versions.rows.map((row) => row.version).slice(-6)).toEqual([
-      "018_document_write_merge_state.sql", "019_project_access_and_member_tokens.sql", "020_member_outbox.sql",
-      "021_member_tasks.sql", "022_member_snapshots.sql", "023_member_task_configuration.sql",
-    ]);
+    const migrationDirectory = resolve(import.meta.dirname, "../../migrations");
+    const migrationFiles = (await readdir(migrationDirectory)).filter((file) => /^\d{3}_.+\.sql$/.test(file)).sort();
+    expect(versions.rows.map((row) => row.version)).toEqual(migrationFiles);
     const { ensureSchema } = await import("../../src/common/db/pool.js");
     await ensureSchema();
     expect((await database.query("select version from core.schema_migrations")).rowCount).toBe(versions.rowCount);

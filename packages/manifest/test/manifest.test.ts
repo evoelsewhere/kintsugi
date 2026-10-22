@@ -22,7 +22,7 @@ describe("kintsugi.yaml", () => {
     const result = parseKintsugiYaml(example!);
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) return;
-    expect(result.manifest.pipelines.map((pipeline) => pipeline.id)).toEqual(["payroll-rearchitect"]);
+    expect(result.manifest.pipelines.map((pipeline) => pipeline.id)).toEqual(["payroll-rebuild"]);
   });
 
   it("reports YAML syntax errors", () => {
@@ -39,7 +39,6 @@ describe("kintsugi.yaml", () => {
         "unitKinds: [screen]",
         "applications:",
         "  - id: web",
-        "    disposition: refactor",
         "    repos:",
         "      - {server: github, path: org/web, role: target}",
         "      - {server: github, path: org/docs, role: legacy}",
@@ -59,8 +58,7 @@ describe("kintsugi.yaml", () => {
         {
           id: "web",
           name: "Billing web",
-          disposition: "refactor",
-          pipeline: "refactor",
+          pipeline: "custom",
           repos: [
             { server: "github", path: "org/web-legacy", role: "legacy" },
             { server: "azdo", path: "Billing/_git/web-api", role: "target", component: "api" },

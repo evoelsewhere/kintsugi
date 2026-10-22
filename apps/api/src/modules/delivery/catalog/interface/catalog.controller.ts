@@ -7,7 +7,7 @@ import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decora
 import type { JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { CatalogService } from "../application/catalog.service.js";
 import { UnderstandRunsService } from "../application/understand-runs.service.js";
-import type { CatalogView } from "../domain/catalog.js";
+import type { CatalogView, UnderstandPlanView } from "../domain/catalog.js";
 import { type CatalogQuery, type UnderstandRunBody, catalogQuerySchema, understandRunSchema } from "./catalog.dto.js";
 
 @ApiTags("delivery · item catalog")
@@ -26,6 +26,16 @@ export class CatalogController {
   @ApiOkResponse({ description: "The catalog (modules, unassigned files, ambiguities), its items with status, last run, pull request and understood state, and counts per status." })
   get(@Param("id") id: string, @Param("appId") appId: string, @Query({ schema: catalogQuerySchema }) query: CatalogQuery): Promise<CatalogView> {
     return this.catalog.view(id, appId, query.ref);
+  }
+
+  @Get("understand/plan")
+  @ApiOperation({
+    summary: "The AI plan of what to understand next: batches of catalog items with a reason each (ADR-0041)",
+    description: "Written by the plan-understand stage (POST …/stages/plan-understand/run) onto the default branch. `plan` is null before the first run; `stale` when the catalog was reassessed since.",
+  })
+  @ApiOkResponse({ description: "The plan (strategy, batches with size, cohesion and what each still depends on, what was left out or dropped), whether it is stale and the current status of its items." })
+  plan(@Param("id") id: string, @Param("appId") appId: string): Promise<UnderstandPlanView> {
+    return this.catalog.plan(id, appId);
   }
 
   @RequirePermission("jobs.run")

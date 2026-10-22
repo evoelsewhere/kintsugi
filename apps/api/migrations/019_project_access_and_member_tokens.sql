@@ -1,4 +1,4 @@
--- Coding Agent Workflow credentials and explicit Project Access (ADR-0042).
+-- Coding Agent Workflow credentials and explicit Project Access (ADR-0053).
 -- Project role, assignment and RACI data do not create these grants.
 
 create table core.member_token (

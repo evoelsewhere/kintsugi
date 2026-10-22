@@ -23,6 +23,7 @@ import { gitApi, type GitRepositoryView } from "@/lib/api/git";
 import { type ApplicationView, type ProjectDetail, type ProjectRepositoryView, projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { deliveryLink } from "@/lib/links";
+import { DesignSetsCard } from "./design-sets-card";
 import { ProjectInsights } from "./projects-insights";
 import { NoRepositories } from "./no-repositories";
 import { ApplicationDialog, LinkDialog, ProjectDialog } from "./project-dialogs";
@@ -194,6 +195,8 @@ export function ProjectDetailPage(): React.JSX.Element {
           />
         ))
       )}
+
+      <DesignSetsCard project={project} />
 
       <Card>
         <CardHeader>

@@ -1,4 +1,4 @@
-// Governance → Gates: quality gates (G0–G6) and stage gates waiting for a decision or decided,
+// Governance → Gates: quality gates (G0–G4) and stage gates waiting for a decision or decided,
 // with status and project filters. Holders of gates.decide approve, reject or waive a pending
 // gate with a note (required to reject or waive); holders of gates.request ask for a pipeline
 // gate. Every request and decision is recorded in the audit log.
@@ -65,7 +65,7 @@ export function GatesView({ status, onStatus, projectOptions }: { status: string
       <CardHeader className="flex-wrap">
         <div>
           <CardTitle>Gates</CardTitle>
-          <CardDescription>Pipeline gates (G0–G6) and stage gates. A gate waits for a person to approve, reject or waive it; each request and decision is audited.</CardDescription>
+          <CardDescription>Pipeline gates (G0–G4) and stage gates. A gate waits for a person to approve, reject or waive it; each request and decision is audited.</CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Chips

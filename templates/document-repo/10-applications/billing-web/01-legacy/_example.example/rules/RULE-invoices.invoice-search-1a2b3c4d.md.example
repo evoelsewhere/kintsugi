@@ -1,0 +1,88 @@
+---
+id: "RULE-invoices.invoice-search-1a2b3c4d"
+name: "Invoice amount includes tax"
+app: "billing-web"
+item: "invoices/invoice-search"
+category: "Calculation"
+priority: "P0"
+confidence: "High"
+status: "confirmed"
+version: 1
+digest: "811bcae93f14"
+sourceCommit: "9f3c2ab"
+source:
+  - "src/INVOICE.cbl:200-212"
+dataObjects:
+  - "INVOICE-REC"
+config: []
+tags:
+  - "billing"
+generatedBy: "split_rules.py"
+---
+
+# RULE-invoices.invoice-search-1a2b3c4d: Invoice amount includes tax
+
+## Summary
+
+The amount shown on an invoice is the net amount plus tax.
+
+## Specification
+
+```text
+Given an invoice with a net amount and a tax rate
+When  the invoice is displayed
+Then  the gross amount is the net amount plus tax
+And   the result is rounded half up to two decimals
+```
+
+## Decision table
+
+| Tax rate | Net amount | Gross amount |
+| --- | --- | --- |
+| 0 | any | net |
+| > 0 | >= 0 | net + net * rate |
+| any | < 0 | rejected |
+
+## Parameters
+
+| Name | Value | Where defined | Configurable |
+| --- | --- | --- | --- |
+| roundingScale | 2 | src/INVOICE.cbl:204 | No |
+
+## Inputs and outputs
+
+| Kind | Detail |
+| --- | --- |
+| Inputs | net amount; tax rate |
+| Reads | INVOICE.NET_AMOUNT; TAX.RATE |
+| Success output | gross amount |
+| Error output | validation error for a negative net amount |
+
+## Evidence
+
+| Source | What it shows |
+| --- | --- |
+| `src/INVOICE.cbl:200-212` | Primary citation of the rule |
+| `src/INVOICE.cbl:204-206` | The rounding of the gross amount |
+
+## Edge cases
+
+| Case | Behaviour | Evidence |
+| --- | --- | --- |
+| Zero tax rate | The gross amount equals the net amount | src/INVOICE.cbl:201 |
+
+## Open questions
+
+None.
+
+## Acceptance scenarios
+
+| # | Given | When | Then |
+| --- | --- | --- | --- |
+| 1 | net 100.00 and rate 0.2 | the invoice is displayed | gross 120.00 |
+
+## Version history
+
+| Version | Date | Change | Commit |
+| --- | --- | --- | --- |
+| 1 | 2026-10-21 | Rule extracted | 9f3c2ab |

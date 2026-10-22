@@ -62,6 +62,6 @@ describe("command flows", () => {
       expect(ofFlow(command.flow!), `flow of ${command.id}`).toEqual(ofPlan(plan!.steps));
       checked.push(command.id);
     }
-    expect(checked).toEqual(["assess", "understand"]);
+    expect(checked).toEqual(["assess", "understand", "plan-understand", "design"]);
   });
 });

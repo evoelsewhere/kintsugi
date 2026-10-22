@@ -17,7 +17,7 @@ Decision: [ADR-0007](../../decisions/0007-git-as-source-of-truth.md).
 |---|---|---|
 | **Legacy repo** (many per application) | Legacy source code | Nobody through Kintsugi: always read-only |
 | **Target repo** (scaffolded target base) | New source code | Members, via branches/PRs |
-| **Document repo** (one per project) | Everything except code: project manifest, assessment, ADRs, AS-IS/TO-BE docs, **standards**, plugins, units, task packs, reviews, deliverables, golden cases | Members + Kintsugi (worker) |
+| **Document repo** (one per project) | Everything except code: project manifest, assessment, ADRs, AS-IS/TO-BE docs, **standards**, plugins, units, task packs, reviews, deliverables | Members + Kintsugi (worker) |
 
 Layout and conventions: [document repository reference](../../reference/document-repo.md).
 
@@ -25,7 +25,7 @@ Layout and conventions: [document repository reference](../../reference/document
 
 The runner never writes to repositories:
 1. A job writes only to the `out` directory of its job workspace.
-2. When the job ends, the **worker** stores `out/restricted/` as restricted records, runs the JobOutput hook (credential scan, artifact checks) and validates the rest: allowed paths, size.
+2. When the job ends, the **worker** stores `out/restricted/` as restricted records, runs the JobOutput hook (artifact checks) and validates the rest: allowed paths, size.
 3. The worker commits to the document repo on `kintsugi/<agent>/<job-id>` and opens a PR. Paths configured as `auto-commit` are committed directly ❓ (D29).
 4. On code repos the runtime only reads and comments on PRs.
 
@@ -39,12 +39,12 @@ Deliverables stay in their Git repositories:
 ## What Postgres keeps
 
 - **Operational state**: users, memberships, job queue and executions, events, usage/cost, audit.
-- **Indexes rebuildable from Git**: units and their status / gate results (from `applications/*/units/**`, [ADR-0012](../../decisions/0012-work-items-as-files-in-git.md)), KB chunks/embeddings, file → artifact mapping.
+- **Indexes rebuildable from Git**: units and their status / gate results (from the unit cards `10-applications/*/02-modern/*/*/README.md`, [ADR-0012](../../decisions/0012-work-items-as-files-in-git.md)), KB chunks/embeddings, file → artifact mapping.
 - **Not** the primary copy of any document. If the DB is lost, the KB can be rebuilt from Git; only operational history is lost.
 
 ## Unit state
 
-Each unit is a directory, `applications/<app>/units/<module>/<unit>/`, whose `unit.md` frontmatter holds its state ([format](../../reference/document-repo-unit-files.md)).
+Each unit has a card, `10-applications/<app>/02-modern/<module>/<unit>/README.md`, whose frontmatter holds its state ([format](../../reference/document-repo-unit-files.md)).
 
 - **One write path**:
   1. Portal and separately authorized API actions call the Kintsugi API. The member CLI/MCP connector is read-only and cannot claim a unit or change its state (ADRs 0041–0042).

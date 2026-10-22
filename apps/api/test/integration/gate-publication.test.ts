@@ -66,7 +66,7 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
         },
       },
       documentRepositoryId: "shop-docs",
-      recordPath: "applications/web/units/core/invoice/reviews/G4.md",
+      recordPath: "10-applications/web/02-modern/core/invoice/reviews/G4.md",
       message: "Publish G4 decision for web/core/invoice",
       actorLabel: "admin",
     };
@@ -121,14 +121,14 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
   });
   it("returns only the latest publication for each requested task gate", async () => {
     const olderInput = createInput("gate_" + "5".repeat(48), adminId, "G2");
-    olderInput.recordPath = "applications/web/units/core/invoice/reviews/G2-older.md";
+    olderInput.recordPath = "10-applications/web/02-modern/core/invoice/reviews/G2-older.md";
     const older = await repository.createDecision(olderInput);
 
     const newerInput = createInput("gate_" + "6".repeat(48), adminId, "G2");
-    newerInput.recordPath = "applications/web/units/core/invoice/reviews/G2-newer.md";
+    newerInput.recordPath = "10-applications/web/02-modern/core/invoice/reviews/G2-newer.md";
     const newer = await repository.createDecision(newerInput);
     const dependencyInput = createInput("gate_" + "7".repeat(48), adminId, "G2", "web/catalog/product");
-    dependencyInput.recordPath = "applications/web/units/catalog/product/reviews/G2.md";
+    dependencyInput.recordPath = "10-applications/web/02-modern/catalog/product/reviews/G2.md";
     const dependency = await repository.createDecision(dependencyInput);
     await app.db.query("update workflow.gate_publication set updated_at = $2 where decision_id = $1", [older.decisionId, "2030-10-19T00:00:00.000Z"]);
     await app.db.query("update workflow.gate_publication set updated_at = $2 where decision_id = $1", [newer.decisionId, "2026-10-20T00:00:00.000Z"]);
@@ -159,9 +159,9 @@ describe.skipIf(!hasDatabase)("evidence-bound gate publication (integration)", (
   });
   it("uses a retained design approval after the implementation task replaces its deliverable list", async () => {
     const input = createInput("gate_" + "3".repeat(48));
-    const designPath = "applications/web/units/core/invoice/design.md";
+    const designPath = "10-applications/web/02-modern/core/invoice/detail/logic.md";
     input.evidence.gateId = "G2";
-    input.recordPath = "applications/web/units/core/invoice/reviews/G2.md";
+    input.recordPath = "10-applications/web/02-modern/core/invoice/reviews/G2.md";
     input.evidence.deliverables = input.evidence.deliverables.map(item => ({ ...item, ...(item.repositoryId === "shop-docs" ? { path: designPath } : {}) }));
     input.evidenceHash = createHash("sha256").update(gateEvidenceCanonicalJson({ ...input.evidence, auditEventId: "0" })).digest("hex");
     input.audit.detail = { ...input.audit.detail, gateId: "G2", evidenceHash: input.evidenceHash };

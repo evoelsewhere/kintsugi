@@ -15,7 +15,7 @@ const context = {
   requiredDeliverableIds: ["code", "docs"],
   requiredDeliverables: [
     { id: "code", repositoryId: "api", path: "src/invoice.ts" },
-    { id: "docs", repositoryId: "docs", path: "applications/web/units/core/invoice/design.md" },
+    { id: "docs", repositoryId: "docs", path: "10-applications/web/02-modern/core/invoice/detail/logic.md" },
   ],
 };
 const deliverables: GateDeliverableEvidence[] = [
@@ -90,7 +90,7 @@ describe("GatePublicationService", () => {
       actor: { userId: "user-1", authorizationId },
     });
     expect(captured?.audit.detail).toMatchObject({ evidenceHash: captured?.evidenceHash, authorizationId, gateId: "G4" });
-    expect(captured?.recordPath).toBe("applications/web/units/core/invoice/reviews/G4.md");
+    expect(captured?.recordPath).toBe("10-applications/web/02-modern/core/invoice/reviews/G4.md");
   });
 
   it("refuses a member token even when the token owner has the gate permission", async () => {

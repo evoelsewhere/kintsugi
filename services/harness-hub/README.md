@@ -18,4 +18,4 @@ Run `kintsugi mcp serve --profile work` from the installed CLI. The process read
 
 The developer's AI reads documents and answers with citations under the developer's existing subscription. Kintsugi continues after ordinary pull requests through server-side provider reconciliation and review. Effective phase exit still requires an authenticated human decision and a merged Git gate record bound to the final required deliverables.
 
-See [the approved Coding Agent Workflow ADR](../../docs/decisions/0041-coding-agent-workflow-through-cli-and-local-mcp.md), [task and snapshot contract](../../docs/decisions/0042-coding-agent-context-and-project-access.md), and [PR continuation contract](../../docs/decisions/0043-evidence-bound-pr-continuation.md).
+See [the approved Coding Agent Workflow ADR](../../docs/decisions/0052-coding-agent-workflow-through-cli-and-local-mcp.md), [task and snapshot contract](../../docs/decisions/0053-coding-agent-context-and-project-access.md), and [PR continuation contract](../../docs/decisions/0054-evidence-bound-pr-continuation.md).

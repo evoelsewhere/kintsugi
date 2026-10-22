@@ -1,0 +1,17 @@
+---
+app: "billing-web"
+item: "invoices/invoice-search"
+generatedBy: "split_rules.py"
+catalogVersion: 1
+rules: 2
+p0: 1
+---
+
+# Business rules - invoices/invoice-search
+
+Each row links to the rule's own file, which holds the specification, evidence and version history.
+
+| ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RULE-invoices.invoice-search-1a2b3c4d | Invoice amount includes tax | Calculation | P0 | High | 1 | confirmed | `src/INVOICE.cbl:200-212` | [RULE-invoices.invoice-search-1a2b3c4d](rules/RULE-invoices.invoice-search-1a2b3c4d.md) |
+| RULE-invoices.invoice-search-5e6f7a8b | Invoice search matches customer, date range and status | Policy | P1 | Medium | 1 | needs-sme | `src/INVOICE.cbl:340-388` | [RULE-invoices.invoice-search-5e6f7a8b](rules/RULE-invoices.invoice-search-5e6f7a8b.md) |

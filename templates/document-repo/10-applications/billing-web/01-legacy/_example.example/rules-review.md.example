@@ -1,0 +1,6 @@
+# Rule verdicts
+
+| Rule | Verdict | Approver | Date | Note |
+| --- | --- | --- | --- | --- |
+| RULE-invoices.invoice-search-1a2b3c4d | confirmed | dana | 2026-10-15 |  |
+| RULE-invoices.invoice-search-5e6f7a8b | clarify | dana | 2026-10-15 | Confirm what an empty status means. |

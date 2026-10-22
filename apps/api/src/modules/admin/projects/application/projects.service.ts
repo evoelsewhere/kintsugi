@@ -116,7 +116,6 @@ export class ProjectsService {
       applications: detail.applications.map((application) => ({
         id: application.id,
         name: application.name,
-        disposition: application.disposition,
         ...(application.pipeline === undefined ? {} : { pipeline: application.pipeline }),
         repos: [...application.asIs.legacy, ...application.asIs.legacyData, ...application.toBe.targets].map(
           (repository): ManifestRepository => ({
@@ -145,7 +144,7 @@ export class ProjectsService {
       auditRecord(actor, AUDIT_ACTIONS.applicationCreate, {
         projectId,
         subject: `${projectId}/${application.id}`,
-        detail: { name: application.name, disposition: application.disposition },
+        detail: { name: application.name },
       }),
     );
     return application;

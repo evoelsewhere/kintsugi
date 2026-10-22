@@ -9,8 +9,7 @@ const minimal = {
   applications: [
     {
       id: "web",
-      disposition: "refactor",
-      pipeline: "refactor",
+      pipeline: "rebuild",
       repos: [
         { server: "github", path: "org/web-legacy", role: "legacy" },
         { server: "github", path: "org/web-api", role: "target", component: "api" },
@@ -29,6 +28,19 @@ describe("kintsugi.yaml validation", () => {
     expect(result.manifest.policy.requireCommitTrailer).toBe(true);
   });
 
+  it("keeps the design set a pipeline stage produces", () => {
+    const stage = { id: "detail-design", performer: { member: ["dev"] }, produces: "detail" };
+    const result = validateManifest({ ...minimal, pipelines: [{ id: "payroll-rebuild", phases: [{ id: "migrate", perUnit: true, stages: [stage, { id: "review", performer: { agent: "gate-reviewer" } }] }] }] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const stages = result.manifest.pipelines[0]!.phases[0]!.stages;
+    expect(stages[0]).toEqual(stage);
+    expect(stages[1]).not.toHaveProperty("produces");
+    const bad = validateManifest({ ...minimal, pipelines: [{ id: "p", phases: [{ id: "migrate", stages: [{ ...stage, produces: "Detail Design" }] }] }] });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.problems.map((problem) => problem.path)).toEqual(["pipelines[0].phases[0].stages[0].produces"]);
+  });
+
   it("reports every problem with its path", () => {
     const result = validateManifest({
       schemaVersion: 2,
@@ -38,7 +50,6 @@ describe("kintsugi.yaml validation", () => {
       applications: [
         {
           id: "web",
-          disposition: "lift-and-shift",
           repos: [
             { server: "github", path: "org/billing-docs", role: "legacy" },
             { server: "github", path: "org/web-api", role: "target" },
@@ -46,7 +57,7 @@ describe("kintsugi.yaml validation", () => {
             { server: "github", path: "org/x", role: "document" },
           ],
         },
-        { id: "web", disposition: "retain" },
+        { id: "web" },
       ],
       pipelines: [{ id: "custom", phases: [{ id: "harden", stages: [{ id: "do", performer: { agent: "a", member: ["dev"] } }] }] }],
       extra: true,
@@ -59,7 +70,6 @@ describe("kintsugi.yaml validation", () => {
       "project.id",
       "project.name",
       "unitKinds",
-      "applications[0].disposition",
       "applications[0].repos[0]",
       "applications[0].repos[1].component",
       "applications[0].repos[2].component",
@@ -78,7 +88,6 @@ describe("kintsugi.yaml validation", () => {
         {
           id: "web",
           name: "Web",
-          disposition: "refactor",
           repos: [
             { server: "github", path: "org/web-api", role: "target", component: "api" },
             { server: "github", path: "org/web-legacy", role: "legacy" },
@@ -102,10 +111,10 @@ describe("repository path", () => {
 
 describe("autoCommitPaths globs", () => {
   it("spans folders with ** and stays within a segment with * and ?", () => {
-    expect(matchesPathGlob("applications/web/units/payroll/run-period/unit.md", "applications/*/units/**/unit.md")).toBe(true);
-    expect(matchesPathGlob("applications/web/units/run-period/unit.md", "applications/*/units/**/unit.md")).toBe(true);
-    expect(matchesPathGlob("applications/web/other/units/payroll/unit.md", "applications/*/units/**/unit.md")).toBe(false);
-    expect(matchesPathGlob("applications/team/web/units/payroll/unit.md", "applications/*/units/**/unit.md")).toBe(false);
+    expect(matchesPathGlob("10-applications/web/02-modern/payroll/run-period/README.md", "10-applications/*/02-modern/**/README.md")).toBe(true);
+    expect(matchesPathGlob("10-applications/web/02-modern/README.md", "10-applications/*/02-modern/**/README.md")).toBe(true);
+    expect(matchesPathGlob("10-applications/web/01-legacy/payroll/README.md", "10-applications/*/02-modern/**/README.md")).toBe(false);
+    expect(matchesPathGlob("10-applications/team/web/02-modern/payroll/README.md", "10-applications/*/02-modern/*/*/README.md")).toBe(false);
     expect(matchesPathGlob("tasks/t-1.md", "tasks/*.md")).toBe(true);
     expect(matchesPathGlob("tasks/a/t-1.md", "tasks/*.md")).toBe(false);
     expect(matchesPathGlob("runs/a/b.json", "**/b.json")).toBe(true);
@@ -113,13 +122,16 @@ describe("autoCommitPaths globs", () => {
   });
 
   it("splits writes by the application and unit defaults", () => {
-    expect(isAutoCommitPath("applications/web/units/payroll/run-period/unit.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/units/payroll/run-period/task.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/generated/traceability.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/units/payroll/run-period/rules.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
-    expect(isAutoCommitPath("applications/web/assessment/generated/topology.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
-    expect(isAutoCommitPath("applications/team/web/generated/a.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("10-applications/web/02-modern/payroll/run-period/README.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/02-modern/payroll/run-period/task.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/_generated/traceability.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/01-legacy/plan.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/01-legacy/payroll/run-period/rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("10-applications/web/02-modern/payroll/run-period/basic/README.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("10-applications/web/02-modern/_design/arch/README.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/02-modern/README.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("10-applications/team/web/_generated/a.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("kintsugi.yaml", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
-    expect(isAutoCommitPath("standards/review-rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("01-standards/review-rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
   });
 });

@@ -1,16 +1,18 @@
-// The `understand` stage (commands/modernize-understand.md, ADR-0033): runs on a selection of
+// The `understand` stage (commands/modernize-understand.md, ADR-0033, ADR-0042): runs on a selection of
 // catalog items (inputs.scope, resolved by the API through assessmentCatalogPath). One run is
-// one pull request that touches only the paths of its own items, so concurrent runs never conflict:
+// one pull request that touches only the paths of its own items, so concurrent runs never conflict. The
+// documents of an item are Markdown in its folder on the legacy side (01-legacy/<module>/<item>/), its card on the modern side; what the steps pass to each other is scratch
+// JSON (intermediate):
 //
-//   scope_items.py      per item: topology fragment (published), brief and rule shard (intermediate)
+//   scope_items.py      per item: topology.md (published), brief and rule shard (scratch)
 //   parallel            extract-rules workflow over the items' shards ∥ harden-scan over their files
-//   split_rules.py      per unit rules.json, stable citation-derived ids RULE-<module>.<unit>-<hash>
-//   split_findings.py   per item findings.json, ids SEC-<module>.<item>-NN
-//   forEach item        a legacy-analyst job writes the AS-IS specification and returns its trace
-//   finish_items.py     per item: checked trace.json, meta.json (understood) and the work item
+//   split_rules.py      per unit rules.md (the index) and a rules/<id>.md file per rule, stable citation-derived ids RULE-<module>.<unit>-<hash>
+//   split_findings.py   per item findings.md, ids SEC-<module>.<item>-NN
+//   forEach item        a legacy-analyst job writes the AS-IS specification and returns its trace (scratch)
+//   finish_items.py     per item: checked trace.md, understanding.md (understood) and the work item
 //
 // Whole-application views (topology, rules, findings, traceability) are not written here: the
-// aggregate rebuild regenerates them under generated/ after a merge. The application overview
+// aggregate rebuild regenerates them under _generated/ after a merge. The application overview
 // documents are an on-demand run of their own.
 //
 // Not wired yet: per-node descriptions and persona flows of the scoped map (the fragments are
@@ -20,22 +22,23 @@ import type { StageContext, StagePlan, StageScope } from "../plan.js";
 import {
   DOCUMENT_PATH_TOKENS,
   assessmentBriefPath,
+  assessmentCatalogDir,
   assessmentCatalogPath,
-  assessmentFilePath,
-  assessmentInventoryPath,
-  assessmentItemFilePath,
+  assessmentSynthesisPath,
   assessmentTopologyPath,
-  knowledgeAsIsItemFilePath,
-  knowledgeAsIsUnitPath,
-  unitsDir,
+  legacyDir,
+  modernDir,
   understandRunDir,
   understandRunFilePath,
   understandScopePath,
+  understandTraceDraftPath,
+  unitKeyAsIsPath,
+  unitKeyLegacyPath,
 } from "@kintsugi/domain";
 import { CREDENTIALS, HEADER, UNTRUSTED, WORKSPACE } from "./common.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
-/** Intermediate files of the run: briefs, shards, the workflows' results. */
+/** Scratch files of the run: briefs, shards, the specification jobs' traces, the workflows' results. */
 const RUN = understandRunDir(APP_TOKEN);
 const SCOPE = understandScopePath(APP_TOKEN);
 
@@ -44,8 +47,8 @@ const TRACE_SCHEMA = {
   required: ["entryPoints", "rulesApplied", "findings", "dependencies", "dataObjects", "externalSystems", "files", "openQuestions"],
   properties: {
     entryPoints: { type: "array", items: { type: "string", description: "An entry point of the item as file:line (route, transaction, main, job step)" } },
-    rulesApplied: { type: "array", items: { type: "string", description: "A stable RULE-<module>.<unit>-<hash> id of the unit's rules.json the code applies" } },
-    findings: { type: "array", items: { type: "string", description: "A SEC-<module>.<item>-NN id of the item's findings.json" } },
+    rulesApplied: { type: "array", items: { type: "string", description: "A stable RULE-<module>.<unit>-<hash> id of the unit's rules.md the code applies" } },
+    findings: { type: "array", items: { type: "string", description: "A SEC-<module>.<item>-NN id of the item's findings.md" } },
     dependencies: {
       type: "array",
       items: {
@@ -71,13 +74,13 @@ ${WORKSPACE}
 
 Your brief is {in}/{item} (read-only): the item's id, name, kind and summary from the catalog, its source files, its
 size, its topology leaves and entry points, the items it depends on and that use it, the data stores it reads and
-writes. Also under {in}: the item's topology fragment ${assessmentItemFilePath(APP_TOKEN, "{key}", "topology.json")}, its business rules
-${assessmentItemFilePath(APP_TOKEN, "{key}", "rules.json")} (ids RULE-<module>.<unit>-<hash>, derived from the canonical citation and stable across reruns, each citation checked by a second agent), its security
-findings ${assessmentItemFilePath(APP_TOKEN, "{key}", "findings.json")} (ids SEC-<module>.<item>-NN), ${assessmentCatalogPath(APP_TOKEN)} (every item of the
-application) and ${assessmentFilePath(APP_TOKEN, "ASSESSMENT.md")}. Read the item's source files and follow its calls only as far as needed to
+writes. Also under {in}: the item's topology ${unitKeyLegacyPath(APP_TOKEN, "{key}", "topology.md")}, its business rules
+${unitKeyLegacyPath(APP_TOKEN, "{key}", "rules.md")} (the index of its rules, ids RULE-<module>.<unit>-<hash>, derived from the canonical citation and stable across reruns, each citation checked by a second agent; one file per rule in ${unitKeyLegacyPath(APP_TOKEN, "{key}", "rules")}/), its security
+findings ${unitKeyLegacyPath(APP_TOKEN, "{key}", "findings.md")} (ids SEC-<module>.<item>-NN), ${assessmentCatalogPath(APP_TOKEN)} and the module documents next to it (every item of the
+application) and ${assessmentSynthesisPath(APP_TOKEN)}. Read the item's source files and follow its calls only as far as needed to
 describe it; the other items have their own specifications.
 
-Write ${knowledgeAsIsUnitPath(APP_TOKEN, "{key}")} with write, with exactly these sections, in this order:
+Write ${unitKeyAsIsPath(APP_TOKEN, "{key}")} with write, with exactly these sections, in this order:
 1. Purpose — what the item does for the business, in two to four sentences.
 2. Entry points — how the item is started (routes, transactions, screens, job steps, main programs), file:line each.
 3. Main flows — the main processing paths, step by step; add a Mermaid sequenceDiagram per main flow (autonumber;
@@ -86,9 +89,9 @@ Write ${knowledgeAsIsUnitPath(APP_TOKEN, "{key}")} with write, with exactly thes
 4. Dependencies — inbound and outbound (catalog items, data stores, external systems), as a table: direction, target,
    kind (call, read, write, integration), evidence file:line.
 5. Data objects — the records, tables, DTOs or copybooks it reads or writes, with the fields that matter.
-6. Business rules applied — each as a RULE id of the item's rules.json with a one-line summary and file:line; a rule
+6. Business rules applied — each as a RULE id of the item's rules.md with a one-line summary and file:line; a rule
    you see in the code that the file lacks is listed as "uncatalogued" with file:line, never given an id.
-7. Security findings and risks — each SEC id of the item's findings.json, and other risks you saw (marked as
+7. Security findings and risks — each SEC id of the item's findings.md, and other risks you saw (marked as
    observations, without an id).
 8. Configuration — the settings, properties, environment variables and tables that change its behavior (names and
    file:line only; never a value that could be a credential).
@@ -131,7 +134,8 @@ export function understandMessage(app: string, scope?: StageScope): string {
 export const UNDERSTAND: StagePlan = {
   id: "understand",
   message: understandMessage,
-  documents: ["kintsugi.yaml", assessmentCatalogPath(APP_TOKEN), assessmentInventoryPath(APP_TOKEN), assessmentTopologyPath(APP_TOKEN), assessmentFilePath(APP_TOKEN, "ASSESSMENT.md"), `${unitsDir(APP_TOKEN)}/`],
+  // The legacy half (catalog, assessment, what earlier runs understood) and the unit cards of the modern half.
+  documents: ["kintsugi.yaml", `${legacyDir(APP_TOKEN)}/`, `${modernDir(APP_TOKEN)}/`],
   requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   reviewAll: true,
   steps: [
@@ -139,7 +143,7 @@ export const UNDERSTAND: StagePlan = {
       id: "scope",
       kind: "script",
       script: "scope_items.py",
-      args: (ctx) => ["{app}", "--catalog", `{in}/${assessmentCatalogPath(APP_TOKEN)}`, "--topology", `{in}/${assessmentTopologyPath(APP_TOKEN)}`, "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--catalog", `{in}/${assessmentCatalogDir(APP_TOKEN)}`, "--items", itemsArg(ctx), "--out", "{out}"],
       intermediate: [`${RUN}/`],
       expects: [SCOPE],
     },
@@ -169,13 +173,13 @@ export const UNDERSTAND: StagePlan = {
       id: "split-rules",
       kind: "script",
       script: "split_rules.py",
-      args: (ctx) => ["{app}", "--rules", "{in}/" + understandRunFilePath(APP_TOKEN, "rules_result.json"), "--catalog", "{in}/" + assessmentCatalogPath(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--rules", "{in}/" + understandRunFilePath(APP_TOKEN, "rules_result.json"), "--catalog", "{in}/" + assessmentCatalogDir(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}", "--docs", "{in}", "--source-commit", "{commit}"],
     },
     {
       id: "split-findings",
       kind: "script",
       script: "split_findings.py",
-      args: (ctx) => ["{app}", "--scan", "{in}/" + understandRunFilePath(APP_TOKEN, "scan.json"), "--catalog", "{in}/" + assessmentCatalogPath(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--scan", "{in}/" + understandRunFilePath(APP_TOKEN, "scan.json"), "--catalog", "{in}/" + assessmentCatalogDir(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}"],
     },
     {
       id: "specifications",
@@ -189,9 +193,9 @@ export const UNDERSTAND: StagePlan = {
         agent: "legacy-analyst",
         task: SPEC_TASK,
         schema: TRACE_SCHEMA,
-        resultTo: knowledgeAsIsItemFilePath(APP_TOKEN, "{key}", "trace.json"),
-        intermediate: [knowledgeAsIsItemFilePath(APP_TOKEN, "{key}", "trace.json")],
-        expects: [knowledgeAsIsUnitPath(APP_TOKEN, "{key}")],
+        resultTo: understandTraceDraftPath(APP_TOKEN, "{key}"),
+        intermediate: [understandTraceDraftPath(APP_TOKEN, "{key}")],
+        expects: [unitKeyAsIsPath(APP_TOKEN, "{key}")],
       },
     },
     {
@@ -201,7 +205,7 @@ export const UNDERSTAND: StagePlan = {
       args: (ctx) => [
         "{app}",
         "--catalog",
-        `{in}/${assessmentCatalogPath(APP_TOKEN)}`,
+        `{in}/${assessmentCatalogDir(APP_TOKEN)}`,
         "--items",
         itemsArg(ctx),
         "--inputs",
@@ -213,7 +217,7 @@ export const UNDERSTAND: StagePlan = {
         "--repo",
         "{repo}",
         "--existing",
-        "{in}/" + unitsDir(APP_TOKEN),
+        "{in}/" + modernDir(APP_TOKEN),
         "--out",
         "{out}",
       ],

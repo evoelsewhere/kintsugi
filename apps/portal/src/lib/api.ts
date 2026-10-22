@@ -92,6 +92,9 @@ export interface HealthResponse {
   status: string;
   service: string;
   at: string;
+  uptimeSeconds?: number;
+  build?: { version: string; commit: string; commitShort: string; builtAt: string | null; startedAt: string };
+  node?: string;
 }
 
 export function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
