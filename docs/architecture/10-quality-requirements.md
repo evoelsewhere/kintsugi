@@ -11,7 +11,7 @@ Quality goals are listed in [1.2](01-introduction-and-goals.md#12-quality-goals)
 | Q5 | Deployability | Upgrade to a new release | Pull images and restart; migrations run automatically; no data loss |
 | Q6 | Traceability | An auditor asks where a detail design came from | The artifact shows `repo@commit:path`, author, harness, AI share, reviewing gate and approver |
 | Q7 | Rebuildability | The Postgres volume is lost, and there is no backup | Work items, statuses, gate results and KB index are rebuilt from Git; documents and code are intact; only operational history (jobs, events, usage, audit) is lost |
-| Q8 | Harness neutrality | A team switches from Copilot to Claude Code mid-project | Members use the same Coding Agent Workflow contract and generate a client package (`kintsugi plugins setup --client claude`); gates and metrics keep working |
+| Q8 | Harness neutrality | A team switches from Copilot to Claude Code mid-project | Members use the same Coding Agent Workflow contract and generate a client package (`kintsugi plugins setup --harness claude-code`); gates and metrics keep working |
 | Q9 | Responsiveness | A runtime job is running | The portal shows job events live (SSE), within ~1 s of the runner emitting them |
 | Q10 | Cost control | A runtime job exceeds its budget | The job is stopped; the cost and the reason are recorded |
 | Q11 | Consistency | A member starts converting screens before the UI conventions and mappings are written | The task pack cites no standard for the unit, `task-planner` flags the gap, and gate G3 has not been approved, so the unit is not assignable |

@@ -64,10 +64,13 @@ describe("access plugin handoff guidance", () => {
     expect(skill).toMatch(/`blocked`[\s\S]*human[\s\S]*follow-up/i);
     expect(skill).toMatch(/`unsupported`[\s\S]*context[\s\S]*follow-up/i);
     expect(skill).toMatch(/`complete`[\s\S]*declared pipeline has no next stage/i);
-    expect(skill).toMatch(/before describing current workflow state, refresh `task_status`/i);
+    expect(skill).toMatch(/before describing current workflow state or continuing based on a continuation event, refresh `task_status`/i);
+    expect(skill).toMatch(/fetch a fresh `task_brief` and cited inputs before starting implementation/i);
+    expect(skill).toMatch(/if task status cannot be refreshed[\s\S]*do not act on the historical record alone/i);
     expect(skill).toMatch(/keep nullable values and missing fields as such[\s\S]*do not invent provenance/i);
-    expect(skill).toMatch(/the four `status` values are guidance only/i);
+    expect(skill).toMatch(/the four event `status` values are guidance only/i);
     expect(skill).toMatch(/not as a live update delivered to this plugin or a command to begin work/i);
+    expect(skill).toMatch(/top-level `status` and `nextAction` are current[\s\S]*embedded continuation event is historical/i);
   });
 
   it("hands implementation and PR creation to the chosen AI and reports only Kintsugi-observed provider state", async () => {

@@ -116,7 +116,7 @@ function nativeCommands(target: CodingAgentClient, root: string, pluginName: str
   };
   const rollbackByClient: Record<CodingAgentClient, string[]> = {
     claude: [`claude plugin uninstall --scope user ${pluginName}@${marketplaceName}`, `claude plugin marketplace remove --scope user ${marketplaceName}`],
-    codex: [`codex plugin marketplace remove ${marketplaceName}`],
+    codex: [`codex plugin remove ${pluginName}@${marketplaceName}`, `codex plugin marketplace remove ${marketplaceName}`],
     copilot: [`copilot plugin uninstall ${pluginName}`, `copilot plugin marketplace remove ${marketplaceName}`],
   };
   return { install: installByClient[target], rollback: rollbackByClient[target] };

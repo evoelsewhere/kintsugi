@@ -1,7 +1,7 @@
 // PostgreSQL adapter for the retained, project-sequenced member event log.
 
 import { Injectable } from "@nestjs/common";
-import { MEMBER_SCHEMA_VERSION, taskEventSchema } from "@kintsugi/harness-sdk";
+import { MEMBER_SCHEMA_VERSION, taskContinuationEventSchema, taskEventSchema, type TaskContinuationEvent } from "@kintsugi/harness-sdk";
 import { getPool } from "#common/db/pool.js";
 import { MemberEventReader, type MemberEventEnvelope } from "../domain/member-event.port.js";
 
@@ -19,6 +19,20 @@ const POSTGRES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{
 
 @Injectable()
 export class PgMemberEventReader extends MemberEventReader {
+  async latestContinuation(projectId: string, unitId: string): Promise<TaskContinuationEvent | undefined> {
+    const result = await getPool().query<MemberEventRow>(
+      `select id::text, project_id, sequence::text as sequence, unit_id, kind, metadata, created_at
+       from workflow.member_event
+       where project_id = $1 and unit_id = $2 and kind = 'task.continuation'
+         and created_at >= now() - interval '7 days'
+       order by sequence desc
+       limit 1`,
+      [projectId, unitId],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : taskContinuationEventSchema.parse(eventFromRow(row));
+  }
+
   async latestSequence(projectId: string): Promise<string> {
     const result = await getPool().query<{ last_sequence: string }>(
       "select coalesce((select last_sequence::text from workflow.member_event_cursor where project_id = $1), '0') as last_sequence",
@@ -53,18 +67,19 @@ export class PgMemberEventReader extends MemberEventReader {
        limit $4`,
       [projectId, unitId, sequence, limit],
     );
-    return result.rows.map((row) => {
-      const occurredAt = row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString();
-      const event = taskEventSchema.parse({
-        schemaVersion: MEMBER_SCHEMA_VERSION,
-        id: row.id,
-        projectId: row.project_id,
-        unitId: row.unit_id,
-        kind: row.kind,
-        occurredAt,
-        metadata: row.metadata,
-      });
-      return { event, sequence: row.sequence };
-    });
+    return result.rows.map((row) => ({ event: eventFromRow(row), sequence: row.sequence }));
   }
+}
+
+function eventFromRow(row: MemberEventRow) {
+  const occurredAt = row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString();
+  return taskEventSchema.parse({
+    schemaVersion: MEMBER_SCHEMA_VERSION,
+    id: row.id,
+    projectId: row.project_id,
+    unitId: row.unit_id,
+    kind: row.kind,
+    occurredAt,
+    metadata: row.metadata,
+  });
 }

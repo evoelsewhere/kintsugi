@@ -1,4 +1,4 @@
-import type { TaskEvent, TaskEventQuery } from "@kintsugi/harness-sdk";
+import type { TaskContinuationEvent, TaskEvent, TaskEventQuery } from "@kintsugi/harness-sdk";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
 
 export interface MemberEventEnvelope {
@@ -8,6 +8,8 @@ export interface MemberEventEnvelope {
 }
 
 export abstract class MemberEventReader {
+  /** Returns the newest retained continuation notification for this exact task, if one exists. */
+  abstract latestContinuation(projectId: string, unitId: string): Promise<TaskContinuationEvent | undefined>;
   /** Latest project sequence at subscription start, so a new watch follows future events only. */
   abstract latestSequence(projectId: string): Promise<string>;
   /** Resolves only a retained event from this exact project and task. */
