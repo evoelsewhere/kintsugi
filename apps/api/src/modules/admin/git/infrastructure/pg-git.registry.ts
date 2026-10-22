@@ -147,6 +147,11 @@ export class PgGitRegistry extends GitRegistry {
     return (await this.getRepository(input.id))!;
   }
 
+  async setRepositoryBranch(id: string, branch: string): Promise<GitRepositoryRecord | undefined> {
+    await this.#pool.query("update admin.git_repository set default_branch = $2, sync_status = 'pending', last_error = null, updated_at = now() where id = $1", [id, branch]);
+    return this.getRepository(id);
+  }
+
   async removeRepository(id: string): Promise<boolean> {
     try {
       const result = await this.#pool.query("delete from admin.git_repository where id = $1", [id]);

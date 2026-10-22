@@ -100,7 +100,7 @@ Recorded actions (see [security → audit coverage](../architecture/concepts/sec
 |---|---|
 | Delivery | `stage.run`, `job-run.cancel`, `manifest.publish` |
 | Projects | `project.create`, `project.update`, `project.delete`, `application.create`, `application.update`, `application.delete`, `repository.link`, `repository.unlink` |
-| Git | `git-server.create`, `git-server.update`, `git-server.delete`, `git-repository.create`, `git-repository.delete` |
+| Git | `git-server.create`, `git-server.update`, `git-server.delete`, `git-repository.create`, `git-repository.update`, `git-repository.delete` |
 | LLM providers | `llm-provider.create`, `llm-provider.update`, `llm-provider.delete`, `model-bindings.save` |
 | Agents | `agent.create`, `agent.update`, `agent.delete`, `agent.enable`, `agent.disable`, `agent.import`, `agent.copy`, `agent.restore`, `skill.create`, `skill.update`, `skill.delete` |
 | Settings | `commit-identity.update` |

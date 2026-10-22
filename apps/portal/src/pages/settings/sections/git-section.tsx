@@ -4,7 +4,7 @@
 // seconds while a repository is not ready). Admins also set the commit identity of
 // kintsugi-bot here.
 
-import { FolderGit2, Plus, Server, Settings2, Trash2 } from "lucide-react";
+import { FolderGit2, GitBranch, Plus, Server, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { gitApi, type GitRepositoryView, type GitServerInput, type GitServerView } from "@/lib/api/git";
 import { formatRelative, shortSha } from "@/lib/format";
 import { CommitIdentityCard } from "./commit-identity-card";
+import { GitBranchDialog } from "./git-branch-dialog";
 import { GitRepositoryDialog } from "./git-repository-dialog";
 import { GitServerDialog } from "./git-server-dialog";
 
@@ -29,6 +30,7 @@ export function GitSection(): React.JSX.Element {
   const [serverDialog, setServerDialog] = useState<{ open: boolean; server: GitServerView | null }>({ open: false, server: null });
   const [repositoryDialog, setRepositoryDialog] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
+  const [branchTarget, setBranchTarget] = useState<GitRepositoryView | null>(null);
   const toast = useToast();
 
   const load = useCallback(async (): Promise<void> => {
@@ -155,6 +157,10 @@ export function GitSection(): React.JSX.Element {
                   {repository.lastError === undefined ? null : <p className="mt-0.5 break-words text-[12px] text-[var(--ds-status-red)]">{repository.lastError}</p>}
                 </div>
                 <SyncStatusBadge status={repository.syncStatus} />
+                <Button size="small" variant="ghost" title="Choose the branch Kintsugi follows" onClick={() => setBranchTarget(repository)}>
+                  <GitBranch className="size-4" />
+                  Branch
+                </Button>
                 <Button size="icon" variant="danger" aria-label={`Remove ${repository.id}`} onClick={() => setRemoveTarget({ kind: "repository", repository })}>
                   <Trash2 className="size-4" />
                 </Button>
@@ -182,6 +188,16 @@ export function GitSection(): React.JSX.Element {
         onSubmit={async (input) => {
           await gitApi.createRepository(input);
           toast.success("Repository registered", `${input.id} — the worker clones it now; its status updates here.`);
+          await load();
+        }}
+      />
+
+      <GitBranchDialog
+        repository={branchTarget}
+        onClose={() => setBranchTarget(null)}
+        onSubmit={async (repository, branch) => {
+          await gitApi.setRepositoryBranch(repository.id, branch);
+          toast.success("Main branch changed", `${repository.id} follows ${branch}; the worker syncs it now.`);
           await load();
         }}
       />

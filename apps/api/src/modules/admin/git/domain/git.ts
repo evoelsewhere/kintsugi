@@ -80,6 +80,8 @@ export interface GitAccess {
 export interface RemoteProbe {
   defaultBranch?: string;
   branchCount: number;
+  /** Branch names, sorted. */
+  branches: string[];
 }
 
 export interface RemoteLocation {

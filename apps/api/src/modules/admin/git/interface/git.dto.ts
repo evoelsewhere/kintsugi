@@ -39,6 +39,16 @@ export const createGitRepositorySchema = z.object({
 });
 export type CreateGitRepositoryInput = z.infer<typeof createGitRepositorySchema>;
 
+export const setRepositoryBranchSchema = z.object({
+  /** A branch name as git lists it under refs/heads/. */
+  defaultBranch: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[A-Za-z0-9._/-]+$/),
+});
+export type SetRepositoryBranchInput = z.infer<typeof setRepositoryBranchSchema>;
+
 /** Maps a server request to the application command. */
 export function toServerCommand(id: string, input: ReplaceGitServerInput): RegisterGitServer {
   const { token, privateKey, username, knownHosts, ...fields } = input;
