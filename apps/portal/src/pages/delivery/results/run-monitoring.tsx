@@ -231,10 +231,11 @@ function LatestRun({ projectId, run, title }: { projectId: string; run: JobRunVi
 
 function StepTimeline({ run }: { run: { startedAt?: string; createdAt: string; finishedAt?: string; steps: JobRunView[] } }): React.JSX.Element {
   const now = useNow(run.finishedAt === undefined);
-  const origin = new Date(run.startedAt ?? run.createdAt).getTime();
-  const end = run.finishedAt === undefined ? now : new Date(run.finishedAt).getTime();
   const steps = [...run.steps].sort((a, b) => new Date(a.startedAt ?? a.createdAt).getTime() - new Date(b.startedAt ?? b.createdAt).getTime());
   const longest = steps.reduce<JobRunView | undefined>((best, step) => (best === undefined || (durationMs(step, now) ?? 0) > (durationMs(best, now) ?? 0) ? step : best), undefined);
+  // A retry is the next attempt of the same run: steps it kept from an earlier attempt started before the run's own start, so the axis begins at the earliest of them.
+  const origin = Math.min(new Date(run.startedAt ?? run.createdAt).getTime(), ...steps.flatMap((step) => (step.startedAt === undefined ? [] : [new Date(step.startedAt).getTime()])));
+  const end = run.finishedAt === undefined ? now : new Date(run.finishedAt).getTime();
   const span = Math.max(1, end - origin, ...steps.map((step) => (step.finishedAt === undefined ? now : new Date(step.finishedAt).getTime()) - origin));
   if (steps.length === 0) return <p className="text-[12px] text-text-muted">{run.startedAt === undefined ? "Waiting for the worker to start it." : "The run recorded no steps."}</p>;
   return (
