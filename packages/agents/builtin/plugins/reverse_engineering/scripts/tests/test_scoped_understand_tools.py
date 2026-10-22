@@ -294,6 +294,29 @@ class UnderstandToolsTests(unittest.TestCase):
         for root, _, names in os.walk(os.path.join(self.out, *APP)):
             self.assertFalse([name for name in names if name.endswith('.json')], root)
 
+    def test_finish_items_counts_the_gaps_the_specification_lists(self):
+        # The count of open questions is the rows of the Gaps and questions table, not the agent's own number (ADR-0057).
+        inputs = self.finish_inputs()
+        gaps = ('# Tax\n\n## Purpose\n\nRounds.\n\n## Gaps and questions\n\n'
+                '| ID | Kind | Question | Where | Impact |\n| --- | --- | --- | --- | --- |\n'
+                '| `GAP-tax.calc-01` | missing-source | What does copybook TAXTAB hold? | `legacy/src/TAX.cbl:4` | blocking |\n'
+                '| GAP-tax.calc-02 | ambiguous | Why 0.0825? | RULE-tax.calc-01 | risk |\n'
+                '| GAP-tax.calc-02 | ambiguous | Again | RULE-tax.calc-01 | risk |\n'
+                '| GAP-tax.calc-03 | guess | Which table? | `legacy/src/TAX.cbl:9` | huge |\n'
+                '| NOTE-1 | note | Not a gap id | - | note |\n')
+        write(unit_file(inputs, 'tax/calc', 'spec.md'), gaps)
+        result = run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', self.out, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'trace.md')))[0]['openQuestions'], 3)
+        for note in ('GAP-tax.calc-02 is listed twice', 'GAP-tax.calc-03 has kind "guess"', 'GAP-tax.calc-03 has impact "huge"', 'NOTE-1 is not a gap id'):
+            self.assertIn(note, result.stdout)
+        # "None." under the heading is zero gaps, whatever the agent counted.
+        write(unit_file(inputs, 'tax/calc', 'spec.md'), '# Tax\n\n## Gaps and questions\n\nNone.\n')
+        result = run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', self.out, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'trace.md')))[0]['openQuestions'], 0)
+        self.assertNotIn('gaps table', result.stdout)
+
     def test_the_unit_card_names_each_legacy_repository_its_files_come_from(self):
         # Two legacy repositories are mounted side by side: files are cited `<repository id>/<path>`.
         two = {**CATALOG, 'items': [
@@ -349,6 +372,20 @@ class UnderstandToolsTests(unittest.TestCase):
         tax = rr.unit_rule_rows(docmd.read_text(unit_file(out, 'tax/calc', 'rules.md')))
         self.assertEqual(sorted(row['name'] for row in tax), ['Amount positive', 'Tax rounding'])
 
+    def test_rebuild_aggregates_lists_the_gaps_of_the_understood_units_blocking_first(self):
+        docs = os.path.join(self.root, 'docs')
+        inputs = self.finish_inputs()
+        self.assertEqual(run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', docs, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1').returncode, 0)
+        write(unit_file(docs, 'tax/calc', 'spec.md'), docmd.read_text(os.path.join(os.path.dirname(__file__), 'fixtures', 'gaps', 'spec.md')))
+        result = run('rebuild_aggregates.py', 'billing', '--docs', docs, '--out', self.out)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('3 gap(s)', result.stdout)
+        front, body = docmd.split_front_matter(docmd.read_text(os.path.join(self.out, *APP, '_generated', 'GAPS.md')))
+        self.assertEqual({key: front[key] for key in ('gaps', 'units', 'blocking', 'risk', 'note', 'missingSource', 'unresolved', 'ambiguous', 'unverified')},
+                         {'gaps': 3, 'units': 1, 'blocking': 1, 'risk': 1, 'note': 1, 'missingSource': 1, 'unresolved': 0, 'ambiguous': 1, 'unverified': 1})
+        rows = docmd.records_in(body)
+        self.assertEqual([(row['item'], row['id'], row['impact']) for row in rows], [('tax/calc', 'GAP-tax.calc-01', 'blocking'), ('tax/calc', 'GAP-tax.calc-02', 'risk'), ('tax/calc', 'GAP-tax.calc-03', 'note')])
+
     def test_rebuild_aggregates_merges_the_units_into_markdown_read_models(self):
         docs = os.path.join(self.root, 'docs')
         inputs = self.finish_inputs()
@@ -359,7 +396,7 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('1 of 2 item(s) understood', result.stdout)
         gen = os.path.join(self.out, *APP, '_generated')
-        self.assertEqual(sorted(os.listdir(gen)), ['BUSINESS_RULES.md', 'DATA_OBJECTS.md', 'README.md', 'SECURITY_FINDINGS.md', 'traceability.md'])
+        self.assertEqual(sorted(os.listdir(gen)), ['BUSINESS_RULES.md', 'DATA_OBJECTS.md', 'GAPS.md', 'README.md', 'SECURITY_FINDINGS.md', 'traceability.md'])
         business = docmd.read_text(os.path.join(gen, 'BUSINESS_RULES.md'))
         self.assertIn('| RULE-tax.calc-01 | tax/calc | Round | Calculation | P0 | High | 1 | confirmed | `src/TAX.cbl:3` | [RULE-tax.calc-01](../01-legacy/tax/calc/rules/RULE-tax.calc-01.md) |', business)
         self.assertEqual([line for line in business.splitlines() if line.startswith('### ')], [])

@@ -12,7 +12,8 @@ same folder, and the fragments the specification jobs returned (scratch/<app>/un
 10-applications/<app>/02-modern/ folder (a unit card already there is left as it is, so a person's progress is never
 overwritten). Writes under --out:
 
-- 01-legacy/<module>/<unit>/trace.md - the fragment with only the rule and finding ids of that item and dependencies
+- 01-legacy/<module>/<unit>/trace.md - the fragment (its `openQuestions` is the number of rows of the specification's
+  `Gaps and questions` table, ADR-0057; a table that does not read is reported on stdout) with only the rule and finding ids of that item and dependencies
   that name a catalog item, a data store or a system, with the sections the later phases fill in
   (requirements, pull requests, tests);
 - 01-legacy/<module>/<unit>/understanding.md - digest, sources, run, counts: the item is `understood` once this file is
@@ -31,6 +32,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
 import docmd  # noqa: E402
+import gaps_common  # noqa: E402
 import paths  # noqa: E402
 import render_rules as rr  # noqa: E402
 import split_findings as sf  # noqa: E402
@@ -111,16 +113,21 @@ def render_trace(app, item_id, checked):
     return '\n'.join(out).rstrip() + '\n'
 
 
-def finish(app, items, chosen, inputs, sources, run, existing):
+def finish(app, items, chosen, inputs, sources, run, existing, notes=None):
+    """`notes`, when given, collects what a person should look at (a specification whose gaps table does not read)."""
     revision = paths.sources_spec(sources)
     texts, done, missing, new_units = {}, [], [], 0
     owners = cc.owner_of(items.values())
     for item in chosen:
         item_id = item['id']
         spec = paths.unit_key_as_is_path(app, item_id)
-        if not os.path.isfile(os.path.join(inputs, *spec.split('/'))):
+        spec_path = os.path.join(inputs, *spec.split('/'))
+        if not os.path.isfile(spec_path):
             missing.append(item_id)
             continue
+        gaps, gap_problems = gaps_common.spec_gaps(docmd.read_text(spec_path))
+        if notes is not None:
+            notes.extend(f'{item_id}: {problem}' for problem in gap_problems)
         raw = cc.read_optional_json(os.path.join(inputs, *paths.understand_trace_draft_path(app, item_id).split('/')))
         trace = raw if isinstance(raw, dict) else {}
         rules_text = docmd.read_optional_text(os.path.join(inputs, *paths.unit_rules_path(app, *item_id.split('/')).split('/')))
@@ -146,7 +153,8 @@ def finish(app, items, chosen, inputs, sources, run, existing):
             'tests': strings(trace.get('tests')),
             # Files as the agent cited them, put right when they name a catalog file (`as-is/` or the repository left out).
             'files': sorted({owners.path_of(rel) or rel for rel in (cc.norm_path(value) for value in strings(trace.get('files'))) if rel}),
-            'openQuestions': trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) and not isinstance(trace.get('openQuestions'), bool) else 0,
+            # The gaps the specification lists; the agent's own count only stands in when it has no such section.
+            'openQuestions': len(gaps) if gaps is not None else trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) and not isinstance(trace.get('openQuestions'), bool) else 0,
         }
         texts[paths.unit_trace_path(app, *item_id.split('/'))] = render_trace(app, item_id, checked)
         record = {
@@ -208,7 +216,8 @@ def main(argv):
             raise cc.DataError('--run must be a run id')
         items, _ = cc.load_catalog(args.catalog)
         chosen = cc.selected(items, args.items)
-        texts, done, missing, new_units = finish(args.app, items, chosen, os.path.realpath(args.inputs), sources, args.run, args.existing)
+        notes = []
+        texts, done, missing, new_units = finish(args.app, items, chosen, os.path.realpath(args.inputs), sources, args.run, args.existing, notes)
         root = os.path.abspath(args.out)
         for path, text in texts.items():
             docmd.write_text(os.path.join(root, *path.split('/')), text)
@@ -218,6 +227,8 @@ def main(argv):
     print(f'{len(done)} item(s) understood, {new_units} work item(s) written; {len(missing)} without a specification')
     for item_id in missing[:60]:
         print(f'- no specification: {item_id}')
+    for note in notes[:60]:
+        print(f'- gaps table: {note}')
     return 0
 
 

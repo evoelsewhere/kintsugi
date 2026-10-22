@@ -64,7 +64,7 @@ const TRACE_SCHEMA = {
     dataObjects: { type: "array", items: { type: "string", description: "A data object (record, table, DTO, copybook) the item reads or writes" } },
     externalSystems: { type: "array", items: { type: "string", description: "An external system the item talks to (logical name, never a URL with credentials)" } },
     files: { type: "array", items: { type: "string", description: "A repository-relative source file the specification cites" } },
-    openQuestions: { type: "integer", description: "How many open questions the specification lists" },
+    openQuestions: { type: "integer", description: "How many gaps (rows of the Gaps and questions table) the specification lists" },
   },
 };
 
@@ -97,12 +97,18 @@ Write ${unitKeyAsIsPath(APP_TOKEN, "{key}")} with write, with exactly these sect
    file:line only; never a value that could be a credential).
 9. Error handling — how failures are detected, reported, retried or swallowed.
 10. Source references — every file:line the specification relies on.
-11. Open questions — what the code does not tell, for a subject-matter expert.
-Mark anything inferred rather than read from code as "(inferred)".
+11. Gaps and questions — what the code does not tell, for a subject-matter expert: a table with the columns ID, Kind,
+   Question, Where and Impact, one row per gap, as the evidence-marks skill says (ids GAP-<module>.<unit>-NN; kinds
+   missing-source, unresolved, ambiguous, unverified; impact blocking, risk or note). The source is often incomplete:
+   a copybook, a called program, a job descriptor or a table definition the code names may not be in the
+   repositories, so search for it, then record it as a gap instead of guessing. A rule of the item below High
+   confidence is a row too (kind ambiguous, Where = its RULE id). Write "None." when there is no gap.
+Mark anything inferred rather than read from code as "(inferred)", and a statement the code cannot settle as
+"(gap: GAP-…)" with its row in section 11.
 
 Return the traceability fragment as your structured result: the entry points, the RULE and SEC ids you listed, the
 dependencies (targets as catalog item ids, data store ids or external system names), data objects, external systems,
-the files you cite and the number of open questions.
+the files you cite and the number of rows of the gaps table.
 
 ${HEADER}
 ${CREDENTIALS}
