@@ -1,44 +1,59 @@
 # Coding Agent Workflow CLI
 
-Status: the typed client, read-only CLI, local stdio MCP bridge and generated Coding Agent Workflow packages are implemented in the unreleased workspace. The SSE client, server event replay, `task watch` and review findings retrieval are implemented; effective workflow continuation remains in progress (T15 still has open implementation and verification items in the [implementation plan](../superpowers/plans/2026-10-20-kintsugi-coding-agent-workflow-implementation.md)). Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
+Status: the typed client, read-only CLI, local stdio MCP bridge, generated Coding Agent Workflow packages, browser authorization, rotating credentials, connection-age policy, SSE replay, `task watch`, review findings retrieval and effective workflow continuation are implemented in the unreleased workspace. The local public-process smoke covers the API/worker OAuth and context path; release validation remains open for authenticated native MCP calls, authenticated GitHub/GHES provider flows, real provider/model behavior, crash recovery, rollback and upgrade. Native setup is enabled only for exact Claude Code and Codex CLI versions recorded in the [compatibility evidence](coding-agent-workflow-compatibility.md).
 
-Authenticate a local profile, generate the package for the chosen AI client, and run the printed native install commands. The installed package configures a local MCP bridge that lets the chosen AI read Kintsugi context. The developer and that AI implement the changes and create a PR using their normal coding tools. The CLI can then retrieve review findings and watch durable task events. It does not call a model, inject text into an already-running conversation, or perform the coding work.
+Install the project plugin before signing in. The plugin setup command records only the Kintsugi installation URL and project ID, generates a local package, and installs it with the selected AI client's native plugin command. On the first MCP connection, the CLI opens Kintsugi in a browser for sign-in and project consent. The CLI keeps short-lived access tokens in memory and a rotating refresh credential in the operating system credential store. The chosen AI reads Kintsugi context; the developer and AI implement changes and create a PR using their normal coding tools. Kintsugi can then observe the PR, provide review findings, and stream task events. The CLI does not call a model, inject text into an existing conversation, or perform the coding work.
 
 ## Build and run from the workspace
 
-The package is not published. From the repository root, build its workspace dependencies and launch the compiled entry point:
+The package is not published. From the repository root, build its workspace dependencies and use the short workspace command:
 
 ```sh
 corepack pnpm --filter @kintsugi/cli... build
-node packages/cli/dist/main.js --help
+pnpm kintsugi --help
 ```
+
+The root `kintsugi` script runs the compiled package. After the CLI is published and installed, use `kintsugi` directly from any directory.
+
+For this unpublished workspace preview, use `pnpm kintsugi` for the commands below.
 
 The CLI requires Node.js 22.19 or newer. Native client and operating-system compatibility still needs a release matrix before claiming support.
 
-## Generate a client package
+## Install the project plugin
 
-After signing in, generate the client-specific package for a tested client version:
+From the project’s Coding Agent Workflow section in the portal, copy the generated command. For a published CLI, it looks like this:
 
 ```sh
-kintsugi plugins setup --harness claude-code --profile work
+kintsugi plugins setup --harness claude-code --url https://kintsugi.example.internal --project modernization
 ```
 
-The command writes a Kintsugi-owned package below the selected profile's local configuration directory and prints native marketplace/install and removal commands. Run the printed commands to change the client installation. The CLI does not edit client settings or execute those commands. Re-running setup updates files only inside the marked Kintsugi-owned package. It refuses to overwrite an existing unowned package or follow symbolic links in the target path.
+The command needs no Kintsugi token. It creates a nonsecret local profile and Kintsugi-owned package, then invokes the selected AI client's native plugin commands. It refuses to overwrite unowned package files or follow symbolic links. Re-run the command to update the package. Start a new AI client session after setup so it loads the plugin.
 
-Setup checks the exact client version before writing. Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2 passed disposable-profile marketplace and plugin lifecycle probes. Copilot CLI package generation is available to tests, but native setup is disabled until its exact client version is verified. The probes have not yet exercised an authenticated plugin-launched MCP request against a live Kintsugi installation.
+The CLI requires Node.js 22.19 or newer. Setup checks the exact client version before writing. Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2 passed disposable-profile marketplace and plugin lifecycle probes. Copilot CLI package generation is available to tests, but native setup is disabled until its exact client version is verified. These lifecycle probes have not exercised a live authenticated MCP call from either client.
 
-## Connect a profile
-
-`auth login` asks for a hidden token when run in an interactive terminal. For automation, `--token-stdin` reads one line from standard input. Both login methods save the token only to the operating-system credential store; profile JSON contains the installation URL and optional default project. An installation URL cannot contain credentials, query parameters or fragments. Remote installations require HTTPS; HTTP is allowed only for loopback.
+For the unpublished workspace preview, build once from the Kintsugi repository root and prefix the generated command with `pnpm`:
 
 ```sh
-kintsugi auth login --url https://kintsugi.example.internal --profile work
+corepack pnpm --filter @kintsugi/cli... build
+pnpm kintsugi plugins setup --harness claude-code --url http://127.0.0.1:5173 --project modernization
+```
+
+Replace the URL with the configured Kintsugi API installation URL shown in the portal. A hosted portal and API may use different origins; the generated command must use the configured API URL. After the CLI is published and installed, use `kintsugi` directly.
+
+## Sign in on first use
+
+When the AI first requests Kintsugi context, its local MCP bridge opens the system browser. Sign in to Kintsugi, review the requested project, and approve it. The browser returns a short-lived authorization code to the CLI over a temporary loopback callback. The CLI exchanges it using PKCE; it does not ask you to create or paste a token. Kintsugi issues a five-minute access token and a rotating refresh credential. Access tokens stay in CLI memory; the refresh credential stays in the OS credential store. The administrator's 15- or 30-day maximum connection age controls when consent is required again.
+
+The profile JSON contains the installation URL and project ID, never credential material. To connect a profile for direct CLI commands without using the plugin, sign in explicitly:
+
+```sh
+kintsugi auth login --url https://kintsugi.example.internal --project modernization --profile work
 kintsugi auth status --profile work
 kintsugi project list --profile work
 kintsugi project use modernization --profile work
 ```
 
-If the profile already belongs to another installation, login fails before reading a token. Use a separate profile name for each installation. `auth logout` removes the selected profile's token. A one-shot `--token-stdin` on read commands is never saved.
+`auth login` also uses browser authorization. A one-shot `--token-stdin` is supported only for existing legacy tokens during migration; it does not accept new OAuth access or refresh credentials. Use a separate profile for each installation. `auth logout` revokes the browser-authorized connection at Kintsugi before removing the local refresh credential. Installation URLs cannot contain credentials, query parameters, or fragments. Remote installations require HTTPS; HTTP is allowed only for loopback.
 
 `project use` follows project-list cursors (up to 100 pages of 25 projects) before saving the local default. If that bound is reached, it reports `PROJECT_LOOKUP_LIMIT_EXCEEDED` and does not save an unverified project.
 
@@ -47,7 +62,7 @@ Windows and macOS use the native credential store through the pinned keyring bin
 For a private certificate authority, provide a PEM bundle when logging in:
 
 ```sh
-kintsugi auth login --url https://kintsugi.internal --ca-file ./company-root.pem
+kintsugi auth login --url https://kintsugi.internal --project modernization --ca-file ./company-root.pem
 ```
 
 The client adds that certificate to the normal trusted roots and retains hostname and TLS verification. It blocks redirects so a bearer token cannot be forwarded to another origin.
@@ -92,7 +107,7 @@ JSON watch output is newline-delimited JSON: one compact event object per line. 
 
 If the server closes a stream before the limit is reached, the client retries from the last delivered event ID, reloads the selected profile's credential and requests only the remaining event count. It also resumes after an interrupted connection. Retries are bounded; if recovery fails, the `NETWORK_ERROR` details include the last cursor as `afterEventId` when one exists. Use that value with `--after-event-id` to resume manually. A stream ending before the requested count does not mean the task completed.
 
-Task events replay over authorized SSE for seven days. An expired, malformed or task-mismatched cursor returns `MEMBER_EVENT_CURSOR_EXPIRED`; fetch current `task status` and start a new watch without the old cursor. The stream rechecks the token, `member.read` permission and Project Access while connected. Watching does not trigger provider reconciliation or workflow continuation.
+The first watch without a cursor replays retained task events. Events replay over authorized SSE for seven days. An expired, malformed or task-mismatched cursor returns `MEMBER_EVENT_CURSOR_EXPIRED`; fetch current `task status` and start a new watch without the old cursor. The stream rechecks the token, `member.read` permission and Project Access while connected. Watching does not trigger provider reconciliation or workflow continuation.
 
 ## Serve the local MCP bridge
 
@@ -102,9 +117,9 @@ Start a local stdio server for a compatible coding agent:
 kintsugi mcp serve --profile work
 ```
 
-The bridge has no inbound network listener. It uses the selected installation profile and reads the OS-stored credential for every API request, so the installation can revoke access between tool calls. Stdin and stdout are reserved for MCP messages; diagnostics use stderr. Authenticate with auth login first. The --token-stdin option is not accepted by mcp serve because it would consume the MCP protocol stream.
+The bridge has no inbound network listener. It uses the selected installation profile and refreshes credentials as needed, so the installation can revoke access between tool calls. If there is no credential, the bridge opens browser sign-in using the project's nonsecret profile settings. Stdin and stdout are reserved for MCP messages; diagnostics use stderr. The `--token-stdin` option is not accepted by `mcp serve` because it would consume the MCP protocol stream.
 
-Each tool call supplies its own project and task identity. `mcp serve --project` is rejected so a connection cannot retain hidden project context. `task_brief` returns a snapshot ID; `document_get` and `document_search` require that ID explicitly. The tools are read-only. The selected AI reads the returned documents and answers the developer; the CLI does not inject a prompt into an already-running AI conversation.
+Each tool call supplies its own project and task identity. `mcp serve --project` is rejected so a connection cannot retain hidden project context. `task_brief` returns a snapshot ID; `document_get` and `document_search` require that ID explicitly. The tools do not edit tasks, documents, or repositories; `task_brief` creates a temporary context snapshot retained for 24 hours. The selected AI reads the returned documents and answers the developer; the CLI does not inject a prompt into an already-running AI conversation.
 
 ## Current limits
 

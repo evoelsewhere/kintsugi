@@ -71,6 +71,8 @@ This page has two parts:
 | [0052](0052-coding-agent-workflow-through-cli-and-local-mcp.md) | Coding Agent Workflow through the CLI and stdio MCP | Accepted (amends 0015, 0028 and 0035) |
 | [0053](0053-coding-agent-context-and-project-access.md) | Scope Coding Agent Workflow context with Project Access and immutable snapshots | Accepted (amends 0012, 0024, 0038 and 0051) |
 | [0054](0054-evidence-bound-pr-continuation.md) | Continue workflows from evidence-bound pull requests and gates | Accepted (amends 0007, 0028, 0038 and 0051) |
+| [0055](0055-portable-agent-plugin-layouts.md) | Generate portable Agent Plugins packages for Codex and Copilot | Accepted (supersedes the Codex package layout in 0015) |
+| [0056](0056-project-scoped-oauth-for-coding-agent-workflow.md) | Use project-scoped browser authorization for the local Coding Agent Workflow | Accepted (amends the OAuth deferral in 0052) |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0052) |
 
@@ -96,7 +98,7 @@ This page has two parts:
 | D16 | Embedding model | 🟠 | Configured like LLM providers; must offer a local option | M1 | ⬜ |
 | D17 | MCP transport + auth | 🟠 | Remote Streamable HTTP on `kintsugi-app`, PAT auth; OAuth with Entra ID | M2 | 🟡 |
 | D18 | Priority member harness + license tier | 🟠 | Copilot first, Claude Code second | M2 | ⬜ |
-| D19 | Asset distribution to harnesses | 🟠 | Agent plugins via marketplaces generated in the document repo (generated built-in plugin + project plugins, all under `plugins/`, relative paths); `kintsugi plugins setup`; fallback rendering for harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md) |
+| D19 | Asset distribution to harnesses | 🟠 | Canonical Claude Code plugin assets are rendered into tested target packages; marketplaces are generated in the document repo and fallback rendering serves harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md), [0055](0055-portable-agent-plugin-layouts.md) |
 | D20 | Source of truth for units | 🟠 | One file per unit in the document repo (`units/**`), state in frontmatter; Postgres is a rebuildable index; single write path through the Kintsugi API (bot commits with actor trailer); Jira / Azure DevOps are mirrors | M2 | ✅ [0012](0012-work-items-as-files-in-git.md) |
 | D21 | Measuring "AI-generated" | 🟠 | Mandatory declaration (commit trailer + PR template); telemetry for cross-checking | M3 | 🟡 |
 | D22 | Git servers & repositories | 🔴 | Many Git servers and many repos; plain git everywhere; API adapters GitHub → Azure DevOps → GitLab → Bitbucket → Gitea | M0 | ✅ [0007](0007-git-as-source-of-truth.md) |
@@ -145,6 +147,8 @@ This page has two parts:
 | D68 | Coding Agent Workflow connection | 🟠 | The CLI installs client assets and runs a local stdio MCP bridge; both use the same read-only HTTPS context contract, current Project Access and the developer's chosen AI | M2 | ✅ [0052](0052-coding-agent-workflow-through-cli-and-local-mcp.md) |
 | D69 | Task context and Project Access | 🟠 | Read validated Git task sources with activity-specific readiness; pin each contextual response to an authorized immutable multi-repository snapshot with citations | M2 | ✅ [0053](0053-coding-agent-context-and-project-access.md) |
 | D70 | PR continuation and effective gates | 🟠 | Reconcile current GitHub PR state; review fixed revisions; publish authenticated, evidence-bound gate decisions as reviewed Git records; continue exactly once after merged proof is validated | M2 | ✅ [0054](0054-evidence-bound-pr-continuation.md) |
+| D71 | Portable plugin package layout | 🟠 | Claude uses its native `.claude-plugin` manifest; Codex and Copilot use portable root `plugin.json` and `mcp.json`; add client-specific compatibility metadata only when required and tested | M2 | ✅ [0055](0055-portable-agent-plugin-layouts.md) |
+| D72 | Coding Agent Workflow authentication | 🟠 | Local stdio clients use project-scoped browser auth-code + PKCE; five-minute access, rotating refresh, 15/30-day admin connection-age cap and admin revocation; legacy tokens keep original expiry and Kintsugi issues no GitHub credentials | M2 | ✅ [0056](0056-project-scoped-oauth-for-coding-agent-workflow.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |

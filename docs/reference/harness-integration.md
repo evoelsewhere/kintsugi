@@ -1,16 +1,18 @@
 # Harness integration
 
-Status: The unreleased workspace includes the typed client, read-only CLI/export, local stdio MCP bridge, generated client packages, GitHub/GHES pull-request observation, review findings, authorized task-event replay with `kintsugi task watch`, evidence-bound gate publication, and durable effective-gate continuation guidance. Native package setup remains version-gated. API and SDK changes must ship together; their strict version-1 schemas are still pre-release, and `latestContinuation` is part of that contract before its first release. After v1 ships, closed-schema response additions require a versioned or capability-negotiated contract. See the [CLI reference](coding-agent-cli.md) for build instructions and current command behavior.
+Status: The unreleased workspace includes the typed client, read-only CLI/export, local stdio MCP bridge, generated client packages, browser authorization with rotating credentials, an administrator-controlled connection-age policy, GitHub PR observation/review components, authorized task-event replay with `kintsugi task watch`, evidence-bound gate publication and effective-gate continuation. Authenticated GitHub.com provider flows are not yet proven; GHES is unprobed and needs an exact tested server version. Native package setup remains version-gated, and authenticated MCP calls from the supported clients remain unverified. API and SDK changes must ship together; their strict version-1 schemas are still pre-release, and `latestContinuation` is part of that contract before its first release. After v1 ships, closed-schema response additions require a versioned or capability-negotiated contract. See the [CLI reference](coding-agent-cli.md) and [compatibility evidence](coding-agent-workflow-compatibility.md) for build instructions and current results.
 
 Kintsugi gives context to the developer's chosen AI. The AI reads the task, design, standards and evidence documents, then answers the developer with citations. Kintsugi does not need to run its own conversational model. The Coding Agent Workflow plugin is separate from project method plugins such as modernization content ([ADR-0052](../decisions/0052-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
 ## Connection path
 
-The developer installs the Kintsugi CLI and signs in to a self-hosted installation over HTTPS. The CLI starts a local stdio MCP process when a client asks for tools. The process has no inbound listener, shares the CLI's project-scoped credentials and calls the same typed Coding Agent Context API. A CLI-only path remains available for shells and explicit Markdown export.
+The developer installs the project plugin before signing in. `kintsugi plugins setup --harness <client> --url <installation> --project <project>` writes a nonsecret local profile and package, then invokes the client's native plugin setup commands. The CLI starts a local stdio MCP process when the AI client asks for tools. If no credential exists, first use opens a browser for Kintsugi sign-in and explicit project consent, then exchanges a PKCE code over a temporary loopback callback. The CLI keeps five-minute access tokens in memory and a rotating refresh credential in the OS credential store; Kintsugi applies the administrator's 15- or 30-day connection limit. The process has no inbound listener and calls the same typed Coding Agent Context API. Hosted AI chats cannot launch this local process and need a future hosted HTTP MCP endpoint with remote authentication.
 
 Claude Code is the first client target, and Codex now has a bounded native package lifecycle probe. Neither is yet a complete authenticated MCP pilot. Copilot CLI is a distinct target; support is claimed only after each exact client version passes authentication, setup, protocol, upgrade and removal checks. See the [compatibility record](coding-agent-workflow-compatibility.md).
 
-The Coding Agent Workflow plugin contains one canonical small skill and generated client-specific MCP configuration. It has no hooks and does not edit arbitrary project instructions. Optional method plugins stay in the project document repository and are installed separately. The CLI generates a local package and prints native client commands; the developer runs those commands to register/install it. Client-side instructions help the AI retrieve information; the server enforces authorization.
+The Coding Agent Workflow plugin contains one canonical small skill and generated client-specific MCP configuration. Claude Code receives `.claude-plugin/plugin.json` and `.mcp.json`; Codex and Copilot CLI receive the portable Agent Plugins root `plugin.json` and `mcp.json`. The Codex marketplace is `.agents/plugins/marketplace.json`; its `.codex-plugin/plugin.json` compatibility manifest is omitted because this package has no Codex-only metadata. See [ADR-0055](../decisions/0055-portable-agent-plugin-layouts.md) and the [generator tests](../../services/harness-hub/test/plugins.test.ts).
+
+These files are generated on the developer's machine under a profile-specific `plugins/coding-agent-workflow/` directory. The MCP manifest includes that installation's local CLI path and profile ID, so the generated package is intentionally local. The setup command executes the client-native marketplace and install commands; after installation and a client restart, the AI client starts the CLI as its stdio MCP process when it needs Kintsugi context. The skill metadata helps the model recognize task/design/status requests and select tools, while the server enforces authorization. The plugin has no hooks and does not edit arbitrary project instructions. Optional method plugins stay in the project document repository and are installed separately.
 
 ## Implemented context API
 
@@ -44,12 +46,13 @@ Every retry rechecks authorization. A valid historical snapshot remains readable
 
 ## CLI commands and current limits
 
-The implemented CLI commands are read-only except for local sign-in, profile selection and explicit file export. Output can be text, JSON or Markdown. `mcp serve` exposes the same typed HTTPS context API through a local stdio process; generated client packages and native setup commands are available for version-gated clients.
+CLI and MCP operations do not edit tasks, project documents, repositories or permissions. Local profile sign-in/selection and explicit file export write local state; `task_brief` may create a temporary server-side context snapshot. Output can be text, JSON or Markdown. `mcp serve` exposes the same typed HTTPS context API through a local stdio process; generated client packages and native setup commands are available for version-gated clients.
 
 | Command | Purpose |
 |---|---|
-| kintsugi auth login --url URL | Sign in to one installation; secret input is hidden and kept in the OS credential store |
-| kintsugi auth status / logout | Show profile connection state or remove the selected local token |
+| kintsugi plugins setup --harness claude-code --url URL --project ID | Generate and install a project plugin without signing in; exact-version gated |
+| kintsugi auth login --url URL --project ID | Start browser sign-in for direct CLI use |
+| kintsugi auth status / logout | Show connection state or revoke and remove the selected local credential |
 | kintsugi project list / use ID | List authorized projects and select a local default |
 | kintsugi task list --mine | List tasks assigned to the authenticated stable user identity |
 | kintsugi task list --ready-for implementation | List tasks whose current inputs allow the requested activity |
@@ -60,9 +63,8 @@ The implemented CLI commands are read-only except for local sign-in, profile sel
 | kintsugi review list --task UNIT / review get ID | Find current authorized review references and retrieve actionable findings |
 | kintsugi task status UNIT | Read current task and relevant PR/gate state |
 | kintsugi task watch UNIT | Stream and resume authorized task events over seven-day SSE replay |
-| kintsugi plugins setup --harness claude-code --profile NAME | Generate a package and print native install/rollback commands; exact-version gated |
-| kintsugi doctor | Check local installation, credential store, network and client capabilities |
-| kintsugi mcp serve --profile NAME | Start a local stdio bridge using the selected profile and its OS credential |
+| kintsugi doctor | Check the local runtime/profile, credential availability and an authorized API read; it does not certify a native AI client version |
+| kintsugi mcp serve --profile NAME | Start a local stdio bridge; first use may open browser sign-in |
 
 The executable returns stable JSON when requested, uses stdout for results and stderr for diagnostics, and does not prompt under `--no-input`. Export refuses to overwrite an existing file. A CLI can export text for a chat without tools; it cannot inject a prompt into an arbitrary running AI conversation. Linux uses `secret-tool` with Secret Service; see the [CLI reference](coding-agent-cli.md) for secure-store and private-CA requirements.
 
@@ -80,7 +82,7 @@ The local server exposes these read-only tools when the matching backend capabil
 | review_get | Explicit project and authorized review ID; advertised when the review capability is enabled |
 | task_status | Explicit project and full unit identity |
 
-The current CLI bridge advertises seven tools: `project_list`, `task_list`, `task_brief`, `document_get`, `document_search`, `review_get` and `task_status`. Document retrieval and search require the snapshot returned by `task_brief`; every tool call supplies its project/task selectors, and the bridge keeps no implicit active project or task. Read-only annotations communicate intent but never replace server authorization. The CLI reads its OS credential store before each API request, allowing server-side Project Access revocation to take effect on the next call. Disposable-profile native lifecycle probes cover Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2; neither probe yet proves a live authenticated MCP tool call. Copilot setup is disabled pending a native version probe.
+The current CLI bridge advertises seven tools: `project_list`, `task_list`, `task_brief`, `document_get`, `document_search`, `review_get` and `task_status`. Document retrieval and search require the snapshot returned by `task_brief`; each tool call supplies its project/task selectors, and the bridge keeps no implicit active project or task. Tools do not edit tasks, documents, or repositories; `task_brief` creates a temporary context snapshot retained for 24 hours. Read-only annotations communicate intent but never replace server authorization. The CLI reads its OS credential store before each API request, allowing server-side Project Access revocation to take effect on the next call. Disposable-profile native lifecycle probes cover Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2; neither probe yet proves a live authenticated MCP tool call. Copilot setup is disabled pending a native version probe.
 
 CLI JSON, MCP structured results and cited text use the same validated DTOs. MCP returns both structured data and equivalent JSON text, with stable safe error codes; it does not wrap JSON-RPC in REST response envelopes. Its stdin/stdout carry only protocol messages.
 
@@ -92,7 +94,7 @@ The application TO-BE design is a basic-design candidate; the unit design is a d
 
 A brief returns an immutable snapshot ID and an index of mandatory sections. Each repository is pinned to its own full Git commit. Source paths, content hashes, approval records, required deliverables and policy version are part of the manifest. Follow-up get/search calls return the same revisions and exact path citations. If content is too large for the brief, the result is explicitly partial and names the sections the AI must retrieve before coding. An expired or unavailable snapshot does not silently switch to the latest branch head ([ADR-0053](../decisions/0053-coding-agent-context-and-project-access.md)).
 
-The member token is project-scoped. Current user and project authorization are checked on every call, even for an existing snapshot. Task assignment filters use a stable user identity, not a display-name match. Reading or listing tasks never claims, assigns, approves or changes their status.
+The browser-authorized connection is scoped to the consented project. Current user, `member.read`, and Project Access are checked on every call, even for an existing snapshot. New Project Access grants do not expand an existing connection. Administrators can choose a 15- or 30-day maximum connection age, which is checked on refresh; members can revoke their own connections and administrators with `security.manage` can revoke any connection. Existing legacy tokens remain bounded by their original expiry and revocation state. Task assignment filters use a stable user identity, not a display-name match. Reading or listing tasks never claims, assigns, approves or changes their status.
 
 ## PR and gate continuation
 
