@@ -77,7 +77,8 @@ const READING = `Under {in} (read-only), at their document-repository paths:
 const RULES = `Identifiers are facts: cite a business rule by its id from rules.md, a common component by its COM-... id, a design item of an earlier set by the id
 in that set's documents; never invent or reuse one. Every rule of the unit appears where the template says rules are covered. Design from the
 specification, not from the legacy structure; read the legacy code only to establish behavior you cite as path:line. What the code or the
-understanding does not tell, and every rule marked clarify in rules-review.md, becomes a written question in the document, never a guess. A
+understanding does not tell, every blocking or risk gap of the specification's "Gaps and questions" table (GAP-... ids) and every rule marked
+clarify in rules-review.md, becomes a written question in the document with the assumption you made, never a silent decision. A
 detail design is precise enough to build from: names, types, conditions, messages and error codes are written. Diagrams are Mermaid, per the
 mermaid-diagrams skill. Write only the documents of this set for this unit: no other file.`;
 

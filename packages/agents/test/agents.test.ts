@@ -183,6 +183,18 @@ describe("built-in catalog", () => {
     }
   });
 
+  it("ships the evidence-marks and design skills and gives them to the agents that read legacy code or write designs (ADR-0057)", async () => {
+    const catalog = await loadBuiltinCatalog();
+    const users = (skill: string): string[] => catalog.agents.filter((agent) => agent.manifest.skills.includes(skill)).map((agent) => agent.manifest.name);
+    expect(catalog.skills.find((entry) => entry.name === "evidence-marks")?.content).toContain("## The gaps table");
+    expect(users("evidence-marks")).toEqual(["business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]);
+    expect(users("design-template-contract")).toEqual(["designer"]);
+    expect(users("design-writing")).toEqual(["design-reviewer", "designer"]);
+    // The kinds and impacts the skill names are the ones finish_items.py checks.
+    const content = catalog.skills.find((entry) => entry.name === "evidence-marks")?.content ?? "";
+    for (const word of ["missing-source", "unresolved", "ambiguous", "unverified", "blocking", "risk", "note"]) expect(content).toContain(`\`${word}\``);
+  });
+
   it("ships the mermaid-diagrams skill and gives it to the agents that draw diagrams", async () => {
     const catalog = await loadBuiltinCatalog();
     const skill = catalog.skills.find((entry) => entry.name === "mermaid-diagrams");
@@ -192,7 +204,7 @@ describe("built-in catalog", () => {
     const users = catalog.agents.filter((agent) => agent.manifest.skills.includes("mermaid-diagrams")).map((agent) => agent.manifest.name);
     expect(users).toEqual(["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]);
     const analyst = catalog.agents.find((agent) => agent.manifest.name === "legacy-analyst")!;
-    expect(toAgentDefinition(analyst, sharedSkills, KERNEL_TOOL_NAMES).skills?.map((entry) => entry.name)).toEqual(["mermaid-diagrams"]);
+    expect(toAgentDefinition(analyst, sharedSkills, KERNEL_TOOL_NAMES).skills?.map((entry) => entry.name)).toEqual(["mermaid-diagrams", "evidence-marks"]);
     // The references and the license stay beside SKILL.md on disk.
     const entries = await readdir(join(BUILTIN_DIR, "plugins", "reverse_engineering", "skills", "mermaid-diagrams"), { recursive: true });
     expect(entries.map((file) => file.split(sep).join("/"))).toEqual(

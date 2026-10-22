@@ -5,7 +5,7 @@ arguments: app
 metadata:
   audience: runtime
   agents: [designer, design-reviewer]
-  skills: [mermaid-diagrams]
+  skills: [design-template-contract, design-writing, evidence-marks, mermaid-diagrams]
   reads: [01-standards/templates/, 01-standards/conventions/, 02-architecture/, 03-transition/, 10-applications/<app>/02-modern/requirements.md, 10-applications/<app>/02-modern/design.md, 10-applications/<app>/01-legacy/_catalog/, 10-applications/<app>/01-legacy/<module>/<unit>/, 10-applications/<app>/02-modern/<module>/<unit>/, 10-applications/<app>/02-modern/_design/]
   writes: [10-applications/<app>/02-modern/<module>/<unit>/<set>/, 10-applications/<app>/02-modern/_design/<set>/]
   gates: [a person selects the design set and the units (units whose set is running or in an open pull request cannot be selected), a person reviews and merges the pull request that carries the design documents]

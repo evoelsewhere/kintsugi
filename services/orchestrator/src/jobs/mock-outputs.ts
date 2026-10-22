@@ -79,7 +79,7 @@ Mock run: no assessment highlight was settled.
 `;
 
 /** The sections of an AS-IS unit specification (understand stage), each with a stub line. */
-const SPEC_SECTIONS = ["Purpose", "Entry points", "Main flows", "Dependencies", "Data objects", "Business rules applied", "Security findings and risks", "Configuration", "Error handling", "Source references", "Open questions"];
+const SPEC_SECTIONS = ["Purpose", "Entry points", "Main flows", "Dependencies", "Data objects", "Business rules applied", "Security findings and risks", "Configuration", "Error handling", "Source references", "Gaps and questions"];
 const UNIT_SPEC = /^10-applications\/[^/]+\/01-legacy\/[a-z0-9][^/]*\/[^/]+\/spec\.md$/;
 
 function mockFile(path: string, agent: string, app: string): string {
