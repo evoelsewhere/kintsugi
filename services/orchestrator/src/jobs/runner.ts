@@ -757,7 +757,9 @@ export class JobRunner {
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
       attempts += 1;
       const handle = await this.#deps.agents.startJob({ ...spec, task });
-      const onAbort = (): void => void handle.abort(isCancelled(signal) ? "cancelled" : "the worker is stopping");
+      // Why it is stopped: a person cancelled the run, a sibling of its group failed, or the worker is stopping.
+      const stoppedFor = (): string => (isCancelled(signal) ? "cancelled" : signal?.reason instanceof Error && signal.reason.message.startsWith("another step of the group failed") ? "another step of its group failed" : "the worker is stopping");
+      const onAbort = (): void => void handle.abort(stoppedFor());
       if (signal?.aborted === true) onAbort();
       else signal?.addEventListener("abort", onAbort, { once: true });
       try {

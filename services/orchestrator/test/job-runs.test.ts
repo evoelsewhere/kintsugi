@@ -73,6 +73,8 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
         "select id, kind, name, status, script_hash, agent from workflow.job_run where parent_id = $1 order by created_at",
         [id],
       );
+      // The three analysis jobs run side by side: their creation order is not defined, so they are compared by name.
+      steps.rows.splice(1, 3, ...steps.rows.slice(1, 4).sort((a, b) => a.name.localeCompare(b.name)));
       expect(steps.rows.map((row) => [row.kind, row.name, row.status])).toEqual([
         ["script", "inventory.py", "succeeded"],
         ["agent", "legacy-analyst", "succeeded"],
