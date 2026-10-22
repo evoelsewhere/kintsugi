@@ -14,7 +14,7 @@ const launcher = {
 const getGenerate = () => (hub as unknown as { generateAccessPlugin?: (input: typeof launcher & { target: "claude" | "codex" | "copilot" }) => { pluginName: string; files: Record<string, string> } }).generateAccessPlugin;
 const getMarketplace = () => (hub as unknown as { generateAccessMarketplace?: (target: "claude" | "codex" | "copilot", version: string) => { path: string; content: string } }).generateAccessMarketplace;
 const getPlan = () => (hub as unknown as { planClientSetup?: (input: typeof launcher & { target: "claude" | "codex" | "copilot"; clientVersion: string; artifactRoot: string }) => Array<{ root: string; relativePath: string; content: string; target: string; pluginName: string; marketplaceName: string }> }).planClientSetup;
-const getApply = () => (hub as unknown as { applyClientSetup?: (changes: Array<{ root: string; relativePath: string; content: string }>) => Promise<{ pluginRoot: string; unchanged: string[]; written: string[]; installCommands: string[]; rollbackCommands: string[] }> }).applyClientSetup;
+const getApply = () => (hub as unknown as { applyClientSetup?: (changes: Array<{ root: string; relativePath: string; content: string }>) => Promise<{ artifactRoot: string; pluginRoot: string; unchanged: string[]; written: string[]; installCommands: string[]; rollbackCommands: string[] }> }).applyClientSetup;
 async function temp(): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), "kintsugi-plugins-"));
   temporary.push(path);
@@ -126,6 +126,55 @@ describe("Coding Agent Workflow plugin generation", () => {
     expect(await readFile(settings, "utf8")).toBe('{"unrelated":true}\n');
   });
 
+  it("quotes setup roots with spaces and apostrophes in native commands", async () => {
+    const plan = getPlan();
+    const apply = getApply();
+    if (plan === undefined || apply === undefined) { expect([plan, apply].every((value) => typeof value === "function")).toBe(true); return; }
+    const cases = [
+      {
+        target: "claude",
+        clientVersion: "2.1.278",
+        marketplaceAdd: "claude plugin marketplace add --scope user ",
+        install: "claude plugin install --scope user kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow",
+        rollback: [
+          "claude plugin uninstall --scope user kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow",
+          "claude plugin marketplace remove --scope user kintsugi-coding-agent-workflow",
+        ],
+      },
+      {
+        target: "codex",
+        clientVersion: "0.163.0-alpha.10.2",
+        marketplaceAdd: "codex plugin marketplace add ",
+        install: "codex plugin add kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow",
+        rollback: ["codex plugin remove kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow", "codex plugin marketplace remove kintsugi-coding-agent-workflow"],
+      },
+    ] as const;
+    const quotePath = (value: string) => process.platform === "win32"
+      ? "'" + value.replace(/'/g, "''") + "'"
+      : "'" + value.replace(/'/g, "'\\''") + "'";
+
+    for (const testCase of cases) {
+      const root = join(await temp(), "Kintsugi artifacts O'Brien " + testCase.target);
+      const report = await apply(plan({
+        ...launcher,
+        target: testCase.target,
+        clientVersion: testCase.clientVersion,
+        artifactRoot: root,
+      }));
+
+      expect(report.artifactRoot).toContain(" ");
+      expect(report.artifactRoot).toContain("'");
+      expect(report.installCommands).toEqual([
+        testCase.marketplaceAdd + quotePath(report.artifactRoot),
+        testCase.install,
+      ]);
+      expect(report.rollbackCommands).toEqual(testCase.rollback);
+      for (const command of report.rollbackCommands) {
+        expect(command).not.toContain(report.artifactRoot);
+        expect(command).not.toContain("O'Brien");
+      }
+    }
+  });
   it("refuses to replace an unowned native marketplace file", async () => {
     const plan = getPlan();
     const apply = getApply();

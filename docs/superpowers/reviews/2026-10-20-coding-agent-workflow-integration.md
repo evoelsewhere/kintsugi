@@ -65,7 +65,7 @@ Focused fixes were reproduced before implementation. Workspace tests ran without
 | Runtime | 12 files, 71 tests passed. |
 | Other workspace packages and portal | Agents 58, Git 40, harness SDK 8, manifest 5, secrets 5 and portal 6 tests passed. Git has one Windows-only symlink test skipped. |
 | Python scripts and hooks | Combined pytest run: 107 passed, 6 Windows symlink tests skipped, 15 subtests passed; zero test warnings with thread exceptions promoted to errors. |
-| Compiled process smoke | Passed on final compiled API and worker in separate processes, including graceful shutdown. |
+| Foundation compiled-process smoke | Passed on compiled API and worker in separate processes, including graceful shutdown. The later T17 public-entrypoint smoke is recorded below. |
 | Markdown links | 306 relative links checked across changed documentation; zero broken targets. |
 | Independent review | The final reviewer found no remaining actionable defect in the corrected source identity, path/title bounds and Unicode search logic. Review was static; test execution is recorded separately above. |
 
@@ -81,7 +81,7 @@ corepack pnpm build
 node scripts/smoke-coding-agent-context.mjs
 ```
 
-The runner refuses missing configuration, creates only a randomly named `kintsugi_smoke_test_*` database and temporary Git/data directories, and cleans up its own processes and data. It boots the compiled API composition and worker core in separate processes on loopback; it does not test deployment-main environment parsing or start a model job.
+The smoke refuses missing configuration, creates only a randomly named `kintsugi_smoke_test_*` database and temporary Git/data directories, and launches the compiled public API (`apps/api/dist/main.js`) and orchestrator (`services/orchestrator/dist/main.js`) entrypoints in separate processes with an allowlisted environment. It exercises migrations, Git sync over two revisions, restart, task/deliverable and pinned context retrieval, freshness, write denial, unknown-review handling, live Project Access revocation and process shutdown. Child diagnostics redact the database URL and exact bootstrap/session/member secrets; cleanup continues through remaining resources if one cleanup action fails. The model-free smoke does not test Docker Compose deployment, GitHub/provider calls, model output, real native-client interoperability, or the full E2E-01–04 pilot.
 
 The other repeatable commands are `corepack pnpm exec turbo run build typecheck lint --force` and `corepack pnpm -r --workspace-concurrency=2 --no-bail test`. Database tests require the private local `DATABASE_URL`; the test helpers create disposable databases rather than running migrations on the configured application database.
 
@@ -94,3 +94,11 @@ Docker/Linux deployment, real GitHub/GitHub Enterprise observations, model-drive
 ## T08 implementation follow-up
 
 On `feature/coding-agent-workflow-mcp`, the T08 implementation adds the pinned MCP server/client 2.3.1 packages, explicit-selector read-only tools, legacy and modern stdio negotiation, safe error mapping and per-request credential authorization. The compiled CLI bridge was exercised as a child process against a loopback HTTP fixture; the second call observed server-side token revocation without exposing the token. Hub tests passed 9/9, typed-client tests 12/12 and CLI tests 27/27; workspace build/typecheck/lint and host-client release probes remain separate verification gates.
+
+## T17 public-process smoke follow-up
+
+On 22 October 2026, a dependency-complete disposable copy refreshed to source baseline `369e48104836e6b83ce1fca01446dd60dbda1d41` passed the public-process helper tests (5/5), combined runner/configuration/helper tests (12/12), API/orchestrator builds, and the model-free public-process smoke against a parent-provisioned loopback PostgreSQL 16 container. These commands used global pnpm 8.10.5 because Corepack could not fetch the repository-pinned pnpm 10.18.0 (`ENOTFOUND registry.npmjs.org`), so repeat under the pinned package manager remains a release check. The smoke exercised the production entrypoints and dropped its uniquely named database during cleanup. This is a retrieval/revocation process slice only; E2E-01–04, GitHub/GHES, model, authenticated native-client, deployment, recovery, rollback and upgrade evidence remain unverified.
+
+## T17 current-head database integration follow-up
+
+On feature head `9a5c00e`, the exact required API integration files passed 42/42 and the orchestrator integration files passed 73/73 against the parent-provisioned PostgreSQL 16 container, with zero skips. Fresh isolated databases were created and dropped by the test helpers; both JSON reports passed the no-skip report assertion. The focused commands used global pnpm 8.10.5 because Corepack could not fetch pinned pnpm 10.18.0, so a pinned-toolchain CI rerun remains outstanding. This local integration evidence does not establish GitHub/GHES, model, authenticated native-client, deployment, recovery, rollback, upgrade or E2E-01–04 pilot readiness.

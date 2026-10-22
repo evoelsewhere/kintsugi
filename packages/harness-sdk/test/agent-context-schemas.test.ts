@@ -180,6 +180,23 @@ describe("Coding Agent Workflow wire schemas", () => {
     expect(result.gates.map(({ publication }) => publication)).toEqual(["effective", "awaiting-merge", "failed"]);
   });
 
+  it("accepts a retained continuation record only for the current task identity", () => {
+    const latestContinuation: TaskEvent = {
+      schemaVersion: "1",
+      projectId: taskStatus.projectId,
+      unitId: taskStatus.unitId,
+      id: "event_001",
+      kind: "task.continuation",
+      occurredAt: "2026-10-21T09:00:00.000Z",
+      metadata: { status: "member-action", code: "MEMBER_STAGE_AVAILABLE", nextAction: "Refresh task context before starting." },
+    };
+    const result = taskStatusSchema.parse({ ...taskStatus, latestContinuation });
+
+    expect(result.latestContinuation).toEqual(latestContinuation);
+    expect(taskStatusSchema.safeParse({ ...taskStatus, latestContinuation: { ...latestContinuation, kind: "review.completed" } }).success).toBe(false);
+    expect(taskStatusSchema.safeParse({ ...taskStatus, latestContinuation: { ...latestContinuation, projectId: "another-project" } }).success).toBe(false);
+  });
+
   it("rejects unknown selectors and arbitrary document paths", () => {
     expect(taskBriefQuerySchema.safeParse({
       schemaVersion: "1",

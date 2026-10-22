@@ -250,6 +250,27 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
       [`sha256:${"4".repeat(64)}`, memberId, confirmedPrUpdatedAt],
     );
 
+    const continuationTransition = "test-latest-continuation:shop:web/core/invoice";
+    await app.db.query(
+      "insert into workflow.member_transition (transition_key, project_id, unit_id, input_hash) values ($1, 'shop', 'web/core/invoice', $2)",
+      [continuationTransition, "5".repeat(64)],
+    );
+    const cursor = await app.db.query<{ last_sequence: string }>(
+      `insert into workflow.member_event_cursor (project_id, last_sequence) values ('shop', 1)
+       on conflict (project_id) do update set last_sequence = workflow.member_event_cursor.last_sequence + 1
+       returning last_sequence::text`,
+    );
+    const continuation = {
+      schemaVersion: "1", decisionId: "decision_42", gateId: "G4", evidenceHash: "6".repeat(64),
+      recordCommit: "7".repeat(40), sourceCommit: "8".repeat(40), status: "member-action",
+      code: "MEMBER_STAGE_AVAILABLE", nextAction: "Refresh current task context before starting.", phase: "verify", stage: "test",
+    };
+    await app.db.query(
+      `insert into workflow.member_event (id, project_id, sequence, transition_key, unit_id, kind, metadata)
+       values ('00000000-0000-4000-8000-000000000099', 'shop', $1, $2, 'web/core/invoice', 'task.continuation', $3::jsonb)`,
+      [cursor.rows[0]!.last_sequence, continuationTransition, JSON.stringify(continuation)],
+    );
+
     const statusPath = withQuery("/member/v1/task-status", { projectId: "shop", unitId: "web/core/invoice" });
     const status = await client.request("GET", statusPath, { csrf: false, headers: bearer() });
     expect(status.status).toBe(200);
@@ -263,6 +284,10 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
         updatedAt: confirmedPrUpdatedAt,
       }],
       currentReviewIds: [currentReviewId],
+      latestContinuation: {
+        schemaVersion: "1", projectId: "shop", unitId: "web/core/invoice", id: "00000000-0000-4000-8000-000000000099",
+        kind: "task.continuation", occurredAt: expect.any(String), metadata: continuation,
+      },
     });
 
     for (const state of [
@@ -290,6 +315,10 @@ describe.skipIf(!hasDatabase)("Coding Agent Workflow versioned read API (integra
     const tasks = await portalSession.get(withQuery("/member/v1/tasks", { projectId: "shop", limit: "25" }));
     expect(tasks.status).toBe(200);
     expect(taskListResultSchema.parse(tasks.body.data).items.map((task) => task.unitId)).toEqual(["web/core/invoice"]);
+
+    const status = await portalSession.get(withQuery("/member/v1/task-status", { projectId: "shop", unitId: "web/core/invoice" }));
+    expect(status.status).toBe(200);
+    expect(taskStatusSchema.parse(status.body.data).latestContinuation?.kind).toBe("task.continuation");
 
     const brief = await portalSession.get(withQuery("/member/v1/task-brief", {
       projectId: "shop", unitId: "web/core/invoice", activity: "implementation",
