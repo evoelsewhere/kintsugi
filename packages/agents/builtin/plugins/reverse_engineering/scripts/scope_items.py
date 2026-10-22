@@ -4,11 +4,11 @@ brief and its rule-extraction shard.
 
     python3 scope_items.py <app> --catalog DIR --items ID,ID,... --out DIR
 
---catalog is applications/<app>/assessment/catalog/ (the committed catalog: each card holds the item's
+--catalog is 10-applications/<app>/01-legacy/_catalog/ (the committed catalog: each card holds the item's
 leaves, the items it depends on and that use it, the data stores it touches); --items the selected item
 ids (active items only). --out is the document-repository root the files are written under:
 
-- applications/<app>/units/<module>/<unit>/understanding/topology.md - the item's leaves, the items it
+- 10-applications/<app>/01-legacy/<module>/<unit>/topology.md - the item's leaves, the items it
   depends on and that use it, the data stores it reads and writes (published).
 - scratch/<app>/understand/briefs/<module>/<unit>.json - what the specification job of the item starts
   from: name, kind, files, size, entry points, links, and where its rules and findings will be (scratch).
@@ -77,7 +77,8 @@ def topology_document(app, item):
 def build(app, chosen):
     files, shards, texts, scratch = set(), [], {}, {}
     for item in chosen:
-        base = paths.unit_key_understanding_path(app, item['id'], '')
+        def at(file):
+            return paths.unit_key_legacy_path(app, item['id'], file)
         brief_leaves = item.get('leafNodes') or []
         brief = {
             'app': app,
@@ -94,11 +95,11 @@ def build(app, chosen):
             'usedBy': sorted(item.get('usedBy') or []),
             'dataStores': [{'id': store['id'], 'access': sorted(store.get('access') or [])} for store in item.get('dataStores') or []],
             'parts': [part for part in item.get('parts') or [] if isinstance(part, dict)][:cc.MAX_PARTS],
-            'topology': f'{base}topology.md',
-            'rules': f'{base}rules.md',
-            'findings': f'{base}findings.md',
+            'topology': at('topology.md'),
+            'rules': at('rules.md'),
+            'findings': at('findings.md'),
         }
-        texts[paths.unit_key_understanding_path(app, item['id'], 'topology.md')] = topology_document(app, item)
+        texts[at('topology.md')] = topology_document(app, item)
         scratch[paths.assessment_brief_path(app, item['id'])] = brief
         shards.append({'name': item['id'].replace('/', '.'), 'domain': item['id'].split('/')[0], 'files': item['files'], 'loc': brief['loc']})
         files.update(item['files'])

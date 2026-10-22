@@ -1,4 +1,4 @@
-// Design → Common: the common components the foundation team designed (architecture/common/) and
+// Design → Common: the common components the foundation team designed (02-architecture/common/) and
 // the units whose designs name each one, with the ids designs name that no document defines.
 // Also Design → Coverage: for each unit, how many of its rules a written design names.
 
@@ -19,13 +19,13 @@ export function DesignCommonTab({ common, onOpenUnit }: { common: CommonDesign; 
     <div className="flex flex-col gap-4">
       {common.components.length === 0 ? (
         <Card>
-          <EmptyState title="No common components yet" description="The foundation team writes one document per component in architecture/common/ (COM-<AREA>-<NN>.md) with /kintsugi:modernize-design-architecture. Unit designs refer to a component by its id." />
+          <EmptyState title="No common components yet" description="The foundation team writes one document per component in 02-architecture/common/ (COM-<AREA>-<NN>.md) with /kintsugi:modernize-design-architecture. Unit designs refer to a component by its id." />
         </Card>
       ) : (
         <DataTable label="Common components" rows={common.components} columns={columns} rowKey={(component) => component.id} searchPlaceholder="Search components" pageSize={25} minWidth={520} />
       )}
       {common.unresolved.length === 0 ? null : (
-        <Section title="Named but not defined" description="Component ids that designs name and no document of architecture/common/ defines. Define the component, or correct the design.">
+        <Section title="Named but not defined" description="Component ids that designs name and no document of 02-architecture/common/ defines. Define the component, or correct the design.">
           <ul className="flex flex-col gap-2 text-[13px]">
             {common.unresolved.map((entry) => (
               <li key={entry.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">

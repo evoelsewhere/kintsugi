@@ -3,15 +3,15 @@ import { cellText, tablesIn, type Table } from './markdown.js'
 import { linesOf } from './text.js'
 
 /**
- * Design sets (ADR-0044, ADR-0045): the project-defined templates of the design phase, read from `standards/design/<set>/`,
+ * Design sets (ADR-0044, ADR-0045): the project-defined templates of the design phase, read from `01-standards/templates/<set>/`,
  * and the check of a unit's design document against its template.
  *
  * A set is a `set.md` (identity in the front matter, its documents in a table) and one template file per document. A
  * template is Markdown; under a heading, an HTML comment holds that section's contract, one directive per line:
  * `required`, `table: A | B`, `seed: rules`, `check: name(args)` (repeatable) and `guidance: text`.
  *
- * `modernize/scripts/design_lib.py` does the same for the member's harness. The two are held to the fixtures in
- * `modernize/scripts/tests/fixtures/design/`, so every message below is written exactly as the Python side writes it.
+ * `design/scripts/design_lib.py` does the same for the member's harness. The two are held to the fixtures in
+ * `design/scripts/tests/fixtures/design/`, so every message below is written exactly as the Python side writes it.
  */
 
 export const DESIGN_CHECKS = ['no-placeholder', 'covers-rules', 'refs-resolve', 'id-pattern', 'max-length', 'one-of'] as const
@@ -19,6 +19,12 @@ export const DESIGN_SEEDS = ['rules'] as const
 const REFERENCE_SOURCES = ['rules', 'requirements', 'components'] as const
 /** The variables a scaffold substitutes in a template. */
 export const DESIGN_TEMPLATE_VARIABLES = ['unit.id', 'unit.title', 'app.id', 'kind', 'set.id', 'set.version'] as const
+/** What a set is written for: each unit, or the application as a whole (ADR-0050). */
+export const DESIGN_SCOPES = ['unit', 'application'] as const
+/** Variables that only mean something for a unit. */
+const UNIT_VARIABLES = ['unit.id', 'unit.title', 'kind'] as const
+/** A document the designer also reads: relative, no `..`, `{app}` the only variable. */
+const READ_PATH = /^[A-Za-z0-9{][A-Za-z0-9._/{}-]{0,159}$/
 const SET_ID = /^[a-z][a-z0-9-]{0,39}$/
 const TEMPLATE_REF = /^([a-z][a-z0-9-]{0,39})@([1-9][0-9]{0,8})$/
 const FILE_PATH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}\.md$/
@@ -45,16 +51,24 @@ export type DesignSection = {
 
 export type DesignFile = { path: string; template: string; required: boolean; when: string[] }
 
+export type DesignScope = (typeof DESIGN_SCOPES)[number]
+
 export type DesignSet = {
   id: string
   title: string
   version: number
+  /** `unit`: a design per unit (the default); `application`: one design for the whole application. */
+  scope: DesignScope
   appliesTo: string[]
   needs: string[]
   stage?: string
+  /** Documents the designer reads besides the ones every design run sees (`{app}` allowed). */
+  reads: string[]
   files: DesignFile[]
-  /** The text of `set.md` below its files table, for people. */
+  /** The text of `set.md` below its files table, for people (without the Instructions section). */
   description: string
+  /** The `## Instructions` section of `set.md`: what the designer is told about this kind of design. */
+  instructions: string
 }
 
 export type DesignTemplate = { sections: DesignSection[] }
@@ -84,7 +98,7 @@ export type DesignContext = {
 }
 
 export type DesignSetSource = {
-  /** The set's folder name under `standards/design/`. */
+  /** The set's folder name under `01-standards/templates/`. */
   folder: string
   /** The text of `set.md`; undefined when the folder has none. */
   setText: string | undefined
@@ -325,6 +339,25 @@ export function parseDesignSet(text: string, folder: string): { set?: DesignSet;
 
   if (needs === null) problems.push('needs must be a list of set ids')
 
+  const scopeValue = front.data.scope === undefined || front.data.scope === null || front.data.scope === '' ? 'unit' : front.data.scope
+  const scope: DesignScope = (DESIGN_SCOPES as readonly unknown[]).includes(scopeValue) ? (scopeValue as DesignScope) : 'unit'
+
+  if (!(DESIGN_SCOPES as readonly unknown[]).includes(scopeValue)) problems.push('scope must be unit or application')
+
+  const readsList = stringList(front.data.reads)
+
+  if (readsList === null) problems.push('reads must be a list of document paths')
+
+  const reads = readsList ?? []
+
+  for (const entry of reads) {
+    if (!READ_PATH.test(entry) || entry.split('/').includes('..') || entry.replace(/\{app\}/g, '').includes('{') || entry.replace(/\{app\}/g, '').includes('}')) {
+      problems.push(`reads "${entry}" must be a relative path with no ".." (only {app} may be used as a variable)`)
+    }
+  }
+
+  if (scope === 'application' && appliesTo !== null && appliesTo.length > 0) problems.push('an application set cannot have appliesTo: an application has no unit kind')
+
   const stage = typeof front.data.stage === 'string' && front.data.stage.trim() !== '' ? front.data.stage.trim() : undefined
   const files: DesignFile[] = []
   const table = tablesIn(front.body).find(candidate => candidate.header.some(cell => norm(cell) === 'path') && candidate.header.some(cell => norm(cell) === 'template'))
@@ -353,12 +386,11 @@ export function parseDesignSet(text: string, folder: string): { set?: DesignSet;
 
       if (required !== 'yes' && required !== 'no') problems.push(`${at}: Required must be yes or no`)
 
-      files.push({
-        path,
-        template,
-        required: required === 'yes',
-        when: whenAt < 0 ? [] : (row[whenAt] ?? '').split(/[,\s]+/).map(kind => kind.replace(/`/g, '').trim()).filter(kind => kind !== ''),
-      })
+      const when = whenAt < 0 ? [] : (row[whenAt] ?? '').split(/[,\s]+/).map(kind => kind.replace(/`/g, '').trim()).filter(kind => kind !== '')
+
+      if (scope === 'application' && when.length > 0) problems.push(`${at}: When must be empty in an application set`)
+
+      files.push({ path, template, required: required === 'yes', when })
     }
 
     if (table.rows.length === 0) problems.push('has no files table (columns Path | Template | Required | When)')
@@ -368,20 +400,42 @@ export function parseDesignSet(text: string, folder: string): { set?: DesignSet;
     return { problems }
   }
 
-  const tableAt = front.body.indexOf('|')
-  const after = tableAt < 0 ? front.body : front.body.split('\n').filter(line => !line.trim().startsWith('|') && !line.trim().startsWith('#')).join('\n')
+  // The Instructions section is for the designer, not for people reading the description.
+  const bodyLines = front.body.split('\n')
+  const instructionsAt = bodyLines.findIndex(line => /^##\s+Instructions\s*$/i.test(line.trim()))
+  let instructions = ''
+  let rest = bodyLines
 
-  return { set: { id, title, version, appliesTo, needs, ...(stage === undefined ? {} : { stage }), files, description: after.trim() }, problems }
+  if (instructionsAt >= 0) {
+    const end = bodyLines.findIndex((line, index) => index > instructionsAt && /^#{1,2}\s/.test(line.trim()))
+    const stop = end < 0 ? bodyLines.length : end
+
+    instructions = bodyLines.slice(instructionsAt + 1, stop).join('\n').trim()
+    rest = [...bodyLines.slice(0, instructionsAt), ...bodyLines.slice(stop)]
+  }
+
+  const after = rest.filter(line => !line.trim().startsWith('|') && !line.trim().startsWith('#')).join('\n')
+
+  return { set: { id, title, version, scope, appliesTo, needs, ...(stage === undefined ? {} : { stage }), reads, files, description: after.trim(), instructions }, problems }
 }
 
-/** The files of a set that a unit of `kind` needs; none when the set is not for that kind. */
-export function designFilesFor(set: DesignSet, kind: string): DesignFile[] {
+/**
+ * The files of a set that a unit of `kind` needs; none when the set is not for that kind. A set of the application is not for any
+ * unit: its files are asked for with a `null` kind.
+ */
+export function designFilesFor(set: DesignSet, kind: string | null): DesignFile[] {
+  if (set.scope === 'application') return kind === null ? set.files : []
+
+  if (kind === null) return []
+
   if (set.appliesTo.length > 0 && !set.appliesTo.includes(kind)) return []
 
   return set.files.filter(file => file.when.length === 0 || file.when.includes(kind))
 }
 
-const designPrefix = 'standards/design'
+/** Where a project's design sets live: `designSetsDir()` of the domain layout (a test keeps them equal; the reader imports nothing). */
+export const DESIGN_SETS_PREFIX = '01-standards/templates'
+const designPrefix = DESIGN_SETS_PREFIX
 
 /**
  * Every set of the project and the faults of their definitions: unique ids that match their folders, existing
@@ -426,6 +480,22 @@ export function loadDesignSets(sources: readonly DesignSetSource[], options: { u
 
       for (const message of parsed.problems) report(templatePath, message)
 
+      if (read.set.scope === 'application') {
+        for (const name of unique([...text.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)].map(match => match[1] ?? ''))) {
+          if ((UNIT_VARIABLES as readonly string[]).includes(name)) report(templatePath, `variable "{{${name}}}" is for unit sets`)
+        }
+
+        for (const section of parsed.template.sections) {
+          if (section.seed === 'rules') report(templatePath, `section "${section.heading}": seed "rules" is for unit sets`)
+
+          for (const check of section.checks) {
+            if (check.name === 'covers-rules') report(templatePath, `section "${section.heading}": check "covers-rules" is for unit sets`)
+
+            if (check.name === 'refs-resolve' && check.source === 'rules') report(templatePath, `section "${section.heading}": refs-resolve source "rules" is for unit sets`)
+          }
+        }
+      }
+
       for (const section of parsed.template.sections) {
         for (const check of section.checks) {
           if (check.name === 'refs-resolve' && !(REFERENCE_SOURCES as readonly string[]).includes(check.source) && !read.set.needs.includes(check.source)) {
@@ -455,9 +525,12 @@ export function loadDesignSets(sources: readonly DesignSetSource[], options: { u
   const known = new Set(sets.map(loaded => loaded.set.id))
   const needsOf = new Map(sets.map(loaded => [loaded.set.id, loaded.set.needs] as const))
 
+  const scopeOf = new Map(sets.map(loaded => [loaded.set.id, loaded.set.scope] as const))
+
   for (const { set } of sets) {
     for (const need of set.needs) {
       if (!known.has(need)) report(`${designPrefix}/${set.id}/set.md`, `needs "${need}" is not a set of this project`)
+      else if (set.scope === 'application' && scopeOf.get(need) === 'unit') report(`${designPrefix}/${set.id}/set.md`, `an application set cannot need "${need}", which is a unit set`)
     }
   }
 

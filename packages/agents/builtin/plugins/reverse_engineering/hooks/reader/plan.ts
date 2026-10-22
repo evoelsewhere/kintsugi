@@ -2,7 +2,7 @@ import { cardsOf, countOf, documentOf, fieldText, itemsOf, recordsOf, sectionTex
 import { paragraphsIn, sectionsOf, tablesIn } from './markdown.js'
 
 /**
- * The plan of what to understand next (ADR-0041, ADR-0042): `understanding/plan.md`, written by
+ * The plan of what to understand next (ADR-0041, ADR-0051): `01-legacy/plan.md`, written by
  * `scripts/check_plan.py` after the planner's draft was checked against the item graph. Front matter with the
  * totals, the strategy, one `## Batch <n>: <title>` section per batch (the rationale, the fields `risk`, `loc`,
  * `high complexity` and `cohesion`, the items, what it still depends on outside) and the tables `Left out` and

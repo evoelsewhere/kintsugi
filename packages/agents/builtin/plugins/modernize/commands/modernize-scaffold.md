@@ -5,7 +5,7 @@ arguments: app
 metadata:
   audience: member
   agents: [scaffolder]
-  reads: [standards/, architecture/blueprint.md, architecture/common/, applications/<app>/to-be/design.md, applications/<app>/generated/BUSINESS_RULES.md, applications/<app>/units/<module>/<unit>/understanding/rules-review.md]
+  reads: [01-standards/, 02-architecture/blueprint.md, 02-architecture/common/, 10-applications/<app>/02-modern/design.md, 10-applications/<app>/_generated/BUSINESS_RULES.md, 10-applications/<app>/01-legacy/<module>/<unit>/rules-review.md]
   writes: []
   gates: []
 ---
@@ -15,7 +15,7 @@ domain model, API stubs that match the interface contracts, and **executable acc
 design assigns to the component. This is the skeleton the units are later implemented in; it holds no unit's logic.
 
 This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **document repository**
-(`architecture/`, `applications/$app/to-be/`, `standards/`); the **legacy repository** of `$app` is your local clone, **read-only**
+(`02-architecture/`, `10-applications/$app/02-modern/`, `01-standards/`); the **legacy repository** of `$app` is your local clone, **read-only**
 (Kintsugi's member hooks refuse writes to it); the skeletons go to the **target repositories** of `$app`, one per component
 (the portal lists them), on your own branch, committed with an `Assisted-by: <harness>` trailer. If the architecture approval gate
 is not approved in the portal, stop and say so: scaffold nothing before it. Run every subagent in the foreground and wait for its
@@ -24,7 +24,7 @@ you did.
 
 ## Phase A — The services to scaffold
 
-Read `architecture/blueprint.md`, the common components in `architecture/common/`, and `applications/$app/to-be/design.md`. List
+Read `02-architecture/blueprint.md`, the common components in `02-architecture/common/`, and `10-applications/$app/02-modern/design.md`. List
 the components of `$app` that have a target repository, each with its responsibilities in one line taken from the design, and the
 rules (from `BUSINESS_RULES.md`) it answers for. Honor the units' `rules-review.md`: a `refuted` rule gets no acceptance test.
 
@@ -39,7 +39,7 @@ Workflow({
   args: { app: "$app",
           sourceDir: "<path of the pinned source checkout, read-only>",
           targetDir: "<path of the working copy in the target repository>",
-          workspaceDir: "<document repository root that holds architecture/ and applications/$app/>",
+          workspaceDir: "<document repository root that holds 02-architecture/ and 10-applications/$app/>",
           services: [
     { name: "<component-name>", responsibilities: "<one line from the design>" }, ...
   ] }
@@ -52,8 +52,8 @@ result report `scaffolded[]` (each component with its `pendingRuleIds`), `totals
 surface.
 
 **Without it,** spawn a **scaffolder** agent per component in parallel (at most 3 at a time; say which you deferred): "Scaffold the
-<component-name> component per `architecture/blueprint.md`, the common components it uses in `architecture/common/` and
-`applications/$app/to-be/design.md`: project skeleton following `standards/conventions/`, domain model, API stubs matching the
+<component-name> component per `02-architecture/blueprint.md`, the common components it uses in `02-architecture/common/` and
+`10-applications/$app/02-modern/design.md`: project skeleton following `01-standards/conventions/`, domain model, API stubs matching the
 interface contracts, and **executable acceptance tests** for every business rule assigned to this component (mark unimplemented
 ones expected-failure with the rule id). No credential from legacy code becomes a fixture or config default: use fake same-shape
 values and env-var placeholders. Write to `<component-name>/` in the target repository."
@@ -70,4 +70,4 @@ env-var names with a pointer to where they are provisioned, never values.
 
 Push the target branches and open the target pull requests. Report: components scaffolded, acceptance tests defined, the share of
 rules with a home, and where the artifacts are. The next step is the detail design of each unit in its wave
-(`/kintsugi:modernize-design $app <module/unit> <set>`), then `/kintsugi:modernize-implement`.
+(generated on the **Design page of the portal**, then reviewed in its pull request), then `/kintsugi:modernize-implement`.

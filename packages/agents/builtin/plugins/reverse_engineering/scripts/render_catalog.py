@@ -6,7 +6,7 @@
 --catalog is the run's reconciled catalog (scratch JSON, written by reconcile_catalog.py); --topology the
 raw topology.json of the same run (scratch), read for the links between items: which item calls which, the
 data stores each touches, and the leaves of each item. --out is the document-repository root the catalog
-is written under: applications/<app>/assessment/catalog/index.md and one <module>.md per module, a card
+is written under: 10-applications/<app>/01-legacy/_catalog/index.md and one <module>.md per module, a card
 per item. No code is read. Standard library only.
 """
 import argparse

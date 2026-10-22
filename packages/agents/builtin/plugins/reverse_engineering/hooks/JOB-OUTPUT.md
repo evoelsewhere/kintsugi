@@ -36,7 +36,7 @@ The report has this shape (values shown are examples, not scan output):
     {
       "category": "malformed_artifact",
       "rule": "invalid_topology_document",
-      "path": "applications/sample-app/assessment/topology.md",
+      "path": "10-applications/sample-app/01-legacy/topology.md",
       "line": 1,
       "redacted": true
     }
@@ -45,7 +45,7 @@ The report has this shape (values shown are examples, not scan output):
     {
       "category": "diagram",
       "rule": "reserved-id",
-      "path": "applications/sample-app/assessment/ARCHITECTURE.mmd",
+      "path": "10-applications/sample-app/01-legacy/architecture.mmd",
       "line": 7,
       "redacted": true
     }
@@ -63,7 +63,7 @@ Each finding contains only a category, a stable rule identifier, a relative path
 The hook validates artifacts when encountered at any depth:
 
 - `topology.md` must be a topology document: front matter that names the `system`, then a `## Domains` section (`invalid_topology_document` otherwise). The raw topology JSON is scratch of the run and is checked by `scripts/render_topology.py`, not here.
-- `BUSINESS_RULES.md` and a unit's `rules.md` are **rules indexes** ([ADR-0046](../../../../../../docs/decisions/0046-one-file-per-business-rule.md)): a table with an `ID` and a `Name` column. Every row needs a rule id (`RULE-NNN`, the item-namespaced `RULE-<module>.<unit>-<hash>`; `invalid_rule_row` otherwise). In the table with `Status` and `Rule file` columns each row links its rule's file (`missing_rule_link`), and a relative link that stays inside the output tree must point to an existing file (`missing_rule_file`); links that leave the tree (`../units/...`) are not followed. An index with no rows needs the line `_No business rules were confirmed in this run._` (`missing_rule_entry`). The older form, a `### RULE-NNN: <title>` card per rule, is still accepted; a heading beginning with `RULE-` that does not match that shape is malformed (`invalid_rule_heading`); other headings (`## Rules`, `## Rule index`), the `Retired rules` table and lines inside fenced code blocks are ignored. A leading byte-order mark is accepted.
+- `BUSINESS_RULES.md` and a unit's `rules.md` are **rules indexes** ([ADR-0046](../../../../../../docs/decisions/0046-one-file-per-business-rule.md)): a table with an `ID` and a `Name` column. Every row needs a rule id (`RULE-NNN`, the item-namespaced `RULE-<module>.<unit>-<hash>`; `invalid_rule_row` otherwise). In the table with `Status` and `Rule file` columns each row links its rule's file (`missing_rule_link`), and a relative link that stays inside the output tree must point to an existing file (`missing_rule_file`); links that leave the tree (`../01-legacy/...`) are not followed. An index with no rows needs the line `_No business rules were confirmed in this run._` (`missing_rule_entry`). The older form, a `### RULE-NNN: <title>` card per rule, is still accepted; a heading beginning with `RULE-` that does not match that shape is malformed (`invalid_rule_heading`); other headings (`## Rules`, `## Rule index`), the `Retired rules` table and lines inside fenced code blocks are ignored. A leading byte-order mark is accepted.
 - A rule's own file (`rules/RULE-….md`) must start with front matter whose `id` equals the file name and contain the title line `# <id>: <name>` (`invalid_rule_file`).
 
 Every `.mmd` file and every `mermaid` fence in a Markdown file is checked with the built-in Mermaid lint (`scripts/mermaid_lint.py`, the rules of the `mermaid-diagrams` skill; no rendering). Its problems are **warnings**: the lint is a heuristic subset of Mermaid's grammar, and a diagram problem is not worth discarding an otherwise valid output. A reviewer sees the warnings on the job and fixes the diagram in the pull request. Only the rule id, path and line are reported. If the lint cannot be loaded the scan continues without it; if it fails on a file, that file gets a `diagram_lint_failed` warning.

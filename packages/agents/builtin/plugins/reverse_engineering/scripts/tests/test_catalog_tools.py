@@ -241,22 +241,27 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(catalog['reconciled']['new'], 1)
 
     def test_reconcile_seeds_from_units(self):
-        units_dir = os.path.join(self.root, 'units', 'billing')
-        write(os.path.join(units_dir, 'customers', 'cust.md'),
+        # The unit cards of the modern half: <module>/<unit>/README.md; a design document or a `_` folder is not a card.
+        units_dir = os.path.join(self.root, '10-applications', 'billing', '02-modern')
+        write(os.path.join(units_dir, 'customers', 'cust', 'README.md'),
               '---\nid: "billing/customers/cust"\nmodule: "customers"\nkind: "program"\ntitle: "Customers"\nsource:\n  - {repo: "legacy", paths: ["src/cust/upd/CUSTUPD.cbl", "src/cust/upd/CUSTLIB.cbl"]}\n---\nbody\n')
-        write(os.path.join(units_dir, 'old', 'gone.md'), '---\nid: billing/old/gone\ntitle: Gone\nsource:\n  - repo: legacy\n    paths:\n      - src/gone/X.cbl\n---\n')
+        write(os.path.join(units_dir, 'old', 'gone', 'README.md'), '---\nid: billing/old/gone\ntitle: Gone\nsource:\n  - repo: legacy\n    paths:\n      - src/gone/X.cbl\n---\n')
+        write(os.path.join(units_dir, 'old', 'gone', 'basic', 'README.md'), '---\nid: billing/old/basic\ntitle: Not a card\n---\n')
+        write(os.path.join(units_dir, '_design', 'arch', 'README.md'), '---\nid: billing/design/arch\ntitle: Not a card\n---\n')
         catalog, stdout = self.reconcile(self.propose(), '--units-dir', units_dir)
         by_id = {item['id']: item for item in catalog['items']}
         self.assertIn('customers/cust', by_id)
         self.assertEqual(by_id['old/gone']['status'], 'retired')
         self.assertEqual(by_id['old/gone']['files'], ['src/gone/X.cbl'])
+        self.assertNotIn('old/basic', by_id)
+        self.assertNotIn('design/arch', by_id)
         self.assertEqual(catalog['reconciled']['from'], 'units')
         self.assertIn('existing units', stdout)
 
     def test_reconcile_expands_unit_directories_on_the_inventory(self):
         # A work item lists a directory leaf's directory, not its files.
-        units_dir = os.path.join(self.root, 'units', 'billing')
-        write(os.path.join(units_dir, 'customers', 'customer-update.md'),
+        units_dir = os.path.join(self.root, '10-applications', 'billing', '02-modern')
+        write(os.path.join(units_dir, 'customers', 'customer-update', 'README.md'),
               '---\nid: "billing/customers/customer-update"\nmodule: "customers"\nkind: "program"\ntitle: "Customer update"\nsource:\n  - {repo: "legacy", paths: ["src/cust/upd"]}\n---\n')
         catalog, _ = self.reconcile(self.propose(), '--units-dir', units_dir)
         by_id = {item['id']: item for item in catalog['items']}

@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """Finish a scoped understand run (ADR-0033): per selected item that got its specification, the
-checked traceability record, the understanding record (what marks the item understood) and its work item.
+checked traceability record, the understanding record (what marks the item understood) and its card.
 
     python3 finish_items.py <app> --catalog DIR --items ID,ID,... --inputs DIR --out DIR
         --commit SHA [--run ID] [--repo ID] [--existing DIR]
 
 --inputs is the run's inputs root (document-repository layout): the specifications
-applications/<app>/units/<module>/<unit>/understanding/as-is.md, the item's rules.md and findings.md in the
+10-applications/<app>/01-legacy/<module>/<unit>/spec.md, the item's rules.md and findings.md in the
 same folder, and the fragments the specification jobs returned (scratch/<app>/understand/trace/<module>/<unit>.json).
 --commit is the source commit, --run the run id, --existing the document repository's
-applications/<app>/units/ folder (a work item already there is left as it is, so a person's progress is never
-overwritten). Writes under --out, in applications/<app>/units/<module>/<unit>/:
+10-applications/<app>/02-modern/ folder (a unit card already there is left as it is, so a person's progress is never
+overwritten). Writes under --out:
 
-- understanding/trace.md - the fragment with only the rule and finding ids of that item and dependencies
+- 01-legacy/<module>/<unit>/trace.md - the fragment with only the rule and finding ids of that item and dependencies
   that name a catalog item, a data store or a system, with the sections the later phases fill in
   (requirements, pull requests, tests);
-- understanding/understanding.md - digest, commit, run, counts: the item is `understood` once this file is
+- 01-legacy/<module>/<unit>/understanding.md - digest, commit, run, counts: the item is `understood` once this file is
   on the default branch, `stale` when the catalog's digest moves away from it;
-- unit.md - the work item (frontmatter = state).
+- 02-modern/<module>/<unit>/README.md - the unit's card (frontmatter = state).
 
 An item without its specification gets none of these (it shows as failed or not analysed).
 Standard library only.
@@ -50,7 +50,7 @@ def complexity(loc):
 
 
 def work_item(app, unit, repo):
-    """unit.md: frontmatter (the unit's state, docs/reference/document-repo-unit-files.md) and a one-paragraph body."""
+    """The unit's card (README.md): frontmatter (the unit's state, docs/reference/document-repo-unit-files.md) and a one-paragraph body."""
     q = docmd.scalar
     lines = [
         '---',
@@ -75,7 +75,7 @@ def work_item(app, unit, repo):
     lines += ['links:'] + links + ['---']
     text = [f'{unit["title"]}: proposed by the understand stage from the catalog of {app}.', f'AS-IS specification: `{unit["spec"]}`.']
     if unit['findings']:
-        text.append(f'Security findings: {", ".join(unit["findings"])} ({paths.unit_key_understanding_path(app, unit["id"].split("/", 1)[1], "findings.md")}).')
+        text.append(f'Security findings: {", ".join(unit["findings"])} ({paths.unit_key_legacy_path(app, unit["id"].split("/", 1)[1], "findings.md")}).')
     if unit['entryPoint']:
         text.append('This unit holds an entry point of the application.')
     return '\n'.join(lines) + '\n\n' + ' '.join(text) + '\n'
@@ -154,7 +154,7 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
             'Its presence on the default branch marks the item understood; a changed catalog digest marks it stale.\n'
         )
         module, name = item_id.split('/', 1)
-        if not (existing and os.path.exists(os.path.join(existing, module, name, 'unit.md'))):
+        if not (existing and os.path.exists(os.path.join(existing, module, name, paths.UNIT_CARD))):
             unit = {
                 'id': f'{app}/{item_id}',
                 'module': module,
@@ -168,7 +168,7 @@ def finish(app, items, chosen, inputs, commit, run, repo, existing):
                 'findings': checked['findings'],
                 'entryPoint': bool(item.get('entryPoints')),
             }
-            texts[paths.unit_key_path(app, item_id, 'unit.md')] = work_item(app, unit, repo)
+            texts[paths.unit_key_state_path(app, item_id)] = work_item(app, unit, repo)
             new_units += 1
         done.append(item_id)
     return texts, done, missing, new_units

@@ -111,10 +111,10 @@ describe("repository path", () => {
 
 describe("autoCommitPaths globs", () => {
   it("spans folders with ** and stays within a segment with * and ?", () => {
-    expect(matchesPathGlob("applications/web/units/payroll/run-period/unit.md", "applications/*/units/**/unit.md")).toBe(true);
-    expect(matchesPathGlob("applications/web/units/run-period/unit.md", "applications/*/units/**/unit.md")).toBe(true);
-    expect(matchesPathGlob("applications/web/other/units/payroll/unit.md", "applications/*/units/**/unit.md")).toBe(false);
-    expect(matchesPathGlob("applications/team/web/units/payroll/unit.md", "applications/*/units/**/unit.md")).toBe(false);
+    expect(matchesPathGlob("10-applications/web/02-modern/payroll/run-period/README.md", "10-applications/*/02-modern/**/README.md")).toBe(true);
+    expect(matchesPathGlob("10-applications/web/02-modern/README.md", "10-applications/*/02-modern/**/README.md")).toBe(true);
+    expect(matchesPathGlob("10-applications/web/01-legacy/payroll/README.md", "10-applications/*/02-modern/**/README.md")).toBe(false);
+    expect(matchesPathGlob("10-applications/team/web/02-modern/payroll/README.md", "10-applications/*/02-modern/*/*/README.md")).toBe(false);
     expect(matchesPathGlob("tasks/t-1.md", "tasks/*.md")).toBe(true);
     expect(matchesPathGlob("tasks/a/t-1.md", "tasks/*.md")).toBe(false);
     expect(matchesPathGlob("runs/a/b.json", "**/b.json")).toBe(true);
@@ -122,14 +122,16 @@ describe("autoCommitPaths globs", () => {
   });
 
   it("splits writes by the application and unit defaults", () => {
-    expect(isAutoCommitPath("applications/web/units/payroll/run-period/unit.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/units/payroll/run-period/task.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/generated/traceability.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/understanding/plan.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
-    expect(isAutoCommitPath("applications/web/units/payroll/run-period/understanding/rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
-    expect(isAutoCommitPath("applications/web/assessment/generated/topology.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
-    expect(isAutoCommitPath("applications/team/web/generated/a.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("10-applications/web/02-modern/payroll/run-period/README.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/02-modern/payroll/run-period/task.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/_generated/traceability.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/01-legacy/plan.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/01-legacy/payroll/run-period/rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("10-applications/web/02-modern/payroll/run-period/basic/README.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("10-applications/web/02-modern/_design/arch/README.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(true);
+    expect(isAutoCommitPath("10-applications/web/02-modern/README.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("10-applications/team/web/_generated/a.json", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
     expect(isAutoCommitPath("kintsugi.yaml", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
-    expect(isAutoCommitPath("standards/review-rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
+    expect(isAutoCommitPath("01-standards/review-rules.md", DEFAULT_AUTO_COMMIT_PATHS)).toBe(false);
   });
 });

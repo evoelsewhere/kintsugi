@@ -17,7 +17,7 @@ later specification can build on the earlier ones.
 
 - **Start from the graph.** `graph.json` is your evidence: per item its size, complexity, dependencies in both
   directions, data stores, depth and cycle. Quote its numbers; never estimate what the graph states.
-- **Start from the assessment for risk.** `ASSESSMENT.md` names what matters to the business and what is dangerous;
+- **Start from the assessment for risk.** `assessment.md` names what matters to the business and what is dangerous;
   tie batches to its findings by id or heading.
 - **Follow the `understand-planning` skill**: how to read the graph, the rules that decide an order, how to write a
   rationale a reviewer can check.

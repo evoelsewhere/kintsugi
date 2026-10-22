@@ -36,7 +36,7 @@ export function Kpi({ label, value, display, hint, previous, higherIsWorse = fal
       </p>
       <p className="text-[24px] leading-7 font-semibold tracking-tight text-text tabular-nums">{display ?? formatCount(value)}</p>
       {delta === undefined ? (
-        hint === undefined ? null : <p className="truncate text-[11px] text-text-muted" title={hint}>{hint}</p>
+        hint === undefined ? null : <p className="line-clamp-2 text-[11px] break-words text-text-muted" title={hint}>{hint}</p>
       ) : (
         <p className={cn("flex items-center gap-0.5 text-[11px] tabular-nums", delta === 0 ? "text-text-muted" : worse ? "text-[var(--ds-status-red)]" : "text-[var(--ds-status-green-dark)]")}>
           {delta === 0 ? "No change" : delta > 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
@@ -47,8 +47,9 @@ export function Kpi({ label, value, display, hint, previous, higherIsWorse = fal
   );
 }
 
-export function KpiRow({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">{children}</div>;
+/** `compact` is for a narrow container (a drawer): at most three tiles per row whatever the screen. */
+export function KpiRow({ children, compact = false }: { children: React.ReactNode; compact?: boolean }): React.JSX.Element {
+  return <div className={cn("grid gap-3", compact ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6")}>{children}</div>;
 }
 
 export function Section({ title, description, actions, children, className }: { title: string; description?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string }): React.JSX.Element {

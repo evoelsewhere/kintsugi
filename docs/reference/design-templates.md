@@ -1,18 +1,18 @@
 # Design templates
 
-> What a project writes in `standards/design/` so that every unit's design documents have the format and the content the project requires. Decisions: [ADR-0044](../decisions/0044-design-phase-common-basic-detail.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md). How to define your own: [guide](../guides/define-design-templates.md).
+> What a project writes in `01-standards/templates/` so that every unit's design documents have the format and the content the project requires. Decisions: [ADR-0044](../decisions/0044-design-phase-common-basic-detail.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md). How to define your own: [guide](../guides/define-design-templates.md).
 
-The design phase has levels (common design, basic design, detail design, then implementation). What each level contains differs from project to project, so Kintsugi does not fix it: the project defines **design sets** as Markdown in its document repo, and one definition does five jobs: it scaffolds the documents, instructs the agent, validates the result, is the rubric of the review, and drives the portal's conformance view.
+The design phase has levels (common design, basic design, detail design, then implementation). What each level contains differs from project to project, so Kintsugi does not fix it: the project defines **design sets** as Markdown in its document repo, and one definition does five jobs: it scaffolds the documents, instructs the designer agent of the portal's design run (ADR-0049), validates the result, is the rubric of the review, and drives the portal's conformance view.
 
 ```mermaid
 flowchart LR
-  def[("standards/design/(set)/<br/>set.md and templates")]
+  def[("01-standards/templates/(set)/<br/>set.md and templates")]
   def --> scaffold["scaffold<br/>first drafts of the documents"]
   def --> agent["agent instruction<br/>the guidance of each section"]
-  def --> member["validation in the harness<br/>check_design.py"]
+  def --> member["validation<br/>check_design.py, in the design run and in a harness"]
   def --> review["review rubric<br/>runtime design-review (planned)"]
   def --> portal["portal<br/>conformance of every unit"]
-  scaffold --> doc[("units/.../design/(set)/")]
+  scaffold --> doc[("02-modern/module/unit/(set)/")]
   agent --> doc
   doc --> member
   doc --> portal
@@ -22,11 +22,12 @@ flowchart LR
 
 | Path | Content |
 |---|---|
-| `standards/design/<set>/set.md` | the set: identity and the documents it holds |
-| `standards/design/<set>/<template>.md` | one template per document of the set |
-| `architecture/common/<COM-id>.md` | the common components every unit reuses (the foundation team's design) |
-| `applications/<app>/units/<module>/<unit>/design/<set>/<path>` | the unit's design documents, one folder per set |
-| `applications/<app>/units/<module>/<unit>/unit.md` | `waived`: files the unit does not need, with a reason |
+| `01-standards/templates/<set>/set.md` | the set: identity, scope and the documents it holds |
+| `01-standards/templates/<set>/<template>.md` | one template per document of the set |
+| `02-architecture/common/<COM-id>.md` | the common components every unit reuses (the foundation team's design) |
+| `10-applications/<app>/02-modern/<module>/<unit>/<set>/<path>` | the unit's design documents, one folder per set of scope `unit` |
+| `10-applications/<app>/02-modern/_design/<set>/<path>` | the application's own design documents, one folder per set of scope `application` ([ADR-0050](../decisions/0050-design-sets-scope-and-instructions.md)) |
+| `10-applications/<app>/02-modern/<module>/<unit>/README.md` | `waived`: files the unit does not need, with a reason |
 
 ## `set.md`
 
@@ -37,20 +38,28 @@ Front matter (scalars and short lists, as every document of the repo):
 | `id` | the set's name and its folder name: lowercase letters, digits and hyphens, starting with a letter |
 | `title` | the name people read |
 | `version` | a positive integer, raised on a change that affects the designs already written |
-| `appliesTo` | unit kinds (from `unitKinds` in `kintsugi.yaml`) the set is for; `[]` means every kind |
-| `needs` | sets that must be written first; a set cannot need itself, directly or through others |
+| `scope` | `unit` (the default): a design per unit; `application`: one design for the whole application |
+| `appliesTo` | unit kinds (from `unitKinds` in `kintsugi.yaml`) the set is for; `[]` means every kind; always `[]` for a set of the application |
+| `needs` | sets that must be written first; a set cannot need itself, directly or through others; a set of the application may need only sets of the application |
 | `stage` | the pipeline stage that produces the set (optional) |
+| `reads` | documents the designer also reads when it generates the set: relative paths or folders of the document repo, `{app}` allowed, no `..` (optional) |
 
 The body holds the documents of the set as a table, then a description for people:
 
 | Column | Meaning |
 |---|---|
-| `Path` | the document, relative to the unit's `design/<set>/`: a relative `.md` path, no `..` |
+| `Path` | the document, relative to the unit's `<set>/` folder (`10-applications/<app>/02-modern/<module>/<unit>/<set>/`): a relative `.md` path, no `..` |
 | `Template` | a file in the set's folder |
 | `Required` | `yes` or `no` |
 | `When` | unit kinds that need the file (comma separated); empty means every kind the set applies to |
 
+A section `## Instructions` in the body is addressed to the designer: how this kind of design is written, what to look at first. It is not part of the description people read.
+
 A pipeline stage names the set it writes with `produces: <set>` ([manifest](document-repo-manifest.md)).
+
+### A set of the application
+
+With `scope: application` the set is written once for the application and generated from the portal for the application itself (`@app` where a unit goes). The set is reported as faulty when: `appliesTo` or a `When` is not empty; it needs a set of units; a template uses `{{unit.id}}`, `{{unit.title}}` or `{{kind}}`, `seed: rules`, `covers-rules` or `refs-resolve(… -> rules)` (rules are per unit). A set of units may need a set of the application, and the design items of the application's documents resolve for it.
 
 ## A template
 
@@ -85,8 +94,8 @@ A closed vocabulary: a project chooses and parameterises checks, it cannot add c
 | Check | Passes when |
 |---|---|
 | `no-placeholder` | the section holds no `TODO` or `TBD` |
-| `covers-rules(Column)` | every business rule of the unit (from `understanding/rules.md`) appears in the column (ids separated by space, comma or semicolon) |
-| `refs-resolve(Column -> source)` | every id in the column exists. `source` is `rules`, `requirements` (the `REQ-` sections of `to-be/requirements.md`), `components` (the `COM-` files of `architecture/common/`), or the id of a set this one needs, whose **design items** are the cells of any `ID` column in the unit's documents of that set. `-`, `n/a`, `TODO` and `TBD` are skipped |
+| `covers-rules(Column)` | every business rule of the unit (from its `rules.md` in `01-legacy/<module>/<unit>/`) appears in the column (ids separated by space, comma or semicolon) |
+| `refs-resolve(Column -> source)` | every id in the column exists. `source` is `rules`, `requirements` (the `REQ-` sections of `02-modern/requirements.md`), `components` (the `COM-` files of `02-architecture/common/`), or the id of a set this one needs, whose **design items** are the cells of any `ID` column in the unit's documents of that set. `-`, `n/a`, `TODO` and `TBD` are skipped |
 | `id-pattern(Column, pattern)` | every non-empty cell matches the whole pattern; use a basic regular expression, which means the same in JavaScript and Python |
 | `max-length(n)` | the section's text, without comments, has at most `n` characters |
 | `one-of(Column, a\|b\|c)` | every non-empty cell is one of the options, without case |
@@ -129,7 +138,7 @@ A unit's document has one of these states:
 | `waived` | the unit's `waived` list names it with a reason |
 | `not-applicable` | the set does not apply to the unit's kind |
 
-A waiver is an entry `<set>/<file>: <reason>` in the `waived` list in the front matter of `unit.md`, written by a person. An agent never writes one.
+A waiver is an entry `<set>/<file>: <reason>` in the `waived` list in the front matter of the unit's card (`02-modern/<module>/<unit>/README.md`), written by a person. An agent never writes one.
 
 ## Checking the sets themselves
 
@@ -147,4 +156,4 @@ A waiver is an entry `<set>/<file>: <reason>` in the `waived` list in the front 
 | `validate_design_templates.py` | `modernize` plugin | checks the sets |
 | `hooks/reader/design.ts` | `@kintsugi/agents/reader` | the same parser and checks, run by the API |
 
-The two implementations are held to the shared fixtures in `packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/` by both test suites.
+The two implementations are held to the shared fixtures in `packages/agents/builtin/plugins/design/scripts/tests/fixtures/design/` by both test suites.

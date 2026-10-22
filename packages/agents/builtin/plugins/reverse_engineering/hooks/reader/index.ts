@@ -55,6 +55,7 @@ export { cardsOf, countOf, documentOf, fieldList, fieldText, firstRecords, items
 export {
   DESIGN_CHECKS,
   DESIGN_SEEDS,
+  DESIGN_SETS_PREFIX,
   checkDesignDocument,
   designCoverage,
   designFilesFor,

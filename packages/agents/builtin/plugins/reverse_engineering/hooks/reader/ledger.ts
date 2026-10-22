@@ -9,7 +9,7 @@ export type ReviewLedger = Record<
 >
 
 /**
- * The per-unit `rules-review.md` (`units/<module>/<unit>/understanding/`), read without trusting it: a table
+ * The per-unit `rules-review.md` (`01-legacy/<module>/<unit>/`), read without trusting it: a table
  * `Rule | Verdict | Approver | Date` (and an optional `Note`) keyed by rule id; `approver` becomes the verdict's title
  * and `date` its `at`, so the panel keeps rendering. The file sits in a workspace anyone may have edited, and a model
  * may have written it, so every value is checked: a verdict is one of three exact words, a rule id is one plain token, a

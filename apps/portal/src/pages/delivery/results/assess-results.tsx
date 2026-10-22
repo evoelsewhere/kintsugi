@@ -4,7 +4,7 @@
 //   Risk & debt — security highlights and technical debt with their distributions, gaps
 //   Inventory   — every measured file, filterable by language
 //   Monitoring  — the stage's runs: health, the latest run's steps, every run
-//   ASSESSMENT.md — the full document
+//   assessment.md — the full document
 
 import { useMemo, useState } from "react";
 import { BarList, Donut, Histogram, Scatter, type Segment, ShareBar } from "@/components/results/charts";
@@ -66,7 +66,7 @@ export function AssessResultsView({ results, compare, projectId, runs }: { resul
           { id: "risk", label: "Risk & debt", count: highlights.security.length + (highlights.debt?.rows.length ?? 0) },
           { id: "inventory", label: "Hotspots", count: inventory?.files.length },
           { id: "monitoring", label: "Monitoring", count: runs?.length },
-          { id: "document", label: "ASSESSMENT.md", hidden: results.document === undefined },
+          { id: "document", label: "assessment.md", hidden: results.document === undefined },
         ]}
       />
 
@@ -76,7 +76,7 @@ export function AssessResultsView({ results, compare, projectId, runs }: { resul
       {tab === "inventory" ? <InventoryTab results={results} /> : null}
       {tab === "monitoring" ? <MonitoringTab projectId={projectId} runs={runs} /> : null}
       {tab === "document" && results.document !== undefined ? (
-        <Section title="ASSESSMENT.md" description={results.document.path}>
+        <Section title="assessment.md" description={results.document.path}>
           <Markdown text={results.document.markdown} path={results.document.path} />
         </Section>
       ) : null}
@@ -143,7 +143,7 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
       )}
 
       {results.architecture === undefined ? null : (
-        <Section title="Architecture" description="ARCHITECTURE.mmd: the domains and how they depend on each other.">
+        <Section title="Architecture" description="architecture.mmd: the domains and how they depend on each other.">
           <MermaidDiagram source={results.architecture} title="Domain diagram" height={760} />
         </Section>
       )}

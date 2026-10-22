@@ -5,7 +5,7 @@
 
 --draft is the planning agent's structured answer ({strategy, batches: [{title, items, rationale, risk}],
 leftOut: [{item, reason}]}); --graph the plan_graph.py output (both scratch JSON of the run); --out the
-document-repository root the plan is written under (applications/<app>/understanding/plan.md).
+document-repository root the plan is written under (10-applications/<app>/01-legacy/plan.md).
 
 The agent proposes, this script decides what stands: an item that is not in the catalog, is understood
 already, is test or generated code, or is named in an earlier batch is dropped (with the reason, in

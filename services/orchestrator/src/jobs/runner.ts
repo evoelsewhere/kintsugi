@@ -120,12 +120,12 @@ interface ResumeState {
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** inputs.scope of a scoped run: catalog item ids and their files; undefined when absent or malformed. */
+/** inputs.scope of a scoped run: catalog item ids (or units) and their files, and the design set of a design run; undefined when absent or malformed. */
 export function scopeOf(inputs: Record<string, unknown>): StageScope | undefined {
   const scope = inputs["scope"];
   if (!isRecord(scope) || !Array.isArray(scope["items"])) return undefined;
   const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
-  return { items: strings(scope["items"]), files: strings(scope["files"]) };
+  return { items: strings(scope["items"]), files: strings(scope["files"]), ...(typeof scope["set"] === "string" ? { set: scope["set"] } : {}) };
 }
 
 interface StepOutcome {
@@ -163,7 +163,7 @@ interface ChildPlacement {
 const BUILTIN_SCRIPT = /^[a-z][a-z0-9_-]{0,63}\.(py|js|mjs)$/;
 const MAX_STDOUT = 20_000;
 const MAX_DETAIL_LINES = 40;
-/** Files of one declared document folder ("standards/", an application's items) a step gets at most. */
+/** Files of one declared document folder ("01-standards/", a half of an application) a step gets at most. */
 const MAX_FOLDER_DOCUMENTS = 5000;
 /** A relative document-repo path without traversal. */
 const SAFE_OUTPUT_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9._/-]+$/;
@@ -224,6 +224,28 @@ export function summarizeToolCall(tool: string, input: unknown, roots: Record<st
   const path = shown(args["path"]);
   if (path !== undefined) parts.push(path);
   if ((tool === "grep" || tool === "find") && typeof args["pattern"] === "string") parts.push(`"${args["pattern"].slice(0, 80)}"`);
+  const firstLine = (text: string, ignoreComments: boolean): { line: string; more: boolean } | undefined => {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== "" && !(ignoreComments && line.startsWith("//")));
+    return lines[0] === undefined ? undefined : { line: lines[0].slice(0, 100), more: lines.length > 1 };
+  };
+  // What the command or script is after, redacted with the rest of the line. A codemode script only reads (the
+  // kernel blocks anything else), shell and git are the model's own words about what it runs.
+  if (tool === "codemode" && typeof args["code"] === "string") {
+    const first = firstLine(args["code"], true);
+    if (first !== undefined) parts.push(`${first.line}${first.more ? " …" : ""}`);
+  } else if (tool === "shell" && typeof args["command"] === "string") {
+    const first = firstLine(args["command"], false);
+    if (first !== undefined) parts.push(`${first.line}${first.more ? " …" : ""}`);
+  } else if (tool === "git" && Array.isArray(args["args"])) {
+    parts.push(args["args"].filter((arg): arg is string => typeof arg === "string").join(" ").slice(0, 100));
+  } else if (tool.startsWith("mcp__")) {
+    // Scalar arguments only, as name=value, so a query is visible and a document body is not.
+    const scalars = Object.entries(args)
+      .filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+      .slice(0, 3)
+      .map(([name, value]) => `${name}=${String(value).slice(0, 40)}`);
+    if (scalars.length > 0) parts.push(scalars.join(" "));
+  }
   return redactText(parts.join(" ")).slice(0, MAX_EVENT_TEXT);
 }
 
@@ -446,7 +468,7 @@ export class JobRunner {
 
   /**
    * An agent that wrote an expected file under the right name but in the wrong folder (a bare
-   * "ASSESSMENT.md" for "applications/<app>/assessment/ASSESSMENT.md") keeps its work: the stray file with
+   * "assessment.md" for "10-applications/<app>/01-legacy/assessment.md") keeps its work: the stray file with
    * the missing file's name (the best path match when several) is moved into place. A file under another name is
    * never guessed (it may be notes): that is the repair attempt's job. Returns whether files are still missing.
    */

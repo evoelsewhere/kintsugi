@@ -234,7 +234,7 @@ export interface PipelineDefinition {
     /** Required for custom phases: built-in phase used for reporting. */
     category?: Phase;
     perUnit?: boolean;
-    /** `produces` names the design set (standards/design/<set>) the stage writes (ADR-0045). */
+    /** `produces` names the design set (01-standards/templates/<set>) the stage writes (ADR-0045). */
     stages: { id: string; performer: StagePerformer; gate?: GateId | (string & {}); produces?: string }[];
   }[];
   gates?: Record<string, { require: string[] }>;

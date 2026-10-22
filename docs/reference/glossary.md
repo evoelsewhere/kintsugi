@@ -5,8 +5,8 @@
 | **Access role** | Installation-wide permission bundle, such as `admin`, `contribute`, `user`, or an admin-defined access sub-role; managed in Admin → Members & Permissions |
 | **AS-IS / TO-BE KB** | Knowledge base of the current / target system. Sources are in Git; the index (vector + graph) is in Postgres |
 | **Code repo** | Umbrella term for source and target repos. A project usually has many, possibly on different Git servers |
-| **Common component** | Something every unit reuses, designed once by the foundation team: a document `architecture/common/COM-<AREA>-<NN>.md`; unit designs refer to it by id ([ADR-0044](../decisions/0044-design-phase-common-basic-detail.md)) |
-| **Design set** | A group of design documents written together for a unit (for example the basic design and the detail design), defined by the project as templates with checks in `standards/design/<set>/` ([design templates](design-templates.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md)) |
+| **Common component** | Something every unit reuses, designed once by the foundation team: a document `02-architecture/common/COM-<AREA>-<NN>.md`; unit designs refer to it by id ([ADR-0044](../decisions/0044-design-phase-common-basic-detail.md)) |
+| **Design set** | A group of design documents written together for a unit (for example the basic design and the detail design), defined by the project as templates with checks in `01-standards/templates/<set>/` ([design templates](design-templates.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md)) |
 | **Digital worker** | An AI work profile such as reverse design, code generation or unit-test generation. In Kintsugi it is an agent plugin plus a task-pack template, run in a member's harness, with runtime agents preparing and reviewing the work |
 | **Foundation team** | The project role that designs what every unit shares (the architecture, the common components, the skeleton) before the units are designed; a name in the pipeline, not a kind of actor |
 | **Gate** | Quality / approval checkpoint: G0–G4 per phase, plus per-unit gates |
@@ -31,13 +31,13 @@
 | **Skill** | An Agent Skills folder (`SKILL.md`) inside a plugin, namespaced `<plugin>:<skill>` |
 | **Target base** | The target repo as scaffolded by the solution architect (framework, layering, conventions, CI) before units are converted into it |
 | **Task pack** | Context for one unit (spec, AS-IS excerpts from the KB, rules, acceptance criteria, suggested skills) for a member's harness |
-| **Unit** | The thing being migrated, identified by the full `<app>/<module>/<unit>`; its evidence lives in `applications/<app>/units/<module>/<unit>/` (ADR-0038) |
-| **Unit file** | `applications/<app>/units/<module>/<unit>/unit.md` in the document repo; its frontmatter is the unit's state (ADR-0012, ADR-0038) |
+| **Unit** | The thing being migrated, identified by the full `<app>/<module>/<unit>`; what is known about it lives in `10-applications/<app>/01-legacy/<module>/<unit>/`, its card and design in `10-applications/<app>/02-modern/<module>/<unit>/` (ADR-0051) |
+| **Unit card** | `10-applications/<app>/02-modern/<module>/<unit>/README.md` in the document repo; its frontmatter is the unit's state (ADR-0012, ADR-0051) |
 | **Wave** | A group of applications or units migrated together, by pattern |
 | **Work item** | Legacy API/domain term corresponding to a unit. Use **unit** in documentation; existing API/CLI names are unchanged. |
-| **Document repo** | The project's single Git repo for everything except code; Markdown only, organised by bounded context; see the [layout reference](document-repo.md) for current paths and planned homes |
-| **Unit aggregate** | The directory `units/<module>/<unit>/` with `unit.md` as its root; each context writes into its own subfolder (`understanding/`); see [document repo contexts](../architecture/concepts/document-repo-contexts.md) |
+| **Document repo** | The project's single Git repo for everything except code; Markdown only, numbered in reading order with each application split into a legacy and a modern half; see the [layout reference](document-repo.md) for current paths and planned homes |
+| **Unit aggregate** | A unit's two folders, `01-legacy/<module>/<unit>/` and `02-modern/<module>/<unit>/`, with the card `README.md` as its root; each context writes into its own folder; see [document repo contexts](../architecture/concepts/document-repo-contexts.md) |
 | **Scratch** | The JSON a run passes between its steps, under `scratch/<app>/` in the job workspace; never committed |
 | **Legacy repo** | An AS-IS repo with role `legacy` (code) or `legacy-data` (data); always read-only for Kintsugi |
-| **Standards** | The project's target conventions, mappings and review rules: plain documents in `standards/` of the document repo |
+| **Standards** | The project's target conventions, mappings and review rules: plain documents in `01-standards/` of the document repo |
 | **Target repo** | A TO-BE repo with role `target`, implementing one architecture `component`; only members write to it |

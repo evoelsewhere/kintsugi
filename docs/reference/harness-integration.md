@@ -134,7 +134,7 @@ The `task-planner` runtime agent produces a task pack for each unit and commits 
 | `suggestedSkills` | Plugin skills to use, namespaced `<plugin>:<skill>` |
 | `deliverables` | Type, description, target repo (`document` / `target`) and path |
 | `documentRepoCommit` | Document repo commit the task pack was generated against |
-| `standards` | The standards (paths under `standards/`) that apply to the unit |
+| `standards` | The standards (paths under `01-standards/`) that apply to the unit |
 
 ## 5. Harness policy
 

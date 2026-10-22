@@ -285,10 +285,14 @@ function LogRow({ event, runStart, label }: { event: JobRunEvent; runStart: numb
       <span className="w-32 shrink-0 truncate font-sans text-[11px] leading-[18px] text-text-muted" title={label}>
         {label}
       </span>
-      <span className="w-11 shrink-0 truncate font-medium" style={{ color: blocked ? "var(--ds-status-red)" : tool === undefined ? undefined : (TOOL_COLOR[tool] ?? "var(--ds-text-secondary)") }}>
+      <span className="w-[4.5rem] shrink-0 truncate font-medium" style={{ color: blocked ? "var(--ds-status-red)" : tool === undefined ? undefined : (TOOL_COLOR[tool] ?? "var(--ds-text-secondary)") }}>
         {category === "tool" && tool !== undefined ? tool : null}
       </span>
-      {category === "tool" && tool !== undefined && !problem ? (
+      {category === "tool" && tool === "codemode" && !problem ? (
+        <span className="min-w-0 flex-1 truncate text-text-secondary" title={rest}>
+          {rest === "" ? "script" : rest}
+        </span>
+      ) : category === "tool" && tool !== undefined && !problem ? (
         <ToolTarget text={rest} />
       ) : (
         <span className={cn("line-clamp-3 min-w-0 flex-1 break-words", category === "status" ? "font-medium text-text" : "text-text-muted", problem && "text-[var(--ds-status-red)]")} title={event.message}>

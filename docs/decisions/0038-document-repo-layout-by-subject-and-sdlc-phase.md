@@ -1,6 +1,6 @@
 # ADR-0038: Document repo layout by subject and SDLC phase
 
-- Status: Accepted. The unit and application trees below are superseded by [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md): the repo holds Markdown only, the unit's evidence lives in `understanding/`, the application's in `assessment/` and `understanding/`.
+- Status: Accepted. The unit and application trees below are superseded by [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md): the repo holds Markdown only, the unit's evidence lives in `understanding/`, the application's in `assessment/` and `understanding/`. The whole tree and the gate records are superseded again by [ADR-0051](0051-document-repo-layout-legacy-and-modern.md).
 - Date: 2026-10-15
 - Decision register: D55
 

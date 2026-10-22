@@ -1,0 +1,7 @@
+{
+  "title": "Design generation",
+  "audience": "runtime",
+  "requires": [
+    "reverse_engineering"
+  ]
+}

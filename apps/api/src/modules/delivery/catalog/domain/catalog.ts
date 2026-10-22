@@ -5,7 +5,7 @@
 import type { ItemCatalog, ItemCatalogItem, PlanBatch, UnderstandPlan } from "@kintsugi/agents/reader";
 import type { ItemAssetClass, ItemStatus } from "@kintsugi/domain";
 
-/** The provenance record (`understanding/understanding.md`) `understand` writes for each specified catalog entry. */
+/** The provenance record (`understanding.md` in the unit's legacy folder) `understand` writes for each specified catalog entry. */
 export interface ItemMeta {
   digest?: string;
   /** Source commit the item was understood at. */
@@ -74,7 +74,7 @@ export function deriveItemStatus(item: ItemCatalogItem, meta: ItemMeta | undefin
 /** Items a new understand run may not take: running, or in an open pull request nobody abandoned. */
 export const isBlocked = (view: Pick<CatalogItemView, "status">): boolean => view.status === "running" || view.status === "in-pr";
 
-/** The AI plan (ADR-0041) as the planning run checked and wrote it (`understanding/plan.md`): the reader's types. */
+/** The AI plan (ADR-0041) as the planning run checked and wrote it (`01-legacy/plan.md`): the reader's types. */
 export type { PlanBatch, UnderstandPlan };
 
 /** The plan with what the catalog says now: whether the plan still fits and where its items stand. */

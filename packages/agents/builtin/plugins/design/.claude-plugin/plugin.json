@@ -1,0 +1,12 @@
+{
+  "name": "design",
+  "version": "1.0.0",
+  "description": "Generate the basic and detail design of each understood unit from the project's own design templates, on the portal, as a runtime stage; the same scripts check a design against its template. Members review the pull request.",
+  "author": {
+    "name": "Kintsugi"
+  },
+  "keywords": [
+    "kintsugi",
+    "runtime"
+  ]
+}

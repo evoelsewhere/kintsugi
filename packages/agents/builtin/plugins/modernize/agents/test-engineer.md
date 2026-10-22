@@ -20,7 +20,7 @@ implementation can be shown to follow them.
 - **Concrete over abstract.** Every test has literal input values and literal
   expected outputs. No "should calculate correctly" — instead "given balance
   1250.00 and APR 18.5%, returns 19.27".
-- **Name the rule each test pins.** When `applications/<app>/assessment/BUSINESS_RULES.md`
+- **Name the rule each test pins.** When `10-applications/<app>/01-legacy/BUSINESS_RULES.md`
   exists, each test names the `RULE-NNN` id(s) it pins, in its display name, in its
   method name where a hyphen is not allowed (`rule017_emptyInput`), or in a
   one-line comment: a test that names no rule counts for no rule.
@@ -42,7 +42,7 @@ implementation can be shown to follow them.
 
 ## Human verdicts on rules
 
-Each unit's `applications/<app>/units/<module>/<unit>/understanding/rules-review.md` (human-owned, authored through a pull
+Each unit's `10-applications/<app>/01-legacy/<module>/<unit>/rules-review.md` (human-owned, authored through a pull
 request) is the verdicts to honor: a rule a person marked `refuted` is not
 an oracle (write the test from the reviewer's note, or ask what is right), and a P0 rule marked
 `clarify` is not settled: raise it instead of guessing.

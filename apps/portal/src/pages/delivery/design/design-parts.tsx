@@ -1,6 +1,5 @@
-// Building blocks of the Design view (ADR-0044, ADR-0045): the one conformance mark every screen
-// uses, the command a member runs in their harness, and a copy button for it. The portal does
-// not write designs; it shows where each stands and hands the work to the harness.
+// Building blocks of the Design view (ADR-0044, ADR-0045, ADR-0049): the one conformance mark every
+// screen uses, and a copy button for a path.
 
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
@@ -31,7 +30,7 @@ export function CopyButton({ text, label, what, size = "small" }: { text: string
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.success(`${what} copied`, "Paste it in your harness.");
+      toast.success(`${what} copied`);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.error(`Could not copy ${what.toLowerCase()}`, text);

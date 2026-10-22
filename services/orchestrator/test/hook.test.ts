@@ -32,20 +32,20 @@ afterEach(() => {
 describe("JobOutput hook", () => {
   it("passes output with diagram problems and reports them as redacted warnings", async () => {
     const ws = workspace({
-      "applications/demo/assessment/ARCHITECTURE.mmd": 'flowchart TB\n    svc_a["A"] --> end\n',
-      "applications/demo/assessment/call-graph.mmd": 'flowchart TD\n    svc_a["A"] --> svc_b["B"]\n',
+      "10-applications/demo/01-legacy/architecture.mmd": 'flowchart TB\n    svc_a["A"] --> end\n',
+      "10-applications/demo/01-legacy/call-graph.mmd": 'flowchart TD\n    svc_a["A"] --> svc_b["B"]\n',
     });
     const outcome = await run(ws);
-    expect(outcome).toMatchObject({ ok: true, findings: 0, warnings: { count: 1, first: ["reserved-id at applications/demo/assessment/ARCHITECTURE.mmd:2"] } });
+    expect(outcome).toMatchObject({ ok: true, findings: 0, warnings: { count: 1, first: ["reserved-id at 10-applications/demo/01-legacy/architecture.mmd:2"] } });
   });
 
   it("does not check credentials", async () => {
-    const ws = workspace({ "applications/demo/assessment/notes.md": "password = TEST_ONLY_NOT_A_SECRET_42\n" });
+    const ws = workspace({ "10-applications/demo/01-legacy/notes.md": "password = TEST_ONLY_NOT_A_SECRET_42\n" });
     expect(await run(ws)).toMatchObject({ ok: true, findings: 0 });
   });
 
   it("blocks a malformed artifact with a redacted reason", async () => {
-    const ws = workspace({ "applications/demo/assessment/topology.md": "# Topology without front matter\n" });
+    const ws = workspace({ "10-applications/demo/01-legacy/topology.md": "# Topology without front matter\n" });
     const outcome = await run(ws);
     expect(outcome.ok).toBe(false);
     expect(outcome.reason).toMatch(/malformed artifact found/);

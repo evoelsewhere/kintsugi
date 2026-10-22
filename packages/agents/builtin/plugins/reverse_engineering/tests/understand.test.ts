@@ -109,8 +109,8 @@ describe('unit trace', () => {
 describe('traceability', () => {
   test('builds the matrix of the understood units, with the reverse indexes', () => {
     const facts: UnitFacts[] = [
-      { item: item('core/invoice', { entryPoints: ['INV'], loc: 420, name: 'Invoice' }), trace: parseUnitTrace(TRACE), spec: 'applications/billing/units/core/invoice/understanding/as-is.md' },
-      { item: item('data/ledger', { loc: 80, files: ['src/ledger.cbl'] }), trace: null, spec: 'applications/billing/units/data/ledger/understanding/as-is.md' },
+      { item: item('core/invoice', { entryPoints: ['INV'], loc: 420, name: 'Invoice' }), trace: parseUnitTrace(TRACE), spec: '10-applications/billing/01-legacy/core/invoice/spec.md' },
+      { item: item('data/ledger', { loc: 80, files: ['src/ledger.cbl'] }), trace: null, spec: '10-applications/billing/01-legacy/data/ledger/spec.md' },
     ]
     const matrix = buildTraceability('billing', facts, { businessRules: true, securityFindings: false })
     expect(matrix.inputs).toEqual({ businessRules: true, securityFindings: false })
@@ -173,7 +173,7 @@ dependsOn: ["billing/data/ledger"]
 source:
   - {repo: "legacy", paths: ["src/INVOICE.cbl"]}
 links:
-  asIs: "applications/billing/units/core/invoice/understanding/as-is.md"
+  asIs: "10-applications/billing/01-legacy/core/invoice/spec.md"
   businessRules: ["RULE-001", "RULE-002"]
 ---
 
@@ -192,7 +192,7 @@ describe('unit files', () => {
       stage: 'understand',
       complexity: 'low',
       dependsOn: ['billing/data/ledger'],
-      links: { asIs: 'applications/billing/units/core/invoice/understanding/as-is.md', businessRules: ['RULE-001', 'RULE-002'] },
+      links: { asIs: '10-applications/billing/01-legacy/core/invoice/spec.md', businessRules: ['RULE-001', 'RULE-002'] },
     })
   })
 

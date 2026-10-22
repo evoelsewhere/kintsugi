@@ -7,7 +7,7 @@
 --catalog the application's catalog folder (assessment/catalog/); --items the run's items. --out is the
 document-repository root. Each confirmed rule goes to the item that owns the file of its primary
 citation (the first path:line of `source`); a rule whose file no selected item owns is left out and
-counted. Writes per item, under applications/<app>/units/<module>/<unit>/understanding/:
+counted. Writes per item, under 10-applications/<app>/01-legacy/<module>/<unit>/:
 
     rules.md            the index: a table of the rules (id, name, category, priority, confidence,
                         version, status, source, link) and the retired ones

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kintsugi Workflows, Assess to Implement</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --color-paper:#f5f5f5; --color-ink:#2d3142; --color-muted:#4f5d75; --color-accent:#bf4520;
+      --font-sans:'Geist',system-ui,sans-serif; --font-serif:'Instrument Serif',serif; --font-mono:'Geist Mono',ui-monospace,monospace; }
+    body { font-family:var(--font-sans); background:var(--color-paper); color:var(--color-ink); padding:3rem 2rem; }
+    .frame { max-width:1320px; margin:0 auto 4rem; }
+    .diagram-container { width:100%; overflow-x:auto; }
+    .eyebrow { font-family:var(--font-mono); font-size:.66rem; font-weight:500; letter-spacing:.18em; text-transform:uppercase; color:var(--color-muted); margin-bottom:.5rem; }
+    h1 { font-family:var(--font-serif); font-size:clamp(1.5rem,2.4vw + .75rem,2rem); font-weight:400; letter-spacing:-.02em; line-height:1.15; margin-bottom:.5rem; }
+    .intro { font-size:.9rem; color:var(--color-muted); max-width:70ch; margin-bottom:1.5rem; line-height:1.5; }
+    svg { width:100%; display:block; }
+    @media print { .diagram-container { overflow-x:visible; } svg { min-width:0 !important; } .frame { break-after:page; } }
+  </style>
+</head>
+<body>
+  <section class="frame">
+    <p class="eyebrow">Workflows · 1 of 3</p>
+    <h1>From assess to implement, stage by stage</h1>
+    <p class="intro">Who does each stage, and which person gates it. Runtime jobs prepare and review; members build in their own harness.</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 580" style="min-width:1280px" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="pipeline-title pipeline-desc">
+        <title id="pipeline-title">Assess to implement pipeline</title>
+        <desc id="pipeline-desc">Seven stages run from assess to implement across the Kintsugi Runtime, members in their own harness, and the people who gate each stage.</desc>
+        <defs><marker id="pipeline-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="pipeline-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker><marker id="pipeline-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+        <rect x="140" y="20" width="460" height="20" rx="3" fill="rgba(45,49,66,0.06)"/>
+        <text x="370.0" y="33" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.14em">P1 · DISCOVER &amp; ASSESS</text>
+        <rect x="620" y="20" width="140" height="20" rx="3" fill="rgba(45,49,66,0.06)"/>
+        <text x="690.0" y="33" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.14em">P2 · DEFINE TO-BE</text>
+        <rect x="780" y="20" width="140" height="20" rx="3" fill="rgba(45,49,66,0.06)"/>
+        <text x="850.0" y="33" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.14em">P3 · FACTORY</text>
+        <rect x="940" y="20" width="300" height="20" rx="3" fill="rgba(45,49,66,0.06)"/>
+        <text x="1090.0" y="33" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.14em">P4 · MIGRATE, BY WAVE</text>
+        <rect x="30" y="56" width="1220" height="148" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <text x="42" y="78" fill="#2d3142" font-size="8" font-weight="600" font-family="Geist Mono, monospace" letter-spacing="0.12em">KINTSUGI RUNTIME</text>
+        <text x="42" y="90" fill="#5a6580" font-size="7.5" font-family="Geist Mono, monospace">pi · read-only jobs</text>
+        <line x1="128" y1="64" x2="128" y2="196" stroke="rgba(45,49,66,0.10)"/>
+        <rect x="30" y="212" width="1220" height="148" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <text x="42" y="234" fill="#2d3142" font-size="8" font-weight="600" font-family="Geist Mono, monospace" letter-spacing="0.12em">MEMBERS</text>
+        <text x="42" y="246" fill="#5a6580" font-size="7.5" font-family="Geist Mono, monospace">own AI harness</text>
+        <line x1="128" y1="220" x2="128" y2="352" stroke="rgba(45,49,66,0.10)"/>
+        <rect x="30" y="368" width="1220" height="148" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <text x="42" y="390" fill="#2d3142" font-size="8" font-weight="600" font-family="Geist Mono, monospace" letter-spacing="0.12em">PEOPLE</text>
+        <text x="42" y="402" fill="#5a6580" font-size="7.5" font-family="Geist Mono, monospace">gates · approvals</text>
+        <line x1="128" y1="376" x2="128" y2="508" stroke="rgba(45,49,66,0.10)"/>
+        <path d="M280,116 H300" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#pipeline-arrow)"/>
+        <path d="M440,116 H460" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#pipeline-arrow)"/>
+        <path d="M600,116 H604 Q612,116 612,124 V264 Q612,272 620,272" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#pipeline-arrow)"/>
+        <path d="M760,272 H780" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#pipeline-arrow)"/>
+        <path d="M920,272 H940" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#pipeline-arrow)"/>
+        <path d="M1080,272 H1100" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#pipeline-arrow)"/>
+        <path d="M210,152 V392" fill="none" stroke="#4f5d75" stroke-width="0.8" stroke-dasharray="1.5,3" opacity="0.8"/>
+        <path d="M370,152 V392" fill="none" stroke="#4f5d75" stroke-width="0.8" stroke-dasharray="1.5,3" opacity="0.8"/>
+        <path d="M530,152 V392" fill="none" stroke="#4f5d75" stroke-width="0.8" stroke-dasharray="1.5,3" opacity="0.8"/>
+        <path d="M690,308 V392" fill="none" stroke="#4f5d75" stroke-width="0.8" stroke-dasharray="1.5,3" opacity="0.8"/>
+        <path d="M850,308 V392" fill="none" stroke="#4f5d75" stroke-width="0.8" stroke-dasharray="1.5,3" opacity="0.8"/>
+        <path d="M1010,308 V392" fill="none" stroke="#4f5d75" stroke-width="0.8" stroke-dasharray="1.5,3" opacity="0.8"/>
+        <path d="M1170,308 V392" fill="none" stroke="#4f5d75" stroke-width="0.8" stroke-dasharray="1.5,3" opacity="0.8"/>
+        <path d="M1010,152 V236" fill="none" stroke="#2e5aa8" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#pipeline-arrow-link)"/>
+        <path d="M1170,152 V236" fill="none" stroke="#2e5aa8" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#pipeline-arrow-link)"/>
+        <rect x="140" y="80" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="140" y="80" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="148" y="102" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">assess</text>
+        <text x="148" y="115" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">inventory · topology</text>
+        <text x="148" y="126" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">catalog · scorecard</text>
+        <rect x="300" y="80" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="300" y="80" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="308" y="102" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">plan-understand</text>
+        <text x="308" y="115" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">order the items into</text>
+        <text x="308" y="126" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">batches (advice)</text>
+        <rect x="460" y="80" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="460" y="80" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="468" y="102" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">understand</text>
+        <text x="468" y="115" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">per unit: rules, risks,</text>
+        <text x="468" y="126" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">AS-IS specification</text>
+        <rect x="620" y="236" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="620" y="236" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="628" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">design-architecture</text>
+        <text x="628" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">target architecture +</text>
+        <text x="628" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">common components</text>
+        <rect x="780" y="236" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="780" y="236" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="788" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">scaffold</text>
+        <text x="788" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">target repos, one</text>
+        <text x="788" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">skeleton per component</text>
+        <rect x="940" y="236" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="940" y="236" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="948" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">design</text>
+        <text x="948" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">basic, then detail,</text>
+        <text x="948" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">per unit, own template</text>
+        <rect x="1100" y="236" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="1100" y="236" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="1108" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">implement</text>
+        <text x="1108" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">code + unit tests,</text>
+        <text x="1108" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">design kept in sync</text>
+        <rect x="940" y="80" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="940" y="80" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="948" y="102" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">design-review</text>
+        <text x="948" y="115" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">plans and reviews</text>
+        <text x="948" y="126" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">designs (planned)</text>
+        <rect x="1100" y="80" width="140" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="1100" y="80" width="140" height="72" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="1108" y="102" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">gate-reviewer</text>
+        <text x="1108" y="115" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">first review of each</text>
+        <text x="1108" y="126" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">PR (planned)</text>
+        <rect x="140" y="392" width="140" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="140" y="392" width="140" height="64" rx="6" fill="#ececec" stroke="#2d3142" stroke-width="1.4"/>
+        <text x="148" y="414" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Merge assess PR</text>
+        <text x="148" y="427" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">a person reviews</text>
+        <rect x="300" y="392" width="140" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="300" y="392" width="140" height="64" rx="6" fill="#ececec" stroke="#2d3142" stroke-width="1.4"/>
+        <text x="308" y="414" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Pick a batch</text>
+        <text x="308" y="427" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">one click in the portal</text>
+        <rect x="460" y="392" width="140" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="460" y="392" width="140" height="64" rx="6" fill="#ececec" stroke="#2d3142" stroke-width="1.4"/>
+        <text x="468" y="414" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Merge understand PR</text>
+        <text x="468" y="427" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">units become AS-IS</text>
+        <rect x="620" y="392" width="140" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="620" y="392" width="140" height="64" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <text x="628" y="414" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">G2 · ARB approval</text>
+        <text x="628" y="427" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">architecture signed off</text>
+        <rect x="780" y="392" width="140" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="780" y="392" width="140" height="64" rx="6" fill="#ececec" stroke="#2d3142" stroke-width="1.4"/>
+        <text x="788" y="414" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">G3 · pilot passes</text>
+        <text x="788" y="427" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">architect confirms</text>
+        <text x="788" y="438" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">skeleton + standards</text>
+        <rect x="940" y="392" width="140" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="940" y="392" width="140" height="64" rx="6" fill="#ececec" stroke="#2d3142" stroke-width="1.4"/>
+        <text x="948" y="414" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Design review</text>
+        <text x="948" y="427" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">stage gate, per unit</text>
+        <rect x="1100" y="392" width="140" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="1100" y="392" width="140" height="64" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <text x="1108" y="414" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">G4 · PR approval</text>
+        <text x="1108" y="427" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">build, checks, human</text>
+        <rect x="40" y="548" width="20" height="12" rx="3" fill="#f5f5f5" stroke="#2d3142"/>
+        <text x="68" y="557" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Live today</text>
+        <rect x="146.0" y="548" width="20" height="12" rx="3" fill="#f5f5f5" stroke="#2d3142" stroke-dasharray="4,3"/>
+        <text x="174.0" y="557" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Planned</text>
+        <rect x="237.0" y="548" width="20" height="12" rx="3" fill="#ececec" stroke="#2d3142"/>
+        <text x="265.0" y="557" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Human gate</text>
+        <rect x="343.0" y="548" width="20" height="12" rx="3" fill="rgba(191,69,32,0.08)" stroke="#bf4520"/>
+        <text x="371.0" y="557" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Milestone gate</text>
+        <line x1="469.0" y1="554" x2="495.0" y2="554" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#pipeline-arrow)"/>
+        <text x="503.0" y="557" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Stage order</text>
+        <line x1="586.0" y1="554" x2="612.0" y2="554" stroke="#4f5d75" stroke-width="0.8" stroke-dasharray="1.5,3"/>
+        <text x="620.0" y="557" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Gated by</text>
+        <line x1="688.0" y1="554" x2="714.0" y2="554" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#pipeline-arrow)"/>
+        <text x="722.0" y="557" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Reviews</text>
+      </svg>
+    </div>
+  </section>
+  <section class="frame">
+    <p class="eyebrow">Workflows · 2 of 3</p>
+    <h1>Inside the runtime: assess, plan-understand, understand</h1>
+    <p class="intro">Every step is a script or an agent job in a read-only workspace. Results arrive as pull requests that a person merges.</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 516" style="min-width:1280px" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="runtime-title runtime-desc">
+        <title id="runtime-title">Runtime workflows: assess, plan-understand, understand</title>
+        <desc id="runtime-desc">Assess is seven steps ending in a catalog; plan-understand advises an order; understand runs on a selection of items and ends in a reviewed pull request.</desc>
+        <defs><marker id="runtime-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="runtime-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker><marker id="runtime-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+        <rect x="30" y="44" width="1220" height="116" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="996" y="48" width="244" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1234" y="57" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="end" letter-spacing="0.14em">ASSESS · ONE RUNTIME RUN → ONE PULL REQUEST</text>
+        <rect x="30" y="192" width="1220" height="116" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="40" y="196" width="206" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="46" y="205" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="start" letter-spacing="0.14em">PLAN-UNDERSTAND · ADVICE, NOT A GATE</text>
+        <rect x="30" y="340" width="1220" height="116" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="1023" y="344" width="217" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1234" y="353" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="end" letter-spacing="0.14em">UNDERSTAND · PER SELECTION, REPEATABLE</text>
+        <path d="M202,110 H238" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M370,110 H406" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M538,110 H574" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M706,110 H742" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M874,110 H910" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M1042,110 H1078" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M1078,258 H1042" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M910,258 H874" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M742,258 H706" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M574,258 H538" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M1144,144 V224" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M472,292 V316 Q472,324 464,324 H144 Q136,324 136,332 V372" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#runtime-arrow)"/>
+        <path d="M202,406 H238" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M370,406 H406" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M538,406 H574" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M706,406 H742" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M874,406 H910" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <path d="M1042,406 H1078" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <rect x="70" y="76" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="70" y="76" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="78" y="84" width="46" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="101" y="93" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">SCRIPT</text>
+        <text x="78" y="110" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">inventory</text>
+        <text x="78" y="123" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">size, complexity,</text>
+        <text x="78" y="134" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">per-file hashes</text>
+        <rect x="238" y="76" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="238" y="76" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="246" y="84" width="40" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2e5aa8" stroke-width="0.6"/>
+        <text x="266" y="93" fill="#2e5aa8" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">AGENT</text>
+        <text x="246" y="110" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">3 parallel jobs</text>
+        <text x="246" y="123" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">legacy-analyst ×2,</text>
+        <text x="246" y="134" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">security-auditor</text>
+        <rect x="406" y="76" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="406" y="76" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="414" y="84" width="40" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2e5aa8" stroke-width="0.6"/>
+        <text x="434" y="93" fill="#2e5aa8" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">AGENT</text>
+        <text x="414" y="110" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">topology script</text>
+        <text x="414" y="123" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">analyst writes</text>
+        <text x="414" y="134" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">extract_topology.py</text>
+        <rect x="574" y="76" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="574" y="76" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="582" y="84" width="46" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="605" y="93" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">SCRIPT</text>
+        <text x="582" y="110" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">extract + render</text>
+        <text x="582" y="123" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">runs it; analyst</text>
+        <text x="582" y="134" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">repairs on failure</text>
+        <rect x="742" y="76" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="742" y="76" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="750" y="84" width="46" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="773" y="93" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">SCRIPT</text>
+        <text x="750" y="110" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">draft catalog</text>
+        <text x="750" y="123" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">module → item from</text>
+        <text x="750" y="134" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">the topology</text>
+        <rect x="910" y="76" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="910" y="76" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="918" y="84" width="40" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2e5aa8" stroke-width="0.6"/>
+        <text x="938" y="93" fill="#2e5aa8" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">AGENT</text>
+        <text x="918" y="110" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">curate catalog</text>
+        <text x="918" y="123" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">group items; apply,</text>
+        <text x="918" y="134" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">reconcile ids</text>
+        <rect x="1078" y="76" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="1078" y="76" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="1086" y="84" width="40" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2e5aa8" stroke-width="0.6"/>
+        <text x="1106" y="93" fill="#2e5aa8" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">AGENT</text>
+        <text x="1086" y="110" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">synthesis</text>
+        <text x="1086" y="123" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">assessment.md,</text>
+        <text x="1086" y="134" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">architecture.mmd</text>
+        <rect x="1078" y="224" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="1078" y="224" width="132" height="68" rx="6" fill="#ececec" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="1086" y="232" width="29" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="1100" y="241" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">DOC</text>
+        <text x="1086" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Item catalog</text>
+        <text x="1086" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">menu of units,</text>
+        <text x="1086" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">stable ids</text>
+        <rect x="910" y="224" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="910" y="224" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="918" y="232" width="46" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="941" y="241" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">SCRIPT</text>
+        <text x="918" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">plan_graph</text>
+        <text x="918" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">calls, shared stores,</text>
+        <text x="918" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">cycles</text>
+        <rect x="742" y="224" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="742" y="224" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="750" y="232" width="40" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2e5aa8" stroke-width="0.6"/>
+        <text x="770" y="241" fill="#2e5aa8" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">AGENT</text>
+        <text x="750" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">understand-planner</text>
+        <text x="750" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">batches of open items</text>
+        <text x="750" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">with a reason each</text>
+        <rect x="574" y="224" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="574" y="224" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="582" y="232" width="46" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="605" y="241" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">SCRIPT</text>
+        <text x="582" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">check_plan</text>
+        <text x="582" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">validate + measure;</text>
+        <text x="582" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">planner repairs</text>
+        <rect x="406" y="224" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="406" y="224" width="132" height="68" rx="6" fill="#ececec" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="414" y="232" width="29" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="428" y="241" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">DOC</text>
+        <text x="414" y="258" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">plan.md</text>
+        <text x="414" y="271" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">advice shown above</text>
+        <text x="414" y="282" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">the catalog</text>
+        <rect x="70" y="372" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="70" y="372" width="132" height="68" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <rect x="78" y="380" width="34" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#bf4520" stroke-width="0.6"/>
+        <text x="95" y="389" fill="#bf4520" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">GATE</text>
+        <text x="78" y="406" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Select items</text>
+        <text x="78" y="419" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">a person picks items</text>
+        <text x="78" y="430" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">or a whole module</text>
+        <rect x="238" y="372" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="238" y="372" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="246" y="380" width="46" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="269" y="389" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">SCRIPT</text>
+        <text x="246" y="406" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">scope_items</text>
+        <text x="246" y="419" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">selected units only;</text>
+        <text x="246" y="430" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">busy ones refused</text>
+        <rect x="406" y="372" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="406" y="372" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="414" y="380" width="40" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2e5aa8" stroke-width="0.6"/>
+        <text x="434" y="389" fill="#2e5aa8" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">AGENT</text>
+        <text x="414" y="406" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">rules ‖ security</text>
+        <text x="414" y="419" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">business-rules-</text>
+        <text x="414" y="430" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">extractor, auditor</text>
+        <rect x="574" y="372" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="574" y="372" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="582" y="380" width="46" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="605" y="389" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">SCRIPT</text>
+        <text x="582" y="406" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">split results</text>
+        <text x="582" y="419" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">split_rules,</text>
+        <text x="582" y="430" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">split_findings</text>
+        <rect x="742" y="372" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="742" y="372" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="750" y="380" width="40" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2e5aa8" stroke-width="0.6"/>
+        <text x="770" y="389" fill="#2e5aa8" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">AGENT</text>
+        <text x="750" y="406" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">AS-IS spec per unit</text>
+        <text x="750" y="419" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">legacy-analyst, one</text>
+        <text x="750" y="430" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">job per item</text>
+        <rect x="910" y="372" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="910" y="372" width="132" height="68" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="918" y="380" width="46" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="941" y="389" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">SCRIPT</text>
+        <text x="918" y="406" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">finish_items</text>
+        <text x="918" y="419" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">unit card, trace,</text>
+        <text x="918" y="430" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">proposed state</text>
+        <rect x="1078" y="372" width="132" height="68" rx="6" fill="#f5f5f5"/>
+        <rect x="1078" y="372" width="132" height="68" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <rect x="1086" y="380" width="34" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#bf4520" stroke-width="0.6"/>
+        <text x="1103" y="389" fill="#bf4520" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">GATE</text>
+        <text x="1086" y="406" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Merge PR</text>
+        <text x="1086" y="419" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">units land in the</text>
+        <text x="1086" y="430" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">document repo</text>
+        <rect x="1149" y="169" width="55" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="1154" y="179" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="start" letter-spacing="0.08em">PR MERGED</text>
+        <rect x="265" y="315" width="70" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="300" y="325" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.08em">BATCH ADVICE</text>
+        <rect x="40" y="484" width="20" height="12" rx="3" fill="#f5f5f5" stroke="#2d3142"/>
+        <text x="68" y="493" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Step</text>
+        <rect x="116.0" y="484" width="20" height="12" rx="3" fill="#ececec" stroke="#4f5d75"/>
+        <text x="144.0" y="493" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Document</text>
+        <rect x="212.0" y="484" width="20" height="12" rx="3" fill="rgba(191,69,32,0.08)" stroke="#bf4520"/>
+        <text x="240.0" y="493" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Human gate</text>
+        <line x1="318.0" y1="490" x2="344.0" y2="490" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#runtime-arrow)"/>
+        <text x="352.0" y="493" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Order</text>
+        <line x1="405.0" y1="490" x2="431.0" y2="490" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#runtime-arrow)"/>
+        <text x="439.0" y="493" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Advice</text>
+      </svg>
+    </div>
+  </section>
+  <section class="frame">
+    <p class="eyebrow">Workflows · 3 of 3</p>
+    <h1>Inside the member plugin: design to implement</h1>
+    <p class="intro">Commands of the modernize plugin, run by members in their harness with the project's own design templates.</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 596" style="min-width:1280px" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="members-title members-desc">
+        <title id="members-title">Member workflows: design-architecture to implement</title>
+        <desc id="members-desc">Four member commands run in the member's own harness: design-architecture, scaffold, design and implement, each with its steps and human checkpoints.</desc>
+        <defs><marker id="members-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="members-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker><marker id="members-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+        <rect x="40" y="32" width="1200" height="108" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="970" y="36" width="260" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1224" y="45" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="end" letter-spacing="0.14em">1 · /DESIGN-ARCHITECTURE · ONE PER APPLICATION</text>
+        <rect x="40" y="168" width="1200" height="108" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="986" y="172" width="244" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1224" y="181" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="end" letter-spacing="0.14em">2 · /SCAFFOLD · AFTER ARCHITECTURE APPROVAL</text>
+        <rect x="40" y="304" width="1200" height="108" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="926" y="308" width="304" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1224" y="317" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="end" letter-spacing="0.14em">3 · /DESIGN · PER UNIT, PER DESIGN SET (BASIC, DETAIL)</text>
+        <rect x="40" y="440" width="1200" height="108" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="953" y="444" width="277" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1224" y="453" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="end" letter-spacing="0.14em">4 · /IMPLEMENT · PER UNIT, FROM ITS DETAIL DESIGN</text>
+        <path d="M208,94 H228" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M376,94 H396" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M544,94 H564" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M712,94 H732" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M52,140 V168" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#members-arrow)"/>
+        <path d="M208,230 H228" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M376,230 H396" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M52,276 V304" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#members-arrow)"/>
+        <path d="M208,366 H228" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M376,366 H396" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M544,366 H564" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M712,366 H732" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M880,366 H900" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M52,412 V440" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#members-arrow)"/>
+        <path d="M208,502 H228" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M376,502 H396" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M544,502 H564" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M712,502 H732" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M880,502 H900" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <path d="M1048,502 H1068" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <rect x="60" y="64" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="64" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="68" y="86" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">A · Capabilities</text>
+        <text x="68" y="99" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">requirements from the</text>
+        <text x="68" y="110" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">AS-IS understanding</text>
+        <rect x="228" y="64" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="228" y="64" width="148" height="60" rx="6" fill="#ececec" stroke="#2d3142" stroke-width="1.4"/>
+        <text x="236" y="86" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Checkpoint 1</text>
+        <text x="236" y="99" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">P0 capabilities and</text>
+        <text x="236" y="110" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">deliberate drops</text>
+        <rect x="396" y="64" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="396" y="64" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="404" y="86" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">C · Common design</text>
+        <text x="404" y="99" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">architecture + COM-</text>
+        <text x="404" y="110" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">common components</text>
+        <rect x="564" y="64" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="564" y="64" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="572" y="86" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Critique</text>
+        <text x="572" y="99" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">architecture-critic</text>
+        <text x="572" y="110" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">challenges the design</text>
+        <rect x="732" y="64" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="732" y="64" width="148" height="60" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <text x="740" y="86" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Checkpoint 2 · G2</text>
+        <text x="740" y="99" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">architecture approval</text>
+        <text x="740" y="110" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">before the skeleton</text>
+        <rect x="60" y="200" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="200" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="68" y="222" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">A · Services</text>
+        <text x="68" y="235" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">components approved</text>
+        <text x="68" y="246" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">in the common design</text>
+        <rect x="228" y="200" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="228" y="200" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="236" y="222" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">B · Parallel scaffold</text>
+        <text x="236" y="235" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">one scaffolder per</text>
+        <text x="236" y="246" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">service + acceptance tests</text>
+        <rect x="396" y="200" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="396" y="200" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="404" y="222" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">C · Handoff</text>
+        <text x="404" y="235" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">knowledge for the</text>
+        <text x="404" y="246" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">design and implement</text>
+        <rect x="60" y="336" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="336" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="68" y="358" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">0 · Ready?</text>
+        <text x="68" y="371" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">set defined, unit</text>
+        <text x="68" y="382" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">exists, inputs present</text>
+        <rect x="228" y="336" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="228" y="336" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="236" y="358" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">1 · Scaffold docs</text>
+        <text x="236" y="371" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">documents from the</text>
+        <text x="236" y="382" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">project template</text>
+        <rect x="396" y="336" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="396" y="336" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="404" y="358" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">2 · Write</text>
+        <text x="404" y="371" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">designer writes each</text>
+        <text x="404" y="382" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">document</text>
+        <rect x="564" y="336" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="564" y="336" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="572" y="358" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">3 · Check</text>
+        <text x="572" y="371" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">validate against the</text>
+        <text x="572" y="382" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">template</text>
+        <rect x="732" y="336" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="732" y="336" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="740" y="358" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">4 · Deliver</text>
+        <text x="740" y="371" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">pull request with</text>
+        <text x="740" y="382" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">the design set</text>
+        <rect x="900" y="336" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="900" y="336" width="148" height="60" rx="6" fill="#ececec" stroke="#2d3142" stroke-width="1.4"/>
+        <text x="908" y="358" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">Stage review</text>
+        <text x="908" y="371" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">approved before the</text>
+        <text x="908" y="382" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">unit is built</text>
+        <rect x="60" y="472" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="472" width="148" height="60" rx="6" fill="#ececec" stroke="#2d3142" stroke-width="1.4"/>
+        <text x="68" y="494" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">0 · Plan</text>
+        <text x="68" y="507" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">design ready, toolchain</text>
+        <text x="68" y="518" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">responds, plan approved</text>
+        <rect x="228" y="472" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="228" y="472" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="236" y="494" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">1 · Tests first</text>
+        <text x="236" y="507" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">unit tests from the</text>
+        <text x="236" y="518" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">detail design</text>
+        <rect x="396" y="472" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="396" y="472" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="404" y="494" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">2 · Implement</text>
+        <text x="404" y="507" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">code on the target</text>
+        <text x="404" y="518" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">stack</text>
+        <rect x="564" y="472" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="564" y="472" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="572" y="494" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">3 · Run tests</text>
+        <text x="572" y="507" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">green, count above 0,</text>
+        <text x="572" y="518" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">design kept in sync</text>
+        <rect x="732" y="472" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="732" y="472" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="740" y="494" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">4 · Notes</text>
+        <text x="740" y="507" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">notes + side-by-side</text>
+        <text x="740" y="518" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">legacy vs new</text>
+        <rect x="900" y="472" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="900" y="472" width="148" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <text x="908" y="494" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">5 · Review</text>
+        <text x="908" y="507" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">architecture-critic</text>
+        <text x="908" y="518" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">reviews the result</text>
+        <rect x="1068" y="472" width="148" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="1068" y="472" width="148" height="60" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <text x="1076" y="494" fill="#2d3142" font-size="11" font-weight="600" font-family="Geist, sans-serif">G4 · PR approval</text>
+        <text x="1076" y="507" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">build, checks, AI</text>
+        <text x="1076" y="518" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">review, human</text>
+        <rect x="40" y="568" width="20" height="12" rx="3" fill="#f5f5f5" stroke="#2d3142"/>
+        <text x="68" y="577" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Step</text>
+        <rect x="116.0" y="568" width="20" height="12" rx="3" fill="#ececec" stroke="#2d3142"/>
+        <text x="144.0" y="577" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Checkpoint</text>
+        <rect x="222.0" y="568" width="20" height="12" rx="3" fill="rgba(191,69,32,0.08)" stroke="#bf4520"/>
+        <text x="250.0" y="577" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Milestone gate</text>
+        <line x1="348.0" y1="574" x2="374.0" y2="574" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#members-arrow)"/>
+        <text x="382.0" y="577" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Order</text>
+        <line x1="435.0" y1="574" x2="461.0" y2="574" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#members-arrow)"/>
+        <text x="469.0" y="577" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Then</text>
+      </svg>
+    </div>
+  </section>
+</body>
+</html>

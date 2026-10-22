@@ -12,7 +12,7 @@ export interface TaskPack {
   version: string;
   /** Document repo commit the task pack was generated against. */
   documentRepoCommit: string;
-  /** Standards that apply to this unit: paths under `standards/` in the document repo. */
+  /** Standards that apply to this unit: paths under `01-standards/` in the document repo. */
   standards: { path: string; title?: string }[];
   title: string;
   objective: string;

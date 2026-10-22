@@ -15,7 +15,7 @@
 ## Prerequisites
 
 - **Open decisions**: see the [decision register](../decisions/README.md#next-decisions).
-- **Seed content**: build an inventory of existing assets that projects can copy into their `standards/` and `plugins/`, e.g. as an organization library:
+- **Seed content**: build an inventory of existing assets that projects can copy into their `01-standards/` and `plugins/`, e.g. as an organization library:
   - prompt libraries (version upgrade, unit-test generation, test-case generation, detail-design generation);
   - document converters (Excel → Markdown);
   - AI code-review tooling (IDE extension, CI action).

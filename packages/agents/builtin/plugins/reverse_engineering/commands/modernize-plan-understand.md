@@ -6,8 +6,8 @@ metadata:
   audience: runtime
   agents: [understand-planner]
   skills: [understand-planning]
-  reads: [applications/<app>/assessment/catalog/, applications/<app>/assessment/topology.md, applications/<app>/assessment/inventory.md, applications/<app>/assessment/ASSESSMENT.md, applications/<app>/units/<module>/<unit>/understanding/understanding.md]
-  writes: [applications/<app>/understanding/plan.md]
+  reads: [10-applications/<app>/01-legacy/_catalog/, 10-applications/<app>/01-legacy/topology.md, 10-applications/<app>/01-legacy/inventory.md, 10-applications/<app>/01-legacy/assessment.md, 10-applications/<app>/01-legacy/<module>/<unit>/understanding.md]
+  writes: [10-applications/<app>/01-legacy/plan.md]
   flow:
     - script: plan_graph
     - agent: understand-planner
@@ -18,7 +18,7 @@ metadata:
 
 **This stage runs as Kintsugi runtime jobs and script steps** (ADR-0041), started from the catalog of the portal's
 AS-IS Understanding page ("Generate Plan"). It does not read the legacy code and proposes nothing a person must
-review: its one output, `applications/$app/understanding/plan.md`, is **advice that every run replaces**,
+review: its one output, `10-applications/$app/01-legacy/plan.md`, is **advice that every run replaces**,
 committed straight to the default branch (it is one of the default `autoCommitPaths`). `$app` is the application id
 from `kintsugi.yaml`.
 
@@ -28,7 +28,7 @@ best in one run. This stage proposes that order.
 
 ## Before it starts
 
-- **Required** on the document repository's default branch: the catalog `applications/$app/assessment/catalog/` (run
+- **Required** on the document repository's default branch: the catalog `10-applications/$app/01-legacy/_catalog/` (run
   `assess` and merge its pull request). Its cards carry the relationships between items (computed from the topology
   of the same run); without them the plan can only go by module, size and the assessment, and says so.
 - The application must have a legacy repository (`role: legacy`), like every runtime stage.
@@ -42,8 +42,8 @@ best in one run. This stage proposes that order.
    `classifyItem` in `@kintsugi/domain`), whether it holds an entry point and is understood already, the items it
    depends on and that use it (with the kinds of calls), the data stores it touches, its fan-in and fan-out, its
    depth (0 = depends on no other item) and its cycle (strongly connected components: items that depend on each
-   other). An item with an `understanding/understanding.md` under `applications/$app/units/<module>/<unit>/` is understood.
-2. One **understand-planner** job reads the graph and `ASSESSMENT.md` under the `understand-planning` skill and
+   other). An item with an `understanding.md` under `10-applications/$app/01-legacy/<module>/<unit>/` is understood.
+2. One **understand-planner** job reads the graph and `assessment.md` under the `understand-planning` skill and
    returns the plan as structured data: a strategy, batches (title, items, rationale, risk) in the order they should
    run, and what it left out on purpose. It opens source files only to settle a doubt.
 3. Script step `scripts/check_plan.py`: the agent proposes, the script decides what stands. It drops items that are

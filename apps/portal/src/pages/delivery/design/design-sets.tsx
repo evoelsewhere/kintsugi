@@ -1,10 +1,11 @@
-// Design → Sets: the project's own templates, as it defined them in standards/design/. A table of
+// Design → Sets: the project's own templates, as it defined them in 01-standards/templates/. A table of
 // the sets and, for one, its files, the contract of every template section, the sets it needs
 // and the faults of its definition. The portal does not edit a template: it changes by a pull
 // request to the document repo.
 
 import { AlertTriangle } from "lucide-react";
 import { lazy, Suspense } from "react";
+import { designSetDir } from "@kintsugi/domain";
 import { Card } from "@/components/ui/card";
 import { type Column, DataTable } from "@/components/ui/data-table";
 import { Drawer } from "@/components/ui/drawer";
@@ -42,7 +43,7 @@ export function DesignSetsTab({
       <Card>
         <EmptyState
           title="No design sets yet"
-          description="Define the project's design sets in standards/design/ of the document repo, one folder per set with a set.md and a template per document. The starter template has a basic design and a detail design to copy and change."
+          description="Define the project's design sets in 01-standards/templates/ of the document repo, one folder per set with a set.md and a template per document. The starter template has a basic, a detail, an API and a test design to copy and change."
           action={<span className="text-[12px] text-text-muted">Guide: docs/guides/define-design-templates.md</span>}
         />
       </Card>
@@ -51,7 +52,7 @@ export function DesignSetsTab({
   const columns: Column<DesignSet>[] = [
     { id: "set", header: "Set", sort: (set) => set.id, search: (set) => `${set.id} ${set.title}`, cell: (set) => <span className="flex flex-col"><span className="text-text">{set.title}</span><span className="font-mono text-[11.5px] text-text-muted">{set.id}</span></span> },
     { id: "version", header: "Ver", align: "right", sort: (set) => set.version, cell: (set) => <span className="text-text-secondary">{set.version}</span> },
-    { id: "applies", header: "Applies to", search: (set) => set.appliesTo.join(" "), cell: (set) => <span className="text-text-secondary">{set.appliesTo.length === 0 ? "every kind" : set.appliesTo.join(", ")}</span> },
+    { id: "applies", header: "Applies to", search: (set) => `${set.scope} ${set.appliesTo.join(" ")}`, cell: (set) => <span className="text-text-secondary">{set.scope === "application" ? "the application" : set.appliesTo.length === 0 ? "every kind" : set.appliesTo.join(", ")}</span> },
     { id: "needs", header: "Needs", search: (set) => set.needs.join(" "), cell: (set) => <span className="text-text-secondary">{set.needs.length === 0 ? "—" : set.needs.join(", ")}</span> },
     {
       id: "stage",
@@ -102,9 +103,9 @@ export function DesignSetsTab({
 }
 
 function SetDetail({ set, sets, problems, onChoose }: { set: DesignSet; sets: DesignSet[]; problems: DesignSetsView["problems"]; onChoose: (set: string | undefined) => void }): React.JSX.Element {
-  const here = problems.filter((problem) => problem.path.startsWith(`standards/design/${set.id}/`));
+  const here = problems.filter((problem) => problem.path.startsWith(`${designSetDir(set.id)}/`));
   const related = sets.filter((entry) => entry.id === set.id || set.needs.includes(entry.id) || entry.needs.includes(set.id));
-  const folder = `standards/design/${set.id}/`;
+  const folder = `${designSetDir(set.id)}/`;
   return (
     <div className="flex flex-col gap-5">
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 rounded-lg bg-recessed p-3 text-[12px]">
@@ -112,7 +113,9 @@ function SetDetail({ set, sets, problems, onChoose }: { set: DesignSet; sets: De
           [
             ["id", set.id],
             ["version", String(set.version)],
-            ["appliesTo", set.appliesTo.length === 0 ? "every kind" : set.appliesTo.join(", ")],
+            ["scope", set.scope === "application" ? "application (one design for the whole application)" : "unit (a design per unit)"],
+            ["appliesTo", set.scope === "application" ? "—" : set.appliesTo.length === 0 ? "every kind" : set.appliesTo.join(", ")],
+            ["reads", set.reads.length === 0 ? "—" : set.reads.join(", ")],
             ["needs", set.needs.length === 0 ? "—" : set.needs.join(", ")],
             ["stage", set.stage ?? "—"],
             ["produced by", set.producedBy.length === 0 ? "no pipeline names it" : set.producedBy.map((entry) => `${entry.stage} in ${entry.pipeline}`).join(", ")],
@@ -125,6 +128,11 @@ function SetDetail({ set, sets, problems, onChoose }: { set: DesignSet; sets: De
         ))}
       </dl>
       {set.description === "" ? null : <p className="text-[13px] leading-6 text-text-secondary">{set.description}</p>}
+      {set.instructions === "" ? null : (
+        <Field label="Instructions to the designer">
+          <p className="whitespace-pre-line text-[13px] leading-6">{set.instructions}</p>
+        </Field>
+      )}
       {here.length === 0 ? null : (
         <Field label="Faults of this set">
           {here.map((problem, index) => (

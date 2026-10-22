@@ -5,9 +5,9 @@
 
 Reads rules_result.json (the object the workflow returned, saved by the orchestrator: --result,
 else <assessment>/rules_result.json, where --assessment is the folder holding it: the document
-repository's applications/<app>/assessment/understand/ folder) and writes BUSINESS_RULES.md and
+repository's 10-applications/<app>/01-legacy/understand/ folder) and writes BUSINESS_RULES.md and
 DATA_OBJECTS.md to --out (the step's
-output folder; a member may give the application's generated/ folder itself). BUSINESS_RULES.md is
+output folder; a member may give the application's _generated/ folder itself). BUSINESS_RULES.md is
 the index: a table of the rules with their version and a link to each rule's own file
 (rules/RULE-NNN.md, see rule_docs.py), then the lists that belong to the whole run (SME questions,
 instruction-shaped content, folded rules, coverage gaps). Rules are numbered RULE-001, RULE-002, ...
@@ -187,7 +187,7 @@ def write_text(root, name, text):
 def main(argv):
     ap = argparse.ArgumentParser(description="Render the extract-rules workflow's result into BUSINESS_RULES.md, one file per rule, and DATA_OBJECTS.md.")
     ap.add_argument('app', help='the application id from kintsugi.yaml (used in the headings)')
-    ap.add_argument('--assessment', required=True, help='the applications/<app>/assessment/understand/ folder of the document repository (rules_result.json is read from it)')
+    ap.add_argument('--assessment', required=True, help='the 10-applications/<app>/01-legacy/understand/ folder of the document repository (rules_result.json is read from it)')
     ap.add_argument('--out', required=True, help='the folder BUSINESS_RULES.md, rules/ and DATA_OBJECTS.md are written to')
     ap.add_argument('--date', default='', help='the date written in the version history (default: today, UTC)')
     ap.add_argument('--source-commit', default='', help='the commit of the analysed source, written in the version history')

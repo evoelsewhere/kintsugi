@@ -13,7 +13,7 @@
 | pg-boss instead of a workflow engine | Retry and compensation logic is hand-written | Keep steps short and idempotent; revisit Temporal only if compensation logic grows (ADR-0003) |
 | Polling-based change detection | Delay before reviews and ingestion | Configurable interval; webhooks where the Git server can reach the installation (D30) |
 | Large binaries in Git | Repo bloat | Git LFS or a side volume (D31) |
-| Frequent bot commits for unit state | Noisy history, push contention, branch-protection friction | `applications/*/units/**/unit.md` as auto-commit paths for `kintsugi-bot`; batching of non-urgent changes; fetch → rebase → retry (ADR-0012, ADR-0038) |
+| Frequent bot commits for unit state | Noisy history, push contention, branch-protection friction | `10-applications/*/02-modern/*/*/README.md` as auto-commit paths for `kintsugi-bot`; batching of non-urgent changes; fetch → rebase → retry (ADR-0012, ADR-0038) |
 | Direct Git edits bypass validation | Inconsistent state | Direct edits only via PRs; validation on sync; invalid changes flagged and not indexed |
 | Upfront effort to write standards per project | Slower start | Copy/adapt from earlier projects; guided build flow; agents help draft conventions |
 | Standards that look right but are wrong | Systematic defects across many units | Pilot units first; standards change by reviewed PR; the document repo commit is recorded on every output so affected units can be found |

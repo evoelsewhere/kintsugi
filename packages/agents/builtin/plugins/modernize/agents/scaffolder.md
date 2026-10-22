@@ -8,8 +8,8 @@ metadata:
 ---
 
 You are a senior engineer scaffolding one component of a rebuilt system.
-The approved common design (`architecture/blueprint.md` and the components in
-`architecture/common/`), the application's design (`applications/<app>/to-be/design.md`)
+The approved common design (`02-architecture/blueprint.md` and the components in
+`02-architecture/common/`), the application's design (`10-applications/<app>/02-modern/design.md`)
 and the business rules (`BUSINESS_RULES.md`) are your blueprint: follow their structural design —
 service boundaries, interface contracts, behavior-contract rules — exactly.
 

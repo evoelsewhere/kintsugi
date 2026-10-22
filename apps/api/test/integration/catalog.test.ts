@@ -79,7 +79,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
     for (const [path, text] of Object.entries(CATALOG)) await remote.commit("docs", path, text);
-    await remote.commit("docs", "applications/web/understanding/plan.md", PLAN);
+    await remote.commit("docs", "10-applications/web/01-legacy/plan.md", PLAN);
     // Understood on main: invoice at the catalog's digest, rates at an older one (stale).
     const invoice = understoodUnit("web", "billing/invoice", {
       digest: "sha256:invoice",
@@ -90,15 +90,15 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
       dependencies: [{ target: "billing/rates" }],
     });
     for (const [path, text] of Object.entries({ ...invoice, ...understoodUnit("web", "billing/rates", { digest: "sha256:old", commit: "b".repeat(40), runId: "run-merged" }) })) await remote.commit("docs", path, text);
-    await remote.commit("docs", "applications/web/units/billing/invoice/understanding/findings.md", findingsDocument("billing/invoice", [{ id: "SEC-billing.invoice-01", cwe: "CWE-89", severity: "High", source: "src/Invoice.java:9", title: "SQL built from input" }]));
+    await remote.commit("docs", "10-applications/web/01-legacy/billing/invoice/findings.md", findingsDocument("billing/invoice", [{ id: "SEC-billing.invoice-01", cwe: "CWE-89", severity: "High", source: "src/Invoice.java:9", title: "SQL built from input" }]));
     // The topology the assessment summarised, on main.
     await remote.commit(
       "docs",
-      "applications/web/assessment/topology.md",
+      "10-applications/web/01-legacy/topology.md",
       '---\nsystem: "web"\n---\n# Topology of web\n\n## Domains\n\n| Domain | Leaves | Data stores | LOC |\n| --- | --- | --- | --- |\n| Billing | 1 | 0 | 10 |\n\n## Leaves\n\n| Leaf | Name | Kind | Domain | File | LOC | Entry point | Dead end |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| INV | Invoice | module | Billing | src/Invoice.java | 10 | yes |  |\n',
     );
-    await remote.commit("docs", "applications/web/units/billing/tax/as-is.md", "# Tax\n", "kintsugi/legacy-analyst/run-open");
-    await remote.commit("docs", "applications/web/units/customers/report/as-is.md", "# Report\n", "kintsugi/legacy-analyst/run-abandoned");
+    await remote.commit("docs", "10-applications/web/01-legacy/billing/tax/spec.md", "# Tax\n", "kintsugi/legacy-analyst/run-open");
+    await remote.commit("docs", "10-applications/web/01-legacy/customers/report/spec.md", "# Report\n", "kintsugi/legacy-analyst/run-abandoned");
     await cloneMirror(`${remote.baseUrl}/docs.git`, new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
     app = await startTestApp();
@@ -276,7 +276,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     const findings = await admin.get<Results>(`${base}?view=harden&item=billing/invoice`);
     expect(findings.body.data?.report?.findings.map((finding) => finding.id)).toEqual(["SEC-billing.invoice-01"]);
     const trace = await admin.get<Results>(`${base}?view=understand&item=billing/invoice`);
-    expect(trace.body.data?.units?.map((unit) => [unit.id, unit.spec, unit.dependsOn, unit.rules])).toEqual([["web/billing/invoice", "applications/web/units/billing/invoice/understanding/as-is.md", ["web/billing/rates"], ["RULE-billing.invoice-1a2b3c4d"]]]);
+    expect(trace.body.data?.units?.map((unit) => [unit.id, unit.spec, unit.dependsOn, unit.rules])).toEqual([["web/billing/invoice", "10-applications/web/01-legacy/billing/invoice/spec.md", ["web/billing/rates"], ["RULE-billing.invoice-1a2b3c4d"]]]);
     const map = await admin.get<Results>(`${base}?view=map`);
     expect(map.body.data).toMatchObject({ stage: "map", empty: false, scope: {} });
     expect(map.body.data?.topology?.nodes.map((node) => node.id)).toContain("INV");

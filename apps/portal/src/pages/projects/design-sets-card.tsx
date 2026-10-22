@@ -1,6 +1,6 @@
 // The design sets of a project on its page (ADR-0045): how many the document repo defines, whether
 // their definitions have faults, and the way to the Design view. Read only: templates are changed
-// by a pull request to standards/design/.
+// by a pull request to 01-standards/templates/.
 
 import { Link } from "react-router-dom";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +19,7 @@ export function DesignSetsCard({ project }: { project: ProjectDetail }): React.J
       <CardHeader>
         <div>
           <CardTitle>Design sets</CardTitle>
-          <CardDescription>The format of the design documents of every unit, defined in standards/design/ of the document repo.</CardDescription>
+          <CardDescription>The format of the design documents of every unit, defined in 01-standards/templates/ of the document repo.</CardDescription>
         </div>
         <Link to={link} className="shrink-0 text-[13px] text-accent hover:underline">
           Open the Design view
@@ -31,7 +31,7 @@ export function DesignSetsCard({ project }: { project: ProjectDetail }): React.J
             view === null ? (
               <p>The design sets could not be read: the document repo is not mirrored yet.</p>
             ) : view.sets.length === 0 ? (
-              <p>No design sets yet. Copy the starter from standards/design/ of the starter template and adapt it.</p>
+              <p>No design sets yet. Copy the starter from 01-standards/templates/ of the starter template and adapt it.</p>
             ) : (
               <p>
                 {view.sets.map((set) => `${set.title} (${set.id}@${set.version})`).join(", ")}

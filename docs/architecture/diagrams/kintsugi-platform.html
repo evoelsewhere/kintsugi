@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kintsugi Platform Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;   /* white-smoke */
+      --color-ink:     #2d3142;   /* jet-black */
+      --color-muted:   #4f5d75;   /* blue-slate */
+      --color-accent:  #bf4520;   /* burnt-tangerine */
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', 'Noto Serif', 'Noto Serif KR', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+    /* The SVG holds its readable width (min-width == the viewBox width, so the
+       type ramp is never silently scaled down). This wrapper lets a narrow
+       screen scroll the diagram instead of the whole page. */
+    .diagram-container { width: 100%; overflow-x: auto; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 860px; display: block; }
+    /* Paper has no scrollbar, so the local scroller would clip instead of
+       scroll. Let the diagram scale down to the sheet: smaller but whole
+       beats sharp but cut off. Must come after the svg rule above - a media
+       query adds no specificity, so a later plain rule would win. */
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · live vs planned</p>
+    <h1>Kintsugi: what runs today, and what comes next</h1>
+
+    <!-- Replace kintsugi-platform with a unique slug for this diagram before export. -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 860 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="kintsugi-platform-title kintsugi-platform-desc">
+        <title id="kintsugi-platform-title">Kintsugi platform architecture</title>
+        <desc id="kintsugi-platform-desc">Portal and member harnesses reach the API and Harness Hub, which feed the Orchestrator, the Kintsugi Runtime and the Knowledge Hub, backed by Postgres and the Git document repo; Harness Hub and Knowledge Hub are planned.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+
+          <!-- OPTIONAL: dot-pattern background. Uncomment the <pattern> and the second <rect> below if you want the dotted paper look. -->
+          <!--
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/>
+          </pattern>
+          -->
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+        <!-- <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/> -->
+
+        <rect x="30" y="64" width="800" height="108" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="40" y="68" width="66" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="46" y="77" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="start" letter-spacing="0.14em">EXPERIENCE</text>
+        <rect x="30" y="204" width="800" height="208" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="366" y="208" width="147" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="440" y="217" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.14em">KINTSUGI · DOCKER COMPOSE</text>
+        <rect x="30" y="444" width="800" height="108" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="689" y="448" width="131" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="814" y="457" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="end" letter-spacing="0.14em">DATA · SOURCE OF TRUTH</text>
+        <path d="M160,156 V236" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M720,156 V236" fill="none" stroke="#2e5aa8" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-link)"/>
+        <path d="M620,266 H260" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M160,296 V336" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M260,366 H340" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M620,366 H540" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M127,396 V476" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M193,396 V420 Q193,428 201,428 H392 Q400,428 400,436 V476" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M720,396 V420 Q720,428 712,428 H488 Q480,428 480,436 V476" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <rect x="60" y="96" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="96" width="200" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="68" y="104" width="32" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="84.0" y="113" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">LIVE</text>
+        <text x="68" y="133" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Portal</text>
+        <text x="68" y="147" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">Results · monitoring · admin</text>
+        <rect x="620" y="96" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="620" y="96" width="200" height="60" rx="6" fill="#ececec" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="628" y="104" width="56" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="656.0" y="113" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">EXTERNAL</text>
+        <text x="628" y="133" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Member harnesses</text>
+        <text x="628" y="147" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">Claude Code · Copilot · Codex</text>
+        <rect x="60" y="236" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="236" width="200" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="68" y="244" width="32" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="84.0" y="253" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">LIVE</text>
+        <text x="68" y="273" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Platform API</text>
+        <text x="68" y="287" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">Admin · Delivery · Monitor · Gov</text>
+        <rect x="620" y="236" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="620" y="236" width="200" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1" stroke-dasharray="4,3"/>
+        <rect x="628" y="244" width="52" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="654.0" y="253" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">PLANNED</text>
+        <text x="628" y="273" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Harness Hub</text>
+        <text x="628" y="287" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">MCP server · CLI · plugins</text>
+        <rect x="60" y="336" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="336" width="200" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="68" y="344" width="32" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="84.0" y="353" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">LIVE</text>
+        <text x="68" y="373" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Orchestrator</text>
+        <text x="68" y="387" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">Worker · pg-boss · Git sync</text>
+        <rect x="340" y="336" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="340" y="336" width="200" height="60" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <rect x="348" y="344" width="32" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#bf4520" stroke-width="0.6"/>
+        <text x="364.0" y="353" fill="#bf4520" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">LIVE</text>
+        <text x="348" y="373" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Kintsugi Runtime (pi)</text>
+        <text x="348" y="387" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">Agent kernel · job workspaces</text>
+        <rect x="620" y="336" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="620" y="336" width="200" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1" stroke-dasharray="4,3"/>
+        <rect x="628" y="344" width="52" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="654.0" y="353" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">PLANNED</text>
+        <text x="628" y="373" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Knowledge Hub</text>
+        <text x="628" y="387" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">Chunks + embeddings · search</text>
+        <rect x="60" y="476" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="476" width="200" height="60" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <rect x="68" y="484" width="32" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#bf4520" stroke-width="0.6"/>
+        <text x="84.0" y="493" fill="#bf4520" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">LIVE</text>
+        <text x="68" y="513" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Git repos</text>
+        <text x="68" y="527" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">Document repo · AS-IS · TO-BE</text>
+        <rect x="340" y="476" width="200" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="340" y="476" width="200" height="60" rx="6" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/>
+        <rect x="348" y="484" width="32" height="12" rx="2" fill="rgba(45,49,66,0.06)" stroke="#2d3142" stroke-width="0.6"/>
+        <text x="364.0" y="493" fill="#2d3142" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.1em">LIVE</text>
+        <text x="348" y="513" fill="#2d3142" font-size="12" font-weight="600" font-family="Geist, sans-serif">Postgres + pgvector</text>
+        <text x="348" y="527" fill="#5a6580" font-size="8.5" font-family="Geist Mono, monospace">State · queue · events</text>
+        <rect x="167" y="189" width="60" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="172" y="199" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="start" letter-spacing="0.08em">REST · SSE</text>
+        <rect x="727" y="189" width="55" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="732" y="199" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="start" letter-spacing="0.08em">MCP · CLI</text>
+        <rect x="410" y="257" width="60" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="440" y="267" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.08em">KB · TASKS</text>
+        <rect x="167" y="311" width="45" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="172" y="321" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="start" letter-spacing="0.08em">ENQUEUE</text>
+        <rect x="275" y="357" width="50" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="300" y="367" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.08em">RUNS JOB</text>
+        <rect x="552" y="357" width="55" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="580" y="367" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.08em">KB SEARCH</text>
+        <rect x="57" y="427" width="65" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="117" y="437" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="end" letter-spacing="0.08em">PR · COMMIT</text>
+        <rect x="258" y="419" width="75" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="296" y="429" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.08em">STATE · QUEUE</text>
+        <rect x="575" y="419" width="50" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="600" y="429" fill="#5a6580" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle" letter-spacing="0.08em">PGVECTOR</text>
+        <rect x="40" y="604" width="20" height="12" rx="3" fill="#f5f5f5" stroke="#2d3142"/><text x="68" y="613" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Live today</text>
+        <rect x="150" y="604" width="20" height="12" rx="3" fill="#f5f5f5" stroke="#2d3142" stroke-dasharray="4,3"/><text x="178" y="613" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Planned</text>
+        <rect x="250" y="604" width="20" height="12" rx="3" fill="rgba(191,69,32,0.08)" stroke="#bf4520"/><text x="278" y="613" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Focal: what Kintsugi owns</text>
+        <rect x="450" y="604" width="20" height="12" rx="3" fill="#ececec" stroke="#4f5d75"/><text x="478" y="613" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">External</text>
+        <line x1="550" y1="610" x2="580" y2="610" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/><text x="588" y="613" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Flow</text>
+        <line x1="640" y1="610" x2="670" y2="610" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/><text x="678" y="613" fill="#5a6580" font-size="8" font-family="Geist Mono, monospace">Planned flow</text>
+
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

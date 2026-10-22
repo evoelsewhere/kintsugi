@@ -44,6 +44,8 @@ export interface StageScope {
   readonly items: readonly string[];
   /** Repository paths of the items' files. */
   readonly files: readonly string[];
+  /** The design set a design run generates for its units (ADR-0049). */
+  readonly set?: string;
 }
 
 /** What a plan's dynamic parts (conditions, arguments, items) can look at while the stage runs. */
@@ -101,9 +103,10 @@ export interface ScriptStep extends StepBase {
 export interface AgentStep extends StepBase {
   kind: "agent";
   agent: string;
-  task: string;
-  /** Extra document-repo files for this step only (the plan's `documents` are always there). */
-  documents?: readonly string[];
+  /** The brief; a function when it depends on the run (the design set of a design run). */
+  task: Dynamic<string>;
+  /** Extra document-repo files for this step only (the plan's `documents` are always there); a function when they depend on the run. */
+  documents?: Dynamic<readonly string[]>;
   /** Structured result: the job writes it as JSON matching this schema. */
   schema?: Record<string, unknown>;
   /** Where the structured result is saved (document-repo path). */

@@ -3,9 +3,9 @@
 
     python3 plan_graph.py <app> --catalog DIR --out DIR [--existing DIR]
 
---catalog is applications/<app>/assessment/catalog/, whose cards carry the links between items (the assess
-stage computed them from the topology); --existing the application's units/ folder (an item with an
-understanding.md there is understood already); --out the document-repository root the graph is written
+--catalog is 10-applications/<app>/01-legacy/_catalog/, whose cards carry the links between items (the assess
+stage computed them from the topology); --existing the application's 01-legacy/ folder (an item with an
+understanding.md in its <module>/<unit>/ folder there is understood already); --out the document-repository root the graph is written
 under (scratch/<app>/understand/graph.json, intermediate).
 
 Per active item: size, complexity, asset class, whether it holds an entry point, the items it depends
@@ -157,8 +157,8 @@ def build(app, catalog_items, understood, catalog_origin):
 def main(argv):
     ap = argparse.ArgumentParser(description='Compute the item graph a planning run reasons over.')
     ap.add_argument('app')
-    ap.add_argument('--catalog', required=True, help='the catalog folder (assessment/catalog/)')
-    ap.add_argument('--existing', help='the application units/ folder: an item with an understanding record there is understood')
+    ap.add_argument('--catalog', required=True, help='the catalog folder (01-legacy/_catalog/)')
+    ap.add_argument('--existing', help='the application 01-legacy/ folder: an item with an understanding record there is understood')
     ap.add_argument('--out', required=True, help='the document-repository root to write under')
     args = ap.parse_args(argv[1:])
     try:
@@ -169,7 +169,7 @@ def main(argv):
         if args.existing and os.path.isdir(args.existing):
             for item_id in items:
                 module, unit = paths.split_unit_key(item_id)
-                if os.path.isfile(os.path.join(args.existing, module, unit, 'understanding', 'understanding.md')):
+                if os.path.isfile(os.path.join(args.existing, module, unit, 'understanding.md')):
                     understood.add(item_id)
         graph = build(args.app, items, understood, catalog.get('source') if isinstance(catalog.get('source'), dict) else {})
         docmd.write_json(os.path.join(os.path.abspath(args.out), *paths.understand_graph_path(args.app).split('/')), graph)

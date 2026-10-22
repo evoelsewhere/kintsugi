@@ -45,7 +45,7 @@ const CATALOGED = {
 /** assess merged its catalog (the links between items are in its cards); one item already has a work item a person moved on. */
 const CATALOGED_SMALL = {
   ...MANIFEST,
-  "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
+  "10-applications/demo/01-legacy/assessment.md": "# Assessment\n\nTwo domains.\n",
   ...catalogDocuments(
     "demo",
     [
@@ -58,12 +58,12 @@ const CATALOGED_SMALL = {
     ],
     ["package.json"],
   ),
-  "applications/demo/units/billing/main/unit.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
+  "10-applications/demo/02-modern/billing/main/README.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
 };
 const ASSESSED = {
   "kintsugi.yaml": "version: 1\nproject: { id: demo }\n",
-  "applications/demo/assessment/ASSESSMENT.md": "# Assessment\n\nTwo domains.\n",
-  "standards/naming.md": "# Naming\n",
+  "10-applications/demo/01-legacy/assessment.md": "# Assessment\n\nTwo domains.\n",
+  "01-standards/naming.md": "# Naming\n",
 };
 
 describe("stage plans (mock agent, fixture repositories)", () => {
@@ -111,7 +111,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     await store.create({ id, projectId: "demo", applicationId: "demo", kind: "stage", name: stage, sourceRepositoryId: options.legacy, actor: "alice", ...(options.inputs === undefined ? {} : { inputs: options.inputs }) });
     const run = await runner.run(id);
     const root = storage.job(id).out;
-    const out = join(root, "applications", "demo", "assessment");
+    const out = join(root, "10-applications", "demo", "01-legacy");
     const summary = run?.outputSummary as
       | { steps: Array<{ id: string; status: string; key?: string; round?: number }>; gates: Array<{ id: string; choice: string; defaulted: boolean }>; agents: number; missingInputs?: unknown }
       | undefined;
@@ -120,16 +120,17 @@ describe("stage plans (mock agent, fixture repositories)", () => {
   }
 
   it("knows which stages are runnable and what they need first", () => {
-    const catalog = "applications/demo/assessment/catalog/index.md";
+    const catalog = "10-applications/demo/01-legacy/_catalog/index.md";
     expect(stageInfo("demo")).toEqual([
       { id: "assess", requires: [] },
       { id: "understand", requires: [{ stage: "assess", path: catalog }] },
       { id: "plan-understand", requires: [{ stage: "assess", path: catalog }] },
+      { id: "design", requires: [{ stage: "assess", path: catalog }] },
       { id: "rebuild", requires: [{ stage: "assess", path: catalog }] },
     ]);
   });
 
-  it("re-assesses: topology script under tools/, the catalog keeps the ids of the previous one and retires what is gone", async () => {
+  it("re-assesses: topology script under _tools/, the catalog keeps the ids of the previous one and retires what is gone", async () => {
     const { run, summary, artifacts, out, agents } = await runStage("assess", { legacy: "small", docs: "cataloged-docs" });
     expect(run?.failureReason).toBeUndefined();
     const ids = summary?.steps.map((step) => step.id) ?? [];
@@ -152,15 +153,15 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     // inventory, the raw topology and the catalog drafts are scratch of the run and never published.
     expect(artifacts).toEqual(
       expect.arrayContaining([
-        "applications/demo/assessment/inventory.md",
-        "applications/demo/assessment/topology.md",
-        "applications/demo/assessment/catalog/index.md",
-        "applications/demo/assessment/catalog/core.md",
-        "applications/demo/assessment/tools/extract_topology.py",
+        "10-applications/demo/01-legacy/inventory.md",
+        "10-applications/demo/01-legacy/topology.md",
+        "10-applications/demo/01-legacy/_catalog/index.md",
+        "10-applications/demo/01-legacy/_catalog/core.md",
+        "10-applications/demo/01-legacy/_tools/extract_topology.py",
       ]),
     );
     expect(artifacts.filter((path) => path.endsWith(".json") || path.startsWith("scratch/") || path.includes("catalog-draft"))).toEqual([]);
-    const catalog = parseItemCatalog(readFileSync(join(out, "catalog", "index.md"), "utf8"), { core: readFileSync(join(out, "catalog", "core.md"), "utf8") })!;
+    const catalog = parseItemCatalog(readFileSync(join(out, "_catalog", "index.md"), "utf8"), { core: readFileSync(join(out, "_catalog", "core.md"), "utf8") })!;
     expect(catalog.items.map((item) => [item.id, item.module, item.status])).toEqual([
       ["core/gone", "core", "retired"],
       ["core/main-program", "core", "active"],
@@ -195,31 +196,32 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     // Each spec job got its brief and its item's rule and finding documents.
     const specs = agents.specs.filter((spec) => spec.task.startsWith("Write the AS-IS specification of one catalog item"));
     const main = specs.find((spec) => spec.task.includes("/understand/briefs/billing/main.json"));
-    expect(main?.task).toContain("applications/demo/units/billing/main/understanding/rules.md");
-    expect(main?.task).toContain("applications/demo/units/billing/main/understanding/as-is.md with write");
+    expect(main?.task).toContain("10-applications/demo/01-legacy/billing/main/rules.md");
+    expect(main?.task).toContain("10-applications/demo/01-legacy/billing/main/spec.md with write");
 
     // Only per-unit Markdown is published; briefs, shards, traces and workflow results stay out.
-    const files = ["as-is.md", "data-objects.md", "findings.md", "rules.md", "topology.md", "trace.md", "understanding.md"];
+    const files = ["data-objects.md", "findings.md", "rules.md", "spec.md", "topology.md", "trace.md", "understanding.md"];
     // Each rule is a file of its own under the unit's rules/ folder; rules.md indexes them.
-    const ruleFiles = artifacts.filter((path) => /\/understanding\/rules\/RULE-[^/]+\.md$/.test(path));
+    const ruleFiles = artifacts.filter((path) => /\/01-legacy\/[^/]+\/[^/]+\/rules\/RULE-[^/]+\.md$/.test(path));
     expect(ruleFiles.length).toBeGreaterThan(0);
     expect(artifacts.filter((path) => !ruleFiles.includes(path))).toEqual([
-      ...files.map((file) => `applications/demo/units/billing/main/understanding/${file}`),
-      ...files.map((file) => `applications/demo/units/rates/rates/understanding/${file}`),
-      "applications/demo/units/rates/rates/unit.md",
+      ...files.map((file) => `10-applications/demo/01-legacy/billing/main/${file}`),
+      ...files.map((file) => `10-applications/demo/01-legacy/rates/rates/${file}`),
+      "10-applications/demo/02-modern/rates/rates/README.md",
     ]);
-    const unit = (path: string): string => readFileSync(join(root, "applications", "demo", "units", ...path.split("/")), "utf8");
+    const unit = (path: string): string => readFileSync(join(root, "10-applications", "demo", "01-legacy", ...path.split("/")), "utf8");
+    const card = (key: string): string => join(root, "10-applications", "demo", "02-modern", ...key.split("/"), "README.md");
     // The topology document of an item: its leaves, the items it depends on, the data stores it touches.
-    const topology = unit("billing/main/understanding/topology.md");
+    const topology = unit("billing/main/topology.md");
     expect(documentOf(topology).data).toMatchObject({ item: "billing/main", leaves: 1, entryPoints: 1 });
     expect(topology).toContain("| rates/rates | call | 1 |");
-    expect(unit("rates/rates/understanding/topology.md")).toContain("| ds:RATES | read |");
-    const record = documentOf(unit("rates/rates/understanding/understanding.md")).data;
-    expect(record).toMatchObject({ item: "rates/rates", status: "understood", digest: "sha256:rates", runId: id, specification: "applications/demo/units/rates/rates/understanding/as-is.md" });
+    expect(unit("rates/rates/topology.md")).toContain("| ds:RATES | read |");
+    const record = documentOf(unit("rates/rates/understanding.md")).data;
+    expect(record).toMatchObject({ item: "rates/rates", status: "understood", digest: "sha256:rates", runId: id, specification: "10-applications/demo/01-legacy/rates/rates/spec.md" });
     expect(record["commit"]).toMatch(/^[0-9a-f]{40}$/);
-    // The work item a person already has is left alone.
-    expect(existsSync(join(root, "applications", "demo", "units", "billing", "main", "unit.md"))).toBe(false);
-    expect(unit("rates/rates/unit.md")).toContain('id: "demo/rates/rates"');
+    // The unit card a person already has is left alone.
+    expect(existsSync(card("billing/main"))).toBe(false);
+    expect(readFileSync(card("rates/rates"), "utf8")).toContain('id: "demo/rates/rates"');
 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({ outputOfJob: id, message: "Understand demo: main, rates", reviewAll: true });
@@ -252,8 +254,8 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const planner = agents.specs.find(planningTask);
     expect(planner?.task).toContain("scratch/demo/understand/graph.json");
     expect(planner?.task).toContain("Return your result as JSON matching this schema");
-    expect(artifacts).toEqual(["applications/demo/understanding/plan.md"]);
-    const plan = readFileSync(join(root, "applications", "demo", "understanding", "plan.md"), "utf8");
+    expect(artifacts).toEqual(["10-applications/demo/01-legacy/plan.md"]);
+    const plan = readFileSync(join(root, "10-applications", "demo", "01-legacy", "plan.md"), "utf8");
     expect(documentOf(plan).data).toMatchObject({ version: 1, app: "demo", batches: 2, planned: 2 });
     expect(plan).toMatch(/## Batch 1: Rates[\s\S]*- `rates\/rates`[\s\S]*## Batch 2: Entry[\s\S]*- `billing\/main`/);
     expect(plan).toContain("| nope/x | not an item of the catalog |");
@@ -292,42 +294,43 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const { run, store, id, writes } = await runStage("understand", { legacy: "small", inputs: { scope: { items: ["billing/main"], files: [] } } });
     expect(run?.status).toBe("failed");
     expect(run?.failureReason).toBe(
-      "applications/demo/assessment/catalog/index.md is not on the default branch of the document repository: run the assess stage first and merge its pull request, then run understand again",
+      "10-applications/demo/01-legacy/_catalog/index.md is not on the default branch of the document repository: run the assess stage first and merge its pull request, then run understand again",
     );
     expect(store.children(id)).toHaveLength(0);
     expect(writes).toHaveLength(0);
   });
 
-  it("rebuilds the generated views from the per-item files: script only, everything under generated/", async () => {
+  it("rebuilds the generated views from the per-item files: script only, everything under _generated/", async () => {
     const { run, writes, artifacts, root } = await runStage("rebuild", { legacy: "small", docs: "understood-docs" });
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
     expect(artifacts).toEqual([
-      "applications/demo/generated/BUSINESS_RULES.md",
-      "applications/demo/generated/DATA_OBJECTS.md",
-      "applications/demo/generated/README.md",
-      "applications/demo/generated/SECURITY_FINDINGS.md",
-      "applications/demo/generated/traceability.md",
+      "10-applications/demo/_generated/BUSINESS_RULES.md",
+      "10-applications/demo/_generated/DATA_OBJECTS.md",
+      "10-applications/demo/_generated/README.md",
+      "10-applications/demo/_generated/SECURITY_FINDINGS.md",
+      "10-applications/demo/_generated/traceability.md",
     ]);
     // Every output is under the default autoCommitPaths: the writer commits it without a pull request.
     expect(artifacts.every((path) => isAutoCommitPath(path, DEFAULT_AUTO_COMMIT_PATHS))).toBe(true);
-    expect(readFileSync(join(root, "applications", "demo", "generated", "BUSINESS_RULES.md"), "utf8")).toContain(
-      "| RULE-rates.rates-1a2b3c4d | rates/rates | Double large amounts | Calculation | P0 | High | 1 | confirmed | `src/rates.c:1` | [RULE-rates.rates-1a2b3c4d](../units/rates/rates/understanding/rules/RULE-rates.rates-1a2b3c4d.md) |",
+    expect(readFileSync(join(root, "10-applications", "demo", "_generated", "BUSINESS_RULES.md"), "utf8")).toContain(
+      "| RULE-rates.rates-1a2b3c4d | rates/rates | Double large amounts | Calculation | P0 | High | 1 | confirmed | `src/rates.c:1` | [RULE-rates.rates-1a2b3c4d](../01-legacy/rates/rates/rules/RULE-rates.rates-1a2b3c4d.md) |",
     );
-    expect(documentOf(readFileSync(join(root, "applications", "demo", "generated", "traceability.md"), "utf8")).data).toMatchObject({ items: 2, units: 1, rulesCovered: 1 });
+    expect(documentOf(readFileSync(join(root, "10-applications", "demo", "_generated", "traceability.md"), "utf8")).data).toMatchObject({ items: 2, units: 1, rulesCovered: 1 });
     expect(writes[0]).toMatchObject({ message: "Rebuild the generated views of demo from its understood units" });
     // The rebuild must stage the per-unit evidence tree, or the aggregates come out empty.
-    expect(REBUILD.documents).toContain("applications/{app}/units/");
+    expect(REBUILD.documents).toContain("10-applications/{app}/01-legacy/");
   }, 120_000);
 
   it("finds the applications whose items a default-branch move touched", () => {
     expect(
       appsTouched([
-        "applications/web/units/a/b/understanding/rules.md",
-        "applications/shop/units/x/y/understanding/understanding.md",
-        "applications/web/generated/traceability.md",
-        "applications/web/units/a/b/unit.md",
-        "applications/Bad/units/a/b/c.md",
+        "10-applications/web/01-legacy/a/b/rules.md",
+        "10-applications/shop/01-legacy/x/y/understanding.md",
+        "10-applications/web/_generated/traceability.md",
+        "10-applications/web/02-modern/a/b/README.md",
+        "10-applications/web/01-legacy/_catalog/index.md",
+        "10-applications/Bad/01-legacy/a/b/c.md",
       ]),
     ).toEqual(["shop", "web"]);
   });
@@ -348,6 +351,6 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const id = randomUUID();
     await store.create({ id, projectId: "demo", applicationId: "demo", kind: "stage", name: "assess", sourceRepositoryId: "small", inputs: {} });
     const run = await runner.run(id);
-    expect(run?.failureReason).toMatch(/^Step analysis failed: (structure|debt|security): Agent (legacy-analyst|security-auditor) did not write applications\/demo\/assessment\/analysis\//);
+    expect(run?.failureReason).toMatch(/^Step analysis failed: (structure|debt|security): Agent (legacy-analyst|security-auditor) did not write 10-applications\/demo\/01-legacy\/_analysis\//);
   });
 });

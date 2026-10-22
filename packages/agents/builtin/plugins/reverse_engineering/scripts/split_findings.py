@@ -4,10 +4,10 @@
     python3 split_findings.py <app> --scan FILE --catalog FILE --items ID,ID,... --out DIR
 
 --scan is the object the harden-scan workflow returned for the run's files (findings, coverage,
-toolsNotRun, ...; scratch); --catalog applications/<app>/assessment/catalog/; --items the run's items.
+toolsNotRun, ...; scratch); --catalog 10-applications/<app>/01-legacy/_catalog/; --items the run's items.
 --out is the document-repository root. Each finding goes to the item that owns the file of its
 `source` (file:line); a finding outside the selected items is left out and counted. Writes
-applications/<app>/units/<module>/<unit>/understanding/findings.md per item: the scorecard, the table of
+10-applications/<app>/01-legacy/<module>/<unit>/findings.md per item: the scorecard, the table of
 findings (ids `SEC-<module>.<item>-NN`), a card per finding for its fix and masked evidence, the tools
 that did not run and the files reviewed.
 

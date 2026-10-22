@@ -17,7 +17,7 @@ export const AUDIENCE_LABEL: Record<StageAudience, string> = {
   portal: "Portal stages",
 };
 
-/** The stages shown in the pipeline: the runtime stages a person runs (ADR-0033; map, extract-rules and harden are steps of understand) and the design stage, which members carry out and the portal tracks (ADR-0044). */
+/** The stages shown in the pipeline: the runtime stages a person runs (ADR-0033; map, extract-rules and harden are steps of understand; ADR-0049: the design stage generates the design sets of the units). */
 export const PIPELINE_STAGES: readonly string[] = ["assess", "understand", "design"];
 
 /** Display names of the stages whose id alone reads poorly; the rest show their id in title case. */
@@ -41,7 +41,7 @@ export function pipelineStages(stages: readonly StageView[]): StageView[] {
   return stages.filter((stage) => PIPELINE_STAGES.includes(stage.id));
 }
 
-/** The pipeline stages a runtime job runs: what progress and health count (the design stage is tracked by its documents). */
+/** The pipeline stages a runtime job runs: what progress and health count. */
 export function runtimePipelineStages(stages: readonly StageView[]): StageView[] {
   return pipelineStages(stages).filter((stage) => stage.audience === "runtime");
 }

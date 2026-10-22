@@ -7,7 +7,7 @@
 // Not wired yet: persona flows, per-node descriptions and chunked mapping of big estates.
 
 import type { AgentStep, ScriptStep } from "../plan.js";
-import { DOCUMENT_PATH_TOKENS, assessmentDir, assessmentFilePath, assessmentInventoryPath, assessmentTopologyPath, scratchDir, scratchInventoryPath, scratchTopologyPath } from "@kintsugi/domain";
+import { DOCUMENT_PATH_TOKENS, applicationInputPath, assessmentDir, assessmentInventoryPath, assessmentTopologyPath, scratchDir, scratchInventoryPath, scratchTopologyPath } from "@kintsugi/domain";
 import { CREDENTIALS, UNTRUSTED, WORKSPACE } from "./common.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
@@ -31,7 +31,7 @@ const topologyTask = (script: string, domains: string): string => `Write the top
 ${WORKSPACE}
 
 If present, ${domains} (group modules under
-them), {in}/${scratchInventoryPath(APP_TOKEN)} the measured inventory (every file; {in}/${assessmentInventoryPath(APP_TOKEN)} summarises it), and {in}/${assessmentFilePath(APP_TOKEN, "graph")}/ a dependency export a person attached
+them), {in}/${scratchInventoryPath(APP_TOKEN)} the measured inventory (every file; {in}/${assessmentInventoryPath(APP_TOKEN)} summarises it), and {in}/${applicationInputPath(APP_TOKEN, "graph")}/ a dependency export a person attached
 (a compiler index, jdeps, a call graph in JSON, CSV, DOT or GraphML): if one exists, map its nodes and edges instead of
 parsing the code, spot-check about ten edges against the source, and still add what graphs omit (entry points from
 deployment configuration, data stores).

@@ -11,8 +11,8 @@ import {
   generatedDir,
   unitDataObjectsPath,
   unitFindingsPath,
+  unitLegacyDir,
   unitRulesPath,
-  unitUnderstandingDir,
   unitUnderstandingPath,
 } from "@kintsugi/domain";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
@@ -109,8 +109,8 @@ export class StageResultsService {
   /**
    * The results of the understand stage (ADR-0033) as one of the result views — `map` (topology),
    * `extract-rules` (rules), `harden` (security findings), `understand` (traceability) — for the
-   * whole application (the generated views under generated/) or one catalog item (the documents of its
-   * understanding folder), at a ref (default: the default branch; a run's branch shows that run's items).
+   * whole application (the generated views under _generated/) or one catalog item (the documents of its
+   * legacy folder), at a ref (default: the default branch; a run's branch shows that run's items).
    */
   async understandResults(projectId: string, applicationId: string, view: string, item: string | undefined, ref: string | undefined): Promise<StageResults & { scope: { item?: string } }> {
     if (view === "assess" || !isResultStage(view)) throw new BadRequestException(`View "${view}" is not an understand result (available: map, extract-rules, harden, understand)`);
@@ -121,12 +121,12 @@ export class StageResultsService {
     const overrides = new Map<string, string | null>();
     let dir: string;
     if (item === undefined) {
-      // The topology of the application is an assessment document; the other views are read models under generated/.
+      // The topology of the application is an assessment document; the other views are read models under _generated/.
       dir = view === "map" ? assessmentDir(applicationId) : generatedDir(applicationId);
     } else {
       const [module = "", unit = ""] = item.split("/");
-      // The unit's understanding folder holds the documents; the views read them under the names of the aggregates.
-      dir = unitUnderstandingDir(applicationId, module, unit);
+      // The unit's legacy folder holds the documents; the views read them under the names of the aggregates.
+      dir = unitLegacyDir(applicationId, module, unit);
       const readAt = (path: string): Promise<string | undefined> => this.documents.readText(context, selected.commit, path);
       if (view === "extract-rules") {
         overrides.set("BUSINESS_RULES.md", (await readAt(unitRulesPath(applicationId, module, unit))) ?? null);

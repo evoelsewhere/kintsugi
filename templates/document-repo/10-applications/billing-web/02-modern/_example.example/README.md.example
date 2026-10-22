@@ -1,0 +1,31 @@
+---
+id: billing-web/invoices/invoice-search
+application: billing-web
+module: invoices
+kind: screen
+title: Invoice search
+wave: 2
+pilot: false
+phase: migrate              # pipeline phase
+stage: convert              # current stage of the phase
+status: in-progress         # pending | in-progress | awaiting-review | approved | rejected | blocked | done | skipped
+assignee: alice
+harness: copilot
+complexity: medium
+dependsOn: [billing-web/common/invoice-dto]
+source:
+  - {repo: org/billing-web-legacy, paths: [Invoices/Search.aspx, Invoices/Search.aspx.cs]}
+target:
+  - {repo: org/billing-web-ui, paths: [src/Invoices/Search/]}
+links:
+  taskPack: 10-applications/billing-web/02-modern/invoices/invoice-search/task.md
+  asIs: 10-applications/billing-web/01-legacy/invoices/invoice-search/spec.md
+  mappings: [01-standards/mappings/invoice-grid.md, 01-standards/mappings/search-list-screen.md]
+  businessRules: [RULE-invoice-amount-001]
+  pullRequests: []
+# Design files this unit does not need, one entry per file, written by a person:
+waived:
+  - "detail/data-access.md: no data store"
+---
+
+Search invoices by customer, date range and status; results grid with paging and export.

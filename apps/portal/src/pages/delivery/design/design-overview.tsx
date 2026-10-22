@@ -1,15 +1,18 @@
 // Design → Overview: where the design of the application stands, results first. A tile per set,
 // how each set's units split by state (each state opens the Units tab filtered to it), what needs
-// attention, and the units ready to be designed next with the command to give a harness.
+// attention, and the units ready to be designed next, each with a button that generates its set (ADR-0049).
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Play } from "lucide-react";
 import { useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import type { DesignOverview, DesignState } from "@/lib/api/design";
+import type { DesignOverview, DesignState, UnitSetActivity } from "@/lib/api/design";
+import { applicationEligibility, eligibility } from "@/lib/design-run";
+import { APPLICATION_UNIT_KEY } from "@kintsugi/domain";
 import { CountChip, Kpi, KpiRow, MoreLink, Section, Signal, SignalList } from "../results/results-parts";
-import { CopyButton } from "./design-parts";
-import { designCommand, STATE_LABEL, STATE_ORDER, STATE_TONE, setLabel } from "./design-state";
+import type { RequestGenerate } from "./design-stage";
+import { STATE_LABEL, STATE_ORDER, STATE_TONE, setLabel } from "./design-state";
 
 const BAR_COLOR: Record<DesignState, string> = {
   conformant: "var(--ds-status-green)",
@@ -25,13 +28,19 @@ const READY_SHOWN = 6;
 
 export function DesignOverviewTab({
   overview,
-  applicationId,
+  activity,
+  runDisabled,
+  onGenerate,
   onOpenUnits,
   onOpenUnit,
   onOpenSets,
 }: {
   overview: DesignOverview;
-  applicationId: string;
+  /** The units a run is generating or a pull request carries, per set. */
+  activity: readonly UnitSetActivity[];
+  /** Why no run can start (permission, repositories); undefined when one can. */
+  runDisabled: string | undefined;
+  onGenerate: RequestGenerate;
   /** Opens the Units tab filtered to a set and a state. */
   onOpenUnits: (set: string, state: DesignState | "") => void;
   onOpenUnit: (key: string) => void;
@@ -39,8 +48,12 @@ export function DesignOverviewTab({
 }): React.JSX.Element {
   const { sets, units, counts, rules, attention } = overview;
   const ready = useMemo(
-    () => units.flatMap((unit) => Object.values(unit.sets).filter((summary) => summary.ready).map((summary) => ({ key: unit.key, title: unit.title, wave: unit.wave, set: summary.set }))).sort((a, b) => (a.wave ?? "~").localeCompare(b.wave ?? "~", undefined, { numeric: true }) || a.key.localeCompare(b.key)),
-    [units],
+    () =>
+      [
+        ...sets.filter((set) => applicationEligibility(overview, set, activity).ok).map((set) => ({ key: APPLICATION_UNIT_KEY, title: "the application", wave: undefined as string | undefined, set: set.id })),
+        ...units.flatMap((unit) => sets.filter((set) => eligibility(unit, set, activity).ok).map((set) => ({ key: unit.key, title: unit.title, wave: unit.wave, set: set.id }))),
+      ].sort((a, b) => (a.wave ?? "~").localeCompare(b.wave ?? "~", undefined, { numeric: true }) || a.key.localeCompare(b.key)),
+    [overview, units, sets, activity],
   );
   const covered = rules.total === 0 ? undefined : Math.round(((rules.total - rules.uncovered) / rules.total) * 100);
   const stale = units.filter((unit) => Object.values(unit.sets).some((summary) => summary.files.stale > 0)).length;
@@ -50,7 +63,7 @@ export function DesignOverviewTab({
       <Card>
         <EmptyState
           title="No design sets yet"
-          description="A design set defines what one design document of a unit contains. Define the project's sets in standards/design/ of the document repo: the starter has a basic and a detail design to copy and change."
+          description="A design set defines what one design document of a unit contains. Define the project's sets in 01-standards/templates/ of the document repo: the starter has a basic, a detail, an API and a test design to copy and change."
           action={
             <button type="button" onClick={onOpenSets} className="text-[13px] text-accent hover:underline">
               Open the Sets tab
@@ -123,7 +136,7 @@ export function DesignOverviewTab({
         </Section>
       </div>
 
-      <Section title="Ready to design next" description="Units whose earlier sets are written and whose own set is not started, by wave. Give the command to a harness.">
+      <Section title="Ready to design next" description="Units (and the application, for a set of the whole application) whose earlier sets are written and whose own set is not started, by wave. Generate a set here, or select several units on the Units tab.">
         {ready.length === 0 ? (
           <p className="text-[13px] text-text-secondary">No unit is waiting: every unit with its earlier sets written has started its next one.</p>
         ) : (
@@ -137,7 +150,10 @@ export function DesignOverviewTab({
                   </button>
                   {entry.wave === undefined ? null : <span className="text-[11.5px] text-text-muted">wave {entry.wave}</span>}
                   <span className="font-mono text-[11.5px] text-text-secondary">{entry.set}</span>
-                  <CopyButton text={designCommand(applicationId, entry.key, entry.set)} label="Copy command" what="Command" />
+                  <Button size="small" variant="ghost" className="shadow-border" disabled={runDisabled !== undefined} title={runDisabled} onClick={() => onGenerate(entry.set, [entry.key])}>
+                    <Play className="size-3.5" />
+                    Generate
+                  </Button>
                 </li>
               ))}
             </ul>

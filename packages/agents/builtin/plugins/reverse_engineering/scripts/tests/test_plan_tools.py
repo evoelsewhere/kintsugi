@@ -95,10 +95,10 @@ class PlanToolsTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = self.temp.name
-        self.units = os.path.join(self.root, 'units')
+        self.units = os.path.join(self.root, '10-applications', 'shop', '01-legacy')
         self.out = os.path.join(self.root, 'out')
         self.graph_path = os.path.join(self.out, 'scratch', 'shop', 'understand', 'graph.json')
-        self.plan_path = os.path.join(self.out, 'applications', 'shop', 'understanding', 'plan.md')
+        self.plan_path = os.path.join(self.out, '10-applications', 'shop', '01-legacy', 'plan.md')
         # The catalog the assess stage committed, links included.
         self.catalog = os.path.join(self.root, 'catalog')
         graph = cc.item_graph(CATALOG['items'], TOPOLOGY)
@@ -133,7 +133,7 @@ class PlanToolsTests(unittest.TestCase):
         self.assertIn('5 open code item(s)', stdout)
 
     def test_graph_marks_items_with_an_understanding_record_as_understood(self):
-        write(os.path.join(self.units, 'core', 'base', 'understanding', 'understanding.md'), '---\nstatus: "understood"\n---\n')
+        write(os.path.join(self.units, 'core', 'base', 'understanding.md'), '---\nstatus: "understood"\n---\n')
         graph, stdout = self.graph()
         self.assertEqual({entry['id'] for entry in graph['items'] if entry['understood']}, {'core/base'})
         self.assertIn('4 open code item(s)', stdout)
@@ -187,7 +187,7 @@ class PlanToolsTests(unittest.TestCase):
         self.assertEqual(outside, [{'item': 'core/base', 'usedBy': ['web/entry']}, {'item': 'core/service', 'usedBy': ['web/entry']}])
 
     def test_items_that_cannot_be_planned_are_dropped_with_the_reason(self):
-        write(os.path.join(self.units, 'core', 'base', 'understanding', 'understanding.md'), '---\nstatus: "understood"\n---\n')
+        write(os.path.join(self.units, 'core', 'base', 'understanding.md'), '---\nstatus: "understood"\n---\n')
         result = self.plan({'batches': [
             {'title': 'Mixed', 'items': ['core/base', 'core/tests', 'nope/x', 'core/old', 'core/service', 'core/service'], 'rationale': '', 'risk': 'high'},
             {'title': 'Repeat', 'items': ['core/service'], 'rationale': '', 'risk': 'high'},

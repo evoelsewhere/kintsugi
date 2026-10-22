@@ -80,14 +80,14 @@ Mock run: no assessment highlight was settled.
 
 /** The sections of an AS-IS unit specification (understand stage), each with a stub line. */
 const SPEC_SECTIONS = ["Purpose", "Entry points", "Main flows", "Dependencies", "Data objects", "Business rules applied", "Security findings and risks", "Configuration", "Error handling", "Source references", "Open questions"];
-const UNIT_SPEC = /^applications\/[^/]+\/units\/[^/]+\/[^/]+\/understanding\/as-is\.md$/;
+const UNIT_SPEC = /^10-applications\/[^/]+\/01-legacy\/[a-z0-9][^/]*\/[^/]+\/spec\.md$/;
 
 function mockFile(path: string, agent: string, app: string): string {
   const name = path.split("/").at(-1) ?? path;
   if (name === "extract_topology.py") return EXTRACT_TOPOLOGY(app);
   if (UNIT_SPEC.test(path)) {
     const sections = SPEC_SECTIONS.map((section) => `## ${section}\n\nMock output of ${agent} for ${app} (the mock agent backend calls no LLM).\n`);
-    return `# ${path.split("/").slice(-4, -2).join("/")}\n\n${sections.join("\n")}`;
+    return `# ${path.split("/").slice(-3, -1).join("/")}\n\n${sections.join("\n")}`;
   }
   // A diagram that passes scripts/mermaid_lint.py: quoted labels on sanitized ids.
   if (name.endsWith(".mmd")) return `flowchart TD\n    n_agent["${agent}"] --> n_output["${name}"]\n`;

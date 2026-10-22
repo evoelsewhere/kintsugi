@@ -1,7 +1,7 @@
 // Design → a unit: its design documents set by set, each file with its state, its problems and the
-// document itself, and what the rules and the references of the designs come to. Read-only: a
-// member writes the documents in their harness, so each missing or faulty file has the command to
-// give it.
+// document itself, and what the rules and the references of the designs come to. A set that is not
+// written yet and can be generated has a Generate button (ADR-0049); a written design is corrected in
+// its pull request or on its branch, like any document.
 
 import { useMemo, useRef, useState } from "react";
 import { Loaded } from "@/components/loaded";
@@ -10,15 +10,19 @@ import { Markdown } from "@/components/results/lazy-markdown";
 import { type Column, DataTable } from "@/components/ui/data-table";
 import { Drawer } from "@/components/ui/drawer";
 import { StatusDot } from "@/components/ui/status-dot";
-import { designApi, type DesignFile, type DesignState, type UnitDesign, type UnitSetDetail } from "@/lib/api/design";
+import { Play } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { designApi, type DesignFile, type DesignOverview, type DesignState, type UnitDesign, type UnitSetActivity, type UnitSetDetail } from "@/lib/api/design";
+import { applicationEligibility, eligibility } from "@/lib/design-run";
+import { APPLICATION_UNIT_KEY, applicationDesignFilePath, unitKeyDesignSetDir } from "@kintsugi/domain";
 import { documentsApi } from "@/lib/api/documents";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { Field, SubTabs } from "../results/results-parts";
-import { ConformanceMark, CopyButton, TemplateRef } from "./design-parts";
-import { designCommand } from "./design-state";
+import { ConformanceMark, TemplateRef } from "./design-parts";
+import type { RequestGenerate } from "./design-stage";
 
 /** The sub-tab of the drawer: a set id, or "coverage". */
 export const COVERAGE_VIEW = "coverage";
@@ -33,6 +37,10 @@ export function UnitDesignDrawer({
   view,
   onView,
   onClose,
+  overview,
+  activity,
+  runDisabled,
+  onGenerate,
 }: {
   project: ProjectDetail;
   application: ApplicationView;
@@ -41,23 +49,31 @@ export function UnitDesignDrawer({
   view: string | undefined;
   onView: (view: string) => void;
   onClose: () => void;
+  /** The design overview, for what each set of the unit can do now. */
+  overview: DesignOverview | undefined;
+  activity: readonly UnitSetActivity[];
+  /** Why no run can start (permission, repositories); undefined when one can. */
+  runDisabled: string | undefined;
+  onGenerate: RequestGenerate;
 }): React.JSX.Element | null {
-  const loader = useLoader(`design/unit/${project.id}/${application.id}/${unitKey ?? ""}/${refParam ?? ""}`, () => (unitKey === undefined ? Promise.resolve(undefined) : designApi.unit(project.id, application.id, unitKey, refParam)));
+  const loader = useLoader(`design/unit/${project.id}/${application.id}/${unitKey ?? ""}/${refParam ?? ""}`, () =>
+    unitKey === undefined ? Promise.resolve(undefined) : unitKey === APPLICATION_UNIT_KEY ? designApi.application(project.id, application.id, refParam) : designApi.unit(project.id, application.id, unitKey, refParam),
+  );
   if (unitKey === undefined) return null;
   const unit = loader.data;
   return (
     <Drawer
       open
       size="wide"
-      title={unitKey}
-      subtitle={unit === undefined ? undefined : `${unit.unit.kind}${unit.unit.title === undefined || unit.unit.title === unit.unit.unit ? "" : ` · ${unit.unit.title}`}`}
+      title={unitKey === APPLICATION_UNIT_KEY ? "The application" : unitKey}
+      subtitle={unit === undefined ? undefined : unitKey === APPLICATION_UNIT_KEY ? `its own design${unit.unit.title === undefined ? "" : ` · ${unit.unit.title}`}` : `${unit.unit.kind}${unit.unit.title === undefined || unit.unit.title === unit.unit.unit ? "" : ` · ${unit.unit.title}`}`}
       onClose={onClose}
     >
       <Loaded loader={loader} rows={8}>
         {(loaded) =>
           loaded === undefined ? null : (
             <DocumentLinksProvider projectId={project.id} commit={loaded.ref.commit}>
-              <UnitDesignBody project={project} application={application} unit={loaded} view={view} onView={onView} />
+              <UnitDesignBody project={project} application={application} unit={loaded} view={view} onView={onView} generate={generateOf(overview, loaded.unit.key, activity, runDisabled, onGenerate)} />
             </DocumentLinksProvider>
           )
         }
@@ -66,7 +82,22 @@ export function UnitDesignDrawer({
   );
 }
 
-function UnitDesignBody({ project, application, unit, view, onView }: { project: ProjectDetail; application: ApplicationView; unit: UnitDesign; view: string | undefined; onView: (view: string) => void }): React.JSX.Element {
+/** What the unit's drawer offers for a set: the button that generates it, or why it cannot be generated now. */
+type GenerateOf = (set: string) => { action?: () => void; disabled?: string; note?: string } | undefined;
+
+function generateOf(overview: DesignOverview | undefined, unitKey: string, activity: readonly UnitSetActivity[], runDisabled: string | undefined, onGenerate: RequestGenerate): GenerateOf {
+  const row = overview?.units.find((unit) => unit.key === unitKey);
+  return (setId) => {
+    const set = overview?.sets.find((entry) => entry.id === setId);
+    if (overview === undefined || set === undefined || (row === undefined && unitKey !== APPLICATION_UNIT_KEY)) return undefined;
+    const result = unitKey === APPLICATION_UNIT_KEY ? applicationEligibility(overview, set, activity) : eligibility(row!, set, activity);
+    if (result.ok) return runDisabled === undefined ? { action: () => onGenerate(setId, [unitKey]) } : { disabled: runDisabled };
+    // A design that is written is not generated again; say why only for the reasons that are about a run.
+    return /^(Being generated|In an open pull request|Needs)/.test(result.reason) ? { note: result.reason } : undefined;
+  };
+}
+
+function UnitDesignBody({ project, application, unit, view, onView, generate }: { project: ProjectDetail; application: ApplicationView; unit: UnitDesign; view: string | undefined; onView: (view: string) => void; generate: GenerateOf }): React.JSX.Element {
   const known = unit.sets.some((set) => set.set === view);
   const current = view === COVERAGE_VIEW ? COVERAGE_VIEW : known ? (view as string) : (unit.sets.find((set) => set.state === "problems" || set.state === "missing")?.set ?? unit.sets[0]?.set ?? COVERAGE_VIEW);
   const uncovered = unit.coverage.filter((row) => row.coveredBy.length === 0).length;
@@ -86,18 +117,17 @@ function UnitDesignBody({ project, application, unit, view, onView }: { project:
       ) : (
         (() => {
           const set = unit.sets.find((entry) => entry.set === current);
-          return set === undefined ? null : <SetView key={set.set} project={project} application={application} unit={unit} set={set} />;
+          return set === undefined ? null : <SetView key={set.set} project={project} application={application} unit={unit} set={set} generate={generate(set.set)} />;
         })()
       )}
     </div>
   );
 }
 
-function SetView({ project, application, unit, set }: { project: ProjectDetail; application: ApplicationView; unit: UnitDesign; set: UnitSetDetail }): React.JSX.Element {
+function SetView({ project, application, unit, set, generate }: { project: ProjectDetail; application: ApplicationView; unit: UnitDesign; set: UnitSetDetail; generate: ReturnType<GenerateOf> }): React.JSX.Element {
   const first = set.files.find((file) => file.state === "problems") ?? set.files.find((file) => file.state === "missing" && file.required) ?? set.files[0];
   const [chosen, setChosen] = useState<string | undefined>(first?.path);
   const file = set.files.find((entry) => entry.path === chosen) ?? first;
-  const command = designCommand(application.id, unit.unit.key, set.set);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-text-secondary">
@@ -106,7 +136,7 @@ function SetView({ project, application, unit, set }: { project: ProjectDetail; 
           {set.set}@{set.version}
         </span>
         {set.needs.length === 0 ? null : <span>after {set.needs.join(", ")}</span>}
-        {set.files.some((entry) => entry.state === "missing" && entry.required) ? <CopyButton text={command} label="Copy command" what="Command" /> : null}
+        <GenerateAction generate={generate} set={set.set} />
       </div>
       <ul className="flex flex-col gap-1" aria-label="Files of the set">
         {set.files.map((entry) => (
@@ -125,13 +155,25 @@ function SetView({ project, application, unit, set }: { project: ProjectDetail; 
           </li>
         ))}
       </ul>
-      {file === undefined ? null : <FileView project={project} application={application} unit={unit} set={set} file={file} command={command} />}
+      {file === undefined ? null : <FileView project={project} application={application} unit={unit} set={set} file={file} />}
     </div>
   );
 }
 
-function FileView({ project, application, unit, set, file, command }: { project: ProjectDetail; application: ApplicationView; unit: UnitDesign; set: UnitSetDetail; file: DesignFile; command: string }): React.JSX.Element {
-  const path = `applications/${application.id}/units/${unit.unit.key}/design/${set.set}/${file.path}`;
+/** The Generate button of a set, or the reason it is not offered (a run is on it, or a set it needs is missing). */
+function GenerateAction({ generate, set }: { generate: ReturnType<GenerateOf>; set: string }): React.JSX.Element | null {
+  if (generate === undefined) return null;
+  if (generate.note !== undefined) return <span className="text-[12px] text-text-muted">{generate.note}</span>;
+  return (
+    <Button size="small" variant="ghost" className="shadow-border" disabled={generate.action === undefined} title={generate.disabled} onClick={generate.action}>
+      <Play className="size-3.5" />
+      Generate {set}
+    </Button>
+  );
+}
+
+function FileView({ project, application, unit, set, file }: { project: ProjectDetail; application: ApplicationView; unit: UnitDesign; set: UnitSetDetail; file: DesignFile }): React.JSX.Element {
+  const path = unit.unit.key === APPLICATION_UNIT_KEY ? applicationDesignFilePath(application.id, set.set, file.path) : `${unitKeyDesignSetDir(application.id, unit.unit.key, set.set)}/${file.path}`;
   return (
     <div className="flex flex-col gap-3">
       {file.stale ? (
@@ -148,7 +190,6 @@ function FileView({ project, application, unit, set, file, command }: { project:
       {file.state === "missing" ? (
         <div className="flex flex-wrap items-center gap-2 text-[13px] text-text-secondary">
           <span>{file.required ? "This file is required and not written yet." : "This optional file is not written."}</span>
-          <CopyButton text={command} label="Copy command" what="Command" />
         </div>
       ) : null}
       {file.problems.length === 0 ? null : <ProblemList problems={file.problems} />}

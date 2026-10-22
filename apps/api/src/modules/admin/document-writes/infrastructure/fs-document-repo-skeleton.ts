@@ -8,13 +8,14 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Injectable } from "@nestjs/common";
+import { applicationDir } from "@kintsugi/domain";
 import type { DocumentWriteFile } from "../domain/document-write.js";
 import { DocumentRepoSkeleton } from "../domain/document-write.ports.js";
 
 const TEMPLATE = "templates/document-repo";
 /** The sample application folder of the template. */
-const SAMPLE_APPLICATION = "applications/billing-web/";
 const SAMPLE_ID = "billing-web";
+const SAMPLE_APPLICATION = `${applicationDir(SAMPLE_ID)}/`;
 const MANIFEST = "kintsugi.yaml";
 
 /** KINTSUGI_TEMPLATES_DIR, else the `templates` folder above the running code (the repository root, or /app in the image). */
@@ -55,7 +56,7 @@ export class FsDocumentRepoSkeleton extends DocumentRepoSkeleton {
         continue;
       }
       const rest = path.slice(SAMPLE_APPLICATION.length);
-      for (const id of applicationIds) files.push({ path: `applications/${id}/${rest}`, content: content.replaceAll(SAMPLE_ID, id), createOnly: true });
+      for (const id of applicationIds) files.push({ path: `${applicationDir(id)}/${rest}`, content: content.replaceAll(SAMPLE_ID, id), createOnly: true });
     }
     return files;
   }
