@@ -9,7 +9,7 @@ import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trai
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
 import type { SourceRepo } from "@kintsugi/domain";
-import { sleep } from "#common/util/async.js";
+import { ChangeFeed } from "#common/realtime/change-feed.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import {
   FINAL_RUN_STATUSES,
@@ -29,8 +29,11 @@ export const DESIGN = "design";
 /** Stages that run on a selection and several at a time. */
 const SCOPED_STAGES: readonly string[] = [UNDERSTAND, DESIGN];
 
-/** How often a follower looks for new events, and how many it takes at a time. */
-const FOLLOW_POLL_MS = 1000;
+/**
+ * A follower reads again when the database says the run changed (change feed); this is how long it waits at most
+ * without a notice, in case one was lost. And how many events it takes at a time.
+ */
+const FOLLOW_SAFETY_MS = 30_000;
 const FOLLOW_BATCH = 200;
 import { JobRunQueue, JobRunStore, StageCatalog } from "../domain/job-run.ports.js";
 
@@ -42,6 +45,7 @@ export class JobRunsService {
     private readonly projects: ProjectsService,
     private readonly audit: AuditTrail,
     private readonly stages: StageCatalog,
+    private readonly feed: ChangeFeed,
   ) {}
 
   /**
@@ -221,24 +225,31 @@ export class JobRunsService {
   async *follow(projectId: string, id: string, afterId: string | undefined, signal: AbortSignal): AsyncGenerator<JobRunFollowUpdate> {
     let last = afterId;
     let status: string | undefined;
-    while (!signal.aborted) {
-      const run = await this.summary(projectId, id);
-      const events = await this.store.events(id, last, FOLLOW_BATCH);
-      for (const event of events) {
-        last = event.id;
-        yield { type: "event", event };
+    // Watching starts before the first read, and a notice that comes while reading is kept: none is missed.
+    const watcher = this.feed.watch((change) => (change.topic === "job-events" && change.scope === id) || (change.topic === "job-runs" && change.scope === projectId), signal);
+    try {
+      while (!signal.aborted) {
+        watcher.clear();
+        const run = await this.summary(projectId, id);
+        const events = await this.store.events(id, last, FOLLOW_BATCH);
+        for (const event of events) {
+          last = event.id;
+          yield { type: "event", event };
+        }
+        if (run.status !== status) {
+          status = run.status;
+          yield { type: "status", run };
+        }
+        if (FINAL_RUN_STATUSES.includes(run.status) && events.length < FOLLOW_BATCH) {
+          // Events written just before the final status are in this batch or the next query.
+          for (const event of await this.store.events(id, last, FOLLOW_BATCH)) yield { type: "event", event };
+          yield { type: "end", run };
+          return;
+        }
+        if (events.length < FOLLOW_BATCH) await watcher.wait(FOLLOW_SAFETY_MS);
       }
-      if (run.status !== status) {
-        status = run.status;
-        yield { type: "status", run };
-      }
-      if (FINAL_RUN_STATUSES.includes(run.status) && events.length < FOLLOW_BATCH) {
-        // Events written just before the final status are in this batch or the next query.
-        for (const event of await this.store.events(id, last, FOLLOW_BATCH)) yield { type: "event", event };
-        yield { type: "end", run };
-        return;
-      }
-      if (events.length < FOLLOW_BATCH) await sleep(FOLLOW_POLL_MS, signal);
+    } finally {
+      watcher.close();
     }
   }
 
