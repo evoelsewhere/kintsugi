@@ -51,6 +51,16 @@ describe("Coding Agent Workflow security model", () => {
     expect(sanitizeCodingAgentConnections([connection])).toHaveLength(1);
   });
 
+  it("keeps API connection metadata when the response omits userId", () => {
+    const connection = {
+      id: "conn-api-shape",
+      clientName: "Kintsugi CLI",
+      projectIds: ["caw-e2e-20261023"],
+      createdAt: "2026-10-23T01:01:33.419Z",
+      lastUsedAt: "2026-10-23T01:19:03.252Z",
+    };
+    expect(connectionListFromApi({ items: [connection] })).toEqual([connection]);
+  });
   it("drops malformed connection records rather than rendering untrusted values", () => {
     expect(sanitizeCodingAgentConnections([
       { id: "", userId: "user-1", clientName: "CLI", projectIds: [], createdAt: "2026-10-22T00:00:00.000Z" },

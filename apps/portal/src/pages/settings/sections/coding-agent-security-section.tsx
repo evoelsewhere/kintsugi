@@ -124,7 +124,7 @@ export function CodingAgentSecuritySection(): React.JSX.Element {
             const expired = policy !== null && !revoked && connectionRenewalExpired(connection.createdAt, policy.maxAgeDays);
             return <li key={connection.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3.5 py-2.5 text-[12px]">
               <div className="min-w-48 flex-1">
-                <p className="font-medium text-text">{connection.clientName} <span className="font-normal text-text-muted">· {connection.userId}</span></p>
+                <p className="font-medium text-text">{connection.clientName}{connection.userId === undefined ? null : <span className="font-normal text-text-muted"> · {connection.userId}</span>}</p>
                 <p className="mt-0.5 text-[11px] text-text-muted">Projects: {connection.projectIds.map((id) => <code key={id} className="mr-1 rounded bg-recessed px-1 py-0.5 font-mono">{id}</code>)}</p>
               </div>
               <div className="text-[11px] text-text-muted">

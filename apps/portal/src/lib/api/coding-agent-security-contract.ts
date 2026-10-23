@@ -9,7 +9,7 @@ export interface CodingAgentConnectionLifetimeView {
 
 export interface CodingAgentConnectionMetadata {
   id: string;
-  userId: string;
+  userId?: string;
   clientName: string;
   projectIds: string[];
   createdAt: string;
@@ -31,7 +31,7 @@ export function sanitizeCodingAgentConnections(value: unknown): CodingAgentConne
   return value.flatMap((item): CodingAgentConnectionMetadata[] => {
     if (!isRecord(item)
       || typeof item.id !== "string" || item.id.length === 0
-      || typeof item.userId !== "string" || item.userId.length === 0
+      || (item.userId !== undefined && (typeof item.userId !== "string" || item.userId.length === 0))
       || typeof item.clientName !== "string" || item.clientName.length === 0
       || !Array.isArray(item.projectIds) || !item.projectIds.every((id) => typeof id === "string")
       || !validTimestamp(item.createdAt)
@@ -39,7 +39,7 @@ export function sanitizeCodingAgentConnections(value: unknown): CodingAgentConne
       || (item.revokedAt !== undefined && !validTimestamp(item.revokedAt))) return [];
     return [{
       id: item.id,
-      userId: item.userId,
+      ...(typeof item.userId === "string" ? { userId: item.userId } : {}),
       clientName: item.clientName,
       projectIds: [...item.projectIds] as string[],
       createdAt: item.createdAt,
