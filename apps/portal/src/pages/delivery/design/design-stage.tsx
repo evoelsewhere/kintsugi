@@ -73,7 +73,7 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
     );
 
   const runs = useLoader(`runs/${project.id}/${application.id}/design`, async () => (await jobRunsApi.list(project.id, application.id, RUN_LIMIT)).items, {
-    refresh: (list) => (list.some((run) => isActiveStatus(run.status) || run.documentWrite?.status === "queued") ? 3000 : 30000),
+    live: [`job-runs:${project.id}`, `document-writes:${project.id}`],
   });
   const designRuns = runs.data === undefined ? undefined : runsOfStage(runs.data, "design");
   // The documents and the activity are read again when a run changes state (finished, merged, abandoned).
@@ -196,7 +196,7 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
                 onFilters={(patch) => update({ ...patch })}
                 selected={params.get("item") ?? undefined}
                 onOpen={(key) => open(key)}
-                understandLink={deliveryLink({ projectId: project.id, applicationId: application.id, stage: "understand" })}
+                understandLink={`${deliveryLink({ projectId: project.id, applicationId: application.id, stage: "understand" })}&tab=catalog`}
               />
             ) : (
               <DesignCoverageTab overview={view} filter={coverageFilter} onFilter={(next) => update({ cov: next === "all" ? undefined : next })} onOpenUnit={(key) => open(key, "coverage")} />

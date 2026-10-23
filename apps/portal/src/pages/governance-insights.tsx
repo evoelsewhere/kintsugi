@@ -28,7 +28,7 @@ const WAIT_BUCKETS: Array<{ label: string; below: number }> = [
 ];
 
 function GatesInsights(): React.JSX.Element | null {
-  const gates = useLoader("governance-insight-gates", async () => (await governanceApi.gates({ limit: 200 })).items, { refresh: () => 20000 });
+  const gates = useLoader("governance-insight-gates", async () => (await governanceApi.gates({ limit: 200 })).items, { live: ["gates"] });
   const now = useNow(false);
   if (gates.data === undefined) return null;
   const list = gates.data;
@@ -71,7 +71,7 @@ function GatesInsights(): React.JSX.Element | null {
 }
 
 function AuditInsights(): React.JSX.Element | null {
-  const audit = useLoader("governance-insight-audit", async () => (await governanceApi.audit({ limit: 200 })).items, { refresh: () => 30000 });
+  const audit = useLoader("governance-insight-audit", async () => (await governanceApi.audit({ limit: 200 })).items, { live: ["audit"] });
   const now = useNow(false);
   if (audit.data === undefined) return null;
   const list = audit.data;

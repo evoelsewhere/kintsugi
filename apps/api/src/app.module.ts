@@ -40,6 +40,8 @@ import { StageDecisionsModule } from "./modules/governance/stage-decisions/index
 import { PoliciesModule } from "./modules/governance/policies/policies.module.js";
 import { ReviewsModule } from "./modules/governance/reviews/reviews.module.js";
 import { RisksModule } from "./modules/governance/risks/risks.module.js";
+import { RealtimeModule } from "./common/realtime/realtime.module.js";
+import { EventsModule } from "./modules/system/events/events.module.js";
 import { DebugModule } from "./modules/system/debug/debug.module.js";
 import { HealthModule } from "./modules/system/health/health.module.js";
 
@@ -54,6 +56,8 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     AuthModule,
     // system
     HealthModule,
+    RealtimeModule,
+    EventsModule,
     // the debug MCP server exists only on a development installation (ADR-0056)
     ...(debugMcpEnabled() ? [DebugModule] : []),
     // admin

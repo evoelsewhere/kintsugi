@@ -1,4 +1,4 @@
-# ADR-0062: Generate portable Agent Plugins packages for Codex and Copilot
+# ADR-0063: Generate portable Agent Plugins packages for Codex and Copilot
 
 - Status: Accepted
 - Date: 2026-10-22

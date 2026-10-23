@@ -14,6 +14,7 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { useToast } from "@/components/ui/toast";
 import { gitApi, type GitRepositoryView, type GitServerInput, type GitServerView } from "@/lib/api/git";
 import { formatRelative, shortSha } from "@/lib/format";
+import { subscribeLive } from "@/lib/live";
 import { CommitIdentityCard } from "./commit-identity-card";
 import { GitBranchDialog } from "./git-branch-dialog";
 import { GitRepositoryDialog } from "./git-repository-dialog";
@@ -50,13 +51,8 @@ export function GitSection(): React.JSX.Element {
     void load();
   }, [load]);
 
-  // The worker clones new repositories in the background: follow them until they are ready.
-  const settling = repositories.some((repository) => repository.syncStatus === "pending" || repository.syncStatus === "cloning");
-  useEffect(() => {
-    if (!settling) return;
-    const timer = setInterval(() => void load(), 3000);
-    return () => clearInterval(timer);
-  }, [settling, load]);
+  // The worker clones new repositories in the background: their status reaches this list over the live stream.
+  useEffect(() => subscribeLive(["repositories"], () => void load()), [load]);
 
   async function saveServer(id: string, input: GitServerInput): Promise<void> {
     if (serverDialog.server === null) await gitApi.createServer({ id, ...input });

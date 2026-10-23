@@ -46,10 +46,10 @@ export function RuntimeStage({ project, application, stage }: { project: Project
   const [confirming, setConfirming] = useState(false);
   // The run list has no stage filter: the application's recent runs are filtered here.
   const runs = useLoader(`runs/${project.id}/${application.id}`, async () => (await jobRunsApi.list(project.id, application.id, RUN_LIMIT)).items, {
-    refresh: (list) => (list.some((run) => isActiveStatus(run.status) || run.documentWrite?.status === "queued") ? 3000 : 30000),
+    live: [`job-runs:${project.id}`, `document-writes:${project.id}`],
   });
   const writes = useLoader(`writes/${project.id}`, async () => (await projectsApi.documentWrites(project.id, 30)).items, {
-    refresh: (list) => (list.some((write) => write.status === "queued") ? 3000 : 30000),
+    live: [`document-writes:${project.id}`],
   });
   const agents = useLoader("agents", agentsApi.list);
 

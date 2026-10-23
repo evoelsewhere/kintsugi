@@ -600,6 +600,13 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(empty.run?.status).toBe("succeeded");
     expect(empty.agents.specs).toHaveLength(2);
     expect(empty.agents.specs[1]?.task).toContain("does not match the schema (missing");
+    expect(empty.agents.specs[1]?.task).toContain("the file has: no properties");
+    expect(empty.agents.specs[1]?.task).toContain("not wrapped in another key");
+
+    // A result wrapped in one extra key is unwrapped, with no repair attempt.
+    const wrapped = await run(() => ({ "result.json": JSON.stringify({ result: JSON.parse(good) }) }));
+    expect(wrapped.run?.status).toBe("succeeded");
+    expect(wrapped.agents.specs).toHaveLength(1);
 
     // Still wrong after the repair attempt: the step fails and says what was wrong.
     const hopeless = await run(() => ({ "result.json": "{}" }));

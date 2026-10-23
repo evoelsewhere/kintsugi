@@ -1,8 +1,8 @@
 // The understand stage of one application (ADR-0033): it runs on a selection of catalog items.
-// Three tabs — Catalog (the module → item tree-table with a status per item, search and filters,
-// tri-state module checkboxes and a sticky run bar for the selection), Runs (the understand runs
-// with their scope, status and pull request, Retry and Abandon, and their live logs) and Results
-// (map, rules, security and traceability for the whole application or one item).
+// Three tabs — Overview (the default: map, rules, security and traceability for the whole
+// application or one item), Catalog (the module → item tree-table with a status per item, search
+// and filters, tri-state module checkboxes and a sticky run bar for the selection) and Runs (the
+// understand runs with their scope, status and pull request, Retry and Abandon, and their live logs).
 // URL: …&tab=catalog|runs|results (&run=<id> opens Runs on that run; &view, &item on Results).
 
 import { ListTree, Play, RefreshCw, Sparkles, Undo2, X } from "lucide-react";
@@ -60,7 +60,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const runs = useLoader(`runs/${project.id}/${application.id}/understand`, async () => (await jobRunsApi.list(project.id, application.id, RUN_LIMIT)).items, {
-    refresh: (list) => (list.some((run) => isActiveStatus(run.status) || run.documentWrite?.status === "queued") ? 3000 : 30000),
+    live: [`job-runs:${project.id}`, `document-writes:${project.id}`],
   });
   const understandRuns = runs.data === undefined ? undefined : runsOfStage(runs.data, "understand");
   const rebuilds = runs.data === undefined ? [] : runsOfStage(runs.data, "rebuild");
@@ -75,7 +75,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
   );
 
   const requested = params.get("tab");
-  const tab: Tab = requested === "runs" || requested === "results" || requested === "catalog" ? requested : params.get("run") !== null ? "runs" : "catalog";
+  const tab: Tab = requested === "runs" || requested === "results" || requested === "catalog" ? requested : params.get("run") !== null ? "runs" : "results";
   const setParam = (entries: Record<string, string | undefined>): void =>
     setParams(
       (previous) => {
@@ -137,9 +137,9 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
         value={tab}
         onChange={(next) => setParam({ tab: next })}
         tabs={[
+          { id: "results", label: "Overview" },
           { id: "catalog", label: "Catalog", ...(total === 0 ? {} : { count: total }) },
           { id: "runs", label: "Runs", ...(pageRuns === undefined ? {} : { count: pageRuns.length }) },
-          { id: "results", label: "Overview" },
         ]}
       />
 
@@ -186,7 +186,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
 
       {tab === "results" ? (
         <Suspense fallback={<Card><SkeletonRows rows={6} /></Card>}>
-          <UnderstandResultsTab project={project} application={application} catalog={catalog.data ?? null} version={version} runs={understandRuns} />
+          <UnderstandResultsTab project={project} application={application} catalog={catalog.data ?? null} version={version} runs={understandRuns} onOpenCatalog={() => setParam({ tab: "catalog" })} onOpenRuns={() => setParam({ tab: "runs" })} />
         </Suspense>
       ) : null}
     </div>

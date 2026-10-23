@@ -3,7 +3,7 @@
 // stores, the persona flows and observations, and the three diagrams (call graph, data lineage,
 // critical path).
 
-import { Database, DoorOpen, Lightbulb } from "lucide-react";
+import { Database, DoorOpen, Lightbulb, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { InlineText } from "@/components/results/inline-text";
 import { MermaidDiagram } from "@/components/results/mermaid-diagram";
@@ -127,6 +127,13 @@ function GraphTab({ topology }: { topology: Topology }): React.JSX.Element {
             <Select value={focus} options={nodeOptions} onChange={setFocus} />
             <Select value={depth} disabled={focus === ""} options={DEPTHS} onChange={setDepth} />
           </div>
+          <NodeFinder
+            nodes={topology.nodes}
+            onPick={(id) => {
+              setFocus(id);
+              setSelected(id);
+            }}
+          />
           {chart.shown < chart.matching ? (
             <p className="text-[12px] text-text-secondary">
               Showing the {chart.shown} largest of {formatCount(chart.matching)} nodes: pick a domain or focus a node to see the rest.
@@ -191,6 +198,51 @@ function GraphTab({ topology }: { topology: Topology }): React.JSX.Element {
           <NodeDetail topology={topology} id={selected} onOpen={setSelected} />
         )}
       </Section>
+    </div>
+  );
+}
+
+/** Finds a node among all of them (the graph draws only the largest): by name, id, file or domain; picking one focuses it. */
+function NodeFinder({ nodes, onPick }: { nodes: MapNode[]; onPick: (id: string) => void }): React.JSX.Element {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const found = useMemo(
+    () => (needle === "" ? [] : nodes.filter((node) => [node.name, node.id, node.file ?? "", node.domain ?? ""].some((text) => text.toLowerCase().includes(needle)))),
+    [nodes, needle],
+  );
+  const pick = (id: string): void => {
+    onPick(id);
+    setQuery("");
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="relative flex items-center">
+        <Search className="pointer-events-none absolute left-2.5 size-3.5 text-text-muted" strokeWidth={1.75} />
+        <input
+          type="search"
+          value={query}
+          placeholder={`Find any of the ${formatCount(nodes.length)} nodes by name, id or file`}
+          aria-label="Find a node"
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            const first = found[0];
+            if (event.key === "Enter" && first !== undefined) pick(first.id);
+          }}
+          className="shadow-border h-[var(--geist-form-small-height)] w-full rounded-[var(--geist-radius)] bg-transparent pr-3 pl-8 text-[13px] text-text placeholder:text-text-muted focus-visible:outline-1 focus-visible:outline-[var(--ds-input-focus-color)] focus-visible:outline-auto focus-visible:shadow-none"
+        />
+      </label>
+      {needle === "" ? null : found.length === 0 ? (
+        <p className="px-1 text-[12px] text-text-muted">No node matches.</p>
+      ) : (
+        <ul className="shadow-border max-h-56 overflow-auto rounded-lg bg-surface p-1">
+          {found.slice(0, 20).map((node) => (
+            <li key={node.id}>
+              <NodeLink node={node} onOpen={pick} />
+            </li>
+          ))}
+          {found.length > 20 ? <li className="px-1.5 py-1 text-[11px] text-text-muted">{formatCount(found.length - 20)} more: type more of the name.</li> : null}
+        </ul>
+      )}
     </div>
   );
 }

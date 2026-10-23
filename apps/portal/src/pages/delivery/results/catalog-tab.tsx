@@ -26,7 +26,7 @@ export default function CatalogTab({ project, application, version }: CatalogTab
         if (error instanceof ApiError && error.status === 404) return null;
         throw error;
       }),
-    { refresh: (view) => (view?.items.some((item) => item.status === "running") === true ? 5000 : 30000) },
+    { live: [`job-runs:${project.id}`, "repositories"] },
   );
   return (
     <Loaded loader={catalog} rows={6}>

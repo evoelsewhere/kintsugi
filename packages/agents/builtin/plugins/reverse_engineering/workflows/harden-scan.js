@@ -371,7 +371,17 @@ ${UNTRUSTED}`,
 // ---- Phase: Verify — refute each finding; Critical/High get a second judge ----
 const SEV_RANK = { Critical: 0, High: 1, Medium: 2, Low: 3 }
 
+// A judge that returned nothing (usually a result file of the wrong shape) gets one more try while the agent cap
+// has room to spare; what still has no verdict is returned as unverified.
+const RETRY_MARGIN = 10
 async function judge(finding, stance, label) {
+  const first = await askJudge(finding, stance, label)
+  if (first || (budget.agents && budget.agents.remaining() <= RETRY_MARGIN)) return first
+  log(`Verify: no verdict for ${label}, asking once more`)
+  return askJudge(finding, stance, label)
+}
+
+function askJudge(finding, stance, label) {
   return agent(
     `${stance}
 

@@ -1,6 +1,6 @@
 # ADR-0038: Document repo layout by subject and SDLC phase
 
-- Status: Accepted. The unit and application trees below are superseded by ADR-0042 and ADR-0051. Coding Agent Workflow task context and evidence-bound continuation amend the member access and gate-record rules (ADRs 0052, 0053 and 0054).
+- Status: Accepted. The unit and application trees below are superseded by ADR-0042 and ADR-0051. Coding Agent Workflow task context and evidence-bound continuation amend the member access and gate-record rules (ADRs 0061 and 0062).
 - Date: 2026-10-15
 - Decision register: D55
 

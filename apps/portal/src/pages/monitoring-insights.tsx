@@ -12,6 +12,7 @@ import { formatRelative } from "@/lib/format";
 import { averageMs, formatMs, percent, successRate } from "@/lib/run-stats";
 import { isActiveStatus } from "@/lib/status";
 import { stageLabel } from "@/lib/stages";
+import { OVERVIEW_TOPICS, WORKER_AGES } from "@/lib/live";
 import { useLoader } from "@/lib/use-loader";
 import { useNow } from "@/lib/use-now";
 import { workerVerdict } from "@/lib/worker-health";
@@ -34,7 +35,7 @@ export function MonitoringInsights({ tab }: { tab: "runs" | "repositories" | "wr
 
 function RunsInsights(): React.JSX.Element | null {
   const runs = useLoader("monitoring-insight-runs", async () => (await jobRunsApi.listAll({ limit: 200 })).items, {
-    refresh: (list) => (list.some((run) => isActiveStatus(run.status)) ? 3000 : 15000),
+    live: ["job-runs", "document-writes"],
   });
   if (runs.data === undefined) return null;
   const top = runs.data.filter((run) => run.kind === "stage");
@@ -85,7 +86,7 @@ const AGE_BUCKETS: Array<{ label: string; below: number }> = [
 ];
 
 function RepositoriesInsights(): React.JSX.Element | null {
-  const repositories = useLoader("monitoring-insight-repositories", monitoringApi.repositories, { refresh: () => 15000 });
+  const repositories = useLoader("monitoring-insight-repositories", monitoringApi.repositories, { live: ["repositories"] });
   const now = useNow(false);
   if (repositories.data === undefined) return null;
   const list = repositories.data;
@@ -131,7 +132,7 @@ const formatNewest = (dates: string[]): string => (dates.length === 0 ? "Never" 
 
 function WritesInsights(): React.JSX.Element | null {
   const writes = useLoader("monitoring-insight-writes", async () => (await monitoringApi.documentWrites({ limit: 100 })).items, {
-    refresh: (list) => (list.some((write) => write.status === "queued") ? 3000 : 15000),
+    live: ["document-writes"],
   });
   const now = useNow(false);
   if (writes.data === undefined) return null;
@@ -178,8 +179,8 @@ function WritesInsights(): React.JSX.Element | null {
 }
 
 function WorkerInsights(): React.JSX.Element | null {
-  const overview = useLoader("overview", monitoringApi.overview, { refresh: () => 10000 });
-  const workers = useLoader("monitoring/workers", monitoringApi.workers, { refresh: () => 10000 });
+  const overview = useLoader("overview", monitoringApi.overview, { live: OVERVIEW_TOPICS, refresh: WORKER_AGES });
+  const workers = useLoader("monitoring/workers", monitoringApi.workers, { live: ["workers"], refresh: WORKER_AGES });
   if (overview.data === undefined) return null;
   const { worker } = overview.data;
   const verdict = workerVerdict(worker);

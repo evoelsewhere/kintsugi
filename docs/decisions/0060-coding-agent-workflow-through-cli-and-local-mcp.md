@@ -1,4 +1,4 @@
-# ADR-0059: Coding Agent Workflow through the CLI and stdio MCP
+# ADR-0060: Coding Agent Workflow through the CLI and stdio MCP
 
 - Status: Accepted
 - Date: 2026-10-20

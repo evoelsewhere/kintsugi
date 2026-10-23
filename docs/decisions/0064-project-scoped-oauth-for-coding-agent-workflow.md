@@ -1,9 +1,9 @@
-# ADR-0063: Use project-scoped browser authorization for the local Coding Agent Workflow
+# ADR-0064: Use project-scoped browser authorization for the local Coding Agent Workflow
 
 - Status: Accepted
 - Date: 2026-10-22
 - Decision register: D79
-- Supersedes: ADR-0059 decision 7 only (OAuth deferral for the local Coding Agent Workflow)
+- Supersedes: ADR-0060 decision 7 only (OAuth deferral for the local Coding Agent Workflow)
 
 ## Context
 

@@ -1,4 +1,4 @@
-# ADR-0061: Continue workflows from evidence-bound pull requests and gates
+# ADR-0062: Continue workflows from evidence-bound pull requests and gates
 
 - Status: Accepted
 - Date: 2026-10-20
