@@ -73,7 +73,7 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
     );
 
   const runs = useLoader(`runs/${project.id}/${application.id}/design`, async () => (await jobRunsApi.list(project.id, application.id, RUN_LIMIT)).items, {
-    refresh: (list) => (list.some((run) => isActiveStatus(run.status) || run.documentWrite?.status === "queued") ? 3000 : 30000),
+    live: [`job-runs:${project.id}`, `document-writes:${project.id}`],
   });
   const designRuns = runs.data === undefined ? undefined : runsOfStage(runs.data, "design");
   // The documents and the activity are read again when a run changes state (finished, merged, abandoned).

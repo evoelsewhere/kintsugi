@@ -54,7 +54,7 @@ export function GatesView({ status, onStatus, projectOptions }: { status: string
   const gates = useLoader<Page<Gate>>(
     `gates/${filter.id}/${projectId}/${offset}`,
     () => governanceApi.gates({ status: filter.statuses, ...(projectId === "" ? {} : { projectId }), limit: PAGE_SIZE, offset }),
-    { refresh: () => 20000 },
+    { live: ["gates"] },
   );
   const canDecide = can("gates.decide");
   const canRequest = canDecide || can("gates.request");
