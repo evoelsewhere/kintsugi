@@ -135,7 +135,7 @@ describe("fixed review input materialization", () => {
   it("pins PR revisions, complete Git diff and approved snapshot documents into read-only inputs", async () => {
     const jobRunId = "review-input-complete";
     const manifest = await materializeReviewInput(dependencies(), observedPullRequest(), snapshot(), jobRunId);
-    const inputDir = storage.job(jobRunId).in;
+    const inputDir = storage.job(jobRunId).docs;
     const input = JSON.parse(await readFile(join(inputDir, "review-input.json"), "utf8")) as Record<string, unknown>;
 
     expect(manifest).toMatchObject({
