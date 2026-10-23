@@ -28,9 +28,29 @@ A card in `<module>.md` is a heading `## <module>/<item>: <name>`, the item's su
 
 Ids are `<segment>/<segment>` of `[a-z0-9][a-z0-9-]{0,62}`. The links between items (`Depends on`, `Used by`, `Data stores`) are computed by `render_catalog.py` from the topology's edges, so the planning stage needs no topology.
 
+## Item kinds
+
+An item has one `kind`, one of the project's `unitKinds` ([ADR-0060](../decisions/0060-item-kinds-and-kind-aware-understanding.md)). Kintsugi knows seven core kinds, named by what the item is to the outside world, not by technology:
+
+| Kind | An item that is… | Web / modern examples | Mainframe examples |
+|---|---|---|---|
+| `screen` | an interactive page or form a person works in | a routed view, page, form, dialog | a CICS transaction with a BMS map, an ISPF panel, a 3270 program |
+| `api` | a synchronous interface other programs call | a REST, SOAP or RPC endpoint group | a CICS program exposed as a service, a stored procedure exposed to callers |
+| `batch-job` | unattended work started by a schedule or an operator | a scheduled task, a cron script | a JCL job or procedure with the programs it runs |
+| `report` | something that produces a document or an extract for people | a report template, an export | a print program writing a report dataset |
+| `event` | a handler that reacts to a message | a queue or topic listener, a webhook | an MQ-triggered program |
+| `integration` | an exchange of data with an external system | a file feed, an SFTP or EDI exchange | a file transfer step, an outbound queue writer |
+| `module` | logic with no entry point of its own, used by other items (the default) | a service, a library of rules | a called subprogram |
+
+The first six are entry kinds (how the system is triggered). A project that declares no `unitKinds` gets all seven; it may declare a subset and add kinds of its own (a kind outside the core has no built-in [specification profile](specification-profiles.md)). Data is not an item kind: data objects stay in the DTO catalog (`data-objects.md` per item) and a `datastore` leaf of the topology is never an item.
+
+`catalog_from_topology.py` maps the leaf kind of the topology onto the kinds the project allows: the leaf kind itself, then its aliases and synonyms (`controller` and `endpoint` are `api`, `batch` is `job`, `job` is `batch-job`, `page` and `map` are `screen`, `listener` is `event`, `feed` is `integration`, …), then `module`. When nothing fits, the item takes `module` (or the first kind when `module` is not allowed) and the catalog's `Ambiguities` says so (`<item> has no kind in unitKinds for the leaf kind "<x>"`). A generic `module` leaf that is an entry point of the application takes the first of `api`, `service`, `transaction`, `program` that the project allows. The curation job may correct a kind (`set-kind`); an item's id does not change with its kind. A file that serves two roles belongs to the item of its main role; the other role is listed as a `Part` with its own kind.
+
+The leaf kinds the topology extraction may write are `screen`, `api`, `job`, `report`, `event`, `interface`, `module` and `datastore`. A `screen` that calls an endpoint has a `call` edge to the `api` leaf that serves it, across repositories when the application has several.
+
 ## Status
 
-An item's status is derived, never stored in the card: `not-analysed`, `running`, `in-pr`, `failed`, `understood`, `stale` or `retired` (the card's `status` only says whether the item still exists). `understood` means `10-applications/<app>/01-legacy/<module>/<item>/understanding.md` is on the default branch; `stale` means the digest in that record differs from the card's. See [reads and stage results](document-repo-read-path.md).
+An item's status is derived, never stored in the card: `not-analysed`, `running`, `in-pr`, `failed`, `understood`, `stale` or `retired` (the card's `status` only says whether the item still exists). `understood` means `10-applications/<app>/01-legacy/<module>/<item>/understanding.md` is on the default branch; `stale` means the digest in that record differs from the card's (`staleReason: source`), or the specification profile recorded in it is older than the current profile of the item's kind, or of another kind (`staleReason: profile`, [specification profiles](specification-profiles.md)). See [reads and stage results](document-repo-read-path.md).
 
 ## Who writes what
 

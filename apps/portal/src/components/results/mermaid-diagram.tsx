@@ -45,6 +45,23 @@ function configure(mermaid: MermaidApi, layout: Layout): void {
   configured = `${theme}/${layout}`;
 }
 
+let scratch: HTMLElement | undefined;
+
+/**
+ * Where Mermaid lays a diagram out. Without a container it appends its working element to <body>, unstyled and in view,
+ * so a large diagram shows as overlapping text at the foot of the page for as long as the layout takes. This one is
+ * off screen but still laid out, as Mermaid measures the text in it.
+ */
+function scratchArea(): HTMLElement {
+  if (scratch?.isConnected !== true) {
+    scratch = document.createElement("div");
+    scratch.setAttribute("aria-hidden", "true");
+    scratch.style.cssText = "position:fixed;left:-100000px;top:0;width:1200px;pointer-events:none;visibility:hidden";
+    document.body.append(scratch);
+  }
+  return scratch;
+}
+
 async function render(id: string, source: string): Promise<string> {
   loading ??= load().catch((error: unknown) => {
     loading = undefined;
@@ -54,12 +71,12 @@ async function render(id: string, source: string): Promise<string> {
   const next = queue.then(async () => {
     configure(mermaid, "elk");
     try {
-      return await mermaid.render(id, source);
+      return await mermaid.render(id, source, scratchArea());
     } catch (failure) {
       // ELK could not lay it out (or the source is wrong): the default layout tells which.
       document.getElementById(`d${id}`)?.remove();
       configure(mermaid, "dagre");
-      return mermaid.render(id, source).catch(() => {
+      return mermaid.render(id, source, scratchArea()).catch(() => {
         throw failure;
       });
     }

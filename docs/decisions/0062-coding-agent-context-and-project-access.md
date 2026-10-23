@@ -1,4 +1,4 @@
-# ADR-0061: Scope Coding Agent Workflow context with Project Access and immutable snapshots
+# ADR-0062: Scope Coding Agent Workflow context with Project Access and immutable snapshots
 
 - Status: Accepted
 - Date: 2026-10-20

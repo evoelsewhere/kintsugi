@@ -1,6 +1,6 @@
 # ADR-0007: Git is the source of truth for code, documents and assets
 
-- Status: Accepted. Amended by [ADR-0062](0062-evidence-bound-pr-continuation.md) for provider-observed pull requests and durable workflow continuation.
+- Status: Accepted. Amended by [ADR-0063](0063-evidence-bound-pr-continuation.md) for provider-observed pull requests and durable workflow continuation.
 - Date: 2026-10-09
 
 ## Decision

@@ -161,7 +161,7 @@ try to keep them yourself.
 Every file of the inventory must stay in exactly one item or in "unassigned", and no item may end up without files.
 Improve the catalog where it helps a person choose what to analyse, and only there:
 - give items and modules business names and one-sentence summaries (rename, rename-module, describe);
-- fix kinds (set-kind, one of unitKinds): a screen, an API, a batch job, a report, a service;
+- fix kinds (set-kind, one of unitKinds): screen (an interactive page or form), api (a synchronous interface others call), batch-job (unattended scheduled work), report, event (a message handler), integration (an exchange with an external system), module (logic with no entry point of its own); an item has one kind, its main role;
 - merge items that are one piece of behaviour (merge, into the first item), split an item that holds unrelated
   behaviour (split: the pieces together hold exactly the item's files), move an item to its module (move-item);
 - place unassigned source files that belong to an item (move-files with "to"); leave documentation and build files
@@ -209,7 +209,9 @@ per the mermaid-diagrams skill, without a Markdown fence. It must be readable at
 - draw only the 8–15 dependencies that matter most between domains, with edge labels of at most three words;
 - sanitized ids, quoted labels of at most three short lines separated by \`<br/>\` (never a literal \\n);
 - give each box one of the classes ui, service, batch, store or external (\`:::ui\`) and define all five with \`classDef\`
-  (translucent fill, same-colour stroke); if you leave the classes out, a later step adds them.
+  (translucent fill, same-colour stroke) with hex colours and fill-opacity, for example
+  \`classDef ui fill:#3b82f6,fill-opacity:0.14,stroke:#3b82f6,stroke-width:1.5px\`; never rgba(), rgb() or hsl(): their commas split
+  the style list and the diagram does not parse. If you leave the classes out, a later step adds them.
 
 A repository an analysis note lists as not read is a gap: name it under Documentation Gaps and in the Rebuild Outlook instead of presenting the assessment as covering the whole application.
 

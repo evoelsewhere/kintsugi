@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_AUTO_COMMIT_PATHS, isAutoCommitPath, manifestFromProject, matchesPathGlob, repositoryPath, validateManifest } from "../src/index.js";
+import { CORE_ITEM_KINDS, DEFAULT_AUTO_COMMIT_PATHS, isAutoCommitPath, manifestFromProject, matchesPathGlob, repositoryPath, validateManifest } from "../src/index.js";
 
 const minimal = {
   schemaVersion: 1,
@@ -96,6 +96,8 @@ describe("kintsugi.yaml validation", () => {
       ],
     });
     expect(manifest.applications[0]!.repos.map((repo) => repo.role)).toEqual(["legacy", "target"]);
+    // A project that declares no unit kinds gets the core item kinds (ADR-0060).
+    expect(manifest.unitKinds).toEqual([...CORE_ITEM_KINDS]);
     expect(validateManifest(JSON.parse(JSON.stringify(manifest)))).toEqual({ ok: true, manifest });
   });
 });

@@ -129,7 +129,7 @@ item's leaves and links, which `scope_items.py` turns into the item's topology d
 }
 ```
 
-- Leaf kinds: `module`, `datastore`, `job`, `screen`. A leaf's `file` is its own source file or directory; **never
+- Leaf kinds: `screen`, `api`, `job`, `report`, `event`, `interface`, `module`, `datastore` ([ADR-0060](../../../../../../docs/decisions/0060-item-kinds-and-kind-aware-understanding.md)). A leaf's `file` is its own source file or directory; **never
   give two leaves the same location**. Edge kinds: `call`, `dispatch`, `read`, `write`; every endpoint is a leaf id.
 - A module is a dead end only once all entry-point and edge types are in the graph; a possible target of an
   unresolved dynamic call (reflection, string-built names, convention-based DI) is an observation, never dead.

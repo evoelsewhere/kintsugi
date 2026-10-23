@@ -64,7 +64,15 @@ source (COBOL columns 8–72, RPG), slice the code area and strip comment lines 
 topology.json must follow this schema exactly, with every top-level key present (observations and flows may stay
 empty lists; a later job fills them):
 ${SCHEMA}
-Leaf kinds: module, datastore, job, screen; edge kinds: call, dispatch, read, write; every edge endpoint, entry point
+Leaf kinds, by what the leaf is to the outside world: screen (an interactive page, form, panel or transaction with a map),
+api (a synchronous interface other programs call: an endpoint group, a service operation), job (unattended work started
+by a schedule or an operator: a scheduled task, a JCL job with its steps), report (produces a document or an extract for
+people), event (reacts to a message: a queue or topic listener, a webhook), interface (an exchange of data with an
+external system: a file feed, an outbound client), module (logic with no entry point of its own, used by others; the
+default) and datastore. Use the most specific kind that fits; a file that serves two roles takes its main one. Edge kinds:
+call, dispatch, read, write. A screen that calls an endpoint gets a call edge to the api leaf that serves it, even when
+that leaf is in another repository (match by route or operation name); a job gets a dispatch edge to the programs its
+steps run; a call whose target you cannot find is an observation, not a guessed edge. Every edge endpoint, entry point
 and dead end is a leaf id. A leaf's file is its own source file (a directory for a module made of many files); never
 give two leaves the same file. Datastore ids and names are logical identifiers (at most host:port): strip userinfo and
 credential parameters from any URL or DSN, and never copy raw configuration values into the file.

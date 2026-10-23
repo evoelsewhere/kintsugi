@@ -82,7 +82,7 @@ def read_plan(path):
         if ident.startswith('Batch '):
             prose, fields, subs = docmd.parse_card(card, 2)
             plan['batches'].append({
-                'n': int(ident.split()[1]), 'title': name, 'rationale': prose, 'risk': fields['risk'], 'loc': int(fields['loc']), 'high': int(fields['high complexity']),
+                'n': int(ident.split()[1]), 'title': name, 'rationale': prose, 'risk': fields['risk'], 'loc': int(fields['loc']), 'high': int(fields['high complexity']), 'kinds': fields.get('kinds', ''),
                 'cohesion': float(fields['cohesion']) if fields['cohesion'] != '' else None, 'items': docmd.bullets_in(subs['Items']),
                 'dependsOutside': [{'item': row['item'], 'usedBy': row['used by'].split(', ')} for row in docmd.records_in(subs.get('Depends on outside', ''))],
             })
@@ -168,6 +168,8 @@ class PlanToolsTests(unittest.TestCase):
         first, second = plan['batches']
         self.assertEqual((first['n'], first['title'], first['loc'], first['high']), (1, 'Foundations', 2400, 2))
         self.assertEqual(first['rationale'], 'Everything calls them.')
+        # The kind mix of a batch (ADR-0060): every item of the fixture is a program.
+        self.assertEqual((first['kinds'], second['kinds']), ('program 2', 'program 1'))
         # service -> base is inside the batch; service -> ORDERS is a data store, not a call to an item.
         self.assertEqual(first['cohesion'], 1.0)
         self.assertEqual(first['dependsOutside'], [])

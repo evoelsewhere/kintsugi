@@ -323,6 +323,36 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(by_id['billing/rates']['kind'], 'program')
         self.assertEqual(by_id['billing/nightly']['kind'], 'batch-job')
 
+    def test_leaf_kinds_map_onto_the_core_kinds(self):
+        topology = json.loads(json.dumps(TOPOLOGY))
+        for node in topology['root']['children'][0]['children']:
+            node['kind'] = {'INVOICE': 'controller', 'RATES': 'report', 'fmt1': 'screen', 'fmt2': 'screen'}.get(node['id'], node['kind'])
+        write(os.path.join(self.assessment, 'topology.json'), topology)
+        write(os.path.join(self.root, 'kintsugi.yaml'), 'unitKinds: [screen, api, batch-job, report, module]\n')
+        catalog = load(self.propose())
+        by_id = {item['id']: item for item in catalog['items']}
+        self.assertEqual(by_id['billing/invoice']['kind'], 'api')
+        self.assertEqual(by_id['billing/rates']['kind'], 'report')
+        self.assertEqual(by_id['billing/nightly']['kind'], 'batch-job')
+        self.assertEqual(by_id['customers/custupd']['kind'], 'module')
+        self.assertFalse([note for note in catalog['ambiguities'] if 'has no kind' in note])
+
+    def test_a_leaf_kind_with_no_fit_falls_back_to_module_and_is_reported(self):
+        topology = json.loads(json.dumps(TOPOLOGY))
+        topology['root']['children'][0]['children'][1]['kind'] = 'event'
+        write(os.path.join(self.assessment, 'topology.json'), topology)
+        write(os.path.join(self.root, 'kintsugi.yaml'), 'unitKinds: [screen, api, module]\n')
+        catalog = load(self.propose())
+        by_id = {item['id']: item for item in catalog['items']}
+        self.assertEqual(by_id['billing/rates']['kind'], 'module')
+        self.assertIn('billing/rates has no kind in unitKinds for the leaf kind "event": shown as module', catalog['ambiguities'])
+        # Without a module kind the first one is taken, never silently.
+        write(os.path.join(self.root, 'kintsugi.yaml'), 'unitKinds: [screen, api]\n')
+        catalog = load(self.propose())
+        by_id = {item['id']: item for item in catalog['items']}
+        self.assertEqual(by_id['billing/rates']['kind'], 'screen')
+        self.assertIn('billing/rates has no kind in unitKinds for the leaf kind "event": shown as screen', catalog['ambiguities'])
+
 
 class CatalogDocumentTests(unittest.TestCase):
     """The committed catalog: render_catalog.py writes it, load_catalog reads it back."""
