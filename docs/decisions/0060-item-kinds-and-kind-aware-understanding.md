@@ -65,7 +65,7 @@ The AS-IS specification keeps its base sections ([ADR-0031](0031-understand-stag
 - **Format.** Markdown only ([ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md)): front matter `kind` (equal to the file name) and `version` (an integer, raised on a change that affects existing specifications); a `## Sections` table `Section | What it holds | Evidence`; a `## Instructions` section for the analyst.
 - **Resolution.** `scope_items.py` resolves the profile of each selected item (project file, else built-in, else none) and puts it in the brief the specification job starts from. The `legacy-analyst` stays the one agent: no agent per kind.
 - **Output.** `spec.md` gains the profile's sections between **Main flows** and **Dependencies**, each as a `##` heading with the section's name; a section with nothing to say says "None." with the reason instead of staying empty. `finish_items.py` checks that every heading is there and reports each missing one; the specification is not sent back to the agent, and a missing section is a finding for the reviewer of the pull request.
-- **Recorded.** `understanding.md` records `profile: <kind>@<version>` and, when a section is absent, `profileMissing`, so a later run can tell that a specification predates a newer profile. This ADR does not change how `stale` is derived (the digest alone).
+- **Recorded.** `understanding.md` records `profile: <kind>@<version>` and, when a section is absent, `profileMissing`, so a later run can tell that a specification predates a newer profile. An understood item is also **stale** when the profile of its kind has a higher version than the recorded one (the project's file when it is usable, else the built-in one), or when it was written with the profile of another kind; the catalog says why (`staleReason`: `source` or `profile`). A specification recorded without a profile is not stale for this reason.
 
 The built-in profiles, stack-neutral and each about a page:
 
@@ -86,7 +86,7 @@ A `batch-job` item on a mainframe is the JCL job; the programs its steps run are
 - The catalog the API serves already carries each item's `kind` and `dependsOn`, so the API does not change and the selection endpoint still takes item ids.
 - The understand page's kind filter shows how many items each kind has, and a **Select shown** action selects every selectable item the filters show. The size limit of a run (about 60 items) applies after the expansion.
 - An **Add dependencies** action adds the items the current selection depends on (`dependsOn` of the item graph, one level deep, retired and blocked items left out). A screen plus the APIs it calls is one selection, one pull request, one review.
-- The AI plan for understanding order ([ADR-0041](0041-ai-plan-for-understanding-order.md)) is unchanged here; ordering entry kinds before internal ones is left to a later change.
+- The AI plan for understanding order ([ADR-0041](0041-ai-plan-for-understanding-order.md)) knows the kind: the item graph carries it, the planning skill has a rule that an entry item comes with what it calls (a screen with its APIs, APIs before the screens that use them), and each planned batch records its kind mix (`kinds`), which the portal shows. The planner still proposes an order, never a selection.
 
 ### 6. Design and the rest
 
@@ -107,7 +107,8 @@ The work item and the modern unit card keep the item's kind, and the design stag
 - Two items for one role (a screen split over several files, a front end and a back end for one dialog) are still two items; the slice selection and the `Known callers` and `Services called` sections are what joins them.
 - Existing catalogs keep their kinds. A project that wants the new detection runs `assess` again; reconciliation keeps item ids ([ADR-0033](0033-assess-catalog-understand-selection.md) §2), and a changed kind is a catalog change reviewed in that pull request.
 - Documentation to update on acceptance: [document-repo-item-catalog.md](../reference/document-repo-item-catalog.md) (the vocabulary, the mapping, the ambiguity), [document-repo-manifest.md](../reference/document-repo-manifest.md) (`unitKinds` default), a new reference page for specification profiles beside [design-templates.md](../reference/design-templates.md), ADR-0031 §4 and ADR-0033 §2 (a pointer to this ADR), and the register.
-- Not decided here: the kind in the AI plan's ordering and rationale, a generated CRUD matrix (which items read and write which datastore) from the topology edges, a stale marker when a profile version is raised, and a kind-aware Overview.
+- `_generated/DATA_ACCESS.md` joins the catalog's data store links into a read/write matrix by data store and by item. The topology edges say read or write, not create, update or delete, so it is not a CRUD matrix.
+- Not decided here: a kind-aware Overview.
 
 ### Rollout
 1. **Vocabulary and detection**: the core kinds and the default, the topology leaf kinds and the synonym table, the `module` fallback with the ambiguity entry, the kind counts and Select shown in the portal. No change to specifications.

@@ -50,7 +50,7 @@ The leaf kinds the topology extraction may write are `screen`, `api`, `job`, `re
 
 ## Status
 
-An item's status is derived, never stored in the card: `not-analysed`, `running`, `in-pr`, `failed`, `understood`, `stale` or `retired` (the card's `status` only says whether the item still exists). `understood` means `10-applications/<app>/01-legacy/<module>/<item>/understanding.md` is on the default branch; `stale` means the digest in that record differs from the card's. See [reads and stage results](document-repo-read-path.md).
+An item's status is derived, never stored in the card: `not-analysed`, `running`, `in-pr`, `failed`, `understood`, `stale` or `retired` (the card's `status` only says whether the item still exists). `understood` means `10-applications/<app>/01-legacy/<module>/<item>/understanding.md` is on the default branch; `stale` means the digest in that record differs from the card's (`staleReason: source`), or the specification profile recorded in it is older than the current profile of the item's kind, or of another kind (`staleReason: profile`, [specification profiles](specification-profiles.md)). See [reads and stage results](document-repo-read-path.md).
 
 ## Who writes what
 

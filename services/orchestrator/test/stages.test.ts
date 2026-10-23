@@ -307,7 +307,9 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(run?.status).toBe("succeeded");
     expect(artifacts).toEqual([
       "10-applications/demo/_generated/BUSINESS_RULES.md",
+      "10-applications/demo/_generated/DATA_ACCESS.md",
       "10-applications/demo/_generated/DATA_OBJECTS.md",
+      "10-applications/demo/_generated/GAPS.md",
       "10-applications/demo/_generated/README.md",
       "10-applications/demo/_generated/SECURITY_FINDINGS.md",
       "10-applications/demo/_generated/traceability.md",

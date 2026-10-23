@@ -435,7 +435,7 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('1 of 2 item(s) understood', result.stdout)
         gen = os.path.join(self.out, *APP, '_generated')
-        self.assertEqual(sorted(os.listdir(gen)), ['BUSINESS_RULES.md', 'DATA_OBJECTS.md', 'GAPS.md', 'README.md', 'SECURITY_FINDINGS.md', 'traceability.md'])
+        self.assertEqual(sorted(os.listdir(gen)), ['BUSINESS_RULES.md', 'DATA_ACCESS.md', 'DATA_OBJECTS.md', 'GAPS.md', 'README.md', 'SECURITY_FINDINGS.md', 'traceability.md'])
         business = docmd.read_text(os.path.join(gen, 'BUSINESS_RULES.md'))
         self.assertIn('| RULE-tax.calc-01 | tax/calc | Round | Calculation | P0 | High | 1 | confirmed | `src/TAX.cbl:3` | [RULE-tax.calc-01](../01-legacy/tax/calc/rules/RULE-tax.calc-01.md) |', business)
         self.assertEqual([line for line in business.splitlines() if line.startswith('### ')], [])
@@ -444,6 +444,12 @@ class UnderstandToolsTests(unittest.TestCase):
         front, body = docmd.split_front_matter(docmd.read_text(os.path.join(gen, 'traceability.md')))
         self.assertEqual((front['items'], front['units'], front['rulesCovered'], front['findingsMapped'], front['openQuestions'], front['stale']), (2, 1, 1, 1, 2, 0))
         self.assertIn('`tax/calc`', body)
+        # The read/write matrix comes from the catalog's links, understood or not (ADR-0060).
+        front, body = docmd.split_front_matter(docmd.read_text(os.path.join(gen, 'DATA_ACCESS.md')))
+        self.assertEqual((front['stores'], front['items'], front['neverWritten']), (1, 1, 0))
+        sections = dict(docmd.sections(body, 2))
+        self.assertEqual(docmd.records_in(sections['By data store']), [{'data store': 'ds:INVOICES', 'written by': 'invoicing/entry (program)', 'read by': '-'}])
+        self.assertEqual(docmd.records_in(sections['By item']), [{'item': 'invoicing/entry', 'kind': 'program', 'reads': '-', 'writes': 'ds:INVOICES'}])
 
 
 if __name__ == '__main__':

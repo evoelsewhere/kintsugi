@@ -5,8 +5,9 @@
 // the documents module (a run's branch is open until it is reachable from the default branch).
 
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { builtinSpecProfileVersions, profileVersionOf } from "@kintsugi/agents";
 import { type ItemCatalog, documentOf, parseItemCatalog, parsePlan, textOf } from "@kintsugi/agents/reader";
-import { type ItemStatus, assessmentCatalogDir, assessmentCatalogModulePath, catalogPath, classifyItem, legacyModuleDir, understandPlanPath, unitUnderstandingPath } from "@kintsugi/domain";
+import { type ItemStatus, assessmentCatalogDir, assessmentCatalogModulePath, catalogPath, classifyItem, legacyModuleDir, specificationProfilesDir, understandPlanPath, unitUnderstandingPath } from "@kintsugi/domain";
 import { type DocumentContext, DocumentsService } from "#modules/delivery/documents/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { type CatalogItemView, type CatalogView, type ItemMeta, type UnderstandPlanView, type UnderstandRunFacts, deriveItemStatus } from "../domain/catalog.js";
@@ -100,9 +101,10 @@ export class CatalogService {
   async withStatus(loaded: LoadedCatalog, applicationId: string): Promise<CatalogView> {
     const { context, catalog } = loaded;
     const [metas, runs] = await Promise.all([this.metas(context, applicationId, catalog), this.understandRuns(context, applicationId)]);
+    const profiles = await this.profileVersions(context, catalog, metas);
     const counts: Partial<Record<ItemStatus, number>> = {};
     const items: CatalogItemView[] = catalog.items.map((item) => {
-      const view: CatalogItemView = { ...item, assetClass: classifyItem(item.files), ...deriveItemStatus(item, metas.get(item.id), runs) };
+      const view: CatalogItemView = { ...item, assetClass: classifyItem(item.files), ...deriveItemStatus(item, metas.get(item.id), runs, profiles) };
       counts[view.status] = (counts[view.status] ?? 0) + 1;
       return view;
     });
@@ -132,6 +134,27 @@ export class CatalogService {
     );
   }
 
+  /**
+   * The current specification profile version of each kind that an understood item was written with a profile for
+   * (ADR-0060): the project's `01-standards/specifications/<kind>.md` when it is a usable profile, else the built-in one.
+   */
+  private async profileVersions(context: DocumentContext, catalog: ItemCatalog, metas: ReadonlyMap<string, ItemMeta>): Promise<Map<string, number>> {
+    const kinds = new Set<string>();
+    for (const item of catalog.items) if (metas.get(item.id)?.profile !== undefined) kinds.add(item.kind);
+    const versions = new Map<string, number>();
+    if (kinds.size === 0) return versions;
+    const builtin = builtinSpecProfileVersions();
+    const commit = (await this.documents.resolve(context, undefined)).commit;
+    await Promise.all(
+      [...kinds].map(async (kind) => {
+        const text = await this.documents.readText(context, commit, `${specificationProfilesDir()}/${kind}.md`, MAX_META_BYTES);
+        const version = (text === undefined ? undefined : profileVersionOf(text, kind)) ?? builtin.get(kind);
+        if (version !== undefined) versions.set(kind, version);
+      }),
+    );
+    return versions;
+  }
+
   /** The understanding record of every item understood on the default branch, by item id. */
   private async metas(context: DocumentContext, applicationId: string, catalog: ItemCatalog): Promise<Map<string, ItemMeta>> {
     const commit = (await this.documents.resolve(context, undefined)).commit;
@@ -153,7 +176,13 @@ export class CatalogService {
               const read = (Array.isArray(meta["sources"]) ? meta["sources"] : []).flatMap((entry: unknown) => textOf(entry, 200) ?? []);
               const commitOf = read.length === 0 ? undefined : read.join(",");
               const runId = pick("runId");
-              metas.set(item.id, { ...(digest === undefined ? {} : { digest }), ...(commitOf === undefined ? {} : { commit: commitOf }), ...(runId === undefined ? {} : { runId }) });
+              const recorded = /^([a-z0-9][a-z0-9-]{0,62})@(\d{1,6})$/.exec(pick("profile") ?? "");
+              metas.set(item.id, {
+                ...(digest === undefined ? {} : { digest }),
+                ...(commitOf === undefined ? {} : { commit: commitOf }),
+                ...(runId === undefined ? {} : { runId }),
+                ...(recorded === null ? {} : { profile: { kind: recorded[1]!, version: Number(recorded[2]) } }),
+              });
             }),
         );
       }),

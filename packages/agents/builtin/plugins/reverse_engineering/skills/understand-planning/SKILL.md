@@ -26,13 +26,18 @@ planned.
    callers, so they cite it instead of guessing. A large foundation is not a reason to defer it.
 3. **A callee with its main callers** when the batch can hold both; `usedBy` and `dependsOn` show who they are. If the
    callers must wait, the batch's `dependsOutside` will list the gap: prefer to avoid it.
-4. **Risk early.** Items the assessment ties to critical or high findings, to sensitive data stores or to the entry
+4. **Entry kinds bring their path.** An item of an entry kind (`screen`, `api`, `batch-job`, `report`, `event`,
+   `integration`; `kind` in the graph) is understood well only together with what it calls. Put a `screen` with the
+   `api` items it depends on and, when the batch can hold them, the `module` items below those; understand the `api`
+   and `batch-job` items that other entry items depend on (`usedBy`) before the screens and reports that use them.
+   `module` items follow rules 1 to 3. Do not mix unrelated entry kinds in one batch just to fill it.
+5. **Risk early.** Items the assessment ties to critical or high findings, to sensitive data stores or to the entry
    points it calls out go early, together with the items that reach them.
-5. **Shared data stores are a bond.** Items writing the same store (see `dataStores`) read well together.
-6. **Respect module boundaries** unless a rule above says otherwise; a module split over batches needs a reason.
-7. **Size for review.** At most 8 items and a few thousand code lines per batch (the job states the exact caps); a
+6. **Shared data stores are a bond.** Items writing the same store (see `dataStores`) read well together.
+7. **Respect module boundaries** unless a rule above says otherwise; a module split over batches needs a reason.
+8. **Size for review.** At most 8 items and a few thousand code lines per batch (the job states the exact caps); a
    reviewer must be able to read the pull request.
-8. **Leave out what is not worth it yet**: tiny, trivial, thin wrappers nobody depends on (`fanIn` 0, small `loc`, low
+9. **Leave out what is not worth it yet**: tiny, trivial, thin wrappers nobody depends on (`fanIn` 0, small `loc`, low
    complexity). Say so in `leftOut` with a reason.
 
 ## Writing the plan
