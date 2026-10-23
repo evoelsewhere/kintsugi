@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { agentContextApi } from "@/lib/api/agent-context";
 import { useAuth } from "@/lib/auth";
 import { errorText } from "@/lib/format";
 import {
+  codingAgentAuthorizationPayload,
   parseCodingAgentAuthorizationRequest,
   safeCodingAgentReturnTo,
   validatedAuthorizationRedirect,
@@ -19,17 +20,28 @@ export function CodingAgentAuthorizePage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [declined, setDeclined] = useState(false);
   const request = parseCodingAgentAuthorizationRequest(location.search);
+  const [clock, setClock] = useState(() => Date.now());
   const returnTo = safeCodingAgentReturnTo(`${location.pathname}${location.search}`);
+  useEffect(() => {
+    if (request?.expiresAt === undefined) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [request?.expiresAt]);
+  const secondsLeft = request?.expiresAt === undefined ? undefined : Math.max(0, Math.ceil((request.expiresAt - clock) / 1000));
+  const expired = secondsLeft === 0;
+  const countdown = secondsLeft === undefined ? undefined : `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
 
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-background text-[13px] text-text-muted">Checking your Kintsugi session…</div>;
   if (user === null) return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
 
   async function approve(): Promise<void> {
     if (request === undefined) return;
+    if (request.expiresAt !== undefined && request.expiresAt <= Date.now()) { setClock(Date.now()); return; }
     setBusy(true);
     setError(null);
     try {
-      const result = await agentContextApi.authorizeCodingAgent(request);
+      const result = await agentContextApi.authorizeCodingAgent(codingAgentAuthorizationPayload(request));
+      if (request.expiresAt !== undefined && request.expiresAt <= Date.now()) { setClock(Date.now()); setBusy(false); return; }
       window.location.assign(validatedAuthorizationRedirect(result.redirectTo, request));
     } catch (failure) {
       setError(errorText(failure));
@@ -53,6 +65,11 @@ export function CodingAgentAuthorizePage(): React.JSX.Element {
         <CardContent>
           {request === undefined ? <div role="alert" className="flex flex-col gap-3 text-[13px] text-text-secondary"><p>This sign-in request is incomplete or invalid. Return to the coding agent and try again.</p>{home}</div> : declined ? <div role="status" className="flex flex-col gap-3 text-[13px] text-text-secondary"><p>No connection was created. You can close this page or return to Kintsugi.</p>{home}</div> : (
             <>
+              {countdown === undefined ? null : <div role="timer" aria-live="off" className="mb-3 flex items-center justify-between gap-3 border-b border-black/[0.06] pb-3 text-[12px] dark:border-white/[0.08]">
+                <div className="min-w-0"><p className="font-medium text-text">Time remaining to approve</p><p className="mt-0.5 text-text-muted">This sign-in request expires automatically.</p></div>
+                <span className={`shrink-0 font-mono text-[14px] font-semibold tabular-nums ${expired ? "text-[var(--ds-status-red)]" : secondsLeft !== undefined && secondsLeft <= 30 ? "text-[var(--ds-status-orange)]" : "text-text"}`}>{expired ? "Expired" : countdown}</span>
+              </div>}
+              {expired ? <p role="alert" className="mb-3 rounded-md bg-recessed px-3 py-2 text-[12px] text-[var(--ds-status-red)]">This sign-in request expired. Return to your coding agent and ask it to retry the Kintsugi request.</p> : null}
               <section aria-label="Requested access" className="overflow-hidden rounded-lg bg-surface shadow-border">
                 <div className="flex items-start gap-3 px-3.5 py-3 [box-shadow:inset_2px_0_0_0_var(--ds-accent)]">
                   <div className="min-w-0 flex-1">
@@ -72,7 +89,7 @@ export function CodingAgentAuthorizePage(): React.JSX.Element {
               {error === null ? null : <p role="alert" className="mt-3 text-[12px] text-[var(--ds-status-red)]">{error}</p>}
               <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                 <Button variant="ghost" disabled={busy} onClick={() => setDeclined(true)}>Decline</Button>
-                <Button variant="solid" disabled={busy || !can("member.read")} onClick={() => void approve()}>{busy ? "Connecting…" : "Allow project access"}<ArrowUpRight className="size-3.5" /></Button>
+                <Button variant="solid" disabled={busy || expired || !can("member.read")} onClick={() => void approve()}>{busy ? "Connecting…" : "Allow project access"}<ArrowUpRight className="size-3.5" /></Button>
               </div>
               <p className="mt-3 text-right text-[11px] text-text-muted">Signed in as {user.displayName} · {home}</p>
             </>

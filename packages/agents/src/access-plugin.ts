@@ -8,6 +8,8 @@ export const ACCESS_PLUGIN_SOURCE_PATHS = [
   ".claude-plugin/plugin.json",
   "kintsugi.json",
   "skills/kintsugi-task/SKILL.md",
+  "assets/kintsugi-mark-light.svg",
+  "assets/kintsugi-mark-dark.svg",
 ] as const;
 
 export type AccessPluginSourcePath = (typeof ACCESS_PLUGIN_SOURCE_PATHS)[number];

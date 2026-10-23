@@ -1,6 +1,6 @@
 # Coding Agent Workflow compatibility and pilot baseline
 
-Status: updated 2026-10-22. Records local package lifecycle probes; these do not establish a complete authenticated MCP integration or a release support matrix.
+Status: updated 2026-10-23. Records local package lifecycle probes; these do not establish a complete authenticated MCP integration or a release support matrix.
 
 ## Host and repository baseline
 
@@ -24,6 +24,8 @@ The native probes used the generated packages from the local CLI and temporary c
 The generated package and marketplace were placed in a disposable temporary root, with separate Claude and Codex homes. Claude accepted `claude plugin validate --strict` for both the generated plugin and marketplace, then completed marketplace add, plugin install/list, uninstall and marketplace removal. Codex completed marketplace add/list, available-plugin listing, plugin add/list, explicit plugin removal and marketplace removal. The initial marketplace-only rollback made `plugin list` empty but left the versioned cache (`plugins/cache/kintsugi-coding-agent-workflow/kintsugi-coding-agent-workflow/0.1.0`) behind. The corrected rollback runs `codex plugin remove kintsugi-coding-agent-workflow@kintsugi-coding-agent-workflow` before `codex plugin marketplace remove kintsugi-coding-agent-workflow`; both commands exited successfully, the marketplace and installed-plugin lists were empty, and the versioned cache was gone. The profile-isolation PATH warning did not prevent installation or rollback.
 
 The probes did not invoke the plugin's MCP server from either native client, authenticate to a Kintsugi installation, fetch a task, or verify client upgrades. Copilot was absent. Those cases remain explicit release-matrix work; generated configuration alone is not support evidence.
+
+Generated Codex packages carry the Kintsugi mark in both light and dark SVG variants and reference them as the composer icon and plugin logo. Package tests verify that every referenced file is bundled and matches the main brand assets. The staged Codex Desktop package has not yet been visually checked in the plugin browser.
 
 ## Baseline verification
 

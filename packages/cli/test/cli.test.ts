@@ -7,11 +7,11 @@ import * as cliModule from "../src/cli.js";
 import type { CodingAgentWorkflowCapabilities, CodingAgentWorkflowPort } from "@kintsugi/harness-sdk";
 
 describe("native client version detection", () => {
-  it("uses the Windows command shell for npm .cmd client shims", async () => {
+  it("uses direct execution for Windows client executables", async () => {
     const execute = vi.fn(async () => ({ stdout: "2.1.278\n", stderr: "" }));
 
     await expect(getNativeClientVersion("claude", "win32", execute as never)).resolves.toBe("2.1.278");
-    expect(execute).toHaveBeenCalledWith("claude", ["--version"], expect.objectContaining({ shell: true }));
+    expect(execute).toHaveBeenCalledWith("claude", ["--version"], expect.objectContaining({ shell: false }));
   });
 
   it("keeps direct execution on Unix", async () => {
@@ -69,6 +69,7 @@ describe("kintsugi CLI", () => {
     const deps = { ...state.deps,
       openBrowser: async () => { signals.emit(signal); },
       createOAuthCallback: async () => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: () => new Promise<{ code: string; state: string }>(() => undefined), close: async () => { closed = true; } }),
+      serveMcp: async (access: CodingAgentWorkflowPort) => { await access.listProjects({ limit: 5 }); return undefined; },
     };
     const entrypoint = (cliModule as unknown as { runCliWithSignals: (argv: string[], deps: typeof state.deps, signals: EventEmitter) => Promise<number> }).runCliWithSignals;
     expect(typeof entrypoint).toBe("function");
@@ -108,6 +109,7 @@ describe("kintsugi CLI", () => {
 
   it("reopens browser consent when MCP refresh is rejected at the connection-age cap", async () => {
     const state = harness(async (_url, init) => {
+      if (init?.body === undefined) return ok({ schemaVersion: "1", items: [], limit: 5 });
       const body = JSON.parse(String(init?.body)) as { grantType: string };
       if (body.grantType === "refresh_token") return Response.json({ success: false }, { status: 401 });
       return ok({ accessToken: "knt_caw_after-consent", refreshToken: "knt_crt_after-consent", expiresIn: 300, connectionId: "renewed", projectIds: ["shop"] });
@@ -117,7 +119,11 @@ describe("kintsugi CLI", () => {
     const deps = { ...state.deps,
       openBrowser: async () => { opened++; },
       createOAuthCallback: async ({ state: nonce }: { state: string }) => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: async () => ({ code: "renewal-code", state: nonce }), close: async () => undefined }),
-      serveMcp: async () => { served = true; },
+      serveMcp: async (access: CodingAgentWorkflowPort) => {
+        served = true;
+        expect(opened).toBe(0);
+        await access.listProjects({ limit: 5 });
+      },
     };
     expect(await runCli(["mcp", "serve"], deps)).toBe(0);
     expect(opened).toBe(1);
@@ -127,6 +133,28 @@ describe("kintsugi CLI", () => {
     expect(state.deps.promptSecret).not.toHaveBeenCalled();
     expect(state.deps.readStdin).not.toHaveBeenCalled();
     expect(JSON.parse(state.credentials.values.get("work")!).connectionId).toBe("renewed");
+  });
+
+  it("starts the MCP bridge before opening first-use browser sign-in", async () => {
+    const state = harness(async (_url, init) => init?.body === undefined
+      ? ok({ schemaVersion: "1", items: [{ projectId: "shop", name: "Shop" }], limit: 5 })
+      : ok({ accessToken: "knt_caw_first-use", refreshToken: "knt_crt_first-use", expiresIn: 300, connectionId: "first-use", projectIds: ["shop"] }), { profile: true });
+    const events: string[] = [];
+    const deps = { ...state.deps,
+      openBrowser: async () => { events.push("browser"); },
+      createOAuthCallback: async ({ state: nonce }: { state: string }) => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: async () => ({ code: "first-use-code", state: nonce }), close: async () => undefined }),
+      serveMcp: async (access: CodingAgentWorkflowPort) => {
+        events.push("server");
+        expect(events).toEqual(["server"]);
+        await access.listProjects({ limit: 5 });
+      },
+    };
+
+    expect(await runCli(["mcp", "serve", "--profile", "work"], deps)).toBe(0);
+    expect(events).toEqual(["server", "browser"]);
+    expect(JSON.parse(state.credentials.values.get("work")!).connectionId).toBe("first-use");
+    expect(state.output().stderr).toContain("Sign in to Kintsugi");
+    expect(state.output().stdout).toBe("");
   });
 
   it("shows only safe OAuth metadata in auth status", async () => {
@@ -230,7 +258,7 @@ describe("kintsugi CLI", () => {
     expect(receivedCapabilities).toEqual({ reviews: true });
     expect(fetch).toHaveBeenCalledOnce();
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("authorization")).toBe("Bearer TEST-mcp-token");
-    expect(state.credentials.get).toHaveBeenCalledTimes(3);
+    expect(state.credentials.get).toHaveBeenCalledTimes(2);
     expect(state.output().stdout + state.output().stderr).not.toContain("TEST-mcp-token");
   });
 

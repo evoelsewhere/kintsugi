@@ -162,9 +162,11 @@ describe("OAuth browser connection", () => {
   it("rejects a callback state mismatch before code exchange and closes the listener", async () => {
     const h = setup();
     let closed = false;
-    h.deps.createOAuthCallback = async () => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: async () => ({ code: "code", state: "wrong" }), close: async () => { closed = true; } });
+    let completion: string | undefined;
+    h.deps.createOAuthCallback = async () => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: async () => ({ code: "code", state: "wrong" }), complete: async (outcome) => { completion = outcome; }, close: async () => { closed = true; } });
     h.deps.openBrowser = async () => undefined;
     await expect(h.session.beginBrowserLogin(profile, "shop")).rejects.toMatchObject({ code: "OAUTH_CALLBACK_INVALID" });
+    expect(completion).toBe("error");
     expect(closed).toBe(true);
     expect(h.requests()).toBe(0);
   });
@@ -172,11 +174,18 @@ describe("OAuth browser connection", () => {
   it("prints an actionable local URL on stderr when automatic browser launch is unavailable", async () => {
     const h = setup();
     let output = "";
+    let completion: string | undefined;
+    let credentialAtCompletion = "";
     h.deps.stderr.write = (value) => { output += value; };
     h.deps.openBrowser = async () => { throw new Error("sensitive launcher detail"); };
-    h.deps.createOAuthCallback = async ({ state }) => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: async () => ({ code: "manual-code", state }), close: async () => undefined });
+    h.deps.createOAuthCallback = async ({ state }) => ({ redirectUri: "http://127.0.0.1:54321/oauth/callback", waitForCode: async () => ({ code: "manual-code", state }), complete: async (outcome) => { completion = outcome; credentialAtCompletion = h.raw(); }, close: async () => undefined });
     await h.session.beginBrowserLogin(profile, "shop");
+    expect(completion).toBe("success");
+    expect(credentialAtCompletion).toContain("knt_crt_new");
     expect(output).toContain("https://kintsugi.example/coding-agent/authorize?");
+    const authorizationUrl = output.match(/https:\/\/[^\s]+/)?.[0];
+    expect(authorizationUrl).toBeDefined();
+    expect(Number(new URL(authorizationUrl!).searchParams.get("expiresAt"))).toBeGreaterThan(Date.now());
     expect(output).toContain("Open the URL above on this machine");
     expect(output).not.toContain("sensitive launcher detail");
     expect(output).not.toContain("knt_crt_");
@@ -203,7 +212,7 @@ describe("OAuth browser connection", () => {
     h.deps.openBrowser = async () => { opened(); };
     const controller = new AbortController();
     h.deps.signal = controller.signal;
-    const waiting = expect(h.session.beginBrowserLogin(profile, "shop")).rejects.toMatchObject({ code: "OAUTH_TIMEOUT" });
+    const waiting = expect(h.session.beginBrowserLogin(profile, "shop")).rejects.toMatchObject({ code: "OAUTH_TIMEOUT", message: expect.stringContaining("2 minutes") });
     await browserOpened;
     controller.abort(new DOMException("Deadline exceeded", "TimeoutError"));
     await waiting;
@@ -211,6 +220,54 @@ describe("OAuth browser connection", () => {
 });
 
 describe("loopback callback", () => {
+  it("shows a branded completion page and reports success only after the CLI finishes sign-in", async () => {
+    const listener = await createOAuthCallback({ state: "expected" });
+    try {
+      const response = await fetch(listener.redirectUri + "?code=one-time-code&state=expected");
+      expect(new URL(response.url).pathname).toBe("/oauth/complete");
+      expect(new URL(response.url).search).toBe("");
+      const body = await response.text();
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("content-security-policy")).toContain("script-src 'nonce-");
+      expect(response.headers.get("content-type")).toContain("text/html");
+      const pending = await fetch(new URL("/oauth/status", listener.redirectUri));
+      expect(await pending.json()).toEqual({ status: "pending" });
+
+      expect(body).toContain("Completing your Kintsugi sign-in");
+      expect(body).toContain("Kintsugi connection ready");
+      const nonce = response.headers.get("content-security-policy")?.match(/script-src 'nonce-([^']+)'/)?.[1];
+      expect(nonce).toBeDefined();
+      expect(body).toContain(`style nonce="${nonce}"`);
+      expect(body).toContain(`script nonce="${nonce}"`);
+      expect(body).toContain("Return to your coding agent and retry your request");
+      expect(body).not.toContain("one-time-code");
+      const complete = (listener as unknown as { complete?: (outcome: "success" | "error") => Promise<void> }).complete;
+      expect(complete).toBeTypeOf("function");
+      if (typeof complete !== "function") return;
+      const completion = complete("success");
+      const status = await fetch(new URL("/oauth/status", listener.redirectUri));
+      expect(await status.json()).toEqual({ status: "success" });
+      await completion;
+    } finally { await listener.close(); }
+  });
+  it("shows an error state when the CLI cannot finish exchanging the authorization code", async () => {
+    const listener = await createOAuthCallback({ state: "expected" });
+    try {
+      const response = await fetch(listener.redirectUri + "?code=one-time-code&state=expected");
+      expect(response.status).toBe(200);
+      expect(new URL(response.url).pathname).toBe("/oauth/complete");
+      expect(new URL(response.url).search).toBe("");
+      const body = await response.text();
+      expect(body).toContain("Kintsugi could not finish sign-in");
+      const complete = (listener as unknown as { complete?: (outcome: "success" | "error") => Promise<void> }).complete;
+      expect(complete).toBeTypeOf("function");
+      if (typeof complete !== "function") return;
+      const completion = complete("error");
+      const status = await fetch(new URL("/oauth/status", listener.redirectUri));
+      expect(await status.json()).toEqual({ status: "error" });
+      await completion;
+    } finally { await listener.close(); }
+  });
   it("rejects an untrusted Host without consuming the real loopback callback", async () => {
     const listener = await createOAuthCallback({ state: "expected" });
     try {
@@ -246,7 +303,7 @@ describe("loopback callback", () => {
 
   it("times out and closes the listening port", async () => {
     const listener = await createOAuthCallback({ state: "expected", timeoutMs: 10 });
-    await expect(listener.waitForCode()).rejects.toMatchObject({ code: "OAUTH_TIMEOUT" });
+    await expect(listener.waitForCode()).rejects.toMatchObject({ code: "OAUTH_TIMEOUT", message: expect.stringContaining("1 second") });
     await expect(fetch(listener.redirectUri)).rejects.toThrow();
     await listener.close();
   });

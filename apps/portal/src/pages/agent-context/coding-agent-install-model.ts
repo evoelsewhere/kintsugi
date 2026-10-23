@@ -1,10 +1,12 @@
 export type InstallHarness = "claude-code" | "codex";
 export type InstallShell = "powershell" | "posix";
+export type PluginInstallMode = "native-cli" | "desktop-ui";
 
 export interface PluginInstallCommandInput {
   baseUrl: string;
   projectId: string;
   harness: InstallHarness;
+  installMode?: PluginInstallMode;
   profileId?: string;
   shell: InstallShell;
 }
@@ -16,6 +18,7 @@ export interface CodingAgentAuthorizationRequest {
   state: string;
   codeChallenge: string;
   codeChallengeMethod: "S256";
+  expiresAt?: number;
 }
 
 function hasControlCharacters(value: string): boolean {
@@ -46,6 +49,9 @@ function quote(value: string, shell: InstallShell): string {
 export function buildPluginInstallCommand(input: PluginInstallCommandInput): string {
   const baseUrl = canonicalBaseUrl(input.baseUrl);
   if (input.harness !== "claude-code" && input.harness !== "codex") throw new Error("Choose a supported AI client.");
+  const installMode = input.installMode ?? "native-cli";
+  if (installMode !== "native-cli" && installMode !== "desktop-ui") throw new Error("Choose a supported install mode.");
+  if (installMode === "desktop-ui" && input.harness !== "codex") throw new Error("The desktop UI install is currently available for Codex Desktop.");
   if (input.shell !== "powershell" && input.shell !== "posix") throw new Error("Choose a supported terminal shell.");
   if (input.projectId.trim() !== input.projectId || input.projectId.length < 1 || input.projectId.length > 200 || hasControlCharacters(input.projectId)) {
     throw new Error("Kintsugi project ID is invalid.");
@@ -55,6 +61,7 @@ export function buildPluginInstallCommand(input: PluginInstallCommandInput): str
   }
   const parts = [
     "kintsugi plugins setup",
+    ...(installMode === "desktop-ui" ? ["--install-mode", "desktop-ui"] : []),
     "--harness", input.harness,
     "--url", quote(baseUrl, input.shell),
     "--project", quote(input.projectId, input.shell),
@@ -66,23 +73,39 @@ export function buildPluginInstallCommand(input: PluginInstallCommandInput): str
 export function parseCodingAgentAuthorizationRequest(search: string): CodingAgentAuthorizationRequest | undefined {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const keys = ["projectId", "clientName", "redirectUri", "state", "codeChallenge", "codeChallengeMethod"];
-  if (params.size !== keys.length || keys.some((key) => params.getAll(key).length !== 1)) return undefined;
+  const allowed = [...keys, "expiresAt"];
+  if (params.size < keys.length || params.size > keys.length + 1 || [...params.keys()].some((key) => !allowed.includes(key))
+    || keys.some((key) => params.getAll(key).length !== 1) || params.getAll("expiresAt").length > 1) return undefined;
   const projectId = params.get("projectId");
   const clientName = params.get("clientName");
   const redirectUri = params.get("redirectUri");
   const state = params.get("state");
   const codeChallenge = params.get("codeChallenge");
   const method = params.get("codeChallengeMethod");
+  const rawExpiry = params.get("expiresAt");
+  const expiresAt = rawExpiry === null ? undefined : Number(rawExpiry);
   if (projectId === null || projectId.trim() !== projectId || projectId.length === 0 || projectId.length > 200 || hasControlCharacters(projectId)
     || clientName === null || clientName.trim() !== clientName || clientName.length === 0 || clientName.length > 80 || hasControlCharacters(clientName)
     || state === null || !/^[A-Za-z0-9_-]{43}$/.test(state)
     || codeChallenge === null || !/^[A-Za-z0-9_-]{43}$/.test(codeChallenge)
-    || method !== "S256" || redirectUri === null) return undefined;
+    || method !== "S256" || redirectUri === null
+    || (rawExpiry !== null && (!/^\d{13}$/.test(rawExpiry) || !Number.isSafeInteger(expiresAt) || expiresAt! - Date.now() > 125_000))) return undefined;
   let redirect: URL;
   try { redirect = new URL(redirectUri); } catch { return undefined; }
   const loopback = ["127.0.0.1", "[::1]", "localhost"].includes(redirect.hostname.toLowerCase());
   if (redirect.protocol !== "http:" || !loopback || !redirect.port || redirect.username || redirect.password || redirect.pathname !== "/oauth/callback" || redirect.search || redirect.hash) return undefined;
-  return { projectId, clientName, redirectUri: redirect.toString(), state, codeChallenge, codeChallengeMethod: "S256" };
+  return { projectId, clientName, redirectUri: redirect.toString(), state, codeChallenge, codeChallengeMethod: "S256", ...(expiresAt === undefined ? {} : { expiresAt }) };
+}
+
+export function codingAgentAuthorizationPayload(request: CodingAgentAuthorizationRequest): Omit<CodingAgentAuthorizationRequest, "expiresAt"> {
+  return {
+    projectId: request.projectId,
+    clientName: request.clientName,
+    redirectUri: request.redirectUri,
+    state: request.state,
+    codeChallenge: request.codeChallenge,
+    codeChallengeMethod: request.codeChallengeMethod,
+  };
 }
 
 export function safeCodingAgentReturnTo(value: string | null): string {

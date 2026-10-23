@@ -12,14 +12,16 @@ import { identityApi, type UserRecord } from "@/lib/api/identity";
 import { errorText, formatDateTime } from "@/lib/format";
 import { Link } from "react-router-dom";
 import { safeProfileName } from "./handoff";
-import { buildPluginInstallCommand, type InstallHarness, type InstallShell } from "./coding-agent-install-model";
+import { buildPluginInstallCommand, type InstallShell } from "./coding-agent-install-model";
+
+type InstallClientChoice = "claude-code" | "codex-desktop" | "codex-cli";
 
 export function MemberTokensPanel({ projectId, canManage, canRead }: { projectId: string; canManage: boolean; canRead: boolean }): React.JSX.Element {
   const toast = useToast();
   const [tokens, setTokens] = useState<MemberTokenMetadata[]>([]);
   const [connections, setConnections] = useState<CodingAgentConnectionMetadata[]>([]);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
-  const [harness, setHarness] = useState<InstallHarness>("claude-code");
+  const [clientChoice, setClientChoice] = useState<InstallClientChoice>("codex-desktop");
   const [shell, setShell] = useState<InstallShell>("powershell");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -28,7 +30,14 @@ export function MemberTokensPanel({ projectId, canManage, canRead }: { projectId
   let setup: string | undefined;
   let setupError: string | null = null;
   try {
-    if (baseUrl !== null) setup = buildPluginInstallCommand({ baseUrl, projectId, harness, profileId: profile, shell });
+    if (baseUrl !== null) setup = buildPluginInstallCommand({
+      baseUrl,
+      projectId,
+      harness: clientChoice === "claude-code" ? "claude-code" : "codex",
+      installMode: clientChoice === "codex-desktop" ? "desktop-ui" : "native-cli",
+      profileId: profile,
+      shell,
+    });
   } catch (failure) {
     setupError = errorText(failure);
   }
@@ -105,22 +114,22 @@ export function MemberTokensPanel({ projectId, canManage, canRead }: { projectId
         <div className="rounded-lg bg-surface shadow-border">
           <div className="flex flex-wrap items-center gap-2 px-3.5 py-3 [box-shadow:inset_2px_0_0_0_var(--ds-accent)]">
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium text-text">One-time install</p>
-              <p className="mt-0.5 text-[12px] text-text-muted">Install the Kintsugi CLI first, then run this command in a terminal. It adds the local plugin without signing in or creating a token.</p>
+              <p className="text-[13px] font-medium text-text">{clientChoice === "codex-desktop" ? "Prepare for Codex Desktop" : "One-time install"}</p>
+              <p className="mt-0.5 text-[12px] text-text-muted">Install the Kintsugi CLI first. Codex Desktop uses this command to prepare its local marketplace; you finish installation in the app.</p>
             </div>
             <Link className="text-[12px] text-accent hover:underline" to="/developer">CLI prerequisites <span aria-hidden="true">↗</span></Link>
           </div>
           <div className="flex flex-wrap items-end gap-2 px-3.5 pb-3.5">
             <Field label="AI client" className="w-44">
-              <Select value={harness} options={[{ value: "claude-code", label: "Claude Code" }, { value: "codex", label: "Codex CLI" }]} onChange={(value) => setHarness(value as InstallHarness)} />
+              <Select value={clientChoice} options={[{ value: "codex-desktop", label: "Codex Desktop" }, { value: "codex-cli", label: "Codex CLI" }, { value: "claude-code", label: "Claude Code" }]} onChange={(value) => setClientChoice(value as InstallClientChoice)} />
             </Field>
             <Field label="Terminal" className="w-44">
               <Select value={shell} options={[{ value: "powershell", label: "PowerShell" }, { value: "posix", label: "macOS / Linux" }]} onChange={(value) => setShell(value as InstallShell)} />
             </Field>
-            <Button size="small" variant="ghost" disabled={setup === undefined} onClick={() => { if (setup !== undefined) void copy(setup, "Install command"); }}><ClipboardCopy className="size-3.5" />Copy command</Button>
+            <Button size="small" variant="ghost" disabled={setup === undefined} onClick={() => { if (setup !== undefined) void copy(setup, clientChoice === "codex-desktop" ? "Preparation command" : "Install command"); }}><ClipboardCopy className="size-3.5" />Copy command</Button>
           </div>
           <pre aria-label="Generated plugin install command" className="overflow-x-auto bg-recessed px-3.5 py-2.5 font-mono text-[11px] leading-5 text-text">{setup ?? (loading ? "Loading the configured Kintsugi URL…" : "Install command is unavailable. Contact your Kintsugi administrator.")}</pre>
-          <p className="px-3.5 py-2.5 text-[11px] text-text-muted">After install, start a new Claude Code or Codex session and ask it to read this project&apos;s Kintsugi task context. First use opens Kintsugi sign-in in your browser.</p>
+          <p className="px-3.5 py-2.5 text-[11px] text-text-muted">{clientChoice === "codex-desktop" ? "Restart Codex Desktop, then open Plugins → Plugins Directory → Kintsugi marketplace and install the plugin. In a new local chat, first use opens Kintsugi sign-in in your browser." : `After install, start a new ${clientChoice === "claude-code" ? "Claude Code" : "Codex CLI"} session. First use opens Kintsugi sign-in in your browser.`}</p>
         </div>
         <div className="flex flex-col gap-1">
           <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-text"><Shield className="size-3.5 text-text-muted" />Your connections</h3>

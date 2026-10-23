@@ -75,20 +75,27 @@ export async function apiForMcp(deps: CliDeps, command: Command): Promise<{ clie
   if (options.tokenStdin) throw new CliError("MCP_TOKEN_STDIN_UNSUPPORTED", "The MCP bridge uses stdin for protocol messages; authenticate the selected profile with auth login");
   if (options.project !== undefined) throw new CliError("MCP_PROJECT_SELECTOR_UNSUPPORTED", "MCP calls require explicit projectId arguments; --project is not a connection default");
   const oauth = oauthFor(deps);
-  try { await oauth.accessTokenFor(profile); }
-  catch (error) {
-    if (!(error instanceof CliError) || !["CREDENTIAL_REQUIRED", "REAUTHENTICATION_REQUIRED"].includes(error.code)) throw error;
-    if (options.noInput === true || (options as { input?: boolean }).input === false) throw error;
-    if (profile.projectId === undefined) throw new CliError("PROJECT_REQUIRED", "This profile needs a project for browser consent; run auth login --url <url> --project <id>");
-    await oauth.beginBrowserLogin(profile, profile.projectId, true);
-  }
   const fetcher = profile.caFile === undefined ? deps.fetch : await createFetchWithPrivateCa(profile.caFile);
+  let authenticated = false;
+  const tokenProvider = async (): Promise<string | undefined> => {
+    try {
+      const token = await oauth.accessTokenFor(profile);
+      authenticated = true;
+      return token;
+    } catch (error) {
+      if (!(error instanceof CliError) || !["CREDENTIAL_REQUIRED", "REAUTHENTICATION_REQUIRED"].includes(error.code)) throw error;
+      if (authenticated && error.code === "CREDENTIAL_REQUIRED") return undefined;
+      if (authenticated || options.noInput === true || (options as { input?: boolean }).input === false) throw error;
+      if (profile.projectId === undefined) throw new CliError("PROJECT_REQUIRED", "This profile needs a project for browser consent; run auth login --url <url> --project <id>");
+      await oauth.beginBrowserLogin(profile, profile.projectId, true);
+      const token = await oauth.accessTokenFor(profile);
+      authenticated = true;
+      return token;
+    }
+  };
   return { client: createCodingAgentWorkflowClient({
     baseUrl: profile.baseUrl,
-    tokenProvider: async () => {
-      try { return await oauth.accessTokenFor(profile); }
-      catch (error) { if (error instanceof CliError && error.code === "CREDENTIAL_REQUIRED") return undefined; throw error; }
-    },
+    tokenProvider,
     fetch: fetcher,
     sleep: deps.sleep,
     signalProvider: () => AbortSignal.any([AbortSignal.timeout(60_000), ...(deps.signal === undefined ? [] : [deps.signal])]),
