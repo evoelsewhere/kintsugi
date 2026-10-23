@@ -71,7 +71,7 @@ const PLAN_TASK = `Plan the order in which application {app} should be understoo
 ${WORKSPACE}
 
 The item graph is {in}/${GRAPH}: per catalog item its size (loc), complexity, whether it is understood already, whether it is test or
-generated code (assetClass), whether it holds an entry point, the items it depends on (dependsOn, with the kinds of calls and
+generated code (assetClass), whether it holds an entry point, its kind (screen, api, batch-job, report, event, integration or module), the items it depends on (dependsOn, with the kinds of calls and
 how many), the items that use it (usedBy), the data stores it touches, its fan-in and fan-out, its depth (0 = it depends on no
 other item) and its cycle (items that depend on each other). Also under {in}: ${assessmentSynthesisPath(APP_TOKEN)}
 (the assessment: summary, rebuild outlook, risks), ${assessmentCatalogPath(APP_TOKEN)} (and the module documents next to it) and ${assessmentTopologyPath(APP_TOKEN)}.

@@ -9,6 +9,16 @@ import { paragraphsIn, sectionsOf, tablesIn } from './markdown.js'
  * `Dropped`. Every field is read as optional; null when the text is not a plan.
  */
 
+/** `screen 2, api 1` as { screen: 2, api: 1 }. */
+const kindsOf = (text: string | undefined): Record<string, number> => {
+  const kinds: Record<string, number> = {}
+  for (const part of (text ?? '').split(',')) {
+    const match = /^\s*([a-z0-9][a-z0-9-]{0,62})\s+(\d{1,4})\s*$/.exec(part)
+    if (match) kinds[match[1]!] = Number(match[2])
+  }
+  return kinds
+}
+
 export type PlanBatch = {
   n: number
   title: string
@@ -17,6 +27,8 @@ export type PlanBatch = {
   items: string[]
   loc: number
   high: number
+  /** How many items of each kind the batch holds (ADR-0060); empty when the plan predates kinds. */
+  kinds: Record<string, number>
   /** Calls inside the batch over all calls its items make to other items; null when they call none. */
   cohesion: number | null
   /** Items outside the batch, not understood and not in an earlier batch, that its items depend on. */
@@ -68,6 +80,7 @@ export function parsePlan(text: string): UnderstandPlan | null {
         items: itemsOf(sectionText(card, 'Items')).slice(0, MAX_LIST),
         loc: countOf(fieldText(card, 'loc')),
         high: countOf(fieldText(card, 'high complexity')),
+        kinds: kindsOf(fieldText(card, 'kinds')),
         cohesion: cohesion === undefined ? null : Number(cohesion),
         dependsOutside: recordsOf(tablesIn(sectionText(card, 'Depends on outside'))[0]).flatMap(row =>
           row.item ? [{ item: row.item.replace(/`/g, ''), usedBy: (row['used by'] ?? '').split(',').map(part => part.trim().replace(/`/g, '')).filter(Boolean) }] : [],

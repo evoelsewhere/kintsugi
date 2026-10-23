@@ -41,6 +41,7 @@ One more shape is read only by the design-set tools: a **directive comment** und
 | `02-modern/<module>/<unit>/<set>/<file>` | `scaffold_design.py`, then the `design` stage's designer | A design document: front matter `template: "<set>@<version>"` (or `"<set>/<kind>@<version>"`) and `unit`, then the sections and tables the template names |
 | `_generated/traceability.md` | `rebuild_aggregates.py` | Front matter with the totals the headlines read; one row per understood unit |
 | `_generated/GAPS.md` | `rebuild_aggregates.py` | The units' `Gaps and questions` rows joined (`Item \| ID \| Kind \| Impact \| Question \| Where`), blocking first; front matter counts by impact and kind ([ADR-0057](../decisions/0057-evidence-marks-and-gaps.md)) |
+| `_generated/DATA_ACCESS.md` | `rebuild_aggregates.py` | The read/write matrix of data stores and items from the catalog's links (`Data store \| Written by \| Read by`, then `Item \| Kind \| Reads \| Writes`); front matter counts ([ADR-0060](../decisions/0060-item-kinds-and-kind-aware-understanding.md)) |
 | `_generated/BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `README.md` | `rebuild_aggregates.py` | The index of the units' rules (one row per rule with its version and a link to the rule's file), the units' objects and findings joined; the index of the specifications |
 
 ## Scratch

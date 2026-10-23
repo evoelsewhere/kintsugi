@@ -21,6 +21,7 @@ export {
   type SkillPackage,
 } from "./format.js";
 export { toAgentDefinition, validateAgent, type AgentContext } from "./definition.js";
+export { builtinSpecProfileVersions, profileVersionOf } from "./spec-profiles.js";
 export { BUILTIN_DIR, builtinPluginDirs, findBuiltinFile, loadBuiltinCatalog, readPackageDir, type BuiltinCatalog, type BuiltinPluginDir } from "./builtin.js";
 export {
   loadBuiltinPlugins,

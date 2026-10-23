@@ -40,6 +40,8 @@ export interface CatalogItem {
   lastRun?: { id: string; status: string; at: string };
   pr?: { runId: string; branch: string; url?: string };
   understood?: { commit?: string; runId?: string };
+  /** Why the item is stale: its files changed, or its kind's specification profile was raised since (ADR-0060). */
+  staleReason?: "source" | "profile";
 }
 
 export interface CatalogView {
@@ -58,6 +60,8 @@ export interface PlanBatch {
   items: string[];
   loc: number;
   high: number;
+  /** Items of each kind in the batch (ADR-0060); empty for an older plan. */
+  kinds?: Record<string, number>;
   /** Calls inside the batch over all calls its items make to other items; null when they call none. */
   cohesion: number | null;
   dependsOutside: Array<{ item: string; usedBy: string[] }>;

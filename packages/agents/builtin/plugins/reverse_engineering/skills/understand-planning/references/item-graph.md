@@ -25,6 +25,7 @@ Written by `scripts/plan_graph.py` (scratch JSON of the run) from the catalog do
 | Field | Meaning |
 | --- | --- |
 | `loc`, `files`, `complexity` | Size and the band from the assessment inventory (`low`, `medium`, `high`). |
+| `kind` | The item's kind (ADR-0060): `screen`, `api`, `batch-job`, `report`, `event`, `integration` (entry kinds) or `module`, or a kind of the project. |
 | `assetClass` | `code`, `test` or `generated`. Only `code` is planned. |
 | `understood` | A specification of the item is on the default branch already. |
 | `entryPoint` | One of the item's leaves is an entry point of the application. |

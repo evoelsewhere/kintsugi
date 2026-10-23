@@ -227,6 +227,7 @@ Everything calls them.
 - **risk:** high
 - **loc:** 2400
 - **high complexity:** 2
+- **kinds:** screen 1, module 1, bad kind
 - **cohesion:** 1.0
 
 ### Items
@@ -276,8 +277,8 @@ describe('plan', () => {
     expect(plan.strategy).toBe('Foundations first, then what uses them.')
     expect(plan.summary).toEqual({ batches: 2, planned: 3, open: 5 })
     expect(plan.batches).toEqual([
-      { n: 1, title: 'Foundations', rationale: 'Everything calls them.', risk: 'high', items: ['core/base', 'core/service'], loc: 2400, high: 2, cohesion: 1, dependsOutside: [] },
-      { n: 2, title: 'Entry', rationale: 'Needs both.', risk: 'medium', items: ['web/entry'], loc: 300, high: 0, cohesion: null, dependsOutside: [{ item: 'core/old', usedBy: ['web/entry', 'web/other'] }] },
+      { n: 1, title: 'Foundations', rationale: 'Everything calls them.', risk: 'high', items: ['core/base', 'core/service'], loc: 2400, high: 2, kinds: { screen: 1, module: 1 }, cohesion: 1, dependsOutside: [] },
+      { n: 2, title: 'Entry', rationale: 'Needs both.', risk: 'medium', items: ['web/entry'], loc: 300, high: 0, kinds: {}, cohesion: null, dependsOutside: [{ item: 'core/old', usedBy: ['web/entry', 'web/other'] }] },
     ])
     expect(plan.leftOut).toEqual([{ item: 'batch/a', reason: 'Low value.' }])
     expect(plan.dropped).toEqual([{ item: 'nope/x', reason: 'not an item of the catalog' }])
