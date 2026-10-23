@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { debugMcpEnabled } from "./common/config/env.js";
 import { AgentsModule } from "./modules/admin/agents/agents.module.js";
+import { PluginAccessModule } from "./modules/admin/plugin-access/index.js";
 import { PluginsModule } from "./modules/admin/plugins/plugins.module.js";
 import { ConnectorsModule } from "./modules/admin/connectors/connectors.module.js";
 import { DocumentWritesModule } from "./modules/admin/document-writes/document-writes.module.js";
@@ -30,6 +31,7 @@ import { SandboxModule } from "./modules/monitoring/sandbox/sandbox.module.js";
 import { JobRunsModule } from "./modules/monitoring/observability/job-runs.module.js";
 import { OverviewModule } from "./modules/monitoring/overview/overview.module.js";
 import { PortfolioOverviewModule } from "./modules/monitoring/portfolio/portfolio.module.js";
+import { MemberActivityModule } from "./modules/monitoring/member-activity/index.js";
 import { TelemetryModule } from "./modules/monitoring/telemetry/telemetry.module.js";
 import { HealthChecksModule } from "./modules/monitoring/target-health/health-checks.module.js";
 import { AuditEntriesModule } from "./modules/governance/audit/audit-entries.module.js";
@@ -70,6 +72,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     McpServersModule,
     AgentsModule,
     PluginsModule,
+    PluginAccessModule,
     HarnessesModule,
     TemplatesModule,
     ProjectBuildsModule,
@@ -86,6 +89,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     OverviewModule,
     PortfolioOverviewModule,
     TelemetryModule,
+    MemberActivityModule,
     JobRunsModule,
     DashboardStatsModule,
     SandboxModule,

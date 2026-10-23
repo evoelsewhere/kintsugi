@@ -69,6 +69,8 @@ export const AUDIT_ACTIONS = {
   codingAgentConnectionReplay: "coding-agent.connection.replay",
   projectAccessGrant: "project-access.grant",
   projectAccessRevoke: "project-access.revoke",
+  pluginAccessGrant: "plugin-access.grant",
+  pluginAccessRevoke: "plugin-access.revoke",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

@@ -30,6 +30,7 @@ import { OVERVIEW_TOPICS, WORKER_AGES } from "@/lib/live";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
 import { MonitoringInsights } from "./monitoring-insights";
+import { MembersView } from "./monitoring-members";
 import { SandboxView } from "./monitoring-sandbox";
 
 const TABS: { id: MonitoringTab; label: string }[] = [
@@ -42,8 +43,10 @@ const TABS: { id: MonitoringTab; label: string }[] = [
 const PAGE_SIZE = 25;
 
 export function MonitoringPage(): React.JSX.Element {
+  const { can } = useAuth();
   const [params, setParams] = useSearchParams();
-  const tab = (TABS.find((entry) => entry.id === params.get("tab"))?.id ?? "runs") satisfies MonitoringTab;
+  const tabs = can("member.activity.view") ? [...TABS, { id: "members" as const, label: "Members" }] : TABS;
+  const tab = (tabs.find((entry) => entry.id === params.get("tab"))?.id ?? "runs") satisfies MonitoringTab;
   const status = params.get("status") ?? "";
   const setQuery = (patch: Record<string, string | null>): void =>
     setParams(
@@ -62,11 +65,12 @@ export function MonitoringPage(): React.JSX.Element {
     <div className="flex flex-col gap-5">
       <Breadcrumbs items={["Monitoring"]} />
       <PageHeading title="Monitoring" description="Live job runs, repository sync, document writes, the worker and the job workspaces across all projects. Lists refresh on their own." />
-      <Tabs label="Monitoring views" tabs={TABS} value={tab} onChange={(id) => setQuery({ tab: id, status: null })} />
+      <Tabs label="Monitoring views" tabs={tabs} value={tab} onChange={(id) => setQuery({ tab: id, status: null })} />
       <MonitoringInsights tab={tab} />
       {tab === "runs" ? <RunsView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
       {tab === "repositories" ? <RepositoriesView /> : null}
       {tab === "writes" ? <WritesView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
+      {tab === "members" ? <MembersView /> : null}
       {tab === "runtime" ? (
         <>
           <WorkerView />

@@ -1,15 +1,19 @@
 import {
+  activityInputSchema,
+  activityReceiptSchema,
   documentFileQuerySchema,
   documentFileSchema,
   documentTreeQuerySchema,
   documentTreeSchema,
+  pluginListQuerySchema,
+  pluginListResultSchema,
   projectListResultSchema,
   projectQuerySchema,
   type MemberPort,
 } from "@kintsugi/harness-sdk";
 import type { McpServer } from "@modelcontextprotocol/server";
 
-export const MEMBER_TOOL_NAMES = ["project_list", "document_tree", "document_get"] as const;
+export const MEMBER_TOOL_NAMES = ["project_list", "document_tree", "document_get", "plugin_list", "activity_record"] as const;
 
 export type MemberToolName = (typeof MEMBER_TOOL_NAMES)[number];
 
@@ -17,6 +21,13 @@ const READ_ONLY = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
+} as const;
+
+/** Adds one bounded record to Kintsugi's monitoring; changes no project, document or repository. */
+const RECORDS_ACTIVITY = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
 } as const;
 
 function toolFailure(error: unknown) {
@@ -42,7 +53,7 @@ async function invokeRead<T extends object>(read: () => Promise<T>) {
   }
 }
 
-/** The common member tools; flows beyond them are added by plugins. */
+/** The common member tools: read projects, documents and plugins, and record activity. Flows are added by plugins. */
 export function registerMemberTools(server: McpServer, member: MemberPort): void {
   server.registerTool("project_list", {
     title: "List Kintsugi projects",
@@ -67,4 +78,20 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     outputSchema: documentFileSchema,
     annotations: READ_ONLY,
   }, (query) => invokeRead(() => member.documentFile(query)));
+
+  server.registerTool("plugin_list", {
+    title: "List member plugins",
+    description: "List the member plugins the authenticated member may install in a project.",
+    inputSchema: pluginListQuerySchema,
+    outputSchema: pluginListResultSchema,
+    annotations: READ_ONLY,
+  }, (query) => invokeRead(() => member.listPlugins(query)));
+
+  server.registerTool("activity_record", {
+    title: "Record plugin activity",
+    description: "Record one short, factual note about work a plugin helped with, for the project's monitoring. Never include document content, credentials or personal data.",
+    inputSchema: activityInputSchema,
+    outputSchema: activityReceiptSchema,
+    annotations: RECORDS_ACTIVITY,
+  }, (input) => invokeRead(() => member.recordActivity(input)));
 }

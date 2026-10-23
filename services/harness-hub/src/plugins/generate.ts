@@ -21,6 +21,20 @@ export interface ConnectorPluginInput {
   pluginName?: string;
   /** Optional user-facing label for the client plugin directory. */
   pluginDisplayName?: string;
+  /** Files of distributed member plugins, relative to the generated plugin folder (see assertDistributablePath). */
+  extraFiles?: Record<string, string>;
+}
+
+/**
+ * What a member plugin may add to the generated package: skills (any text file under a skill), and for the
+ * clients that read them, agents and commands as Markdown. Hooks, scripts and MCP entries are never distributed.
+ */
+export function assertDistributablePath(target: HarnessClient, path: string): void {
+  const parts = path.split("/");
+  const safe = path.length > 0 && path.length <= 300 && !path.includes("\\") && parts.every((part) => part !== "" && part !== "." && part !== "..");
+  const skill = /^skills\/[^/]+\/.+$/.test(path);
+  const markdown = /^(?:agents|commands)\/[^/]+\.md$/.test(path) && target !== "codex";
+  if (!safe || !(skill || markdown)) throw new PluginSetupError("PLUGIN_FILE_NOT_DISTRIBUTABLE", `A member plugin cannot add ${path} to a ${target} package`);
 }
 
 export interface GeneratedPluginFiles {
@@ -124,6 +138,11 @@ export function generateConnectorPlugin(input: ConnectorPluginInput): GeneratedP
         kintsugi: { type: "stdio", command, args },
       },
     });
+  }
+  for (const [path, content] of Object.entries(input.extraFiles ?? {})) {
+    assertDistributablePath(input.target, path);
+    if (Object.hasOwn(files, path)) throw new PluginSetupError("PLUGIN_FILE_CONFLICT", `A member plugin file collides with a generated file: ${path}`);
+    files[path] = content;
   }
   return { pluginName, files };
 }

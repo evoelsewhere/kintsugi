@@ -164,9 +164,10 @@ export class PgJobStore implements JobStore, WorkspaceStates {
       .catch(() => undefined);
   }
 
-  /** Deletes the spans started more than `days` ago; returns how many. */
+  /** Deletes the spans started and the member activity recorded more than `days` ago; returns how many spans. */
   async pruneTelemetry(days: number): Promise<number> {
     const result = await this.pool.query("delete from monitoring.telemetry_span where started_at < now() - make_interval(days => $1)", [days]);
+    await this.pool.query("delete from monitoring.member_activity where at < now() - make_interval(days => $1)", [days]);
     return result.rowCount ?? 0;
   }
 

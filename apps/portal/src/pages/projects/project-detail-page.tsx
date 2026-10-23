@@ -26,6 +26,7 @@ import { deliveryLink } from "@/lib/links";
 import { subscribeLive } from "@/lib/live";
 import { DesignSetsCard } from "./design-sets-card";
 import { MemberConnectPanel } from "../member/connect-panel";
+import { PluginAccessPanel } from "./plugin-access-panel";
 import { ProjectAccessPanel } from "./project-access-panel";
 import { ProjectInsights } from "./projects-insights";
 import { NoRepositories } from "./no-repositories";
@@ -189,6 +190,8 @@ export function ProjectDetailPage(): React.JSX.Element {
       <DesignSetsCard project={project} />
 
       <ProjectAccessPanel projectId={projectId} canManage={can("project.access.manage")} />
+
+      <PluginAccessPanel projectId={projectId} canManage={can("plugin.access.manage")} />
 
       <MemberConnectPanel projectId={projectId} canManage={can("tokens.manage-own")} canRead={can("member.read")} />
 

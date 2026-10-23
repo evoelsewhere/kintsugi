@@ -1,4 +1,4 @@
-import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, rename, rm, rmdir } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { assertClientCompatibility } from "./compatibility.js";
@@ -8,6 +8,8 @@ export interface SetupInput extends ConnectorPluginInput {
   clientVersion: string;
   /** Dedicated per-client root below Kintsugi's local config directory. */
   artifactRoot: string;
+  /** The record of installed member plugins (see PLUGIN_STATE_PATH); written with the package when given. */
+  stateFile?: string;
 }
 
 export interface SetupChange {
@@ -209,6 +211,7 @@ export function planClientSetup(input: SetupInput): SetupChange[] {
   const marketplace = generateConnectorMarketplace(input.target, input.cliVersion, input.profileId);
   const entries: Array<[string, string]> = [
     [MARKER_PATH, SETUP_MARKER(input.target)],
+    ...(input.stateFile === undefined ? [] : [[PLUGIN_STATE_PATH, input.stateFile] as [string, string]]),
     [marketplace.path, marketplace.content],
     ...Object.entries(generated.files).map(([path, content]): [string, string] => [`plugins/${input.target}/${generated.pluginName}/${path}`, content]),
   ];
@@ -490,4 +493,94 @@ export async function stageCodexDesktopPlugin(input: CodexDesktopSetupInput, dep
     installationMode: "desktop-ui",
     staged: true,
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Member plugins distributed by Kintsugi (ADR-0069). Their files ride inside the connector package; this
+// record says which plugin put which files there, so an update or a removal deletes exactly those.
+// ---------------------------------------------------------------------------------------------------------
+
+export const PLUGIN_STATE_PATH = ".kintsugi-plugins.json";
+
+export interface InstalledPlugin {
+  version: string;
+  contentHash: string;
+  /** Paths relative to the connector plugin folder. */
+  files: string[];
+}
+
+export interface PluginInstallState {
+  schemaVersion: "1";
+  plugins: Record<string, InstalledPlugin>;
+}
+
+export function emptyPluginState(): PluginInstallState {
+  return { schemaVersion: "1", plugins: {} };
+}
+
+export function serializePluginState(state: PluginInstallState): string {
+  const plugins = Object.fromEntries(Object.entries(state.plugins).sort(([a], [b]) => a.localeCompare(b)));
+  return JSON.stringify({ schemaVersion: "1", plugins }, null, 2) + "\n";
+}
+
+/** The installed-plugin record of a managed package root; empty when the package has none yet. */
+export async function readPluginState(artifactRoot: string, deps: SetupFileDeps = FILES): Promise<PluginInstallState> {
+  const path = join(resolve(artifactRoot), PLUGIN_STATE_PATH);
+  await assertNoSymlinkPath(path, deps);
+  let raw: string;
+  try { raw = (await deps.readFile(path)).toString("utf8"); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyPluginState();
+    throw error;
+  }
+  let parsed: Partial<PluginInstallState>;
+  try { parsed = JSON.parse(raw) as Partial<PluginInstallState>; } catch {
+    throw new PluginSetupError("PLUGIN_STATE_INVALID", "The record of installed Kintsugi plugins is not valid JSON");
+  }
+  if (parsed.schemaVersion !== "1" || typeof parsed.plugins !== "object" || parsed.plugins === null) {
+    throw new PluginSetupError("PLUGIN_STATE_INVALID", "The record of installed Kintsugi plugins has an unsupported shape");
+  }
+  for (const [name, entry] of Object.entries(parsed.plugins)) {
+    if (typeof entry?.version !== "string" || typeof entry.contentHash !== "string" || !Array.isArray(entry.files) || entry.files.some((file) => typeof file !== "string")) {
+      throw new PluginSetupError("PLUGIN_STATE_INVALID", `The record of installed Kintsugi plugins is malformed at ${name}`);
+    }
+  }
+  return { schemaVersion: "1", plugins: parsed.plugins as Record<string, InstalledPlugin> };
+}
+
+/** The state after installing (or updating) one plugin, and the files of its previous version that are now stale. */
+export function withInstalledPlugin(state: PluginInstallState, name: string, plugin: InstalledPlugin): { state: PluginInstallState; stale: string[] } {
+  for (const [other, entry] of Object.entries(state.plugins)) {
+    if (other === name) continue;
+    const clash = plugin.files.find((file) => entry.files.includes(file));
+    if (clash !== undefined) throw new PluginSetupError("PLUGIN_FILE_CONFLICT", `${clash} is already installed by the plugin ${other}`);
+  }
+  const previous = state.plugins[name]?.files ?? [];
+  return { state: { schemaVersion: "1", plugins: { ...state.plugins, [name]: plugin } }, stale: previous.filter((file) => !plugin.files.includes(file)) };
+}
+
+/** The state after removing one plugin, and its files. */
+export function withoutPlugin(state: PluginInstallState, name: string): { state: PluginInstallState; stale: string[] } {
+  const entry = state.plugins[name];
+  if (entry === undefined) throw new PluginSetupError("PLUGIN_NOT_INSTALLED", `The plugin ${name} is not installed in this package`);
+  const { [name]: _removed, ...rest } = state.plugins;
+  return { state: { schemaVersion: "1", plugins: rest }, stale: entry.files };
+}
+
+/** Deletes files a plugin no longer carries from the connector package, and the folders it leaves empty. */
+export async function pruneStalePluginFiles(artifactRoot: string, target: HarnessClient, relativePaths: readonly string[], deps: SetupFileDeps = FILES): Promise<string[]> {
+  const root = resolve(artifactRoot);
+  const pluginRoot = join(root, "plugins", target, KINTSUGI_PLUGIN_NAME);
+  const removed: string[] = [];
+  for (const relativePath of relativePaths) {
+    assertRelativeFile(relativePath);
+    const destination = resolve(pluginRoot, relativePath);
+    if (!within(pluginRoot, destination) || destination === pluginRoot) throw new PluginSetupError("SETUP_PATH_INVALID", "A stale plugin path escaped the Kintsugi plugin folder");
+    await assertNoSymlinkPath(destination, deps);
+    await deps.rm(destination, { force: true });
+    removed.push(destination);
+    for (let directory = dirname(destination); directory !== pluginRoot && within(pluginRoot, directory); directory = dirname(directory)) {
+      try { await rmdir(directory); } catch { break; }
+    }
+  }
+  return removed;
 }

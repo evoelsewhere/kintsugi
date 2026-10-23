@@ -1,0 +1,12 @@
+{
+  "name": "context",
+  "version": "1.0.0",
+  "description": "Ground a member's own AI client in the project's document repository: find and read standards, architecture and transition documents through the Kintsugi tools, answer with citations and record what was done.",
+  "author": {
+    "name": "Kintsugi"
+  },
+  "keywords": [
+    "kintsugi",
+    "member"
+  ]
+}

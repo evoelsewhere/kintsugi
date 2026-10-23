@@ -5,9 +5,10 @@ import { describe, expect, it } from "vitest";
 import { loadBuiltinPlugins, PLUGIN_MANIFEST_FILE, readBuiltinPluginFile } from "../src/index.js";
 
 describe("built-in plugins", () => {
-  it("splits the modernization content into understand and modernize", async () => {
+  it("ships the member context plugin beside the runtime plugins", async () => {
     const plugins = await loadBuiltinPlugins();
     expect(plugins.map((plugin) => [plugin.name, plugin.audience])).toEqual([
+      ["context", "member"],
       ["reverse_engineering", "runtime"],
       ["modernize", "runtime"],
     ]);
@@ -37,6 +38,7 @@ describe("built-in plugins", () => {
   it("keeps the parts two plugins share identical, and a plugin that needs another says so", async () => {
     const plugins = await loadBuiltinPlugins();
     expect(plugins.map((plugin) => [plugin.name, plugin.requires])).toEqual([
+      ["context", []],
       ["reverse_engineering", []],
       ["modernize", ["reverse_engineering"]],
     ]);

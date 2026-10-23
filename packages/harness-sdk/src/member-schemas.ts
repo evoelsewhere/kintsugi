@@ -71,3 +71,58 @@ export const documentFileSchema = z.object({
   size: z.number().int().min(0),
   content: z.string(),
 }).strict();
+
+const pluginNameSchema = z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9_-]*$/);
+const harnessSchema = z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9._-]*$/);
+const kindSchema = z.string().trim().min(1).max(64).regex(/^[a-z][a-z0-9._-]*$/);
+
+export const MAX_ACTIVITY_SUMMARY_LENGTH = 500;
+
+export const pluginSummarySchema = z.object({
+  name: pluginNameSchema,
+  title: z.string().min(1).max(200),
+  version: z.string().min(1).max(64),
+  description: z.string().max(2000),
+}).strict();
+
+export const pluginListQuerySchema = z.object({
+  schemaVersion: versionSchema,
+  projectId: projectIdSchema,
+}).strict();
+
+export const pluginBundleQuerySchema = z.object({
+  schemaVersion: versionSchema,
+  projectId: projectIdSchema,
+  name: pluginNameSchema,
+}).strict();
+
+export const pluginListResultSchema = listResultSchema(pluginSummarySchema);
+
+export const pluginBundleSchema = pluginSummarySchema.extend({
+  schemaVersion: z.literal(MEMBER_SCHEMA_VERSION),
+  projectId: projectIdSchema,
+  contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  files: z.array(z.object({
+    path: z.string().min(1).max(300),
+    content: z.string(),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  }).strict()).max(200),
+}).strict();
+
+export const activityDetailSchema = z.record(z.string().max(64), z.union([z.string().max(500), z.number(), z.boolean(), z.null()])).refine((value) => Object.keys(value).length <= 20, "at most 20 detail entries");
+
+/** Body of a plugin's write-back; the same shape is the MCP tool input and the CLI options. */
+export const activityInputSchema = z.object({
+  schemaVersion: versionSchema,
+  projectId: projectIdSchema,
+  kind: kindSchema,
+  pluginName: pluginNameSchema.optional(),
+  harness: harnessSchema.optional(),
+  summary: z.string().max(MAX_ACTIVITY_SUMMARY_LENGTH).optional(),
+  detail: activityDetailSchema.optional(),
+}).strict();
+
+export const activityReceiptSchema = z.object({
+  schemaVersion: z.literal(MEMBER_SCHEMA_VERSION),
+  id: z.string().min(1).max(100),
+}).strict();

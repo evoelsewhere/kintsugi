@@ -11,7 +11,9 @@ export const PERMISSION_KEY = "kintsugi:required-permission";
 export const MEMBER_READ_SCOPE_KEY = "kintsugi:member-read-scope";
 
 export interface MemberReadScope {
-  projectIdFrom: "query" | "params" | "token-projects";
+  projectIdFrom: "query" | "params" | "body" | "token-projects";
+  /** Allows POST as well: the route records something about the member's own work and changes no project data. */
+  write?: boolean;
 }
 
 export const SKIP_CSRF_KEY = "kintsugi:skip-csrf";
@@ -39,7 +41,7 @@ export const Public = (): MethodDecorator & ClassDecorator => SetMetadata(IS_PUB
  */
 export const RequirePermission = (...codes: [string, ...string[]]): MethodDecorator & ClassDecorator => SetMetadata(PERMISSION_KEY, codes);
 
-/** Marks a GET endpoint as a project-scoped Kintsugi member read route. */
+/** Marks an endpoint as a project-scoped Kintsugi member route: GET, or POST when the scope is a write. */
 export const AllowMemberRead = (scope: MemberReadScope): MethodDecorator & ClassDecorator => SetMetadata(MEMBER_READ_SCOPE_KEY, scope);
 
 /** The caller set by AuthGuard; only valid on authenticated (non-@Public) routes. */

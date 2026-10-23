@@ -1,18 +1,30 @@
 import {
+  activityInputSchema,
+  activityReceiptSchema,
   documentFileSchema,
   documentFileQuerySchema,
   documentTreeQuerySchema,
   documentTreeSchema,
+  pluginBundleQuerySchema,
+  pluginBundleSchema,
+  pluginListQuerySchema,
+  pluginListResultSchema,
   projectListResultSchema,
   projectQuerySchema,
 } from "@kintsugi/harness-sdk";
 import type {
+  ActivityInput,
+  ActivityReceipt,
   DocumentFile,
   DocumentFileQuery,
   DocumentTree,
   DocumentTreeQuery,
   ListResult,
   MemberPort,
+  PluginBundle,
+  PluginBundleQuery,
+  PluginListQuery,
+  PluginSummary,
   ProjectQuery,
   ProjectSummary,
 } from "@kintsugi/harness-sdk";
@@ -141,14 +153,17 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
     query: Record<string, unknown>,
     schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
     signalOverride?: AbortSignal,
+    payload?: unknown,
   ): Promise<T> {
+    // A write is sent once: repeating it after a lost response could record it twice.
+    const method = payload === undefined ? "GET" : "POST";
     let signal = signalOverride ?? options.signal;
     let signalResolved = signal !== undefined;
     const basePath = baseUrl.pathname.replace(/\/+$/, "");
     const url = new URL(`${basePath}${API_PREFIX}/${endpoint}`, baseUrl.origin);
     const urlQuery = { ...query };
     delete urlQuery.schemaVersion;
-    appendQuery(url, urlQuery);
+    if (method === "GET") appendQuery(url, urlQuery);
     let retries = 0;
 
     while (true) {
@@ -165,14 +180,15 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
       let response: Response;
       try {
         response = await fetcher(url, {
-          method: "GET",
-          headers: { accept: "application/json", authorization: `Bearer ${token}` },
+          method,
+          headers: { accept: "application/json", authorization: `Bearer ${token}`, ...(method === "POST" ? { "content-type": "application/json" } : {}) },
+          ...(method === "POST" ? { body: JSON.stringify(payload) } : {}),
           redirect: "manual",
           ...(signal === undefined ? {} : { signal }),
         });
       } catch (error) {
         if (isAbortError(error) || signal?.aborted) throw cancelledError();
-        if (retries < maxRetries) {
+        if (method === "GET" && retries < maxRetries) {
           retries += 1;
           await sleep(Math.min(250 * 2 ** (retries - 1), MAX_RETRY_DELAY_MS), signal);
           continue;
@@ -192,7 +208,7 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
 
       if (!response.ok) {
         const apiError = errorFromEnvelope(response.status, body, token);
-        const retryable = [429, 502, 503, 504].includes(response.status);
+        const retryable = method === "GET" && [429, 502, 503, 504].includes(response.status);
         if (retryable && retries < maxRetries) {
           retries += 1;
           await sleep(retryAfterMilliseconds(response, now()) ?? Math.min(250 * 2 ** (retries - 1), MAX_RETRY_DELAY_MS), signal);
@@ -219,6 +235,18 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
     documentFile: (query: DocumentFileQuery): Promise<DocumentFile> => {
       const parsed = documentFileQuerySchema.parse(query);
       return request("documents/file", parsed, documentFileSchema);
+    },
+    listPlugins: (query: PluginListQuery): Promise<ListResult<PluginSummary>> => {
+      const parsed = pluginListQuerySchema.parse(query);
+      return request("plugins", parsed, pluginListResultSchema);
+    },
+    pluginBundle: (query: PluginBundleQuery): Promise<PluginBundle> => {
+      const { name, ...rest } = pluginBundleQuerySchema.parse(query);
+      return request(`plugins/${encodeURIComponent(name)}`, rest, pluginBundleSchema);
+    },
+    recordActivity: (input: ActivityInput): Promise<ActivityReceipt> => {
+      const parsed = activityInputSchema.parse(input);
+      return request("activity", {}, activityReceiptSchema, undefined, parsed);
     },
   };
 }
