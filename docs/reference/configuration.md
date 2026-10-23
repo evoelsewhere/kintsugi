@@ -13,6 +13,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_HTTP_BIND` | no | `127.0.0.1` | Host interface for the published app port. Loopback keeps the app private for SSH-tunnel access or a local TLS reverse proxy |
 | `KINTSUGI_HTTP_PORT` | no | `8080` | Published port of `kintsugi-app` |
 | `KINTSUGI_PUBLIC_URL` | yes | `http://localhost:8080` in the Compose starter | External URL (used for links, MCP and CLI configuration); use the HTTPS URL when publishing behind a TLS reverse proxy |
+| `KINTSUGI_RELEASES_DIR` | no | `/app/releases` in the image | Folder of CLI packages the app serves at `/api/v1/releases` and lists in the Guideline ([ADR-0070](../decisions/0070-cli-distributed-by-the-installation.md)); the image build fills it |
 | `KINTSUGI_SECRET_KEY` | yes | — | Master key encrypting secrets in Postgres (`openssl rand -base64 32`) |
 | `KINTSUGI_BOOTSTRAP_ADMIN_USER` | yes (first start) | `admin` | First admin account |
 | `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` | yes (first start) | — | First admin password; the deploy workflow accepts letters, digits, dots, underscores, and hyphens (minimum 8 characters). Change it after first sign-in |

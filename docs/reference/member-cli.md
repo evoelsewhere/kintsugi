@@ -4,26 +4,31 @@ Status: the typed client, the CLI, the local stdio MCP bridge, the generated Kin
 
 The CLI and the MCP bridge are the **common base** between a member's own AI client (Claude Code, Codex, Copilot, ChatGPT) and Kintsugi ([ADR-0069](../decisions/0069-common-member-base-and-plugin-distribution.md)): sign-in, project access and document reads. They know no stage, task or review; flows are added by member plugins, which Kintsugi distributes, permits and monitors. The CLI does not call a model, inject text into an existing conversation or do any coding work.
 
-## Build and run from the workspace
+## Install the CLI
 
-The package is not published. From the repository root:
-
-```sh
-corepack pnpm --filter @kintsugi/cli... build
-pnpm kintsugi --help
-```
-
-The root `kintsugi` script runs the compiled package. After the CLI is published and installed, use `kintsugi` directly. It requires Node.js 22.19 or newer.
-
-## Install the connector plugin
-
-From the project page in the portal, copy the generated command. For a published CLI it looks like this:
+The installation serves the CLI itself ([ADR-0070](../decisions/0070-cli-distributed-by-the-installation.md)). The portal page **Guideline** (`/guideline`) shows these commands with the installation's own URL, and lists the packages for a manual install:
 
 ```sh
-kintsugi plugins setup --harness claude-code --url https://kintsugi.example.internal --project modernization
+curl -fsSL https://kintsugi.example.internal/api/v1/releases/latest/install.sh | sh
 ```
 
-The command needs no Kintsugi token. It records a nonsecret local profile, generates a Kintsugi-owned package (the MCP server entry of the selected client, plus the Kintsugi marks for Codex) and installs it with the client's native plugin command. It refuses to overwrite unowned files or follow symbolic links; re-run it to update the package. Start a new client session afterwards. For Codex Desktop, `--install-mode desktop-ui` stages a personal marketplace that you finish installing in the app.
+```powershell
+powershell -ExecutionPolicy Bypass -Command "irm https://kintsugi.example.internal/api/v1/releases/latest/install.ps1 | iex"
+```
+
+The installer needs Node.js 22.19 or newer. It downloads the package of the platform (Linux, macOS or Windows; x64 or ARM64) from the installation, checks it against the SHA-256 written into the installer, unpacks it into `~/.kintsugi` (`%LOCALAPPDATA%\Kintsugi` on Windows; `KINTSUGI_HOME` changes it), writes `install.json` with the installation's URL so the CLI needs no `--url`, and prints the PATH line to add (Windows adds the `bin` folder to the user PATH itself). Running it again updates the CLI in place at the same path, so the generated client packages keep working. A package can also be downloaded from the Guideline, unpacked and put on the PATH by hand. `kintsugi --version` verifies it.
+
+The installation builds the packages with its image (`pnpm release:cli`, run by `Dockerfile.app`) into `KINTSUGI_RELEASES_DIR` and serves `GET /api/v1/releases/latest` (version, minimum Node.js, a package per platform with SHA-256 and URL), `latest/install.sh`, `latest/install.ps1` and `<version>/<file>`. These routes are public only because `curl` and PowerShell cannot sign in; the packages prove themselves by their hashes.
+
+From the workspace, `pnpm --filter @kintsugi/cli... build` and `pnpm kintsugi --help` run the compiled package.
+
+## Connect an AI client
+
+```sh
+kintsugi connect claude my-project
+```
+
+`connect <claude|codex|codex-desktop> [project]` records a nonsecret local profile (the first one becomes the default), generates a Kintsugi-owned package (the MCP server entry of the client, plus the Kintsugi marks for Codex) and installs it with the client's native plugin commands. The URL comes from `--url`, `KINTSUGI_URL`, the default profile or `install.json`, in that order. The output is one line; `--verbose` lists the files written and the commands run. `kintsugi plugins setup --harness <client> --url <url> --project <id>` is the long form, always verbose. Setup refuses to overwrite unowned files or follow symbolic links; re-run it to update the package. Start a new client session afterwards. `codex-desktop` stages a personal marketplace that you finish installing in the app.
 
 Setup checks the exact client version before writing; see the [compatibility evidence](member-client-compatibility.md). The package contains no skill and no hooks: the connector only starts the local MCP bridge. Plugins that carry flows are installed next to it.
 
@@ -32,10 +37,10 @@ Setup checks the exact client version before writing; see the [compatibility evi
 When the AI first needs Kintsugi, the local MCP bridge opens the system browser. Sign in, review the requested project and approve it. The browser returns a short-lived authorization code to the CLI over a temporary loopback callback and the CLI exchanges it with PKCE; nobody creates or pastes a token. Kintsugi issues a five-minute access token and a rotating refresh credential. The access token stays in CLI memory and the refresh credential in the operating system credential store. The administrator's 15- or 30-day maximum connection age (Settings → Security) controls when consent is required again, and connections can be revoked in the portal.
 
 ```sh
-kintsugi auth login --url https://kintsugi.example.internal --project modernization --profile work
-kintsugi auth status --profile work
-kintsugi project list --profile work
-kintsugi project use modernization --profile work
+kintsugi login modernization        # same as: kintsugi auth login --project modernization
+kintsugi auth status
+kintsugi project list
+kintsugi project use modernization
 ```
 
 The profile JSON holds the installation URL and project ID, never credential material. `--token-stdin` accepts only an existing legacy token. Use one profile per installation. `auth logout` revokes the connection at Kintsugi before removing the local credential. Installation URLs cannot contain credentials, a query or a fragment; remote installations require HTTPS (HTTP only for loopback). A private certificate authority is added with `--ca-file`; redirects are blocked so a bearer token is never forwarded to another origin.
@@ -57,12 +62,12 @@ kintsugi document get 01-standards/conventions/typescript.md --ref refs/heads/ma
 A member plugin (`audience: member`) carries a flow for the member's own AI client, as skills, agents and commands. Kintsugi offers it to a project's members (Project → Member plugins, `plugin.access.manage`); the CLI installs it:
 
 ```sh
-kintsugi plugins list                                  # what you may install, and what is installed
-kintsugi plugins install context --harness claude-code
-kintsugi plugins remove context --harness claude-code
+kintsugi plugins list     # what you may install, and what is installed
+kintsugi add context      # install or update; add -H claude or -H codex when both are connected
+kintsugi remove context
 ```
 
-`install` downloads the plugin from the installation, checks every file against its SHA-256 and the bundle against its content hash, writes the files into the Kintsugi package of the client next to the connector, and re-runs the client's native plugin commands. Re-running it updates the plugin and deletes the files the new version no longer carries; `remove` deletes exactly the files the plugin put there. A record (`.kintsugi-plugins.json`) in the package keeps which plugin owns which files, and two plugins cannot write the same file. Claude Code receives skills, agents and commands; Codex receives skills. Start a new client session afterwards. Hooks, scripts, workflows and MCP entries are never distributed: a plugin is text the AI reads. Installing needs `--harness`, a signed-in profile and the exact client versions listed in the [compatibility evidence](member-client-compatibility.md); Codex Desktop's staged install does not carry plugins yet.
+`add` (also `plugins install`) downloads the plugin from the installation, checks every file against its SHA-256 and the bundle against its content hash, writes the files into the Kintsugi package of the client next to the connector, and re-runs the client's native plugin commands. Re-running it updates the plugin and deletes the files the new version no longer carries; `remove` deletes exactly the files the plugin put there. A record (`.kintsugi-plugins.json`) in the package keeps which plugin owns which files, and two plugins cannot write the same file. Claude Code receives skills, agents and commands; Codex receives skills. Start a new client session afterwards. Hooks, scripts, workflows and MCP entries are never distributed: a plugin is text the AI reads. Installing needs a signed-in profile and the exact client versions listed in the [compatibility evidence](member-client-compatibility.md); Codex Desktop's staged install does not carry plugins yet.
 
 The built-in `context` plugin is the first one: a skill that reads the project's documents through the tools below, answers with citations and records what it did.
 

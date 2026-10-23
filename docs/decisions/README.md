@@ -86,6 +86,7 @@ This page has two parts:
 | [0067](0067-remove-access-and-review-plugins.md) | Remove the Coding Agent Workflow, keep the common member base | Accepted (supersedes 0063 and the task part of 0062; amends 0015, 0035, 0061 and 0064) |
 | [0068](0068-design-generation-in-the-modernize-plugin.md) | Generate the design in the modernize plugin | Accepted (amends 0035 and 0049) |
 | [0069](0069-common-member-base-and-plugin-distribution.md) | Common member base and plugin distribution | Accepted (amends 0015, 0035 and 0061) |
+| [0070](0070-cli-distributed-by-the-installation.md) | The CLI is distributed by the installation | Accepted (amends 0069) |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0061) |
 
@@ -173,6 +174,7 @@ This page has two parts:
 | D81 | Member authentication | 🟠 | Local stdio clients use project-scoped browser auth-code plus PKCE; five-minute access, rotating refresh, 15/30-day admin age cap and admin revocation; Kintsugi issues no GitHub credentials | M2 | ✅ [0065](0065-project-scoped-oauth-for-coding-agent-workflow.md), kept by [0067](0067-remove-access-and-review-plugins.md) |
 | D82 | Codex Desktop plugin installation | 🟠 | Stage an installable personal Codex marketplace package and let Codex Desktop complete installation; retain CLI setup for other harnesses | M2 | ✅ [0066](0066-codex-desktop-plugin-installation.md), kept by [0067](0067-remove-access-and-review-plugins.md) |
 | D83 | Common member base | 🟠 | The CLI and the local MCP bridge are the common base for member harnesses (sign-in, identity, reading resources, one bounded activity record); flows are member plugins that Kintsugi distributes as text bundles, permits per project and member, and monitors per member | M2 | ✅ [0069](0069-common-member-base-and-plugin-distribution.md) |
+| D84 | CLI distribution | 🟠 | The installation builds and serves the CLI packages, hash-checked one-line installers and a Guideline page in the portal; short commands (`connect`, `login`, `add`) | M2 | ✅ [0070](0070-cli-distributed-by-the-installation.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |
