@@ -1,26 +1,35 @@
 #!/usr/bin/env python3
 """Generate `languages.py` of the reverse_engineering plugin from the Pygments lexer catalogue.
 
-    python scripts/gen_languages.py [--check]
+    python scripts/gen_languages.py [--check] [--linguist languages.yml]
 
 `inventory.py` names the language of a file by its extension or its file name. The table it uses is generated here: Pygments knows
 the extensions and the file names of about 600 languages, and this script keeps the programming, scripting, query, hardware and
-template languages, drops data, configuration, log and documentation formats, and applies the curated choices below for the
-extensions several languages claim. The result is committed (`languages.py` is standard library only, the plugin does not need
-Pygments); run this script again after a Pygments upgrade or a change to the curated part, and review the diff.
+template languages, drops data, configuration, log and documentation formats, adds what GitHub Linguist knows beyond that (its
+`programming` languages, pinned to LINGUIST_COMMIT), and applies the curated choices below for the extensions several languages claim.
+The result is committed (`languages.py` is standard library only, the plugin does not need Pygments or PyYAML); run this script
+again after a Pygments upgrade, a new Linguist commit or a change to the curated part, and review the diff.
 
 --check exits 1 when the committed file differs from what would be generated.
 """
 import argparse
 import os
+import re
 import sys
+import urllib.request
 from collections import defaultdict
 
 try:
     import pygments
+    import yaml
     from pygments.lexers._mapping import LEXERS
 except ImportError:
-    sys.exit('gen_languages.py needs Pygments (pip install pygments)')
+    sys.exit('gen_languages.py needs Pygments and PyYAML (pip install pygments pyyaml)')
+
+# GitHub Linguist is the second source: its programming languages add the extensions and file names Pygments does not know. Pinned,
+# so that a run is reproducible; change the commit, run the script again and review the diff to take a newer catalogue.
+LINGUIST_COMMIT = '73ee9a3b277f398c37ca4ab0dea0193849de6460'
+LINGUIST_URL = f'https://raw.githubusercontent.com/github-linguist/linguist/{LINGUIST_COMMIT}/lib/linguist/languages.yml'
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'packages', 'agents', 'builtin', 'plugins', 'reverse_engineering', 'scripts', 'languages.py')
 
@@ -70,6 +79,13 @@ CURATED = {
     '.srw': 'PowerBuilder', '.sru': 'PowerBuilder', '.srf': 'PowerBuilder', '.srd': 'PowerBuilder', '.ddl': 'SQL', '.tsql': 'SQL',
     '.prc': 'SQL', '.fnc': 'PL/SQL', '.trg': 'PL/SQL', '.ftl': 'FreeMarker', '.cfm': 'ColdFusion', '.cfc': 'ColdFusion',
     '.natural': 'Natural', '.nsp': 'Natural', '.ngl': 'Natural', '.clp': 'CL', '.clle': 'CL', '.mak': 'Makefile', '.mk': 'Makefile',
+    # z/OS: DCLGEN output (a COBOL host structure), JCL procedures, assembler macros, and IMS database and program definitions (assembler macros).
+    '.dcl': 'COBOL', '.proc': 'JCL', '.mac': 'Assembly', '.dbd': 'Assembly', '.psb': 'Assembly',
+    # More mainframe source: JCL job and control members, Pro*COBOL and embedded-SQL COBOL, high level assembler, Easytrieve.
+    '.cntl': 'JCL', '.job': 'JCL', '.pco': 'COBOL', '.sqb': 'COBOL', '.cb2': 'COBOL', '.mlc': 'Assembly', '.hlasm': 'Assembly',
+    '.ezt': 'Easytrieve',
+    # Extensions Linguist says several languages claim, decided: Progress OpenEdge, Fortran preprocessing, M4, VBA, Salesforce, Cake.
+    '.w': 'OpenEdge ABL', '.fpp': 'Fortran', '.m4': 'M4', '.vba': 'Visual Basic', '.trigger': 'Apex', '.cake': 'C#',
 }
 # Pygments names that differ in case or spelling from the name people use.
 CANONICAL = {
@@ -84,7 +100,18 @@ CANONICAL = {
 AMBIGUOUS_TO_OTHER = {
     '.txt', '.text', '.in', '.out', '.log', '.def', '.dat', '.bin', '.lst', '.tmp', '.conf', '.cfg', '.ini', '.json',
     '.b', '.bug', '.g', '.i', '.j', '.mac', '.mi', '.n', '.p', '.rl',
+    # A mainframe PS data set (Physical Sequential), not PostScript; a CICS CSD resource definition, not a Csound score.
+    '.ps', '.csd',
 }
+# Linguist names that are the same language as a name above (compared without case): the one the inventory already uses wins.
+LINGUIST_ALIASES = {
+    'PLSQL': 'PL/SQL', 'Batchfile': 'Batch', 'Fortran Free Form': 'Fortran', 'MATLAB': 'Matlab', 'Wolfram Language': 'Mathematica',
+    'REXX': 'Rexx', 'xBase': 'FoxPro', 'SQLPL': 'SQL', 'PLpgSQL': 'PL/SQL', 'JavaScript+ERB': 'JavaScript', 'NetLinx+ERB': 'NetLinx',
+    'Literate CoffeeScript': 'CoffeeScript', 'C2hs Haskell': 'Haskell', 'DIGITAL Command Language': 'DCL', 'Vim script': 'VimL',
+}
+# Extensions Linguist gives to a programming language that are, in a legacy estate, more often something else (a Windows executable,
+# a mail message, an armored key, a troff file, a macOS application bundle): left out, the file is read as "Other".
+LINGUIST_NOT_SOURCE = {'.com', '.app', '.asc', '.msg', '.nr', '.pat', '.por', '.ice', '.sw', '.tm', '.vs', '.fp'}
 # File names (lower case) that name a language without an extension.
 FILENAMES = {
     'makefile': 'Makefile', 'gnumakefile': 'Makefile', 'dockerfile': 'Dockerfile', 'cmakelists.txt': 'CMake', 'rakefile': 'Ruby',
@@ -112,8 +139,41 @@ def collect():
     return by_extension, by_filename
 
 
-def build():
+def load_linguist(path):
+    if path:
+        text = open(path, encoding='utf-8').read()
+    else:
+        with urllib.request.urlopen(LINGUIST_URL, timeout=60) as response:
+            text = response.read().decode('utf-8')
+    return yaml.safe_load(text)
+
+
+def add_linguist(by_extension, by_filename, catalogue):
+    """Add the programming languages of Linguist for the extensions and the file names Pygments does not have: what Pygments says stays."""
+    pygments_extensions, pygments_filenames = set(by_extension), set(by_filename)
+    known = {name.lower(): name for names in list(by_extension.values()) + list(by_filename.values()) for name in names}
+    known.update({name.lower(): name for name in CURATED.values()})
+
+    def canonical(name):
+        name = LINGUIST_ALIASES.get(name, name)
+        return known.get(name.lower(), name)
+
+    for name, entry in catalogue.items():
+        if entry.get('type') != 'programming':
+            continue
+        for extension in entry.get('extensions', []):
+            extension = extension.lower()
+            if re.fullmatch(r'\.[^\s./*?\[\]]+', extension) and extension not in LINGUIST_NOT_SOURCE and extension not in pygments_extensions:
+                by_extension[extension].add(canonical(name))
+        for filename in entry.get('filenames', []):
+            if '/' not in filename and not any(c in filename for c in '*?[]') and filename.lower() not in pygments_filenames:
+                by_filename[filename.lower()].add(canonical(name))
+
+
+def build(catalogue=None):
     by_extension, by_filename = collect()
+    if catalogue:
+        add_linguist(by_extension, by_filename, catalogue)
     extensions, conflicts = {}, {}
     for extension in sorted(by_extension):
         names = sorted(by_extension[extension])
@@ -158,8 +218,9 @@ def render(extensions, filenames):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--check', action='store_true', help='exit 1 when languages.py is not what would be generated')
+    parser.add_argument('--linguist', help='a local copy of Linguist\'s languages.yml (default: downloaded at the pinned commit)')
     args = parser.parse_args()
-    extensions, filenames, conflicts = build()
+    extensions, filenames, conflicts = build(load_linguist(args.linguist))
     text = render(extensions, filenames)
     for extension, names in sorted(conflicts.items()):
         print(f'ambiguous {extension}: {", ".join(names)}', file=sys.stderr)

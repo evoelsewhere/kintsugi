@@ -142,6 +142,56 @@ class InventoryTests(unittest.TestCase):
         }
         self.assertEqual({path: language_for(path) for path in expected}, expected)
 
+    def test_ebcdic_files_are_decoded_and_a_binary_file_is_still_refused(self):
+        from inventory import DataError, decode_source
+        record = 'ACCT0001Immanuel                 '.encode('cp037') + b'\x00\x00\x00\x01' + '0001NORTH'.encode('cp037')
+        self.assertEqual(decode_source(record, 'a.cbl'), 'ACCT0001Immanuel                 \x00\x00\x00\x010001NORTH')
+        cobol = '       IDENTIFICATION DIVISION.\n       PROGRAM-ID. PAYROLL.\n'.encode('cp037')
+        self.assertIn('PROGRAM-ID. PAYROLL.', decode_source(cobol, 'a.cbl'))
+        self.assertEqual(decode_source('caf\xe9 au lait\n'.encode('cp1252'), 'a.txt'), 'caf\xe9 au lait\n')
+        self.assertEqual(decode_source('print(1)\r\n'.encode('utf-16'), 'a.py'), 'print(1)\r\n')
+        with self.assertRaises(DataError):
+            decode_source(bytes(range(256)) * 4 + b'\x00', 'a.py')
+
+    def test_a_binary_file_with_a_source_extension_is_counted_and_does_not_stop_the_inventory(self):
+        with open(os.path.join(self.source, 'logo.py'), 'wb') as handle:
+            handle.write(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x00' * 20)
+        with open(os.path.join(self.source, 'ok.py'), 'w', encoding='utf-8') as handle:
+            handle.write('x = 1\n')
+        result = self.inventory()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        raw = json.loads(docmd.read_text(os.path.join(self.scratch, 'inventory.json')))
+        by_path = {entry['path']: entry for entry in raw['files']}
+        self.assertEqual(by_path['logo.py']['language'], 'Other')
+        self.assertIn('sha256', by_path['logo.py'])
+        self.assertEqual(raw['languages'], {'Python': 1})
+
+    def test_z_os_file_types_get_their_mainframe_language(self):
+        from inventory import language_for, refine_language
+        expected = {
+            'app/dcl/AUTHFRDS.dcl': 'COBOL', 'maclib/ASMWAIT.mac': 'Assembly', 'ims/DBPAUTP0.dbd': 'Assembly', 'ims/PSBPAUTB.psb': 'Assembly',
+            'csd/CRDDEMO2.csd': 'Other', 'data/AWS.M2.CARDDEMO.ACCTDATA.PS': 'Other', 'proc/REPROC.proc': 'JCL', 'db/load.prc': 'SQL',
+        }
+        self.assertEqual({path: language_for(path) for path in expected}, expected)
+        self.assertEqual(refine_language('proc/REPROC.prc', '//REPROC PROC\n', 'SQL'), 'JCL')
+        self.assertEqual(refine_language('db/load.prc', 'CREATE PROCEDURE p AS\n', 'SQL'), 'SQL')
+        self.assertEqual(refine_language('ctl/DB2CREAT.ctl', '/* Copyright */\n', 'Visual Basic'), 'Other')
+        self.assertEqual(refine_language('ui/Grid.ctl', 'VERSION 5.00\nBegin VB.UserControl Grid\n', 'Visual Basic'), 'Visual Basic')
+
+    def test_a_mainframe_data_set_with_binary_fields_does_not_stop_the_inventory(self):
+        os.makedirs(os.path.join(self.source, 'app', 'data'))
+        with open(os.path.join(self.source, 'app', 'data', 'EXPORT.DATA.PS'), 'wb') as handle:
+            handle.write('C2025-09-28 22:53:40'.encode('cp037') + b'\x00\x00\x00\x01' + 'NORTH'.encode('cp037'))
+        with open(os.path.join(self.source, 'app', 'PAYROLL.cbl'), 'wb') as handle:
+            handle.write('       IDENTIFICATION DIVISION.\n       PROGRAM-ID. PAYROLL.\n'.encode('cp037').replace(b'\x25', b'\x15'))
+        result = self.inventory()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        raw = json.loads(docmd.read_text(os.path.join(self.scratch, 'inventory.json')))
+        by_path = {entry['path']: entry for entry in raw['files']}
+        self.assertEqual(by_path['app/data/EXPORT.DATA.PS']['language'], 'Other')
+        self.assertEqual(by_path['app/PAYROLL.cbl']['language'], 'COBOL')
+        self.assertEqual(by_path['app/PAYROLL.cbl']['lines'], 2)
+
     def test_the_generated_table_is_well_formed_and_keeps_the_names_the_inventory_always_used(self):
         import languages
         for extension, name in languages.EXTENSIONS.items():
@@ -216,15 +266,15 @@ class InventoryTests(unittest.TestCase):
         self.assertIn('outside the read-only --source', result.stderr)
         self.assertFalse(os.path.exists(out))
 
-    def test_oversized_source_file_is_rejected(self):
+    def test_an_oversized_source_file_is_counted_without_being_read(self):
         from inventory import MAX_FILE_BYTES
         path = os.path.join(self.source, 'too_large.py')
         with open(path, 'wb') as handle:
             handle.write(b'x' * (MAX_FILE_BYTES + 1))
         result = self.inventory()
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('exceeds the', result.stderr)
-        self.assertFalse(os.path.exists(self.out))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        raw = json.loads(docmd.read_text(os.path.join(self.scratch, 'inventory.json')))
+        self.assertEqual(raw['files'], [{'path': 'too_large.py', 'bytes': MAX_FILE_BYTES + 1, 'language': 'Other'}])
 
 
 class RenderTopologyTests(unittest.TestCase):

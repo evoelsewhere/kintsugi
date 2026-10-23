@@ -122,12 +122,40 @@ def read_bounded(path):
     return data
 
 
+# The bytes of EBCDIC text: space, lower and upper case letters, digits. Mainframe sources and data sets
+# are in EBCDIC when they were transferred in binary mode; ASCII and UTF-8 text has almost none of them.
+EBCDIC_TEXT = frozenset(
+    [0x40, *range(0x81, 0x8A), *range(0x91, 0x9A), *range(0xA2, 0xAA), *range(0xC1, 0xCA), *range(0xD1, 0xDA), *range(0xE2, 0xEA), *range(0xF0, 0xFA)]
+)
+EBCDIC_CODEC = 'cp037'
+
+
+def looks_ebcdic(data):
+    sample = data[:65536]
+    return bool(sample) and sum(1 for byte in sample if byte in EBCDIC_TEXT) * 2 >= len(sample)
+
+
+class BinaryContent(DataError):
+    """A file that is not text, whatever its extension says."""
+
+
 def decode_source(data, path):
+    if data.startswith((b'\xff\xfe', b'\xfe\xff')):
+        # Windows tools save UTF-16 with a byte order mark; its NUL bytes are not binary content.
+        try:
+            return data.decode('utf-16')
+        except UnicodeDecodeError:
+            raise BinaryContent(f'unexpected binary content in source file: {path}') from None
     if b'\x00' in data:
-        raise DataError(f'unexpected binary content in source file: {path}')
+        # EBCDIC records carry NUL bytes in their binary fields; any other NUL means a binary file.
+        if looks_ebcdic(data):
+            return data.decode(EBCDIC_CODEC)
+        raise BinaryContent(f'unexpected binary content in source file: {path}')
     try:
         return data.decode('utf-8-sig')
     except UnicodeDecodeError:
+        if looks_ebcdic(data):
+            return data.decode(EBCDIC_CODEC)
         # Legacy sources are often in a single-byte code page (Windows-1252, Latin-1); line and
         # keyword counts do not depend on the exact characters, and Latin-1 decodes any byte.
         return data.decode('latin-1')
@@ -136,6 +164,16 @@ def decode_source(data, path):
 def language_for(path):
     name = os.path.basename(path).lower()
     return FILENAMES.get(name) or EXTENSIONS.get(os.path.splitext(name)[1], 'Other')
+
+
+def refine_language(path, text, language):
+    """An extension several systems use is read by what the file holds."""
+    name = path.lower()
+    if language == 'SQL' and name.endswith('.prc') and text.lstrip().startswith('//'):
+        return 'JCL'  # a JCL procedure, not a SQL procedure
+    if language == 'Visual Basic' and name.endswith('.ctl') and not re.match(r'\s*VERSION\s+\d', text):
+        return 'Other'  # a Visual Basic 6 user control starts with its VERSION line; any other `.ctl` is a control file of another system
+    return language
 
 
 def analyze(path, text, language):
@@ -260,9 +298,23 @@ def inventory(source, app, sources=None):
             rel = os.path.relpath(path, root).replace(os.sep, '/')
             language = language_for(rel)
             record = {'path': rel, 'bytes': size, 'language': language}
+            if language != 'Other' and size > MAX_FILE_BYTES:
+                # A source file too large to read is counted, not measured, like any file that is not source.
+                language = record['language'] = 'Other'
             if language != 'Other':
                 data = read_bounded(path)
-                record = analyze(rel, decode_source(data, path), language) | {'bytes': size, 'sha256': hashlib.sha256(data).hexdigest()}
+                try:
+                    text = decode_source(data, path)
+                    language = refine_language(rel, text, language)
+                except BinaryContent:
+                    # A binary file with a source extension (an image, an archive, a compiled object) is counted, not measured.
+                    language = 'Other'
+                if language == 'Other':
+                    record['language'] = 'Other'
+                    record['sha256'] = hashlib.sha256(data).hexdigest()
+                    files.append(record)
+                    continue
+                record = analyze(rel, text, language) | {'bytes': size, 'sha256': hashlib.sha256(data).hexdigest()}
                 files.append(record)
                 if len(files) > MAX_SOURCE_FILES:
                     raise DataError(f'source tree exceeds the {MAX_SOURCE_FILES}-source-file limit')
