@@ -33,8 +33,27 @@ export interface DesignSetFile {
   path: string;
   template: string;
   required: boolean;
-  when: string[];
+  /** The unit kind whose profile folder holds the template; absent when the file uses the set's own template (ADR-0053). */
+  profile?: string;
+  /** What a document of the file names in its `template:` front matter (`detail@2`, or `detail/screen@3`). */
+  ref: string;
+  /** A finished example for the designer, relative to the set folder. */
+  example?: string;
   sections: DesignSection[];
+}
+
+/** The variation of a set for one unit kind (ADR-0053). */
+export interface DesignProfile {
+  kind: string;
+  version: number;
+  /** Paths of the set's files this kind does not have. */
+  removes: string[];
+  /** The profile's instructions to the designer, read after the set's. */
+  instructions: string;
+  /** The files of the set for this kind, with the template each is written with. */
+  files: DesignSetFile[];
+  /** The names in the profile's `_examples/` folder. */
+  examples: string[];
 }
 
 export interface DesignSet {
@@ -43,6 +62,7 @@ export interface DesignSet {
   version: number;
   /** `unit`: a design per unit; `application`: one design for the whole application (ADR-0050). */
   scope: "unit" | "application";
+  /** The unit kinds the set is for: none when it has files every kind has. */
   appliesTo: string[];
   needs: string[];
   stage?: string;
@@ -52,7 +72,10 @@ export interface DesignSet {
   /** The project's instructions to the designer for this kind of design. */
   instructions: string;
   producedBy: Array<{ pipeline: string; stage: string }>;
+  /** The files every kind has unless its profile changes them. */
   files: DesignSetFile[];
+  /** One profile per unit kind that has a folder in the set. */
+  profiles: DesignProfile[];
   usage?: { units: number; onCurrent: number; stale: number };
 }
 
@@ -108,7 +131,10 @@ export interface DesignFile {
   required: boolean;
   state: DesignFileState;
   stale: boolean;
+  /** What the design names in its front matter. */
   template?: string;
+  /** What a design of this file must name: the template of the unit's kind, in its current version. */
+  expected: string;
   problems: DesignProblem[];
   waiver?: string;
 }

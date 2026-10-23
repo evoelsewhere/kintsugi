@@ -13,7 +13,7 @@ document:
   server: my-git-server     # Git server id registered in the installation (Settings -> Git)
   path: org/my-project-docs # clone URL path relative to the server's base URL, without .git
 
-unitKinds: [module]         # TODO e.g. [screen, api, batch-job, db-object]
+unitKinds: [screen, api, batch-job, db-object, report]   # TODO your unit kinds; a design set may have a profile folder per kind (01-standards/templates/<set>/<kind>/)
 
 applications:
   - id: billing-web         # one entry per application in scope (kebab-case)

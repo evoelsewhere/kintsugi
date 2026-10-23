@@ -43,7 +43,7 @@ the **item catalog** (`scripts/catalog_from_topology.py`, a **legacy-analyst** c
 `scripts/apply_catalog_edits.py`, `scripts/reconcile_catalog.py`), then a **legacy-analyst** synthesis job that
 writes `10-applications/$app/01-legacy/assessment.md` and `10-applications/$app/01-legacy/architecture.mmd`. Portfolio
 mode: per application, the `scripts/inventory.py` script step and one **legacy-analyst** survey job (workflow
-`workflows/portfolio-assess.js`), then a synthesis job that writes `00-project/portfolio/portfolio.md`. Every job reads the application's legacy repository read-only at a fixed commit
+`workflows/portfolio-assess.js`), then a synthesis job that writes `00-project/portfolio/portfolio.md`. Every job reads the application's legacy repositories (every `role: legacy` repository it has) read-only at fixed commits
 and writes only through `write`; the worker commits the outputs to the document repository as
 `kintsugi-bot`, and the portal shows them.
 
@@ -51,9 +51,11 @@ and writes only through `write`; the worker commits the outputs to the document 
 project. Otherwise run **Single-application mode** on `$app`, the first token: the application id from
 `kintsugi.yaml`.
 
-The code is the **legacy repository** of `$app`, registered on the application in `kintsugi.yaml`
-(`role: legacy`); each job reads it at the commit the orchestrator pinned for this run. Say which repository and
-commit were read in one line at the top of every artifact. If the application has no legacy repository, the
+The code is the **legacy repositories** of `$app`, registered on the application in `kintsugi.yaml`
+(`role: legacy`, one or several); each job reads every one of them at the commit the orchestrator pinned for this run, one
+folder per repository under `as-is/`, named by the repository's id, so a file is cited `<repository id>/<path>`
+([ADR-0052](../../../../../../docs/decisions/0052-several-legacy-repositories-per-application.md)). Say which repositories
+and commits were read in one line at the top of every artifact. If the application has no legacy repository, the
 stage cannot start: the orchestrator says so, and the fix is registering one on the application in the portal.
 
 ---
@@ -65,10 +67,10 @@ can use to sequence a multi-year program.
 
 The orchestrator lists the applications from `kintsugi.yaml` (the workflow has no filesystem access) and the
 portal shows the count before the stage starts (30 applications means 30 survey jobs). Per application it runs
-the `scripts/inventory.py` script step on that application's legacy repository, then the orchestrator runs
+the `scripts/inventory.py` script step on that application's legacy repositories, then the orchestrator runs
 workflow `workflows/portfolio-assess.js`, one **legacy-analyst** survey job per application, all independent,
 with `args: { apps: ["<app1>", "<app2>", ...], inventories: { "<app>": <the figures of that application's inventory>, ... } }` and each job reading its own
-application's legacy repository. Each job is given its application's inventory figures and fills in the parts
+application's legacy repositories. Each job is given its application's inventory figures and fills in the parts
 that need reading the code (dependency freshness, documentation coverage, risk notes); runtime jobs have no
 shell, so the measured figures (lines, file count, complexity, the tool that produced them) come from the
 script step, never from the job. Each job returns a metrics row and the workflow computes the COCOMO index in
@@ -97,12 +99,12 @@ The portal renders the heat-map from the table of `portfolio.md` (index and Risk
 
 # Single-application mode
 
-Assess the legacy repository of `$app` so a VP of Engineering could take a fact-grounded brief into a
+Assess the legacy repositories of `$app` so a VP of Engineering could take a fact-grounded brief into a
 budget meeting.
 
 ## Step 1 — Inventory
 
-Script step `scripts/inventory.py $app --source <source checkout> --source-repo <the application's repository> --source-commit <the commit the job read> --out 10-applications/$app/01-legacy --scratch scratch/$app` writes `10-applications/$app/01-legacy/inventory.md` (front matter with the figures of record; tables of the languages, the directories, the size distribution and the 50 most complex files) and, as scratch of the run that is never committed, `scratch/$app/inventory.json` with every file: SLOC and
+Script step `scripts/inventory.py $app --source <the source folder: one folder per legacy repository> --sources <`id@commit` of each legacy repository, comma separated> --out 10-applications/$app/01-legacy --scratch scratch/$app` writes `10-applications/$app/01-legacy/inventory.md` (front matter with the figures of record; tables of the languages, the directories, the size distribution and the 50 most complex files) and, as scratch of the run that is never committed, `scratch/$app/inventory.json` with every file: SLOC and
 file count per language, the per-file complexity (decision keywords counted the same way for every
 application: `IF`/`EVALUATE`/`PERFORM` for COBOL, `if`/`for`/`while`/`case`/`catch` for C-family, and the
 language's equivalents elsewhere), and the index `2.94 × KSLOC^1.10`. Use the index
@@ -120,19 +122,19 @@ and rough coverage signal. This is part of the structure job's task (Step 3, job
 
 ## Step 3 — Deep analysis (three jobs, in parallel)
 
-1. **legacy-analyst** — "Build a structural map of the legacy repository of $app: the 5–12 major
+1. **legacy-analyst** — "Build a structural map of the legacy source of $app (every legacy repository): the 5–12 major
    functional domains (group optional subsystems under one umbrella), which
    files belong to each, and how they depend on each other (control flow and
    shared data). Return a markdown table and a Mermaid `flowchart TB` of the
    domains drawn by the `mermaid-diagrams` skill: one `subgraph` per domain,
    nodes classed by kind (ui, service, batch, store, external), at most 40
-   edges. Cite repo-relative
-   paths. Flag dangling references." Also: the technology fingerprint of Step 2.
-2. **legacy-analyst** — "Identify technical debt in the legacy repository of $app: dead code,
+   edges. Cite paths with their
+   repository's folder first, and note which repositories you read. Flag dangling references." Also: the technology fingerprint of Step 2.
+2. **legacy-analyst** — "Identify technical debt in the legacy source of $app (every legacy repository): dead code,
    deprecated APIs, duplication, god objects, missing error handling, hardcoded
    config. Return the top 10 by remediation value, each with file:line. Mask any
    credential value per your secret-handling rules."
-3. **security-auditor** — "Scan the legacy repository of $app for vulnerabilities: injection, auth
+3. **security-auditor** — "Scan the legacy source of $app (every legacy repository) for vulnerabilities: injection, auth
    weaknesses, hardcoded secrets, vulnerable dependencies, missing input
    validation. Return a CWE-tagged table with file:line and severity. Mask every
    credential (file:line plus a 2–4 character preview, never the value)."
@@ -203,7 +205,7 @@ credential values never appear in it. If credentials were found:
 
 Write `10-applications/$app/01-legacy/assessment.md` with: **Executive Summary** (3–4 sentences:
 what it is, how big, how risky, the headline recommendation) · **System
-Inventory** (from `inventory.md`, saying which method measured it, and the legacy repository and commit
+Inventory** (from `inventory.md`, saying which method measured it, and the legacy repositories and commits
 read) · **Architecture at a Glance** (domain table, refer to the diagram) ·
 **Production Runtime Profile** (or "no telemetry available") · **Technical Debt**
 (top 10) · **Security Findings** (CWE table) · **Documentation Gaps** (top 5) ·

@@ -27,7 +27,8 @@ export type UnderstandPlan = {
   version: number
   app: string
   strategy: string
-  catalog: { commit?: string; items: number; open: number }
+  /** The catalog's sources the plan was made from, `id@commit,id@commit`; a different catalog makes the plan stale. */
+  catalog: { sources?: string; items: number; open: number }
   batches: PlanBatch[]
   leftOut: { item: string; reason: string }[]
   dropped: { item: string; reason: string }[]
@@ -76,13 +77,13 @@ export function parsePlan(text: string): UnderstandPlan | null {
 
   if (batches.length === 0) return null
 
-  const commit = textOf(data.catalogCommit, 80)
+  const sources = textOf(data.catalogSources, 5_000)
 
   return {
     version: 1,
     app: textOf(data.app) ?? '',
     strategy,
-    catalog: { ...(commit === undefined ? {} : { commit }), items: countOf(data.items), open: countOf(data.open) },
+    catalog: { ...(sources === undefined ? {} : { sources }), items: countOf(data.items), open: countOf(data.open) },
     batches,
     leftOut: reasons(sections.find(section => section.title === 'Left out')?.body ?? ''),
     dropped: reasons(sections.find(section => section.title === 'Dropped')?.body ?? ''),

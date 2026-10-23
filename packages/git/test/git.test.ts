@@ -22,6 +22,8 @@ import {
   isAncestor,
   resolveCommit,
   runGit,
+  stepFolder,
+  worktreeIsAt,
 } from "../src/index.js";
 
 const local = { allowFileProtocol: true } as const;
@@ -97,7 +99,7 @@ describe("mirror and job worktrees", () => {
 
     // A new upstream commit reaches the mirror; the old job keeps its snapshot.
     const job1 = storage.job("job-1");
-    await addWorktree(mirror, job1.src, first, local);
+    await addWorktree(mirror, job1.asIs, first, local);
     const second = await commitFile("README.md", "v2\n");
     await fetchMirror(mirror, local);
     expect(await resolveCommit(mirror, "main")).toBe(second);
@@ -107,18 +109,35 @@ describe("mirror and job worktrees", () => {
     await expect(isAncestor(mirror, "0".repeat(40), "main")).rejects.toThrow();
 
     const job2 = storage.job("job-2");
-    await addWorktree(mirror, job2.src, second, local);
-    expect(await readFile(join(job1.src, "README.md"), "utf8")).toBe("v1\n");
-    expect(await readFile(join(job2.src, "README.md"), "utf8")).toBe("v2\n");
+    await addWorktree(mirror, job2.asIs, second, local);
+    expect(await readFile(join(job1.asIs, "README.md"), "utf8")).toBe("v1\n");
+    expect(await readFile(join(job2.asIs, "README.md"), "utf8")).toBe("v2\n");
 
-    await removeWorktree(mirror, job1.src);
-    expect(existsSync(job1.src)).toBe(false);
-    await removeWorktree(mirror, job2.src);
+    await removeWorktree(mirror, job1.asIs);
+    expect(existsSync(job1.asIs)).toBe(false);
+    await removeWorktree(mirror, job2.asIs);
+  });
+
+  it("tells whether a worktree is still the pinned commit with nothing changed", async () => {
+    const storage = new CheckoutStorage(join(root, "data"));
+    const mirror = storage.mirror("local", "app");
+    const commit = await resolveCommit(mirror, "main");
+    const job = storage.job("job-reuse");
+    expect(await worktreeIsAt(job.asIs, commit)).toBe(false);
+    await addWorktree(mirror, job.asIs, commit, local);
+    expect(await worktreeIsAt(job.asIs, commit)).toBe(true);
+    expect(await worktreeIsAt(job.asIs, "0".repeat(40))).toBe(false);
+    await writeFile(join(job.asIs, "README.md"), "changed\n");
+    expect(await worktreeIsAt(job.asIs, commit)).toBe(false);
+    await writeFile(join(job.asIs, "README.md"), "v2\n");
+    await writeFile(join(job.asIs, "stray.txt"), "x\n");
+    expect(await worktreeIsAt(job.asIs, commit)).toBe(false);
+    await removeWorktree(mirror, job.asIs);
   });
 
   it("only checks out full commit ids", async () => {
     const storage = new CheckoutStorage(join(root, "data"));
-    await expect(addWorktree(storage.mirror("local", "app"), storage.job("job-3").src, "main", local)).rejects.toThrow(/full commit id/);
+    await expect(addWorktree(storage.mirror("local", "app"), storage.job("job-3").asIs, "main", local)).rejects.toThrow(/full commit id/);
   });
 
   it("never runs repository hooks", async () => {
@@ -127,9 +146,9 @@ describe("mirror and job worktrees", () => {
     const marker = join(root, "hook-ran");
     await writeFile(join(mirror, "hooks", "post-checkout"), `#!/bin/sh\necho ran > "${marker.replaceAll("\\", "/")}"\n`, { mode: 0o755 });
     const job = storage.job("job-hooks");
-    await addWorktree(mirror, job.src, await resolveCommit(mirror, "main"), local);
+    await addWorktree(mirror, job.asIs, await resolveCommit(mirror, "main"), local);
     expect(existsSync(marker)).toBe(false);
-    await removeWorktree(mirror, job.src);
+    await removeWorktree(mirror, job.asIs);
   });
 });
 
@@ -173,6 +192,23 @@ describe("checkout storage", () => {
     expect(() => storage.mirror("srv", "a/b")).toThrow(/Invalid repository id/);
     expect(() => storage.job("../../etc")).toThrow(/Invalid job id/);
     expect(() => new CheckoutStorage("relative/path")).toThrow(/absolute/);
+  });
+
+  it("lays a job workspace out in zones, with a safe folder for every step key", () => {
+    const storage = new CheckoutStorage(join(root, "data"));
+    const job = storage.job("job-1");
+    expect(job.asIs).toBe(join(job.root, "as-is"));
+    expect(job.toBe).toBe(join(job.root, "to-be"));
+    expect(job.ledger).toBe(join(job.root, ".state", "ledger.json"));
+    const step = job.step("design-unit#billing/invoice@2");
+    expect(step.root.startsWith(job.steps)).toBe(true);
+    expect(step.in).toBe(join(step.root, "in"));
+    expect(step.out).toBe(join(step.root, "out"));
+    expect(step.tmp).toBe(join(step.root, "tmp"));
+    expect(stepFolder("design-unit#billing/invoice@2")).toMatch(/^[A-Za-z0-9._-]+$/);
+    expect(stepFolder("a#b")).not.toBe(stepFolder("a-b"));
+    expect(stepFolder("../../etc")).toMatch(/^etc-[0-9a-f]{8}$/);
+    expect(job.step("same").root).toBe(job.step("same").root);
   });
 
   it("defaults to .kintsugi/data without KINTSUGI_DATA_DIR", () => {

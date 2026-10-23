@@ -1,7 +1,8 @@
 // Monitoring — live state across all projects, refreshing on its own: job runs (status and
 // project filters, durations, the agent or script that ran), the sync status of every
-// registered repository, document writes, and the workers (heartbeats) and their queues.
-// URL: /monitoring?tab=runs|repositories|writes|worker&status=<filter>
+// registered repository, document writes, and the runtime: the workers (heartbeats) with their queues and the
+// job workspaces on disk (ADR-0058).
+// URL: /monitoring?tab=runs|repositories|writes|runtime&status=<filter>
 
 import { Activity, FolderGit2, GitCommitHorizontal, Play, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -29,12 +30,13 @@ import { isActiveStatus } from "@/lib/status";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
 import { MonitoringInsights } from "./monitoring-insights";
+import { SandboxView } from "./monitoring-sandbox";
 
 const TABS: { id: MonitoringTab; label: string }[] = [
   { id: "runs", label: "Job runs" },
   { id: "repositories", label: "Repositories" },
   { id: "writes", label: "Document writes" },
-  { id: "worker", label: "Worker" },
+  { id: "runtime", label: "Runtime" },
 ];
 
 const PAGE_SIZE = 25;
@@ -59,13 +61,18 @@ export function MonitoringPage(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-5">
       <Breadcrumbs items={["Monitoring"]} />
-      <PageHeading title="Monitoring" description="Live job runs, repository sync, document writes and the worker across all projects. Lists refresh on their own." />
+      <PageHeading title="Monitoring" description="Live job runs, repository sync, document writes, the worker and the job workspaces across all projects. Lists refresh on their own." />
       <Tabs label="Monitoring views" tabs={TABS} value={tab} onChange={(id) => setQuery({ tab: id, status: null })} />
       <MonitoringInsights tab={tab} />
       {tab === "runs" ? <RunsView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
       {tab === "repositories" ? <RepositoriesView /> : null}
       {tab === "writes" ? <WritesView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
-      {tab === "worker" ? <WorkerView /> : null}
+      {tab === "runtime" ? (
+        <>
+          <WorkerView />
+          <SandboxView />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -324,6 +331,7 @@ const QUEUE_PURPOSE: Record<string, string> = {
   "job-run": "Runtime job runs (stages, scripts, agent jobs)",
   "document-write": "Commits and pull requests to document repos",
   "git-sync": "Clones and fetches of registered repositories",
+  "workspace-cleanup": "Removal of a job workspace asked for in Monitoring → Runtime",
 };
 
 function WorkerView(): React.JSX.Element {

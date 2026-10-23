@@ -12,7 +12,7 @@ assessment/catalog/
   <module>.md       one card per item of the module
 ```
 
-`index.md` has front matter (`app`, `sourceRepository`, `sourceCommit`, counts) and the tables `Modules` (module, name, items, summary) and `Items` (item, name, kind, status, LOC, complexity, files), then the lists `Ambiguities` (what a person should check) and `Unassigned files` (inventory files in no item: documentation, build files, code the topology did not place; the first 200, the count is in the front matter).
+`index.md` has front matter (`app`, `sources`: the `<repository id>@<commit>` of each legacy repository, counts) and the tables `Modules` (module, name, items, summary) and `Items` (item, name, kind, status, LOC, complexity, files), then the lists `Ambiguities` (what a person should check) and `Unassigned files` (inventory files in no item: documentation, build files, code the topology did not place; the first 200, the count is in the front matter).
 
 A card in `<module>.md` is a heading `## <module>/<item>: <name>`, the item's summary and:
 

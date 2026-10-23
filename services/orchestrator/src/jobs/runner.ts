@@ -1,33 +1,41 @@
-// The job runner (ADR-0023, ADR-0027, ADR-0029): runs one job run end to end in its job
-// workspace and hands the result to the document repo writer.
+// The job runner (ADR-0023, ADR-0027, ADR-0029, ADR-0055): runs one attempt of a job run end to end in the job's
+// workspace and hands the result to the document repo writer. The workspace belongs to the job and outlives its
+// attempts (packages/git/src/storage.ts has the layout):
 //
-//   <data>/jobs/<id>/src  read-only worktree of the source repository at the job's commit
-//   <data>/jobs/<id>/in   read-only inputs: earlier steps' outputs and declared documents
-//   <data>/jobs/<id>/out  the only place results are written
-//   <data>/jobs/<id>/tmp  scratch, deleted when the step ends
+//   as-is/<repo>, to-be/<repo>  read-only worktrees of the repositories at their pinned commits
+//   docs/                       read-only: the declared documents of the document repo at its pinned commit
+//   out/  work/                 the results; what the steps of a stage pass to each other
+//   steps/<step>/{in,out,tmp}   one folder per step of a stage; a failed agent step keeps its out/ for the next attempt
+//   .state/ledger.json          what each step ran with and wrote, so a later attempt skips what did not change
+//   WORKSPACE.md, workspace.json  the guide for the agents and the manifest, written here
 //
 // After every step: out/restricted/ is stored as encrypted restricted records and removed,
 // the JobOutput hook checks out/ (fail-closed), and the files are indexed as artifacts. A
 // top-level run then enqueues a document write of its out/ (outputOfJob) with job, agent and
-// actor trailers. Stage steps run as child runs sharing the stage's source checkout.
+// actor trailers. Stage steps run as child runs in folders of the stage's workspace, sharing its checkouts.
 //
-// There is no OS sandbox: scripts and agent jobs run as child processes in the job directory
-// with a cleared environment, limits and a process-tree kill; agent tools are confined by the
-// kernel (read only under src/in, write only under out). Only an agent job's own child gets
-// its provider credentials (launcher/agent-process.ts); scripts never get any.
+// There is no OS sandbox: scripts and agent jobs run as child processes with the job workspace as their working
+// directory, a cleared environment, limits and a process-tree kill; agent tools are confined by the kernel (read
+// only under as-is/, to-be/, the step's in/ and the guide, write only under the step's out/). Only an agent job's
+// own child gets its provider credentials (launcher/agent-process.ts); scripts never get any.
 
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { findBuiltinFile } from "@kintsugi/agents";
-import { mcpServersNamedBy, THINKING_LEVELS, type Provenance, type ThinkingLevel } from "@kintsugi/domain";
-import type { CheckoutStorage } from "@kintsugi/git";
+import { DEFAULT_SANDBOX, legacySources, mcpServersNamedBy, sourceRole, sourceSpec, targetSources, THINKING_LEVELS, type PinnedSource, type Provenance, type SandboxSettings, type SourceRepo, type ThinkingLevel } from "@kintsugi/domain";
+import { type CheckoutStorage, type JobPaths, runGit } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
+import { defaultSandbox, limitsWith, type SandboxProvider } from "../sandbox.js";
+import { renderGuide, type GuideSource } from "../workspace/guide.js";
+import { digestOf, filesDigest, Ledger, type LedgerOutput } from "../workspace/ledger.js";
+import { readManifest, writeAtomically, writeManifest, type WorkspaceManifest } from "../workspace/manifest.js";
+import { dropCheckouts, mountFolder, mountPath, mountSources } from "../workspace/provision.js";
 import type { AgentResolver } from "./agents.js";
 import { materializeSkillFiles } from "./skill-files.js";
-import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepRecord, stepKey } from "./executor.js";
+import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepReuse } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
 import { runJobOutputHook } from "./hook.js";
 import { shapeProblem } from "./result-shape.js";
@@ -45,7 +53,7 @@ import {
   type StepLimits,
   isCancelled,
 } from "./model.js";
-import { type Placeholders, type StageScope, fill } from "./plan.js";
+import { type Placeholders, type StagePlan, type StageScope, fill } from "./plan.js";
 import { STAGES } from "./stages.js";
 import { type AgentCallOptions, type WorkflowBudgets, loadWorkflow, runWorkflow } from "./workflow.js";
 
@@ -79,7 +87,10 @@ export interface JobRunnerDeps {
   /** The MCP servers (with decrypted headers) an agent names in its tools; absent when the installation has no registry. */
   mcpServers?: (ids: readonly string[]) => Promise<McpServerSpec[]>;
   interpreters: Interpreters;
+  /** The budgets of stages and workflows (and the limits when no sandbox settings are given). */
   defaults?: JobDefaults;
+  /** The sandbox settings (limits, read-only marking), read when a run starts; default: the built-in defaults. */
+  sandbox?: SandboxProvider;
   /** Hands a write to the document repo writer (queue `document-write`). */
   requestWrite(documentRepositoryId: string, request: DocumentWriteRequest): Promise<void>;
   /** Built-in scripts; defaults to the scripts/ folder of the built-in plugin that has the script. */
@@ -96,26 +107,57 @@ export interface JobRunnerDeps {
   log?: (message: string) => void;
 }
 
+/** The folders a unit of work (the run itself, or one step of a stage) works in. */
 interface StepWorkspace {
   /** The top-level run whose live record gets this step's events. */
   rootId: string;
+  /** The attempt of that run. */
+  attempt: number;
+  /** The job workspace: the working directory of every process of the run. */
   root: string;
-  src?: string;
+  /** The folder of this unit: the workspace itself for the run, `steps/<step>/` for a step. */
+  dir: string;
+  /** WORKSPACE.md, once written. */
+  guide?: string;
+  asIs?: string;
+  toBe?: string;
   in: string;
   out: string;
   tmp: string;
-  commit?: string;
-  /** The document-repo commit declared documents are read at (pinned for a whole run, ADR-0033). */
+  /** Every repository the run reads, each at its commit (ADR-0052, ADR-0055). */
+  sources?: PinnedSource[];
+  /** The document-repo commit declared documents are read at (pinned for a whole job, ADR-0033). */
   documentsCommit?: string;
-}
-
-/** What a resumed run takes over from the failed one (ADR-0033). */
-interface ResumeState {
-  from: string;
-  completed: Set<string>;
+  /** Files an earlier try of this step left in its output folder (document-repo paths). */
+  carried?: string[];
+  /** The sandbox settings this run started with, and the limits they give (ADR-0055). */
+  sandbox: SandboxSettings;
+  defaults: JobDefaults;
 }
 
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/** A manifest as `writeManifest` takes it (without the version and the time it stamps itself). */
+function withoutStamp(manifest: WorkspaceManifest): Omit<WorkspaceManifest, "version" | "updatedAt"> {
+  const { version: _version, updatedAt: _updatedAt, ...rest } = manifest;
+  return rest;
+}
+
+/** Files of a checkout, as git lists them; undefined when it cannot be counted. */
+async function countFiles(dir: string): Promise<number | undefined> {
+  try {
+    const { stdout } = await runGit(["-C", dir, "ls-files", "-z"]);
+    return stdout === "" ? 0 : stdout.split("\0").length - 1;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The repositories a run reads: its list, else the one repository a run recorded before the list existed. */
+function sourcesOf(run: JobRun): SourceRepo[] {
+  if (run.sources !== undefined && run.sources.length > 0) return run.sources;
+  return run.sourceRepositoryId === undefined ? [] : [{ repositoryId: run.sourceRepositoryId, ...(run.sourceCommit === undefined ? {} : { commit: run.sourceCommit }) }];
+}
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** inputs.scope of a scoped run: catalog item ids (or units) and their files, and the design set of a design run; undefined when absent or malformed. */
@@ -138,6 +180,8 @@ interface StepOutcome {
   stdout?: string;
   /** Agent jobs a workflow started. */
   agents?: number;
+  /** What a stage wrote for the pull request description (ADR-0054), read before its work area is removed. */
+  description?: string;
 }
 
 /** A failed script step, with the end of its error output (redacted) for a repair job. */
@@ -156,6 +200,8 @@ interface ChildPlacement {
   out: string;
   work?: string;
   intermediate?: boolean | readonly string[];
+  /** The step's key in the plan; names its folder in the workspace and lets it keep its output when it fails. */
+  key?: string;
 }
 
 const BUILTIN_SCRIPT = /^[a-z][a-z0-9_-]{0,63}\.(py|js|mjs)$/;
@@ -166,6 +212,8 @@ const MAX_FOLDER_DOCUMENTS = 5000;
 /** A relative document-repo path without traversal. */
 const SAFE_OUTPUT_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9._/-]+$/;
 const MAX_RESTRICTED_FILES = 100;
+/** The most of a stage's description that goes into a pull request (ADR-0054). */
+const MAX_DESCRIPTION_CHARS = 60_000;
 const MAX_RESTRICTED_BYTES = 1024 * 1024;
 const RESULT_FILE = "result.json";
 
@@ -187,6 +235,13 @@ const resultFileNote = (problem: string, written: readonly string[]): string =>
   `\n\nThe step needs your structured result and ${problem}. ` +
   `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
   `Write the JSON result with write to the bare path "${RESULT_FILE}" (no folder, the one exception to the full-path rule), matching the schema above, nothing else in that file, then stop.`;
+
+/** Appended to an agent's task when an earlier try of the step left files in its output folder: names only, never content. */
+const carriedNote = (paths: readonly string[]): string =>
+  paths.length === 0
+    ? ""
+    : `\n\nAn earlier try of this step stopped before it finished. The files it wrote are already in your output directory (paths relative to it): ${paths.slice(0, 40).join(", ")}${paths.length > 40 ? ` and ${paths.length - 40} more` : ""}. ` +
+      "They have not been checked, and you cannot read them. Write the files that are still missing; rewrite one only if you are not sure it was finished.";
 
 const sha256 = (content: Buffer): string => createHash("sha256").update(content).digest("hex");
 
@@ -213,7 +268,7 @@ export function summarizeToolCall(tool: string, input: unknown, roots: Record<st
     for (const [label, root] of Object.entries(roots)) {
       if (root === undefined) continue;
       const full = resolve(root, value);
-      if (full === resolve(root)) return label;
+      if (isAbsolute(value) && full === resolve(root)) return label;
       if (isAbsolute(value) && isInside(root, full)) return `${label}/${relative(root, full).split(sep).join("/")}`;
     }
     return isAbsolute(value) ? "(outside the workspace)" : value;
@@ -258,7 +313,11 @@ export class JobRunner {
     this.#log = deps.log ?? ((line) => console.log(`[jobs] ${line}`));
   }
 
-  /** Runs a queued job run; a run in any other status is left alone. Never throws for a failing job. */
+  /**
+   * Runs a queued job run: the next attempt of the job (ADR-0055). A run in any other status is left alone. Never
+   * throws for a failing job. What the attempt needs is provisioned (and kept when an earlier attempt made it);
+   * when it ends, the checkouts go unless the job failed and can be retried.
+   */
   async run(id: string, signal?: AbortSignal): Promise<JobRun | undefined> {
     const { store, storage, checkouts } = this.#deps;
     const run = await store.get(id);
@@ -266,38 +325,30 @@ export class JobRunner {
     // A run cancelled while it waited in the queue is not started.
     if (!(await store.start(id))) return store.get(id);
     const paths = storage.job(id);
-    const ws: StepWorkspace = { rootId: id, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp };
-    await this.#event(ws, undefined, "status", `${run.kind} ${run.name} started`, { status: "running" });
-    let checkedOut = false;
+    const sandbox = await (this.#deps.sandbox ?? defaultSandbox)().catch(() => DEFAULT_SANDBOX);
+    const ws: StepWorkspace = { rootId: id, attempt: run.attempt, root: paths.root, dir: paths.root, in: paths.docs, out: paths.out, tmp: paths.tmp, sandbox, defaults: limitsWith(this.#defaults, sandbox) };
+    await this.#event(ws, undefined, "status", `${run.kind} ${run.name} started${run.attempt > 1 ? ` (attempt ${run.attempt})` : ""}`, { status: "running", attempt: run.attempt });
+    let manifest: WorkspaceManifest | undefined;
+    let ended: "succeeded" | "failed" | "cancelled" = "failed";
     try {
-      for (const dir of [paths.in, paths.out, paths.tmp]) await mkdir(dir, { recursive: true });
-      if (run.sourceRepositoryId !== undefined) {
-        const commit = run.sourceCommit ?? (await checkouts.resolve(run.sourceRepositoryId));
-        if (run.sourceCommit === undefined) await store.update(id, { sourceCommit: commit });
-        run.sourceCommit = commit;
-        await checkouts.checkout(run.sourceRepositoryId, commit, paths.src);
-        checkedOut = true;
-        ws.src = paths.src;
-        ws.commit = commit;
-      }
-      const pinned = run.inputs["documentsCommit"];
-      if (typeof pinned === "string" && COMMIT.test(pinned)) ws.documentsCommit = pinned;
-      const resume = typeof run.inputs["resumeOf"] === "string" ? await this.#resume(run, ws, run.inputs["resumeOf"]) : undefined;
-      await this.#prepareInputs(run, ws);
-      const outcome = await this.#step(run, ws, signal, resume);
-      const summary = await this.#finish(run, ws, outcome);
+      const provisioned = await this.#provision(run, ws, paths);
+      manifest = provisioned.manifest;
+      const outcome = await this.#step(run, ws, signal, provisioned.ledger);
+      const { summary } = await this.#finish(run, ws, outcome);
       const write = run.inputs["publishOutput"] === false ? undefined : await this.#publish(run, ws, outcome);
       await store.succeed(id, { ...summary, ...(write === undefined ? {} : { documentWriteId: write }) });
+      ended = "succeeded";
       await this.#event(ws, undefined, "status", `succeeded${write === undefined ? "" : ", output handed to the document repo writer"}`, { status: "succeeded" });
       this.#log(`${run.kind} ${run.name} (${id}) succeeded${write === undefined ? "" : `, document write ${write}`}`);
     } catch (error) {
       if (isCancelled(signal)) {
+        ended = "cancelled";
         await store.cancel(id).catch(() => undefined);
         await this.#event(ws, undefined, "status", "cancelled", { status: "cancelled" });
         this.#log(`${run.kind} ${run.name} (${id}) cancelled`);
       } else {
         const reason = reasonOf(error);
-        // A failed stage keeps its steps and gate choices, so it can be resumed (ADR-0033).
+        // A failed stage keeps its steps, so a retry can skip them (the ledger has the details, ADR-0055).
         const summary = error instanceof StageFailure ? { ...error.outcome, ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }) } : undefined;
         await store.fail(id, reason, summary).catch(() => undefined);
         await this.#event(ws, undefined, "status", `failed: ${reason}`, { status: "failed" });
@@ -305,38 +356,130 @@ export class JobRunner {
       }
     } finally {
       await removeTree(paths.tmp).catch(() => undefined);
-      await removeTree(paths.in).catch(() => undefined);
-      if (checkedOut && run.sourceRepositoryId !== undefined) await checkouts.release(run.sourceRepositoryId, paths.src).catch(() => undefined);
+      if (manifest !== undefined) {
+        const settled = { ...manifest, state: ended === "succeeded" ? ("published" as const) : ("parked" as const) };
+        // A job that failed keeps its checkouts for a retry (the sweep drops them later); any other end drops them now.
+        if (ended === "failed") await writeManifest(paths.manifest, withoutStamp(settled)).catch(() => undefined);
+        else await dropCheckouts(checkouts, paths, settled).catch(() => undefined);
+      } else {
+        await removeTree(paths.steps).catch(() => undefined);
+      }
     }
     return store.get(id);
   }
 
   /**
-   * A resume of a failed stage run (inputs.resumeOf): takes over its kept out/ and work/, the
-   * agent and workflow leaves that succeeded and the gate choices it recorded.
+   * Makes the workspace ready for this attempt: pins the sources, mounts the ones that are not mounted at their
+   * commit, builds the documents, writes the guide and opens the ledger. Safe to repeat: a retry finds most of it done.
    */
-  async #resume(run: JobRun, ws: StepWorkspace, fromId: string): Promise<ResumeState> {
-    const from = await this.#deps.store.get(fromId);
-    if (from === undefined || from.kind !== "stage" || from.name !== run.name || from.projectId !== run.projectId || from.applicationId !== run.applicationId) {
-      throw new JobFailure(`Run ${fromId} cannot be resumed by this run (not a ${run.name} run of the same application)`);
+  async #provision(run: JobRun, ws: StepWorkspace, paths: JobPaths): Promise<{ manifest: WorkspaceManifest; ledger: Ledger }> {
+    const { store, checkouts } = this.#deps;
+    let previous = await readManifest(paths.manifest);
+    // A retry from scratch discards what the job kept, once.
+    const fresh = run.inputs["fresh"] === true && previous?.freshApplied !== run.attempt;
+    if (fresh) {
+      for (const dir of [paths.out, paths.work, paths.state, paths.steps, paths.docs]) await removeTree(dir).catch(() => undefined);
+      if (previous !== undefined) {
+        const { documentsFor: _documentsFor, ...kept } = previous;
+        previous = kept;
+      }
     }
-    if (from.status !== "failed") throw new JobFailure(`Run ${fromId} did not fail (${from.status}): only a failed run is resumed`);
-    const old = this.#deps.storage.job(fromId);
-    await copyTree(old.out, ws.out);
-    await copyTree(join(old.root, "work"), join(ws.root, "work"));
-    const summary = from.outputSummary ?? {};
-    const steps = Array.isArray(summary["steps"]) ? (summary["steps"] as unknown[]).filter((step): step is StepRecord => isRecord(step) && typeof step["id"] === "string") : [];
-    const completed = new Set(steps.filter((step) => step.status === "succeeded" && (step.kind === "agent" || step.kind === "workflow")).map((step) => stepKey(step)));
-    const pinned = summary["documentsCommit"];
-    if (ws.documentsCommit === undefined && typeof pinned === "string" && COMMIT.test(pinned)) ws.documentsCommit = pinned;
-    await this.#event(ws, undefined, "log", `resuming run ${fromId}: ${completed.size} agent or workflow step(s) are not run again`, { resumeOf: fromId, reused: completed.size });
-    return { from: fromId, completed };
+    for (const dir of [paths.out, paths.docs, paths.tmp, paths.state]) await mkdir(dir, { recursive: true });
+
+    // Every repository at its pinned commit, else at its current one (recorded so a retry reads the same).
+    const requested = sourcesOf(run);
+    const sources: PinnedSource[] = [];
+    const skipped: string[] = [];
+    for (const source of requested) {
+      try {
+        sources.push({ repositoryId: source.repositoryId, commit: source.commit ?? (await checkouts.resolve(source.repositoryId)), role: sourceRole(source) });
+      } catch (error) {
+        // The legacy code is what a job is about and fails it; the to-be is a reference, and a target repository that is
+        // empty, not synced yet or gone is left out, with a line in the log.
+        if (sourceRole(source) === "legacy") throw error;
+        skipped.push(source.repositoryId);
+        await this.#event(ws, undefined, "log", `to-be repository ${source.repositoryId} is left out: ${reasonOf(error)}`);
+      }
+    }
+    if (requested.some((source) => source.commit === undefined) || skipped.length > 0) await store.update(run.id, { sources });
+    if (sources.length > 0) {
+      run.sources = sources;
+      run.sourceCommit = (legacySources(sources)[0] ?? sources[0])!.commit;
+      ws.sources = sources;
+    }
+    const pinned = run.inputs["documentsCommit"];
+    const documentsCommit = typeof pinned === "string" && COMMIT.test(pinned) ? pinned : previous?.documentsCommit;
+    if (documentsCommit !== undefined) ws.documentsCommit = documentsCommit;
+
+    const base = (): Omit<WorkspaceManifest, "version" | "updatedAt"> => ({
+      jobId: run.id,
+      attempt: run.attempt,
+      state: "running",
+      sources,
+      ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }),
+      ...(previous?.documentsFor === undefined ? {} : { documentsFor: previous.documentsFor }),
+      ...(fresh ? { freshApplied: run.attempt } : previous?.freshApplied === undefined ? {} : { freshApplied: previous.freshApplied }),
+    });
+    // The manifest comes first: whatever happens while mounting, the workspace says what it was built for.
+    let manifest = await writeManifest(paths.manifest, base());
+    await mountSources(checkouts, paths, legacySources(sources), { readOnly: ws.sandbox.markReadOnly });
+    for (const target of targetSources(sources)) {
+      try {
+        await mountSources(checkouts, paths, [target], { readOnly: ws.sandbox.markReadOnly });
+      } catch (error) {
+        sources.splice(sources.indexOf(target), 1);
+        await this.#event(ws, undefined, "log", `to-be repository ${target.repositoryId} is left out: ${reasonOf(error)}`);
+      }
+    }
+    if (sources.length !== manifest.sources.length) {
+      await store.update(run.id, { sources });
+      run.sources = sources;
+      ws.sources = sources;
+      manifest = await writeManifest(paths.manifest, base());
+    }
+    if (legacySources(sources).length > 0) ws.asIs = paths.asIs;
+    if (targetSources(sources).length > 0) ws.toBe = paths.toBe;
+
+    const built = !fresh && manifest.documentsFor !== undefined && manifest.documentsFor === ws.documentsCommit;
+    const declared = await this.#prepareInputs(run, ws, { build: !built });
+    if (declared && ws.documentsCommit !== undefined && manifest.documentsFor !== ws.documentsCommit) {
+      previous = { ...(previous ?? manifest), documentsFor: ws.documentsCommit };
+      manifest = await writeManifest(paths.manifest, base());
+    }
+
+    const ledger = await Ledger.open(paths.ledger);
+    if (fresh) await ledger.reset();
+    await this.#writeGuide(run, ws, paths, ledger);
+    return { manifest, ledger };
+  }
+
+  /** WORKSPACE.md for this attempt: the layout, the repositories, and what earlier attempts left and read. */
+  async #writeGuide(run: JobRun, ws: StepWorkspace, paths: JobPaths, ledger: Ledger): Promise<void> {
+    const sources: GuideSource[] = [];
+    for (const source of ws.sources ?? []) sources.push({ ...source, path: mountFolder(source), ...(await countFiles(mountPath(paths, source)).then((files) => (files === undefined ? {} : { files }))) });
+    const entries = ledger.entries();
+    await writeAtomically(
+      paths.guide,
+      renderGuide({
+        jobId: run.id,
+        attempt: run.attempt,
+        job: `${run.kind} ${run.name}`,
+        ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }),
+        sources,
+        ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }),
+        history: {
+          succeeded: entries.filter(([, entry]) => entry.status === "succeeded").length,
+          failed: entries.flatMap(([key, entry]) => (entry.status === "failed" ? [{ key, reason: entry.reason ?? "failed" }] : [])),
+        },
+      }),
+    );
+    ws.guide = paths.guide;
   }
 
   /** Appends to the top-level run's live record (best effort; texts are redacted). */
   async #event(ws: StepWorkspace, stepId: string | undefined, kind: JobEventKind, message: string, data?: Record<string, unknown>): Promise<void> {
     await this.#deps.store
-      .addEvent({ runId: ws.rootId, ...(stepId === undefined ? {} : { stepId }), kind, message: redactText(message).slice(0, 1000), ...(data === undefined ? {} : { data }) })
+      .addEvent({ runId: ws.rootId, attempt: ws.attempt, ...(stepId === undefined ? {} : { stepId }), kind, message: redactText(message).slice(0, 1000), ...(data === undefined ? {} : { data }) })
       .catch(() => undefined);
   }
 
@@ -344,28 +487,37 @@ export class JobRunner {
   // Steps
   // -------------------------------------------------------------------------
 
+  /** A path in the workspace as the job's processes see it: relative to the workspace root, with `/` separators. */
+  #relative(ws: StepWorkspace, path: string): string {
+    return relative(ws.root, path).split(sep).join("/");
+  }
+
   #placeholders(run: JobRun, ws: StepWorkspace): Placeholders {
+    const legacy = legacySources(ws.sources ?? []);
     return {
-      in: ws.in,
-      out: ws.out,
-      tmp: ws.tmp,
-      ...(ws.src === undefined ? {} : { src: ws.src }),
-      ...(ws.commit === undefined ? {} : { commit: ws.commit }),
-      ...(run.sourceRepositoryId === undefined ? {} : { repo: run.sourceRepositoryId }),
+      in: this.#relative(ws, ws.in),
+      out: this.#relative(ws, ws.out),
+      tmp: this.#relative(ws, ws.tmp),
+      ...(ws.asIs === undefined ? {} : { src: this.#relative(ws, ws.asIs) }),
+      ...(ws.toBe === undefined ? {} : { tobe: this.#relative(ws, ws.toBe) }),
+      ...(legacy.length === 0 ? {} : { sources: sourceSpec(legacy) }),
       ...(run.applicationId === undefined ? {} : { app: run.applicationId }),
     };
   }
 
-  #limits(run: JobRun, kind: "script" | "agent"): StepLimits {
-    return { ...this.#defaults[kind], ...run.limits };
+  #limits(run: JobRun, ws: StepWorkspace, kind: "script" | "agent"): StepLimits {
+    return { ...ws.defaults[kind], ...run.limits };
   }
 
   /**
-   * Declared document-repo files are copied into in/ from the default branch tip: inputs.documents,
-   * and for a stage its plan's documents, prerequisites and optional inputs. Missing ones are skipped, except a
-   * stage's prerequisites; an entry ending in "/" is a folder.
+   * Declared document-repo files are copied into in/ from the pinned commit (the default branch tip when the job
+   * first reads one): inputs.documents, and for a stage its plan's documents, prerequisites and optional inputs.
+   * Missing ones are skipped, except a stage's prerequisites; an entry ending in "/" is a folder. With `build`
+   * false the copies are already there (an earlier attempt made them) and only the prerequisites are checked.
+   * Returns whether any document is declared.
    */
-  async #prepareInputs(run: JobRun, ws: StepWorkspace): Promise<void> {
+  async #prepareInputs(run: JobRun, ws: StepWorkspace, options: { build?: boolean } = {}): Promise<boolean> {
+    const build = options.build ?? true;
     const plan = run.kind === "stage" ? STAGES[run.name] : undefined;
     const declared = run.inputs["documents"];
     const entries = [
@@ -375,7 +527,7 @@ export class JobRunner {
       ...(plan?.optional ?? []).map((entry) => entry.path),
     ];
     if (entries.length > 0) {
-      const repository = await this.#deps.store.documentRepository(run.projectId);
+      const repository = build ? await this.#deps.store.documentRepository(run.projectId) : undefined;
       if (repository !== undefined) {
         const { checkouts } = this.#deps;
         // Every step of a run reads the same document-repo commit: pinned by the run, else the
@@ -408,10 +560,11 @@ export class JobRunner {
         }
       }
     }
-    await makeReadOnly(ws.in);
+    if (build && ws.sandbox.markReadOnly) await makeReadOnly(ws.in);
+    return entries.length > 0;
   }
 
-  async #step(run: JobRun, ws: StepWorkspace, signal?: AbortSignal, resume?: ResumeState): Promise<StepOutcome> {
+  async #step(run: JobRun, ws: StepWorkspace, signal?: AbortSignal, ledger?: Ledger): Promise<StepOutcome> {
     switch (run.kind) {
       case "script":
         return this.#script(run, ws, signal);
@@ -420,7 +573,7 @@ export class JobRunner {
       case "workflow":
         return this.#workflow(run, ws, signal);
       case "stage":
-        return this.#stage(run, ws, signal, resume);
+        return this.#stage(run, ws, signal, ledger);
     }
   }
 
@@ -510,11 +663,11 @@ export class JobRunner {
     const rawArgs = run.inputs["args"];
     if (rawArgs !== undefined && !(Array.isArray(rawArgs) && rawArgs.every((arg) => typeof arg === "string"))) throw new JobFailure("inputs.args must be a list of strings");
     const args = ((rawArgs ?? []) as string[]).map((arg) => fill(arg, values));
-    const limits = this.#limits(run, "script");
+    const limits = this.#limits(run, ws, "script");
     const result = await runScript({
       file,
       args,
-      workspace: { cwd: ws.root, readOnly: [...(ws.src === undefined ? [] : [ws.src]), ws.in], writable: [ws.out, ws.tmp], tmp: ws.tmp, out: ws.out },
+      workspace: { cwd: ws.root, readOnly: [...(ws.asIs === undefined ? [] : [ws.asIs]), ...(ws.toBe === undefined ? [] : [ws.toBe]), ws.in], writable: [ws.out, ws.tmp], tmp: ws.tmp, out: ws.out },
       limits: { timeoutSec: limits.timeoutSec, maxOutputBytes: limits.maxOutputBytes },
       interpreters: this.#deps.interpreters,
       ...(signal === undefined ? {} : { signal }),
@@ -542,14 +695,14 @@ export class JobRunner {
   }
 
   async #agent(run: JobRun, ws: StepWorkspace, signal?: AbortSignal): Promise<StepOutcome> {
-    const definition = await materializeSkillFiles(await this.#deps.agentDefinitions.definition(run.name), ws.in);
+    const definition = await materializeSkillFiles(await this.#deps.agentDefinitions.definition(run.name), ws.in, { readOnly: ws.sandbox.markReadOnly });
     const expectedAgentVersion = run.inputs["expectedAgentVersion"];
     if (expectedAgentVersion !== undefined) {
       if (typeof expectedAgentVersion !== "string" || expectedAgentVersion.trim() === "") {
         throw new JobFailure("inputs.expectedAgentVersion must be a non-empty version string");
       }
       if (definition.version !== expectedAgentVersion) {
-        throw new JobFailure(`Agent ${run.name} has version ${definition.version}, expected agent version ${expectedAgentVersion}`);
+        throw new JobFailure("Agent " + run.name + " has version " + definition.version + ", expected agent version " + expectedAgentVersion);
       }
     }
     const mock = this.#deps.agents.engine.startsWith("mock");
@@ -557,7 +710,7 @@ export class JobRunner {
     if (binding === undefined) throw new JobFailure(`No model is bound to agent "${run.name}" (Settings → LLM Providers)`);
     const task = run.inputs["task"];
     if (typeof task !== "string" || task.trim() === "") throw new JobFailure("inputs.task is missing");
-    const limits = this.#limits(run, "agent");
+    const limits = this.#limits(run, ws, "agent");
     const agentId = `${definition.id}@${definition.version}`;
     // The MCP servers the agent names in its tools: resolved here, where the registry and its secrets are, and handed to the job's child.
     const mcpIds = mcpServersNamedBy(definition.tools);
@@ -580,12 +733,18 @@ export class JobRunner {
         : "";
     const spec: JobSpec = {
       agent: definition,
-      task: fill(task, this.#placeholders(run, ws)) + schemaNote,
+      task: fill(task, this.#placeholders(run, ws)) + schemaNote + carriedNote(ws.carried ?? []),
       model: { provider: binding.provider, id: binding.model, ...(thinking === undefined ? {} : { thinking }) },
-      // Reads are confined to the checkout and the inputs, writes to out/ (kernel path guard).
-      workspace: { readOnly: [...(ws.src === undefined ? [] : [ws.src]), ws.in], outDir: ws.out },
+      // Reads are confined to the checkouts, the inputs and the guide, writes to the output folder (kernel path guard).
+      // The first entry is where a search without a path looks: the as-is code, else the inputs.
+      workspace: {
+        root: ws.root,
+        readOnly: [...(ws.asIs === undefined ? [] : [ws.asIs]), ...(ws.toBe === undefined ? [] : [ws.toBe]), ws.in, ...(ws.guide === undefined ? [] : [ws.guide])],
+        outDir: ws.out,
+      },
       limits: {
         timeoutSec: limits.timeoutSec,
+        idleTimeoutSec: ws.sandbox.agentIdleTimeoutSec,
         ...(limits.maxTurns === undefined ? {} : { maxTurns: limits.maxTurns }),
         ...(limits.maxCostUsd === undefined ? {} : { maxCostUsd: limits.maxCostUsd }),
       },
@@ -594,7 +753,7 @@ export class JobRunner {
     };
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0, cacheReadTokens: 0, cacheWriteTokens: 0, compactions: 0 };
     const stepId = run.id === ws.rootId ? undefined : run.id;
-    const roots = { src: ws.src, in: ws.in, out: ws.out };
+    const roots = { "as-is": ws.asIs, "to-be": ws.toBe, in: ws.in, out: ws.out };
     // The job's spans (ADR-0048) are stored in batches as they arrive; each run of the agent is an attempt.
     let attempts = 0;
     let spans: SpanRecord[] = [];
@@ -606,7 +765,9 @@ export class JobRunner {
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
       attempts += 1;
       const handle = await this.#deps.agents.startJob({ ...spec, task });
-      const onAbort = (): void => void handle.abort(isCancelled(signal) ? "cancelled" : "the worker is stopping");
+      // Why it is stopped: a person cancelled the run, a sibling of its group failed, or the worker is stopping.
+      const stoppedFor = (): string => (isCancelled(signal) ? "cancelled" : signal?.reason instanceof Error && signal.reason.message.startsWith("another step of the group failed") ? "another step of its group failed" : "the worker is stopping");
+      const onAbort = (): void => void handle.abort(stoppedFor());
       if (signal?.aborted === true) onAbort();
       else signal?.addEventListener("abort", onAbort, { once: true });
       try {
@@ -622,6 +783,7 @@ export class JobRunner {
               provider: binding.provider,
               model: binding.model,
               attempt: attempts,
+              runAttempt: ws.attempt,
               span: event.span,
             });
             if (spans.length >= 100) await flushSpans();
@@ -656,7 +818,7 @@ export class JobRunner {
       if (!(this.#deps.mockOutputs ?? mock)) return;
       await writeMockOutputs({
         out: ws.out,
-        ...(ws.src === undefined ? {} : { src: ws.src }),
+        ...(ws.asIs === undefined ? {} : { src: ws.asIs }),
         agent: run.name,
         app: run.applicationId ?? run.projectId,
         expects: this.#expects(run, ws),
@@ -794,7 +956,7 @@ export class JobRunner {
     // A stage hands its workflow what is left of the stage's agent budget (inputs.budget.maxAgents).
     const budget = run.inputs["budget"] as { maxAgents?: unknown } | undefined;
     const cap = typeof budget?.maxAgents === "number" && Number.isFinite(budget.maxAgents) ? Math.max(0, Math.floor(budget.maxAgents)) : undefined;
-    const budgets = cap === undefined ? this.#defaults.workflow : { ...this.#defaults.workflow, maxAgents: Math.min(this.#defaults.workflow.maxAgents, cap) };
+    const budgets = cap === undefined ? ws.defaults.workflow : { ...ws.defaults.workflow, maxAgents: Math.min(ws.defaults.workflow.maxAgents, cap) };
     const outcome = await runWorkflow({
       source,
       args: run.inputs["args"] ?? {},
@@ -822,11 +984,13 @@ export class JobRunner {
   }
 
   /** A stage: its plan (stages.ts) run by the generic executor, every leaf step a child run. */
-  async #stage(run: JobRun, ws: StepWorkspace, signal?: AbortSignal, resume?: ResumeState): Promise<StepOutcome> {
+  async #stage(run: JobRun, ws: StepWorkspace, signal?: AbortSignal, ledger?: Ledger): Promise<StepOutcome> {
     const plan = STAGES[run.name];
     if (plan === undefined) throw new JobFailure(`Unknown stage "${run.name}"`);
-    if (run.applicationId === undefined || run.sourceRepositoryId === undefined || ws.commit === undefined) throw new JobFailure(`Stage ${run.name} needs an application with a legacy repository`);
-    const work = join(ws.root, "work");
+    const legacy = legacySources(ws.sources ?? []);
+    if (run.applicationId === undefined || legacy.length === 0) throw new JobFailure(`Stage ${run.name} needs an application with a legacy repository`);
+    const paths = this.#deps.storage.job(ws.rootId);
+    const work = paths.work;
     await mkdir(work, { recursive: true });
     const scope = scopeOf(run.inputs);
     const provenance = new Map<string, Provenance>();
@@ -842,16 +1006,36 @@ export class JobRunner {
         ok: true,
         summary: child.outcome.summary,
         agents: child.outcome.agents ?? 0,
+        outputs: child.outputs,
+        digest: child.digest,
         ...(child.outcome.stdout === undefined ? {} : { stdout: child.outcome.stdout }),
       };
     };
+    const reuse: StepReuse | undefined =
+      ledger === undefined
+        ? undefined
+        : {
+            fingerprint: (spec, upstream) => this.#fingerprint(ws, spec, upstream),
+            settled: async (key, fingerprint) => {
+              const entry = ledger.get(key);
+              if (entry === undefined || entry.status !== "succeeded" || entry.fingerprint !== fingerprint) return undefined;
+              // What it wrote must still be there: a group that failed before its outputs were merged left nothing.
+              for (const output of entry.outputs) {
+                const stat = await lstat(join(output.zone === "out" ? ws.out : work, ...output.path.split("/"))).catch(() => undefined);
+                if (stat?.isFile() !== true) return undefined;
+              }
+              return { digest: entry.digest };
+            },
+            record: (key, entry) => ledger.record(key, { ...entry, attempt: ws.attempt, finishedAt: new Date().toISOString() }),
+          };
     try {
       const executor = new StagePlanExecutor({
         plan,
         run: { id: run.id, projectId: run.projectId, applicationId: run.applicationId },
-        values: { app: run.applicationId, repo: run.sourceRepositoryId, commit: ws.commit },
-        dirs: { root: ws.root, in: ws.in, work, out: ws.out },
-        limits: this.#defaults.stage,
+        values: { app: run.applicationId, sources: sourceSpec(legacy) },
+        // Group members stage their outputs under steps/, beside the folders of the steps.
+        dirs: { root: paths.steps, in: ws.in, work, out: ws.out },
+        limits: ws.defaults.stage,
         gates: this.#deps.gates,
         runLeaf,
         log: (line, data) => {
@@ -860,19 +1044,22 @@ export class JobRunner {
         },
         ...(signal === undefined ? {} : { signal }),
         ...(scope === undefined ? {} : { scope }),
-        ...(resume === undefined ? {} : { completed: resume.completed, resumeOf: resume.from }),
+        ...(typeof run.inputs["resumeOf"] === "string" ? { resumeOf: run.inputs["resumeOf"] } : {}),
+        ...(reuse === undefined || ledger === undefined ? {} : { reuse, gateChoices: ledger.gates(), onGate: (id: string, choice: string) => ledger.recordGate(id, choice) }),
       });
       const outcome = await executor.run();
-      // work/ goes only when the stage succeeds: a failed run keeps it beside out/ for a resume
+      const description = await this.#description(plan, run.applicationId, work);
+      // work/ goes only when the stage succeeds: a failed job keeps it beside out/ for its next attempt
       // (same retention, cleanup.ts).
       await removeTree(work).catch(() => undefined);
       return {
         summary: {
           ...outcome,
+          attempt: ws.attempt,
           ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }),
-          ...(resume === undefined ? {} : { resumeOf: resume.from }),
         },
         ...(agent === undefined ? {} : { agent }),
+        ...(description === undefined ? {} : { description }),
         provenance,
       };
     } catch (error) {
@@ -882,10 +1069,28 @@ export class JobRunner {
   }
 
   /**
-   * Runs one step of a stage or workflow as a child run: its own in/out/tmp, the parent's
-   * source checkout, the parent's inputs and outputs so far as its inputs (for a stage step: the
-   * placement's directories). On success its out/ is merged into the parent's out/; for a stage
-   * step, intermediate files go to the placement's work directory instead.
+   * What a step would run with (ledger.ts): its definition by content, its task as the stage filled it, the pinned
+   * sources and documents, and the chain of what came before it. A script is not reused, so its definition is not read.
+   */
+  async #fingerprint(ws: StepWorkspace, spec: LeafRun, upstream: string): Promise<string> {
+    const { budget: _budget, ...inputs } = spec.inputs;
+    let definition = "script";
+    try {
+      if (spec.kind === "agent") definition = digestOf(await this.#deps.agentDefinitions.definition(spec.name));
+      else if (spec.kind === "workflow") definition = digestOf(await loadWorkflow(spec.name, this.#deps.workflowsDir));
+    } catch {
+      definition = "unavailable";
+    }
+    const pins = { sources: (ws.sources ?? []).map((source) => [sourceRole(source), source.repositoryId, source.commit]), documents: ws.documentsCommit ?? null };
+    return digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream });
+  }
+
+  /**
+   * Runs one step of a stage or workflow as a child run, in its own folder of the job workspace (`steps/<step>/`):
+   * its inputs are a view of the stage's documents, work and output so far (the placement's directories) and the
+   * parent's checkouts; its output folder is its own. On success its out/ is merged into the parent's out/; for a
+   * stage step, intermediate files go to the placement's work directory instead. An agent step that fails keeps its
+   * out/, and the next try of the step, in this attempt or the next, is told what is in it.
    */
   async #child(
     parent: JobRun,
@@ -893,9 +1098,13 @@ export class JobRunner {
     spec: Pick<NewJobRun, "kind" | "name" | "inputs">,
     signal?: AbortSignal,
     placement: ChildPlacement = { inputs: [parentWs.in, parentWs.out], out: parentWs.out },
-  ): Promise<{ id: string; ok: true; outcome: StepOutcome } | { id: string; ok: false; reason: string; detail?: string }> {
+  ): Promise<
+    | { id: string; ok: true; outcome: StepOutcome; outputs: LedgerOutput[]; digest: string }
+    | { id: string; ok: false; reason: string; detail?: string }
+  > {
     const { store, storage } = this.#deps;
     const id = randomUUID();
+    const first = parentWs.sources === undefined ? undefined : (legacySources(parentWs.sources)[0] ?? parentWs.sources[0]);
     await store.create({
       id,
       projectId: parent.projectId,
@@ -904,27 +1113,39 @@ export class JobRunner {
       kind: spec.kind,
       name: spec.name,
       ...(parent.sourceRepositoryId === undefined ? {} : { sourceRepositoryId: parent.sourceRepositoryId }),
-      ...(parentWs.commit === undefined ? {} : { sourceCommit: parentWs.commit }),
+      ...(parentWs.sources === undefined || first === undefined ? {} : { sourceCommit: first.commit, sources: parentWs.sources }),
       inputs: spec.inputs ?? {},
       limits: parent.limits,
       ...(parent.actor === undefined ? {} : { actor: parent.actor }),
     });
     await store.start(id);
     const run = (await store.get(id))!;
-    const paths = storage.job(id);
+    const folder = storage.job(parentWs.rootId).step(placement.key ?? id);
+    // A stage step keeps its out/ when it fails, if it is an agent: the next try continues from what is there.
+    const keeps = placement.key !== undefined && spec.kind === "agent";
     await this.#event(parentWs, id, "step.started", `${spec.kind} ${spec.name} started`, { kind: spec.kind, name: spec.name });
-    const ws: StepWorkspace = { rootId: parentWs.rootId, root: paths.root, in: paths.in, out: paths.out, tmp: paths.tmp, ...(parentWs.src === undefined ? {} : { src: parentWs.src }), ...(parentWs.commit === undefined ? {} : { commit: parentWs.commit }), ...(parentWs.documentsCommit === undefined ? {} : { documentsCommit: parentWs.documentsCommit }) };
+    const ws: StepWorkspace = { ...parentWs, dir: folder.root, in: folder.in, out: folder.out, tmp: folder.tmp };
+    delete ws.carried;
+    let failed = true;
     try {
       if (signal?.aborted === true) throw new JobFailure("aborted");
-      for (const dir of [paths.in, paths.out, paths.tmp]) await mkdir(dir, { recursive: true });
+      if (!keeps) await removeTree(folder.root).catch(() => undefined);
+      for (const dir of [folder.in, folder.tmp]) await removeTree(dir).catch(() => undefined);
+      for (const dir of [folder.in, folder.out, folder.tmp]) await mkdir(dir, { recursive: true });
+      if (keeps) {
+        const left = (await listFiles(folder.out)).map((entry) => entry.path).filter((path) => !path.startsWith("restricted/"));
+        if (left.length > 0) ws.carried = left;
+      }
       for (const dir of placement.inputs) await copyTree(dir, ws.in);
       await this.#prepareInputs(run, ws);
       const outcome = await this.#step(run, ws, signal);
-      const summary = await this.#finish(run, ws, outcome);
+      const { summary, entries } = await this.#finish(run, ws, outcome);
       await store.succeed(id, summary);
       await this.#merge(ws.out, placement);
+      failed = false;
       await this.#event(parentWs, id, "step.finished", `${spec.kind} ${spec.name} succeeded`, { kind: spec.kind, name: spec.name, status: "succeeded" });
-      return { id, ok: true, outcome };
+      const outputs = entries.filter((entry) => !entry.path.startsWith("restricted/")).map((entry): LedgerOutput => ({ path: entry.path, zone: this.#isIntermediate(entry.path, placement) ? "work" : "out" }));
+      return { id, ok: true, outcome, outputs, digest: filesDigest(entries) };
     } catch (error) {
       if (isCancelled(signal)) {
         await store.cancel(id).catch(() => undefined);
@@ -936,18 +1157,26 @@ export class JobRunner {
       await this.#event(parentWs, id, "step.finished", `${spec.kind} ${spec.name} failed: ${reason}`, { kind: spec.kind, name: spec.name, status: "failed" });
       return { id, ok: false, reason, ...(error instanceof ScriptFailure ? { detail: error.detail } : {}) };
     } finally {
-      await removeTree(paths.root).catch(() => undefined);
+      if (failed && keeps) {
+        for (const dir of [folder.in, folder.tmp]) await removeTree(dir).catch(() => undefined);
+      } else {
+        await removeTree(folder.root).catch(() => undefined);
+      }
     }
+  }
+
+  /** Whether a file of a stage step is for the steps after it only (work/), not published (out/). */
+  #isIntermediate(path: string, placement: ChildPlacement): boolean {
+    const intermediate = placement.intermediate ?? false;
+    if (placement.work === undefined || intermediate === false) return false;
+    return intermediate === true || intermediate.some((prefix) => path === prefix || path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`));
   }
 
   /** A finished step's out/: published files to placement.out, intermediate ones to placement.work. */
   async #merge(out: string, placement: ChildPlacement): Promise<void> {
-    const intermediate = placement.intermediate ?? false;
-    if (placement.work === undefined || intermediate === false) return copyTree(out, placement.out);
-    const isIntermediate = (path: string): boolean =>
-      intermediate === true || intermediate.some((prefix) => path === prefix || path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`));
-    await copyTree(out, placement.out, (path) => !isIntermediate(path));
-    await copyTree(out, placement.work, isIntermediate);
+    if (placement.work === undefined || (placement.intermediate ?? false) === false) return copyTree(out, placement.out);
+    await copyTree(out, placement.out, (path) => !this.#isIntermediate(path, placement));
+    await copyTree(out, placement.work, (path) => this.#isIntermediate(path, placement));
   }
 
   // -------------------------------------------------------------------------
@@ -976,10 +1205,14 @@ export class JobRunner {
   }
 
   /** restricted/ → encrypted records; the JobOutput hook over out/; the artifact index. */
-  async #finish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<Record<string, unknown>> {
+  async #finish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<{ summary: Record<string, unknown>; entries: ArtifactEntry[] }> {
     const restricted = await this.#storeRestricted(run, ws);
     const hook = await this.#hook(ws);
-    if (!hook.ok) throw new JobFailure(hook.reason ?? "JobOutput hook blocked the output");
+    if (!hook.ok) {
+      // A step that fails keeps what it wrote for its next try (ADR-0055): what passed the checks, never what failed them.
+      for (const item of hook.items) if (!item.path.startsWith("restricted/")) await rm(join(ws.out, ...item.path.split("/")), { force: true }).catch(() => undefined);
+      throw new JobFailure(hook.reason ?? "JobOutput hook blocked the output");
+    }
     const files = await listFiles(ws.out);
     const entries: ArtifactEntry[] = [];
     for (const file of files) {
@@ -987,15 +1220,18 @@ export class JobRunner {
     }
     await this.#deps.store.addArtifacts(run.id, entries);
     return {
-      ...outcome.summary,
-      files: entries.length,
-      bytes: entries.reduce((total, entry) => total + entry.size, 0),
-      restrictedFiles: restricted,
-      jobOutputHook: {
-        checkedFiles: hook.checked.files,
-        checkedBytes: hook.checked.bytes,
-        ...(hook.warnings.count === 0 ? {} : { diagramWarnings: hook.warnings.count, diagramWarningsFirst: hook.warnings.first }),
+      summary: {
+        ...outcome.summary,
+        files: entries.length,
+        bytes: entries.reduce((total, entry) => total + entry.size, 0),
+        restrictedFiles: restricted,
+        jobOutputHook: {
+          checkedFiles: hook.checked.files,
+          checkedBytes: hook.checked.bytes,
+          ...(hook.warnings.count === 0 ? {} : { diagramWarnings: hook.warnings.count, diagramWarningsFirst: hook.warnings.first }),
+        },
       },
+      entries,
     };
   }
 
@@ -1021,6 +1257,15 @@ export class JobRunner {
     }
   }
 
+  /** The pull-request description a stage wrote in its work area (ADR-0054): bounded and redacted; undefined when it wrote none. */
+  async #description(plan: StagePlan, app: string, work: string): Promise<string | undefined> {
+    const path = plan.description?.(app);
+    if (path === undefined) return undefined;
+    const text = await readFile(join(work, ...path.split("/")), "utf8").catch(() => undefined);
+    if (text === undefined || text.trim() === "") return undefined;
+    return redactText(text.length > MAX_DESCRIPTION_CHARS ? `${text.slice(0, MAX_DESCRIPTION_CHARS)}\n\n... (cut)` : text);
+  }
+
   /** A top-level run's out/ goes to the document repo through the writer; returns the write id. */
   async #publish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<string | undefined> {
     if (run.parentId !== undefined) return undefined;
@@ -1028,6 +1273,7 @@ export class JobRunner {
     const repository = await this.#deps.store.documentRepository(run.projectId);
     if (repository === undefined) throw new JobFailure(`Project ${run.projectId} has no document repository`);
     const plan = run.kind === "stage" ? STAGES[run.name] : undefined;
+    const description = outcome.description;
     const request: DocumentWriteRequest = {
       writeId: randomUUID(),
       projectId: run.projectId,
@@ -1036,6 +1282,7 @@ export class JobRunner {
       outputOfJob: run.id,
       jobId: run.id,
       ...(plan?.reviewAll === true ? { reviewAll: true } : {}),
+      ...(description === undefined ? {} : { description }),
       ...(outcome.agent === undefined ? {} : { agent: outcome.agent }),
       ...(run.actor === undefined ? {} : { actor: run.actor }),
     };

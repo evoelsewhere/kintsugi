@@ -228,11 +228,14 @@ describe("agents service", () => {
 
     await service.remove("house-reviewer", admin);
     await service.removeSkill("house-style", admin);
-    // The member connector skill stays in its own plugin; only runtime skills appear in this catalog.
+    // The member connector skill stays in its own plugin; runtime skills include the newer design contract and evidence skills.
     const sharedSkills = await service.listSkills();
     expect(sharedSkills.some((skill) => skill.name === "kintsugi-task")).toBe(false);
     expect(sharedSkills.map((skill) => [skill.name, skill.source, skill.usedBy])).toEqual([
-      ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "designer", "legacy-analyst"]],
+      ["design-template-contract", "builtin", ["designer"]],
+      ["design-writing", "builtin", ["design-reviewer", "designer"]],
+      ["evidence-marks", "builtin", ["business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]],
+      ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]],
       ["understand-planning", "builtin", ["understand-planner"]],
     ]);
 

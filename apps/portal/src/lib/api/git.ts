@@ -61,7 +61,15 @@ export interface TestAccessResult {
   branchCount?: number;
 }
 
-const SERVERS = "/api/admin/git-servers";
+export interface RepositoryBranchesView {
+  branches: string[];
+  /** The branch the server's HEAD points to. */
+  remoteDefault?: string;
+  /** The branch Kintsugi follows now. */
+  current?: string;
+}
+
+const SERVERS ="/api/admin/git-servers";
 const REPOSITORIES = "/api/admin/git-repositories";
 
 /** Name and email of kintsugi-bot's commits to document repos (installation setting). */
@@ -87,5 +95,7 @@ export const gitApi = {
   testAccess: (serverId: string, url: string) => apiSend<TestAccessResult>(`${SERVERS}/${serverId}/test`, "POST", { url }),
   listRepositories: () => apiGetAll<GitRepositoryView>(REPOSITORIES),
   createRepository: (input: { id: string; serverId: string; url: string }) => apiSend<GitRepositoryView>(REPOSITORIES, "POST", input),
+  repositoryBranches: (id: string) => apiGet<RepositoryBranchesView>(`${REPOSITORIES}/${id}/branches`),
+  setRepositoryBranch: (id: string, defaultBranch: string) => apiSend<GitRepositoryView>(`${REPOSITORIES}/${id}`, "PATCH", { defaultBranch }),
   removeRepository: (id: string) => apiSend<void>(`${REPOSITORIES}/${id}`, "DELETE"),
 };

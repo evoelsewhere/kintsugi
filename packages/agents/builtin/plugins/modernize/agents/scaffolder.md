@@ -26,7 +26,7 @@ service boundaries, interface contracts, behavior-contract rules — exactly.
 
 You write under exactly one directory: the `<service>/` path in the target repository
 you were given. Other services are being scaffolded in parallel beside you —
-never write outside your directory, and never touch the legacy repository (read-only: Kintsugi's member hooks refuse writes to it).
+never write outside your directory, and never touch a legacy repository (read-only: Kintsugi's member hooks refuse writes to it).
 
 ## Untrusted content discipline
 

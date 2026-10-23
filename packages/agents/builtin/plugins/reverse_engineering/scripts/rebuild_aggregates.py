@@ -13,6 +13,8 @@ under; they are never written by a run's pull request, only by this script (auto
   under its item-namespaced id, with its version and a link to the rule's own file); DATA_OBJECTS.md -
   every unit's data objects;
 - 10-applications/<app>/_generated/SECURITY_FINDINGS.md - the scorecard and every unit's findings;
+- 10-applications/<app>/_generated/GAPS.md - the gaps of every understood unit's specification (its `Gaps and questions`
+  table, ADR-0057), blocking ones first, with the totals by kind and impact in the front matter;
 - 10-applications/<app>/_generated/traceability.md - the totals (front matter) and one row per understood unit;
 - 10-applications/<app>/_generated/README.md - the index of the specifications.
 
@@ -26,6 +28,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
 import docmd  # noqa: E402
+import gaps_common as gc  # noqa: E402
 import paths  # noqa: E402
 import render_rules as rr  # noqa: E402
 import rule_docs as rd  # noqa: E402
@@ -52,7 +55,7 @@ def trace_of(text):
 def rebuild(app, docs):
     items, catalog = cc.load_catalog(os.path.join(docs, *paths.assessment_catalog_dir(app).split('/')))
     active = [item for item in items.values() if item.get('status') != 'retired']
-    rule_rows, objects, finding_rows, rows = [], [], [], []
+    rule_rows, objects, finding_rows, rows, gap_rows = [], [], [], [], []
     for item in sorted(active, key=lambda entry: entry['id']):
         item_id = item['id']
         parts = item_id.split('/')
@@ -71,6 +74,9 @@ def rebuild(app, docs):
         if record_text is None:
             continue
         record = docmd.split_front_matter(record_text)[0]
+        spec_rows = gc.spec_gaps(unit_text(docs, paths.unit_key_as_is_path(app, item_id)) or '')[0]
+        # A row whose kind or impact is not one of the lists cannot be classified: finish_items.py reported it, and it stays in the specification.
+        gap_rows += [{**row, 'item': item_id} for row in spec_rows or [] if row['kind'] in gc.GAP_KINDS and row['impact'] in gc.GAP_IMPACTS]
         trace = trace_of(unit_text(docs, paths.unit_trace_path(app, *parts)))
         deps = [row for row in trace['Dependencies'] if row.get('target')]
         outbound = sorted({row['target'] for row in deps if row['target'] in items and row.get('direction') != 'inbound'})
@@ -81,7 +87,7 @@ def rebuild(app, docs):
             'rules': trace['Rules applied'], 'findings': trace['Findings'], 'entryPoint': bool(item.get('entryPoints')),
             'requirements': trace['Requirements'], 'openQuestions': trace['openQuestions'], 'stale': record.get('digest') != item.get('digest'),
         })
-    return active, rule_rows, objects, finding_rows, rows
+    return active, rule_rows, objects, finding_rows, rows, gap_rows
 
 
 def business_rules(app, rule_rows):
@@ -124,6 +130,25 @@ def security_findings(app, finding_rows):
         doc += [f"| {row.get('id', '')} | {row.get('cwe', '')} | {row.get('severity', '')} | {row.get('confidence', '')} | {row.get('location', '')} | {row.get('title', '')} | {row.get('exploit scenario', '')} |" for row in order]
     else:
         doc.append('No confirmed findings in the understood items.')
+    return '\n'.join(doc).rstrip() + '\n'
+
+
+def gaps_md(app, gap_rows):
+    """The application's gaps: every understood unit's `Gaps and questions` rows, blocking first (ADR-0057)."""
+    ordered = sorted(gap_rows, key=lambda row: (gc.GAP_IMPACTS.index(row['impact']) if row['impact'] in gc.GAP_IMPACTS else len(gc.GAP_IMPACTS), row['item'], row['id']))
+    by_kind = {kind: sum(1 for row in ordered if row['kind'] == kind) for kind in gc.GAP_KINDS}
+    by_impact = {impact: sum(1 for row in ordered if row['impact'] == impact) for impact in gc.GAP_IMPACTS}
+    front = docmd.front_matter({'app': app, 'generatedBy': 'rebuild_aggregates.py', 'gaps': len(ordered), 'units': len({row['item'] for row in ordered}),
+                                **{impact: count for impact, count in by_impact.items()}, 'missingSource': by_kind['missing-source'], 'unresolved': by_kind['unresolved'],
+                                'ambiguous': by_kind['ambiguous'], 'unverified': by_kind['unverified']})
+    doc = [front, f'# Gaps and questions - {rr.one_line(app, 80)}', '',
+           f'Generated from the `Gaps and questions` tables of the understood units ({paths.legacy_dir(app)}/*/*/spec.md); do not edit by hand. '
+           "An answer is written in the unit's specification, in the pull request that carries it.", '']
+    if ordered:
+        table = docmd.table(['Item', 'ID', 'Kind', 'Impact', 'Question', 'Where'], [[row['item'], row['id'], row['kind'], row['impact'], row.get('question', ''), row.get('where', '')] for row in ordered])
+        doc.append(table.rstrip('\n'))
+    else:
+        doc.append('No gaps were recorded in the understood items.')
     return '\n'.join(doc).rstrip() + '\n'
 
 
@@ -180,13 +205,14 @@ def main(argv):
         if not cc.APP_RE.match(args.app):
             raise cc.DataError('the application id must be kebab-case')
         docs = os.path.realpath(args.docs)
-        active, rule_rows, objects, finding_rows, rows = rebuild(args.app, docs)
+        active, rule_rows, objects, finding_rows, rows, gap_rows = rebuild(args.app, docs)
         root = os.path.abspath(args.out)
         gen = os.path.join(root, *paths.generated_dir(args.app).split('/'))
         texts = {
             'BUSINESS_RULES.md': business_rules(args.app, rule_rows),
             'DATA_OBJECTS.md': data_objects(args.app, objects),
             'SECURITY_FINDINGS.md': security_findings(args.app, finding_rows),
+            'GAPS.md': gaps_md(args.app, gap_rows),
             'traceability.md': traceability_md(args.app, rows, active, rule_rows, finding_rows),
             'README.md': readme(args.app, active, rows),
         }
@@ -195,7 +221,7 @@ def main(argv):
     except (cc.DataError, rr.DataError, OSError, RecursionError) as error:
         print(f'rebuild_aggregates.py: {error}', file=sys.stderr)
         return 1
-    print(f'{len(rows)} of {len(active)} item(s) understood; {len(rule_rows)} rule(s), {len(finding_rows)} finding(s)')
+    print(f'{len(rows)} of {len(active)} item(s) understood; {len(rule_rows)} rule(s), {len(finding_rows)} finding(s), {len(gap_rows)} gap(s)')
     return 0
 
 

@@ -1,6 +1,6 @@
 # ADR-0051: A numbered document repo layout, each application split into legacy and modern
 
-- Status: Accepted (supersedes the tree of 0042; amends 0038, 0044, 0045, 0050)
+- Status: Accepted (supersedes the tree of 0042; amends 0038, 0044, 0045, 0050; the files of the legacy half are cited `<repository id>/<path>` since 0052)
 - Date: 2026-10-21
 - Decision register: D67
 

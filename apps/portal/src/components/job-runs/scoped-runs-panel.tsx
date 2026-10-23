@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { type JobRunView, jobRunsApi } from "@/lib/api/job-runs";
 import type { ProjectDetail } from "@/lib/api/projects";
 import { formatRelative } from "@/lib/format";
+import { stageLabel } from "@/lib/stages";
 import type { Loader } from "@/lib/use-loader";
 
 export interface ScopedRunsLabels {
@@ -24,6 +25,8 @@ export interface ScopedRunsLabels {
   emptyDescription: string;
   /** What a run's scope holds, singular: "item" or "unit". */
   noun: string;
+  /** The stage the panel is about; runs of the stages that go with it (planning, rebuild) are labelled with theirs. */
+  stage?: string;
 }
 
 interface ScopedRunsPanelProps {
@@ -41,10 +44,10 @@ export function ScopedRunsPanel({ project, runs, loader, canRun, initialRun, lab
   const toast = useToast();
   const [abandoning, setAbandoning] = useState<JobRunView | null>(null);
 
-  async function retry(run: JobRunView): Promise<void> {
+  async function retry(run: JobRunView, options: { fresh?: boolean } = {}): Promise<void> {
     try {
-      const next = await jobRunsApi.retry(project.id, run.id);
-      toast.success("Retry queued", "It skips the agent jobs that succeeded and reruns the rest.");
+      const next = await jobRunsApi.retry(project.id, run.id, options);
+      toast.success(`Attempt ${next.attempt} queued`, options.fresh === true ? "It begins from nothing; the pinned commits stay." : "It skips the steps whose inputs did not change and runs the rest.");
       onStarted(next);
       await onChanged();
     } catch (failure) {
@@ -75,9 +78,10 @@ export function ScopedRunsPanel({ project, runs, loader, canRun, initialRun, lab
                       <li key={run.id} className={index > 0 ? "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)] py-2.5" : "py-2.5"}>
                         <div className="flex flex-wrap items-center gap-2">
                           <RunStatusBadge status={run.status} />
+                          {labels.stage === undefined || run.name === labels.stage ? null : <StatusBadge tone="muted" label={stageLabel(run.name)} />}
                           {run.abandonedAt === undefined ? null : <StatusBadge tone="muted" label="Abandoned" />}
                           {run.scope?.set === undefined ? null : <span className="rounded-full bg-hover px-2 py-0.5 font-mono text-[11px] text-text-secondary">{run.scope.set}</span>}
-                          {run.resumeOf === undefined ? null : <span className="text-[11px] text-text-muted">retry of {run.resumeOf.slice(0, 8)}</span>}
+                          {run.attempt > 1 ? <span className="text-[11px] text-text-muted">attempt {run.attempt}</span> : null}
                           <span className="font-mono text-[11px] text-text-muted">{run.id.slice(0, 8)}</span>
                           <span className="text-[12px] text-text-muted">
                             {formatRelative(run.createdAt)}
@@ -90,10 +94,15 @@ export function ScopedRunsPanel({ project, runs, loader, canRun, initialRun, lab
                           )}
                           <div className="ml-auto flex items-center gap-2">
                             {canRun && run.status === "failed" ? (
-                              <Button size="small" variant="ghost" className="shadow-border" onClick={() => void retry(run)}>
-                                <RotateCcw className="size-3.5" />
-                                Retry
-                              </Button>
+                              <>
+                                <Button size="small" variant="ghost" className="shadow-border" onClick={() => void retry(run)}>
+                                  <RotateCcw className="size-3.5" />
+                                  Retry
+                                </Button>
+                                <Button size="small" variant="ghost" title="Discard what the job kept and begin again from the same commits" onClick={() => void retry(run, { fresh: true })}>
+                                  From scratch
+                                </Button>
+                              </>
                             ) : null}
                             {canRun && openPr ? (
                               <Button size="small" variant="ghost" className="shadow-border" onClick={() => setAbandoning(run)}>

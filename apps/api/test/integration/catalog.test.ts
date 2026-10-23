@@ -30,7 +30,7 @@ export const CATALOG = catalogDocuments(
     { id: "customers/gone", files: ["src/Gone.java"], status: "retired" },
   ],
   ["README.md"],
-  { repo: "legacy", commit: "a".repeat(40) },
+  ["legacy@" + "a".repeat(40), "legacy-data@" + "b".repeat(40)],
   ["src/X.java is claimed by 2 leaves"],
 );
 
@@ -91,6 +91,21 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     });
     for (const [path, text] of Object.entries({ ...invoice, ...understoodUnit("web", "billing/rates", { digest: "sha256:old", commit: "b".repeat(40), runId: "run-merged" }) })) await remote.commit("docs", path, text);
     await remote.commit("docs", "10-applications/web/01-legacy/billing/invoice/findings.md", findingsDocument("billing/invoice", [{ id: "SEC-billing.invoice-01", cwe: "CWE-89", severity: "High", source: "src/Invoice.java:9", title: "SQL built from input" }]));
+    // The invoice specification lists two gaps (ADR-0057); the rates specification predates the table. The application's GAPS.md joins them.
+    const gapsTable = [
+      "| ID | Kind | Question | Where | Impact |",
+      "| --- | --- | --- | --- | --- |",
+      "| GAP-billing.invoice-01 | missing-source | What does copybook TAXTAB hold? | `legacy/src/Invoice.java:41` | blocking |",
+      "| GAP-billing.invoice-02 | ambiguous | Why is the rate 8.25%? | RULE-billing.invoice-1a2b3c4d | risk |",
+    ];
+    await remote.commit("docs", "10-applications/web/01-legacy/billing/invoice/spec.md", ["# billing/invoice", "", "## Gaps and questions", "", ...gapsTable, ""].join("\n"));
+    await remote.commit(
+      "docs",
+      "10-applications/web/_generated/GAPS.md",
+      ["---", 'app: "web"', "gaps: 2", "---", "# Gaps and questions - web", "", "| Item | ID | Kind | Impact | Question | Where |", "| --- | --- | --- | --- | --- | --- |",
+        "| billing/invoice | GAP-billing.invoice-01 | missing-source | blocking | What does copybook TAXTAB hold? | `legacy/src/Invoice.java:41` |",
+        "| billing/invoice | GAP-billing.invoice-02 | ambiguous | risk | Why is the rate 8.25%? | RULE-billing.invoice-1a2b3c4d |", ""].join("\n"),
+    );
     // The topology the assessment summarised, on main.
     await remote.commit(
       "docs",
@@ -170,7 +185,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     const byId = new Map(data.items.map((entry) => [entry.id, entry]));
     expect(data.items.every((entry) => (entry as { assetClass?: string }).assetClass === "code")).toBe(true);
     expect(byId.get("billing/tax")?.pr).toEqual({ runId: "run-open", branch: "kintsugi/legacy-analyst/run-open", url: "https://git.example/pr/1" });
-    expect(byId.get("billing/invoice")?.understood).toEqual({ commit: "b".repeat(40), runId: "run-merged" });
+    expect(byId.get("billing/invoice")?.understood).toEqual({ commit: "legacy@" + "b".repeat(40), runId: "run-merged" });
     expect(byId.get("billing/rates")?.lastRun?.id).toBe("run-failed");
     expect(data.counts).toEqual({ understood: 1, failed: 3, "in-pr": 1, "not-analysed": 1, retired: 1 });
   });
@@ -196,7 +211,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect((await admin.get(`/projects/shop/applications/web/catalog?ref=${"0".repeat(40)}`)).status).toBe(404);
   });
 
-  type RunView = { id: string; name: string; status: string; scope?: { items: string[] }; resumeOf?: string; abandonedAt?: string };
+  type RunView = { id: string; name: string; status: string; attempt: number; scope?: { items: string[] }; abandonedAt?: string };
   type Failure = { message: string; details?: { conflicts?: Array<{ item: string; runId?: string; state: string }>; unknown?: string[] } };
 
   it("starts understand on a selection, pinned to the catalog's commit, and refuses unknown, retired, blocked and oversized selections", async () => {
@@ -248,14 +263,21 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect((await admin.request("POST", "/projects/shop/job-runs/run-open/retry")).status).toBe(409);
     const retried = await admin.request<RunView>("POST", "/projects/shop/job-runs/run-failed/retry");
     expect(retried.status).toBe(202);
-    expect(retried.body.data).toMatchObject({ name: "understand", resumeOf: "run-failed", scope: { items: ["customers/update", "billing/rates"] } });
-    const inputs = await app.db.query<{ inputs: { documentsCommit: string; resumeOf: string } }>("select inputs from workflow.job_run where id = $1", [retried.body.data!.id]);
-    expect(inputs.rows[0]?.inputs).toMatchObject({ documentsCommit: "c".repeat(40), resumeOf: "run-failed" });
-    // The same through the selection endpoint.
-    await app.db.query("update workflow.job_run set status = 'cancelled' where id = $1", [retried.body.data!.id]);
+    // The same run goes back in the queue as its next attempt (ADR-0055), on the same scope and documents.
+    expect(retried.body.data).toMatchObject({ id: "run-failed", name: "understand", status: "queued", attempt: 2, scope: { items: ["customers/update", "billing/rates"] } });
+    const inputs = await app.db.query<{ inputs: { documentsCommit: string; fresh: boolean } }>("select inputs from workflow.job_run where id = $1", ["run-failed"]);
+    expect(inputs.rows[0]?.inputs).toMatchObject({ documentsCommit: "c".repeat(40), fresh: false });
+    expect((await admin.request("POST", "/projects/shop/job-runs/run-failed/retry")).status).toBe(409);
+    // The same through the selection endpoint, from scratch.
+    await app.db.query("update workflow.job_run set status = 'failed' where id = 'run-failed'");
     const resumed = await admin.request<RunView>("POST", "/projects/shop/applications/web/understand/runs", { body: { resumeOf: "run-failed" } });
     expect(resumed.status).toBe(202);
-    expect(resumed.body.data?.resumeOf).toBe("run-failed");
+    expect(resumed.body.data).toMatchObject({ id: "run-failed", attempt: 3 });
+    await app.db.query("update workflow.job_run set status = 'failed' where id = 'run-failed'");
+    const fresh = await admin.request<RunView>("POST", "/projects/shop/job-runs/run-failed/retry", { body: { fresh: true } });
+    expect(fresh.body.data).toMatchObject({ id: "run-failed", attempt: 4 });
+    expect((await app.db.query<{ inputs: { fresh: boolean } }>("select inputs from workflow.job_run where id = 'run-failed'")).rows[0]?.inputs.fresh).toBe(true);
+    await app.db.query("update workflow.job_run set status = 'cancelled' where id = 'run-failed'");
   });
 
   it("serves the understand results per view for the application (generated) or one item (its own files)", async () => {
@@ -281,6 +303,20 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect(map.body.data).toMatchObject({ stage: "map", empty: false, scope: {} });
     expect(map.body.data?.topology?.nodes.map((node) => node.id)).toContain("INV");
     expect((await admin.get<Results>(`${base}?view=extract-rules`)).body.data?.empty).toBe(true);
+    type GapsView = Results & { gaps: Array<{ id: string; kind: string; impact: string; item?: string; where: string }>; gapCounts: { total: number; units: number; byImpact: Record<string, number> }; noSection?: boolean };
+    const gaps = await admin.get<GapsView>(`${base}?view=gaps`);
+    expect(gaps.body.data).toMatchObject({ stage: "gaps", empty: false, scope: {}, gapCounts: { total: 2, units: 1, byImpact: { blocking: 1, risk: 1, note: 0 } } });
+    expect(gaps.body.data?.gaps.map((gap) => [gap.item, gap.id, gap.kind, gap.impact])).toEqual([
+      ["billing/invoice", "GAP-billing.invoice-01", "missing-source", "blocking"],
+      ["billing/invoice", "GAP-billing.invoice-02", "ambiguous", "risk"],
+    ]);
+    const ownGaps = await admin.get<GapsView>(`${base}?view=gaps&item=billing/invoice`);
+    expect(ownGaps.body.data).toMatchObject({ stage: "gaps", empty: false, scope: { item: "billing/invoice" }, gapCounts: { total: 2 } });
+    expect(ownGaps.body.data?.gaps[0]).toMatchObject({ id: "GAP-billing.invoice-01", item: "billing/invoice", where: "legacy/src/Invoice.java:41" });
+    expect(ownGaps.body.data?.noSection).toBeUndefined();
+    // A specification written before the table has no section: no gaps, and the view says so.
+    const oldGaps = await admin.get<GapsView>(`${base}?view=gaps&item=billing/rates`);
+    expect(oldGaps.body.data).toMatchObject({ gaps: [], noSection: true, gapCounts: { total: 0 } });
     expect((await admin.get(`${base}?view=assess`)).status).toBe(400);
     expect((await admin.get(`${base}?view=map&item=..%2Fx`)).status).toBe(400);
   });

@@ -5,10 +5,15 @@
 // outputs are published (the stage's out/) and which are intermediate (its work/).
 //
 // Groups (parallel, forEach) give every member the same inputs: their outputs are staged and
-// merged into the stage only when the whole group has finished.
+// merged into the stage when the whole group has finished (also when a member failed: what the others wrote
+// is kept for the next attempt of the job, ADR-0055).
+//
+// A later attempt of the job skips a step that already succeeded when nothing it was given changed (StepReuse):
+// the executor keeps the upstream chain, a hash of everything that came before a step in the plan.
 
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { chainAfter, contributionOf, digestOf, type LedgerOutput } from "../workspace/ledger.js";
 import { copyTree } from "./files.js";
 import { type GateDecider, JobFailure } from "./model.js";
 import {
@@ -43,17 +48,35 @@ export interface LeafPlacement {
   work: string;
   /** true, or the document-repo path prefixes that are intermediate. */
   intermediate: boolean | readonly string[];
+  /** The step's key in the plan (`<step id>[#<item>][@<round>]`), which names its folder in the job workspace; set by the executor. */
+  key?: string;
+}
+
+/** What the executor knows of a step's place in the plan, added to its result (the runner does not set it). */
+interface Contribution {
+  /** What the step adds to the upstream chain of the steps after it. */
+  contribution?: string;
 }
 
 export type LeafResult =
-  | { id: string; ok: true; summary: Record<string, unknown>; stdout?: string; agents: number }
-  | { id: string; ok: false; reason: string; detail?: string };
+  | ({ id: string; ok: true; summary: Record<string, unknown>; stdout?: string; agents: number; outputs?: LedgerOutput[]; digest?: string } & Contribution)
+  | ({ id: string; ok: false; reason: string; detail?: string } & Contribution);
+
+/** What an earlier attempt of the job recorded about a step (the ledger, ADR-0055). */
+export interface StepReuse {
+  /** What the step would run with, given the chain of the steps before it. */
+  fingerprint(spec: LeafRun, upstream: string): Promise<string>;
+  /** The step's success in an earlier attempt, if its fingerprint is this one and what it wrote is still there. */
+  settled(key: string, fingerprint: string): Promise<{ digest: string } | undefined>;
+  /** Records how the step ended. */
+  record(key: string, entry: { status: "succeeded" | "failed"; fingerprint: string; digest: string; outputs: LedgerOutput[]; reason?: string }): Promise<void>;
+}
 
 export interface ExecutorDeps {
   plan: StagePlan;
   /** The stage run, for gate requests. */
   run: { id: string; projectId: string; applicationId?: string };
-  values: { app: string; repo: string; commit: string };
+  values: { app: string; sources: string };
   /** The stage's directories: declared documents (in), intermediate outputs (work), published outputs (out). */
   dirs: { root: string; in: string; work: string; out: string };
   limits: { maxAgents: number; concurrency: number };
@@ -65,20 +88,24 @@ export interface ExecutorDeps {
   /** The selection of a scoped run (ADR-0033). */
   scope?: StageScope;
   /**
-   * Resume of a failed run: the agent and workflow leaves and forEach items that succeeded in it
-   * (keys of stepKey()); their outputs are already in the stage's out/ and work/, so they are
-   * not run again. Script steps always run again.
+   * Later attempts of the job: the agent and workflow steps (and forEach items) that already succeeded with
+   * the same fingerprint are not run again; their outputs are in the stage's out/ and work/. Script steps
+   * always run again: they are cheap, deterministic, and the guard before publication.
    */
-  completed?: ReadonlySet<string>;
-  /** Resume: gate decisions are re-read from the original run's durable stage-decision record. */
+  /** Earlier run id for legacy persisted gate decisions. */
   resumeOf?: string;
+  reuse?: StepReuse;
+  /** Gate choices already accepted in a previous attempt. */
+  gateChoices?: ReadonlyMap<string, string>;
+  /** Record the choice for a later attempt. */
+  onGate?: (id: string, choice: string) => Promise<void>;
 }
 
-/** The key of a leaf run in a resume's `completed` set: `<step id>[#<forEach key>][@<round>]`. */
+/** The key of a leaf step: `<step id>[#<forEach key>][@<round>]`. It names the step in the ledger and its folder in the workspace. */
 export const stepKey = (step: { id: string; key?: string; round?: number }): string =>
   `${step.id}${step.key === undefined ? "" : `#${step.key}`}${step.round === undefined || step.round === 0 ? "" : `@${step.round}`}`;
 
-/** A failed stage, with what it recorded so far (persisted in the run's summary for a resume). */
+/** A failed stage, with what it recorded so far (persisted in the run's summary). */
 export class StageFailure extends JobFailure {
   constructor(
     message: string,
@@ -97,7 +124,7 @@ export interface StepRecord {
   round?: number;
   key?: string;
   reason?: string;
-  /** A resume took this step's outputs from the failed run instead of running it. */
+  /** An earlier attempt already ran this step with the same fingerprint; its outputs were kept. */
   reused?: boolean;
 }
 
@@ -133,9 +160,12 @@ export class StagePlanExecutor {
   #agents = 0;
   #groups = 0;
   #round = 0;
+  /** The upstream chain: everything that came before the next step in the plan (see ledger.ts). */
+  #chain: string;
 
   constructor(deps: ExecutorDeps) {
     this.#deps = deps;
+    this.#chain = digestOf(["stage", deps.plan.id]);
   }
 
   /** Runs the plan; a failure is thrown as a StageFailure carrying the steps recorded so far. */
@@ -183,8 +213,8 @@ export class StagePlanExecutor {
   // ---------------------------------------------------------------------------
 
   #values(extra: Placeholders = {}): Placeholders {
-    const { app, repo, commit } = this.#deps.values;
-    return { app, repo, commit, run: this.#deps.run.id, ...(this.#round === 0 ? {} : { round: String(this.#round) }), ...extra };
+    const { app, sources } = this.#deps.values;
+    return { app, sources, run: this.#deps.run.id, ...(this.#round === 0 ? {} : { round: String(this.#round) }), ...extra };
   }
 
   #context(): StageContext {
@@ -248,7 +278,7 @@ export class StagePlanExecutor {
       case "script":
       case "agent":
       case "workflow":
-        return this.#leafOrFail(step, this.#placement(step));
+        return this.#fold((await this.#leafOrFail(step, this.#placement(step))).contribution);
       case "parallel":
         return this.#group(
           step.id,
@@ -271,9 +301,15 @@ export class StagePlanExecutor {
     return { inputs: [this.#deps.dirs.in, this.#deps.dirs.work, this.#deps.dirs.out], out: dirs.out, work: dirs.work, intermediate };
   }
 
-  async #leafOrFail(step: LeafStep, placement: LeafPlacement, extra: Placeholders = {}): Promise<void> {
+  async #leafOrFail(step: LeafStep, placement: LeafPlacement, extra: Placeholders = {}): Promise<LeafResult> {
     const result = await this.#leaf(step, placement, extra);
     if (!result.ok) throw new JobFailure(`Step ${step.id} failed: ${result.reason}`);
+    return result;
+  }
+
+  /** A sequential step has finished: what it adds to the chain is what the steps after it depend on. */
+  #fold(contribution: string | undefined): void {
+    if (contribution !== undefined) this.#chain = chainAfter(this.#chain, [contribution]);
   }
 
   /** Runs one leaf (with its repair loop for scripts); records it; never throws for a failed step. */
@@ -281,35 +317,41 @@ export class StagePlanExecutor {
     return this.#deps.signal?.aborted === true;
   }
 
-  async #leaf(step: LeafStep, placement: LeafPlacement, extra: Placeholders = {}, abort?: AbortSignal): Promise<LeafResult> {
-    let first = await this.#start(step, placement, extra, abort);
+  /** `upstream`: the chain the step starts from; the members of a group all start from the chain before the group. */
+  async #leaf(step: LeafStep, placement: LeafPlacement, extra: Placeholders = {}, abort?: AbortSignal, upstream: string = this.#chain): Promise<LeafResult> {
+    let first = await this.#start(step, placement, extra, abort, upstream);
     if (!first.ok && step.kind === "agent" && TRANSIENT_PROVIDER_FAILURE.test(first.reason) && this.#deps.signal?.aborted !== true) {
       // A provider hiccup (content filter, overload, dropped connection) is not the step's fault: one more try.
       await this.#deps.log(`step ${step.id}: the provider failed (${first.reason}); trying once more`, { step: step.id, retry: true });
-      first = await this.#start(step, placement, extra, abort);
+      first = await this.#start(step, placement, extra, abort, upstream);
     }
     if (first.ok || step.kind !== "script" || step.repair === undefined || this.#deps.signal?.aborted === true) return first;
     await this.#deps.log(`step ${step.id} failed; ${step.repair.agent} gets the error once to fix it`, { step: step.id, repair: step.repair.id });
     const error = first.detail ?? first.reason;
-    const repaired = await this.#start(step.repair, this.#placement(step.repair, { ...extra, error }, { out: placement.out, work: placement.work }), { ...extra, error }, abort);
+    const repaired = await this.#start(step.repair, this.#placement(step.repair, { ...extra, error }, { out: placement.out, work: placement.work }), { ...extra, error }, abort, upstream);
     if (!repaired.ok) return repaired;
-    return this.#start(step, placement, extra, abort);
+    return this.#start(step, placement, extra, abort, upstream);
   }
 
-  async #start(step: LeafStep, placement: LeafPlacement, extra: Placeholders, abort?: AbortSignal): Promise<LeafResult> {
+  async #start(step: LeafStep, placement: LeafPlacement, extra: Placeholders, abort: AbortSignal | undefined, upstream: string): Promise<LeafResult> {
     const values = this.#values(extra);
     const key = stepKey({ id: step.id, ...(extra.key === undefined ? {} : { key: extra.key }), round: this.#round });
-    if (step.kind !== "script" && this.#deps.completed?.has(key) === true) {
-      this.#record({ id: step.id, kind: step.kind, status: "succeeded", reused: true, ...(extra.key === undefined ? {} : { key: extra.key }) });
-      await this.#deps.log(`step ${key} succeeded in the resumed run: not run again`, { step: step.id, reused: true });
-      return { id: "", ok: true, summary: { reused: true }, agents: 0 };
-    }
     const spec = await this.#spec(step, values);
+    const reuse = this.#deps.reuse;
+    const fingerprint = reuse === undefined ? undefined : await reuse.fingerprint(spec, upstream);
+    if (reuse !== undefined && fingerprint !== undefined && step.kind !== "script") {
+      const settled = await reuse.settled(key, fingerprint);
+      if (settled !== undefined) {
+        this.#record({ id: step.id, kind: step.kind, name: spec.name, status: "succeeded", reused: true, ...(extra.key === undefined ? {} : { key: extra.key }) });
+        await this.#deps.log(`step ${key} succeeded in an earlier attempt and nothing it was given changed: not run again`, { step: step.id, reused: true });
+        return { id: "", ok: true, summary: { reused: true }, agents: 0, contribution: contributionOf(key, fingerprint, settled.digest) };
+      }
+    }
     if (spec.kind === "agent" && this.#agents >= this.#deps.limits.maxAgents) {
       throw new JobFailure(`Stage agent cap reached (${this.#deps.limits.maxAgents} agent jobs, KINTSUGI_STAGE_MAX_AGENTS) before step ${step.id}`);
     }
     if (spec.kind === "agent") this.#agents += 1;
-    const result = await this.#deps.runLeaf(spec, placement, abort);
+    const result = await this.#deps.runLeaf(spec, { ...placement, key }, abort);
     if (result.ok) {
       if (spec.kind === "workflow") this.#agents += result.agents;
       if (result.stdout !== undefined) this.#stdout.set(step.id, result.stdout.slice(-MAX_STDOUT));
@@ -323,7 +365,12 @@ export class StagePlanExecutor {
       ...(extra.key === undefined ? {} : { key: extra.key }),
       ...(result.ok ? {} : { reason: result.reason }),
     });
-    return result;
+    if (reuse === undefined || fingerprint === undefined) return result;
+    // A script is a function of what it is given, which the fingerprint covers; what it wrote may carry a timestamp. An
+    // agent's output is what the steps after it were given, so its content goes into the chain.
+    const digest = !result.ok ? "failed" : step.kind === "script" ? "script" : (result.digest ?? "");
+    await reuse.record(key, { status: result.ok ? "succeeded" : "failed", fingerprint, digest, outputs: result.ok ? (result.outputs ?? []) : [], ...(result.ok ? {} : { reason: result.reason }) });
+    return { ...result, contribution: contributionOf(key, fingerprint, digest) };
   }
 
   /** The child run of a leaf: stage values filled now, workspace paths by the child itself. */
@@ -377,6 +424,7 @@ export class StagePlanExecutor {
   /** Members run with the same inputs; their outputs are merged once all have finished. */
   async #group(id: string, members: ReadonlyArray<{ step: LeafStep; extra: Placeholders }>, concurrency: number, tolerateFailures: boolean): Promise<void> {
     this.#groups += 1;
+    const before = this.#chain;
     const staging = join(this.#deps.dirs.root, `group-${this.#groups}`);
     const dirs = { out: join(staging, "out"), work: join(staging, "work") };
     await mkdir(dirs.out, { recursive: true });
@@ -396,7 +444,7 @@ export class StagePlanExecutor {
             if (stop.signal.aborted) return { id: "", ok: false, reason: "not started: another step of the group failed" };
             let result: LeafResult;
             try {
-              result = await this.#leaf(member.step, this.#placement(member.step, member.extra, dirs), member.extra, stop.signal);
+              result = await this.#leaf(member.step, this.#placement(member.step, member.extra, dirs), member.extra, stop.signal, before);
             } catch (error) {
               result = { id: "", ok: false, reason: error instanceof Error ? error.message : String(error) };
             }
@@ -412,12 +460,19 @@ export class StagePlanExecutor {
       this.#checkAborted();
       const failed = results.flatMap((result, index) => (result.ok ? [] : [{ step: enabled[index]!.step.id, reason: result.reason }]));
       if (failed.length > 0 && !tolerateFailures) {
+        // What the members that succeeded wrote is kept: the next attempt of the job skips them.
+        await copyTree(dirs.out, this.#deps.dirs.out);
+        await copyTree(dirs.work, this.#deps.dirs.work);
         const first = firstFailure ?? failed[0]!;
         throw new JobFailure(`Step ${id} failed: ${first.step}: ${first.reason}${failed.length > 1 ? ` (and ${failed.length - 1} more)` : ""}`);
       }
       if (failed.length > 0) await this.#deps.log(`step ${id}: ${failed.length} of ${results.length} failed and are left out`, { step: id, failed: failed.length });
       await copyTree(dirs.out, this.#deps.dirs.out);
       await copyTree(dirs.work, this.#deps.dirs.work);
+      this.#chain = chainAfter(
+        before,
+        results.flatMap((result) => (result.contribution === undefined ? [] : [result.contribution])),
+      );
     } finally {
       await rm(staging, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
     }
@@ -447,7 +502,7 @@ export class StagePlanExecutor {
           this.#checkAborted();
           if (!(await this.#enabled(member))) continue;
           if (member.kind === "gate") await this.#gate(member);
-          else await this.#leafOrFail(member, this.#placement(member, { maxRounds: String(step.max) }), { maxRounds: String(step.max) });
+          else this.#fold((await this.#leafOrFail(member, this.#placement(member, { maxRounds: String(step.max) }), { maxRounds: String(step.max) })).contribution);
         }
         if (await step.until(this.#context())) {
           await this.#deps.log(`step ${step.id}: done after round ${round}`, { step: step.id, rounds: round });
@@ -463,18 +518,26 @@ export class StagePlanExecutor {
   async #gate(step: GateStep): Promise<void> {
     const question = await this.#resolve(step.question);
     const { run, plan, gates, signal } = this.#deps;
-    const decision = await gates.decide(
-      { runId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }), stage: plan.id, gate: step.id, question, options: step.options, default: step.default, decisionMode: step.decisionMode, ...(this.#deps.resumeOf === undefined ? {} : { resumeOf: this.#deps.resumeOf }) },
-      signal,
-    );
-    if (!step.options.includes(decision.choice)) throw new JobFailure(`Gate ${step.id} returned a choice outside its allowed options`);
-    if (step.decisionMode === "required-human" && (decision.defaulted || decision.by === undefined || decision.by.trim() === "")) {
-      throw new JobFailure(`Gate ${step.id} requires a decision from an authenticated human`);
+    const replayed = this.#deps.gateChoices?.get(step.id);
+    const decision = replayed !== undefined && step.options.includes(replayed)
+      ? { choice: replayed, defaulted: false, by: "an earlier attempt" }
+      : await gates.decide(
+          { runId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }), stage: plan.id, gate: step.id, question, options: step.options, default: step.default, decisionMode: step.decisionMode, ...(this.#deps.resumeOf === undefined ? {} : { resumeOf: this.#deps.resumeOf }) },
+          signal,
+        );
+    if (!step.options.includes(decision.choice)) throw new JobFailure("Gate " + step.id + " returned a choice outside its allowed options");
+    if (replayed === undefined && step.decisionMode === "required-human" && (decision.defaulted || decision.by === undefined || decision.by.trim() === "")) {
+      throw new JobFailure("Gate " + step.id + " requires a decision from an authenticated human");
     }
-    if (step.decisionMode === "default" && (!decision.defaulted || decision.choice !== step.default)) {
-      throw new JobFailure(`Gate ${step.id} must use its documented default`);
+    if (replayed === undefined && step.decisionMode === "default" && (!decision.defaulted || decision.choice !== step.default)) {
+      throw new JobFailure("Gate " + step.id + " must use its documented default");
+    }
+    if (replayed !== undefined && step.decisionMode === "default" && decision.choice !== step.default) {
+      throw new JobFailure("Gate " + step.id + " must use its documented default");
     }
     const choice = decision.choice;
+    await this.#deps.onGate?.(step.id, choice);
+    this.#chain = chainAfter(this.#chain, [digestOf(["gate", step.id, choice])]);
     this.#gates.set(step.id, { id: step.id, question, choice, defaulted: decision.defaulted, ...(decision.by === undefined ? {} : { by: decision.by }) });
     await this.#deps.log(decision.defaulted ? `gate defaulted: ${step.id} — ${question} → ${choice}` : `gate decided: ${step.id} → ${choice}${decision.by === undefined ? "" : ` by ${decision.by}`}`, {
       gate: step.id,

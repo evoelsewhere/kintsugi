@@ -46,6 +46,8 @@ describe.skipIf(!hasDatabase)("git servers and repositories (integration)", () =
       ["POST", "/admin/git-servers/any/test"],
       ["GET", "/admin/git-repositories"],
       ["POST", "/admin/git-repositories"],
+      ["GET", "/admin/git-repositories/any/branches"],
+      ["PATCH", "/admin/git-repositories/any"],
       ["DELETE", "/admin/git-repositories/any"],
     ] as const) {
       const response = await client.request(method, path, method === "GET" || method === "DELETE" ? {} : { body: {} });
@@ -326,10 +328,22 @@ describe.skipIf(!hasDatabase)("git servers and repositories (integration)", () =
     const missing = await call("POST", "/admin/git-repositories", { id: "missing", serverId: "internal", url: `${remote.baseUrl}/missing.git` });
     expect(missing.status).toBe(400);
 
+    // The branch Kintsugi follows can be moved to another branch of the server; the worker then syncs it again.
+    await remote.commit("legacy-app", "RELEASE.md", "release\n", "release");
+    const branches = await call("GET", "/admin/git-repositories/legacy-app/branches");
+    expect(branches.body.data).toEqual({ branches: ["release", "trunk"], remoteDefault: "trunk", current: "trunk" });
+    expect((await call("PATCH", "/admin/git-repositories/legacy-app", { defaultBranch: "nope" })).status).toBe(400);
+    expect((await call("PATCH", "/admin/git-repositories/legacy-app", { defaultBranch: "bad branch" })).status).toBe(400);
+    await app.db.query("update admin.git_repository set sync_status = 'ready' where id = 'legacy-app'");
+    const moved = await call("PATCH", "/admin/git-repositories/legacy-app", { defaultBranch: "release" });
+    expect(moved.status).toBe(200);
+    expect(moved.body.data).toMatchObject({ id: "legacy-app", defaultBranch: "release", syncStatus: "pending" });
+    expect((await call("PATCH", "/admin/git-repositories/missing", { defaultBranch: "release" })).status).toBe(404);
+
     // A server with repositories cannot be removed or moved away from them.
     expect((await call("DELETE", "/admin/git-servers/internal")).status).toBe(409);
-    const moved = await call("PATCH", "/admin/git-servers/internal", { kind: "plain-git", name: "Internal", baseUrl: "https://moved.example.invalid", authType: "none" });
-    expect(moved.status).toBe(409);
+    const rehosted = await call("PATCH", "/admin/git-servers/internal", { kind: "plain-git", name: "Internal", baseUrl: "https://moved.example.invalid", authType: "none" });
+    expect(rehosted.status).toBe(409);
 
     expect((await call("DELETE", "/admin/git-repositories/legacy-app")).status).toBe(204);
     expect((await call("DELETE", "/admin/git-servers/internal")).status).toBe(204);

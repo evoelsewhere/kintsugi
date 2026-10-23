@@ -79,7 +79,7 @@ Mock run: no assessment highlight was settled.
 `;
 
 /** The sections of an AS-IS unit specification (understand stage), each with a stub line. */
-const SPEC_SECTIONS = ["Purpose", "Entry points", "Main flows", "Dependencies", "Data objects", "Business rules applied", "Security findings and risks", "Configuration", "Error handling", "Source references", "Open questions"];
+const SPEC_SECTIONS = ["Purpose", "Entry points", "Main flows", "Dependencies", "Data objects", "Business rules applied", "Security findings and risks", "Configuration", "Error handling", "Source references", "Gaps and questions"];
 const UNIT_SPEC = /^10-applications\/[^/]+\/01-legacy\/[a-z0-9][^/]*\/[^/]+\/spec\.md$/;
 
 function mockFile(path: string, agent: string, app: string): string {
@@ -139,10 +139,10 @@ const exists = (path: string): Promise<boolean> =>
     () => false,
   );
 
-/** The first source file of the checkout (sorted), cited as `path:1-1`. */
+/** The first source file of the checkout (sorted), cited as `path:1-1`; the checkout holds a folder per repository, each with its own `.git`. */
 async function citation(src: string | undefined): Promise<string> {
   if (src === undefined) return "README.md:1-1";
-  const files = (await listFiles(src).catch(() => [])).filter((file) => !file.path.startsWith(".git/") && file.path !== ".git");
+  const files = (await listFiles(src).catch(() => [])).filter((file) => !/(^|\/)\.git(\/|$)/.test(file.path));
   const code = files.find((file) => !/\.(md|txt|json|ya?ml)$/i.test(file.path)) ?? files[0];
   return `${code?.path ?? "README.md"}:1-1`;
 }

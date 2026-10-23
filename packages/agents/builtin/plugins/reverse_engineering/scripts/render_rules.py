@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the extract-rules workflow's result into BUSINESS_RULES.md, one file per rule, and DATA_OBJECTS.md.
 
-    python3 render_rules.py <app> --out DIR --assessment DIR [--date YYYY-MM-DD] [--source-commit SHA]
+    python3 render_rules.py <app> --out DIR --assessment DIR [--date YYYY-MM-DD] [--sources SPEC]
 
 Reads rules_result.json (the object the workflow returned, saved by the orchestrator: --result,
 else <assessment>/rules_result.json, where --assessment is the folder holding it: the document
@@ -24,6 +24,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import docmd  # noqa: E402
+import paths  # noqa: E402
 
 MAX_RESULT_BYTES = 5_000_000
 MAX_RECORDS = 10_000
@@ -190,10 +191,15 @@ def main(argv):
     ap.add_argument('--assessment', required=True, help='the 10-applications/<app>/01-legacy/understand/ folder of the document repository (rules_result.json is read from it)')
     ap.add_argument('--out', required=True, help='the folder BUSINESS_RULES.md, rules/ and DATA_OBJECTS.md are written to')
     ap.add_argument('--date', default='', help='the date written in the version history (default: today, UTC)')
-    ap.add_argument('--source-commit', default='', help='the commit of the analysed source, written in the version history')
+    ap.add_argument('--sources', default='', help='the legacy repositories and their commits (`id@commit,id@commit`), written in the version history')
     args = ap.parse_args(argv[1:])
     if not args.assessment.strip() or not args.out.strip():
         print('render_rules.py: --assessment and --out must be non-empty explicit paths', file=sys.stderr)
+        return 1
+    try:
+        revision = paths.sources_spec(paths.parse_sources(args.sources)) if args.sources else ''
+    except ValueError as error:
+        print(f'render_rules.py: --sources: {error}', file=sys.stderr)
         return 1
     system = args.app
     assessment = os.path.realpath(os.path.expanduser(args.assessment))
@@ -233,8 +239,8 @@ def main(argv):
     rule_files = {}
     rows = []
     for _, r in numbered:
-        history = [[1, date, 'Rule extracted', args.source_commit]]
-        rule_files[f"rules/{rule_docs.file_name(r['id'])}"] = rule_docs.render_rule_file(system, None, r, 1, history, commit=args.source_commit)
+        history = [[1, date, 'Rule extracted', revision]]
+        rule_files[f"rules/{rule_docs.file_name(r['id'])}"] = rule_docs.render_rule_file(system, None, r, 1, history, commit=revision)
         rows.append(rule_docs.index_row(r['id'], r.get('name'), r.get('category'), r.get('priority'), r.get('confidence'), 1, rule_docs.status_of(r), split_citation(r.get('source'))[0], f"rules/{rule_docs.file_name(r['id'])}"))
 
     doc = [docmd.front_matter({'app': system, 'generatedBy': 'render_rules.py', 'catalogVersion': 1, 'rules': len(rules), 'p0': sum(1 for r in rules if r.get('priority') == 'P0')}),

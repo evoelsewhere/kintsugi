@@ -192,4 +192,73 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     expect(await missing.json()).toMatchObject({ success: false, statusCode: 404 });
     expect((await fetch(`${app.baseUrl}/projects/billing/job-runs/${runId}/events`)).status).toBe(401);
   });
+
+  it("records every legacy repository of an application on its run, in the order they were linked, and a retry keeps their commits", async () => {
+    // Two legacy repositories on one application (ADR-0052): the run reads both, not just the first.
+    for (const id of ["multi-skeleton", "multi-unities"]) {
+      await app.db.query("insert into admin.git_repository (id, server_id, url) values ($1, 'github', $2)", [id, `https://github.example.invalid/org/${id}.git`]);
+    }
+    expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "multi", name: "multi" } })).status).toBe(201);
+    for (const repositoryId of ["multi-skeleton", "multi-unities"]) {
+      expect((await admin.request("POST", "/admin/projects/billing/applications/multi/repositories", { body: { repositoryId, role: "legacy" } })).status).toBe(201);
+    }
+    const started = await admin.request<RunView & { sources?: Array<{ repositoryId: string; commit?: string }>; sourceRepositoryId?: string }>("POST", "/projects/billing/applications/multi/stages/assess/run");
+    expect(started.status).toBe(202);
+    const run = started.body.data!;
+    expect(run.sourceRepositoryId).toBe("multi-skeleton");
+    expect(run.sources).toEqual([{ repositoryId: "multi-skeleton", role: "legacy" }, { repositoryId: "multi-unities", role: "legacy" }]);
+    const stored = await app.db.query<{ sources: unknown; source_repository_id: string }>("select sources, source_repository_id from workflow.job_run where id = $1", [run.id]);
+    expect(stored.rows[0]).toEqual({ sources: [{ repositoryId: "multi-skeleton", role: "legacy" }, { repositoryId: "multi-unities", role: "legacy" }], source_repository_id: "multi-skeleton" });
+
+    // The worker resolves the commits and the run fails: a retry reads the same commits of both repositories.
+    const first = "a".repeat(40);
+    const second = "b".repeat(40);
+    await app.db.query("update workflow.job_run set status = 'failed', failure_reason = 'x', source_commit = $2, sources = $3::jsonb where id = $1", [
+      run.id,
+      first,
+      JSON.stringify([{ repositoryId: "multi-skeleton", commit: first, role: "legacy" }, { repositoryId: "multi-unities", commit: second, role: "legacy" }]),
+    ]);
+    const retried = await admin.request<RunView & { attempt: number; sources?: Array<{ repositoryId: string; commit?: string }> }>("POST", `/projects/billing/job-runs/${run.id}/retry`);
+    expect(retried.status).toBe(202);
+    // The same run, the next attempt, on the same commits of both repositories.
+    expect(retried.body.data).toMatchObject({ id: run.id, status: "queued", attempt: 2 });
+    expect(retried.body.data?.sources).toEqual([
+      { repositoryId: "multi-skeleton", commit: first, role: "legacy" },
+      { repositoryId: "multi-unities", commit: second, role: "legacy" },
+    ]);
+
+    // A run recorded before the list existed shows its one repository.
+    await app.db.query("insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, source_commit, status) values ('old-run', 'billing', 'web', 'stage', 'assess', 'billing-legacy', $1, 'succeeded')", [first]);
+    const old = await admin.get<RunView & { sources?: Array<{ repositoryId: string; commit?: string }> }>("/projects/billing/job-runs/old-run");
+    expect(old.body.data?.sources).toEqual([{ repositoryId: "billing-legacy", commit: first }]);
+  });
+
+  it("mounts the target repositories of an application beside the legacy ones, and shows the attempts of a job (ADR-0055)", async () => {
+    for (const id of ["tobe-legacy", "tobe-api"]) {
+      await app.db.query("insert into admin.git_repository (id, server_id, url) values ($1, 'github', $2)", [id, `https://github.example.invalid/org/${id}.git`]);
+    }
+    expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "tobe", name: "tobe" } })).status).toBe(201);
+    expect((await admin.request("POST", "/admin/projects/billing/applications/tobe/repositories", { body: { repositoryId: "tobe-legacy", role: "legacy" } })).status).toBe(201);
+    expect((await admin.request("POST", "/admin/projects/billing/applications/tobe/repositories", { body: { repositoryId: "tobe-api", role: "target", component: "api" } })).status).toBe(201);
+
+    const started = await admin.request<RunView & { sources?: unknown[]; sourceRepositoryId?: string }>("POST", "/projects/billing/applications/tobe/stages/assess/run");
+    expect(started.status, started.raw).toBe(202);
+    const run = started.body.data!;
+    expect(run.sourceRepositoryId).toBe("tobe-legacy");
+    expect(run.sources).toEqual([{ repositoryId: "tobe-legacy", role: "legacy" }, { repositoryId: "tobe-api", role: "target" }]);
+
+    // A job that failed twice: its attempts are listed oldest first.
+    await app.db.query(
+      "update workflow.job_run set status = 'failed', failure_reason = 'x', attempt = 3, attempts = $2::jsonb where id = $1",
+      [run.id, JSON.stringify([{ n: 1, status: "failed", startedAt: "2026-10-22T08:00:00Z", finishedAt: "2026-10-22T08:10:00Z", reason: "boom" }, { n: 2, status: "failed", reason: "again" }])],
+    );
+    await app.db.query("insert into workflow.job_event (job_run_id, kind, message, data, attempt) values ($1, 'log', 'resuming', '{}', 2)", [run.id]);
+    const detail = await admin.get<RunView & { attempt: number; attempts: unknown[] }>(`/projects/billing/job-runs/${run.id}`);
+    expect(detail.body.data).toMatchObject({ attempt: 3, attempts: [{ n: 1, status: "failed", reason: "boom" }, { n: 2, status: "failed", reason: "again" }] });
+    // The events carry their attempt; the run list shows the attempt.
+    const events = await app.db.query<{ attempt: number }>("select attempt from workflow.job_event where job_run_id = $1 order by id desc limit 1", [run.id]);
+    expect(events.rows[0]?.attempt).toBe(2);
+    const listed = await admin.get<{ items: Array<{ id: string; attempt: number }> }>("/projects/billing/job-runs?applicationId=tobe");
+    expect(listed.body.data?.items.find((item) => item.id === run.id)).toMatchObject({ attempt: 3 });
+  });
 });

@@ -1,8 +1,8 @@
-# ADR-0052: Coding Agent Workflow through the CLI and stdio MCP
+# ADR-0059: Coding Agent Workflow through the CLI and stdio MCP
 
 - Status: Accepted
 - Date: 2026-10-20
-- Decision register: D17, D18, D19, D43, D68
+- Decision register: D17, D18, D19, D43, D75
 - Amends: [ADR-0015](0015-member-assets-as-agent-plugins.md), [ADR-0028](0028-remove-rulebook-single-document-repo.md), [ADR-0035](0035-kintsugi-plugins-marketplace.md)
 
 ## Context

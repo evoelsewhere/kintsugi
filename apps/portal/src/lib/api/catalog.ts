@@ -44,7 +44,7 @@ export interface CatalogItem {
 
 export interface CatalogView {
   ref: { ref: string; commit: string };
-  catalog: { app: string; source: { repo?: string; commit?: string }; modules: CatalogModule[]; unassigned: string[]; unassignedCount: number; ambiguities: string[] };
+  catalog: { app: string; source: { sources: string[] }; modules: CatalogModule[]; unassigned: string[]; unassignedCount: number; ambiguities: string[] };
   items: CatalogItem[];
   counts: Partial<Record<ItemStatus, number>>;
 }
@@ -83,7 +83,7 @@ export interface UnderstandPlanView {
 const app = (projectId: string, applicationId: string): string => `/api/projects/${encodeURIComponent(projectId)}/applications/${encodeURIComponent(applicationId)}`;
 
 /** The result views of the understand stage. */
-export type UnderstandView = "understand" | "map" | "extract-rules" | "harden";
+export type UnderstandView = "understand" | "map" | "extract-rules" | "harden" | "gaps";
 
 /** A conflict of a refused selection (409): an item already running or in an open pull request. */
 export interface SelectionConflict {

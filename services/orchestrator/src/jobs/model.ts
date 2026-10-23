@@ -1,8 +1,8 @@
-// Job runs (workflow.job_run, migration 010; ADR-0027, ADR-0029): what the worker records
+// Job runs (workflow.job_run, migration 010; ADR-0027, ADR-0029, ADR-0055): what the worker records
 // about every runtime step it runs, and the ports the job runner depends on. A stage is a
-// sequence of steps; each step is a child run with its own job workspace.
+// sequence of steps; each step is a child run that works in a folder of the stage's job workspace.
 
-import type { Provenance } from "@kintsugi/domain";
+import type { Provenance, SourceRepo } from "@kintsugi/domain";
 import type { JobSpan } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 
@@ -28,9 +28,13 @@ export interface JobRun {
   /** Stage id, script file, agent id or workflow id. */
   name: string;
   status: JobStatus;
+  /** 1 for the first attempt; a retry of a failed stage run runs the same run again as the next attempt (ADR-0055). */
+  attempt: number;
   failureReason?: string;
+  /** The first legacy repository and its commit; `sources` lists every one the run reads (ADR-0052). */
   sourceRepositoryId?: string;
   sourceCommit?: string;
+  sources?: SourceRepo[];
   inputs: Record<string, unknown>;
   limits: Partial<StepLimits>;
   scriptHash?: string;
@@ -50,6 +54,7 @@ export interface NewJobRun {
   name: string;
   sourceRepositoryId?: string;
   sourceCommit?: string;
+  sources?: SourceRepo[];
   inputs?: Record<string, unknown>;
   limits?: Partial<StepLimits>;
   actor?: string;
@@ -75,6 +80,8 @@ export type JobEventKind = "status" | "step.started" | "step.finished" | "tool" 
 export interface JobEventRecord {
   /** The top-level run the event belongs to. */
   runId: string;
+  /** The attempt of that run (1 when absent). */
+  attempt?: number;
   /** The step (child run) it came from; undefined for the run itself. */
   stepId?: string;
   kind: JobEventKind;
@@ -95,6 +102,8 @@ export interface SpanRecord {
   model: string;
   /** 1 for the first run of the step, 2 for a retry or a repair run. */
   attempt: number;
+  /** The attempt of the top-level run the span belongs to (ADR-0055). */
+  runAttempt?: number;
   span: JobSpan;
 }
 
@@ -102,11 +111,12 @@ export interface SpanRecord {
 export interface JobStore {
   get(id: string): Promise<JobRun | undefined>;
   create(run: NewJobRun): Promise<void>;
-  /** queued → running; false when the run is no longer queued (cancelled before it started). */
+  /** queued → running, recording the start of the attempt; false when the run is no longer queued (cancelled before it started). */
   start(id: string): Promise<boolean>;
-  update(id: string, patch: { sourceCommit?: string; scriptHash?: string; agent?: string }): Promise<void>;
+  update(id: string, patch: { sources?: SourceRepo[]; scriptHash?: string; agent?: string }): Promise<void>;
+  /** The attempt ends well: the run succeeded, and the attempt is added to the run's history. */
   succeed(id: string, summary: Record<string, unknown>): Promise<void>;
-  /** `reason` must be redacted already. */
+  /** The attempt ends badly; `reason` must be redacted already. */
   fail(id: string, reason: string, summary?: Record<string, unknown>): Promise<void>;
   /** Records the run as cancelled (a person asked for it). */
   cancel(id: string): Promise<void>;
@@ -121,8 +131,6 @@ export interface JobStore {
   addRestricted(id: string, path: string, content: Buffer): Promise<void>;
   /** Records the document write (queued) and links it to the run. */
   recordDocumentWrite(id: string, request: DocumentWriteRequest): Promise<void>;
-  /** The application's legacy repository (the first one when there are several). */
-  legacyRepository(projectId: string, applicationId: string): Promise<string | undefined>;
   /** The project's document repository. */
   documentRepository(projectId: string): Promise<string | undefined>;
   /** The provider/model bound to an agent: per project first, then the installation default. */
@@ -133,8 +141,10 @@ export interface JobStore {
 export interface SourceCheckouts {
   /** Brings the mirror up to date and returns the commit `ref` (default: the default branch) points to. */
   resolve(repositoryId: string): Promise<string>;
-  /** A detached worktree of `commit` at `dest`, marked read-only. */
-  checkout(repositoryId: string, commit: string, dest: string): Promise<void>;
+  /** A detached worktree of `commit` at `dest`, marked read-only unless the sandbox settings say not to (`readOnly: false`). */
+  checkout(repositoryId: string, commit: string, dest: string, options?: { readOnly?: boolean }): Promise<void>;
+  /** Whether `dest` already holds `commit` with nothing changed, so a workspace can keep it (ADR-0055). */
+  isCurrent(dest: string, commit: string): Promise<boolean>;
   /** A text file of the repository at `commit`; undefined when it does not exist. */
   readDocument(repositoryId: string, commit: string, path: string): Promise<string | undefined>;
   /** The files under folder `dir` (ending in "/") at `commit`, sorted; none when it does not exist. */

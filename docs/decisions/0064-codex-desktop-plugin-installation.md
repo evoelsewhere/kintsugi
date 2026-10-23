@@ -1,10 +1,10 @@
-# ADR-0057: Install the Coding Agent Workflow plugin from Codex Desktop
+# ADR-0064: Install the Coding Agent Workflow plugin from Codex Desktop
 
 - Status: Accepted
 - Date: 2026-10-22
-- Decision register: D68
-- Amends: ADR-0052 decisions 1 and 6
-- Preserves: ADR-0052 local stdio transport and read-only context contract; ADR-0056
+- Decision register: D80
+- Amends: ADR-0059 decisions 1 and 6
+- Preserves: ADR-0059 local stdio transport and read-only context contract; ADR-0063
 
 ## Context
 

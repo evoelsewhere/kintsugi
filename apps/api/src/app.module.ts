@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { debugMcpEnabled } from "./common/config/env.js";
 import { AgentsModule } from "./modules/admin/agents/agents.module.js";
 import { PluginsModule } from "./modules/admin/plugins/plugins.module.js";
 import { ConnectorsModule } from "./modules/admin/connectors/connectors.module.js";
@@ -26,6 +27,7 @@ import { WorkItemsModule } from "./modules/delivery/workbench/work-items.module.
 import { AiMetricsModule } from "./modules/monitoring/ai-metrics/ai-metrics.module.js";
 import { CostEntriesModule } from "./modules/monitoring/cost/cost-entries.module.js";
 import { DashboardStatsModule } from "./modules/monitoring/dashboards/dashboard-stats.module.js";
+import { SandboxModule } from "./modules/monitoring/sandbox/sandbox.module.js";
 import { JobRunsModule } from "./modules/monitoring/observability/job-runs.module.js";
 import { OverviewModule } from "./modules/monitoring/overview/overview.module.js";
 import { PortfolioOverviewModule } from "./modules/monitoring/portfolio/portfolio.module.js";
@@ -38,6 +40,7 @@ import { StageDecisionsModule } from "./modules/governance/stage-decisions/index
 import { PoliciesModule } from "./modules/governance/policies/policies.module.js";
 import { ReviewsModule } from "./modules/governance/reviews/reviews.module.js";
 import { RisksModule } from "./modules/governance/risks/risks.module.js";
+import { DebugModule } from "./modules/system/debug/debug.module.js";
 import { HealthModule } from "./modules/system/health/health.module.js";
 
 /**
@@ -51,6 +54,8 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     AuthModule,
     // system
     HealthModule,
+    // the debug MCP server exists only on a development installation (ADR-0056)
+    ...(debugMcpEnabled() ? [DebugModule] : []),
     // admin
     ProjectsModule,
     DocumentWritesModule,
@@ -82,6 +87,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     TelemetryModule,
     JobRunsModule,
     DashboardStatsModule,
+    SandboxModule,
     AiMetricsModule,
     CostEntriesModule,
     HealthChecksModule,

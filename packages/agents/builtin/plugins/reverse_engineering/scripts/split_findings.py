@@ -40,7 +40,7 @@ def split(app, scan, chosen):
     for finding in findings[:MAX_FINDINGS * 10]:
         if not isinstance(finding, dict):
             continue
-        item_id = owner.get(cc.norm_path(str(finding.get('source') or '').split(':', 1)[0]) or '')
+        item_id = owner.item_of(cc.norm_path(str(finding.get('source') or '').split(':', 1)[0]))
         if item_id is None:
             unplaced += 1
             continue

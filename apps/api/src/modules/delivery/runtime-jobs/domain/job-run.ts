@@ -3,7 +3,7 @@
 // the document write that carries them to the document repo. The API records a stage run as
 // `queued` and enqueues it; the worker records everything else. Pure types.
 
-import type { Provenance } from "@kintsugi/domain";
+import type { Provenance, SourceRepo } from "@kintsugi/domain";
 
 export type JobRunKind = "stage" | "script" | "agent" | "workflow";
 export const JOB_RUN_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"] as const;
@@ -23,6 +23,8 @@ export interface JobRunEventView {
   message: string;
   /** The step (child run) the event came from. */
   stepRunId?: string;
+  /** The attempt of the run the event belongs to. */
+  attempt: number;
   data: Record<string, unknown>;
 }
 
@@ -55,6 +57,16 @@ export interface JobRunDocumentWrite {
   error?: string;
 }
 
+/** What one finished attempt of a job did (ADR-0055). */
+export interface JobAttemptView {
+  n: number;
+  status: "succeeded" | "failed" | "cancelled";
+  startedAt?: string;
+  finishedAt?: string;
+  /** Redacted. */
+  reason?: string;
+}
+
 export interface JobRunView {
   id: string;
   projectId: string;
@@ -65,8 +77,15 @@ export interface JobRunView {
   status: JobRunStatus;
   /** Redacted. */
   failureReason?: string;
+  /** The first legacy repository (the application may link several, see `sources`). */
   sourceRepositoryId?: string;
   sourceCommit?: string;
+  /** Every repository the run reads, each at its commit and with its role: the legacy code and the target code (ADR-0052, ADR-0055). */
+  sources?: SourceRepo[];
+  /** 1 for the first attempt; a retry of a failed stage run is the next attempt of the same run (ADR-0055). */
+  attempt: number;
+  /** The attempts that ended, oldest first (top-level runs). */
+  attempts?: JobAttemptView[];
   scriptHash?: string;
   agent?: string;
   actor?: string;
@@ -78,8 +97,6 @@ export interface JobRunView {
   cancelRequestedAt?: string;
   /** The catalog items an understand run works on (ADR-0033, inputs.scope.items); for a design run the units and the design set (ADR-0049). */
   scope?: { items: string[]; set?: string };
-  /** The failed run this one resumes (inputs.resumeOf). */
-  resumeOf?: string;
   /** Set when a person abandoned the run's pull request: its items are released. */
   abandonedAt?: string;
   startedAt?: string;
@@ -160,10 +177,9 @@ export interface NewStageRun {
   projectId: string;
   applicationId: string;
   stage: string;
-  sourceRepositoryId: string;
+  /** The repositories the run reads, at least one legacy; a commit pins it (a retry of the run reads what its first attempt read). */
+  sources: SourceRepo[];
   actor?: string;
-  /** Pinned source commit (a retry reads what the failed run read). */
-  sourceCommit?: string;
-  /** Run inputs: scope, documentsCommit, resumeOf (ADR-0033). */
+  /** Run inputs: scope, documentsCommit (ADR-0033). */
   inputs?: Record<string, unknown>;
 }

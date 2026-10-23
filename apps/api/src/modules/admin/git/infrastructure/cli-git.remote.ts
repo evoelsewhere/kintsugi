@@ -28,6 +28,10 @@ export class CliGitRemote extends GitRemote {
       ...(access.knownHosts === undefined ? {} : { knownHosts: access.knownHosts }),
       timeoutMs: PROBE_TIMEOUT_MS,
     });
-    return { ...(info.defaultBranch === undefined ? {} : { defaultBranch: info.defaultBranch }), branchCount: info.branches.length };
+    return {
+      ...(info.defaultBranch === undefined ? {} : { defaultBranch: info.defaultBranch }),
+      branchCount: info.branches.length,
+      branches: info.branches.map((branch) => branch.name).sort(),
+    };
   }
 }

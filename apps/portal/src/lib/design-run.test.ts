@@ -93,7 +93,7 @@ describe("the application's own design (ADR-0050)", () => {
 });
 
 describe("setFacts", () => {
-  const set = (over: Partial<DesignSet>): DesignSet => ({ id: "s", title: "S", version: 1, scope: "unit", appliesTo: [], needs: [], description: "", reads: [], instructions: "", producedBy: [], files: [{ path: "a.md", template: "a.md", required: true, when: [], sections: [] }, { path: "b.md", template: "b.md", required: false, when: [], sections: [] }], ...over });
+  const set = (over: Partial<DesignSet>): DesignSet => ({ id: "s", title: "S", version: 1, scope: "unit", appliesTo: [], needs: [], description: "", reads: [], instructions: "", producedBy: [], files: [{ path: "a.md", template: "a.md", required: true, ref: "s@1", sections: [] }, { path: "b.md", template: "b.md", required: false, ref: "s@1", sections: [] }], profiles: [], ...over });
 
   it("says who a set is for, what it writes, what it needs and what it also reads", () => {
     expect(setFacts(set({}))).toEqual([{ label: "For", value: "every unit" }, { label: "Documents", value: "2 (1 required): a.md, b.md" }]);
@@ -101,6 +101,11 @@ describe("setFacts", () => {
       ["For", "units of kind screen, api"],
       ["Documents", "2 (1 required): a.md, b.md"],
       ["After", "basic"],
+    ]);
+    expect(setFacts(set({ profiles: [{ kind: "screen", version: 3, removes: [], instructions: "", files: [], examples: [] }, { kind: "batch", version: 1, removes: ["a.md"], instructions: "", files: [], examples: [] }] })).map((fact) => [fact.label, fact.value])).toEqual([
+      ["For", "every unit"],
+      ["Documents", "2 (1 required): a.md, b.md"],
+      ["Profiles", "screen (v3), batch (v1)"],
     ]);
     expect(setFacts(set({ scope: "application", reads: ["10-applications/{app}/00-inputs/", "02-architecture/"] })).map((fact) => [fact.label, fact.value])).toEqual([
       ["For", "the application as a whole"],

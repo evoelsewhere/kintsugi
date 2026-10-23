@@ -1,8 +1,8 @@
-# ADR-0054: Continue workflows from evidence-bound pull requests and gates
+# ADR-0061: Continue workflows from evidence-bound pull requests and gates
 
 - Status: Accepted
 - Date: 2026-10-20
-- Decision register: D70
+- Decision register: D77
 - Amends: [ADR-0007](0007-git-as-source-of-truth.md), [ADR-0028](0028-remove-rulebook-single-document-repo.md), [ADR-0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md), [ADR-0051](0051-document-repo-layout-legacy-and-modern.md)
 
 ## Context

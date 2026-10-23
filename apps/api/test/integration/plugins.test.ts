@@ -40,8 +40,8 @@ describe.skipIf(!hasDatabase)("plugins (integration)", () => {
       ["modernize", "member", "builtin"],
     ]);
     const pluginsByName = new Map(list.body.data!.map((plugin) => [plugin.name, plugin]));
-    expect(pluginsByName.get("reverse_engineering")!.counts).toMatchObject({ agent: 4, command: 3, workflow: 3, skill: 2 });
-    expect(pluginsByName.get("design")!.counts).toMatchObject({ agent: 1, command: 1 });
+    expect(pluginsByName.get("reverse_engineering")!.counts).toMatchObject({ agent: 4, command: 3, workflow: 3, skill: 3 });
+    expect(pluginsByName.get("design")!.counts).toMatchObject({ agent: 2, command: 1, skill: 2 });
   });
 
   it("opens a plugin and reads one of its files", async () => {

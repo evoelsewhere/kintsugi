@@ -5,8 +5,8 @@ import { Body, Controller, Get, Put } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { InstallationSettingsService } from "../application/installation-settings.service.js";
-import type { CommitIdentityView } from "../domain/installation-settings.js";
-import { type CommitIdentityInput, commitIdentitySchema } from "./installation-settings.dto.js";
+import type { CommitIdentityView, SandboxSettingsView } from "../domain/installation-settings.js";
+import { type CommitIdentityInput, type SandboxSettingsInput, commitIdentitySchema, sandboxSettingsSchema } from "./installation-settings.dto.js";
 
 @ApiTags("admin · settings")
 @Controller("admin/settings")
@@ -26,5 +26,27 @@ export class InstallationSettingsController {
   @ApiOkResponse({ description: "The stored commit identity." })
   setCommitIdentity(@Body({ schema: commitIdentitySchema }) body: CommitIdentityInput, @CurrentActor() actor: Actor): Promise<CommitIdentityView> {
     return this.settings.setCommitIdentity(body, actor);
+  }
+}
+
+/** Settings → Sandbox (ADR-0055): the environment jobs run in. Gated by sandbox.manage. */
+@ApiTags("admin · settings")
+@Controller("admin/settings")
+@RequirePermission("sandbox.manage")
+export class SandboxSettingsController {
+  constructor(private readonly settings: InstallationSettingsService) {}
+
+  @Get("sandbox")
+  @ApiOperation({ summary: "Get the settings of the sandbox environment: how long a job workspace keeps its checkouts and results, and the limits of its processes" })
+  @ApiOkResponse({ description: "The settings in effect; isDefault while none was stored." })
+  sandbox(): Promise<SandboxSettingsView> {
+    return this.settings.sandbox();
+  }
+
+  @Put("sandbox")
+  @ApiOperation({ summary: "Set the sandbox environment settings (the worker applies them to the next job and the next sweep)" })
+  @ApiOkResponse({ description: "The stored settings. 400 names every field out of range." })
+  setSandbox(@Body({ schema: sandboxSettingsSchema }) body: SandboxSettingsInput, @CurrentActor() actor: Actor): Promise<SandboxSettingsView> {
+    return this.settings.setSandbox(body, actor);
   }
 }

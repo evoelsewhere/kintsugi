@@ -47,6 +47,7 @@ export {
   type UnitFacts,
   type UnitTrace,
 } from './traceability.js'
+export { GAP_IMPACTS, GAP_KINDS, countGaps, parseGaps, parseSpecGaps, type Gap, type GapCounts, type GapImpact, type GapKind, type GapReport } from './gaps.js'
 export { frontmatterOf, parseWorkItem, type Frontmatter, type WorkItemSummary } from './work-item.js'
 export { ITEM_ID, parseItemCatalog, type ItemCatalog, type ItemCatalogDependency, type ItemCatalogItem, type ItemCatalogModule, type ItemCatalogPart } from './item-catalog.js'
 export { renderLedger, parseLedger } from './ledger.js'
@@ -57,13 +58,17 @@ export {
   DESIGN_SEEDS,
   DESIGN_SETS_PREFIX,
   checkDesignDocument,
+  designBaseFiles,
   designCoverage,
   designFilesFor,
   designIsStale,
   designReferences,
   designItemIds,
+  designRefText,
+  designTemplateOf,
   designTemplateRefOf,
   loadDesignSets,
+  parseDesignProfile,
   parseDesignSet,
   parseDesignTemplate,
   ruleCardsOf,
@@ -72,10 +77,15 @@ export {
   type DesignFile,
   type DesignProblem,
   type DesignProblemCode,
+  type DesignProfile,
+  type DesignProfileSource,
   type DesignSection,
   type DesignSet,
   type DesignSetSource,
   type DesignTemplate,
   type DesignTemplateProblem,
+  type DesignTemplateRef,
+  type LoadedDesignProfile,
   type LoadedDesignSet,
+  type ResolvedDesignFile,
 } from './design.js'

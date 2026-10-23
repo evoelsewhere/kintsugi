@@ -1,7 +1,8 @@
 // A list of job runs (Delivery per application, Monitoring across projects): status, what ran,
 // when, how long, who started it and where its output went; a row opens the run's detail with
-// steps, artifacts and the live log. Active runs can be cancelled, and a failed stage run retried
-// (it resumes from the kept outputs and skips the agent steps that succeeded), with jobs.run.
+// steps, artifacts and the live log. Active runs can be cancelled, and a failed stage run retried, with jobs.run: a
+// retry is the next attempt of the same run in the same workspace (it skips the steps whose inputs did not change),
+// and "From scratch" discards what the job kept first (ADR-0055).
 
 import { ChevronDown, ChevronRight, ExternalLink, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { isActive, jobRunsApi, type JobRunView } from "@/lib/api/job-runs";
-import { formatDateTime, formatDuration, formatRelative, shortSha } from "@/lib/format";
+import { formatDateTime, formatDuration, formatRelative, shortSha, sourcesLabel } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
@@ -51,13 +52,14 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
   const [open, setOpen] = useState<string | null>(initialOpen ?? null);
   const [cancelling, setCancelling] = useState<JobRunView | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<JobRunView | null>(null);
   const toast = useToast();
 
-  async function retry(run: JobRunView): Promise<void> {
+  async function retry(run: JobRunView, options: { fresh?: boolean } = {}): Promise<void> {
     setRetrying(run.id);
     try {
-      const next = await jobRunsApi.retry(run.projectId, run.id);
-      toast.success("Retry queued", "It skips the agent jobs that succeeded and reruns the rest.");
+      const next = await jobRunsApi.retry(run.projectId, run.id, options);
+      toast.success(`Attempt ${next.attempt} queued`, options.fresh === true ? "It begins from nothing; the pinned commits stay." : "It skips the steps whose inputs did not change and runs the rest.");
       setOpen(next.id);
       onChanged();
     } catch (failure) {
@@ -109,6 +111,7 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
                       {run.name}
                       <span className="ml-1.5 font-mono text-[11px] font-normal text-text-muted">{run.kind}</span>
                     </button>
+                    {run.attempt > 1 ? <span className="rounded-full bg-hover px-1.5 py-0.5 text-[11px] text-text-secondary" title="A retry runs the same job again, in the same workspace">attempt {run.attempt}</span> : null}
                     <RunStatusBadge status={run.status} cancelling={cancelRequested} />
                     {showProject ? (
                       <Link
@@ -126,8 +129,7 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
                       {run.agent === undefined ? null : <span className="rounded-full bg-hover px-1.5 py-0.5">{run.agent}</span>}
                       {run.sourceCommit === undefined ? null : (
                         <span className="rounded-full bg-hover px-1.5 py-0.5 font-mono">
-                          {run.sourceRepositoryId === undefined ? "" : `${run.sourceRepositoryId}@`}
-                          {shortSha(run.sourceCommit)}
+                          {run.sources === undefined ? `${run.sourceRepositoryId === undefined ? "" : `${run.sourceRepositoryId}@`}${shortSha(run.sourceCommit)}` : sourcesLabel(run.sources)}
                         </span>
                       )}
                       {run.outputSummary?.files === undefined ? null : (
@@ -160,10 +162,15 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
                     </a>
                   )}
                   {canRetry && run.status === "failed" && run.kind === "stage" && run.applicationId !== undefined ? (
-                    <Button size="small" variant="ghost" className="shadow-border" disabled={retrying !== null} onClick={() => void retry(run)}>
-                      <RotateCcw className="size-3.5" />
-                      {retrying === run.id ? "Retrying…" : "Retry"}
-                    </Button>
+                    <>
+                      <Button size="small" variant="ghost" className="shadow-border" disabled={retrying !== null} onClick={() => void retry(run)}>
+                        <RotateCcw className="size-3.5" />
+                        {retrying === run.id ? "Retrying…" : "Retry"}
+                      </Button>
+                      <Button size="small" variant="ghost" disabled={retrying !== null} title="Discard what the job kept and begin again from the same commits" onClick={() => setFresh(run)}>
+                        From scratch
+                      </Button>
+                    </>
                   ) : null}
                   {canCancel && isActive(run) && run.cancelRequestedAt === undefined ? (
                     <Button size="small" variant="danger" onClick={() => setCancelling(run)}>
@@ -185,6 +192,18 @@ export function JobRunList({ runs, canCancel, canRetry = false, showProject = fa
           );
         })}
       </ul>
+      <ConfirmDialog
+        open={fresh !== null}
+        title="Retry from scratch?"
+        confirmLabel="Retry from scratch"
+        busyLabel="Queueing…"
+        onConfirm={async () => {
+          if (fresh !== null) await retry(fresh, { fresh: true });
+        }}
+        onClose={() => setFresh(null)}
+      >
+        {`${fresh?.name ?? "The run"} runs again from nothing: what its workspace kept (the results of its steps) is discarded. It reads the same commits as before. A plain retry keeps the steps whose inputs did not change.`}
+      </ConfirmDialog>
       <ConfirmDialog
         open={cancelling !== null}
         title="Cancel job run?"

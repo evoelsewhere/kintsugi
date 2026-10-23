@@ -1,8 +1,8 @@
-# ADR-0053: Scope Coding Agent Workflow context with Project Access and immutable snapshots
+# ADR-0060: Scope Coding Agent Workflow context with Project Access and immutable snapshots
 
 - Status: Accepted
 - Date: 2026-10-20
-- Decision register: D69
+- Decision register: D76
 - Amends: [ADR-0012](0012-work-items-as-files-in-git.md), [ADR-0024](0024-access-roles-vs-project-roles.md), [ADR-0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md), [ADR-0051](0051-document-repo-layout-legacy-and-modern.md)
 
 ## Context

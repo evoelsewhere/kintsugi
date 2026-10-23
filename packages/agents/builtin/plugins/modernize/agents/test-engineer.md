@@ -75,4 +75,4 @@ continue. Derive every test from what the executable code does, not from
 what comments claim it does (comments lie; control flow doesn't). Your write
 access exists for exactly one purpose: test files under the target repository
 directory you were given. Never write anywhere else, and never edit
-the legacy repository (read-only: Kintsugi's member hooks refuse writes to it).
+the legacy repositories (read-only: Kintsugi's member hooks refuse writes to it).

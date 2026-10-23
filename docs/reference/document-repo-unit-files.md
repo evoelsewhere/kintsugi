@@ -40,7 +40,7 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 | `phase`, `stage`, `status` | Progress. `status`: `pending`, `in-progress`, `awaiting-review`, `approved`, `rejected`, `blocked`, `done`, `skipped` |
 | `assignee`, `harness` | Who works on it, and with which member harness |
 | `dependsOn` | Unit ids (used for leaves-first ordering) |
-| `source`, `target` | `{repo, paths}` lists in the legacy (read-only) and target repos |
+| `source`, `target` | `{repo, paths}` lists in the legacy (read-only) and target repos. A unit may have one `source` entry per legacy repository it reads; paths are relative to that repository ([ADR-0052](../decisions/0052-several-legacy-repositories-per-application.md)). |
 | `requiredDeliverables` | Optional bounded {id, repositoryId, path} declarations; stable IDs flow into briefs, snapshots and gate evidence |
 | `links` | Task pack, AS-IS specification, mappings (paths under `01-standards/mappings/`), business rules, pull requests |
 | `waived` | Design files the unit does not need, a list of `<set>/<file>: <reason>`; written by a person, never by an agent ([design templates](design-templates.md#conformance)) |

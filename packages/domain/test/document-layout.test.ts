@@ -28,6 +28,7 @@ import {
   designSetDir,
   designSetPath,
   designSetsDir,
+  designProfilePath,
   designTemplatePath,
   generatedDir,
   glossaryPath,
@@ -160,6 +161,8 @@ describe("ADR-0051 document-repo layout", () => {
     expect(designSetDir("detail")).toBe("01-standards/templates/detail");
     expect(designSetPath("detail")).toBe("01-standards/templates/detail/set.md");
     expect(designTemplatePath("detail", "logic.md")).toBe("01-standards/templates/detail/logic.md");
+    expect(designTemplatePath("detail", "screen/logic.md")).toBe("01-standards/templates/detail/screen/logic.md");
+    expect(designProfilePath("detail", "screen")).toBe("01-standards/templates/detail/screen/profile.md");
   });
 
   it("puts the common design at project level", () => {

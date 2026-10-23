@@ -15,14 +15,19 @@ import {
   designFilesFor,
   designIsStale,
   designItemIds,
+  designRefText,
+  designTemplateOf,
   DESIGN_CHECKS,
   DESIGN_SEEDS,
   loadDesignSets,
+  parseDesignProfile,
   parseDesignSet,
   parseDesignTemplate,
   ruleCardsOf,
   type DesignContext,
+  type DesignProfileSource,
   type DesignSetSource,
+  type LoadedDesignSet,
 } from '../hooks/reader/design.js'
 
 /**
@@ -33,16 +38,31 @@ import {
 const DIR = fileURLToPath(new URL('../../design/scripts/tests/fixtures/design/', import.meta.url))
 const read = (...parts: string[]): string => readFileSync(join(DIR, ...parts), 'utf8')
 
+const mdIn = (...parts: string[]): string[] => (existsSync(join(DIR, ...parts)) ? readdirSync(join(DIR, ...parts)).filter(name => name.endsWith('.md')) : [])
+
 function sourcesOf(group: string): DesignSetSource[] {
   return readdirSync(join(DIR, group), { withFileTypes: true })
     .filter(entry => entry.isDirectory())
     .map(entry => {
-      const files = readdirSync(join(DIR, group, entry.name)).filter(name => name.endsWith('.md'))
+      const files = mdIn(group, entry.name)
+      const profiles: Record<string, DesignProfileSource> = {}
+
+      for (const kind of readdirSync(join(DIR, group, entry.name), { withFileTypes: true }).filter(sub => sub.isDirectory() && !sub.name.startsWith('_'))) {
+        const inKind = mdIn(group, entry.name, kind.name)
+
+        profiles[kind.name] = {
+          profileText: inKind.includes('profile.md') ? read(group, entry.name, kind.name, 'profile.md') : undefined,
+          templates: Object.fromEntries(inKind.filter(name => name !== 'profile.md').map(name => [name, read(group, entry.name, kind.name, name)])),
+          examples: mdIn(group, entry.name, kind.name, '_examples'),
+        }
+      }
 
       return {
         folder: entry.name,
         setText: files.includes('set.md') ? read(group, entry.name, 'set.md') : undefined,
         templates: Object.fromEntries(files.filter(name => name !== 'set.md').map(name => [name, read(group, entry.name, name)])),
+        examples: mdIn(group, entry.name, '_examples'),
+        profiles,
       }
     })
 }
@@ -51,7 +71,8 @@ const cases = JSON.parse(read('cases.json')) as {
   context: DesignContext
   appContext: DesignContext
   unitKinds: string[]
-  cases: { file: string; set: string; template: string }[]
+  resolveKinds: string[]
+  cases: { file: string; set: string; template: string; kind?: string }[]
   appCases: { file: string; set: string; template: string }[]
 }
 
@@ -65,15 +86,21 @@ function actual() {
 
   for (const item of cases.cases) {
     const loaded = good.sets.find(candidate => candidate.set.id === item.set)
-    const template = loaded?.templates[item.template]
 
-    if (loaded === undefined || template === undefined) throw new Error(`fixture ${item.file}: no template ${item.set}/${item.template}`)
+    if (loaded === undefined) throw new Error(`fixture ${item.file}: no set ${item.set}`)
+
+    // A case names the kind it is written for; without one it is written with the set's own template.
+    const file = item.kind === undefined ? undefined : designFilesFor(loaded, item.kind).find(candidate => candidate.template === item.template)
+    const template = file === undefined ? loaded.templates[item.template] : designTemplateOf(loaded, file)
+    const ref = file === undefined ? { id: loaded.set.id, version: loaded.set.version } : file.ref
+
+    if (template === undefined) throw new Error(`fixture ${item.file}: no template ${item.set}/${item.template}`)
 
     const text = read('designs', item.file)
 
     designs[item.file] = {
-      problems: checkDesignDocument(template, loaded.set, text, cases.context).map(problem => ({ code: problem.code, ...(problem.section === undefined ? {} : { section: problem.section }), message: problem.message })),
-      stale: designIsStale(text, loaded.set),
+      problems: checkDesignDocument(template, ref, text, cases.context).map(problem => ({ code: problem.code, ...(problem.section === undefined ? {} : { section: problem.section }), message: problem.message })),
+      stale: designIsStale(text, ref),
     }
   }
 
@@ -84,10 +111,28 @@ function actual() {
     if (loaded === undefined || template === undefined) throw new Error(`fixture ${item.file}: no template ${item.set}/${item.template}`)
 
     const text = read('designs', item.file)
+    const ref = { id: loaded.set.id, version: loaded.set.version }
 
     appDesigns[item.file] = {
-      problems: checkDesignDocument(template, loaded.set, text, cases.appContext).map(problem => ({ code: problem.code, ...(problem.section === undefined ? {} : { section: problem.section }), message: problem.message })),
-      stale: designIsStale(text, loaded.set),
+      problems: checkDesignDocument(template, ref, text, cases.appContext).map(problem => ({ code: problem.code, ...(problem.section === undefined ? {} : { section: problem.section }), message: problem.message })),
+      stale: designIsStale(text, ref),
+    }
+  }
+
+  // The files of each set for each kind, with the template each is written with.
+  const resolved: Record<string, { path: string; template: string; required: boolean; templateFile: string; ref: string; profile: string | null; example: string | null }[]> = {}
+
+  for (const loaded of good.sets) {
+    for (const kind of cases.resolveKinds) {
+      resolved[`${loaded.set.id}/${kind}`] = designFilesFor(loaded, kind).map(file => ({
+        path: file.path,
+        template: file.template,
+        required: file.required,
+        templateFile: file.templateFile,
+        ref: designRefText(file.ref),
+        profile: file.profile,
+        example: file.example,
+      }))
     }
   }
 
@@ -96,12 +141,14 @@ function actual() {
       sets: good.problems,
       'bad-sets': bad.problems,
       'bad-set-ids': bad.sets.map(loaded => loaded.set.id),
+      'bad-profile-kinds': Object.keys(bad.sets.find(loaded => loaded.set.id === 'omega')?.profiles ?? {}),
       'app-sets': appGood.problems,
       'bad-app-sets': appBad.problems,
       'bad-app-set-ids': appBad.sets.map(loaded => loaded.set.id),
     },
     designs,
     appDesigns,
+    resolved,
   }
 }
 
@@ -133,7 +180,7 @@ describe('design sets: scope, reads and instructions (ADR-0050)', () => {
 
   test('a set is for units unless it says application', () => {
     expect(parseDesignSet(read('sets', 'basic', 'set.md'), 'basic').set).toMatchObject({ scope: 'unit', reads: [], instructions: '' })
-    expect(arch()).toMatchObject({ scope: 'application', appliesTo: [], needs: [], reads: ['10-applications/{app}/01-legacy/', '02-architecture/'], stage: 'architecture-design' })
+    expect(arch()).toMatchObject({ scope: 'application', needs: [], reads: ['10-applications/{app}/01-legacy/', '02-architecture/'], stage: 'architecture-design' })
   })
 
   test('the Instructions section is for the designer and leaves the description', () => {
@@ -142,13 +189,14 @@ describe('design sets: scope, reads and instructions (ADR-0050)', () => {
   })
 
   test('an application set has files and no unit kind', () => {
-    expect(designFilesFor(arch(), null).map(file => file.path)).toEqual(['overview.md'])
-    expect(designFilesFor(arch(), 'screen')).toEqual([])
-    const unitSet = parseDesignSet(read('sets', 'basic', 'set.md'), 'basic').set
+    const app = loadDesignSets(sourcesOf('app-sets'), { unitKinds: cases.unitKinds }).sets
+    const [archSet, dbunit] = [app.find(loaded => loaded.set.id === 'arch'), app.find(loaded => loaded.set.id === 'dbunit')]
 
-    if (unitSet === undefined) throw new Error('no set')
+    if (archSet === undefined || dbunit === undefined) throw new Error('no set')
 
-    expect(designFilesFor(unitSet, null)).toEqual([])
+    expect(designFilesFor(archSet, null).map(file => file.path)).toEqual(['overview.md'])
+    expect(designFilesFor(archSet, 'screen')).toEqual([])
+    expect(designFilesFor(dbunit, null)).toEqual([])
   })
 
   test('a unit set may need an application set and the items of the application resolve for it', () => {
@@ -164,21 +212,52 @@ describe('design sets: reading', () => {
     const { set, problems } = parseDesignSet(read('sets', 'detail', 'set.md'), 'detail')
 
     expect(problems).toEqual([])
-    expect(set).toMatchObject({ id: 'detail', title: 'Detail design', version: 2, appliesTo: ['screen', 'api'], needs: ['basic'], stage: 'detail-design' })
-    expect(set?.files).toEqual([
-      { path: 'logic.md', template: 'logic.md', required: true, when: [] },
-      { path: 'sql.md', template: 'sql.md', required: false, when: ['api'] },
-    ])
+    expect(set).toMatchObject({ id: 'detail', title: 'Detail design', version: 2, needs: ['basic'], stage: 'detail-design', instructions: 'Cite every rule by its id.' })
+    expect(set?.files).toEqual([{ path: 'logic.md', template: 'logic.md', required: true }])
     expect(set?.description).toContain('How the unit is built.')
   })
 
-  test('which files a unit of a kind needs', () => {
-    const set = parseDesignSet(read('sets', 'detail', 'set.md'), 'detail').set
-    if (set === undefined) throw new Error('no set')
+  test('a profile keeps its kind, version, removed files, added files and instructions', () => {
+    expect(parseDesignProfile(read('sets', 'detail', 'api', 'profile.md'), 'api')).toEqual({
+      profile: { kind: 'api', version: 1, files: [{ path: 'sql.md', template: 'sql.md', required: false }], removes: [], instructions: 'Name every query and its parameters.' },
+      problems: [],
+    })
+    expect(parseDesignProfile(read('sets', 'detail', 'batch', 'profile.md'), 'batch').profile).toMatchObject({ kind: 'batch', version: 1, removes: ['logic.md'], files: [{ path: 'job.md', template: 'job.md', required: true }] })
+    expect(parseDesignProfile('# No front matter', 'api')).toEqual({ problems: ['has no front matter'] })
+  })
 
-    expect(designFilesFor(set, 'screen').map(file => file.path)).toEqual(['logic.md'])
-    expect(designFilesFor(set, 'api').map(file => file.path)).toEqual(['logic.md', 'sql.md'])
-    expect(designFilesFor(set, 'batch')).toEqual([])
+  describe('which files a unit of a kind needs', () => {
+    const detail = (): LoadedDesignSet => {
+      const found = loadDesignSets(sourcesOf('sets'), { unitKinds: cases.unitKinds }).sets.find(loaded => loaded.set.id === 'detail')
+
+      if (found === undefined) throw new Error('no set')
+
+      return found
+    }
+
+    test('a kind without a profile has the base files, a profile adds, replaces and removes', () => {
+      const paths = (kind: string | null): string[] => designFilesFor(detail(), kind).map(file => file.path)
+
+      expect(paths('other')).toEqual(['logic.md'])
+      expect(paths('screen')).toEqual(['logic.md'])
+      expect(paths('api')).toEqual(['logic.md', 'sql.md'])
+      expect(paths('batch')).toEqual(['job.md'])
+      expect(paths(null)).toEqual([])
+    })
+
+    test('the template of a file is the one in the profile folder when it has one of that name, and the document names it', () => {
+      const [screen, api, other] = [designFilesFor(detail(), 'screen')[0], designFilesFor(detail(), 'api')[1], designFilesFor(detail(), 'other')[0]]
+
+      expect(screen).toMatchObject({ profile: 'screen', templateFile: 'screen/logic.md', ref: { id: 'detail/screen', version: 3 }, example: 'screen/_examples/logic.md' })
+      expect(api).toMatchObject({ profile: 'api', templateFile: 'api/sql.md', ref: { id: 'detail/api', version: 1 }, example: null })
+      expect(other).toMatchObject({ profile: null, templateFile: 'logic.md', ref: { id: 'detail', version: 2 }, example: '_examples/logic.md' })
+      expect(designTemplateOf(detail(), screen as NonNullable<typeof screen>)?.sections.map(section => section.heading)).toEqual(['Business rules', 'Screen events'])
+      expect(designTemplateOf(detail(), other as NonNullable<typeof other>)?.sections.map(section => section.heading)).toEqual(['Business rules', 'Error handling', 'Dependencies'])
+    })
+
+    test('an api document that uses the base logic names the set, not the profile', () => {
+      expect(designFilesFor(detail(), 'api')[0]).toMatchObject({ profile: null, ref: { id: 'detail', version: 2 } })
+    })
   })
 
   test('a template section is a heading with a directive block, and only that', () => {

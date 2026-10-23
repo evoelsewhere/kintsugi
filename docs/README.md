@@ -47,7 +47,9 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 **Reference**
 - [Glossary](reference/glossary.md)
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
-- [Harness integration](reference/harness-integration.md): read-only CLI and local MCP, Project Access, snapshots, PR evidence and continuation
+- [Debug MCP server](reference/debug-mcp.md): the read-only tools of a development installation over runs, sandboxes, logs, queues and the database (ADR-0056)
+- [Job workspace](reference/job-workspace.md): the layout of a job's workspace, the guide, attempts, the ledger and the lifecycle (ADR-0055)
+- [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
 - [Coding Agent Workflow CLI](reference/coding-agent-cli.md): install, authenticate, fetch task context and inspect current limits
 - [Coding Agent Workflow compatibility](reference/coding-agent-workflow-compatibility.md): tested client versions and setup probes
 - [Evidence-bound gate records](reference/gate-records.md): reviewed publication and effective approval

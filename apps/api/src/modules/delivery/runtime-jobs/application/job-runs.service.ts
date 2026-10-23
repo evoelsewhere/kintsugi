@@ -8,6 +8,7 @@ import { toPage } from "#common/application/pagination.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
+import type { SourceRepo } from "@kintsugi/domain";
 import { sleep } from "#common/util/async.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import {
@@ -60,11 +61,11 @@ export class JobRunsService {
   }
 
   /**
-   * Records a top-level stage run as `queued` and enqueues it. `inputs` and `sourceCommit` pin what
-   * the run reads (scope, documentsCommit, resumeOf: ADR-0033). Several understand or design runs may be
-   * active at once (each on its own items or units); any other stage runs once at a time per application.
+   * Checks that a stage can start for an application and returns the repositories the run reads: the project has a
+   * document repository, the application a legacy one, no other run of the stage is active (the scoped stages
+   * excepted), and the stages it reads from have succeeded. 400/404/409 otherwise.
    */
-  async startRun(projectId: string, applicationId: string, stage: string, actor: Actor, options: { inputs?: Record<string, unknown>; sourceCommit?: string } = {}): Promise<JobRunView> {
+  async #checkStart(projectId: string, applicationId: string, stage: string): Promise<SourceRepo[]> {
     const plans = this.stages.plans(applicationId);
     const plan = plans.find((entry) => entry.id === stage);
     if (plan === undefined) {
@@ -74,8 +75,13 @@ export class JobRunsService {
     const application = project.applications.find((entry) => entry.id === applicationId);
     if (application === undefined) throw new NotFoundException(`Application ${applicationId} not found in project ${projectId}`);
     if (project.documentRepository === null) throw new ConflictException(`Project ${projectId} has no document repository`);
-    const legacy = application.asIs.legacy[0];
-    if (legacy === undefined) throw new ConflictException(`Application ${applicationId} has no legacy repository; register one on the application first`);
+    // Every legacy repository of the application is read, in the order they were linked (ADR-0052), and every target
+    // repository (the to-be) is mounted beside them, read-only (ADR-0055).
+    if (application.asIs.legacy.length === 0) throw new ConflictException(`Application ${applicationId} has no legacy repository; register one on the application first`);
+    const sources: SourceRepo[] = [
+      ...application.asIs.legacy.map((repository): SourceRepo => ({ repositoryId: repository.repositoryId, role: "legacy" })),
+      ...application.toBe.targets.map((repository): SourceRepo => ({ repositoryId: repository.repositoryId, role: "target" })),
+    ];
     if (!SCOPED_STAGES.includes(stage) && (await this.store.hasStageRun(projectId, applicationId, stage, ["queued", "running"]))) {
       throw new ConflictException(`A ${stage} run of ${applicationId} is already queued or running; wait for it or cancel it first`);
     }
@@ -86,16 +92,25 @@ export class JobRunsService {
         );
       }
     }
+    return sources;
+  }
+
+  /**
+   * Records a top-level stage run as `queued` and enqueues it. `inputs` pin what the run reads (scope,
+   * documentsCommit: ADR-0033). Several understand or design runs may be active at once (each on its own items
+   * or units); any other stage runs once at a time per application.
+   */
+  async startRun(projectId: string, applicationId: string, stage: string, actor: Actor, options: { inputs?: Record<string, unknown> } = {}): Promise<JobRunView> {
+    const sources = await this.#checkStart(projectId, applicationId, stage);
 
     const run = await this.store.createStageRun({
       id: newId(),
       projectId,
       applicationId,
       stage,
-      sourceRepositoryId: legacy.repositoryId,
+      sources,
       actor: actor.username ?? actor.id,
       ...(options.inputs === undefined ? {} : { inputs: options.inputs }),
-      ...(options.sourceCommit === undefined ? {} : { sourceCommit: options.sourceCommit }),
     });
     try {
       await this.queue.enqueue(run.id);
@@ -103,27 +118,35 @@ export class JobRunsService {
       await this.store.markFailed(run.id, `Could not enqueue the run: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
-    const resumeOf = options.inputs?.["resumeOf"];
-    await this.audit.recordChange(
-      auditRecord(actor, AUDIT_ACTIONS.stageRun, { projectId, subject: run.id, detail: { stage, applicationId, ...(typeof resumeOf === "string" ? { resumeOf } : {}), ...(run.scope === undefined ? {} : { items: run.scope.items.length }) } }),
-    );
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.stageRun, { projectId, subject: run.id, detail: { stage, applicationId, ...(run.scope === undefined ? {} : { items: run.scope.items.length }) } }));
     return run;
   }
 
   /**
-   * Retries a failed stage run (ADR-0033): a new run on the same source commit, scope and pinned
-   * documents commit that resumes from the failed run's kept outputs. 409 unless the run failed.
+   * Retries a failed stage run (ADR-0055): the same run goes back in the queue as its next attempt, in the same
+   * workspace, on the same pinned commits, scope and documents; the worker skips the steps whose inputs did not
+   * change and whose results are still there. `fresh` begins from nothing instead (the job's results and ledger are
+   * discarded; the pins stay). 409 unless the run failed, or another run of the stage is active.
    */
-  async retry(projectId: string, id: string, actor: Actor): Promise<JobRunView> {
+  async retry(projectId: string, id: string, actor: Actor, options: { fresh?: boolean } = {}): Promise<JobRunView> {
     const run = await this.summary(projectId, id);
     if (run.parentId !== undefined || run.kind !== "stage" || run.applicationId === undefined) throw new BadRequestException(`Job run ${id} is not a stage run of an application`);
     if (run.status !== "failed") throw new ConflictException(`Job run ${id} did not fail (${run.status}): only a failed run is retried`);
-    const inputs = (await this.store.inputs(projectId, id)) ?? {};
-    const pinned = typeof inputs["documentsCommit"] === "string" ? inputs["documentsCommit"] : run.outputSummary?.["documentsCommit"];
-    return this.startRun(projectId, run.applicationId, run.name, actor, {
-      inputs: { ...inputs, ...(typeof pinned === "string" ? { documentsCommit: pinned } : {}), resumeOf: id },
-      ...(run.sourceCommit === undefined ? {} : { sourceCommit: run.sourceCommit }),
-    });
+    // The same conditions as a start: the stage may be running for another reason by now, or a stage it reads may have been undone.
+    await this.#checkStart(projectId, run.applicationId, run.name);
+    const fresh = options.fresh === true;
+    // The documents the failed attempt read stay the ones the job reads.
+    const read = run.outputSummary?.["documentsCommit"];
+    if (!(await this.store.requeue(projectId, id, { fresh, ...(typeof read === "string" ? { documentsCommit: read } : {}) }))) throw new ConflictException(`Job run ${id} is no longer failed`);
+    try {
+      await this.queue.enqueue(id);
+    } catch (error) {
+      await this.store.markFailed(id, `Could not enqueue the retry: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+    const retried = await this.summary(projectId, id);
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.jobRunRetry, { projectId, subject: id, detail: { name: run.name, attempt: retried.attempt, fresh } }));
+    return retried;
   }
 
   /**

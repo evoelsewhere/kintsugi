@@ -6,9 +6,9 @@
 Run from the root of the document repository checkout (or name it with --root). For every design set that applies to the
 unit's kind (`kind` in its card, README.md), each document the set lists is read from
 `10-applications/<app>/02-modern/<module>/<unit>/<set>/` and checked against its template: the front matter names the
-template, every required section is there and not empty, tables have their columns, and the checks the template names
+template (`<set>@<version>`, or `<set>/<kind>@<version>` for a template of the kind's profile, ADR-0053), every required section is there and not empty, tables have their columns, and the checks the template names
 pass (no TODO left, every rule of the unit covered, references that resolve, ids of the right shape). A file the
-unit's `waived` list names, with a reason, is accepted; a design written against an older version of its set is reported as
+unit's `waived` list names, with a reason, is accepted; a design written against an older version of its template is reported as
 stale, not as a fault.
 
 The same checks run in the API, so the portal shows what this prints. Exit 0 when every required file is there and
@@ -46,7 +46,7 @@ def check_unit(root, app, unit_key, only_set=None):
     for_application = unit_key == dl.APPLICATION_KEY
     unit = dl.read_application(root, app) if for_application else dl.read_unit(root, app, unit_key)
     sets, problems = load(root)
-    chosen = [loaded for loaded in sets if (only_set is None or loaded['set']['id'] == only_set) and dl.files_for(loaded['set'], unit['kind'])]
+    chosen = [loaded for loaded in sets if (only_set is None or loaded['set']['id'] == only_set) and dl.files_for(loaded, unit['kind'])]
     if only_set is not None and not any(loaded['set']['id'] == only_set for loaded in sets):
         raise docmd.DataError(f'there is no design set "{only_set}" in {paths.design_sets_dir()}/')
     if only_set is not None and not chosen:
@@ -54,23 +54,23 @@ def check_unit(root, app, unit_key, only_set=None):
     mine = [problem for problem in problems if any(problem['path'].startswith(f'{paths.design_set_dir(loaded["set"]["id"])}/') for loaded in chosen)]
     if mine:
         raise docmd.DataError('fix the design templates first:\n' + '\n'.join(f'  {problem["path"]}: {problem["message"]}' for problem in mine))
-    context = dl.application_context(root, app, sets) if for_application else dl.unit_context(root, app, unit_key, sets)
+    context = dl.application_context(root, app, sets) if for_application else dl.unit_context(root, app, unit_key, sets, unit['kind'])
     report = {'unit': f'{app}/{unit_key}', 'kind': 'application' if for_application else unit['kind'], 'sets': [], 'ok': True}
     for loaded in chosen:
         set_ = loaded['set']
         files = []
-        for file in dl.files_for(set_, unit['kind']):
+        for file in dl.files_for(loaded, unit['kind']):
             waiver = unit['waived'].get((set_['id'], file['path']))
             path = os.path.join(root, *dl.design_file_path(app, unit_key, loaded, file['path']).split('/'))
-            entry = {'path': file['path'], 'required': file['required'], 'state': 'conformant', 'problems': [], 'stale': False, 'waived': waiver}
+            entry = {'path': file['path'], 'required': file['required'], 'ref': dl.ref_text(file['ref']), 'state': 'conformant', 'problems': [], 'stale': False, 'waived': waiver}
             if waiver is not None:
                 entry['state'] = 'waived'
             elif not os.path.isfile(path) or os.path.islink(path):
                 entry['state'] = 'missing'
             else:
                 text = docmd.read_text(path)
-                entry['problems'] = dl.check_document(loaded['templates'][file['template']], set_, text, context)
-                entry['stale'] = dl.is_stale(text, set_)
+                entry['problems'] = dl.check_document(dl.template_of(loaded, file), file['ref'], text, context)
+                entry['stale'] = dl.is_stale(text, file['ref'])
                 entry['state'] = 'problems' if entry['problems'] else 'conformant'
             if entry['state'] == 'problems' or (entry['state'] == 'missing' and file['required']):
                 report['ok'] = False
@@ -88,7 +88,7 @@ def render(report):
         for file in entry['files']:
             state = {'conformant': 'conformant', 'waived': f'waived: {file["waived"]}', 'missing': 'missing' if file['required'] else 'not written (optional)',
                      'problems': f'{len(file["problems"])} problem(s)'}[file['state']]
-            lines.append(f'    {file["path"]}: {state}' + (' (written against an older version of the set)' if file['stale'] else ''))
+            lines.append(f'    {file["path"]}: {state}' + (f' (written against an older version of the template, now {file["ref"]})' if file['stale'] else ''))
             for problem in file['problems']:
                 lines.append(f'      - {"[" + problem["section"] + "] " if problem.get("section") else ""}{problem["message"]}')
     lines.append('ok' if report['ok'] else 'not ready: a required file is missing or a document has problems')

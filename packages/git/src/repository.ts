@@ -138,6 +138,26 @@ export async function addWorktree(mirrorPath: string, dest: string, commit: stri
   await runGit(["--git-dir", mirrorPath, "worktree", "add", "--detach", "--", dest, commit], options);
 }
 
+/**
+ * Whether `dest` is a worktree detached at `commit` with nothing changed in it: the check that lets a job workspace
+ * reuse a checkout it made earlier (ADR-0055). False for a missing folder, another commit or a modified file.
+ */
+export async function worktreeIsAt(dest: string, commit: string): Promise<boolean> {
+  try {
+    const head = await runGit(["-C", dest, "rev-parse", "--verify", "--end-of-options", "HEAD^{commit}"]);
+    if (head.stdout.trim() !== commit) return false;
+    const status = await runGit(["--no-optional-locks", "-C", dest, "status", "--porcelain", "--untracked-files=all"]);
+    return status.stdout.trim() === "";
+  } catch {
+    return false;
+  }
+}
+
+/** Forgets the worktrees of a mirror whose folder is gone. */
+export async function pruneWorktrees(mirrorPath: string): Promise<void> {
+  await runGit(["--git-dir", mirrorPath, "worktree", "prune"]);
+}
+
 /** Removes a job worktree and forgets it in the mirror. */
 export async function removeWorktree(mirrorPath: string, dest: string): Promise<void> {
   await runGit(["--git-dir", mirrorPath, "worktree", "remove", "--force", "--", dest]);

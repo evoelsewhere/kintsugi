@@ -4,12 +4,14 @@
 // worker writes everything else.
 
 import { Injectable } from "@nestjs/common";
+import type { SourceRepo } from "@kintsugi/domain";
 import { decryptSecret } from "@kintsugi/secrets";
 import type { Pool } from "pg";
 import { getPool, withTransaction } from "#common/db/pool.js";
 import type {
   ArtifactView,
   CancelOutcome,
+  JobAttemptView,
   JobRunDetail,
   JobRunEventKind,
   JobRunEventView,
@@ -32,9 +34,12 @@ interface RunRow {
   kind: JobRunKind;
   name: string;
   status: JobRunStatus;
+  attempt: number;
+  attempts: unknown;
   failure_reason: string | null;
   source_repository_id: string | null;
   source_commit: string | null;
+  sources: unknown;
   script_hash: string | null;
   agent: string | null;
   actor: string | null;
@@ -45,7 +50,6 @@ interface RunRow {
   cancel_requested_at: Date | null;
   scope_items: unknown;
   scope_set: string | null;
-  resume_of: string | null;
   abandoned_at: Date | null;
   write_id: string | null;
   write_status: string | null;
@@ -56,14 +60,36 @@ interface RunRow {
 }
 
 const SELECT = `
-  select r.id, r.project_id, r.application_id, r.parent_id, r.kind, r.name, r.status, r.failure_reason,
-         r.source_repository_id, r.source_commit, r.script_hash, r.agent, r.actor, r.output_summary,
+  select r.id, r.project_id, r.application_id, r.parent_id, r.kind, r.name, r.status, r.attempt, r.attempts, r.failure_reason,
+         r.source_repository_id, r.source_commit, r.sources, r.script_hash, r.agent, r.actor, r.output_summary,
          r.started_at, r.finished_at, r.created_at, r.cancel_requested_at,
-         r.inputs->'scope'->'items' as scope_items, r.inputs->'scope'->>'set' as scope_set, r.inputs->>'resumeOf' as resume_of, r.abandoned_at,
+         r.inputs->'scope'->'items' as scope_items, r.inputs->'scope'->>'set' as scope_set, r.abandoned_at,
          w.id as write_id, w.status as write_status, w.branch as write_branch, w.pr_url as write_pr_url, w.error as write_error,
          (select count(*)::int from governance.restricted_record x where x.job_run_id = r.id) as restricted_records
     from workflow.job_run r
     left join workflow.document_write w on w.id = r.document_write_id`;
+
+/** The sources of a row: the recorded list, else the one repository a run recorded before the list existed. */
+function sourcesOf(row: RunRow): SourceRepo[] | undefined {
+  if (Array.isArray(row.sources)) {
+    const list = row.sources.flatMap((entry: unknown): SourceRepo[] => {
+      const { repositoryId, commit, role } = (entry ?? {}) as { repositoryId?: unknown; commit?: unknown; role?: unknown };
+      return typeof repositoryId === "string" ? [{ repositoryId, ...(typeof commit === "string" ? { commit } : {}), ...(role === "legacy" || role === "target" ? { role } : {}) }] : [];
+    });
+    if (list.length > 0) return list;
+  }
+  return row.source_repository_id === null ? undefined : [{ repositoryId: row.source_repository_id, ...(row.source_commit === null ? {} : { commit: row.source_commit }) }];
+}
+
+/** The attempts that ended, as recorded by the worker; entries that are not well formed are left out. */
+function attemptsOf(value: unknown): JobAttemptView[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry: unknown): JobAttemptView[] => {
+    const { n, status, startedAt, finishedAt, reason } = (entry ?? {}) as Record<string, unknown>;
+    if (typeof n !== "number" || (status !== "succeeded" && status !== "failed" && status !== "cancelled")) return [];
+    return [{ n, status, ...(typeof startedAt === "string" ? { startedAt } : {}), ...(typeof finishedAt === "string" ? { finishedAt } : {}), ...(typeof reason === "string" ? { reason } : {}) }];
+  });
+}
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
@@ -76,9 +102,12 @@ function toView(row: RunRow): JobRunView {
     kind: row.kind,
     name: row.name,
     status: row.status,
+    attempt: row.attempt,
+    ...(row.parent_id === null && attemptsOf(row.attempts).length > 0 ? { attempts: attemptsOf(row.attempts) } : {}),
     ...optional("failureReason", row.failure_reason),
     ...optional("sourceRepositoryId", row.source_repository_id),
     ...optional("sourceCommit", row.source_commit),
+    ...optional("sources", sourcesOf(row) ?? null),
     ...optional("scriptHash", row.script_hash),
     ...optional("agent", row.agent),
     ...optional("actor", row.actor),
@@ -97,7 +126,6 @@ function toView(row: RunRow): JobRunView {
     restrictedRecords: row.restricted_records,
     ...optional("cancelRequestedAt", row.cancel_requested_at?.toISOString() ?? null),
     ...(Array.isArray(row.scope_items) ? { scope: { items: row.scope_items.filter((item): item is string => typeof item === "string"), ...(row.scope_set === null ? {} : { set: row.scope_set }) } } : {}),
-    ...optional("resumeOf", row.resume_of),
     ...optional("abandonedAt", row.abandoned_at?.toISOString() ?? null),
     ...optional("startedAt", row.started_at?.toISOString() ?? null),
     ...optional("finishedAt", row.finished_at?.toISOString() ?? null),
@@ -113,9 +141,9 @@ export class PgJobRunStore extends JobRunStore {
 
   async createStageRun(run: NewStageRun): Promise<JobRunView> {
     await this.#pool.query(
-      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor, source_commit, inputs)
-       values ($1, $2, $3, 'stage', $4, $5, $6, $7, $8)`,
-      [run.id, run.projectId, run.applicationId, run.stage, run.sourceRepositoryId, run.actor ?? null, run.sourceCommit ?? null, JSON.stringify(run.inputs ?? {})],
+      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor, source_commit, sources, inputs)
+       values ($1, $2, $3, 'stage', $4, $5, $6, $7, $8, $9)`,
+      [run.id, run.projectId, run.applicationId, run.stage, run.sources[0]!.repositoryId, run.actor ?? null, run.sources[0]!.commit ?? null, JSON.stringify(run.sources), JSON.stringify(run.inputs ?? {})],
     );
     const result = await this.#pool.query<RunRow>(`${SELECT} where r.id = $1`, [run.id]);
     return toView(result.rows[0]!);
@@ -172,6 +200,20 @@ export class PgJobRunStore extends JobRunStore {
       steps: steps.rows.map(toView),
       artifacts: artifacts.rows.map((artifact) => ({ path: artifact.path, sha256: artifact.sha256, size: Number(artifact.size), provenance: artifact.provenance })),
     };
+  }
+
+  async requeue(projectId: string, id: string, options: { fresh: boolean; documentsCommit?: string }): Promise<boolean> {
+    // The same run goes back in the queue as its next attempt; its inputs (scope, pinned documents) stay, `fresh` is replaced.
+    const result = await this.#pool.query(
+      `update workflow.job_run
+          set status = 'queued', attempt = attempt + 1, failure_reason = null, finished_at = null, started_at = null,
+              cancel_requested_at = null, cancel_requested_by = null,
+              inputs = inputs || jsonb_build_object('fresh', $3::boolean)
+                      || case when inputs ? 'documentsCommit' or $4::text is null then '{}'::jsonb else jsonb_build_object('documentsCommit', $4::text) end
+        where project_id = $1 and id = $2 and parent_id is null and status = 'failed'`,
+      [projectId, id, options.fresh, options.documentsCommit ?? null],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async restricted(projectId: string, id: string): Promise<RestrictedRecordView[]> {
@@ -274,8 +316,8 @@ export class PgJobRunStore extends JobRunStore {
   }
 
   async events(id: string, afterId: string | undefined, limit: number): Promise<JobRunEventView[]> {
-    const result = await this.#pool.query<{ id: string; at: Date; kind: JobRunEventKind; message: string; step_run_id: string | null; data: Record<string, unknown> }>(
-      `select id::text, at, kind, message, step_run_id, data from workflow.job_event
+    const result = await this.#pool.query<{ id: string; at: Date; kind: JobRunEventKind; message: string; step_run_id: string | null; attempt: number; data: Record<string, unknown> }>(
+      `select id::text, at, kind, message, step_run_id, attempt, data from workflow.job_event
         where job_run_id = $1 and id > $2 order by id limit $3`,
       [id, afterId ?? "0", limit],
     );
@@ -285,6 +327,7 @@ export class PgJobRunStore extends JobRunStore {
       kind: row.kind,
       message: row.message,
       ...optional("stepRunId", row.step_run_id),
+      attempt: row.attempt,
       data: row.data,
     }));
   }

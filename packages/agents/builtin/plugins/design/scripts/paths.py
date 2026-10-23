@@ -27,6 +27,43 @@ UNIT_CARD = 'README.md'
 _SEGMENT = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
 
 
+# ---------------------------------------------------------------------------
+# The legacy repositories of a run (ADR-0052), mirroring packages/domain/src/source.ts
+# ---------------------------------------------------------------------------
+
+_SOURCE_FOLDER = re.compile(r'^[a-z0-9][a-z0-9._-]{0,127}$', re.IGNORECASE)
+_COMMIT = re.compile(r'^[0-9a-f]{40}([0-9a-f]{24})?$')
+
+
+def is_source_folder(name):
+    """Whether `name` can be the id (the mount folder) of a legacy repository: one safe path segment."""
+    return bool(_SOURCE_FOLDER.match(name))
+
+
+def parse_sources(spec):
+    """[(repository id, commit)] of a spec `id@commit,id@commit`: one source folder under `as-is/` each, in order.
+    Raises ValueError when the spec is not well formed."""
+    sources = []
+    for part in spec.split(','):
+        pieces = part.strip().split('@')
+        if len(pieces) != 2 or not _SOURCE_FOLDER.match(pieces[0]) or not _COMMIT.match(pieces[1]):
+            raise ValueError(f'not a source "<repository id>@<commit>": {part.strip()[:80]}')
+        if any(repo == pieces[0] for repo, _ in sources):
+            raise ValueError(f'repository {pieces[0]} is listed twice')
+        sources.append((pieces[0], pieces[1]))
+    return sources
+
+
+def sources_spec(sources):
+    return ','.join(f'{repo}@{commit}' for repo, commit in sources)
+
+
+def split_source_path(cited, sources):
+    """(repository id, path inside it) of a cited `<repository id>/<path>`, None when its first segment is not one of `sources`."""
+    repo, slash, path = cited.partition('/')
+    return (repo, path) if slash and any(repo == known for known, _ in sources) else None
+
+
 def split_unit_key(unit_key):
     """(module, unit) of a `<module>/<unit>` key."""
     module, unit = unit_key.split('/', 1)
@@ -118,6 +155,10 @@ def design_set_path(set_id):
 
 def design_template_path(set_id, template):
     return f'{design_set_dir(set_id)}/{template}'
+
+
+def design_profile_path(set_id, kind):
+    return f'{design_set_dir(set_id)}/{kind}/profile.md'
 
 
 def application_design_dir(app):
@@ -227,6 +268,19 @@ def design_run_dir(app):
 
 def design_manifest_path(app):
     return f'{design_run_dir(app)}/manifest.json'
+
+
+def design_review_path(app, unit_key):
+    name = '_application' if unit_key == '@app' else unit_key
+    return f'{design_run_dir(app)}/review/{name}.md'
+
+
+def design_review_report_path(app):
+    return f'{design_run_dir(app)}/review-report.json'
+
+
+def design_summary_path(app):
+    return f'{design_run_dir(app)}/review.md'
 
 
 def design_report_path(app):
