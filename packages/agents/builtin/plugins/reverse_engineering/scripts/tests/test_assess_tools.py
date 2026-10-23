@@ -314,6 +314,24 @@ class RenderTopologyTests(unittest.TestCase):
         self.assertIn('flows', result.stderr)
         self.assertFalse(os.path.exists(self.out))
 
+    def test_observations_written_as_objects_are_rendered_as_text(self):
+        topology = make_topology()
+        topology['observations'] = [{'text': 'Coupling between A and B.', 'severity': 'high'}, 'Plain line.', {'id': 'o1'}]
+        write_json(self.topology, topology)
+        result = self.render()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        body = docmd.read_text(os.path.join(self.out, 'topology.md'))
+        self.assertIn('Coupling between A and B.', body)
+        self.assertIn('Plain line.', body)
+
+    def test_observations_without_any_text_fail_with_what_is_wrong(self):
+        broken = make_topology()
+        broken['observations'] = [{'severity': 3}]
+        write_json(self.topology, broken)
+        result = self.render()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('observations', result.stderr)
+
     def test_a_duplicate_node_id_fails(self):
         broken = make_topology()
         broken['root']['children'][1]['children'][0]['id'] = 'module:AccountService'
