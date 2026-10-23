@@ -1,8 +1,8 @@
-# ADR-0055: Generate portable Agent Plugins packages for Codex and Copilot
+# ADR-0062: Generate portable Agent Plugins packages for Codex and Copilot
 
 - Status: Accepted
 - Date: 2026-10-22
-- Decision register: D19, D71
+- Decision register: D19, D78
 - Supersedes: the Codex package manifest layout in ADR-0015; the canonical Kintsugi asset source format is unchanged.
 
 ## Context

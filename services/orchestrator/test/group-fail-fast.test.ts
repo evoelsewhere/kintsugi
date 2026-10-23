@@ -47,7 +47,7 @@ async function runGroup(): Promise<{ error: string | undefined; started: string[
   const executor = new StagePlanExecutor({
     plan,
     run: { id: "r", projectId: "p" },
-    values: { app: "demo", repo: "legacy", commit: "abc" },
+    values: { app: "demo", sources: `legacy@${"a".repeat(40)}` },
     dirs,
     limits: { maxAgents: 10, concurrency: 3 },
     gates: { decide: async (_request: unknown, fallback: string) => fallback } as never,

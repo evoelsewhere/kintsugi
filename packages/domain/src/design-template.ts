@@ -28,18 +28,36 @@ export const APPLICATION_UNIT_KEY = "@app";
 /** A set id is also its folder name under `01-standards/templates/`. */
 export const DESIGN_SET_ID_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 
+/** A unit kind with a profile is the folder name `01-standards/templates/<set>/<kind>/` (ADR-0053). */
+export const DESIGN_KIND_PATTERN = DESIGN_SET_ID_PATTERN;
+
+/** The file of a profile folder that defines the profile; the folder of finished examples is `_examples/`. */
+export const DESIGN_PROFILE_FILE = "profile.md";
+export const DESIGN_EXAMPLES_DIR = "_examples";
+
 /** A common component id, the file name of `02-architecture/common/<id>.md`. */
 export const COMPONENT_ID_PATTERN = /^COM-[A-Z0-9][A-Z0-9-]{0,38}$/;
 
-/** One document of a set: a row of the files table in `set.md`. */
+/** One document of a set: a row of the files table in `set.md` or `profile.md`. */
 export interface DesignFileSpec {
   /** Relative to the unit's `<set>/` folder on the modern side. */
   path: string;
-  /** A file in the set's folder. */
+  /** A file in the set's folder; for a kind with a profile, the same name in the profile's folder replaces it. */
   template: string;
   required: boolean;
-  /** Unit kinds that need the file; empty means every kind the set applies to. */
-  when: string[];
+}
+
+/** The variation of a set for one unit kind (ADR-0053): `01-standards/templates/<set>/<kind>/profile.md`. */
+export interface DesignProfile {
+  kind: string;
+  /** Raised on a change that affects the designs written with the profile's templates. */
+  version: number;
+  /** Files added to the base ones, or redefining a base file of the same path. */
+  files: DesignFileSpec[];
+  /** Paths of base files this kind does not have. */
+  removes: string[];
+  /** The `## Instructions` section of `profile.md`, read after the set's. */
+  instructions: string;
 }
 
 export interface DesignSet {
@@ -49,14 +67,13 @@ export interface DesignSet {
   version: number;
   /** `unit`: a design per unit; `application`: one design for the whole application. */
   scope: DesignScope;
-  /** Unit kinds the set is for; empty means every kind (and always empty for an application set). */
-  appliesTo: string[];
   /** Sets that must exist before this one. */
   needs: string[];
   /** The pipeline stage that produces it. */
   stage?: string;
   /** Documents the designer reads besides the ones every design run sees (`{app}` allowed). */
   reads: string[];
+  /** The files every kind has, unless its profile changes them; none when the set is only for kinds with a profile. */
   files: DesignFileSpec[];
   /** The `## Instructions` section of `set.md`, for the designer. */
   instructions: string;
@@ -114,15 +131,15 @@ export interface DesignProblem {
 export const DESIGN_STATES = ["conformant", "problems", "stale", "missing", "waived", "not-applicable"] as const;
 export type DesignState = (typeof DESIGN_STATES)[number];
 
-/** `<set>@<version>`, the provenance a design file carries in its front matter. */
-export function designTemplateRef(set: string, version: number): string {
-  return `${set}@${version}`;
+/** `<set>@<version>` for a base template, `<set>/<kind>@<version>` for a profile's: the provenance a design file carries in its front matter. */
+export function designTemplateRef(set: string, version: number, kind?: string): string {
+  return `${kind === undefined ? set : `${set}/${kind}`}@${version}`;
 }
 
-/** The set and version a `template` front-matter value names, or undefined when it is not of the form `<set>@<version>`. */
-export function parseDesignTemplateRef(value: string): { set: string; version: number } | undefined {
-  const match = /^([a-z][a-z0-9-]{0,39})@([1-9][0-9]{0,8})$/.exec(value.trim());
-  return match === null ? undefined : { set: match[1] as string, version: Number(match[2]) };
+/** The set, kind (of a profile's template) and version a `template` front-matter value names, or undefined when it has neither form. */
+export function parseDesignTemplateRef(value: string): { set: string; kind?: string; version: number } | undefined {
+  const match = /^([a-z][a-z0-9-]{0,39})(?:\/([a-z][a-z0-9-]{0,39}))?@([1-9][0-9]{0,8})$/.exec(value.trim());
+  return match === null ? undefined : { set: match[1] as string, ...(match[2] === undefined ? {} : { kind: match[2] }), version: Number(match[3]) };
 }
 
 /** A waiver in the `waived` list of the unit card (`README.md`): `<set>/<file>: <reason>`. */

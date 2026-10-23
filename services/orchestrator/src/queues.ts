@@ -26,6 +26,12 @@ export const SNAPSHOT_RETENTION_QUEUE = "snapshot-retention";
  */
 export const JOB_RUN_QUEUE = "job-run";
 
+/**
+ * An admin's request to remove one job workspace (Settings -> Sandbox, ADR-0058). The API cannot write the data
+ * volume, so it asks the worker, which checks again that the run is not active before it deletes anything.
+ */
+export const WORKSPACE_CLEANUP_QUEUE = "workspace-cleanup";
+
 type QueueOptions = NonNullable<Parameters<PgBoss["createQueue"]>[1]>;
 
 export const DOCUMENT_WRITE_QUEUE_OPTIONS: QueueOptions = {
@@ -50,6 +56,17 @@ export const SNAPSHOT_RETENTION_QUEUE_OPTIONS: QueueOptions = {
   expireInSeconds: 60 * 60,
 };
 
+export const WORKSPACE_CLEANUP_QUEUE_OPTIONS: QueueOptions = {
+  policy: "standard",
+  retryLimit: 0,
+  expireInSeconds: 30 * 60,
+};
+
+/** Payload of a workspace-cleanup job. */
+export interface WorkspaceCleanupRequest {
+  jobId: string;
+  actor?: string;
+}
 /** Payload of a `job-run` job; the API creates the row as `queued` first. */
 /** Durable outbox intent consumed by the worker to retain a snapshot. */
 export interface SnapshotRetentionRequest {
@@ -94,6 +111,8 @@ export interface DocumentWriteRequest {
   unit?: string;
   /** Every file goes to the pull request, auto-commit paths included (a stage's proposals). */
   reviewAll?: boolean;
+  /** Markdown a stage wrote for the pull request description, shown between the message and the file list (ADR-0054). */
+  description?: string;
 }
 
 /** Creates the queue if missing; safe on every start, from any process. */
@@ -119,4 +138,14 @@ export async function ensureSnapshotRetentionQueue(boss: PgBoss): Promise<void> 
 /** Enqueues one delivery per run id; outbox replay and recovery can safely send it again. */
 export async function sendJobRun(boss: PgBoss, request: JobRunRequest): Promise<void> {
   await boss.send(JOB_RUN_QUEUE, request, { singletonKey: request.jobRunId });
+}
+
+/** Creates the workspace-cleanup queue if missing; safe on every start, from any process. */
+export async function ensureWorkspaceCleanupQueue(boss: PgBoss): Promise<void> {
+  await boss.createQueue(WORKSPACE_CLEANUP_QUEUE, WORKSPACE_CLEANUP_QUEUE_OPTIONS);
+}
+
+/** Asks the worker to remove one job workspace. */
+export async function sendWorkspaceCleanup(boss: PgBoss, request: WorkspaceCleanupRequest): Promise<void> {
+  await boss.send(WORKSPACE_CLEANUP_QUEUE, request);
 }

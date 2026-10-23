@@ -11,7 +11,9 @@ export {
   fetchMirror,
   lsRemote,
   parseGitVersion,
+  pruneWorktrees,
   removeWorktree,
+  worktreeIsAt,
   isAncestor,
   resolveCommit,
   type MirrorOptions,
@@ -19,7 +21,7 @@ export {
   type RemoteInfo,
   type RemoteOptions,
 } from "./repository.js";
-export { CheckoutStorage, dataDirFromEnv, type JobPaths } from "./storage.js";
+export { CheckoutStorage, dataDirFromEnv, stepFolder, type JobPaths, type StepPaths } from "./storage.js";
 export {
   BOT_NAME,
   COMMIT_IDENTITY_SETTING,

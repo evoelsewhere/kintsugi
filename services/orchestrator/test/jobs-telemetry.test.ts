@@ -36,7 +36,6 @@ describe("telemetry of an agent job", () => {
 
   it("stores every span of the attempt with its agent, model and attempt, and sums cache tokens into the usage", async () => {
     const store = new MemoryJobStore();
-    store.legacy = { demo: "legacy" };
     const runner = new JobRunner({
       store,
       gates: DEFAULT_GATE_DECIDER,

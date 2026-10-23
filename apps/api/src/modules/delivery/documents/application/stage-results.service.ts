@@ -9,6 +9,7 @@ import {
   assessmentCatalogModulePath,
   assessmentDir,
   generatedDir,
+  unitAsIsPath,
   unitDataObjectsPath,
   unitFindingsPath,
   unitLegacyDir,
@@ -24,6 +25,8 @@ import {
   type StageSource,
   assessHeadline,
   assessResults,
+  gapsHeadline,
+  gapsResults,
   hardenHeadline,
   hardenResults,
   mapHeadline,
@@ -45,6 +48,7 @@ const HEADLINES: Record<ResultStage, (source: StageSource) => Promise<{ counts: 
   "extract-rules": rulesHeadline,
   harden: hardenHeadline,
   understand: understandHeadline,
+  gaps: gapsHeadline,
 };
 
 export const isResultStage = (stage: string): stage is ResultStage => (RESULT_STAGES as readonly string[]).includes(stage);
@@ -87,6 +91,9 @@ export class StageResultsService {
       case "harden":
         results = { stage, ...common, ...(await hardenResults(source, appDir)), restrictedRecords: runId === undefined ? 0 : await this.restrictedCount(projectId, runId), ...(runId === undefined ? {} : { runId }) };
         break;
+      case "gaps":
+        results = { stage, ...common, ...(await gapsResults(source, appDir)) };
+        break;
       case "understand": {
         // Work-item status is current on the default branch, not on the run's branch.
         const tip = await this.defaultBranchRef(context);
@@ -113,7 +120,7 @@ export class StageResultsService {
    * legacy folder), at a ref (default: the default branch; a run's branch shows that run's items).
    */
   async understandResults(projectId: string, applicationId: string, view: string, item: string | undefined, ref: string | undefined): Promise<StageResults & { scope: { item?: string } }> {
-    if (view === "assess" || !isResultStage(view)) throw new BadRequestException(`View "${view}" is not an understand result (available: map, extract-rules, harden, understand)`);
+    if (view === "assess" || !isResultStage(view)) throw new BadRequestException(`View "${view}" is not an understand result (available: map, extract-rules, harden, gaps, understand)`);
     if (item !== undefined && !CATALOG_ITEM_ID_PATTERN.test(item)) throw new BadRequestException(`"${item.slice(0, 130)}" is not a catalog item id`);
     const context = await this.documents.context(projectId);
     this.application(context, applicationId);
@@ -133,6 +140,8 @@ export class StageResultsService {
         overrides.set("DATA_OBJECTS.md", (await readAt(unitDataObjectsPath(applicationId, module, unit))) ?? null);
       }
       if (view === "harden") overrides.set("SECURITY_FINDINGS.md", (await readAt(unitFindingsPath(applicationId, module, unit))) ?? null);
+      // The unit's specification holds its gaps table; the view reads it under the name of the aggregate.
+      if (view === "gaps") overrides.set("GAPS.md", (await readAt(unitAsIsPath(applicationId, module, unit))) ?? null);
       if (view === "understand") {
         const moduleDocument = await readAt(assessmentCatalogModulePath(applicationId, module));
         if (moduleDocument === undefined || !moduleDocument.includes(`\n## ${item}: `)) throw new NotFoundException(`${item} is not in the catalog of ${applicationId} at ${selected.ref}`);
@@ -151,6 +160,8 @@ export class StageResultsService {
         return { stage: view, ...common, ...(await rulesResults(source, appDir)) };
       case "harden":
         return { stage: view, ...common, ...(await hardenResults(source, appDir)), restrictedRecords: 0 };
+      case "gaps":
+        return { stage: view, ...common, ...(await gapsResults(source, appDir, item)) };
       case "understand":
         return { stage: view, ...common, ...(await understandResults(source, appDir, applicationId, [], undefined, item)) };
       default:
@@ -164,7 +175,8 @@ export class StageResultsService {
     this.application(context, applicationId);
     const all = (await this.runs.list(projectId, applicationId, { limit: RECENT_RUNS, offset: 0 })).items;
     return Promise.all(
-      RESULT_STAGES.map(async (stage) => {
+      // `gaps` is a view of the understand stage, not a stage with runs of its own.
+      RESULT_STAGES.filter((stage) => stage !== "gaps").map(async (stage) => {
         const runs = all.filter((run) => run.kind === "stage" && run.name === stage && run.status === "succeeded");
         // Without a successful run, the default branch holds nothing this application's stage wrote.
         if (runs.length === 0) return { stage, headline: [] };

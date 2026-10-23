@@ -21,6 +21,8 @@ export abstract class GitRegistry {
   abstract findRepositoryByUrl(url: string): Promise<GitRepositoryRecord | undefined>;
   abstract countRepositories(serverId: string): Promise<number>;
   abstract createRepository(input: RegisterGitRepository): Promise<GitRepositoryRecord>;
+  /** Sets the branch Kintsugi follows and marks the repository `pending`: the worker syncs it again. */
+  abstract setRepositoryBranch(id: string, branch: string): Promise<GitRepositoryRecord | undefined>;
   /** Rejects with RepositoryInUseError while a project links the repository. */
   abstract removeRepository(id: string): Promise<boolean>;
 }

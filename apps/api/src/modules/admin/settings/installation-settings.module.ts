@@ -5,12 +5,12 @@ import { Module } from "@nestjs/common";
 import { InstallationSettingsService } from "./application/installation-settings.service.js";
 import { InstallationSettings } from "./domain/installation-settings.js";
 import { PgInstallationSettings } from "./infrastructure/pg-installation-settings.js";
-import { InstallationSettingsController } from "./interface/installation-settings.controller.js";
+import { InstallationSettingsController, SandboxSettingsController } from "./interface/installation-settings.controller.js";
 import { CodingAgentSecurityController } from "./interface/coding-agent-security.controller.js";
 
 /** admin · installation settings managed in the portal (commit identity, …). */
 @Module({
-  controllers: [InstallationSettingsController, CodingAgentSecurityController],
+  controllers: [InstallationSettingsController, SandboxSettingsController, CodingAgentSecurityController],
   providers: [InstallationSettingsService, { provide: InstallationSettings, useClass: PgInstallationSettings }],
   exports: [InstallationSettingsService],
 })

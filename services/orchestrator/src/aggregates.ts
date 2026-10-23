@@ -45,19 +45,20 @@ export async function triggerRebuilds(deps: RebuildTriggerDeps, move: TipMove): 
   const started: string[] = [];
   for (const { project_id: projectId } of projects.rows) {
     for (const app of apps) {
+      // Every legacy repository of the application, in the order they were linked (ADR-0052).
       const legacy = await deps.pool.query<{ repository_id: string }>(
-        "select repository_id from admin.project_repository where project_id = $1 and application_id = $2 and role = 'legacy' order by created_at, repository_id limit 1",
+        "select repository_id from admin.project_repository where project_id = $1 and application_id = $2 and role = 'legacy' order by created_at, repository_id",
         [projectId, app],
       );
-      const repository = legacy.rows[0]?.repository_id;
-      if (repository === undefined) continue;
+      const repositories = legacy.rows.map((row) => row.repository_id);
+      if (repositories.length === 0) continue;
       const id = randomUUID();
       // One queued or running rebuild per application: a later tip is covered by the run that starts after it.
       const inserted = await deps.pool.query(
-        `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor)
-         select $1, $2, $3, 'stage', 'rebuild', $4, 'kintsugi'
+        `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, sources, actor)
+         select $1, $2, $3, 'stage', 'rebuild', $4, $5::jsonb, 'kintsugi'
           where not exists (select 1 from workflow.job_run where project_id = $2 and application_id = $3 and name = 'rebuild' and parent_id is null and status = 'queued')`,
-        [id, projectId, app, repository],
+        [id, projectId, app, repositories[0], JSON.stringify(repositories.map((repositoryId) => ({ repositoryId })))],
       );
       if ((inserted.rowCount ?? 0) === 0) continue;
       await deps.enqueue(id);

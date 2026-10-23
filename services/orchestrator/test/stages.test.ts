@@ -38,8 +38,8 @@ const CATALOGED = {
     "demo",
     [{ id: "core", name: "Core" }],
     [
-      { id: "core/main-program", name: "Main program", files: ["src/main.c", "src/rates.c"] },
-      { id: "core/gone", name: "Gone", files: ["src/gone.c"] },
+      { id: "core/main-program", name: "Main program", files: ["small/src/main.c", "small/src/rates.c"] },
+      { id: "core/gone", name: "Gone", files: ["small/src/gone.c"] },
     ],
   ),
 };
@@ -54,10 +54,10 @@ const CATALOGED_SMALL = {
       { id: "rates", name: "Rates" },
     ],
     [
-      { id: "billing/main", files: ["src/main.c"], leaves: ["MAIN"], entryPoints: ["MAIN"], dependsOn: ["rates/rates"] },
-      { id: "rates/rates", files: ["src/rates.c"], leaves: ["RATES"], dataStores: ["ds:RATES"] },
+      { id: "billing/main", files: ["small/src/main.c"], leaves: ["MAIN"], entryPoints: ["MAIN"], dependsOn: ["rates/rates"] },
+      { id: "rates/rates", files: ["small/src/rates.c"], leaves: ["RATES"], dataStores: ["ds:RATES"] },
     ],
-    ["package.json"],
+    ["small/package.json"],
   ),
   "10-applications/demo/02-modern/billing/main/README.md": "---\nid: demo/billing/main\nstatus: in-progress\n---\n",
 };
@@ -80,7 +80,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     repos["cataloged-small-docs"] = fixtureRepository(CATALOGED_SMALL);
     repos["understood-docs"] = fixtureRepository({
       ...CATALOGED_SMALL,
-      ...understoodUnit("demo", "rates/rates", { digest: "sha256:rates", commit: "a".repeat(40), rule: { id: "RULE-rates.rates-1a2b3c4d", name: "Double large amounts", source: "src/rates.c:1" } }),
+      ...understoodUnit("demo", "rates/rates", { digest: "sha256:rates", commit: "a".repeat(40), rule: { id: "RULE-rates.rates-1a2b3c4d", name: "Double large amounts", source: "small/src/rates.c:1" } }),
     });
     dataDir = mkdtempSync(join(tmpdir(), "kintsugi-stages-data-"));
     storage = new CheckoutStorage(dataDir);
@@ -168,8 +168,8 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       ["core/gone", "core", "retired"],
       ["core/main-program", "core", "active"],
     ]);
-    expect(catalog.items[1]).toMatchObject({ files: ["src/main.c", "src/rates.c"], aliases: ["Main program"] });
-    expect(catalog.unassigned).toEqual(["package.json"]);
+    expect(catalog.items[1]).toMatchObject({ files: ["small/src/main.c", "small/src/rates.c"], aliases: ["Main program"] });
+    expect(catalog.unassigned).toEqual(["small/package.json"]);
     // The mock extraction found no edges, and the inventory summary names the source commit.
     expect(documentOf(readFileSync(join(out, "inventory.md"), "utf8")).data).toMatchObject({ app: "demo", fileCount: 3, sourceFileCount: 2 });
     expect(documentOf(readFileSync(join(out, "topology.md"), "utf8")).data).toMatchObject({ system: "demo", domains: 1 });
@@ -182,7 +182,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const { run, writes, agents, summary, artifacts, id, store, root } = await runStage("understand", {
       legacy: "small",
       docs: "cataloged-small-docs",
-      inputs: { scope: { items: ["billing/main", "rates/rates"], files: ["src/main.c", "src/rates.c"] } },
+      inputs: { scope: { items: ["billing/main", "rates/rates"], files: ["small/src/main.c", "small/src/rates.c"] } },
     });
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
@@ -220,7 +220,8 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(unit("rates/rates/topology.md")).toContain("| ds:RATES | read |");
     const record = documentOf(unit("rates/rates/understanding.md")).data;
     expect(record).toMatchObject({ item: "rates/rates", status: "understood", digest: "sha256:rates", runId: id, specification: "10-applications/demo/01-legacy/rates/rates/spec.md" });
-    expect(record["commit"]).toMatch(/^[0-9a-f]{40}$/);
+    // The record names the repository and commit the run read: `<repository id>@<commit>`.
+    expect(record["sources"]).toEqual([expect.stringMatching(/^small@[0-9a-f]{40}$/)]);
     // The unit card a person already has is left alone.
     expect(existsSync(card("billing/main"))).toBe(false);
     expect(readFileSync(card("rates/rates"), "utf8")).toContain('id: "demo/rates/rates"');
@@ -316,7 +317,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     // Every output is under the default autoCommitPaths: the writer commits it without a pull request.
     expect(artifacts.every((path) => isAutoCommitPath(path, DEFAULT_AUTO_COMMIT_PATHS))).toBe(true);
     expect(readFileSync(join(root, "10-applications", "demo", "_generated", "BUSINESS_RULES.md"), "utf8")).toContain(
-      "| RULE-rates.rates-1a2b3c4d | rates/rates | Double large amounts | Calculation | P0 | High | 1 | confirmed | `src/rates.c:1` | [RULE-rates.rates-1a2b3c4d](../01-legacy/rates/rates/rules/RULE-rates.rates-1a2b3c4d.md) |",
+      "| RULE-rates.rates-1a2b3c4d | rates/rates | Double large amounts | Calculation | P0 | High | 1 | confirmed | `small/src/rates.c:1` | [RULE-rates.rates-1a2b3c4d](../01-legacy/rates/rates/rules/RULE-rates.rates-1a2b3c4d.md) |",
     );
     expect(documentOf(readFileSync(join(root, "10-applications", "demo", "_generated", "traceability.md"), "utf8")).data).toMatchObject({ items: 2, units: 1, rulesCovered: 1 });
     expect(writes[0]).toMatchObject({ message: "Rebuild the generated views of demo from its understood units" });

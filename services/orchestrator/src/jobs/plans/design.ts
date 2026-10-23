@@ -3,13 +3,16 @@
 // itself (the one pseudo-unit `@app`). A run is one set × many units (inputs.scope: the unit keys and the set) and one
 // pull request that touches only the `<set>/` folders of its units on the modern side (or `_design/<set>/` of the application). The flow is the one of
 // `understand`: a script prepares, an agent job per unit does the work, a script checks it, and a second round fixes
-// what the check found:
+// what the check found; an independent reviewer reads each unit in between (ADR-0054):
 //
 //   scaffold_design.py   per unit the skeleton of each document of the set from its template (scratch) and a manifest
 //   forEach unit         a designer job writes every document of the set at its document-repository path
 //   check_design.py      the template's checks for every unit; the report is scratch
-//   forEach flagged unit a designer job fixes what the check named (skipped when nothing was flagged)
+//   forEach unit         a design-reviewer job reads the documents against the unit's AS-IS specification and writes its findings (scratch)
+//   check_review.py      the findings of the notes, per unit (scratch)
+//   forEach flagged unit a designer job fixes what the check named and the blockers and majors of the review (skipped when nothing was flagged)
 //   check_design.py      the result; a unit that still has problems is carried by the pull request, never a failure
+//   render_design_review.py  the review of the run: the description of the pull request (scratch)
 //
 // The documents are the published output; the skeletons, the manifest and the reports are intermediate. What a
 // document must contain is the project's template (01-standards/templates/<set>/), read by the agent, the scaffold and the
@@ -27,7 +30,10 @@ import {
   commonComponentsDir,
   designManifestPath,
   designReportPath,
+  designReviewPath,
+  designReviewReportPath,
   designSetsDir,
+  designSummaryPath,
   generatedDir,
   legacyDir,
   modernDir,
@@ -42,20 +48,27 @@ import { CREDENTIALS, UNTRUSTED, WORKSPACE } from "./common.js";
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
 const MANIFEST = designManifestPath(APP_TOKEN);
 const REPORT = designReportPath(APP_TOKEN);
+const REVIEW_REPORT = designReviewReportPath(APP_TOKEN);
+const SUMMARY = designSummaryPath(APP_TOKEN);
 const SET_ID = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 /** The designer agent of the `design` plugin. */
 const DESIGNER = "designer";
+/** The independent reviewer of the `design` plugin (ADR-0054). */
+const REVIEWER = "design-reviewer";
 /** The project's common design and standards, as every designer job reads them. */
 const COMMON = `${architectureDir()}/blueprint.md and ${commonComponentsDir()}/ (components COM-...), the requirements ${applicationRequirementsPath(APP_TOKEN)}, the application's design
   ${applicationDesignPath(APP_TOKEN)}, the project's ${standardsDir()}/ (conventions, mappings), and ${transitionDir()}/ (coexistence,
   data migration, and the shared data definitions in shared-data/ that several applications use)`;
 
 const READING = `Under {in} (read-only), at their document-repository paths:
-- The project's definition of the set: ${designSetsDir()}/<set>/set.md and the template of each document next to it. Under each heading a
-  comment holds the section's contract (required, table columns, seed, checks, guidance): keep every heading and column as given.
+- The project's definition of the set: ${designSetsDir()}/<set>/set.md and the template of each document next to it, and, when the manifest
+  names a profile for your unit's kind, <set>/<kind>/profile.md: its Instructions come after the set's, and the templates in that folder
+  replace the set's own of the same name. Under each heading a comment holds the section's contract (required, table columns, seed, checks,
+  guidance): keep every heading and column as given, in the template the manifest names for the document (templateFile).
 - The skeleton of each document the scaffold wrote, at its final path ${unitKeyDesignSetDir(APP_TOKEN, "{key}", "<set>")}/<file>, with the
   front matter that names the template, the unit's rules seeded where a section lists them, and a TODO in each section to write. The manifest
-  ${MANIFEST} lists, for your unit {key}, the documents of the set (path, template, whether required).
+  ${MANIFEST} lists, for your unit {key}, the documents of the set (path, template, templateFile, the reference ref its front matter names,
+  whether required) and, where the project has one, a finished example of the document: match its shape and depth, never copy its content.
 - What the unit is: ${unitKeyAsIsPath(APP_TOKEN, "{key}")} (the AS-IS specification), rules.md and the rule files under rules/, rules-review.md,
   topology.md, trace.md and findings.md in the same folder, and the unit's card ${unitKeyStatePath(APP_TOKEN, "{key}")}.
 - The common design: ${COMMON}, and the catalog ${assessmentCatalogPath(APP_TOKEN)}.
@@ -64,7 +77,8 @@ const READING = `Under {in} (read-only), at their document-repository paths:
 const RULES = `Identifiers are facts: cite a business rule by its id from rules.md, a common component by its COM-... id, a design item of an earlier set by the id
 in that set's documents; never invent or reuse one. Every rule of the unit appears where the template says rules are covered. Design from the
 specification, not from the legacy structure; read the legacy code only to establish behavior you cite as path:line. What the code or the
-understanding does not tell, and every rule marked clarify in rules-review.md, becomes a written question in the document, never a guess. A
+understanding does not tell, every blocking or risk gap of the specification's "Gaps and questions" table (GAP-... ids) and every rule marked
+clarify in rules-review.md, becomes a written question in the document with the assumption you made, never a silent decision. A
 detail design is precise enough to build from: names, types, conditions, messages and error codes are written. Diagrams are Mermaid, per the
 mermaid-diagrams skill. Write only the documents of this set for this unit: no other file.`;
 
@@ -72,7 +86,8 @@ mermaid-diagrams skill. Write only the documents of this set for this unit: no o
 const APPLICATION_READING = `Under {in} (read-only), at their document-repository paths:
 - The project's definition of the set: ${designSetsDir()}/<set>/set.md and the template of each document next to it. Under each heading a
   comment holds the section's contract (required, table columns, checks, guidance): keep every heading and column as given. The section
-  "Instructions" of set.md is addressed to you: follow it.
+  "Instructions" of set.md is addressed to you: follow it. Where the manifest names an example of a document, match its shape and depth,
+  never copy its content.
 - The skeleton of each document the scaffold wrote, at its final path ${applicationDesignSetDir(APP_TOKEN, "<set>")}/<file>, with the
   front matter that names the template and a TODO in each section to write. The manifest ${MANIFEST} lists, for {key}, the documents of the set
   (path, template, whether required) and the extra documents the set asks you to read.
@@ -113,17 +128,35 @@ full path of its skeleton, replacing every TODO and keeping the front matter. ${
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
+const reviewTask = (set: string, scope: "unit" | "application"): string => {
+  const subject = scope === "application" ? `application {app}` : `unit {key} of application {app}`;
+  return `Review the design documents of the set "${set}" of ${subject}. You did not write them: judge them against what the old system does and against the project's template.
+
+${WORKSPACE}
+
+${(scope === "application" ? APPLICATION_READING : READING).replaceAll("<set>", set)}
+
+The documents under review are at the final paths above (the designer has replaced the skeletons). The check report is {in}/${REPORT}: it lists what the scripts
+already found, so do not repeat it. Report what a script cannot: behavior of the specification the design drops, a rule named but not designed, ids and
+names that disagree, anything a builder would have to guess. Write your review note with write at ${designReviewPath(APP_TOKEN, scope === "application" ? "@app" : "{key}")}, in the form your instructions give; write no other file.
+
+${CREDENTIALS}
+${UNTRUSTED}`;
+};
+
 const fixTask = (set: string, scope: "unit" | "application"): string => {
   const subject = scope === "application" ? `application {app}` : `unit {key} of application {app}`;
-  return `Fix the design documents of the set "${set}" of ${subject}: a check of the documents against the project's template found problems.
+  return `Fix the design documents of the set "${set}" of ${subject}: a check of the documents against the project's template found problems, or an independent reviewer found blockers or majors.
 
 ${WORKSPACE}
 
 ${(scope === "application" ? APPLICATION_READING : READING).replaceAll("<set>", set)}
 
 The documents you wrote are under {in} at their final paths. The check report is {in}/${REPORT}: find the entry of {app}/{key}; per file it lists the state
-and the problems (section and message, never content). Change only what the problems name, in the documents they name, and write each of those documents
-again in full with write, at the same path (a file that is missing is written from its skeleton). ${scope === "application" ? APPLICATION_RULES : RULES}
+and the problems (section and message, never content). The reviewer's findings are in {in}/${REVIEW_REPORT}: find the entry of {app}/{key}; each finding names a
+document, a section, what is wrong and a suggestion. Fix the check problems and the findings of severity blocker and major, and leave the minors to the person.
+Change only what they name, in the documents they name, and write each of those documents again in full with write, at the same path (a file that is missing
+is written from its skeleton). ${scope === "application" ? APPLICATION_RULES : RULES}
 
 ${CREDENTIALS}
 ${UNTRUSTED}`;
@@ -176,6 +209,24 @@ async function flagged(ctx: StageContext): Promise<string[]> {
     .map((entry) => (entry.unit as string).slice(prefix.length));
 }
 
+interface ReviewReport {
+  units?: Array<{ unit?: unknown; reviewed?: unknown; blockers?: unknown; majors?: unknown }>;
+}
+
+/** The units the reviewer found a blocker or a major in: the fix round works on them too. */
+async function reviewFlagged(ctx: StageContext): Promise<string[]> {
+  const report = (await ctx.readJson(designReviewReportPath(ctx.app))) as ReviewReport | undefined;
+  const prefix = `${ctx.app}/`;
+  return (report?.units ?? [])
+    .filter((entry) => entry.reviewed === true && typeof entry.unit === "string" && entry.unit.startsWith(prefix) && (Number(entry.blockers) > 0 || Number(entry.majors) > 0))
+    .map((entry) => (entry.unit as string).slice(prefix.length));
+}
+
+/** The units the fix round works on: the check found faults, or the review found a blocker or a major. */
+async function toFix(ctx: StageContext): Promise<string[]> {
+  return [...new Set([...(await flagged(ctx)), ...(await reviewFlagged(ctx))])];
+}
+
 const checkArgs = (ctx: StageContext): string[] => ["{app}", unitsOf(ctx).join(","), "--set", setOf(ctx), "--root", "{in}", "--tolerate", "--report", `{out}/${REPORT}`];
 
 /** The pull-request title: the set and the units (the module when one module's units are selected). */
@@ -192,6 +243,7 @@ export function designMessage(app: string, scope?: StageScope): string {
 export const DESIGN: StagePlan = {
   id: "design",
   message: designMessage,
+  description: (app) => designSummaryPath(app),
   documents: [
     "kintsugi.yaml",
     `${standardsDir()}/`,
@@ -239,12 +291,35 @@ export const DESIGN: StagePlan = {
       expects: [REPORT],
     },
     {
+      id: "review",
+      kind: "forEach",
+      concurrency: 4,
+      tolerateFailures: true,
+      items: async (ctx) => (await scaffolded(ctx)).map((key) => ({ key, item: key })),
+      step: {
+        id: "review-unit",
+        kind: "agent",
+        agent: REVIEWER,
+        task: async (ctx) => reviewTask(setOf(ctx), (await setFacts(ctx)).scope),
+        documents: async (ctx) => (await setFacts(ctx)).reads,
+        intermediate: true,
+      },
+    },
+    {
+      id: "check-review",
+      kind: "script",
+      script: "check_review.py",
+      args: (ctx) => ["{app}", unitsOf(ctx).join(","), "--root", "{in}", "--report", `{out}/${REVIEW_REPORT}`],
+      intermediate: true,
+      expects: [REVIEW_REPORT],
+    },
+    {
       id: "fixes",
       kind: "forEach",
       concurrency: 4,
       tolerateFailures: true,
-      when: async (ctx) => (await flagged(ctx)).length > 0,
-      items: async (ctx) => (await flagged(ctx)).map((key) => ({ key, item: key })),
+      when: async (ctx) => (await toFix(ctx)).length > 0,
+      items: async (ctx) => (await toFix(ctx)).map((key) => ({ key, item: key })),
       step: {
         id: "fix-unit",
         kind: "agent",
@@ -260,6 +335,14 @@ export const DESIGN: StagePlan = {
       args: checkArgs,
       intermediate: true,
       expects: [REPORT],
+    },
+    {
+      id: "summary",
+      kind: "script",
+      script: "render_design_review.py",
+      args: (ctx) => ["{app}", unitsOf(ctx).join(","), "--set", setOf(ctx), "--root", "{in}", "--out", `{out}/${SUMMARY}`],
+      intermediate: true,
+      expects: [SUMMARY],
     },
   ],
 };

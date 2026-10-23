@@ -80,7 +80,7 @@ class Repo(unittest.TestCase):
         self.root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.root, True)
         shutil.copytree(os.path.join(FIXTURES, 'sets'), os.path.join(self.root, '01-standards', 'templates'))
-        self.put('kintsugi.yaml', 'unitKinds: [screen, api]\n')
+        self.put('kintsugi.yaml', 'unitKinds: [screen, api, batch]\n')
         # The unit's card and design on the modern side, what is known about it on the legacy side.
         self.unit = os.path.join('10-applications', 'billing', '02-modern', 'payroll', 'run-period')
         self.known = os.path.join('10-applications', 'billing', '01-legacy', 'payroll', 'run-period')
@@ -186,6 +186,73 @@ class Scaffold(Repo):
         self.assertEqual(run(sd.main, ['billing', 'payroll/none,payroll/nope', 'basic', '--root', self.root])[0], 2)
 
 
+class Profiles(Repo):
+    """A set with a profile per unit kind (ADR-0053): the template, the reference and the files depend on the kind."""
+
+    def detail(self, *extra, unit='payroll/run-period'):
+        return run(sd.main, ['billing', unit, 'detail', '--root', self.root, *extra])
+
+    def test_a_unit_of_a_kind_with_its_own_template_is_scaffolded_from_it_and_names_it(self):
+        code, out, err = self.detail()
+        self.assertEqual((code, err), (0, ''))
+        text = self.read(self.design('detail', 'logic.md'))
+        self.assertTrue(text.startswith('---\ntemplate: "detail/screen@3"\nunit: "billing/payroll/run-period"\n---\n# Run period: screen logic\n'))
+        self.assertIn('## Screen events\n\n| Event | Handler | Rule |', text)
+
+    def test_a_kind_without_a_profile_template_is_scaffolded_from_the_set_and_names_the_set(self):
+        self.put(os.path.join(self.unit, 'README.md'), UNIT_MD.replace('"screen"', '"api"'))
+        self.detail('--all')
+        self.assertTrue(self.read(self.design('detail', 'logic.md')).startswith('---\ntemplate: "detail@2"\n'))
+        self.assertTrue(self.read(self.design('detail', 'sql.md')).startswith('---\ntemplate: "detail/api@1"\n'))
+
+    def test_a_profile_can_remove_the_files_of_the_set_and_add_its_own(self):
+        self.put(os.path.join(self.unit, 'README.md'), UNIT_MD.replace('"screen"', '"batch"'))
+        code, out, _ = self.detail()
+        self.assertEqual(code, 0)
+        self.assertIn('run-period/detail/job.md', out)
+        self.assertFalse(os.path.exists(os.path.join(self.root, self.design('detail', 'logic.md'))))
+
+    def test_the_manifest_names_the_profile_the_template_the_reference_and_the_example(self):
+        manifest = os.path.join(self.root, 'scratch', 'manifest.json')
+        self.assertEqual(self.detail('--manifest', manifest)[0], 0)
+        with open(manifest, encoding='utf-8') as handle:
+            entry = json.load(handle)['units']['payroll/run-period']
+        self.assertEqual(entry['profile'], '01-standards/templates/detail/screen/profile.md')
+        self.assertEqual([(f['path'].rsplit('/', 1)[1], f['templateFile'], f['ref'], f['example']) for f in entry['files']],
+                         [('logic.md', '01-standards/templates/detail/screen/logic.md', 'detail/screen@3', '01-standards/templates/detail/screen/_examples/logic.md')])
+        manifest_api = os.path.join(self.root, 'scratch', 'api.json')
+        self.put(os.path.join(self.unit, 'README.md'), UNIT_MD.replace('"screen"', '"other"'))
+        self.assertEqual(self.detail('--manifest', manifest_api)[0], 0)
+        with open(manifest_api, encoding='utf-8') as handle:
+            entry = json.load(handle)['units']['payroll/run-period']
+        self.assertEqual((entry['profile'], entry['files'][0]['ref'], entry['files'][0]['example']), (None, 'detail@2', '01-standards/templates/detail/_examples/logic.md'))
+
+    def test_the_check_expects_the_template_of_the_kind_and_reports_a_design_of_an_older_profile_as_stale(self):
+        self.put(self.design('basic', 'functions.md'), FUNCTIONS_OK)
+        self.put(self.design('detail', 'logic.md'), fixture('designs', 'detail-screen-ok.md'))
+        code, out, _ = self.check('--set', 'detail', '--json')
+        self.assertEqual(code, 0, out)
+        file = json.loads(out)['sets'][0]['files'][0]
+        self.assertEqual((file['ref'], file['stale'], file['state']), ('detail/screen@3', False, 'conformant'))
+        self.put(self.design('detail', 'logic.md'), fixture('designs', 'detail-screen-stale.md'))
+        file = json.loads(self.check('--set', 'detail', '--json')[1])['sets'][0]['files'][0]
+        self.assertEqual((file['stale'], file['state']), (True, 'conformant'))
+        code, out, _ = self.check('--set', 'detail')
+        self.assertIn('(written against an older version of the template, now detail/screen@3)', out)
+
+    def test_a_design_that_names_the_set_where_the_kind_has_its_own_template_is_wrong(self):
+        self.put(self.design('detail', 'logic.md'), fixture('designs', 'detail-ok.md'))
+        code, out, _ = self.check('--set', 'detail')
+        self.assertEqual(code, 1)
+        self.assertIn('template reference "detail@2" does not name this template (expected detail/screen@3)', out)
+
+    def test_a_profile_with_a_fault_blocks_the_scaffold_of_its_set(self):
+        self.put(os.path.join('01-standards', 'templates', 'detail', 'screen', 'profile.md'), '---\nkind: other\nversion: 1\n---\n')
+        code, _, err = self.detail()
+        self.assertEqual(code, 2)
+        self.assertIn('detail/screen/profile.md: kind "other" does not match its folder "screen"', err)
+
+
 class Check(Repo):
     def test_a_fresh_scaffold_is_not_ready_and_a_written_design_is(self):
         self.scaffold()
@@ -217,6 +284,7 @@ class Check(Repo):
         self.assertEqual((files['overview.md']['stale'], files['overview.md']['state']), (True, 'conformant'))
 
     def test_the_ids_a_design_points_to_come_from_the_repository(self):
+        self.put(os.path.join(self.unit, 'README.md'), UNIT_MD.replace('"screen"', '"api"'))
         self.put(os.path.join('02-architecture', 'common', 'COM-LOG-01.md'), '# Logging\n')
         self.put(os.path.join('10-applications', 'billing', '02-modern', 'requirements.md'), '## REQ-01: Pay\n')
         self.put(self.design('basic', 'functions.md'), FUNCTIONS_OK)
@@ -355,6 +423,7 @@ class Validate(unittest.TestCase):
         code, out, _ = run(vt.main, ['--root', root])
         self.assertEqual(code, 1)
         self.assertIn('01-standards/templates/alpha/set.md: file "a.md" is listed twice', out)
+        self.assertIn('01-standards/templates/omega/screen/stray.md: is not used by any file of the kind "screen"', out)
         self.assertEqual(run(vt.main, ['--root', os.path.join(root, 'none')])[0], 2)
 
     def test_the_starter_sets_of_the_template_are_valid(self):

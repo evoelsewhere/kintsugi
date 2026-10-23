@@ -25,7 +25,7 @@ describe("agent jobs in child processes", () => {
     agent,
     task: "Assess the fixture.",
     model,
-    workspace: { readOnly: [paths.src], outDir: paths.out },
+    workspace: { root: paths.src, readOnly: [paths.src], outDir: paths.out },
     limits: { timeoutSec, maxTurns: 3 },
   });
   const collect = async (events: AsyncIterable<JobEvent>): Promise<JobEvent[]> => {
@@ -55,10 +55,42 @@ describe("agent jobs in child processes", () => {
     const events = await collect(handle.events);
     const done = await handle.done;
     expect(done).toMatchObject({ type: "job.completed" });
-    expect(events[0]).toMatchObject({ type: "job.started", agent: "legacy-analyst@1.1.0" });
+    expect(events[0]).toMatchObject({ type: "job.started", agent: "legacy-analyst@1.2.0" });
     expect(events.some((event) => event.type === "tool.call")).toBe(true);
     expect(events.at(-1)).toEqual(done);
   });
+
+  it("starts pi in a workspace root above the folders it reads, under the permission model (ADR-0055)", async () => {
+    // The layout of a real step: the root, as-is/, the step's folders and the guide. The child may read only some of
+    // them, and its own check of the job must still find the root a directory: a job that fails here fails with
+    // "invalid job: not a directory", never reaching the provider.
+    const job = mkdtempSync(join(root, "ws-"));
+    for (const dir of ["as-is/web/src", "steps/s1/in", "steps/s1/out", "steps/s1/tmp", ".state"]) mkdirSync(join(job, dir), { recursive: true });
+    writeFileSync(join(job, "as-is", "web", "src", "main.c"), "int main(void) { return 0; }\n");
+    writeFileSync(join(job, "WORKSPACE.md"), "# guide\n");
+    writeFileSync(join(job, ".state", "ledger.json"), "{}");
+    const runtime = createChildAgentRuntime({
+      mode: "pi",
+      loadProvider: async () => ({
+        config: { kind: "custom", id: "local", enabled: true, auth: { type: "none" }, api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", models: [{ id: "m" }] },
+        credentials: { env: {}, secrets: {} },
+      }),
+    });
+    const handle = await runtime.startJob({
+      agent,
+      task: "Assess the fixture.",
+      model: { provider: "local", id: "m" },
+      workspace: { root: job, readOnly: [join(job, "as-is"), join(job, "steps", "s1", "in"), join(job, "WORKSPACE.md")], outDir: join(job, "steps", "s1", "out") },
+      limits: { timeoutSec: 60, maxTurns: 3 },
+    });
+    await collect(handle.events);
+    const done = await handle.done;
+    expect(done.type).toBe("job.failed");
+    if (done.type === "job.failed") {
+      expect(done.error).not.toMatch(/invalid job|not a directory|ERR_ACCESS_DENIED/i);
+      expect(done.error).toMatch(/connect/i);
+    }
+  }, 90_000);
 
   it("passes the API key on stdin and provider variables in the child's environment only", async () => {
     process.env["KINTSUGI_TEST_WORKER_ONLY"] = "worker-secret";

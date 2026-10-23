@@ -1,16 +1,16 @@
 // kintsugi-worker entry point (ADR-0003, ADR-0025, ADR-0029). Configuration is deployment
 // environment only: DATABASE_URL, KINTSUGI_SECRET_KEY (decrypts Git and LLM credentials),
 // KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL and the job settings
-// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_* including KINTSUGI_JOB_RETENTION_DAYS, KINTSUGI_SCRIPT_TIMEOUT, KINTSUGI_AGENT_IDLE_TIMEOUT, KINTSUGI_WORKFLOW_*, KINTSUGI_STAGE_*,
-// KINTSUGI_PYTHON, KINTSUGI_NODE). Git servers, repositories, LLM providers and the commit identity are
-// configured in the portal.
+// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_MAX_CONCURRENCY, KINTSUGI_WORKFLOW_*, KINTSUGI_STAGE_*, KINTSUGI_PYTHON,
+// KINTSUGI_NODE). Git servers, repositories, LLM providers, the commit identity and the sandbox environment
+// (how long a workspace keeps what it holds, the limits of its processes: ADR-0055) are configured in the portal.
 
 import { existsSync } from "node:fs";
+import { captureLogs, pgDebugLogSink } from "@kintsugi/domain";
 import { CheckoutStorage, checkGitVersion, dataDirFromEnv } from "@kintsugi/git";
 import { createChildAgentRuntime, interpretersFromEnv, loadProvider } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { Pool } from "pg";
-import { DEFAULT_JOB_RETENTION_DAYS } from "./jobs/cleanup.js";
 import { DEFAULT_JOB_LIMITS, type JobDefaults } from "./jobs/runner.js";
 import { startWorker } from "./worker.js";
 
@@ -25,35 +25,14 @@ function positive(name: string, fallback: number): number {
   return value;
 }
 
-/** A limit that is off unless set: unset or blank means none. */
-function optionalPositive(name: string): number | undefined {
-  const raw = process.env[name];
-  return raw === undefined || raw.trim() === "" ? undefined : positive(name, 1);
-}
-
-function nonNegative(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw.trim() === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value < 0) throw new Error(`${name} must be zero (no limit) or a positive number`);
-  return value;
-}
-
-/** Job limits from the environment, with the defaults of DEFAULT_JOB_LIMITS. */
+/**
+ * The budgets of stages and workflows from the environment, with the defaults of DEFAULT_JOB_LIMITS. The limits of the
+ * processes of a job (timeouts, output size, turns, cost) are the sandbox settings, read from the database per job.
+ */
 function jobDefaults(): JobDefaults {
-  const maxOutputBytes = positive("KINTSUGI_JOB_MAX_OUTPUT_BYTES", DEFAULT_JOB_LIMITS.agent.maxOutputBytes);
-  // No turn limit by default (and no wall-clock or cost limit either): a job ends when the agent is done; only the idle watchdog stops one that is stalled.
-  const maxTurns = optionalPositive("KINTSUGI_JOB_MAX_TURNS");
-  const maxCostUsd = optionalPositive("KINTSUGI_JOB_MAX_COST_USD");
   return {
-    script: { timeoutSec: positive("KINTSUGI_SCRIPT_TIMEOUT", DEFAULT_JOB_LIMITS.script.timeoutSec), maxOutputBytes },
-    agent: {
-      // 0 = no wall-clock limit (a stalled provider is still caught by the idle watchdog).
-      timeoutSec: nonNegative("KINTSUGI_JOB_DEFAULT_TIMEOUT", DEFAULT_JOB_LIMITS.agent.timeoutSec),
-      maxOutputBytes,
-      ...(maxTurns === undefined ? {} : { maxTurns }),
-      ...(maxCostUsd === undefined ? {} : { maxCostUsd }),
-    },
+    script: DEFAULT_JOB_LIMITS.script,
+    agent: DEFAULT_JOB_LIMITS.agent,
     workflow: {
       maxAgents: positive("KINTSUGI_WORKFLOW_MAX_AGENTS", DEFAULT_JOB_LIMITS.workflow.maxAgents),
       concurrency: positive("KINTSUGI_WORKFLOW_CONCURRENCY", DEFAULT_JOB_LIMITS.workflow.concurrency),
@@ -73,10 +52,8 @@ function jobDefaults(): JobDefaults {
 function agentRuntime(databaseUrl: string, node: string): AgentRuntime {
   const mode = (process.env["KINTSUGI_RUNTIME_MODE"] ?? "pi").trim();
   if (mode !== "pi" && mode !== "mock") throw new Error('KINTSUGI_RUNTIME_MODE must be "pi" or "mock"');
-  const idle = process.env["KINTSUGI_AGENT_IDLE_TIMEOUT"];
-  const idleTimeoutSec = idle === undefined ? undefined : Number(idle);
-  if (idleTimeoutSec !== undefined && !(Number.isInteger(idleTimeoutSec) && idleTimeoutSec >= 0)) throw new Error("KINTSUGI_AGENT_IDLE_TIMEOUT must be a whole number of seconds (0 turns it off)");
-  return createChildAgentRuntime({ mode, node, loadProvider: (providerId) => loadProvider(providerId, databaseUrl), ...(idleTimeoutSec === undefined ? {} : { idleTimeoutSec }) });
+  // The idle limit of a job is a sandbox setting, carried by the job (limits.idleTimeoutSec).
+  return createChildAgentRuntime({ mode, node, loadProvider: (providerId) => loadProvider(providerId, databaseUrl) });
 }
 
 async function main(): Promise<void> {
@@ -89,6 +66,9 @@ async function main(): Promise<void> {
   const gitVersion = await checkGitVersion();
   const storage = new CheckoutStorage(dataDirFromEnv());
   const pool = new Pool({ connectionString: databaseUrl, max: 5 });
+  // A development installation mirrors what the worker prints to the database for the debug MCP server (ADR-0056).
+  const debugging = ["1", "true"].includes((process.env["KINTSUGI_DEBUG_MCP"] ?? "").trim().toLowerCase());
+  const capture = debugging ? captureLogs({ service: "worker", sink: pgDebugLogSink(pool), stdout: process.stdout, stderr: process.stderr }) : undefined;
   const interpreters = interpretersFromEnv();
   const agents = agentRuntime(databaseUrl, interpreters.node);
   const worker = await startWorker({
@@ -96,7 +76,6 @@ async function main(): Promise<void> {
     pool,
     storage,
     pollIntervalSeconds,
-    jobRetentionDays: positive("KINTSUGI_JOB_RETENTION_DAYS", DEFAULT_JOB_RETENTION_DAYS),
     telemetryRetentionDays: positive("KINTSUGI_TELEMETRY_RETENTION_DAYS", 30),
     jobs: { agents, interpreters, defaults: jobDefaults(), concurrency: positive("KINTSUGI_JOB_MAX_CONCURRENCY", 2) },
   });
@@ -105,6 +84,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (): Promise<void> => {
     await worker.stop();
+    await capture?.stop();
     await pool.end();
     process.exit(0);
   };

@@ -11,7 +11,7 @@ import { type Column, DataTable } from "@/components/ui/data-table";
 import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
-import type { DesignSet, DesignSetFile, DesignSetsView } from "@/lib/api/design";
+import type { DesignProfile, DesignSet, DesignSetFile, DesignSetsView } from "@/lib/api/design";
 import { Field, Section } from "../results/results-parts";
 import { CopyButton } from "./design-parts";
 import { setLabel } from "./design-state";
@@ -65,6 +65,7 @@ export function DesignSetsTab({
         ),
     },
     { id: "files", header: "Files", align: "right", sort: (set) => set.files.length, cell: (set) => <span className="text-text-secondary">{set.files.length}</span> },
+    { id: "profiles", header: "Profiles", search: (set) => set.profiles.map((profile) => profile.kind).join(" "), cell: (set) => <span className="text-text-secondary">{set.profiles.length === 0 ? "—" : set.profiles.map((profile) => profile.kind).join(", ")}</span> },
     ...(showUsage
       ? [
           {
@@ -157,8 +158,15 @@ function SetDetail({ set, sets, problems, onChoose }: { set: DesignSet; sets: De
           </Suspense>
         </Section>
       ) : null}
-      {set.files.map((file) => (
-        <FileContract key={file.path} file={file} />
+      {set.files.length === 0 ? null : (
+        <Section title={set.profiles.length === 0 ? "Documents" : "Documents of every kind"} description="What each unit kind has unless its profile changes it.">
+          {set.files.map((file) => (
+            <FileContract key={file.path} file={file} />
+          ))}
+        </Section>
+      )}
+      {set.profiles.map((profile) => (
+        <ProfileDetail key={profile.kind} profile={profile} set={set} />
       ))}
       <Field label="Changing this template">
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -169,6 +177,29 @@ function SetDetail({ set, sets, problems, onChoose }: { set: DesignSet; sets: De
         </div>
       </Field>
     </div>
+  );
+}
+
+/** One unit kind's variation of a set (ADR-0053): the documents it has, its instructions, and the contract of the templates it replaces. */
+function ProfileDetail({ profile, set }: { profile: DesignProfile; set: DesignSet }): React.JSX.Element {
+  const own = profile.files.filter((file) => file.profile !== undefined);
+  return (
+    <Section title={`Units of kind ${profile.kind}`} description={`Profile version ${profile.version} · ${designSetDir(set.id)}/${profile.kind}/profile.md`}>
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] text-text-secondary">
+          Documents: {profile.files.length === 0 ? "none" : profile.files.map((file) => `${file.path} (${file.ref})`).join(", ")}
+          {profile.removes.length === 0 ? "" : ` · without ${profile.removes.join(", ")}`}
+        </p>
+        {profile.instructions === "" ? null : (
+          <Field label="Instructions to the designer for this kind">
+            <p className="whitespace-pre-line text-[13px] leading-6">{profile.instructions}</p>
+          </Field>
+        )}
+        {own.map((file) => (
+          <FileContract key={file.path} file={file} />
+        ))}
+      </div>
+    </Section>
   );
 }
 
@@ -183,7 +214,7 @@ function FileContract({ file }: { file: DesignSetFile }): React.JSX.Element {
   return (
     <Section
       title={file.path}
-      description={`${file.required ? "Required" : "Optional"}${file.when.length === 0 ? "" : ` for ${file.when.join(", ")}`} · template ${file.template}`}
+      description={`${file.required ? "Required" : "Optional"} · template ${file.profile === undefined ? file.template : `${file.profile}/${file.template}`} (${file.ref})${file.example === undefined ? "" : ` · example ${file.example}`}`}
     >
       {file.sections.length === 0 ? (
         <p className="text-[13px] text-text-secondary">The template has no section with a contract: its headings are structure only.</p>

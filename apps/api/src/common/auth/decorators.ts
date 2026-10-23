@@ -15,6 +15,8 @@ export interface MemberReadScope {
   projectIdFrom: "query" | "params" | "token-projects";
 }
 
+export const SKIP_CSRF_KEY = "kintsugi:skip-csrf";
+
 /** The signed-in caller as seen by use cases: identity plus effective permissions. */
 export interface Actor {
   id: string;
@@ -22,6 +24,12 @@ export interface Actor {
   username?: string;
   permissions: string[];
 }
+
+/**
+ * Exempts a route from the CSRF header check. For a route that never takes the session cookie and authenticates every
+ * request itself (the debug MCP server, ADR-0056); never for one that does.
+ */
+export const SkipCsrf = (): MethodDecorator & ClassDecorator => SetMetadata(SKIP_CSRF_KEY, true);
 
 /** Marks a route as reachable without a session. */
 export const Public = (): MethodDecorator & ClassDecorator => SetMetadata(IS_PUBLIC_KEY, true);

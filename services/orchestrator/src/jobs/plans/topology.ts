@@ -36,17 +36,23 @@ them), {in}/${scratchInventoryPath(APP_TOKEN)} the measured inventory (every fil
 parsing the code, spot-check about ten edges against the source, and still add what graphs omit (entry points from
 deployment configuration, data stores).
 
-The script does the reading of the repository, not you: never read the code file by file to build the topology
+The script does the reading of the source tree, not you: never read the code file by file to build the topology
 yourself. Take the layout and the file list from the inputs above, then read only what teaches you how modules refer
-to each other in this repository: its entry points and build or deployment configuration, and one or two
+to each other in these repositories: their entry points and build or deployment configuration, and one or two
 representative files per domain (about 15 files in all; stop reading as soon as you can name the reference patterns).
 Then write ${script} with write, early, and refine it with edit rather than rewriting it: a Python 3 script using the
 standard library only. You cannot run it (no shell): a script step runs it after you finish and gives you its error once
 to fix, so do not re-read your own output to check it. It is run as
 \`python extract_topology.py <source dir> <output dir>\`: it reads only the source directory, uses no network, writes <output dir>/topology.json and prints a summary (at most about 200 lines) headed by
-"Legacy repository {repo} at {commit}". It runs in a sandboxed script environment with a time limit, so keep it simple
+"Legacy sources {sources}". It runs in a sandboxed script environment with a time limit, so keep it simple
 and bounded: a few hundred lines of general patterns (regular expressions over the files it walks, one function per
 reference pattern), never a list of this repository's files or classes written out by hand.
+
+The <source dir> holds one folder per legacy repository of the application, so every file path the script sees and writes
+starts with the folder of its repository (a leaf's file is, for example, <repository id>/src/Billing.java). A domain may
+span several repositories, and an edge may cross them: resolve a dependency declared in the build file of one repository
+(a library, a shared module), an import or a service call that targets another repository of the application to the leaf
+in that repository, not to a stub.
 
 What it extracts: the call graph (direct calls, imports, and dispatcher calls whose targets are variables: config
 tables, route maps, dependency injection; resolve variables against configuration before calling an edge

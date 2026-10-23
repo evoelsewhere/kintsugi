@@ -33,12 +33,13 @@ export function agent(tools: string[], extra: Partial<AgentDefinition> = {}): Ag
   return { id: "test-agent", version: "1.0.0", instructions: "You are a test agent.", tools, ...extra };
 }
 
-export function jobSpec(workspace: Workspace, definition: AgentDefinition, limits: Partial<JobLimits> = {}): JobSpec {
+/** `root`: the agent's working directory; by default the source folder, so a relative path reads from it. */
+export function jobSpec(workspace: Workspace, definition: AgentDefinition, limits: Partial<JobLimits> = {}, root: string = workspace.src): JobSpec {
   return {
     agent: definition,
     task: "do the thing",
     model: { provider: "faux", id: "m1" },
-    workspace: { readOnly: [workspace.src], outDir: workspace.out },
+    workspace: { root, readOnly: [workspace.src], outDir: workspace.out },
     limits: { timeoutSec: 30, ...limits },
     metadata: { projectId: "p1" },
   };

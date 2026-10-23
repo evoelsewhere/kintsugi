@@ -40,6 +40,7 @@ export function setFacts(set: DesignSet): Array<{ label: string; value: string }
   return [
     { label: "For", value: set.scope === "application" ? "the application as a whole" : set.appliesTo.length === 0 ? "every unit" : `units of kind ${set.appliesTo.join(", ")}` },
     { label: "Documents", value: `${set.files.length} (${required} required): ${set.files.map((file) => file.path).join(", ")}` },
+    ...(set.profiles.length === 0 ? [] : [{ label: "Profiles", value: set.profiles.map((profile) => `${profile.kind} (v${profile.version})`).join(", ") }]),
     ...(set.needs.length === 0 ? [] : [{ label: "After", value: set.needs.join(", ") }]),
     ...(set.reads.length === 0 ? [] : [{ label: "Also reads", value: set.reads.join(", ") }]),
   ];

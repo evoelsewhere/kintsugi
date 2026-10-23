@@ -16,9 +16,10 @@ Contract types: `JobSpec`, `AgentDefinition`, `JobEvent`, `JobHandle`, `AgentRun
 | `agent` | The `AgentDefinition` (below) |
 | `task` | The user prompt for this job |
 | `model` | `{ provider, id, thinking? }`: `provider` is an LLM provider config id; `thinking` overrides the agent's default |
-| `workspace.readOnly` | Directories the agent may read; the first one is its working directory |
+| `workspace.root` | The job workspace, the agent's working directory: a relative path of a read tool is resolved against it ([job workspace](job-workspace.md)) |
+| `workspace.readOnly` | What the agent may read: the first entry is a directory (where a search without a path looks, the as-is code), the others directories or files (the guide `WORKSPACE.md`, which the system prompt tells the agent to read first) |
 | `workspace.outDir` | The only directory the agent may write to |
-| `limits` | `timeoutSec` (required), `maxTurns`, `maxCostUsd` |
+| `limits` | `timeoutSec` (required), `idleTimeoutSec` (stalled-model watchdog; 0 = off), `maxTurns`, `maxCostUsd` |
 | `mcp` | `{ servers }`: the MCP servers the agent names in `tools` (`name`, `url`, `headers`, `timeoutSec`, `allowedTools`), resolved by the worker with the headers decrypted; they travel on the job child's stdin only |
 | `metadata` | Opaque correlation data (e.g. project id, trigger), echoed on `job.started`; never shown to the agent |
 
@@ -42,7 +43,7 @@ Only tools in the agent's allowlist are created; pi registers nothing else.
 | Tool | Access | Description |
 |---|---|---|
 | `read`, `ls`, `grep`, `find` | Read, confined to `workspace.readOnly` | File tools on the read-only sources (symlinks resolved); `grep` searches in-process, no `ripgrep` needed |
-| `write`, `edit` | Write, confined to `workspace.outDir` | pi's own tools: create or overwrite an output file, or change one by exact text replacement. A relative path starts at `workspace.outDir`; the read-only roots stay out of reach. The caller decides what happens to the files (the worker commits outputs, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
+| `write`, `edit` | Write, confined to `workspace.outDir` | pi's own tools: create or overwrite an output file, or change one by exact text replacement. A relative path starts at `workspace.outDir`; the read-only roots and the rest of the workspace stay out of reach. The caller decides what happens to the files (the worker commits outputs, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
 | `shell`, `git` | Process tools | One `bash -c` or one `git` command per call in the job's cleared environment, with a timeout and kill-tree; results are cut to 2000 lines or 50 KB ([ADR-0040](../decisions/0040-kernel-shell-and-git-tools.md)) |
 | `codemode` | Scripts over the read tools | The model writes JavaScript that runs in pi's QuickJS sandbox and prints only what it needs. A script may call only `read`, `ls`, `grep`, `find` and read-only MCP tools, runs at most 120 s and returns at most 8,000 tokens ([ADR-0047](../decisions/0047-kernel-extensions-codemode-and-http-mcp.md)) |
 | `mcp__<server>__<tool>` | MCP tools | The tools of an HTTP MCP server an administrator registered (Settings → MCP servers), only for an agent that names the server. A tool runs when its server marks it read-only or the administrator allowed it by name; callable from codemode scripts when the agent has codemode, declared to the model otherwise |

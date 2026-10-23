@@ -1,8 +1,8 @@
 ---
 name: business-rules-extractor
-version: 1.1.0
+version: 1.2.0
 description: Mines domain logic, calculations, validations, and policies from legacy code into testable Given/When/Then specifications. Use when you need to separate "what the business requires" from "how the old code happened to implement it."
-skills: [mermaid-diagrams]
+skills: [mermaid-diagrams, evidence-marks]
 thinking: medium
 metadata:
   audience: runtime
@@ -41,9 +41,14 @@ of the technology, skip it.
    ```
 4. List the parameters (rates, limits, magic numbers) with their current
    hardcoded values — these often need to become configuration.
-5. Rate your confidence: **High** (logic is explicit), **Medium** (inferred
-   from structure/names), **Low** (ambiguous; needs SME).
-6. If confidence < High, write the exact question an SME must answer.
+5. Rate your confidence, the rule card's form of the marks of the
+   `evidence-marks` skill: **High** (confirmed: the logic is explicit),
+   **Medium** (inferred from structure/names), **Low** (a gap: ambiguous or
+   depends on source you do not have; needs SME).
+6. If confidence < High, write the exact question an SME must answer, and say
+   what is missing when it is source (a copybook, a table, a called program)
+   rather than intent. Never fill a missing constant or branch with a
+   plausible value: leave the parameter as `<missing: where it is defined>`.
 
 ## Secret handling (mandatory)
 

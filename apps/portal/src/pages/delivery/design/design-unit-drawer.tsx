@@ -179,7 +179,7 @@ function FileView({ project, application, unit, set, file }: { project: ProjectD
       {file.stale ? (
         <p className="rounded-[var(--geist-radius)] bg-hover px-3 py-2 text-[12.5px] text-text-secondary">
           <StatusDot tone="orange" className="mr-1.5 size-2" />
-          Written against <TemplateRef value={file.template} current={set.version} />. Bring it up to date with the changes of the set, or leave it: the set's version moved after this design was written.
+          Written against <TemplateRef value={file.template} expected={file.expected} />. Bring it up to date with the changes of the template, or leave it: its version moved after this design was written.
         </p>
       ) : null}
       {file.state === "waived" ? (

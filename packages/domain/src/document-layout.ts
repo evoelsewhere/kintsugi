@@ -217,9 +217,14 @@ export function designSetPath(set: string): string {
   return `${designSetDir(set)}/set.md`;
 }
 
-/** A template file of a set, named by the `Template` column of its files table. */
+/** A template file of a set, named by the `Template` column of its files table; `<kind>/<name>` for a template of a profile (ADR-0053). */
 export function designTemplatePath(set: string, template: string): string {
   return `${designSetDir(set)}/${template}`;
+}
+
+/** The profile of a set for one unit kind: its version, the files it adds or removes, its instructions (ADR-0053). */
+export function designProfilePath(set: string, kind: string): string {
+  return `${designSetDir(set)}/${kind}/profile.md`;
 }
 
 /** The design of the application as a whole, one folder per design set of scope `application` (ADR-0050). */
@@ -307,6 +312,21 @@ export function designManifestPath(app: string): string {
 /** The conformance of each unit of the run after a check (intermediate). */
 export function designReportPath(app: string): string {
   return designRunFilePath(app, "report.json");
+}
+
+/** The reviewer's note on one unit of a design run (ADR-0054, intermediate); the application is `_application`. */
+export function designReviewPath(app: string, unitKey: string): string {
+  return designRunFilePath(app, `review/${unitKey === "@app" ? "_application" : unitKey}.md`);
+}
+
+/** The findings of the reviewer's notes, per unit, after `check_review.py` (intermediate). */
+export function designReviewReportPath(app: string): string {
+  return designRunFilePath(app, "review-report.json");
+}
+
+/** The review of the whole run, written for the pull request description (intermediate, ADR-0054). */
+export function designSummaryPath(app: string): string {
+  return designRunFilePath(app, "review.md");
 }
 
 export function assessmentBriefsDir(app: string): string {

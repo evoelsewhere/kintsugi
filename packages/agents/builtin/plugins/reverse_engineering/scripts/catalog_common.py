@@ -4,7 +4,7 @@ reconcile_catalog.py and render_catalog.py. Not a script on its own.
 The catalog lists an application's items, module -> item. Inside a run it is one JSON document passed
 between the steps (scratch, never committed):
 
-    {"app": "...", "generatedBy": "...", "source": {"repo": "...", "commit": "..."},
+    {"app": "...", "generatedBy": "...", "sources": ["<repository id>@<commit>", ...],
      "modules": [{"id", "name", "summary"}],
      "items": [{"id": "<module>/<item>", "module", "kind", "name", "summary", "files", "leaves",
                 "entryPoints", "loc", "complexity", "digest", "status", "aliases", "parts"}],
@@ -88,11 +88,12 @@ def load_inventory(path):
             'complexity': complexity if isinstance(complexity, int) and not isinstance(complexity, bool) and complexity >= 0 else None,
             'sha256': digest if isinstance(digest, str) and re.fullmatch(r'[0-9a-f]{64}', digest) else None,
         }
-    source = {
-        'repo': data.get('sourceRepository') if isinstance(data.get('sourceRepository'), str) else None,
-        'commit': data.get('sourceCommit') if isinstance(data.get('sourceCommit'), str) else None,
-    }
-    return files, source
+    return files, sources_of(data.get('sources'))
+
+
+def sources_of(value):
+    """The `<repository id>@<commit>` entries of a `sources` list, in order; anything else is dropped."""
+    return [entry for entry in value if isinstance(entry, str) and entry] if isinstance(value, list) else []
 
 
 def digest_of(files, inventory):
@@ -265,7 +266,7 @@ def item_graph(items, topology):
 def render_catalog(app, catalog, graph=None):
     """{repository-relative path: text} of the catalog documents. `graph` is item_graph()'s result."""
     graph = graph or {}
-    source = catalog.get('source') if isinstance(catalog.get('source'), dict) else {}
+    sources = sources_of(catalog.get('sources'))
     modules = {module['id']: module for module in catalog['modules']}
     by_module = {}
     for item in catalog['items']:
@@ -280,8 +281,7 @@ def render_catalog(app, catalog, graph=None):
         docmd.front_matter({
             'app': app,
             'generatedBy': catalog.get('generatedBy') or 'render_catalog.py',
-            'sourceRepository': source.get('repo') or '',
-            'sourceCommit': source.get('commit') or '',
+            'sources': sources,
             'modules': len(modules),
             'items': len(active),
             'retired': len(catalog['items']) - len(active),
@@ -416,7 +416,7 @@ def load_catalog_dir(directory):
     catalog = {
         'app': app,
         'generatedBy': front.get('generatedBy') if isinstance(front.get('generatedBy'), str) else '',
-        'source': {key: front[field] for key, field in (('repo', 'sourceRepository'), ('commit', 'sourceCommit')) if isinstance(front.get(field), str) and front[field]},
+        'sources': sources_of(front.get('sources')),
         'modules': modules,
         'items': list(items.values()),
         'unassigned': unassigned,
@@ -452,9 +452,41 @@ def selected(items, value):
     return [items[item_id] for item_id in ids]
 
 
+class Owners(dict):
+    """{file: item id}, with the lookup of a file as an agent cites it."""
+
+    _rest = None
+
+    def path_of(self, cited):
+        """The catalog file a cited path names. Citations are `<repository id>/<path>` (ADR-0052); a path written with the
+        leading `as-is/` of the job workspace, or without its repository, still resolves when exactly one file of the items
+        has that path. None when the file is in no item or the path is ambiguous."""
+        if not cited:
+            return None
+        if cited in self:
+            return cited
+        stripped = cited[6:] if cited.startswith('as-is/') else None
+        if stripped is not None and stripped in self:
+            return stripped
+        if self._rest is None:
+            self._rest = {}
+            for full in self:
+                self._rest.setdefault(full.partition('/')[2], []).append(full)
+        for path in (cited, stripped):
+            matches = self._rest.get(path, []) if path is not None else []
+            if len(matches) == 1:
+                return matches[0]
+        return None
+
+    def item_of(self, cited):
+        """The item that owns the file a citation names, or None."""
+        path = self.path_of(cited)
+        return None if path is None else self[path]
+
+
 def owner_of(items):
     """{file: item id} over the given items."""
-    owner = {}
+    owner = Owners()
     for item in items:
         for rel in item['files']:
             owner.setdefault(rel, item['id'])

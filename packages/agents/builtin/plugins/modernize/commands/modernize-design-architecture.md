@@ -22,10 +22,10 @@ layering rules), and the part of the design that is specific to `$app`. It write
 repositories is the `scaffold` command, after the architecture is approved.
 
 This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **document repository**
-(`10-applications/$app/01-legacy/`: the assessment and the units' folders, `01-standards/`); the **legacy repository** of `$app` is
-your local clone, **read-only** (Kintsugi's member hooks refuse writes to it). Before you start, say in one line which source
-commit you read: the one the assessment recorded for `$app` (`sourceCommit` in `10-applications/$app/01-legacy/inventory.md`, and in
-the portal); check out exactly that commit. Everything this command writes goes on your own branch of the document repository
+(`10-applications/$app/01-legacy/`: the assessment and the units' folders, `01-standards/`); the **legacy repositories** of `$app` (one or several) are
+your local clones, **read-only** (Kintsugi's member hooks refuse writes to it). Before you start, say in one line which source
+commit of each legacy repository you read: the ones the assessment recorded for `$app` (`sources` in `10-applications/$app/01-legacy/inventory.md`, and in
+the portal); check out exactly those commits. The documents cite a file as `<repository id>/<path>`: the first folder is the repository's id in the portal, whatever your local clone is called. Everything this command writes goes on your own branch of the document repository
 and reaches the project through a pull request. Run every subagent in the foreground and wait for its result: never end your
 turn while one is still running. Stop any server or other process you started before you finish, and say you did.
 
@@ -40,7 +40,7 @@ Reuse what the understanding stages produced, honoring each unit's `rules-review
 specification as written; a P0 rule marked `clarify` is a question for checkpoint 1): `BUSINESS_RULES.md` and `DATA_OBJECTS.md` in
 `10-applications/$app/_generated/`, `topology.md` and `assessment.md` in `10-applications/$app/01-legacy/`, and the units' `spec.md`. If
 the interface catalog or the domain entities are missing, spawn **legacy-analyst**: "Catalog every external interface of the
-legacy repository of $app: inbound (screens, APIs, batch triggers, queues) and outbound (reports, files, downstream calls, DB
+legacy repositories of $app: inbound (screens, APIs, batch triggers, queues) and outbound (reports, files, downstream calls, DB
 writes), with name, direction, payload shape and frequency or SLA if discernible; mask credentials. Then list the core domain
 entities and their relationships as a Mermaid erDiagram (keys marked PK/FK, every relationship labelled)."
 

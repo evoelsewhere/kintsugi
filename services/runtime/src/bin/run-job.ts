@@ -58,7 +58,7 @@ const spec: JobSpec = {
   agent,
   task,
   model: { provider, id: modelId ?? "mock" },
-  workspace: { readOnly: [resolve(readDir)], outDir: resolve(outDir) },
+  workspace: { root: resolve(readDir), readOnly: [resolve(readDir)], outDir: resolve(outDir) },
   limits: {
     timeoutSec: numberArg("timeout") ?? 300,
     ...(maxTurns === undefined ? {} : { maxTurns }),

@@ -1,6 +1,6 @@
 # ADR-0035: Kintsugi plugins — one marketplace of plugins replaces the agent catalog
 
-- Status: Accepted (phase 1 implemented; later phases planned). Amended by [ADR-0041](0052-coding-agent-workflow-through-cli-and-local-mcp.md): the Coding Agent Workflow plugin is separate from method plugins and has no hooks.
+- Status: Accepted (phase 1 implemented; later phases planned). Amended by [ADR-0041](0059-coding-agent-workflow-through-cli-and-local-mcp.md): the Coding Agent Workflow plugin is separate from method plugins and has no hooks.
 - Date: 2026-10-14
 - Decision register: D54
 - Amends: ADR-0015 (the plugin format now also carries the runtime content), ADR-0026 (the Agent Builder becomes part of the plugin editor), ADR-0027 (the built-in content is split into plugins)

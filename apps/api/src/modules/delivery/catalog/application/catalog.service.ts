@@ -90,7 +90,9 @@ export class CatalogService {
     const view = await this.view(projectId, applicationId, undefined).catch(() => undefined);
     const status: Record<string, ItemStatus> = {};
     for (const batch of plan.batches) for (const id of batch.items) status[id] = view?.items.find((item) => item.id === id)?.status ?? "retired";
-    const stale = view !== undefined && plan.catalog.commit !== undefined && view.catalog.source.commit !== undefined && view.catalog.source.commit !== plan.catalog.commit;
+    // The plan is stale when the catalog was rebuilt from other sources (a repository added, or another commit) since.
+    const now = view?.catalog.source.sources.join(",") ?? "";
+    const stale = view !== undefined && plan.catalog.sources !== undefined && now !== "" && now !== plan.catalog.sources;
     return { plan, stale, status };
   }
 
@@ -147,7 +149,9 @@ export class CatalogService {
               const meta = documentOf(text).data;
               const pick = (key: string): string | undefined => textOf(meta[key], 120);
               const digest = pick("digest");
-              const commitOf = pick("commit");
+              // The repositories and commits the unit was understood at, `<repository id>@<commit>` (ADR-0052).
+              const read = (Array.isArray(meta["sources"]) ? meta["sources"] : []).flatMap((entry: unknown) => textOf(entry, 200) ?? []);
+              const commitOf = read.length === 0 ? undefined : read.join(",");
               const runId = pick("runId");
               metas.set(item.id, { ...(digest === undefined ? {} : { digest }), ...(commitOf === undefined ? {} : { commit: commitOf }), ...(runId === undefined ? {} : { runId }) });
             }),

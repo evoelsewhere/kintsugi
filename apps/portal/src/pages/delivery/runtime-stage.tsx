@@ -250,7 +250,7 @@ export function RuntimeStage({ project, application, stage }: { project: Project
         onClose={() => setConfirming(false)}
       >
         <p>
-          The worker reads {application.asIs.legacy[0]?.repositoryId ?? "the legacy repo"} read-only at its current commit and proposes the outputs to{" "}
+          The worker reads {application.asIs.legacy.length === 0 ? "the legacy repo" : application.asIs.legacy.map((repo) => repo.repositoryId).join(", ")} read-only at their current commits and proposes the outputs to{" "}
           {project.documentRepository?.repositoryId ?? "the document repo"}
           {stage.agents.length === 0 ? "." : `, starting ${stage.agents.join(", ")}.`}
         </p>

@@ -38,7 +38,7 @@ def inv_file(path, lines, complexity=1, content=None):
 
 
 INVENTORY = {
-    'app': 'billing', 'sourceRepository': 'legacy', 'sourceCommit': 'a' * 40,
+    'app': 'billing', 'sources': ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40],
     'files': [
         inv_file('src/billing/INVOICE.cbl', 900, 120),
         inv_file('src/billing/RATES.cbl', 400, 30),
@@ -122,7 +122,7 @@ class CatalogTests(unittest.TestCase):
         ids = [item['id'] for item in catalog['items']]
         self.assertEqual(ids, ['billing/invoice', 'billing/nightly', 'billing/rates', 'billing/util', 'customers/custupd'])
         self.assertEqual([module['id'] for module in catalog['modules']], ['billing', 'customers'])
-        self.assertEqual(catalog['source'], {'repo': 'legacy', 'commit': 'a' * 40})
+        self.assertEqual(catalog['sources'], ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40])
         by_id = {item['id']: item for item in catalog['items']}
         # A directory leaf takes every inventory file under it; small leaves of one directory are grouped.
         self.assertEqual(by_id['customers/custupd']['files'], ['src/cust/upd/CUSTLIB.cbl', 'src/cust/upd/CUSTUPD.cbl', 'src/cust/upd/CUSTUPD2.cbl'])
@@ -252,11 +252,37 @@ class CatalogTests(unittest.TestCase):
         by_id = {item['id']: item for item in catalog['items']}
         self.assertIn('customers/cust', by_id)
         self.assertEqual(by_id['old/gone']['status'], 'retired')
-        self.assertEqual(by_id['old/gone']['files'], ['src/gone/X.cbl'])
+        # The code of a gone unit stays cited under its repository.
+        self.assertEqual(by_id['old/gone']['files'], ['legacy/src/gone/X.cbl'])
         self.assertNotIn('old/basic', by_id)
         self.assertNotIn('design/arch', by_id)
         self.assertEqual(catalog['reconciled']['from'], 'units')
         self.assertIn('existing units', stdout)
+
+    def test_reconcile_seeds_from_cards_of_an_application_with_two_legacy_repositories(self):
+        # The inventory cites files `<repository id>/<path>`; a card lists paths inside each repository, in either YAML form.
+        inventory = {'app': 'billing', 'sources': ['web@' + 'a' * 40, 'db@' + 'b' * 40],
+                     'files': [inv_file('web/src/Main.cbl', 100), inv_file('web/src/Util.cbl', 50), inv_file('db/schema/T.sql', 20), inv_file('db/schema/U.sql', 30)]}
+        inventory_path = os.path.join(self.root, 'inventory-two.json')
+        write(inventory_path, inventory)
+        units_dir = os.path.join(self.root, '10-applications', 'billing', '02-modern')
+        place = ['---', 'id: "billing/orders/place"', 'module: "orders"', 'kind: "program"', 'title: "Place"', 'source:', '  - {repo: "web", paths: ["src/Main.cbl"]}', '  - {repo: "db", paths: ["schema"]}', '---', '']
+        ship = ['---', 'id: billing/orders/ship', 'title: Ship', 'source:', '  - repo: web', '    paths:', '      - src/Util.cbl', '---', '']
+        write(os.path.join(units_dir, 'orders', 'place', 'README.md'), '\n'.join(place))
+        write(os.path.join(units_dir, 'orders', 'ship', 'README.md'), '\n'.join(ship))
+        catalog = {'app': 'billing', 'modules': [{'id': 'orders', 'name': 'Orders', 'summary': ''}], 'unassigned': [], 'ambiguities': [],
+                   'items': [cc.new_item('orders/new-place', 'orders', 'program', 'Place', ['web/src/Main.cbl', 'db/schema/T.sql', 'db/schema/U.sql']),
+                             cc.new_item('orders/new-ship', 'orders', 'program', 'Ship', ['web/src/Util.cbl'])]}
+        catalog_path = os.path.join(self.root, 'two.json')
+        write(catalog_path, catalog)
+        out = os.path.join(self.root, 'two-out.json')
+        result = run('reconcile_catalog.py', '--catalog', catalog_path, '--inventory', inventory_path, '--out', out, '--units-dir', units_dir)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        by_id = {item['id']: item for item in load(out)['items']}
+        # The new items took the ids of the cards: the files matched under their repositories.
+        self.assertEqual(sorted(by_id), ['orders/place', 'orders/ship'])
+        self.assertEqual(by_id['orders/place']['files'], ['db/schema/T.sql', 'db/schema/U.sql', 'web/src/Main.cbl'])
+        self.assertEqual({item['status'] for item in by_id.values()}, {'active'})
 
     def test_reconcile_expands_unit_directories_on_the_inventory(self):
         # A work item lists a directory leaf's directory, not its files.
@@ -332,7 +358,7 @@ class CatalogDocumentTests(unittest.TestCase):
             read = items[item['id']]
             for key in ('module', 'kind', 'name', 'files', 'leaves', 'entryPoints', 'loc', 'complexity', 'digest', 'status'):
                 self.assertEqual(read[key], item[key], (item['id'], key))
-        self.assertEqual(catalog['source'], {'repo': 'legacy', 'commit': 'a' * 40})
+        self.assertEqual(catalog['sources'], ['legacy@' + 'a' * 40, 'legacy-data@' + 'b' * 40])
         self.assertEqual([module['id'] for module in catalog['modules']], ['billing', 'customers'])
         self.assertEqual(catalog['unassigned'], ['README.md'])
         self.assertEqual(catalog['app'], 'billing')

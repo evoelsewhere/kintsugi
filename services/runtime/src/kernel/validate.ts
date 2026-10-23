@@ -46,16 +46,31 @@ export function validateJobSpec(spec: JobSpec): void {
     }
   }
 
-  if (workspace.readOnly.length === 0) problems.push("workspace.readOnly needs at least one directory");
-  for (const dir of [...workspace.readOnly, workspace.outDir]) {
+  if (workspace.readOnly.length === 0) problems.push("workspace.readOnly needs at least one entry");
+  for (const dir of [workspace.root, workspace.outDir]) {
     if (!isDirectory(dir)) problems.push(`not a directory: ${dir}`);
+  }
+  // The first entry is where a search without a path looks, so it is a directory; the others may be single files (the guide).
+  if (workspace.readOnly[0] !== undefined && !isDirectory(workspace.readOnly[0])) problems.push(`not a directory: ${workspace.readOnly[0]}`);
+  for (const entry of workspace.readOnly.slice(1)) {
+    if (!exists(entry)) problems.push(`does not exist: ${entry}`);
   }
 
   if (!(limits.timeoutSec >= 0)) problems.push("limits.timeoutSec must be zero (no limit) or positive");
+  if (limits.idleTimeoutSec !== undefined && !(limits.idleTimeoutSec >= 0)) problems.push("limits.idleTimeoutSec must be zero (off) or positive");
   if (limits.maxTurns !== undefined && !(limits.maxTurns >= 1)) problems.push("limits.maxTurns must be at least 1");
   if (limits.maxCostUsd !== undefined && !(limits.maxCostUsd > 0)) problems.push("limits.maxCostUsd must be positive");
 
   if (problems.length > 0) throw new Error(`invalid job: ${problems.join("; ")}`);
+}
+
+function exists(path: string): boolean {
+  try {
+    statSync(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isDirectory(path: string): boolean {

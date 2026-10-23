@@ -5,6 +5,10 @@ template file per document. A template is Markdown; under a heading, an HTML com
 contract, one directive per line: `required`, `table: A | B`, `seed: rules`, `check: name(args)` (repeatable)
 and `guidance: text`.
 
+A set may hold a profile per unit kind (ADR-0053): a folder named after the kind, with a `profile.md` (its version, the
+files it adds or removes, its instructions), templates that replace the set's own of the same name as whole files, and
+`_examples/` for the designer. A document names the template it was written with: `set@n`, or `set/kind@n` for a profile's.
+
 This is the member-side copy of `hooks/reader/design.ts` in the reverse_engineering plugin, which the API runs.
 Both are held to the fixtures in `scripts/tests/fixtures/design/`, so every message below is written exactly as
 the TypeScript side writes it. Standard library only.
@@ -29,7 +33,10 @@ READ_PATH = re.compile(r'^[A-Za-z0-9{][A-Za-z0-9._/{}-]{0,159}$')
 APPLICATION_KEY = '@app'
 INSTRUCTIONS_HEADING = re.compile(r'^##\s+Instructions\s*$', re.IGNORECASE)
 SET_ID = re.compile(r'^[a-z][a-z0-9-]{0,39}$')
-TEMPLATE_REF = re.compile(r'^([a-z][a-z0-9-]{0,39})@([1-9][0-9]{0,8})$')
+# `set@n` or `set/kind@n`: the first group is the id of the template in use (`set` or `set/kind`).
+TEMPLATE_REF = re.compile(r'^([a-z][a-z0-9-]{0,39}(?:/[a-z][a-z0-9-]{0,39})?)@([1-9][0-9]{0,8})$')
+PROFILE_FILE = 'profile.md'
+EXAMPLES_DIR = '_examples'
 FILE_PATH = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}\.md$')
 PLACEHOLDER = re.compile(r'\b(?:TODO|TBD)\b', re.ASCII)
 SKIPPED_TOKENS = {'-', '\u2014', '\u2013', 'n/a', 'N/A', 'TODO', 'TBD'}
@@ -303,6 +310,43 @@ def _string_list(value):
     return None
 
 
+def _read_files_table(body, problems):
+    """(files, found, retired): the files table of `set.md` or `profile.md`; `retired` when it still has the `When` column that profiles replaced (ADR-0053)."""
+    files = []
+    table = next((t for t in tables_in(body) if any(norm(c) == 'path' for c in t['header']) and any(norm(c) == 'template' for c in t['header'])), None)
+    if table is None:
+        return files, False, False
+
+    def column(name):
+        return next((i for i, cell in enumerate(table['header']) if norm(cell) == name), -1)
+    path_at, template_at, required_at = column('path'), column('template'), column('required')
+    for row in table['rows']:
+        path = at(row, path_at).replace('`', '').strip()
+        template = at(row, template_at).replace('`', '').strip()
+        required = norm(at(row, required_at))
+        where = f'file "{path}"'
+        if not FILE_PATH.match(path) or '..' in path.split('/'):
+            problems.append(f'{where}: path must be a relative .md path with no ".."')
+            continue
+        if any(known['path'] == path for known in files):
+            problems.append(f'{where} is listed twice')
+            continue
+        if required not in ('yes', 'no'):
+            problems.append(f'{where}: Required must be yes or no')
+        files.append({'path': path, 'template': template, 'required': required == 'yes'})
+    return files, len(table['rows']) > 0, column('when') >= 0
+
+
+def _split_instructions(body):
+    """(instructions, rest lines): the `## Instructions` section of a set or profile body, for the designer, and the rest of the body."""
+    body_lines = body.split('\n')
+    instructions_at = next((i for i, line in enumerate(body_lines) if INSTRUCTIONS_HEADING.match(line.strip())), -1)
+    if instructions_at < 0:
+        return '', body_lines
+    stop = next((i for i in range(instructions_at + 1, len(body_lines)) if re.match(r'^#{1,2}\s', body_lines[i].strip())), len(body_lines))
+    return '\n'.join(body_lines[instructions_at + 1:stop]).strip(), body_lines[:instructions_at] + body_lines[stop:]
+
+
 def parse_set(text, folder):
     """(set or None, problems): `set` is None when the file cannot give a usable identity."""
     problems = []
@@ -313,7 +357,6 @@ def parse_set(text, folder):
     id_ = data.get('id').strip() if isinstance(data.get('id'), str) else ''
     title = data.get('title').strip() if isinstance(data.get('title'), str) else ''
     version = data.get('version')
-    applies_to = _string_list(data.get('appliesTo'))
     needs = _string_list(data.get('needs'))
     version_ok = isinstance(version, int) and not isinstance(version, bool) and version >= 1
     if not SET_ID.match(id_):
@@ -324,8 +367,9 @@ def parse_set(text, folder):
         problems.append('title is missing')
     if not version_ok:
         problems.append('version must be a positive integer')
-    if applies_to is None:
-        problems.append('appliesTo must be a list of unit kinds')
+    applies = data.get('appliesTo')
+    if applies is not None and applies != '' and applies != []:
+        problems.append('appliesTo is replaced by a folder per unit kind with a profile.md (ADR-0053)')
     if needs is None:
         problems.append('needs must be a list of set ids')
     scope_value = 'unit' if data.get('scope') in (None, '') else data.get('scope')
@@ -340,68 +384,103 @@ def parse_set(text, folder):
         bare = entry.replace('{app}', '')
         if not READ_PATH.match(entry) or '..' in entry.split('/') or '{' in bare or '}' in bare:
             problems.append(f'reads "{entry}" must be a relative path with no ".." (only {{app}} may be used as a variable)')
-    if scope == 'application' and applies_to:
-        problems.append('an application set cannot have appliesTo: an application has no unit kind')
     stage = data.get('stage').strip() if isinstance(data.get('stage'), str) and data.get('stage').strip() else None
-    files = []
-    table = next((t for t in tables_in(body) if any(norm(c) == 'path' for c in t['header']) and any(norm(c) == 'template' for c in t['header'])), None)
-    if table is None:
-        problems.append('has no files table (columns Path | Template | Required | When)')
-    else:
-        def column(name):
-            return next((i for i, cell in enumerate(table['header']) if norm(cell) == name), -1)
-        path_at, template_at, required_at, when_at = column('path'), column('template'), column('required'), column('when')
-        for row in table['rows']:
-            path = at(row, path_at).replace('`', '').strip()
-            template = at(row, template_at).replace('`', '').strip()
-            required = norm(at(row, required_at))
-            where = f'file "{path}"'
-            if not FILE_PATH.match(path) or '..' in path.split('/'):
-                problems.append(f'{where}: path must be a relative .md path with no ".."')
-                continue
-            if any(known['path'] == path for known in files):
-                problems.append(f'{where} is listed twice')
-                continue
-            if required not in ('yes', 'no'):
-                problems.append(f'{where}: Required must be yes or no')
-            when = [] if when_at < 0 else [kind.replace('`', '').strip() for kind in re.split(r'[,\s]+', at(row, when_at)) if kind.replace('`', '').strip()]
-            if scope == 'application' and when:
-                problems.append(f'{where}: When must be empty in an application set')
-            files.append({'path': path, 'template': template, 'required': required == 'yes', 'when': when})
-        if not table['rows']:
-            problems.append('has no files table (columns Path | Template | Required | When)')
-    if not SET_ID.match(id_) or not version_ok or title == '' or applies_to is None or needs is None:
+    files, found, retired = _read_files_table(body, problems)
+    if retired:
+        problems.append('the When column is replaced by a folder per unit kind with a profile.md (ADR-0053)')
+    # A unit set may have no files of its own when every kind has a profile: the loader decides. An application set has no profiles.
+    if scope == 'application' and not found:
+        problems.append('has no files table (columns Path | Template | Required)')
+    if not SET_ID.match(id_) or not version_ok or title == '' or needs is None:
         return None, problems
     # The Instructions section is for the designer, not for people reading the description.
-    body_lines = body.split('\n')
-    instructions_at = next((i for i, line in enumerate(body_lines) if INSTRUCTIONS_HEADING.match(line.strip())), -1)
-    instructions, rest = '', body_lines
-    if instructions_at >= 0:
-        stop = next((i for i in range(instructions_at + 1, len(body_lines)) if re.match(r'^#{1,2}\s', body_lines[i].strip())), len(body_lines))
-        instructions = '\n'.join(body_lines[instructions_at + 1:stop]).strip()
-        rest = body_lines[:instructions_at] + body_lines[stop:]
+    instructions, rest = _split_instructions(body)
     description = '\n'.join(line for line in rest if not line.strip().startswith(('|', '#'))).strip()
-    result = {'id': id_, 'title': title, 'version': version, 'scope': scope, 'appliesTo': applies_to, 'needs': needs, 'stage': stage, 'reads': reads, 'files': files, 'description': description, 'instructions': instructions}
+    result = {'id': id_, 'title': title, 'version': version, 'scope': scope, 'needs': needs, 'stage': stage, 'reads': reads, 'files': files, 'description': description, 'instructions': instructions}
     return result, problems
 
 
-def files_for(set_, kind):
-    """The files of a set that a unit of `kind` needs; none when the set is not for that kind.
+def parse_profile(text, folder):
+    """(profile or None, problems): one profile, read from `<set>/<kind>/profile.md`; None when the file cannot give a usable identity."""
+    problems = []
+    front = front_of(text)
+    if front is None:
+        return None, ['has no front matter']
+    data, body = front
+    kind = data.get('kind').strip() if isinstance(data.get('kind'), str) else ''
+    version = data.get('version')
+    removes = _string_list(data.get('removes'))
+    version_ok = isinstance(version, int) and not isinstance(version, bool) and version >= 1
+    if not SET_ID.match(kind):
+        problems.append('kind is missing or not a lowercase name (letters, digits, hyphens)')
+    elif kind != folder:
+        problems.append(f'kind "{kind}" does not match its folder "{folder}"')
+    if not version_ok:
+        problems.append('version must be a positive integer')
+    if removes is None:
+        problems.append('removes must be a list of file paths')
+    for entry in removes or []:
+        if not FILE_PATH.match(entry) or '..' in entry.split('/'):
+            problems.append(f'removes "{entry}" must be a relative .md path with no ".."')
+    files, _, retired = _read_files_table(body, problems)
+    if retired:
+        problems.append('the When column is not used in a profile: the profile is the kind')
+    if not SET_ID.match(kind) or kind != folder or not version_ok or removes is None:
+        return None, problems
+    return {'kind': kind, 'version': version, 'files': files, 'removes': removes, 'instructions': _split_instructions(body)[0]}, problems
 
-    A set of the application is not for any unit: its files are asked for with kind None."""
-    if set_['scope'] == 'application':
-        return list(set_['files']) if kind is None else []
-    if kind is None:
+
+def _effective_files(set_, profile):
+    """The files of a set for a unit kind, before their templates are located: the set's, with the profile's removed, redefined and added."""
+    if profile is None:
+        return list(set_['files'])
+    own = {file['path']: file for file in profile['files']}
+    kept = [own.get(file['path'], file) for file in set_['files'] if file['path'] not in profile['removes']]
+    return kept + [file for file in profile['files'] if not any(known['path'] == file['path'] for known in set_['files'])]
+
+
+def files_for(loaded, kind):
+    """The files of a set that a unit of `kind` needs, each with the template it is written with; none when the set is not for that kind.
+
+    The set's files are the base ones with the kind's profile applied (ADR-0053). A set of the application is not for any unit:
+    its files are asked for with kind None. Each file is {'path', 'template', 'required', 'profile' (the kind whose folder holds
+    the template, else None), 'ref': {'id', 'version'}, 'templateFile' (relative to the set folder), 'example' (or None)}."""
+    set_ = loaded['set']
+    if (kind is not None) if set_['scope'] == 'application' else (kind is None):
         return []
-    if set_['appliesTo'] and kind not in set_['appliesTo']:
-        return []
-    return [f for f in set_['files'] if not f['when'] or kind in f['when']]
+    entry = None if kind is None else loaded['profiles'].get(kind)
+    out = []
+    for file in _effective_files(set_, entry['profile'] if entry else None):
+        in_profile = entry is not None and file['template'] in entry['templates']
+        if entry is not None and file['template'] in entry['examples']:
+            example = f'{kind}/{EXAMPLES_DIR}/{file["template"]}'
+        elif file['template'] in loaded['examples']:
+            example = f'{EXAMPLES_DIR}/{file["template"]}'
+        else:
+            example = None
+        out.append({**file, 'profile': kind if in_profile else None,
+                    'ref': {'id': f'{set_["id"]}/{kind}', 'version': entry['profile']['version']} if in_profile else {'id': set_['id'], 'version': set_['version']},
+                    'templateFile': f'{kind}/{file["template"]}' if in_profile else file['template'], 'example': example})
+    return out
+
+
+def template_of(loaded, file):
+    """The parsed template a file of `files_for` is written with."""
+    if file['profile'] is None:
+        return loaded['templates'].get(file['template'])
+    return loaded['profiles'][file['profile']]['templates'].get(file['template'])
+
+
+def ref_text(ref):
+    """The text a document carries in its `template:` front matter for a reference."""
+    return f'{ref["id"]}@{ref["version"]}'
 
 
 def load_sets(sources, unit_kinds=None):
     """(sets, problems): every set of the project and the faults of their definitions.
 
-    `sources` is a list of {'folder', 'set_text' (None when set.md is missing), 'templates': {file name: text}}.
+    `sources` is a list of {'folder', 'set_text' (None when set.md is missing), 'templates': {file name: text}, 'examples': [names],
+    'profiles': {kind: {'profile_text' (None when profile.md is missing), 'templates': {file name: text}, 'examples': [names]}}}.
     A set that cannot give a usable identity is left out; the others are returned, with their problems listed."""
     problems, sets = [], []
 
@@ -410,29 +489,21 @@ def load_sets(sources, unit_kinds=None):
 
     for source in sorted(sources, key=lambda s: s['folder']):
         folder = source['folder']
-        set_path = f'{DESIGN_PREFIX}/{folder}/set.md'
+        set_dir = f'{DESIGN_PREFIX}/{folder}'
+        set_path = f'{set_dir}/set.md'
         if source['set_text'] is None:
             report(set_path, 'is missing')
             continue
-        read, read_problems = parse_set(source['set_text'], folder)
-        for message in read_problems:
+        set_, set_problems = parse_set(source['set_text'], folder)
+        for message in set_problems:
             report(set_path, message)
-        if read is None:
+        if set_ is None:
             continue
         templates = {}
-        for file in read['files']:
-            template_path = f'{DESIGN_PREFIX}/{folder}/{file["template"]}'
-            text = source['templates'].get(file['template'])
-            if text is None:
-                report(set_path, f'file "{file["path"]}": template "{file["template"]}" does not exist in the set folder')
-                continue
-            if file['template'] in templates:
-                continue
-            sections, template_problems = parse_template(text)
-            templates[file['template']] = {'sections': sections}
-            for message in template_problems:
-                report(template_path, message)
-            if read['scope'] == 'application':
+
+        def analyse(text, sections, template_path, set_=set_):
+            """What a template says about itself that depends on the set: the unit-only features, and the sources its references may name."""
+            if set_['scope'] == 'application':
                 for name in unique(re.findall(r'\{\{\s*([^{}]*?)\s*\}\}', text)):
                     if name in UNIT_VARIABLES:
                         report(template_path, f'variable "{{{{{name}}}}}" is for unit sets')
@@ -446,19 +517,73 @@ def load_sets(sources, unit_kinds=None):
                             report(template_path, f'section "{section["heading"]}": refs-resolve source "rules" is for unit sets')
             for section in sections:
                 for check in section['checks']:
-                    if check['name'] == 'refs-resolve' and check['source'] not in REFERENCE_SOURCES and check['source'] not in read['needs']:
+                    if check['name'] == 'refs-resolve' and check['source'] not in REFERENCE_SOURCES and check['source'] not in set_['needs']:
                         report(template_path, f'section "{section["heading"]}": refs-resolve source "{check["source"]}" is not rules, requirements, components or a set in needs')
-        for kind in read['appliesTo']:
+
+        def use_own(name, source=source, templates=templates, set_dir=set_dir, analyse=analyse):
+            """Reads a template of the set's own folder once; False when the folder has none of that name."""
+            text = source['templates'].get(name)
+            if text is None:
+                return False
+            if name not in templates:
+                sections, template_problems = parse_template(text)
+                templates[name] = {'sections': sections}
+                for message in template_problems:
+                    report(f'{set_dir}/{name}', message)
+                analyse(text, sections, f'{set_dir}/{name}')
+            return True
+
+        for file in set_['files']:
+            if not use_own(file['template']):
+                report(set_path, f'file "{file["path"]}": template "{file["template"]}" does not exist in the set folder')
+        profiles = {}
+        profile_sources = source.get('profiles') or {}
+        for kind in sorted(profile_sources):
+            profile_source = profile_sources[kind]
+            profile_dir = f'{set_dir}/{kind}'
+            profile_path = f'{profile_dir}/{PROFILE_FILE}'
+            if set_['scope'] == 'application':
+                report(profile_path, 'an application set cannot have profiles: an application has no unit kind')
+                continue
+            if not SET_ID.match(kind):
+                report(profile_path, f'"{kind}" is not a lowercase name (letters, digits, hyphens) for a unit kind')
+                continue
             if unit_kinds is not None and kind not in unit_kinds:
-                report(set_path, f'unit kind "{kind}" in appliesTo is not declared in unitKinds')
-        for file in read['files']:
-            for kind in file['when']:
-                if read['appliesTo']:
-                    if kind not in read['appliesTo']:
-                        report(set_path, f'file "{file["path"]}": kind "{kind}" in When is not one the set applies to')
-                elif unit_kinds is not None and kind not in unit_kinds:
-                    report(set_path, f'file "{file["path"]}": kind "{kind}" in When is not declared in unitKinds')
-        sets.append({'set': read, 'templates': templates})
+                report(profile_path, f'unit kind "{kind}" is not declared in unitKinds')
+            if profile_source['profile_text'] is None:
+                report(profile_path, 'is missing')
+                continue
+            profile, profile_problems = parse_profile(profile_source['profile_text'], kind)
+            for message in profile_problems:
+                report(profile_path, message)
+            if profile is None:
+                continue
+            for path in profile['removes']:
+                if not any(file['path'] == path for file in set_['files']):
+                    report(profile_path, f'removes "{path}" is not a file of the set')
+                if any(file['path'] == path for file in profile['files']):
+                    report(profile_path, f'file "{path}" is both removed and defined')
+            own = {}
+            listed = {file['path'] for file in profile['files']}
+            effective = _effective_files(set_, profile)
+            for file in effective:
+                text = profile_source['templates'].get(file['template'])
+                if text is not None:
+                    if file['template'] not in own:
+                        sections, template_problems = parse_template(text)
+                        own[file['template']] = {'sections': sections}
+                        for message in template_problems:
+                            report(f'{profile_dir}/{file["template"]}', message)
+                        analyse(text, sections, f'{profile_dir}/{file["template"]}')
+                elif file['path'] in listed and not use_own(file['template']):
+                    report(profile_path, f'file "{file["path"]}": template "{file["template"]}" exists neither in the profile folder nor in the set folder')
+            for name in sorted(profile_source['templates']):
+                if not any(file['template'] == name for file in effective):
+                    report(f'{profile_dir}/{name}', f'is not used by any file of the kind "{kind}"')
+            profiles[kind] = {'profile': profile, 'templates': own, 'examples': sorted(profile_source.get('examples') or [])}
+        if set_['scope'] == 'unit' and not set_['files'] and not profile_sources:
+            report(set_path, 'has no files: list them in a table (Path | Template | Required) or add a folder per unit kind with a profile.md')
+        sets.append({'set': set_, 'templates': templates, 'examples': sorted(source.get('examples') or []), 'profiles': profiles})
     known = {loaded['set']['id'] for loaded in sets}
     needs_of = {loaded['set']['id']: loaded['set']['needs'] for loaded in sets}
     scope_of = {loaded['set']['id']: loaded['set']['scope'] for loaded in sets}
@@ -495,11 +620,11 @@ def template_ref_of(text):
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def is_stale(text, set_):
-    """Whether the design was written against an older version of its set."""
-    ref = template_ref_of(text)
-    match = TEMPLATE_REF.match(ref) if ref else None
-    return bool(match) and match.group(1) == set_['id'] and int(match.group(2)) < set_['version']
+def is_stale(text, ref):
+    """Whether the design was written against an older version of its template (`ref`: the template in use, ADR-0053)."""
+    named = template_ref_of(text)
+    match = TEMPLATE_REF.match(named) if named else None
+    return bool(match) and match.group(1) == ref['id'] and int(match.group(2)) < ref['version']
 
 
 def item_ids(text):
@@ -518,8 +643,10 @@ def _content_of(lines, headings, position):
     return strip_comments('\n'.join(lines[heading['line'] + 1:end])).strip()
 
 
-def check_document(template, set_, text, context):
-    """The faults of one design document against its template and set, as {'code', 'section', 'message'}; none means it conforms.
+def check_document(template, expected, text, context):
+    """The faults of one design document against its template, as {'code', 'section', 'message'}; none means it conforms.
+
+    `expected` is the {'id', 'version'} of the template in use (`ref` of a file of `files_for`).
 
     `context` carries ruleIds, requirementIds, componentIds and `items`: the id of a set to the design items of the unit in it."""
     problems = []
@@ -528,8 +655,8 @@ def check_document(template, set_, text, context):
         problems.append({'code': 'missing-template-ref', 'message': 'front matter has no template reference (template: <set>@<version>)'})
     else:
         match = TEMPLATE_REF.match(ref)
-        if not match or match.group(1) != set_['id']:
-            problems.append({'code': 'wrong-template-ref', 'message': f'template reference "{ref}" does not name this set (expected {set_["id"]}@{set_["version"]})'})
+        if not match or match.group(1) != expected['id']:
+            problems.append({'code': 'wrong-template-ref', 'message': f'template reference "{ref}" does not name this template (expected {ref_text(expected)})'})
     front = front_of(text)
     body = front[1] if front else text
     lines = lines_of(clean_source(body))
@@ -617,6 +744,13 @@ def _real_file(path):
     return os.path.isfile(path) and not os.path.islink(path)
 
 
+def _markdown_in(directory):
+    """The names of the Markdown files (not links) directly in a folder, sorted; none when it does not exist."""
+    if not _real_dir(directory):
+        return []
+    return [name for name in sorted(os.listdir(directory)) if name.endswith('.md') and _real_file(os.path.join(directory, name))]
+
+
 def read_sources(root):
     """The sets under `01-standards/templates/` of the repository at `root`, as `load_sets` takes them."""
     base = os.path.join(root, *paths.design_sets_dir().split('/'))
@@ -627,10 +761,21 @@ def read_sources(root):
         directory = os.path.join(base, folder)
         if not _real_dir(directory):
             continue
-        files = [name for name in sorted(os.listdir(directory)) if name.endswith('.md') and _real_file(os.path.join(directory, name))]
+        files = _markdown_in(directory)
+        profiles = {}
+        for kind in sorted(os.listdir(directory)):
+            profile_dir = os.path.join(directory, kind)
+            if kind.startswith('_') or not _real_dir(profile_dir):
+                continue
+            inside = _markdown_in(profile_dir)
+            profiles[kind] = {'profile_text': docmd.read_text(os.path.join(profile_dir, PROFILE_FILE)) if PROFILE_FILE in inside else None,
+                              'templates': {name: docmd.read_text(os.path.join(profile_dir, name)) for name in inside if name != PROFILE_FILE},
+                              'examples': _markdown_in(os.path.join(profile_dir, EXAMPLES_DIR))}
         sources.append({'folder': folder,
                         'set_text': docmd.read_text(os.path.join(directory, 'set.md')) if 'set.md' in files else None,
-                        'templates': {name: docmd.read_text(os.path.join(directory, name)) for name in files if name != 'set.md'}})
+                        'templates': {name: docmd.read_text(os.path.join(directory, name)) for name in files if name != 'set.md'},
+                        'examples': _markdown_in(os.path.join(directory, EXAMPLES_DIR)),
+                        'profiles': profiles})
     return sources
 
 
@@ -712,14 +857,18 @@ def component_ids(root):
     return sorted(name[:-3] for name in os.listdir(base) if name.endswith('.md') and COMPONENT_ID.match(name[:-3]))
 
 
-def unit_items(root, app, unit_key, sets):
-    """{set id: design item ids} of the unit's documents in each set that exists on disk."""
+def unit_items(root, app, unit_key, sets, kind):
+    """{set id: design item ids} of the documents of the unit (of unit kind `kind`; None for the application) in each set that exists on disk."""
     items = {}
     for loaded in sets:
+        if loaded['set']['scope'] == 'application':
+            files = files_for(loaded, None)
+        elif unit_key == APPLICATION_KEY:
+            files = []
+        else:
+            files = files_for(loaded, kind)
         found = []
-        for file in loaded['set']['files']:
-            if loaded['set']['scope'] == 'unit' and unit_key == APPLICATION_KEY:
-                continue
+        for file in files:
             path = os.path.join(root, *design_file_path(app, unit_key, loaded, file['path']).split('/'))
             if _real_file(path):
                 found.extend(item_ids(docmd.read_text(path)))
@@ -729,13 +878,13 @@ def unit_items(root, app, unit_key, sets):
 
 def application_context(root, app, sets):
     """What the ids an application's design points to are checked against: its requirements, the common components and the design items of the application's own sets."""
-    return {'ruleIds': [], 'requirementIds': requirement_ids(root, app), 'componentIds': component_ids(root), 'items': unit_items(root, app, APPLICATION_KEY, sets)}
+    return {'ruleIds': [], 'requirementIds': requirement_ids(root, app), 'componentIds': component_ids(root), 'items': unit_items(root, app, APPLICATION_KEY, sets, None)}
 
 
-def unit_context(root, app, unit_key, sets):
+def unit_context(root, app, unit_key, sets, kind):
     """What the ids a unit's design points to are checked against."""
     return {'ruleIds': [ident for ident, _ in rules_of(root, app, unit_key)], 'requirementIds': requirement_ids(root, app),
-            'componentIds': component_ids(root), 'items': unit_items(root, app, unit_key, sets)}
+            'componentIds': component_ids(root), 'items': unit_items(root, app, unit_key, sets, kind)}
 
 
 # ---------------------------------------------------------------------------
@@ -758,11 +907,12 @@ def _section_lines(section, rules):
     return ['', *docmd.table(columns, rows).rstrip('\n').split('\n'), '']
 
 
-def scaffold_text(template_text, sections, set_, unit_id, title, app, kind, rules):
+def scaffold_text(template_text, sections, set_id, ref, unit_id, title, app, kind, rules):
     """The first draft of one design document: the template with its directive blocks replaced by what an author fills in.
 
     A section keeps its heading; its table (seeded with the unit's rules when the template says so) or a `TODO` replaces
-    what the template holds under it, since the guidance lives in the directive. Text under other headings is kept."""
+    what the template holds under it, since the guidance lives in the directive. Text under other headings is kept.
+    `ref` is the {'id', 'version'} of the template in use: the front matter names it, and `{{set.version}}` is its version."""
     lines = lines_of(clean_source(template_text))
     headings = headings_of(lines)
     out, cursor = [], 0
@@ -775,10 +925,10 @@ def scaffold_text(template_text, sections, set_, unit_id, title, app, kind, rule
         out.extend(_section_lines(section, rules))
         cursor = following
     out.extend(lines[cursor:])
-    variables = {'unit.id': unit_id, 'unit.title': title, 'app.id': app, 'kind': kind, 'set.id': set_['id'], 'set.version': str(set_['version'])}
+    variables = {'unit.id': unit_id, 'unit.title': title, 'app.id': app, 'kind': kind, 'set.id': set_id, 'set.version': str(ref['version'])}
     body = re.sub(r'\{\{\s*([^{}]*?)\s*\}\}', lambda match: variables.get(match.group(1), match.group(0)), '\n'.join(out))
     body = re.sub(r'\n{3,}', '\n\n', body).strip('\n')
-    front = {'template': f'{set_["id"]}@{set_["version"]}'}
+    front = {'template': ref_text(ref)}
     if unit_id is not None:
         front['unit'] = unit_id
     return docmd.front_matter(front) + body + '\n'

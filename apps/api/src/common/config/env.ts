@@ -35,6 +35,15 @@ export function loadEnv(): AppEnv {
   };
 }
 
+/**
+ * True on a development installation (KINTSUGI_DEBUG_MCP=1 or true): the debug MCP server is served and the API and the
+ * worker mirror their logs to the database (ADR-0056). Never set by the deploy package.
+ */
+export function debugMcpEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = (env["KINTSUGI_DEBUG_MCP"] ?? "").trim().toLowerCase();
+  return value === "1" || value === "true";
+}
+
 export interface BootstrapAdmin {
   username: string;
   password: string;

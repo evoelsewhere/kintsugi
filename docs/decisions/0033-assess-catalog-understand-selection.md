@@ -1,6 +1,6 @@
 # ADR-0033: Two runtime stages: assess builds the item catalog; understand runs on a selection
 
-- Status: Accepted (document formats and paths amended by [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md): the catalog and the per-unit documents are Markdown); §4 layout statements amended by [ADR-0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md); historical decision text retained
+- Status: Accepted (document formats and paths amended by [ADR-0042](0042-markdown-only-document-repo-by-bounded-context.md): the catalog and the per-unit documents are Markdown); §4 layout statements amended by [ADR-0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md); the resume by copy of §6 is replaced by an in-place retry in [ADR-0055](0055-one-durable-workspace-per-job.md); historical decision text retained
 - Date: 2026-10-12
 - Decision register: D52
 

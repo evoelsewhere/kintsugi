@@ -68,7 +68,7 @@ describe("an MCP job in a child process", () => {
       agent,
       task: "Look the billing topic up.",
       model: { provider: "local", id: "m" },
-      workspace: { readOnly: [join(job, "src")], outDir: join(job, "out") },
+      workspace: { root: join(job, "src"), readOnly: [join(job, "src")], outDir: join(job, "out") },
       limits: { timeoutSec: 90 },
       mcp: { servers: [{ name: "docs", url: mcp.url, headers: { Authorization: `Bearer ${MCP_TOKEN}` }, timeoutSec: 20, allowedTools: [] }] },
     };

@@ -83,14 +83,15 @@ def scalar(value):
 
 
 def unit_file(path):
-    """{id, title, module, kind, files} of a work-item file's frontmatter (a best-effort read)."""
+    """{id, title, module, kind, files, sources} of a unit card's frontmatter (a best-effort read): `sources` is the
+    [(repository, path)] of its `source` entries, `files` the paths alone."""
     if os.path.islink(path) or os.path.getsize(path) > MAX_UNIT_BYTES:
         return None
     with open(path, encoding='utf-8-sig', errors='replace') as handle:
         lines = handle.read().splitlines()
     if not lines or lines[0].strip() != '---':
         return None
-    fields, files, in_paths = {}, [], False
+    fields, files, sources, in_paths, repo = {}, [], [], False, ''
     for line in lines[1:]:
         if line.strip() == '---':
             break
@@ -99,12 +100,17 @@ def unit_file(path):
             fields[match.group(1)] = scalar(match.group(2))
             in_paths = False
             continue
+        named = re.search(r"""(?<![\w-])repo:\s*("[^"]*"|'[^']*'|[^,}\s]+)""", line)
+        if named:
+            repo = scalar(named.group(1))
         listed = re.search(r'paths:\s*(\[.*\])', line)
         if listed:
             try:
-                files += [value for value in json.loads(listed.group(1)) if isinstance(value, str)]
+                found = [value for value in json.loads(listed.group(1)) if isinstance(value, str)]
             except json.JSONDecodeError:
-                files += [scalar(value) for value in listed.group(1).strip('[]').split(',') if value.strip()]
+                found = [scalar(value) for value in listed.group(1).strip('[]').split(',') if value.strip()]
+            files += found
+            sources += [(repo, value) for value in found]
             continue
         if re.match(r'^\s*-?\s*paths:\s*$', line):
             in_paths = True
@@ -112,23 +118,30 @@ def unit_file(path):
         block = re.match(r'^\s+-\s+(.+)$', line)
         if in_paths and block:
             files.append(scalar(block.group(1)))
+            sources.append((repo, scalar(block.group(1))))
         elif not line.startswith(' '):
             in_paths = False
-    return {**fields, 'files': files}
+    return {**fields, 'files': files, 'sources': sources}
 
 
-def expand(paths, inventory):
-    """Inventory files of a unit's paths: a file as is, a directory as every inventory file under it.
-    A path that names nothing of the inventory is kept as it is (the unit's code is gone)."""
+def expand(entries, inventory):
+    """Inventory files of a unit's `source` entries, [(repository, path)]: a file as is, a directory as every inventory
+    file under it. Files are cited `<repository id>/<path>` (ADR-0052), so a path is tried under its repository first and
+    as written second (a card written by hand may not name one). A path that names nothing of the inventory is kept
+    under its repository (the unit's code is gone)."""
     files = set()
-    for rel in (cc.norm_path(value) for value in paths):
+    for repo, value in entries:
+        rel = cc.norm_path(value)
         if rel is None:
             continue
-        if rel in inventory:
-            files.add(rel)
-            continue
-        under = {path for path in inventory if path.startswith(rel.rstrip('/') + '/')}
-        files |= under or {rel}
+        candidates = ([f'{repo}/{rel}'] if repo and paths.is_source_folder(repo) else []) + [rel]
+        for candidate in candidates:
+            under = {path for path in inventory if path.startswith(candidate.rstrip('/') + '/')}
+            if candidate in inventory or under:
+                files |= {candidate} if candidate in inventory else under
+                break
+        else:
+            files.add(candidates[0])
     return sorted(files)
 
 
@@ -151,7 +164,7 @@ def old_from_units(units_dir, inventory):
                 key = '/'.join(str(unit.get('id', '')).split('/')[1:]) if unit else ''
                 if not unit or not cc.ITEM_ID_RE.match(key):
                     continue
-                files = expand(unit['files'], inventory)
+                files = expand(unit['sources'], inventory)
                 if key in seeded:
                     if not seeded[key]['files']:
                         seeded[key]['files'] = sorted(set(files))

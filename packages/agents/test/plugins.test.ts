@@ -26,7 +26,7 @@ describe("built-in plugins", () => {
     const design = plugins.find((plugin) => plugin.name === "design")!;
     const modernize = plugins.find((plugin) => plugin.name === "modernize")!;
     expect(design.components.filter((component) => component.kind === "command").map((component) => component.name)).toEqual(["design"]);
-    expect(design.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["designer"]);
+    expect(design.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["design-reviewer", "designer"]);
     expect(modernize.components.filter((component) => component.kind === "command").map((component) => component.name)).toEqual(["design-architecture", "scaffold", "implement"]);
   });
 
@@ -58,7 +58,7 @@ describe("built-in plugins", () => {
 
   it("reads plugin.json from the plugin folder and reads files only from the plugin", async () => {
     const plugins = await loadBuiltinPlugins();
-    expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "1.0.0" });
+    expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "1.1.0" });
     expect(JSON.parse((await readBuiltinPluginFile(plugins, "modernize", "kintsugi.json"))!)).toMatchObject({ audience: "member", requires: ["reverse_engineering", "design"] });
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/modernize-design.md")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "../package.json")).toBeUndefined();
@@ -118,6 +118,6 @@ describe("plugin flows", () => {
     // The design command runs the design-set scripts, in the order its text names them.
     const design = flow(designPlugin, "design");
     expect(design.steps.filter((step) => step.kind === "script").map((step) => step.name)).toEqual(["validate_design_templates", "scaffold_design", "check_design"]);
-    expect(design.steps.filter((step) => step.kind === "agent").map((step) => step.name)).toEqual(["designer"]);
+    expect(design.steps.filter((step) => step.kind === "agent").map((step) => step.name)).toEqual(["designer", "design-reviewer"]);
   });
 });

@@ -12,6 +12,7 @@ import {
   type GitServerRecord,
   type RegisterGitRepository,
   type RegisterGitServer,
+  type RemoteProbe,
   remoteLocation,
   RepositoryInUseError,
   repositoryUrlProblem,
@@ -25,7 +26,15 @@ export interface TestAccessResult {
   branchCount?: number;
 }
 
-const hasCredential = (input: RegisterGitServer): boolean => input.credential.token !== undefined || input.credential.privateKey !== undefined;
+export interface RepositoryBranches {
+  branches: string[];
+  /** The branch the server's HEAD points to. */
+  remoteDefault?: string;
+  /** The branch Kintsugi follows now. */
+  current?: string;
+}
+
+const hasCredential =(input: RegisterGitServer): boolean => input.credential.token !== undefined || input.credential.privateKey !== undefined;
 
 /** The credential an auth type needs, or a reason it is incomplete. */
 function credentialProblem(input: RegisterGitServer): string | undefined {
@@ -272,6 +281,41 @@ export class GitService {
       auditRecord(actor, AUDIT_ACTIONS.gitRepositoryCreate, { subject: repository.id, detail: { serverId: repository.serverId, url: auditUrl(repository.url) } }),
     );
     return repository;
+  }
+
+  /** The branches of a registered repository on its server, and the one the server calls its default. */
+  async listBranches(id: string): Promise<RepositoryBranches> {
+    const repository = await this.getRepository(id);
+    const probe = await this.#probeRepository(repository);
+    return { branches: probe.branches, ...(probe.defaultBranch === undefined ? {} : { remoteDefault: probe.defaultBranch }), ...(repository.defaultBranch === undefined ? {} : { current: repository.defaultBranch }) };
+  }
+
+  /**
+   * Chooses the branch Kintsugi follows (the "main" branch: what is mirrored, analysed and where documents are
+   * written). It must exist on the server; the repository goes back to `pending` and the worker syncs it.
+   */
+  async setRepositoryBranch(id: string, branch: string, actor: Actor): Promise<GitRepositoryRecord> {
+    const existing = await this.getRepository(id);
+    if (existing.defaultBranch === branch) return existing;
+    const probe = await this.#probeRepository(existing);
+    if (!probe.branches.includes(branch)) throw new BadRequestException(`${branch} is not a branch of ${auditUrl(existing.url)}`);
+    const updated = await this.registry.setRepositoryBranch(id, branch);
+    if (updated === undefined) throw new NotFoundException(`Repository ${id} not found`);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.gitRepositoryUpdate, { subject: id, detail: { serverId: existing.serverId, url: auditUrl(existing.url), from: existing.defaultBranch ?? null, to: branch } }),
+    );
+    return updated;
+  }
+
+  async #probeRepository(repository: GitRepositoryRecord): Promise<RemoteProbe> {
+    const server = await this.#mustGetServer(repository.serverId);
+    const problem = repositoryUrlProblem(repository.url, server);
+    if (problem !== undefined) throw new BadRequestException(problem);
+    try {
+      return await this.remote.probe(repository.url, (await this.registry.serverAccess(repository.serverId))!);
+    } catch (error) {
+      throw new BadRequestException(`Cannot reach ${auditUrl(repository.url)}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async removeRepository(id: string, actor: Actor): Promise<void> {

@@ -75,8 +75,8 @@ export interface InventorySignals {
 
 export interface Inventory {
   app?: string;
-  sourceRepository?: string;
-  sourceCommit?: string;
+  /** The legacy repositories measured, `<repository id>@<commit>`. */
+  sources: string[];
   method?: string;
   complexityIndexFormula?: string;
   fileCount: number;
@@ -220,9 +220,15 @@ export interface MapDiagram {
   source: string;
 }
 
-export type ResultStage = "assess" | "map" | "extract-rules" | "harden" | "understand";
+/** `gaps` is a view of the understand stage (ADR-0057), not a stage with its own page. */
+export type ResultStage = "assess" | "map" | "extract-rules" | "harden" | "understand" | "gaps";
 
 export const RESULT_STAGES: readonly ResultStage[] = ["assess", "map", "extract-rules", "harden", "understand"];
+
+export const GAP_KINDS = ["missing-source", "unresolved", "ambiguous", "unverified"] as const;
+export const GAP_IMPACTS = ["blocking", "risk", "note"] as const;
+export type GapKind = (typeof GAP_KINDS)[number];
+export type GapImpact = (typeof GAP_IMPACTS)[number];
 
 export const hasResultsView = (stage: string): stage is ResultStage => (RESULT_STAGES as readonly string[]).includes(stage);
 
@@ -285,6 +291,25 @@ export interface HardenResults extends ResultsBase {
   runId?: string;
 }
 
+/** A gap of the legacy understanding: a row of a specification's `Gaps and questions` table. */
+export interface Gap {
+  id: string;
+  kind: GapKind;
+  impact: GapImpact;
+  question: string;
+  where: string;
+  /** The catalog item (`<module>/<unit>`) the gap belongs to. */
+  item?: string;
+}
+
+export interface GapsResults extends ResultsBase {
+  stage: "gaps";
+  gaps: Gap[];
+  gapCounts: { total: number; units: number; byKind: Record<GapKind, number>; byImpact: Record<GapImpact, number> };
+  /** One unit's view: its specification predates the `Gaps and questions` table. */
+  noSection?: boolean;
+}
+
 /** A unit of the understand stage: its row of the traceability matrix and its work item at the ref. */
 export interface UnderstandUnit {
   id: string;
@@ -337,7 +362,7 @@ export interface UnderstandResults extends ResultsBase {
   missingInputs: Array<{ path: string; stage: string }>;
 }
 
-export type StageResults = AssessResults | MapResults | RulesResults | HardenResults | UnderstandResults;
+export type StageResults = AssessResults | MapResults | RulesResults | HardenResults | UnderstandResults | GapsResults;
 
 /** A text file of the document repo at a ref. */
 export interface DocumentFile {

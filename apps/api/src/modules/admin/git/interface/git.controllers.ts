@@ -6,16 +6,18 @@ import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, 
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { pageQuerySchema } from "#common/interface/pagination.js";
-import { GitService, type TestAccessResult } from "../application/git.service.js";
+import { GitService, type RepositoryBranches, type TestAccessResult } from "../application/git.service.js";
 import type { GitRepositoryRecord, GitServerRecord } from "../domain/git.js";
 import {
   type CreateGitRepositoryInput,
   type CreateGitServerInput,
   type ReplaceGitServerInput,
+  type SetRepositoryBranchInput,
   type TestAccessInput,
   createGitRepositorySchema,
   createGitServerSchema,
   replaceGitServerSchema,
+  setRepositoryBranchSchema,
   testAccessSchema,
   toServerCommand,
 } from "./git.dto.js";
@@ -99,6 +101,20 @@ export class GitRepositoriesController {
   @ApiCreatedResponse({ description: "The repository, pending its first clone." })
   create(@Body({ schema: createGitRepositorySchema }) input: CreateGitRepositoryInput, @CurrentActor() actor: Actor): Promise<GitRepositoryRecord> {
     return this.git.createRepository(input, actor);
+  }
+
+  @Get(":id/branches")
+  @ApiOperation({ summary: "List the repository's branches on its server (with its stored credential)" })
+  @ApiOkResponse({ description: "The branches, the server's default and the one Kintsugi follows." })
+  branches(@Param("id") id: string): Promise<RepositoryBranches> {
+    return this.git.listBranches(id);
+  }
+
+  @Patch(":id")
+  @ApiOperation({ summary: "Choose the branch Kintsugi follows (the repository's main branch); the worker syncs it again" })
+  @ApiOkResponse({ description: "The repository, pending its sync on the new branch." })
+  setBranch(@Param("id") id: string, @Body({ schema: setRepositoryBranchSchema }) input: SetRepositoryBranchInput, @CurrentActor() actor: Actor): Promise<GitRepositoryRecord> {
+    return this.git.setRepositoryBranch(id, input.defaultBranch, actor);
   }
 
   @Delete(":id")

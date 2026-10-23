@@ -5,8 +5,9 @@
 
 Run from the root of the document repository checkout (or name it with --root), for example on the pull request that
 changes `01-standards/templates/`. Every set is checked: a unique id that matches its folder, a title, an integer version, the
-files table, template files that exist, known directives and checks with valid parameters, kinds the project declares in
-`kintsugi.yaml`, and `needs` that name existing sets without a cycle.
+files table, template files that exist, known directives and checks with valid parameters, the profile of each unit kind
+(`<set>/<kind>/profile.md`, ADR-0053: its kind and version, the files it adds or removes, the templates it uses), kinds the project
+declares in `kintsugi.yaml`, and `needs` that name existing sets without a cycle.
 
 Exit 0 when the sets are valid (or there are none), 1 when something is wrong, 2 for input that cannot be used.
 Standard library only.

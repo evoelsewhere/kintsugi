@@ -210,7 +210,7 @@ const PLAN = `---
 version: 1
 app: "shop"
 generatedBy: "plan_understand"
-catalogCommit: "${'a'.repeat(40)}"
+catalogSources: "legacy@${'a'.repeat(40)},legacy-data@${'b'.repeat(40)}"
 items: 6
 open: 5
 batches: 2
@@ -272,7 +272,7 @@ describe('plan', () => {
   test('reads the strategy, the batches, what was left out and what was dropped', () => {
     const plan = parsePlan(PLAN)!
     expect(plan.app).toBe('shop')
-    expect(plan.catalog).toEqual({ commit: 'a'.repeat(40), items: 6, open: 5 })
+    expect(plan.catalog).toEqual({ sources: 'legacy@' + 'a'.repeat(40) + ',legacy-data@' + 'b'.repeat(40), items: 6, open: 5 })
     expect(plan.strategy).toBe('Foundations first, then what uses them.')
     expect(plan.summary).toEqual({ batches: 2, planned: 3, open: 5 })
     expect(plan.batches).toEqual([

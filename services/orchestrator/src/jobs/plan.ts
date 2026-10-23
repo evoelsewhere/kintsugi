@@ -1,13 +1,16 @@
 // Stage plans (ADR-0027): what a pipeline stage runs, as data. A plan is a list of steps; the
 // generic executor (executor.ts) runs them in the stage's job workspace, each leaf step as a
-// child run with its own in/out/tmp. Types and the placeholder filler only: this module is
+// child run with its own in/out/tmp folders in the job workspace. Types and the placeholder filler only: this module is
 // imported by the API too (prerequisites, `runnable`), so it pulls in nothing at run time.
 //
-// Placeholders, filled when a step starts:
+// Placeholders, filled when a step starts. Paths are relative to the job workspace, which is the working directory
+// of every process of the job (ADR-0055), so the same step has the same text in every attempt:
 //
-//   {src}    the read-only source checkout        {in}    the step's read-only inputs
-//   {out}    the step's output directory          {tmp}   its scratch directory
-//   {commit} the source commit                    {repo}  the source repository id
+//   {src}    the read-only as-is checkouts (as-is/)     {in}    the step's read-only inputs
+//   {tobe}   the read-only to-be checkouts (to-be/)     {out}   the step's output directory
+//   {tmp}    its scratch directory
+//   {sources} the legacy repositories and their commits, `id@commit,id@commit`; {src} holds one folder
+//            per repository, named by its id (ADR-0052)
 //   {app}    the application id                 {run}   the stage run's id
 //   {item} {key}         the current item of a forEach step
 //   {round} {maxRounds}  the current round of a repeat step
@@ -18,7 +21,7 @@
 // `intermediate` are inputs for later steps only; everything else is the stage's output and goes
 // to the document repo through the writer.
 
-export const PLACEHOLDER_NAMES = ["src", "in", "out", "tmp", "commit", "repo", "app", "run", "item", "key", "round", "maxRounds", "error"] as const;
+export const PLACEHOLDER_NAMES = ["src", "tobe", "in", "out", "tmp", "sources", "app", "run", "item", "key", "round", "maxRounds", "error"] as const;
 export type PlaceholderName = (typeof PLACEHOLDER_NAMES)[number];
 export type Placeholders = Partial<Record<PlaceholderName, string>>;
 
@@ -51,8 +54,8 @@ export interface StageScope {
 /** What a plan's dynamic parts (conditions, arguments, items) can look at while the stage runs. */
 export interface StageContext {
   readonly app: string;
-  readonly repo: string;
-  readonly commit: string;
+  /** The legacy repositories and their commits, `id@commit,id@commit` (the `{sources}` placeholder). */
+  readonly sources: string;
   /** The selection of a scoped run (understand); undefined for a whole-application stage. */
   readonly scope: StageScope | undefined;
   /** The current round of the enclosing repeat step (1-based); 0 outside one. */
@@ -177,6 +180,11 @@ export interface StagePlan {
   id: string;
   /** Commit message of the stage's document write (first line = pull-request title); `scope` for a scoped run. */
   message(app: string, scope?: StageScope): string;
+  /**
+   * The document-repo path (intermediate, never published) of a Markdown file the stage writes for the pull request
+   * description; the runner reads it when the stage is done (ADR-0054).
+   */
+  description?(app: string): string;
   /** Document-repo files (or folders, ending in "/") every step sees under {in}; missing ones are skipped. */
   documents?: readonly string[];
   /** Files that must exist on the document repo's default branch before the stage starts. */

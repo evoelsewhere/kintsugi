@@ -8,6 +8,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { designReviewPath } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
 import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -132,7 +133,7 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
     expect(steps.filter((step) => step[0] === "design-unit").map((step) => step[2]).sort()).toEqual(UNITS.slice().sort());
-    expect(steps.map((step) => step[0])).toEqual(expect.arrayContaining(["scaffold", "check", "fixes", "check-final"]));
+    expect(steps.map((step) => step[0])).toEqual(expect.arrayContaining(["scaffold", "check", "review-unit", "check-review", "fixes", "check-final", "summary"]));
     expect(steps.find((step) => step[0] === "fixes")?.[1]).toBe("skipped");
     expect(agents.specs.filter((spec) => spec.agent.id === "designer")).toHaveLength(2);
 
@@ -172,6 +173,59 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     expect(published(designPath("payroll/close-period", "overview.md"))).toBe(OVERVIEW_OK);
     expect(logs.some((line) => line.includes("step fixes: 1 job(s)"))).toBe(true);
   }, 120_000);
+
+  describe("the independent review (ADR-0054)", () => {
+    const NOTE_HEAD = (key: string): string => `---\nunit: "${key}"\n---\n# Review of ${key}\n\n| Severity | Document | Section | Category | Finding | Suggestion |\n| --- | --- | --- | --- | --- | --- |\n`;
+    const note = (key: string, rows: string[] = []): Record<string, string> => ({ [designReviewPath("demo", key)]: NOTE_HEAD(key) + rows.map((row) => `${row}\n`).join("") });
+
+    it("has a reviewer read each unit, sends blockers to the fix round with the findings, and describes the pull request with the review", async () => {
+      const { run, agents, steps, artifacts, writes } = await runDesign({
+        files: {
+          designer: (spec) => written(unitOf(spec.task)),
+          "design-reviewer": (spec) => {
+            const key = unitOf(spec.task);
+            return key === "payroll/close-period"
+              ? note(key, ["| blocker | overview.md | Rule coverage | fidelity | RULE-004 is in the specification but no row applies it. | Add a row with the fee formula. |", "| minor | functions.md | Functions | clarity | Say which currency. | Name it. |"])
+              : note(key);
+          },
+        },
+      });
+      expect(run?.status).toBe("succeeded");
+      expect(steps.filter((step) => step[0] === "review-unit").map((step) => step[2]).sort()).toEqual(UNITS.slice().sort());
+      expect(steps.find((step) => step[0] === "check-review")?.[1]).toBe("succeeded");
+      // The check passes for both units; only the blocker of the review sends close-period to the fix round.
+      expect(steps.filter((step) => step[0] === "fix-unit")).toEqual([["fix-unit", "succeeded", "payroll/close-period"]]);
+      const review = agents.specs.find((spec) => spec.agent.id === "design-reviewer" && unitOf(spec.task) === "payroll/close-period")!;
+      expect(review.task).toContain("You did not write them");
+      expect(review.task).toContain("scratch/demo/design/review/payroll/close-period.md");
+      expect(review.task).toContain("scratch/demo/design/report.json");
+      const fix = agents.specs.find((spec) => spec.task.startsWith("Fix the design documents"))!;
+      expect(fix.task).toContain("scratch/demo/design/review-report.json");
+
+      // The notes are scratch; only the documents are published.
+      expect(artifacts).toEqual(UNITS.flatMap((key) => ["functions.md", "overview.md"].map((file) => designPath(key, file))).sort());
+
+      const description = writes[0]?.description ?? "";
+      expect(description).toContain("2 unit(s): 1 ready, 1 ready with findings, 0 incomplete.");
+      expect(description).toContain("| payroll/run-period | screen | ready | 0 | 0 | 0 |");
+      expect(description).toContain("| payroll/close-period | screen | ready-with-findings | 1 | 0 | 1 |");
+      expect(description).toContain("RULE-004 is in the specification but no row applies it.");
+    }, 180_000);
+
+    it("counts a unit whose note does not parse as not reviewed, and does not fix it for that", async () => {
+      const { run, steps, writes } = await runDesign({
+        files: {
+          designer: (spec) => written(unitOf(spec.task)),
+          "design-reviewer": (spec) => ({ [designReviewPath("demo", unitOf(spec.task))]: "I looked and it is fine.\n" }),
+        },
+      });
+      expect(run?.status).toBe("succeeded");
+      expect(steps.find((step) => step[0] === "fixes")?.[1]).toBe("skipped");
+      const description = writes[0]?.description ?? "";
+      expect(description).toContain("0 ready, 0 ready with findings, 2 incomplete.");
+      expect(description).toContain("Not reviewed: no findings table");
+    }, 180_000);
+  });
 
   it("carries a unit that is still wrong after the fix round in the pull request instead of failing the run", async () => {
     const { run, steps, published } = await runDesign({

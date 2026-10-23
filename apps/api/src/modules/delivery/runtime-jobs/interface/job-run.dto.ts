@@ -19,6 +19,10 @@ export type ListAllJobRunsQuery = z.infer<typeof listAllJobRunsQuerySchema>;
 export const listRestrictedRecordsQuerySchema = pageQuerySchema.extend({ projectId: filterId, jobRunId: filterId });
 export type ListRestrictedRecordsQuery = z.infer<typeof listRestrictedRecordsQuerySchema>;
 
+/** Body of POST retry: `fresh` discards what the job kept and begins from nothing (ADR-0055). */
+export const retryBodySchema = z.object({ fresh: z.boolean().optional() }).default({});
+export type RetryBody = z.infer<typeof retryBodySchema>;
+
 /** An event id (workflow.job_event.id). */
 export const eventIdSchema = z.string().regex(/^\d{1,18}$/, "must be an event id");
 

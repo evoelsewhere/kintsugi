@@ -14,6 +14,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import docmd  # noqa: E402
+import paths  # noqa: E402
+from languages import EXTENSIONS, FILENAMES  # noqa: E402
 
 MAX_FILE_BYTES = 5_000_000
 MAX_TOTAL_BYTES = 100_000_000
@@ -28,35 +30,64 @@ SKIP_DIRS = {
     '.git', '.hg', '.svn', '.idea', '.vscode', '__pycache__', '.venv', 'venv',
     'node_modules', 'vendor', 'vendors', 'dist', 'build', 'target', 'out',
     'coverage', 'bin', 'obj',
+    # Generated output and caches of the web and JVM toolchains.
+    '.nuxt', '.next', '.output', '.svelte-kit', '.gradle', '.turbo', '.cache', 'bower_components',
 }
-LANGUAGES = {
-    '.asm': 'Assembly', '.bas': 'BASIC', '.c': 'C', '.cc': 'C++', '.cpp': 'C++',
-    '.cbl': 'COBOL', '.cob': 'COBOL', '.cs': 'C#', '.css': 'CSS', '.dart': 'Dart',
-    '.go': 'Go', '.h': 'C/C++', '.hpp': 'C++', '.html': 'HTML', '.java': 'Java',
-    '.js': 'JavaScript', '.jsx': 'JavaScript', '.kt': 'Kotlin', '.kts': 'Kotlin',
-    '.md': 'Markdown', '.mjs': 'JavaScript', '.php': 'PHP', '.pl': 'Perl',
-    '.py': 'Python', '.rb': 'Ruby', '.rs': 'Rust', '.scala': 'Scala', '.sh': 'Shell',
-    '.sql': 'SQL', '.swift': 'Swift', '.ts': 'TypeScript', '.tsx': 'TypeScript',
-    '.vb': 'Visual Basic', '.xml': 'XML', '.yaml': 'YAML', '.yml': 'YAML',
-    # Visual Basic 6: classes, forms, user controls and designers.
-    '.cls': 'Visual Basic', '.frm': 'Visual Basic', '.ctl': 'Visual Basic', '.dsr': 'Visual Basic',
-}
-C_FAMILY = {'C', 'C++', 'C#', 'C/C++', 'Java', 'JavaScript', 'TypeScript', 'Go', 'Kotlin', 'Swift', 'PHP', 'Dart', 'Scala'}
+# The language of a file by its extension or its name: `languages.py`, generated from the Pygments catalogue by scripts/gen_languages.py.
+# A file of an extension that is not in it is "Other": counted, but not measured.
+DEFAULT_BRANCHES = ('if', 'for', 'while', 'case', 'catch')
+SHELL_BRANCHES = ('if', 'elif', 'for', 'while', 'until', 'case')
+LISP_BRANCHES = ('if', 'when', 'unless', 'cond', 'case', 'loop')
+ML_BRANCHES = ('if', 'case', 'match', 'when')
+PASCAL_BRANCHES = ('if', 'for', 'while', 'case', 'repeat', 'except')
+PERL_BRANCHES = ('if', 'elsif', 'unless', 'for', 'foreach', 'while', 'until')
+BASIC_BRANCHES = ('if', 'elseif', 'for', 'while', 'case', 'until')
+# Decision words per language; a language that is not here uses the C-family words above, which fit most of the rest.
 BRANCHES = {
     'COBOL': ('IF', 'EVALUATE', 'PERFORM'),
     'Python': ('if', 'for', 'while', 'except'),
     'Ruby': ('if', 'unless', 'for', 'while', 'rescue', 'when'),
     'Rust': ('if', 'for', 'while', 'match'),
     'SQL': ('case', 'when'),
-    'Visual Basic': ('if', 'elseif', 'for', 'while', 'case', 'until'),
-    'BASIC': ('if', 'elseif', 'for', 'while', 'case', 'until'),
+    'PL/SQL': ('if', 'elsif', 'for', 'while', 'case', 'when', 'loop', 'exception'),
+    'Visual Basic': BASIC_BRANCHES, 'BASIC': BASIC_BRANCHES, 'VBScript': BASIC_BRANCHES, 'BlitzBasic': BASIC_BRANCHES,
+    'Shell': SHELL_BRANCHES, 'Makefile': ('ifeq', 'ifneq', 'ifdef', 'ifndef'),
+    'PowerShell': ('if', 'elseif', 'for', 'foreach', 'while', 'switch', 'catch'),
+    'Perl': PERL_BRANCHES, 'Raku': PERL_BRANCHES,
+    'Tcl': ('if', 'elseif', 'for', 'foreach', 'while', 'switch', 'catch'),
+    'Lua': ('if', 'elseif', 'for', 'while', 'repeat'),
+    'Fortran': ('if', 'do', 'while', 'select', 'case'),
+    'Ada': ('if', 'elsif', 'for', 'while', 'case', 'when'),
+    'Pascal': PASCAL_BRANCHES, 'Delphi': PASCAL_BRANCHES, 'Modula-2': PASCAL_BRANCHES, 'Component Pascal': PASCAL_BRANCHES,
+    'Erlang': ('if', 'case', 'receive', 'try', 'catch'), 'Elixir': ('if', 'unless', 'case', 'cond', 'with', 'rescue'),
+    'Haskell': ML_BRANCHES, 'OCaml': ML_BRANCHES, 'F#': ML_BRANCHES, 'Standard ML': ML_BRANCHES, 'ReasonML': ML_BRANCHES,
+    'Elm': ML_BRANCHES, 'PureScript': ML_BRANCHES, 'Idris': ML_BRANCHES, 'Agda': ML_BRANCHES, 'Gleam': ML_BRANCHES,
+    'Common Lisp': LISP_BRANCHES, 'Emacs Lisp': LISP_BRANCHES, 'Scheme': LISP_BRANCHES, 'Racket': LISP_BRANCHES,
+    'Clojure': LISP_BRANCHES, 'ClojureScript': LISP_BRANCHES, 'Fennel': LISP_BRANCHES, 'Hy': LISP_BRANCHES,
+    'RPG': ('if', 'elseif', 'for', 'dow', 'dou', 'when', 'on-error'),
+    'PL/I': ('if', 'do', 'when', 'select'), 'Rexx': ('if', 'when', 'do'),
 }
-DEFAULT_BRANCHES = ('if', 'for', 'while', 'case', 'catch')
 COMMENT_PREFIXES = ('#', '//', '/*', '*', '*/', '--', '<!--', '-->', '*>')
+# Comment starts a language has besides those above (the line starts with one, after its indentation).
+SEMICOLON = (';',)
+PERCENT = ('%',)
+COMMENT_EXTRAS = {
+    'Fortran': ('!',), 'Assembly': (';', '@'), 'NASM': (';',), 'TASM': (';',), 'MIPS': ('#', ';'),
+    'Common Lisp': SEMICOLON, 'Emacs Lisp': SEMICOLON, 'Scheme': SEMICOLON, 'Racket': SEMICOLON, 'Clojure': SEMICOLON,
+    'ClojureScript': SEMICOLON, 'Fennel': SEMICOLON, 'Hy': SEMICOLON, 'AutoHotkey': SEMICOLON, 'INI': SEMICOLON,
+    'Erlang': PERCENT, 'Prolog': PERCENT, 'Matlab': PERCENT, 'Octave': PERCENT, 'Scilab': PERCENT, 'PostScript': PERCENT,
+    'Visual Prolog': PERCENT, 'Haskell': ('{-',), 'Elm': ('{-',), 'Idris': ('{-',), 'Agda': ('{-',), 'PureScript': ('{-',),
+    'OCaml': ('(*',), 'F#': ('(*',), 'Standard ML': ('(*',), 'ReasonML': ('(*',), 'Pascal': ('{', '(*'), 'Delphi': ('{', '(*'),
+    'Modula-2': ('(*',), 'Component Pascal': ('(*',), 'AppleScript': ('(*',), 'VimL': ('"',), 'PowerShell': ('<#',),
+    'Batch': ('::',), 'Haml': ('-#',), 'Jinja': ('{#',), 'Twig': ('{#',), 'Mako': ('##',), 'Smarty': ('{*',), 'ERB': ('<%#',),
+    'Handlebars': ('{{!',), 'RPG': ('*',), 'PL/I': ('/*',), 'Natural': ('*',), 'ColdFusion': ('<!---',), 'JSP': ('<%--',),
+    'Vue': ('<!--',), 'Svelte': ('<!--',), 'Astro': ('<!--',), 'Lua': ('--',), 'Ada': ('--',), 'SQL': ('--',), 'PL/SQL': ('--',),
+}
+REM_LANGUAGES = ('Visual Basic', 'BASIC', 'VBScript', 'BlitzBasic', 'Batch')
 
 
 def branch_pattern(language):
-    words = ('if', 'for', 'while', 'case', 'catch') if language in C_FAMILY else BRANCHES.get(language, DEFAULT_BRANCHES)
+    words = BRANCHES.get(language, DEFAULT_BRANCHES)
     return re.compile(r'\b(?:' + '|'.join(re.escape(word) for word in words) + r')\b', re.IGNORECASE)
 
 
@@ -103,7 +134,8 @@ def decode_source(data, path):
 
 
 def language_for(path):
-    return LANGUAGES.get(os.path.splitext(path)[1].lower(), 'Other')
+    name = os.path.basename(path).lower()
+    return FILENAMES.get(name) or EXTENSIONS.get(os.path.splitext(name)[1], 'Other')
 
 
 def analyze(path, text, language):
@@ -112,12 +144,13 @@ def analyze(path, text, language):
     comments = 0
     branches = 0
     pattern = branch_pattern(language)
+    prefixes = COMMENT_PREFIXES + COMMENT_EXTRAS.get(language, ())
     for line in lines:
         stripped = line.strip()
-        is_comment = stripped.startswith(COMMENT_PREFIXES)
+        is_comment = stripped.startswith(prefixes)
         if language == 'COBOL' and len(line) > 6 and line[6] in ('*', '/'):
             is_comment = True
-        if language in ('Visual Basic', 'BASIC') and (stripped.startswith("'") or stripped.upper().startswith('REM ')):
+        if language in REM_LANGUAGES and ((language != 'Batch' and stripped.startswith("'")) or stripped.upper().startswith('REM ')):
             is_comment = True
         if not stripped:
             blank += 1
@@ -138,11 +171,6 @@ def analyze(path, text, language):
     }
 
 
-
-def valid_commit(value):
-    if not re.fullmatch(r'[0-9a-fA-F]{40,64}', value):
-        raise argparse.ArgumentTypeError('must be a 40-64 character hexadecimal commit')
-    return value.lower()
 
 def source_commit(source):
     git_dir = os.path.join(source, '.git')
@@ -169,12 +197,26 @@ def source_commit(source):
             pass
     return 'not available'
 
-def inventory(source, app, source_repository=None, pinned_commit=None):
+def parse_sources_argument(value):
+    """The `--sources` spec as [(repository id, commit)]."""
+    try:
+        return paths.parse_sources(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
+def inventory(source, app, sources=None):
+    """`source` is the folder the legacy repositories are mounted in, one folder per repository (ADR-0052), and `sources`
+    their [(repository id, commit)]. Without `sources` the folder is read as one repository: its name and its HEAD."""
     if not isinstance(source, str) or not source.strip():
         raise DataError('--source must be a non-empty explicit checkout path')
     root = os.path.realpath(os.path.expanduser(source))
     if not os.path.isdir(root):
         raise DataError(f'--source is not a directory: {source}')
+    for repo, _ in sources or []:
+        # A source named in the provenance must be a folder of the tree that is measured.
+        if not os.path.isdir(os.path.join(root, repo)):
+            raise DataError(f'--sources names {repo}, which is not a folder of --source')
     files = []
     scanned = 0
     visited_directories = 0
@@ -252,8 +294,7 @@ def inventory(source, app, source_repository=None, pinned_commit=None):
         metrics['ksloc'] = round(metrics['codeLines'] / 1000, 3)
     return {
         'app': app,
-        'sourceRepository': source_repository or os.path.basename(os.path.normpath(source)),
-        'sourceCommit': pinned_commit or source_commit(root),
+        'sources': [f'{repo}@{commit}' for repo, commit in (sources or [(os.path.basename(os.path.normpath(source)), source_commit(root))])],
         'method': 'static inventory (UTF-8, Latin-1 fallback); per-file decision keywords are counted as a language-neutral complexity proxy',
         'complexityIndexFormula': '2.94 × KSLOC^1.10',
         'fileCount': len(files),
@@ -342,8 +383,7 @@ def render_markdown(data, summary):
     and the most complex files, as tables."""
     fields = {
         'app': data['app'],
-        'sourceRepository': data['sourceRepository'],
-        'sourceCommit': data['sourceCommit'],
+        'sources': data['sources'],
         'method': data['method'],
         'complexityIndexFormula': data['complexityIndexFormula'],
         'fileCount': data['fileCount'],
@@ -370,7 +410,7 @@ def render_markdown(data, summary):
         docmd.front_matter(fields),
         f'# Inventory of {data["app"]}',
         '',
-        f'Measured at `{data["sourceCommit"]}` of {data["sourceRepository"]}: {data["sourceFileCount"]:,} source files, {data["sloc"]:,} lines of code. '
+        f'Measured at {", ".join(f"`{entry}`" for entry in data["sources"])}: {data["sourceFileCount"]:,} source files, {data["sloc"]:,} lines of code. '
         'The per-file records stay in the run; this document keeps the figures of record and their roll-ups.',
         '',
         '## Languages',
@@ -410,16 +450,15 @@ def write_outputs(out, scratch, data, source_root):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Build a bounded source inventory and static complexity estimate.')
     parser.add_argument('app', help='application id used in the inventory heading')
-    parser.add_argument('--source-commit', type=valid_commit, help='pinned source commit (40-64 hexadecimal characters)')
-    parser.add_argument('--source-repo', help='source repository identity label')
-    parser.add_argument('--source', required=True, help='read-only source checkout')
+    parser.add_argument('--sources', type=parse_sources_argument, help='the legacy repositories mounted in --source and their commits, `id@commit,id@commit`')
+    parser.add_argument('--source', required=True, help='read-only source folder: one folder per legacy repository')
     parser.add_argument('--out', required=True, help='folder where inventory.md is written')
     parser.add_argument('--scratch', required=True, help='folder where the per-file inventory.json is written (not committed)')
     args = parser.parse_args(argv[1:] if argv is not None else None)
     try:
         if not args.out.strip() or not args.scratch.strip():
             raise DataError('--out and --scratch must be non-empty explicit output folders')
-        data = inventory(args.source, args.app, args.source_repo, args.source_commit)
+        data = inventory(args.source, args.app, args.sources)
         source_root = os.path.realpath(os.path.expanduser(args.source))
         path = write_outputs(os.path.abspath(os.path.expanduser(args.out)), os.path.abspath(os.path.expanduser(args.scratch)), data, source_root)
     except (DataError, OSError, RecursionError) as error:

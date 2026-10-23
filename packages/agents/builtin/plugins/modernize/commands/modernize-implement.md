@@ -18,10 +18,10 @@ the design says. The code goes to the **target repository** of `$app` that imple
 This command runs in your own harness through Kintsugi's member plugin. Inputs come from the **document repository**, checked out next
 to the target repository: the unit's design set folders in `10-applications/$app/02-modern/<module>/<unit>/` (the contract), what is
 known about it in `10-applications/$app/01-legacy/<module>/<unit>/`, the common components in
-`02-architecture/common/`, and `01-standards/`. The **legacy repository** of `$app` is your local clone, **read-only** (Kintsugi's member
-hooks refuse writes to it). Before you start, say in one line which source commit you read: the one the assessment recorded for `$app`
-(`sourceCommit` in `10-applications/$app/01-legacy/inventory.md`, and in the portal); check out exactly that commit. If you have no clone
-of the legacy repository, stop and say so: nothing can run without the code, and the fix is to clone the repositories the portal lists
+`02-architecture/common/`, and `01-standards/`. The **legacy repositories** of `$app` (one or several) are your local clones, **read-only** (Kintsugi's member
+hooks refuse writes to it). Before you start, say in one line which source commits you read: the ones the assessment recorded for `$app`
+(`sources` in `10-applications/$app/01-legacy/inventory.md`, and in the portal); check out exactly those commits. The documents cite a file as `<repository id>/<path>`: the first folder is the repository's id in the portal, whatever your local clone is called. If you have no clone
+of a legacy repository, stop and say so: nothing can run without the code, and the fix is to clone the repositories the portal lists
 for `$app`. What you write in the document repository (`TRANSFORMATION_NOTES.md` and design corrections) goes on your own branch of the document repository and reaches the project through a
 pull request. Run every subagent in the foreground and wait for its result: never end your turn while one is still running. Stop any
 server or other process you started (a watcher) before you finish, and say you did. **If `$target_stack` is empty**, use the stack named in `02-architecture/blueprint.md` for the unit's

@@ -1,6 +1,6 @@
-// Domain of installation settings managed in the portal (admin.installation_setting). First
-// setting: the commit identity — name and email of kintsugi-bot, author and committer of every
-// commit the worker makes to a document repo (ADR-0019). Pure types and the port.
+// Domain of installation settings managed in the portal (admin.installation_setting). Pure types and the port.
+
+import type { SandboxSettings } from "@kintsugi/domain";
 
 export interface CommitIdentity {
   name: string;
@@ -18,6 +18,14 @@ export type CodingAgentConnectionLifetime = 15 | 30;
 
 export interface CodingAgentConnectionLifetimeView {
   maxAgeDays: CodingAgentConnectionLifetime;
+  isDefault: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+/** The sandbox settings as the portal shows them (ADR-0055). */
+export interface SandboxSettingsView extends SandboxSettings {
+  /** True while no administrator has stored any: the defaults apply. */
   isDefault: boolean;
   updatedBy?: string;
   updatedAt?: string;

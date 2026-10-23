@@ -48,7 +48,10 @@ const DIAGRAM = assessmentDiagramPath(APP_TOKEN);
 const INVENTORY_FIRST = `The inventory measured by the script step is at {in}/${assessmentInventoryPath(APP_TOKEN)} (languages, directories, the most complex files);
 {in}/${scratchInventoryPath(APP_TOKEN)} lists every file. Read the summary first. Its figures (lines, files, complexity, index) are the figures of record; do not re-measure them.`;
 
-const STRUCTURE_TASK = `Build the structural map of the legacy repository of {app}.
+/** An application may have several legacy repositories: each analysis note says which it covered (ADR-0052). */
+const COVERAGE = `The source has one folder per legacy repository: cover every one of them, and end your notes with the line "Repositories read: <ids>", adding "not read: <ids> (<why>)" for any you did not get to. A domain, a dependency or a debt item may span repositories: cite each file with its repository's folder.`;
+
+const STRUCTURE_TASK = `Build the structural map of the legacy source of {app} (every legacy repository linked to it).
 
 ${WORKSPACE}
 
@@ -66,11 +69,13 @@ technology fingerprint, and a Mermaid \`flowchart TB\` of the domains per the me
 domain, nodes classed by kind, at most 40 edges), in a fenced \`mermaid\` block. These notes are input for the synthesis
 job, not a final document.
 
+${COVERAGE}
+
 ${HEADER}
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
-const DEBT_TASK = `Identify the technical debt of the legacy repository of {app}.
+const DEBT_TASK = `Identify the technical debt of the legacy source of {app} (every legacy repository linked to it).
 
 ${WORKSPACE}
 
@@ -80,11 +85,13 @@ Look for dead code, deprecated APIs, duplication, god objects, missing error han
 Write ${ANALYSIS}/debt.md with write: the top 10 items by remediation value, each with file:line, what it is
 and why it matters. These notes are input for the synthesis job, not a final document.
 
+${COVERAGE}
+
 ${HEADER}
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
-const SECURITY_TASK = `Scan the legacy repository of {app} for vulnerabilities.
+const SECURITY_TASK = `Scan the legacy source of {app} (every legacy repository linked to it) for vulnerabilities.
 
 ${WORKSPACE}
 
@@ -96,6 +103,8 @@ characters), file:line, type, what it appears to grant, production or test guess
 synthesis job, not a final document.
 
 ${HEADER}
+${COVERAGE}
+
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
@@ -180,8 +189,8 @@ Your inputs, read-only:
 
 Write ${SYNTHESIS} with write, a fact-grounded brief a VP of Engineering could take into a
 budget meeting, with these sections: Executive Summary (3–4 sentences: what it is, how big, how risky, the headline
-recommendation) · System Inventory (from inventory.md, naming the method that measured it, and the legacy repository
-and commit read) · Architecture at a Glance (the domain table; refer to architecture.mmd) · Production Runtime
+recommendation) · System Inventory (from inventory.md, naming the method that measured it, and the legacy repositories
+and their commits read) · Architecture at a Glance (the domain table; refer to architecture.mmd) · Production Runtime
 Profile (p50/p95/p99 per key job or route, the highest-variance domain as the operational risk; or "no telemetry
 available") · Technical Debt (top 10, file:line) · Security Findings (CWE table, file:line, severity) ·
 Documentation Gaps (compare what the code does with what README, docs and comments say: the top 5 behaviors or
@@ -201,6 +210,8 @@ per the mermaid-diagrams skill, without a Markdown fence. It must be readable at
 - sanitized ids, quoted labels of at most three short lines separated by \`<br/>\` (never a literal \\n);
 - give each box one of the classes ui, service, batch, store or external (\`:::ui\`) and define all five with \`classDef\`
   (translucent fill, same-colour stroke); if you leave the classes out, a later step adds them.
+
+A repository an analysis note lists as not read is a gap: name it under Documentation Gaps and in the Rebuild Outlook instead of presenting the assessment as covering the whole application.
 
 Secrets first: the assessment is shared and committed, so masking applies to every section, whichever note a finding
 came from. ${RESTRICTED} Security Findings then points to "Credential inventory in the restricted portal record (not
@@ -227,7 +238,7 @@ export const ASSESS: StagePlan = {
       id: "inventory",
       kind: "script",
       script: "inventory.py",
-      args: ["{app}", "--source", "{src}", "--source-repo", "{repo}", "--source-commit", "{commit}", "--out", "{out}/" + DIR, "--scratch", "{out}/" + SCRATCH],
+      args: ["{app}", "--source", "{src}", "--sources", "{sources}", "--out", "{out}/" + DIR, "--scratch", "{out}/" + SCRATCH],
       intermediate: [scratchInventoryPath(APP_TOKEN)],
       expects: [assessmentInventoryPath(APP_TOKEN), scratchInventoryPath(APP_TOKEN)],
     },

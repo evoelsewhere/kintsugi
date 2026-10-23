@@ -23,4 +23,4 @@ The worker observes the gate PR through its registered provider repository ident
 
 After verification, `workflow.gate_publication` and the `gate.effective` durable event are committed through one idempotent transaction, keyed by decision and evidence hash. Continuation consumes that event in the next workflow step; publication does not invent subsequent tasks. Failed writer attempts retain the decision and durable write identity for retry. Missing provider or Git objects remain pending. Changed context or evidence is stale. A closed gate PR or invalid evidence requires repair and a new reviewed basis where appropriate.
 
-See [ADR-0054](../decisions/0054-evidence-bound-pr-continuation.md) and the [document write path](document-repo-write-path.md).
+See [ADR-0061](../decisions/0061-evidence-bound-pr-continuation.md) and the [document write path](document-repo-write-path.md).
