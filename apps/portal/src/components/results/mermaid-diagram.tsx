@@ -3,13 +3,14 @@
 // Flowcharts, state and class diagrams are laid out by ELK (@mermaid-js/layout-elk), as GitHub draws them: it keeps the
 // boxes of a nested subgraph together and routes edges between groups, where the default layout (dagre) stretches the
 // diagram and draws long curves across it. A diagram ELK cannot lay out is drawn again with the default layout.
-// Pan by dragging, zoom with the buttons or Ctrl + wheel; the source is one click away. The diagram is drawn at its own
+// Pan by dragging, zoom with the buttons or Ctrl + wheel; the source is one click away. Full screen fills the window and
+// there the plain wheel zooms toward the pointer (Esc leaves it), so the page behind never scrolls. The diagram is drawn at its own
 // size and starts as large as the box width allows without going below `MIN_START_ZOOM`, so a wide diagram stays legible
 // and is panned or fitted instead of shrunk to unreadable text. The box is as tall as the drawn diagram, up to `height`.
 // `onNodeClick` reports clicks on flowchart nodes by their Mermaid id, read from the drawn SVG
 // (no Mermaid click callbacks, which "strict" disables).
 
-import { Code2, Maximize2, Minus, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Code2, Maximize2, Minimize2, Minus, Plus, Scan, Search } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -89,6 +90,8 @@ function useDarkTheme(): boolean {
 const MIN_HEIGHT = 96;
 /** A wide diagram starts no smaller than this, whatever the box width. */
 const MIN_START_ZOOM = 0.6;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 4;
 /** The box while the diagram is drawn. */
 const DRAWING_HEIGHT = 160;
 
@@ -110,12 +113,20 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [query, setQuery] = useState("");
+  // The drawn nodes (their SVG ids) whose text contains the query, and the one in focus.
+  const [matches, setMatches] = useState<string[]>([]);
+  const [hit, setHit] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const drag = useRef<{ x: number; y: number; startX: number; startY: number; node: string | undefined } | null>(null);
   const content = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const placed = useRef<string | null>(null);
+  // The latest view, for the wheel listener (it is attached once, not on every render).
+  const view = useRef({ zoom: 1, offset: { x: 0, y: 0 } });
+  const fullscreenRef = useRef(false);
   // The drawn diagram's own size (unscaled: a transform does not change layout size).
   const [natural, setNatural] = useState<{ width: number; height: number } | undefined>(undefined);
 
@@ -144,15 +155,119 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
     setOffset({ x: Math.max(0, (width - size.width * zoomed) / 2), y: 0 });
   };
 
+  /** Places the diagram as large as the frame allows, not below MIN_START_ZOOM. */
+  const start = (size: { width: number; height: number }): void => {
+    const width = frame.current?.clientWidth ?? size.width;
+    place(size, Math.min(1, Math.max(MIN_START_ZOOM, width / size.width)));
+  };
+
   // A new drawing starts as large as the frame allows, not below MIN_START_ZOOM.
   useLayoutEffect(() => {
     if (svg === null || natural === undefined || placed.current === svg) return;
     placed.current = svg;
-    const width = frame.current?.clientWidth ?? natural.width;
-    place(natural, Math.min(1, Math.max(MIN_START_ZOOM, width / natural.width)));
+    start(natural);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [svg, natural]);
 
-  const boxHeight = svg === null || natural === undefined ? Math.min(height, DRAWING_HEIGHT) : Math.min(height, Math.max(MIN_HEIGHT, natural.height * zoom));
+  /** Fits the whole diagram in the view (never enlarges it). */
+  const fit = (): void => {
+    if (natural === undefined) return;
+    const width = frame.current?.clientWidth ?? natural.width;
+    const room = fullscreen ? (frame.current?.clientHeight ?? height) : height;
+    place(natural, Math.max(MIN_ZOOM, Math.min(1, (width - 8) / natural.width, (room - 8) / natural.height)));
+  };
+
+  useLayoutEffect(() => {
+    view.current = { zoom, offset };
+    fullscreenRef.current = fullscreen;
+  });
+
+  // Entering full screen fits the whole diagram in the window; leaving it starts as a new drawing does.
+  useLayoutEffect(() => {
+    if (natural === undefined) return;
+    if (fullscreen) fit();
+    else start(natural);
+    // Only a switch of the mode places the diagram again, not every zoom or resize.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullscreen]);
+
+  const drawnNodes = (): Element[] => [...(content.current?.querySelectorAll("g.node") ?? [])];
+
+  /** Centers a drawn node in the frame, zooming in to at least 100%. */
+  const reveal = (nodeId: string | undefined): void => {
+    const node = drawnNodes().find((candidate) => candidate.id === nodeId);
+    const box = frame.current?.getBoundingClientRect();
+    const origin = content.current?.getBoundingClientRect();
+    if (node === undefined || box === undefined || origin === undefined) return;
+    const at = node.getBoundingClientRect();
+    const next = Math.min(MAX_ZOOM, Math.max(zoom, 1));
+    setZoom(next);
+    setOffset({
+      x: box.width / 2 - ((at.left + at.width / 2 - origin.left) / zoom) * next,
+      y: box.height / 2 - ((at.top + at.height / 2 - origin.top) / zoom) * next,
+    });
+  };
+
+  const search = (text: string): void => {
+    setQuery(text);
+    const needle = text.trim().toLowerCase();
+    const found = needle === "" ? [] : drawnNodes().filter((node) => (node.textContent ?? "").toLowerCase().includes(needle)).map((node) => node.id);
+    setMatches(found);
+    setHit(0);
+    reveal(found[0]);
+  };
+
+  const step = (by: number): void => {
+    if (matches.length === 0) return;
+    const next = (hit + by + matches.length) % matches.length;
+    setHit(next);
+    reveal(matches[next]);
+  };
+
+  // The matches are outlined, the node in focus more strongly, and the rest fades (classes, so a redraw drops them).
+  useEffect(() => {
+    for (const node of drawnNodes()) {
+      node.classList.toggle("kt-hit", matches.includes(node.id));
+      node.classList.toggle("kt-current", node.id === matches[hit]);
+    }
+  }, [matches, hit, svg]);
+
+  // Full screen covers the window: Esc leaves it and the page behind stays put.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const leave = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setFullscreen(false);
+    };
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", leave);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener("keydown", leave);
+    };
+  }, [fullscreen]);
+
+  // Wheel zoom toward the pointer: plain in full screen, with Ctrl (or ⌘) elsewhere so the page still scrolls.
+  // A native listener, because React's wheel handlers are passive and cannot stop the page from scrolling.
+  useEffect(() => {
+    const element = frame.current;
+    if (element === null) return;
+    const zoomAt = (event: WheelEvent): void => {
+      if (!fullscreenRef.current && !event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const { zoom: current, offset: at } = view.current;
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current * (event.deltaY < 0 ? 1.1 : 1 / 1.1)));
+      const box = element.getBoundingClientRect();
+      const x = event.clientX - box.left;
+      const y = event.clientY - box.top;
+      setZoom(next);
+      setOffset({ x: x - ((x - at.x) * next) / current, y: y - ((y - at.y) * next) / current });
+    };
+    element.addEventListener("wheel", zoomAt, { passive: false });
+    return () => element.removeEventListener("wheel", zoomAt);
+  }, [showSource, error, svg]);
+
+  const boxHeight = fullscreen ? undefined : svg === null || natural === undefined ? Math.min(height, DRAWING_HEIGHT) : Math.min(height, Math.max(MIN_HEIGHT, natural.height * zoom));
 
   useEffect(() => {
     let cancelled = false;
@@ -173,29 +288,64 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
     };
   }, [id, source, dark]);
 
-  /** Fits the whole diagram in the view (never enlarges it). */
-  const fit = (): void => {
-    if (natural === undefined) return;
-    const width = frame.current?.clientWidth ?? natural.width;
-    place(natural, Math.max(0.1, Math.min(1, (width - 8) / natural.width, (height - 8) / natural.height)));
-  };
-
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    <div className={fullscreen ? "fixed inset-0 z-[100] flex flex-col gap-2 bg-surface p-4" : cn("flex flex-col gap-2", className)}>
       <div className="flex items-center gap-1">
         <p className="mr-auto truncate text-[12px] text-text-muted">{title}</p>
         {toolbar}
         {showSource || error !== null ? null : (
           <>
-            <Button size="icon" variant="ghost" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(0.25, value / 1.25))}>
+            <label className="relative flex items-center">
+              <Search className="pointer-events-none absolute left-2 size-3.5 text-text-muted" strokeWidth={1.75} />
+              <input
+                type="search"
+                value={query}
+                placeholder="Find a node"
+                aria-label="Find a node in the diagram"
+                onChange={(event) => search(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    step(event.shiftKey ? -1 : 1);
+                  } else if (event.key === "Escape" && query !== "") {
+                    // Clears the search first; a second Esc leaves full screen.
+                    event.nativeEvent.stopPropagation();
+                    search("");
+                  }
+                }}
+                className="shadow-border h-7 w-40 rounded-[var(--geist-radius)] bg-transparent pr-2 pl-7 text-[12px] text-text placeholder:text-text-muted focus-visible:outline-1 focus-visible:outline-[var(--ds-input-focus-color)] focus-visible:outline-auto focus-visible:shadow-none"
+              />
+            </label>
+            {query.trim() === "" ? null : (
+              <>
+                <span className="min-w-10 text-center text-[11px] text-text-muted tabular-nums">{matches.length === 0 ? "none" : `${hit + 1}/${matches.length}`}</span>
+                <Button size="icon" variant="ghost" aria-label="Previous match" disabled={matches.length < 2} onClick={() => step(-1)}>
+                  <ChevronUp />
+                </Button>
+                <Button size="icon" variant="ghost" aria-label="Next match" disabled={matches.length < 2} onClick={() => step(1)}>
+                  <ChevronDown />
+                </Button>
+              </>
+            )}
+            <Button size="icon" variant="ghost" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_ZOOM, value / 1.25))}>
               <Minus />
             </Button>
             <span className="w-10 text-center text-[11px] text-text-muted tabular-nums">{Math.round(zoom * 100)}%</span>
-            <Button size="icon" variant="ghost" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(4, value * 1.25))}>
+            <Button size="icon" variant="ghost" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_ZOOM, value * 1.25))}>
               <Plus />
             </Button>
             <Button size="icon" variant="ghost" aria-label="Fit the whole diagram" title="Fit the whole diagram" onClick={fit}>
-              <Maximize2 />
+              <Scan />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={fullscreen ? "Leave full screen" : "Full screen"}
+              title={fullscreen ? "Leave full screen (Esc)" : "Full screen: scroll to zoom, drag to pan"}
+              aria-pressed={fullscreen}
+              onClick={() => setFullscreen((value) => !value)}
+            >
+              {fullscreen ? <Minimize2 /> : <Maximize2 />}
             </Button>
           </>
         )}
@@ -207,20 +357,15 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
       {showSource || error !== null ? (
         <>
           {error === null ? null : <p className="text-[12px] text-[var(--ds-status-red)]">The diagram could not be drawn ({error.split("\n")[0]}); its source:</p>}
-          <pre className="overflow-auto rounded-lg bg-recessed p-3 font-mono text-[12px] leading-5 text-text-secondary" style={{ maxHeight: height }}>
+          <pre className="overflow-auto rounded-lg bg-recessed p-3 font-mono text-[12px] leading-5 text-text-secondary" style={fullscreen ? undefined : { maxHeight: height }}>
             {source}
           </pre>
         </>
       ) : (
         <div
           ref={frame}
-          className="relative cursor-grab touch-none overflow-hidden rounded-lg bg-recessed/60 select-none active:cursor-grabbing"
-          style={{ height: boxHeight }}
-          onWheel={(event) => {
-            if (!event.ctrlKey && !event.metaKey) return;
-            event.preventDefault();
-            setZoom((value) => Math.min(4, Math.max(0.25, value * (event.deltaY < 0 ? 1.1 : 0.9))));
-          }}
+          className={cn("relative cursor-grab touch-none overflow-hidden rounded-lg bg-recessed/60 select-none active:cursor-grabbing", fullscreen && "min-h-0 flex-1")}
+          style={boxHeight === undefined ? undefined : { height: boxHeight }}
           onPointerDown={(event) => {
             drag.current = {
               x: event.clientX - offset.x,
@@ -246,7 +391,8 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
           ) : (
             <div
               ref={content}
-              className={cn("w-max p-4", onNodeClick === undefined ? undefined : "[&_g.node]:cursor-pointer")}
+              id={`${id}-view`}
+              className={cn("w-max p-4", onNodeClick === undefined ? undefined : "[&_g.node]:cursor-pointer", matches.length > 0 && "kt-searching")}
               style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`, transformOrigin: "top left" }}
               // Rendered by Mermaid with securityLevel "strict": sanitized SVG without HTML labels.
               dangerouslySetInnerHTML={{ __html: svg }}

@@ -231,3 +231,17 @@
     box-shadow: var(--ds-shadow-border-medium);
   }
 }
+
+/* Find a node in a Mermaid diagram (components/results/mermaid-diagram.tsx): matches are outlined, the rest fades. */
+.kt-searching g.node:not(.kt-hit) {
+  opacity: 0.25;
+}
+
+.kt-searching g.node.kt-hit :is(rect, path, polygon, circle, ellipse) {
+  stroke: var(--ds-status-orange) !important;
+  stroke-width: 3px !important;
+}
+
+.kt-searching g.node.kt-current :is(rect, path, polygon, circle, ellipse) {
+  stroke-width: 6px !important;
+}
