@@ -31,14 +31,14 @@ Kintsugi has **four pillars** (Admin, Delivery, Monitoring, Governance) on top o
 | A6 Project Build | Create / join a document repo; register per application the AS-IS repos (`legacy`, `legacy-data`) and TO-BE repos (`target` per architecture component); choose or declare pipelines | [Build a project](../guides/build-project.md) |
 
 ### B. Delivery
-Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/delivery-pipeline.md)). The runtime agents named here (`assessment`, `task-planner`, `gate-reviewer`, …) are planned, not shipped; each will be an agent definition supplied per job ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)).
+Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/delivery-pipeline.md)). The runtime agents named here (`assessment`, `task-planner`, …) are planned, not shipped; each will be an agent definition supplied per job ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)).
 
 | Sub-module | Phase | Main functions |
 |---|---|---|
 | B1 Portfolio & Assessment | P1 | Inventory and unit files (proposed by `assessment`, confirmed by people), unit dependencies (`dependsOn`), weighted scorecard, wave planning. `assessment` and `wave-planner` draft; the architect approves |
 | B2 Architecture Studio | P2 | AS-IS vs TO-BE architecture, ADRs, gap list, co-existence strategy, POC plan, cost-benefit, ARB review. Supported by `to-be-analyst` |
-| B3 Factory Setup | P3 | Base source, IaC, CI/CD; select or author agent plugins and task-pack templates; configure `gate-reviewer` rules; pilot on 1–2 features |
-| B4 Migration Workbench | P4 | Board of units (index of the unit cards `10-applications/*/02-modern/*/*/README.md`) × stages; `task-planner` produces task packs; assignment / claiming; PR tracking; `gate-reviewer` review; design ↔ code sync |
+| B3 Factory Setup | P3 | Base source, IaC, CI/CD; select or author agent plugins and task-pack templates; pilot on 1–2 features |
+| B4 Migration Workbench | P4 | Board of units (index of the unit cards `10-applications/*/02-modern/*/*/README.md`) × stages; `task-planner` produces task packs; assignment / claiming; PR tracking; design ↔ code sync |
 
 ### C. Monitoring
 
@@ -67,7 +67,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | E2 Knowledge Hub | AS-IS / TO-BE KB: sources in Git, text chunks + embeddings (pgvector) in Postgres, no code graph; ingestion; search API |
 | E3 Standards & Assets | Reads `kintsugi.yaml`, `01-standards/` and `plugins/` from the document repo at a fixed commit, and combines them with built-in assets for runtime jobs and harness rendering ([document repository](../reference/document-repo.md)) |
 | E4 Kintsugi Runtime (pi) | Generic agent kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)): runs one agent job whose [agent definition](../reference/runtime-agents.md) is supplied with the job, in the job's workspace ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)); knows no agent. Built-in and custom agents are installation data managed in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
-| E5 Harness Hub | MCP server, CLI backend, plugin validation and **marketplace generation** (generated built-in plugin + project plugins, all under the document repo's `plugins/`), fallback rendering, policy distribution, telemetry ingest ([harness integration](../reference/harness-integration.md)) |
+| E5 Harness Hub | Not shipped ([ADR-0067](../decisions/0067-remove-access-and-review-plugins.md)): plugins will attach MCP, CLI and harness integration later |
 | E6 Git Sync & Writer | Sync many repos across many Git servers; the writer, the only component that commits to project repos: commits / PRs runtime results, unit state changes and portal-published files (e.g. `kintsugi.yaml`) to the document repo through the `document-write` queue, one write per repository at a time (fetch → rebase → retry, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
 | E7 Events | Domain events (job.started, pr.opened, gate.passed, artifact.registered…) via outbox + `LISTEN/NOTIFY` |
 | E8 Connectors | Git provider APIs (PRs, comments, webhooks), trackers, wikis, observability |
@@ -89,7 +89,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 
 | Container | Modules | Code |
 |---|---|---|
-| `kintsugi-app` | API, portal, Harness Hub (MCP, CLI API), job gateway | `apps/api`, `apps/portal`, `services/harness-hub` |
+| `kintsugi-app` | API, portal, job gateway | `apps/api`, `apps/portal` |
 | `kintsugi-worker` | Orchestrator, Git Sync & Writer, ingestion, job launcher | `services/orchestrator`, `services/knowledge`, `services/runtime` (launcher) |
 
 Shared libraries and assets:
@@ -101,6 +101,5 @@ Shared libraries and assets:
 | `packages/agents` | Agent packages (Claude Code agent files + Agent Skills): parsing, validation, resolution by name across built-in and custom agents, conversion of runtime agents to `AgentDefinition`, ZIP import/export; `builtin/` holds the modernization content (agents, commands, workflows, scripts, hooks, tests) adapted from upstream ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md), [ADR-0027](../decisions/0027-builtin-modernization-content.md)) |
 | `packages/git` | Git core: system `git` CLI wrapper with per-call credentials, checkout storage layout, provider REST adapters ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)) |
 | `packages/runtime-sdk` | `AgentRuntime`, `JobSpec`, `AgentDefinition`, `JobEvent`, LLM provider configuration types |
-| `packages/harness-sdk` | `TaskPack`, `AssetRenderer`, `HarnessActivity`, `HarnessPolicy` |
 | `templates/document-repo` | Document repo starter template: `kintsugi.yaml`, neutral `01-standards/` and `plugins/` samples |
 | `deploy/compose` | The Docker Compose package |

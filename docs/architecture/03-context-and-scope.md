@@ -27,8 +27,6 @@
 | Interface | Protocol | Direction | Notes |
 |---|---|---|---|
 | Portal / REST API | HTTPS, REST + OpenAPI, SSE for live events | Inbound | Behind the project's reverse proxy / TLS |
-| Kintsugi MCP server | MCP Streamable HTTP, Bearer PAT | Inbound | [Harness integration](../reference/harness-integration.md) |
-| `kintsugi` CLI | HTTPS REST, PAT | Inbound | |
 | Git (any server) | git over HTTPS (token) or SSH (deploy key) | Outbound from the worker | Clone / fetch / push |
 | Git provider APIs | HTTPS REST (GitHub, Azure DevOps, GitLab, Bitbucket, Gitea) | Outbound; webhooks inbound when reachable | PRs, comments; polling fallback |
 | LLM providers | HTTPS | Outbound from `kintsugi-worker` (agent jobs) and `kintsugi-app` (connection tests) | Only the configured providers are called; no egress allowlist is enforced by Kintsugi |

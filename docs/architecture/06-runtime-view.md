@@ -1,6 +1,6 @@
 # 6. Runtime view
 
-Some runtime agents named on this page (`assessment`, `task-planner`, `gate-reviewer`, …) predate the built-in set of [ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md) (`legacy-analyst`, `business-rules-extractor`, `architecture-critic`, `security-auditor`) and describe intent. Every agent is an agent definition supplied per job to the generic runtime kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)).
+Some runtime agents named on this page (`assessment`, `task-planner`, …) predate the built-in set of [ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md) (`legacy-analyst`, `business-rules-extractor`, `architecture-critic`, `security-auditor`) and describe intent. Every agent is an agent definition supplied per job to the generic runtime kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)).
 
 ## 6.1 A runtime job (example: the `assess` stage)
 
@@ -68,19 +68,13 @@ With the mock backend (`KINTSUGI_RUNTIME_MODE=mock`) no agent writes anything, s
 
 1. **Create / join / copy-from.** An admin or architect creates the project and registers its application/repository records in the portal; the portal renders `kintsugi.yaml`. **Publish kintsugi.yaml** proposes it, together with the starter structure of `templates/document-repo/` for everything the document repo lacks (create-only files, one skeleton per application), as one pull request from `kintsugi/<user>/<write-id>`; that PR is gate G0. Joining an existing repo by reading its `kintsugi.yaml` remains planned (see [Build a project](../guides/build-project.md)).
 2. **Standards.** The team writes `01-standards/` and `plugins/` through normal PRs, helped by `knowledge-ingest` dry runs and `to-be-analyst`. Plugins are validated after each merge.
-3. **Pilot.** Pilot units run through task-planner → member → gate-reviewer (→ compare). The team fixes the standards where results were wrong; the architect then approves gate G3.
+3. **Pilot.** Pilot units run through the stages of the pipeline (→ compare). The team fixes the standards where results were wrong; the architect then approves gate G3.
 
 Guide: [build a project](../guides/build-project.md).
 
 ## 6.3 Unit loop (member + harness)
 
-1. The task and unit state are read from their validated Git documents. Kintsugi builds an activity-specific brief with the required designs, standards, deliverables, approval status and an immutable snapshot.
-2. The member signs in through the CLI and connects a chosen AI through the local stdio MCP bridge, or exports a cited Markdown brief for a chat without tools. Reading a task does not claim or assign it.
-3. The AI retrieves authorized sections from the same snapshot and answers with citations. The developer implements in the normal code and document repositories and opens ordinary pull requests.
-4. GitHub notifications and durable reconciliation find current PR state, including changes made while the developer is offline. Kintsugi reviews a complete fixed revision and exposes current, cited findings through the portal, CLI or MCP.
-5. The developer addresses findings and completes provider-required human review. After every required deliverable merges, an authorized human gate decision is recorded in a gate-record PR. Kintsugi advances the workflow only when the merged record validates against the exact final revisions.
-
-Step-by-step instructions for members: [Coding Agent Workflow guide](../guides/coding-agent-workflow.md).
+Not part of this build: no member-harness integration ships ([ADR-0067](../decisions/0067-remove-access-and-review-plugins.md)). The stages after `design` (implement, test, ...) are added to the `modernize` plugin and run in the runtime ([ADR-0068](../decisions/0068-design-generation-in-the-modernize-plugin.md)).
 
 ## 6.4 KB question & answer
 

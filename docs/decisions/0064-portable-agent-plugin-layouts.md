@@ -1,6 +1,6 @@
 # ADR-0064: Generate portable Agent Plugins packages for Codex and Copilot
 
-- Status: Accepted
+- Status: Superseded by [ADR-0067](0067-remove-access-and-review-plugins.md)
 - Date: 2026-10-22
 - Decision register: D19, D78
 - Supersedes: the Codex package manifest layout in ADR-0015; the canonical Kintsugi asset source format is unchanged.

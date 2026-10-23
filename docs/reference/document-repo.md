@@ -49,7 +49,7 @@ A folder whose name starts with `_` belongs to the application and is never a mo
 
 ## Gates
 
-Gate decisions (G0-G4 and stage gates) are requested, approved, rejected or waived in the portal (Governance → Gates); each request and decision is audited. The portal decision remains authoritative. For evidence-bound Coding Agent Workflow continuation, Kintsugi publishes a readable record under 10-applications/<app>/02-modern/<module>/<unit>/reviews/ as a reviewed pull request. The record is a Git proof of the decision and its exact deliverables; it becomes effective only after merge and validation. It does not replace the audited decision in the portal ([gate-record contract](gate-records.md), ADR-0054).
+Gate decisions (G0-G4 and stage gates) are requested, approved, rejected or waived in the portal (Governance → Gates); each request and decision is audited. The portal decision remains authoritative.
 
 ## Auto-commit
 
@@ -69,7 +69,6 @@ Straight-to-default-branch commits are limited to the default auto-commit paths:
 - Files under `10-applications/<app>/_generated/` are aggregates rebuilt from the merged unit files, never hand-authored sources.
 - The template's `plugins/` contains project-authored member plugin sources only.
 - The built-in copy `plugins/kintsugi/` and harness fallback renderings are planned outputs; the built-in plugin generator is not implemented yet.
-- `packages/harness-sdk` declares three planned marketplace output paths: `.claude-plugin/marketplace.json`, `.github/plugin/marketplace.json`, and `.agents/plugins/marketplace.json`. No current code writes these files; they are generated outputs, not authored sources or template content.
 
 ## Repository model
 

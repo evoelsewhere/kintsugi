@@ -20,12 +20,12 @@ Targets are starting points; each project sets its own baseline in P0 (gate G0).
 
 | Metric | Primary source | Supplementary source |
 |---|---|---|
-| Coverage, active rate | `HarnessActivity` from the Kintsugi MCP server / CLI | Built-in plugin hooks, harness telemetry (OTel, vendor metrics APIs) |
+| Coverage, active rate | Harness activity (no source ships in this build) | Built-in plugin hooks, harness telemetry (OTel, vendor metrics APIs) |
 | SDLC coverage | Stage runs with `Provenance.origin` ∈ {`human-with-ai`, `runtime-agent`} | — |
 | Time saved, cost reduction | Unit estimates vs. actuals (tracker), runtime cost (`UsageRecord`) | — |
 | Outcome ratio | Artifact registrations with `aiShare` | `Assisted-by` commit trailers |
 | Defect rate | Defects linked to artifacts through traceability, split by provenance | — |
 
-The sources themselves are listed in [harness integration → telemetry](../reference/harness-integration.md#6-telemetry-sources). Collection is explained in [observability and telemetry](../architecture/concepts/observability-and-telemetry.md).
+No harness telemetry source ships in this build ([ADR-0067](../decisions/0067-remove-access-and-review-plugins.md)). Collection is explained in [observability and telemetry](../architecture/concepts/observability-and-telemetry.md).
 
 > Open: the exact formulas for outcome ratio and defect rate must be fixed before M3, because they decide what M2 has to collect (D21).

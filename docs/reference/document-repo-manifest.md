@@ -32,7 +32,7 @@ pipelines:
         perUnit: true
         stages:
           - {id: implement, performer: {member: [dev]}}
-          - {id: review, performer: {agent: gate-reviewer}}
+          - {id: review, performer: {agent: design-reviewer}}
           - {id: approve, performer: {member: [core-team]}, gate: G4}
 autoCommitPaths:
   - 10-applications/*/02-modern/*/*/README.md    # unit cards: state changes, committed by kintsugi-bot

@@ -45,7 +45,7 @@ pipelines: []
 #        perUnit: true
 #        stages:
 #          - {id: implement, performer: {member: [dev]}}
-#          - {id: review, performer: {agent: gate-reviewer}}
+#          - {id: review, performer: {agent: design-reviewer}}
 #          - {id: approve, performer: {member: [core-team]}, gate: G4}
 
 policy:
