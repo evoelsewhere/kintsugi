@@ -16,8 +16,9 @@ overwritten). Writes under --out:
   `Gaps and questions` table, ADR-0057; a table that does not read is reported on stdout) with only the rule and finding ids of that item and dependencies
   that name a catalog item, a data store or a system, with the sections the later phases fill in
   (requirements, pull requests, tests);
-- 01-legacy/<module>/<unit>/understanding.md - digest, sources, run, counts: the item is `understood` once this file is
-  on the default branch, `stale` when the catalog's digest moves away from it;
+- 01-legacy/<module>/<unit>/understanding.md - digest, sources, run, counts and the specification profile of the item's
+  kind it was written with (`profile: <kind>@<version>`, `profileMissing` when the specification lacks a section of it, ADR-0060):
+  the item is `understood` once this file is on the default branch, `stale` when the catalog's digest moves away from it;
 - 02-modern/<module>/<unit>/README.md - the unit's card (frontmatter = state).
 
 An item without its specification gets none of these (it shows as failed or not analysed).
@@ -34,6 +35,7 @@ import catalog_common as cc  # noqa: E402
 import docmd  # noqa: E402
 import gaps_common  # noqa: E402
 import paths  # noqa: E402
+import spec_profiles  # noqa: E402
 import render_rules as rr  # noqa: E402
 import split_findings as sf  # noqa: E402
 
@@ -125,9 +127,20 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None):
         if not os.path.isfile(spec_path):
             missing.append(item_id)
             continue
-        gaps, gap_problems = gaps_common.spec_gaps(docmd.read_text(spec_path))
+        spec_text = docmd.read_text(spec_path)
+        gaps, gap_problems = gaps_common.spec_gaps(spec_text)
         if notes is not None:
             notes.extend(f'{item_id}: {problem}' for problem in gap_problems)
+        # The profile of the item's kind (ADR-0060) the brief carried, and the sections of it the specification lacks.
+        brief = cc.read_optional_json(os.path.join(inputs, *paths.assessment_brief_path(app, item_id).split('/')))
+        profile = brief.get('profile') if isinstance(brief, dict) and isinstance(brief.get('profile'), dict) else None
+        profile_missing = []
+        if profile is not None and isinstance(profile.get('sections'), list) and isinstance(profile.get('kind'), str) and isinstance(profile.get('version'), int):
+            profile_missing = spec_profiles.missing_sections(profile, spec_text)
+            if notes is not None:
+                notes.extend(f'{item_id}: no section "{name}" of the {profile["kind"]} profile' for name in profile_missing)
+        else:
+            profile = None
         raw = cc.read_optional_json(os.path.join(inputs, *paths.understand_trace_draft_path(app, item_id).split('/')))
         trace = raw if isinstance(raw, dict) else {}
         rules_text = docmd.read_optional_text(os.path.join(inputs, *paths.unit_rules_path(app, *item_id.split('/')).split('/')))
@@ -169,6 +182,10 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None):
             'rules': len(checked['rulesApplied']),
             'findings': len(checked['findings']),
         }
+        if profile is not None:
+            record['profile'] = f'{profile["kind"]}@{profile["version"]}'
+            if profile_missing:
+                record['profileMissing'] = profile_missing
         texts[paths.unit_understanding_path(app, *item_id.split('/'))] = (
             docmd.front_matter(record) + f'# Understanding record - {item_id}\n\nThe specification of this item was written at `{revision}`. '
             'Its presence on the default branch marks the item understood; a changed catalog digest marks it stale.\n'
@@ -228,7 +245,7 @@ def main(argv):
     for item_id in missing[:60]:
         print(f'- no specification: {item_id}')
     for note in notes[:60]:
-        print(f'- gaps table: {note}')
+        print(f'- specification check: {note}')
     return 0
 
 

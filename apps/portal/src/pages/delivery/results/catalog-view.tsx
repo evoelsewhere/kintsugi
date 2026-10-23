@@ -38,9 +38,14 @@ function groupByFolder(paths: readonly string[]): Array<{ folder: string; paths:
   return [...groups.entries()].map(([folder, list]) => ({ folder, paths: list })).sort((a, b) => b.paths.length - a.paths.length || a.folder.localeCompare(b.folder));
 }
 
-export function ItemStatusBadge({ status }: { status: string }): React.JSX.Element {
+const STALE_TITLE = {
+  source: "The item's files changed since its specification was written",
+  profile: "The specification profile of the item's kind was raised since its specification was written",
+} as const;
+
+export function ItemStatusBadge({ status, staleReason }: { status: string; staleReason?: "source" | "profile" | undefined }): React.JSX.Element {
   const style = styleOf(ITEM_STATUS, status);
-  return <StatusBadge tone={style.tone} label={style.label} busy={style.busy} />;
+  return <StatusBadge tone={style.tone} label={style.label} busy={style.busy} {...(status === "stale" && staleReason !== undefined ? { title: STALE_TITLE[staleReason] } : {})} />;
 }
 
 export interface CatalogSelection {
@@ -260,7 +265,7 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                           </td>
                           <td className="px-2 py-2">
                             <span className="flex flex-wrap items-center gap-1.5">
-                              <ItemStatusBadge status={item.status} />
+                              <ItemStatusBadge status={item.status} staleReason={item.staleReason} />
                               {item.pr?.url === undefined ? null : (
                                 <a className={cn("rounded-[4px] text-[12px] text-accent hover:underline", FOCUS)} href={item.pr.url} target="_blank" rel="noreferrer">
                                   PR

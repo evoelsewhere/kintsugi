@@ -178,6 +178,7 @@ function BatchCard({ batch, status, byId, selected, onSelect }: { batch: PlanBat
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-text-muted tabular-nums">
         <span>{formatCount(batch.loc)} lines</span>
         {batch.high === 0 ? null : <span>{batch.high} high complexity</span>}
+        {Object.keys(batch.kinds ?? {}).length < 2 ? null : <span title="Items of each kind in the batch">{Object.entries(batch.kinds ?? {}).map(([kind, count]) => `${count} ${kind}`).join(" · ")}</span>}
         {cohesion === undefined ? null : (
           <span className="inline-flex items-center gap-1" title="Calls inside the batch over all calls its items make to other items: high means the batch reads on its own">
             <GitFork className="size-3" strokeWidth={1.75} />

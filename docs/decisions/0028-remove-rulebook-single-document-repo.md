@@ -1,6 +1,6 @@
 # ADR-0028: Remove the rulebook; one document repo per project
 
-- Status: Accepted. Amended by [ADR-0060](0060-coding-agent-workflow-through-cli-and-local-mcp.md) for the separate hookless Coding Agent Workflow plugin and by [ADR-0062](0062-evidence-bound-pr-continuation.md) for evidence-bound gate continuation.
+- Status: Accepted. Amended by [ADR-0061](0061-coding-agent-workflow-through-cli-and-local-mcp.md) for the separate hookless Coding Agent Workflow plugin and by [ADR-0063](0063-evidence-bound-pr-continuation.md) for evidence-bound gate continuation.
 - Date: 2026-10-10
 - Decision register: D48 (supersedes D34–D38 and D41; amends D19, D29, D43)
 - Supersedes: [ADR-0011](0011-project-rulebook.md), [ADR-0013](0013-composable-open-rulebook.md)

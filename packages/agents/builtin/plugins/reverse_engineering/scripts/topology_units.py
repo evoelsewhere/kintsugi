@@ -23,23 +23,46 @@ MAX_GROUP_FILES = 20
 DEFAULT_MAX_UNITS = 240
 MAX_NODES = 50_000
 NON_UNIT_KINDS = {'system', 'domain', 'datastore'}
-# Map leaf kinds to the usual unit-kind names of kintsugi.yaml, in order of preference.
+# The core item kinds (ADR-0060) and the unit-kind names a project may use for them, in order of preference.
+# A topology leaf kind (or its alias) is looked up here when `unitKinds` does not name it.
 KIND_SYNONYMS = {
     'job': ['batch-job', 'batch', 'job'],
-    'screen': ['screen', 'ui', 'page'],
+    'screen': ['screen', 'ui', 'page', 'transaction', 'map'],
+    'api': ['api', 'service-api', 'endpoint', 'rest', 'service'],
+    'report': ['report'],
+    'event': ['event', 'message', 'listener', 'consumer'],
+    'interface': ['integration', 'interface', 'feed'],
     'module': ['module', 'program', 'component', 'service'],
+}
+# Other spellings of a leaf kind the extraction script may write.
+LEAF_ALIASES = {
+    'batch': 'job', 'batch-job': 'job', 'schedule': 'job',
+    'page': 'screen', 'ui': 'screen', 'map': 'screen', 'form': 'screen', 'transaction': 'screen',
+    'endpoint': 'api', 'controller': 'api', 'rest': 'api', 'service-api': 'api',
+    'listener': 'event', 'consumer': 'event', 'message': 'event', 'webhook': 'event',
+    'integration': 'interface', 'feed': 'interface', 'file-feed': 'interface',
+    'program': 'module', 'component': 'module', 'service': 'module', 'library': 'module',
 }
 
 
-def choose_kind(leaf_kind, kinds):
+def kind_choice(leaf_kind, kinds):
+    """(kind, guessed): the unit kind for a leaf kind. `guessed` is True when nothing in `unitKinds` fits and the
+    first kind (or `module`) was taken instead, which the catalog reports as an ambiguity."""
     if not kinds:
-        return leaf_kind
+        return leaf_kind, False
     if leaf_kind in kinds:
-        return leaf_kind
-    for candidate in KIND_SYNONYMS.get(leaf_kind, []):
+        return leaf_kind, False
+    canonical = LEAF_ALIASES.get(leaf_kind, leaf_kind)
+    for candidate in [canonical] + KIND_SYNONYMS.get(canonical, []):
         if candidate in kinds:
-            return candidate
-    return kinds[0]
+            return candidate, False
+    if 'module' in kinds:
+        return 'module', True
+    return kinds[0], True
+
+
+def choose_kind(leaf_kind, kinds):
+    return kind_choice(leaf_kind, kinds)[0]
 
 
 def walk_topology(topology):
@@ -144,7 +167,8 @@ def build_units(leaves, sizes, kinds, max_units):
             'unit': unit,
             'key': f'{module}/{unit}',
             'title': members[0]['name'] if len(members) == 1 else f'{name} ({len(members)} leaves)',
-            'kind': choose_kind(leaf_kind, kinds),
+            'kind': kind_choice(leaf_kind, kinds)[0],
+            'kindGuessed': kind_choice(leaf_kind, kinds)[1],
             'leafKind': leaf_kind,
             'leaves': sorted(leaf['id'] for leaf in members),
             'files': files,

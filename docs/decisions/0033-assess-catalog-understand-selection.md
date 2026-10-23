@@ -29,7 +29,7 @@ The runtime has two understanding stages:
 
 - **Two levels**: module → item. Functions inside an item are `parts`: shown, never selectable.
 - **Ids** are `<module>/<item>`, both kebab-case segments (the unit-key regex of ADR-0031). Catalog items are the units: the work item id is `<app>/<module>/<item>`, so one id goes end to end.
-- **Kinds** come from `unitKinds` of `kintsugi.yaml`.
+- **Kinds** come from `unitKinds` of `kintsugi.yaml`; the core vocabulary and how a leaf maps onto it are in [ADR-0060](0060-item-kinds-and-kind-aware-understanding.md).
 - **Full file coverage**: every source file of `inventory.json` belongs to exactly one item or is listed in `unassigned`. A script checks it.
 - **`digest`**: a hash over the item's files and their per-file sha256 (measured by the inventory), so a changed item is detectable without reading code.
 - **No parsers**: the catalog is derived deterministically from the topology the model-written extraction script produced (`catalog_from_topology.py`), then curated by a `legacy-analyst` job that returns structured edits (rename, kind, merge, split, summaries), which a script validates and applies; an edit that would break file coverage is rejected.

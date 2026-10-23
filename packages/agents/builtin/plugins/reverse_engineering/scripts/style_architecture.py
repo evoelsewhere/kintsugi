@@ -14,6 +14,7 @@ is copied unchanged. Standard library only, no network access (ADR-0029).
 from __future__ import annotations
 
 import argparse
+import colorsys
 import re
 import sys
 from pathlib import Path
@@ -39,6 +40,42 @@ UI_LABEL = re.compile(r"controller|screen|page|\bui\b|view|\bapi\b|endpoint|gate
 BATCH_LABEL = re.compile(r"\bjobs?\b|batch|scheduler|cron|\betl\b|worker|task runner", re.IGNORECASE)
 
 
+STYLE_LINE = re.compile(r"^\s*(classDef|style|linkStyle)\b")
+# rgb(37,99,235) / rgba(37, 99, 235, 0.12) / rgb(37 99 235 / 12%) and hsl(...) / hsla(...), as a value of fill, stroke or color.
+COLOR_VALUE = re.compile(
+    r"\b(fill|stroke|color)\s*:\s*(rgba?|hsla?)\(\s*([\d.]+)(?:deg)?\s*[, ]\s*([\d.]+)%?\s*[, ]\s*([\d.]+)%?\s*(?:[,/]\s*([\d.]+%?)\s*)?\)",
+    re.IGNORECASE,
+)
+
+
+def plain_colors(line: str) -> str:
+    """A classDef, style or linkStyle line with its rgb()/rgba()/hsl()/hsla() colours as #rrggbb plus fill-opacity or
+    stroke-opacity: the commas of a colour function split the style list and the diagram does not parse."""
+    if not STYLE_LINE.match(line):
+        return line
+
+    def replace(match: re.Match[str]) -> str:
+        prop, fn, first, second, third, alpha = match.groups()
+        try:
+            a, b, c = float(first), float(second), float(third)
+            if fn.lower().startswith("hsl"):
+                r, g, bl = colorsys.hls_to_rgb((a % 360) / 360, c / 100, b / 100)
+                red, green, blue = (round(value * 255) for value in (r, g, bl))
+            else:
+                red, green, blue = (max(0, min(255, round(value))) for value in (a, b, c))
+            opacity = None
+            if alpha is not None:
+                opacity = float(alpha[:-1]) / 100 if alpha.endswith("%") else float(alpha)
+        except ValueError:
+            return match.group(0)
+        out = f"{prop}:#{red:02x}{green:02x}{blue:02x}"
+        if opacity is not None and prop != "color":
+            out += f",{prop}-opacity:{max(0.0, min(1.0, opacity)):g}"
+        return out
+
+    return COLOR_VALUE.sub(replace, line)
+
+
 def classify(shape: str, label: str, group: str) -> str:
     if shape == "[(":
         return "store"
@@ -61,7 +98,8 @@ def style(text: str) -> str:
         lines = lines[1:]
     if lines and FENCE.match(lines[-1]):
         lines = lines[:-1]
-    body = [line for line in lines if not line.lstrip().startswith("%%")]
+    lines = [plain_colors(line) for line in lines]
+    body = [line for line in lines if line.strip() and not line.lstrip().startswith("%%")]
     if not body or not HEADER.match(body[0]):
         return text
     # Literal "\n" inside a quoted label is a line break the renderer does not know.

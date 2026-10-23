@@ -117,6 +117,45 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual([shard['name'] for shard in load(os.path.join(scratch, 'shards.json'))], ['invoicing.entry', 'tax.calc'])
         self.assertEqual(load(os.path.join(scratch, 'scope.json'))['files'], ['src/INV01.cbl', 'src/TAX.cbl', 'src/TAXLIB.cbl'])
 
+    PROGRAM_PROFILE = ('---\nkind: "program"\nversion: 2\n---\n# Specification profile: program\n\n## Sections\n\n'
+                       '| Section | What it holds | Evidence |\n|---|---|---|\n| Copybooks | the copybooks it includes | COPY statements |\n| Return codes | what it returns | the exit paths |\n\n'
+                       '## Instructions\n\nList every copybook.\n')
+
+    def test_scope_items_puts_the_profile_of_the_kind_in_the_brief(self):
+        standards = os.path.join(self.root, 'standards')
+        write(os.path.join(standards, 'program.md'), self.PROGRAM_PROFILE)
+        write(os.path.join(standards, 'module.md'), 'not a profile')
+        result = run('scope_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--out', self.out, '--standards', standards)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        brief = load(os.path.join(self.out, 'scratch', 'billing', 'understand', 'briefs', 'tax', 'calc.json'))
+        self.assertEqual(brief['profile']['kind'], 'program')
+        self.assertEqual((brief['profile']['version'], brief['profile']['source']), (2, 'project'))
+        self.assertEqual([section['name'] for section in brief['profile']['sections']], ['Copybooks', 'Return codes'])
+        self.assertEqual(brief['profile']['instructions'], 'List every copybook.')
+        # Without a project file a kind with no built-in profile has none.
+        result = run('scope_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--out', self.out)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNone(load(os.path.join(self.out, 'scratch', 'billing', 'understand', 'briefs', 'tax', 'calc.json'))['profile'])
+
+    def test_finish_items_records_the_profile_and_the_sections_the_specification_lacks(self):
+        standards = os.path.join(self.root, 'standards')
+        write(os.path.join(standards, 'program.md'), self.PROGRAM_PROFILE)
+        inputs = self.finish_inputs()
+        self.assertEqual(run('scope_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--out', inputs, '--standards', standards).returncode, 0)
+        write(unit_file(inputs, 'tax/calc', 'spec.md'), '# Tax\n\n## Purpose\n\nRounds.\n\n## Copybooks\n\nTAXTAB.\n\n## Gaps and questions\n\nNone.\n')
+        result = run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', self.out, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))[0]
+        self.assertEqual((record['profile'], record['profileMissing']), ('program@2', ['Return codes']))
+        self.assertIn('tax/calc: no section "Return codes" of the program profile', result.stdout)
+        # A complete specification records the profile and nothing missing.
+        write(unit_file(inputs, 'tax/calc', 'spec.md'), '# Tax\n\n## 3. Copybooks\n\nTAXTAB.\n\n## Return codes\n\n0.\n\n## Gaps and questions\n\nNone.\n')
+        result = run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', self.out, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))[0]
+        self.assertEqual(record['profile'], 'program@2')
+        self.assertNotIn('profileMissing', record)
+
     def test_scope_items_refuses_unknown_and_retired_items(self):
         for items in ('tax/old', 'nope/x', ''):
             result = run('scope_items.py', 'billing', '--catalog', self.catalog, '--items', items, '--out', self.out)
@@ -396,7 +435,7 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('1 of 2 item(s) understood', result.stdout)
         gen = os.path.join(self.out, *APP, '_generated')
-        self.assertEqual(sorted(os.listdir(gen)), ['BUSINESS_RULES.md', 'DATA_OBJECTS.md', 'GAPS.md', 'README.md', 'SECURITY_FINDINGS.md', 'traceability.md'])
+        self.assertEqual(sorted(os.listdir(gen)), ['BUSINESS_RULES.md', 'DATA_ACCESS.md', 'DATA_OBJECTS.md', 'GAPS.md', 'README.md', 'SECURITY_FINDINGS.md', 'traceability.md'])
         business = docmd.read_text(os.path.join(gen, 'BUSINESS_RULES.md'))
         self.assertIn('| RULE-tax.calc-01 | tax/calc | Round | Calculation | P0 | High | 1 | confirmed | `src/TAX.cbl:3` | [RULE-tax.calc-01](../01-legacy/tax/calc/rules/RULE-tax.calc-01.md) |', business)
         self.assertEqual([line for line in business.splitlines() if line.startswith('### ')], [])
@@ -405,6 +444,12 @@ class UnderstandToolsTests(unittest.TestCase):
         front, body = docmd.split_front_matter(docmd.read_text(os.path.join(gen, 'traceability.md')))
         self.assertEqual((front['items'], front['units'], front['rulesCovered'], front['findingsMapped'], front['openQuestions'], front['stale']), (2, 1, 1, 1, 2, 0))
         self.assertIn('`tax/calc`', body)
+        # The read/write matrix comes from the catalog's links, understood or not (ADR-0060).
+        front, body = docmd.split_front_matter(docmd.read_text(os.path.join(gen, 'DATA_ACCESS.md')))
+        self.assertEqual((front['stores'], front['items'], front['neverWritten']), (1, 1, 0))
+        sections = dict(docmd.sections(body, 2))
+        self.assertEqual(docmd.records_in(sections['By data store']), [{'data store': 'ds:INVOICES', 'written by': 'invoicing/entry (program)', 'read by': '-'}])
+        self.assertEqual(docmd.records_in(sections['By item']), [{'item': 'invoicing/entry', 'kind': 'program', 'reads': '-', 'writes': 'ds:INVOICES'}])
 
 
 if __name__ == '__main__':

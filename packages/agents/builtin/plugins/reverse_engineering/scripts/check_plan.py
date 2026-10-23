@@ -16,6 +16,7 @@ that it depends on and that are not understood yet. A draft with no batch left f
 repair step gives the agent the reason once. Standard library only.
 """
 import argparse
+import collections
 import os
 import sys
 
@@ -94,6 +95,7 @@ def check(app, draft, graph, max_batch, max_batches):
             'n': number,
             'loc': loc,
             'high': sum(1 for item_id in batch['items'] if by_id[item_id]['complexity'] == 'high'),
+            'kinds': dict(sorted(collections.Counter(by_id[item_id].get('kind') or 'module' for item_id in batch['items']).items())),
             'cohesion': None if internal + external == 0 else round(internal / (internal + external), 2),
             'dependsOutside': [{'item': target, 'usedBy': sorted(users)} for target, users in sorted(outside.items())],
         })
@@ -145,6 +147,7 @@ def render_plan(plan):
                 'risk': batch['risk'],
                 'loc': batch['loc'],
                 'high complexity': batch['high'],
+                'kinds': ', '.join(f'{kind} {count}' for kind, count in batch['kinds'].items()),
                 'cohesion': '' if batch['cohesion'] is None else batch['cohesion'],
             }),
             '### Items',

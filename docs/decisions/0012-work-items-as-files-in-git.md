@@ -1,6 +1,6 @@
 # ADR-0012: Work items are files in the workspace repo; Postgres indexes them
 
-- Status: Accepted. Unit frontmatter extended by [ADR-0013](0013-composable-open-rulebook.md) (`packs`, `rulesApplied`, `stale`, `waivers`); those fields removed by [ADR-0028](0028-remove-rulebook-single-document-repo.md), which also renames the workspace repo to the document repo. Coding Agent Workflow context is read-only under [ADR-0060](0060-coding-agent-workflow-through-cli-and-local-mcp.md); task projection and immutable source context are further specified by [ADR-0061](0061-coding-agent-context-and-project-access.md).
+- Status: Accepted. Unit frontmatter extended by [ADR-0013](0013-composable-open-rulebook.md) (`packs`, `rulesApplied`, `stale`, `waivers`); those fields removed by [ADR-0028](0028-remove-rulebook-single-document-repo.md), which also renames the workspace repo to the document repo. Coding Agent Workflow context is read-only under [ADR-0061](0061-coding-agent-workflow-through-cli-and-local-mcp.md); task projection and immutable source context are further specified by [ADR-0062](0062-coding-agent-context-and-project-access.md).
 - Date: 2026-10-09
 - Decision register: D20
 - Amends: ADR-0003 (where pipeline state is persisted)

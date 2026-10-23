@@ -60,7 +60,7 @@
 
 ## Orchestrated execution after plan approval
 
-- **Coordinator (parent):** finalize ADR-0064/D80, implement T18–T19, establish the shared `CliDeps` test seams in `packages/cli/src/cli.ts`, then own T22–T23, combined-diff review, and the final verification run.
+- **Coordinator (parent):** finalize ADR-0065/D81, implement T18–T19, establish the shared `CliDeps` test seams in `packages/cli/src/cli.ts`, then own T22–T23, combined-diff review, and the final verification run.
 - **CLI authentication subagent:** implement T20 in the auth, OAuth, MCP, profile, and credential-store files. Do not edit `packages/cli/src/cli.ts`; the coordinator owns that shared dependency interface.
 - **Plugin installer subagent:** implement T21 in `packages/cli/src/commands/plugins.ts`, Harness Hub generation/setup, and plugin tests. Do not edit `cli.ts` or the shared profile implementation; create the profile through its public store interface.
 - Start the two subagent lanes after the shared contract is fixed. Keep their file ownership disjoint, review each result, and run combined tests from the parent before integrating. No agent publishes packages, deploys, or installs into an ordinary client profile.
@@ -68,8 +68,8 @@
 ### Task T18: Connection persistence and admin lifetime policy
 
 **Files:**
-- Create: `docs/decisions/0064-project-scoped-oauth-for-coding-agent-workflow.md`
-- Modify: `docs/decisions/README.md` with ADR-0064 and decision D80
+- Create: `docs/decisions/0065-project-scoped-oauth-for-coding-agent-workflow.md`
+- Modify: `docs/decisions/README.md` with ADR-0065 and decision D81
 - Create: `apps/api/migrations/032_coding_agent_connections.sql`
 - Modify: `apps/api/src/modules/admin/settings/domain/installation-settings.ts`
 - Modify: `apps/api/src/modules/admin/settings/application/installation-settings.service.ts`
@@ -81,7 +81,7 @@
 
 **Interfaces:** `CodingAgentConnectionLifetime = 15 | 30`; `getCodingAgentConnectionLifetime(): Promise<CodingAgentConnectionLifetimeView>`; `setCodingAgentConnectionLifetime(days: CodingAgentConnectionLifetime, actor: Actor): Promise<CodingAgentConnectionLifetimeView>`. Add `GET/PUT /api/admin/settings/coding-agent-connection-lifetime`, guarded by the migration-backed `security.manage` permission. The view contains `maxAgeDays`, `isDefault`, and update metadata, never secrets. Portal copy explains that this setting requires browser sign-in again after 15 or 30 days; access tokens still last five minutes.
 
-- [x] Finalize ADR-0064 and D80; preserve ADR-0060 and supersede only its OAuth-deferral clause.
+- [x] Finalize ADR-0065 and D81; preserve ADR-0061 and supersede only its OAuth-deferral clause.
 - [x] Add tests for default 15 days, admin setting 30 days, invalid values, and denial without `security.manage`.
 - [x] Run the installation-settings integration coverage; it passes in the API database suite.
 - [x] Add the connection, project-scope and authorization-code migration tables; add the token connection link and admin-only `security.manage` grant while preserving existing token rows.
@@ -187,7 +187,7 @@
 
 - T18–T19 cover every backend/data/permission requirement; T20 covers browser PKCE, refresh, secure storage, and MCP stream behavior; T21 covers plugin-first setup; T22 covers install/consent/admin UX; T23 covers smoke, docs, and release evidence.
 - The critical conditions appear in Review Focus and have explicit owning tests.
-- ADR-0064/D80 captures the authentication protocol change without rewriting ADR-0060; both the ADR and decision register mark it accepted.
+- ADR-0065/D81 captures the authentication protocol change without rewriting ADR-0061; both the ADR and decision register mark it accepted.
 - User and administrator revocation paths are distinct and permission-checked; existing PATs retain only original expiry/revocation behavior.
 - The existing Test project is used only for a safely empty read/revoke smoke; task/document retrieval uses a separate synthetic fixture.
 - The project-scoped credential shape and the five-minute access / 15-or-30-day refresh policy match the approved spec.

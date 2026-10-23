@@ -88,10 +88,13 @@ def build(app, topology, inventory, sources, kinds, max_items):
             ambiguities.append(f'unit {unit["key"]} has no file of the inventory: left out of the catalog')
             continue
         summaries = [described[leaf] for leaf in unit['leaves'] if leaf in described]
+        kind = kind_of(unit, entry_points, kinds)
+        if unit.get('kindGuessed') and kind == unit['kind']:
+            ambiguities.append(f'{unit["key"]} has no kind in unitKinds for the leaf kind "{unit["leafKind"]}": shown as {kind}')
         items.append(cc.new_item(
             unit['key'],
             unit['module'],
-            kind_of(unit, entry_points, kinds),
+            kind,
             cc.clean_text(unit['title'], cc.MAX_NAME) or unit['unit'],
             files,
             summary=cc.clean_text(summaries[0], cc.MAX_SUMMARY) if len(summaries) == 1 else '',
