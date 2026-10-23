@@ -1,25 +1,26 @@
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import type { CliDeps } from "../cli.js";
-import { CliError, isProfileId, validateInstallationUrl } from "../profile.js";
+import { CliError, defaultInstallationUrl, isProfileId, validateInstallationUrl } from "../profile.js";
 import { emit, selectedProfile, type CommandOptions } from "./shared.js";
 import { oauthFor, parseOAuthCredential } from "../oauth.js";
 import { withCredentialLock } from "../oauth-lock.js";
 
-export function registerAuthCommands(program: Command, deps: CliDeps): void {
-  const auth = program.command("auth").description("Manage local Kintsugi credentials");
-  auth.command("login")
+function registerLogin(parent: Command, deps: CliDeps): void {
+  parent.command("login [project]")
     .description("Connect a profile to a Kintsugi installation")
-    .requiredOption("--url <url>", "Kintsugi installation HTTPS URL")
+    .option("--url <url>", "Kintsugi installation HTTPS URL (default: the one this CLI was installed from)")
     .option("--profile <id>", "Profile name")
     .option("--ca-file <path>", "Private CA PEM file for this installation")
     .option("--token-stdin", "Read token from stdin instead of the hidden prompt")
-    .action(async function(this: Command) {
-      const options = this.optsWithGlobals() as CommandOptions & { url: string; caFile?: string; tokenStdin?: boolean };
+    .action(async function(this: Command, projectArgument: string | undefined) {
+      const options = this.optsWithGlobals() as CommandOptions & { url?: string; caFile?: string; tokenStdin?: boolean };
       const id = options.profile ?? "work";
       if (!isProfileId(id)) throw new CliError("PROFILE_ID_INVALID", "Profile name may contain letters, numbers, dot, underscore, and dash");
-      const baseUrl = validateInstallationUrl(options.url);
       const config = await deps.profiles.load();
+      const url = options.url ?? await defaultInstallationUrl(deps.env, deps.launcher?.cliEntrypointPath, config.profiles[config.activeProfile ?? ""]?.baseUrl);
+      if (url === undefined) throw new CliError("URL_REQUIRED", "Pass the installation URL with --url <url>; the installer records it for a CLI installed from the installation");
+      const baseUrl = validateInstallationUrl(url);
       const prior = config.profiles[id];
       if (prior !== undefined && prior.baseUrl !== baseUrl) throw new CliError("PROFILE_INSTALLATION_MISMATCH", "This profile belongs to a different Kintsugi installation; use a new profile name");
       let caFile: string | undefined;
@@ -28,7 +29,7 @@ export function registerAuthCommands(program: Command, deps: CliDeps): void {
         caFile = resolve(deps.cwd, options.caFile!);
         await (await import("../tls.js")).createFetchWithPrivateCa(caFile);
       }
-      const project = options.project ?? prior?.projectId;
+      const project = projectArgument ?? options.project ?? prior?.projectId;
       const profile = { id, baseUrl, ...(project === undefined ? {} : { projectId: project }), ...((caFile ?? prior?.caFile) === undefined ? {} : { caFile: caFile ?? prior?.caFile }) };
       if (options.tokenStdin === true) {
         const token = (await deps.readStdin()).trim();
@@ -45,6 +46,12 @@ export function registerAuthCommands(program: Command, deps: CliDeps): void {
       await deps.profiles.save(config);
       emit(deps, this, { profile: id, baseUrl, authenticated: true });
     });
+}
+
+export function registerAuthCommands(program: Command, deps: CliDeps): void {
+  const auth = program.command("auth").description("Manage local Kintsugi credentials");
+  registerLogin(auth, deps);
+  registerLogin(program, deps);
 
   auth.command("status").description("Show the selected profile and credential availability").action(async function(this: Command) {
     const { profile } = await selectedProfile(deps, this);

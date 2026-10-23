@@ -8,7 +8,7 @@
 import type { ApplicationRepositoryRole } from "@kintsugi/domain";
 import { FolderGit2, GitPullRequestArrow, Package, Pencil, Plus, Trash2, Unlink } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { type ApplicationView, type ProjectDetail, type ProjectRepositoryView, p
 import { useAuth } from "@/lib/auth";
 import { deliveryLink } from "@/lib/links";
 import { subscribeLive } from "@/lib/live";
+import { Tabs } from "@/components/ui/tabs";
 import { DesignSetsCard } from "./design-sets-card";
 import { MemberConnectPanel } from "../member/connect-panel";
 import { PluginAccessPanel } from "./plugin-access-panel";
@@ -39,11 +40,21 @@ type ConfirmTarget =
 
 type LinkTarget = { application: ApplicationView; role: ApplicationRepositoryRole };
 
+type ProjectTab = "project" | "plugins" | "access" | "connect";
+
 export function ProjectDetailPage(): React.JSX.Element {
   const { projectId = "" } = useParams();
   const navigate = useNavigate();
   const { can } = useAuth();
   const canManage = can("projects.manage");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabs: Array<{ id: ProjectTab; label: string }> = [
+    { id: "project", label: "Project" },
+    ...(can("plugin.access.manage") ? [{ id: "plugins" as const, label: "Member plugins" }] : []),
+    ...(can("project.access.manage") ? [{ id: "access" as const, label: "Project access" }] : []),
+    ...(can("member.read") ? [{ id: "connect" as const, label: "Connect your AI" }] : []),
+  ];
+  const tab = tabs.find((entry) => entry.id === searchParams.get("tab"))?.id ?? "project";
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [manifest, setManifest] = useState<string>("");
   const [publishOpen, setPublishOpen] = useState(false);
@@ -146,72 +157,76 @@ export function ProjectDetailPage(): React.JSX.Element {
         </CardHeader>
       </Card>
 
-      {canManage && repositories.length === 0 ? <NoRepositories onSettingsClosed={() => void load()} /> : null}
+      <Tabs label="Project sections" tabs={tabs} value={tab} onChange={(id) => setSearchParams(id === "project" ? {} : { tab: id }, { replace: true })} />
 
-      <ProjectInsights project={project} />
+      {tab === "project" ? (
+        <>
+        {canManage && repositories.length === 0 ? <NoRepositories onSettingsClosed={() => void load()} /> : null}
 
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-[15px] font-medium text-text">Applications</h2>
-          <p className="mt-0.5 text-[12px] text-text-muted">AS-IS repositories are read-only for Kintsugi; only members write to TO-BE target repositories.</p>
-        </div>
-        {canManage ? (
-          <Button size="small" variant="solid" onClick={() => setApplicationDialog({ open: true, application: null })}>
-            <Plus className="size-4" />
-            Add application
-          </Button>
-        ) : null}
-      </div>
+        <ProjectInsights project={project} />
 
-      {project.applications.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={Package}
-            title="No applications yet"
-            description={canManage ? "Add the applications to modernize, then link their legacy repositories so Delivery can run stages." : "Someone with projects.manage adds the applications to modernize."}
-          />
-        </Card>
-      ) : (
-        project.applications.map((application) => (
-          <ApplicationCard
-            key={application.id}
-            projectId={project.id}
-            application={application}
-            canManage={canManage}
-            canLink={linkable.length > 0}
-            onEdit={() => setApplicationDialog({ open: true, application })}
-            onRemove={() => setConfirm({ kind: "application", application })}
-            onLink={(role) => setLinkTarget({ application, role })}
-            onUnlink={(repository) => setConfirm({ kind: "link", application, repository })}
-          />
-        ))
-      )}
-
-      <DesignSetsCard project={project} />
-
-      <ProjectAccessPanel projectId={projectId} canManage={can("project.access.manage")} />
-
-      <PluginAccessPanel projectId={projectId} canManage={can("plugin.access.manage")} />
-
-      <MemberConnectPanel projectId={projectId} canManage={can("tokens.manage-own")} canRead={can("member.read")} />
-
-      <Card>
-        <CardHeader>
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <CardTitle>kintsugi.yaml</CardTitle>
-            <CardDescription>
-              Rendered from this project. Publishing proposes it to the document repo as a pull request; unit kinds, pipelines, auto-commit paths and policy show defaults.
-            </CardDescription>
+            <h2 className="text-[15px] font-medium text-text">Applications</h2>
+            <p className="mt-0.5 text-[12px] text-text-muted">AS-IS repositories are read-only for Kintsugi; only members write to TO-BE target repositories.</p>
           </div>
-          {canManage && project.documentRepository !== null ? (
-            <Button size="small" variant="solid" className="shrink-0" onClick={() => setPublishOpen(true)}>
-              <GitPullRequestArrow className="size-4" />
-              Publish kintsugi.yaml
+          {canManage ? (
+            <Button size="small" variant="solid" onClick={() => setApplicationDialog({ open: true, application: null })}>
+              <Plus className="size-4" />
+              Add application
             </Button>
           ) : null}
-        </CardHeader>
-        <pre className="shadow-border mt-3 max-h-[28rem] overflow-auto rounded-[var(--geist-radius)] bg-recessed px-3 py-2 font-mono text-[12px] leading-5 text-text">{manifest}</pre>
-      </Card>
+        </div>
+
+        {project.applications.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={Package}
+              title="No applications yet"
+              description={canManage ? "Add the applications to modernize, then link their legacy repositories so Delivery can run stages." : "Someone with projects.manage adds the applications to modernize."}
+            />
+          </Card>
+        ) : (
+          project.applications.map((application) => (
+            <ApplicationCard
+              key={application.id}
+              projectId={project.id}
+              application={application}
+              canManage={canManage}
+              canLink={linkable.length > 0}
+              onEdit={() => setApplicationDialog({ open: true, application })}
+              onRemove={() => setConfirm({ kind: "application", application })}
+              onLink={(role) => setLinkTarget({ application, role })}
+              onUnlink={(repository) => setConfirm({ kind: "link", application, repository })}
+            />
+          ))
+        )}
+
+        <DesignSetsCard project={project} />
+
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>kintsugi.yaml</CardTitle>
+              <CardDescription>
+                Rendered from this project. Publishing proposes it to the document repo as a pull request; unit kinds, pipelines, auto-commit paths and policy show defaults.
+              </CardDescription>
+            </div>
+            {canManage && project.documentRepository !== null ? (
+              <Button size="small" variant="solid" className="shrink-0" onClick={() => setPublishOpen(true)}>
+                <GitPullRequestArrow className="size-4" />
+                Publish kintsugi.yaml
+              </Button>
+            ) : null}
+          </CardHeader>
+          <pre className="shadow-border mt-3 max-h-[28rem] overflow-auto rounded-[var(--geist-radius)] bg-recessed px-3 py-2 font-mono text-[12px] leading-5 text-text">{manifest}</pre>
+        </Card>
+        </>
+      ) : null}
+
+      {tab === "plugins" ? <PluginAccessPanel projectId={projectId} canManage={can("plugin.access.manage")} /> : null}
+      {tab === "access" ? <ProjectAccessPanel projectId={projectId} canManage={can("project.access.manage")} /> : null}
+      {tab === "connect" ? <MemberConnectPanel projectId={projectId} canManage={can("tokens.manage-own")} canRead={can("member.read")} /> : null}
 
       <ConfirmDialog
         open={publishOpen}

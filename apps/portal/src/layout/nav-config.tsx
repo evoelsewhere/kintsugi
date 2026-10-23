@@ -3,6 +3,7 @@
 import {
   Activity,
   Blocks,
+  BookOpenText,
   FolderKanban,
   Gauge,
   type LucideIcon,
@@ -66,5 +67,10 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: "plugins", label: "Plugins", icon: Blocks, to: "/plugins" },
       { id: "members", label: "Members & Permissions", icon: Users, to: "/members" },
     ],
+  },
+  {
+    id: "help",
+    label: "Help",
+    items: [{ id: "guideline", label: "Guideline", icon: BookOpenText, to: "/guideline" }],
   },
 ];

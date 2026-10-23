@@ -7,7 +7,8 @@ import { useToast } from "@/components/ui/toast";
 import { memberApi, type MemberTokenMetadata } from "@/lib/api/member";
 import type { CodingAgentConnectionMetadata } from "@/lib/api/coding-agent-security";
 import { errorText, formatDateTime } from "@/lib/format";
-import { buildPluginInstallCommand, safeProfileName, type InstallShell } from "./install-model";
+import { Link } from "react-router-dom";
+import { buildPluginInstallCommand, type InstallShell } from "./install-model";
 
 type InstallClientChoice = "claude-code" | "codex-desktop" | "codex-cli";
 
@@ -18,10 +19,10 @@ export function MemberConnectPanel({ projectId, canManage, canRead }: { projectI
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   const [clientChoice, setClientChoice] = useState<InstallClientChoice>("codex-desktop");
   const [shell, setShell] = useState<InstallShell>("powershell");
+  const [withUrl, setWithUrl] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const profile = safeProfileName(projectId);
   let setup: string | undefined;
   let setupError: string | null = null;
   try {
@@ -30,7 +31,7 @@ export function MemberConnectPanel({ projectId, canManage, canRead }: { projectI
       projectId,
       harness: clientChoice === "claude-code" ? "claude-code" : "codex",
       installMode: clientChoice === "codex-desktop" ? "desktop-ui" : "native-cli",
-      profileId: profile,
+      withUrl,
       shell,
     });
   } catch (failure) {
@@ -110,7 +111,7 @@ export function MemberConnectPanel({ projectId, canManage, canRead }: { projectI
           <div className="flex flex-wrap items-center gap-2 px-3.5 py-3 [box-shadow:inset_2px_0_0_0_var(--ds-accent)]">
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-text">{clientChoice === "codex-desktop" ? "Prepare for Codex Desktop" : "One-time install"}</p>
-              <p className="mt-0.5 text-[12px] text-text-muted">Install the Kintsugi CLI first (it is built from packages/cli). Codex Desktop uses this command to prepare its local marketplace; you finish installation in the app.</p>
+              <p className="mt-0.5 text-[12px] text-text-muted">Install the Kintsugi CLI first (<Link className="text-accent hover:underline" to="/guideline/install-the-cli">guide</Link>). Codex Desktop uses this command to prepare its local marketplace; you finish installation in the app.</p>
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-2 px-3.5 pb-3.5">
@@ -123,6 +124,7 @@ export function MemberConnectPanel({ projectId, canManage, canRead }: { projectI
             <Button size="small" variant="ghost" disabled={setup === undefined} onClick={() => { if (setup !== undefined) void copy(setup, clientChoice === "codex-desktop" ? "Preparation command" : "Install command"); }}><ClipboardCopy className="size-3.5" />Copy command</Button>
           </div>
           <pre aria-label="Generated connector install command" className="overflow-x-auto bg-recessed px-3.5 py-2.5 font-mono text-[11px] leading-5 text-text">{setup ?? (loading ? "Loading the configured Kintsugi URL…" : "Install command is unavailable. Contact your Kintsugi administrator.")}</pre>
+          <p className="px-3.5 pt-2 text-[11px] text-text-muted">Then add a plugin your project offers: <code>kintsugi add context</code>. {withUrl ? "The command names this installation, for a CLI installed from elsewhere." : "A CLI installed from this installation already knows its URL."} <button type="button" className="text-accent hover:underline" onClick={() => setWithUrl(!withUrl)}>{withUrl ? "Hide the URL" : "Add the URL"}</button></p>
           <p className="px-3.5 py-2.5 text-[11px] text-text-muted">{clientChoice === "codex-desktop" ? "Restart Codex Desktop, then open Plugins → Plugins Directory → Kintsugi marketplace and install the plugin. In a new local chat, first use opens Kintsugi sign-in in your browser." : `After install, start a new ${clientChoice === "claude-code" ? "Claude Code" : "Codex CLI"} session. First use opens Kintsugi sign-in in your browser.`}</p>
         </div>
         <div className="flex flex-col gap-1">

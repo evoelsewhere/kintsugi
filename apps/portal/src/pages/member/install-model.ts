@@ -7,8 +7,9 @@ export interface PluginInstallCommandInput {
   projectId: string;
   harness: InstallHarness;
   installMode?: PluginInstallMode;
-  profileId?: string;
   shell: InstallShell;
+  /** Add --url, for a CLI that was not installed from this installation. */
+  withUrl?: boolean;
 }
 
 export interface MemberAuthorizationRequest {
@@ -46,6 +47,7 @@ function quote(value: string, shell: InstallShell): string {
     : `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+/** The short command that connects an AI client to a project: `kintsugi connect claude billing-api`. */
 export function buildPluginInstallCommand(input: PluginInstallCommandInput): string {
   const baseUrl = canonicalBaseUrl(input.baseUrl);
   if (input.harness !== "claude-code" && input.harness !== "codex") throw new Error("Choose a supported AI client.");
@@ -56,18 +58,10 @@ export function buildPluginInstallCommand(input: PluginInstallCommandInput): str
   if (input.projectId.trim() !== input.projectId || input.projectId.length < 1 || input.projectId.length > 200 || hasControlCharacters(input.projectId)) {
     throw new Error("Kintsugi project ID is invalid.");
   }
-  if (input.profileId !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(input.profileId)) {
-    throw new Error("Kintsugi profile ID is invalid.");
-  }
-  const parts = [
-    "kintsugi plugins setup",
-    ...(installMode === "desktop-ui" ? ["--install-mode", "desktop-ui"] : []),
-    "--harness", input.harness,
-    "--url", quote(baseUrl, input.shell),
-    "--project", quote(input.projectId, input.shell),
-  ];
-  if (input.profileId !== undefined) parts.push("--profile", quote(input.profileId, input.shell));
-  return parts.join(" ");
+  const client = input.harness === "claude-code" ? "claude" : installMode === "desktop-ui" ? "codex-desktop" : "codex";
+  const project = /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(input.projectId) ? input.projectId : quote(input.projectId, input.shell);
+  // A CLI installed from this installation already knows its URL; the flag is for one installed from elsewhere.
+  return ["kintsugi connect", client, project, ...(input.withUrl === true ? ["--url", quote(baseUrl, input.shell)] : [])].join(" ");
 }
 
 export function parseMemberAuthorizationRequest(search: string): MemberAuthorizationRequest | undefined {
