@@ -209,7 +209,9 @@ per the mermaid-diagrams skill, without a Markdown fence. It must be readable at
 - draw only the 8–15 dependencies that matter most between domains, with edge labels of at most three words;
 - sanitized ids, quoted labels of at most three short lines separated by \`<br/>\` (never a literal \\n);
 - give each box one of the classes ui, service, batch, store or external (\`:::ui\`) and define all five with \`classDef\`
-  (translucent fill, same-colour stroke); if you leave the classes out, a later step adds them.
+  (translucent fill, same-colour stroke) with hex colours and fill-opacity, for example
+  \`classDef ui fill:#3b82f6,fill-opacity:0.14,stroke:#3b82f6,stroke-width:1.5px\`; never rgba(), rgb() or hsl(): their commas split
+  the style list and the diagram does not parse. If you leave the classes out, a later step adds them.
 
 A repository an analysis note lists as not read is a gap: name it under Documentation Gaps and in the Rebuild Outlook instead of presenting the assessment as covering the whole application.
 
