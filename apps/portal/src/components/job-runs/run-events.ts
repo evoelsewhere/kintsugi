@@ -40,7 +40,38 @@ export function useRunEvents(projectId: string, runId: string, handlers: { onSta
   return { events, live };
 }
 
-export type LogCategory = "tool" | "model" | "status" | "log";
+/**
+ * A counter that goes up when a step of the run starts or finishes or its status changes, from the same event stream and
+ * without keeping the events: put it in a loader's key to read the run again then, instead of polling. The recorded
+ * events replay in a burst when the stream opens, so changes within `SETTLE_MS` count once. Idle while `enabled` is false.
+ */
+export function useRunPulse(projectId: string, runId: string, enabled: boolean): number {
+  const [pulse, setPulse] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const changed = (): void => {
+      clearTimeout(timer);
+      timer = setTimeout(() => setPulse((count) => count + 1), SETTLE_MS);
+    };
+    const close = jobRunsApi.follow(projectId, runId, {
+      onEvent: (event) => {
+        if (event.kind === "step.started" || event.kind === "step.finished") changed();
+      },
+      onStatus: changed,
+      onEnd: changed,
+    });
+    return () => {
+      clearTimeout(timer);
+      close();
+    };
+  }, [projectId, runId, enabled]);
+  return pulse;
+}
+
+const SETTLE_MS = 600;
+
+export type LogCategory ="tool" | "model" | "status" | "log";
 
 export const categoryOf = (event: JobRunEvent): LogCategory =>
   event.kind === "tool" ? "tool" : event.kind === "status" || event.kind === "step.started" || event.kind === "step.finished" ? "status" : typeof event.data["turn"] === "number" ? "model" : "log";
