@@ -40,9 +40,9 @@ const applicationSet = [
   "scope: application",
   "needs: []",
   "---",
-  "| Path | Template | Required | When |",
-  "| --- | --- | --- | --- |",
-  "| overview.md | overview.md | yes | |",
+  "| Path | Template | Required |",
+  "| --- | --- | --- |",
+  "| overview.md | overview.md | yes |",
 ].join("\n");
 describe.skipIf(!hasDatabase)("Coding Agent Workflow task index (integration)", () => {
   let app: TestApp;

@@ -2,7 +2,7 @@ import { createServer } from "node:net";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { credentialLockPort, withCredentialLock } from "../src/oauth-lock.js";
+import { credentialLockPipePath, credentialLockPort, withCredentialLock } from "../src/oauth-lock.js";
 
 describe("OS credential mutex", () => {
   it("fails closed at its deadline when an unrelated listener owns the lock port", async () => {
@@ -22,6 +22,14 @@ describe("OS credential mutex", () => {
     } finally { await new Promise<void>((resolve) => unrelated.close(() => resolve())); }
     await withCredentialLock(account, async () => { invoked = true; });
     expect(invoked).toBe(true);
+  });
+
+  it("derives a stable opaque named-pipe fallback per profile", () => {
+    const account = `test-${randomUUID()}`;
+    const path = credentialLockPipePath(account);
+    expect(path.startsWith("\\\\.\\pipe\\kintsugi-caw-")).toBe(true);
+    expect(credentialLockPipePath(account)).toBe(path);
+    expect(credentialLockPipePath(account + "-other")).not.toBe(path);
   });
 
   it("cancels a waiting operation without taking or releasing another process's lock", async () => {
