@@ -50,12 +50,13 @@ describe("agent resolution", () => {
       off: { enabled: false, files: { "off.md": agentFile("name: off\nversion: 1.0.0\ndescription: d") } },
       broken: { enabled: true, files: { "broken.md": "no frontmatter" } },
       shell: { enabled: true, files: { "shell.md": agentFile("name: shell\nversion: 1.0.0\ndescription: d\ntools: [bash]") } },
+      writer: { enabled: true, files: { "writer.md": agentFile("name: writer\nversion: 1.0.0\ndescription: d\ntools: [read]\nmetadata: {audience: member}") } },
     });
     await expect(resolveAgentDefinition("nobody", options(custom))).rejects.toThrow('Unknown agent "nobody"');
     await expect(resolveAgentDefinition("off", options(custom))).rejects.toThrow('Agent "off" is disabled');
     await expect(resolveAgentDefinition("broken", options(custom))).rejects.toThrow(/not a valid package/);
     await expect(resolveAgentDefinition("shell", options(custom))).rejects.toThrow(/cannot run: unknown tool "bash"/);
-    await expect(resolveAgentDefinition("scaffolder", options(custom))).rejects.toThrow(/member agent/);
+    await expect(resolveAgentDefinition("writer", options(custom))).rejects.toThrow(/member agent/);
     expect(await resolveAgent("reviewer", options())).toMatchObject({ ok: false, reason: "unknown" });
   });
 });

@@ -1,6 +1,6 @@
 """Tests for the review scripts of a design run (ADR-0054): check_review and render_design_review.
 
-Run:  python -m pytest packages/agents/builtin/plugins/design/scripts/tests/test_design_review.py
+Run:  python -m pytest packages/agents/builtin/plugins/modernize/scripts/tests/test_design_review.py
 """
 import contextlib
 import io

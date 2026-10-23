@@ -1,6 +1,6 @@
 """Tests for the design-set scripts: design_lib, scaffold_design, check_design, validate_design_templates.
 
-Run:  python -m pytest packages/agents/builtin/plugins/design/scripts/tests/test_design.py
+Run:  python -m pytest packages/agents/builtin/plugins/modernize/scripts/tests/test_design.py
 The fixtures are shared with hooks/tests of the reverse_engineering plugin (`design.test.ts`): the TypeScript reader the API
 runs and `design_lib.py` the member's harness runs must give the same answers for the same files.
 """

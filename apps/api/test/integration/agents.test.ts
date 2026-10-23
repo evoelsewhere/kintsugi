@@ -52,7 +52,7 @@ describe.skipIf(!hasDatabase)("agents (integration)", () => {
     expect(list.status).toBe(200);
     const legacy = list.body.data!.find((agent) => agent.name === "legacy-analyst");
     expect(legacy).toMatchObject({ source: "builtin", audience: "runtime", enabled: true, problems: [] });
-    expect(list.body.data!.find((agent) => agent.name === "scaffolder")).toMatchObject({ audience: "member" });
+    expect(list.body.data!.find((agent) => agent.name === "designer")).toMatchObject({ source: "builtin", audience: "runtime" });
     expect((await client.get("/admin/agents/legacy-analyst")).status).toBe(200);
     expect((await client.get<{ kernelTools: string[] }>("/admin/agents/context")).body.data!.kernelTools).toEqual([...KERNEL_TOOL_NAMES]);
 
@@ -177,7 +177,6 @@ describe.skipIf(!hasDatabase)("agents (integration)", () => {
 
     const definition = await admin.get<{ id: string; version: string; skills: { name: string }[] }>("/admin/agents/house-reviewer/definition");
     expect(definition.body.data).toMatchObject({ id: "house-reviewer", version: "3.0.0", skills: [{ name: "house-style" }, { name: "checklist" }] });
-    expect((await admin.get("/admin/agents/scaffolder/definition")).status).toBe(400);
 
     // The worker's resolution path (orchestrator store over the same tables).
     const pool = new pg.Pool({ connectionString: app.db.url, max: 1 });

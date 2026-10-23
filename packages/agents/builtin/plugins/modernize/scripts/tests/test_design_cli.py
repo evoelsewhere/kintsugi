@@ -1,6 +1,6 @@
 """Tests for the design-set command lines: scaffold_design, check_design, validate_design_templates.
 
-Run:  python -m pytest packages/agents/builtin/plugins/design/scripts/tests/test_design_cli.py
+Run:  python -m pytest packages/agents/builtin/plugins/modernize/scripts/tests/test_design_cli.py
 Each test builds a small document repository from the shared fixtures: two sets and one unit with three rules.
 """
 import contextlib

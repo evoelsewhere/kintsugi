@@ -21,7 +21,7 @@ import type { DocumentWriteRequest } from "../src/queues.js";
 import { catalogDocuments } from "./support/documents.js";
 import { type AgentFiles, LocalCheckouts, MemoryJobStore, fixtureRepository, writingAgentRuntime } from "./support/jobs.js";
 
-const FIXTURES = fileURLToPath(new URL("../../../packages/agents/builtin/plugins/design/scripts/tests/fixtures/design/", import.meta.url));
+const FIXTURES = fileURLToPath(new URL("../../../packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/", import.meta.url));
 const fixture = (...parts: string[]): string => readFileSync(join(FIXTURES, ...parts), "utf8");
 
 const RULES = "# Rules\n\n### R-001: Total is computed\n**Priority:** P0\n\n### R-002: Rounding\n**Priority:** P1\n\n### R-003: Date format\n**Priority:** P2\n";
