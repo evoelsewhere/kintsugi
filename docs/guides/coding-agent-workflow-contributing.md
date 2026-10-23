@@ -25,7 +25,7 @@ Keep these boundaries intact:
 | MCP protocol adapter, native plugin generation, setup safety and client version gates | `services/harness-hub/` |
 | Canonical access plugin and task-reading skill | `packages/agents/builtin/plugins/access/` |
 | Portal user guide | `apps/portal/src/pages/coding-agent-workflow.tsx` and its route/navigation entry |
-| End-to-end workflow and release evidence | `docs/guides/coding-agent-workflow.md`, `docs/reference/coding-agent-workflow-compatibility.md`, and the implementation plan linked from the workflow guide |
+| End-to-end workflow and release evidence | docs/development/implementation-delivery-record.md and docs/reference/coding-agent-workflow-compatibility.md |
 
 The canonical member plugin uses the Claude Code plugin layout. The generator derives Claude manifests and portable `plugin.json` / `mcp.json` packages for other harnesses. Do not hand-write parallel `.claude/skills`, `.github/agents`, or client-specific copies of the access instructions. Extend the canonical source and generation path instead.
 

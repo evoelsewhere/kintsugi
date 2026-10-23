@@ -10,6 +10,7 @@ The documentation is organized by **what the reader needs**, following [Diátaxi
 | [decisions/](decisions/) | Record | see what was decided, what is still open, and the ADRs |
 | [reference/](reference/) | Reference | look up exact facts: agents, MCP tools, CLI, data model, repo layout, configuration, terms |
 | [guides/](guides/) | How-to | accomplish a task: install, configure, work on a migration task |
+| [development/](development/) | Delivery record | review implementation status, plans, open work, and verification evidence |
 
 Tutorials (learning-oriented walkthroughs) will be added once a first release exists.
 
@@ -77,6 +78,9 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - **Interactive Coding Agent Workflow guide**: in the portal, open Workspace → AI workflow (`/coding-agent-workflow`)
 - [Coding Agent Workflow architecture and current limits](guides/coding-agent-workflow.md)
 - [Extend the Coding Agent Workflow CLI and harness plugins](guides/coding-agent-workflow-contributing.md)
+
+**Delivery record**
+- [Implementation and verification record](development/implementation-delivery-record.md): consolidated design, progress, test plan, evidence, and remaining release work
 
 ## Conventions
 
