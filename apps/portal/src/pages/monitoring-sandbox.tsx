@@ -40,7 +40,7 @@ export function SandboxView(): React.JSX.Element {
   const { can } = useAuth();
   const toast = useToast();
   const [asked, setAsked] = useState<SandboxWorkspace | null>(null);
-  const list = useLoader("monitoring-sandbox", monitoringApi.sandboxWorkspaces, { refresh: () => 10000 });
+  const list = useLoader("monitoring-sandbox", monitoringApi.sandboxWorkspaces, { live: ["job-runs"], refresh: () => 30000 });
   const canRemove = can("sandbox.manage");
 
   const workspaces = list.data?.workspaces ?? [];

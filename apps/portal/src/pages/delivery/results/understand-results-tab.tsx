@@ -17,6 +17,7 @@ import type { StageResults } from "@/lib/api/documents";
 import type { JobRunView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { shortSha } from "@/lib/format";
+import { isActiveStatus } from "@/lib/status";
 import { useLoader } from "@/lib/use-loader";
 import { GapsResultsView } from "./gaps-results";
 import { HardenResultsView } from "./harden-results";
@@ -24,6 +25,7 @@ import { MapResultsView } from "./map-results";
 import { OutputFiles, Section } from "./results-parts";
 import { LatestRunNotice, MonitoringTab } from "./run-monitoring";
 import { RulesResultsView } from "./rules-results";
+import { UnderstandFirstSteps } from "./understand-first-steps";
 import { UnderstandResultsView } from "./understand-results";
 
 const VIEWS: Array<{ id: UnderstandView; label: string }> = [
@@ -46,9 +48,13 @@ export interface UnderstandResultsTabProps {
   version: string;
   /** The understand runs of the application, newest first (the Monitoring view reads them). */
   runs?: JobRunView[] | undefined;
+  /** Opens the Catalog tab, where the items to understand are chosen. */
+  onOpenCatalog: () => void;
+  /** Opens the Runs tab. */
+  onOpenRuns: () => void;
 }
 
-export default function UnderstandResultsTab({ project, application, catalog, version, runs }: UnderstandResultsTabProps): React.JSX.Element {
+export default function UnderstandResultsTab({ project, application, catalog, version, runs, onOpenCatalog, onOpenRuns }: UnderstandResultsTabProps): React.JSX.Element {
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
   const monitoring = requested === "monitoring";
@@ -106,15 +112,24 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
       {monitoring ? null : (
         <Loaded loader={results} rows={6}>
           {(loaded) =>
-            loaded.empty ? (
+            loaded.empty && item === undefined ? (
+              <UnderstandFirstSteps
+                applicationName={application.name}
+                hasCatalog={catalog !== null}
+                running={(runs ?? []).some((run) => isActiveStatus(run.status))}
+                onOpenCatalog={onOpenCatalog}
+                onOpenRuns={onOpenRuns}
+              />
+            ) : loaded.empty ? (
               <Card>
                 <EmptyState
                   icon={PackageOpen}
-                  title={item === undefined ? "No generated views yet" : `No ${VIEWS.find((entry) => entry.id === view)?.label.toLowerCase()} for ${item} yet`}
-                  description={
-                    item === undefined
-                      ? "They are rebuilt after an understand pull request is merged (or with Rebuild generated views above)."
-                      : "Run understand on this item; its files appear here while its pull request is open and after it is merged."
+                  title={`No ${VIEWS.find((entry) => entry.id === view)?.label.toLowerCase()} for ${item ?? ""} yet`}
+                  description="Run understand on this item in the Catalog; its files appear here while its pull request is open and after it is merged."
+                  action={
+                    <Button size="small" variant="ghost" className="shadow-border" onClick={onOpenCatalog}>
+                      Go to the Catalog
+                    </Button>
                   }
                 />
               </Card>

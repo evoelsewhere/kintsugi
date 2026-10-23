@@ -73,7 +73,7 @@ Straight-to-default-branch commits are limited to the default auto-commit paths:
 
 ## Repository model
 
-The document repo is a Git repository registered with role document; application code repositories use legacy, legacy-data, or target roles. Git is the source of truth for project documents and member deliverables. Postgres indexes unit state and stores audited gate decisions; a published evidence record is accepted only at its validated merge revision ([ADR-0019](../decisions/0019-workspace-repo-write-path.md), [ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md), [ADR-0061](../decisions/0061-evidence-bound-pr-continuation.md)).
+The document repo is a Git repository registered with role document; application code repositories use legacy, legacy-data, or target roles. Git is the source of truth for project documents and member deliverables. Postgres indexes unit state and stores audited gate decisions; a published evidence record is accepted only at its validated merge revision ([ADR-0019](../decisions/0019-workspace-repo-write-path.md), [ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md), [ADR-0062](../decisions/0062-evidence-bound-pr-continuation.md)).
 
 ## Related references
 

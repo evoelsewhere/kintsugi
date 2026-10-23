@@ -1,6 +1,6 @@
 # ADR-0024: Distinguish access roles from project roles
 
-- Status: Accepted. Amended by [ADR-0042](0060-coding-agent-context-and-project-access.md) for project-scoped member-token authorization and the separation of assignment from access.
+- Status: Accepted. Amended by [ADR-0061](0061-coding-agent-context-and-project-access.md) for project-scoped member-token authorization and the separation of assignment from access.
 - Date: 2026-10-10
 - Decision register: D44
 

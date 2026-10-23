@@ -42,7 +42,7 @@ function evidenceOf(stage: StageView, writes: DocumentWriteView[]): DocumentWrit
 export function MemberStage({ project, application, stage }: { project: ProjectDetail; application: ApplicationView; stage: StageView }): React.JSX.Element {
   const agents = useLoader("agents", agentsApi.list);
   const writes = useLoader(`writes/${project.id}/${EVIDENCE_WINDOW}`, async () => (await projectsApi.documentWrites(project.id, EVIDENCE_WINDOW)).items, {
-    refresh: (list) => (list.some((write) => write.status === "queued") ? 3000 : 60000),
+    live: [`document-writes:${project.id}`],
   });
 
   return (

@@ -23,6 +23,7 @@ import { gitApi, type GitRepositoryView } from "@/lib/api/git";
 import { type ApplicationView, type ProjectDetail, type ProjectRepositoryView, projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { deliveryLink } from "@/lib/links";
+import { subscribeLive } from "@/lib/live";
 import { DesignSetsCard } from "./design-sets-card";
 import { ProjectInsights } from "./projects-insights";
 import { NoRepositories } from "./no-repositories";
@@ -74,17 +75,8 @@ export function ProjectDetailPage(): React.JSX.Element {
     void load();
   }, [load]);
 
-  // The worker clones newly linked repositories in the background: follow them until ready.
-  const settling =
-    project !== null &&
-    [project.documentRepository, ...project.applications.flatMap((application) => [...application.asIs.legacy, ...application.asIs.legacyData, ...application.toBe.targets])].some(
-      (repository) => repository !== null && (repository.syncStatus === "pending" || repository.syncStatus === "cloning"),
-    );
-  useEffect(() => {
-    if (!settling) return;
-    const timer = setInterval(() => void load(), 3000);
-    return () => clearInterval(timer);
-  }, [settling, load]);
+  // The worker clones newly linked repositories in the background: their status reaches this page over the live stream.
+  useEffect(() => subscribeLive(["repositories"], () => void load()), [load]);
 
   if (project === null) {
     return (

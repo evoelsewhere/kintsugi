@@ -26,7 +26,7 @@ import { projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatRelative, shortSha } from "@/lib/format";
 import { deliveryLink, type MonitoringTab } from "@/lib/links";
-import { isActiveStatus } from "@/lib/status";
+import { OVERVIEW_TOPICS, WORKER_AGES } from "@/lib/live";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
 import { MonitoringInsights } from "./monitoring-insights";
@@ -119,7 +119,7 @@ function RunsView({ status, onStatus }: { status: string; onStatus: (value: stri
   const runs = useLoader<Page<JobRunView>>(
     `runs/${filter.id}/${projectId}/${offset}`,
     () => jobRunsApi.listAll({ status: filter.statuses, ...(projectId === "" ? {} : { projectId }), limit: PAGE_SIZE, offset }),
-    { refresh: (page) => (page.items.some((run) => isActiveStatus(run.status) || run.documentWrite?.status === "queued") ? 3000 : 15000) },
+    { live: ["job-runs", "document-writes"] },
   );
 
   return (
@@ -182,7 +182,7 @@ function RunsView({ status, onStatus }: { status: string; onStatus: (value: stri
 
 function RepositoriesView(): React.JSX.Element {
   const repositories = useLoader("monitoring/repositories", monitoringApi.repositories, {
-    refresh: (list) => (list.some((repository) => repository.syncStatus === "pending" || repository.syncStatus === "cloning") ? 3000 : 30000),
+    live: ["repositories"],
   });
   return (
     <Card className="overflow-hidden p-0">
@@ -278,7 +278,7 @@ function WritesView({ status, onStatus }: { status: string; onStatus: (value: st
   const writes = useLoader(
     `writes/${filter.id}/${projectId}/${offset}`,
     () => monitoringApi.documentWrites({ status: filter.statuses, ...(projectId === "" ? {} : { projectId }), limit: PAGE_SIZE, offset }),
-    { refresh: (page) => (page.items.some((write) => write.status === "queued") ? 3000 : 20000) },
+    { live: ["document-writes"] },
   );
   return (
     <Card>
@@ -335,8 +335,8 @@ const QUEUE_PURPOSE: Record<string, string> = {
 };
 
 function WorkerView(): React.JSX.Element {
-  const overview = useLoader("overview", monitoringApi.overview, { refresh: () => 10000 });
-  const workers = useLoader("monitoring/workers", monitoringApi.workers, { refresh: () => 10000 });
+  const overview = useLoader("overview", monitoringApi.overview, { live: OVERVIEW_TOPICS, refresh: WORKER_AGES });
+  const workers = useLoader("monitoring/workers", monitoringApi.workers, { live: ["workers"], refresh: WORKER_AGES });
   return (
     <Card>
       <CardHeader>

@@ -32,3 +32,40 @@ export function shapeProblem(schema: unknown, value: unknown): string | undefine
   }
   return undefined;
 }
+
+/**
+ * A model often wraps the result in one extra key (`{"result": {...}}`, `{"verdict": {...}}`). When the value does
+ * not fit but its only property does, that property is the result; any other value comes back unchanged.
+ */
+export function unwrapResult(schema: unknown, value: unknown): unknown {
+  if (shapeProblem(schema, value) === undefined || typeOf(value) !== "object") return value;
+  const values = Object.values(value as Record<string, unknown>);
+  const inner = values.length === 1 ? values[0] : undefined;
+  return inner !== undefined && typeOf(inner) === "object" && shapeProblem(schema, inner) === undefined ? inner : value;
+}
+
+/** The property names of a value (names only, bounded, one line each): enough to tell an agent what it wrote instead. */
+export function keysOf(value: unknown): string {
+  if (typeOf(value) !== "object") return typeOf(value);
+  const names = Object.keys(value as Record<string, unknown>)
+    .slice(0, 8)
+    .map((name) => name.replace(/[^\w.-]/g, "?").slice(0, 40));
+  return names.length === 0 ? "no properties" : names.join(", ");
+}
+
+const PLACEHOLDER: Record<string, unknown> = { string: "...", boolean: false, integer: 0, number: 0, array: [], object: {} };
+
+/** A minimal value of the schema's required properties (the first enum value, a placeholder by type), as JSON for a repair note. */
+export function exampleOf(schema: unknown): string | undefined {
+  if (typeof schema !== "object" || schema === null) return undefined;
+  const { properties, required } = schema as Schema & { properties?: Record<string, Schema & { enum?: unknown[] }> };
+  const names = (Array.isArray(required) ? required : []).filter((key): key is string => typeof key === "string");
+  if (names.length === 0) return undefined;
+  const example: Record<string, unknown> = {};
+  for (const name of names) {
+    const child = properties?.[name];
+    const type = Array.isArray(child?.type) ? child?.type[0] : child?.type;
+    example[name] = child?.enum?.[0] ?? (typeof type === "string" && type in PLACEHOLDER ? PLACEHOLDER[type] : "...");
+  }
+  return JSON.stringify(example);
+}

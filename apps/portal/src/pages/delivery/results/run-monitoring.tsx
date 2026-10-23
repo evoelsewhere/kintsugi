@@ -4,7 +4,9 @@
 // Runs & logs.
 
 import { ArrowUpRight, CircleAlert, LoaderCircle } from "lucide-react";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useRunPulse } from "@/components/job-runs/run-events";
 import { Loaded } from "@/components/loaded";
 import { RunStatusBadge, WriteStatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
@@ -182,7 +184,14 @@ function RunBars({ runs, compact = false }: { runs: readonly JobRunView[]; compa
 /** The steps of the newest run on a timeline: when each started and how long it took. */
 function LatestRun({ projectId, run, title }: { projectId: string; run: JobRunView; title: string }): React.JSX.Element {
   const openRun = useOpenRun();
-  const detail = useLoader(`monitor-run/${projectId}/${run.id}/${run.status}`, () => jobRunsApi.get(projectId, run.id), { refresh: () => (isActiveStatus(run.status) ? 3000 : false) });
+  // The steps are read again when the run's own event stream says a step or the status changed, not on a timer.
+  const pulse = useRunPulse(projectId, run.id, isActiveStatus(run.status));
+  const detail = useLoader(`monitor-run/${projectId}/${run.id}`, () => jobRunsApi.get(projectId, run.id));
+  const reload = detail.reload;
+  useEffect(() => {
+    // A reload keeps the timeline on screen; it replaces it when the answer arrives.
+    if (pulse > 0) void reload();
+  }, [pulse, reload]);
   return (
     <Section
       title={title}

@@ -33,7 +33,7 @@ const COMPLEXITY_TONE: Record<string, StatusTone> = { low: "green", medium: "ora
 const catalogLink = (projectId: string, applicationId: string): string => `${deliveryLink({ projectId, applicationId, stage: "assess" })}&tab=catalog`;
 
 export function Portfolio(): React.JSX.Element {
-  const portfolio = useLoader("overview-portfolio", monitoringApi.portfolio, { refresh: () => 30000 });
+  const portfolio = useLoader("overview-portfolio", monitoringApi.portfolio, { live: ["job-runs", "document-writes", "repositories", "gates"] });
   return (
     <Loaded loader={portfolio} rows={4}>
       {(data) =>

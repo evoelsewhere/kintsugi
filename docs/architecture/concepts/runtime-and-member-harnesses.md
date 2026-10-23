@@ -1,6 +1,6 @@
 # Runtime and member harnesses
 
-Kintsugi has two agent execution worlds with separate ownership ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md), [Coding Agent Workflow](../../decisions/0059-coding-agent-workflow-through-cli-and-local-mcp.md)).
+Kintsugi has two agent execution worlds with separate ownership ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md), [Coding Agent Workflow](../../decisions/0060-coding-agent-workflow-through-cli-and-local-mcp.md)).
 
 | | **Kintsugi Runtime (pi)** | **Member harnesses** (Claude Code, GitHub Copilot, ChatGPT/Codex) |
 |---|---|---|
