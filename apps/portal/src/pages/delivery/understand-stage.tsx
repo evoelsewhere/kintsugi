@@ -186,7 +186,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
 
       {tab === "results" ? (
         <Suspense fallback={<Card><SkeletonRows rows={6} /></Card>}>
-          <UnderstandResultsTab project={project} application={application} catalog={catalog.data ?? null} version={version} runs={understandRuns} />
+          <UnderstandResultsTab project={project} application={application} catalog={catalog.data ?? null} version={version} runs={understandRuns} onOpenCatalog={() => setParam({ tab: "catalog" })} onOpenRuns={() => setParam({ tab: "runs" })} />
         </Suspense>
       ) : null}
     </div>
