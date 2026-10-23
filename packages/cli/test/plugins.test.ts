@@ -15,6 +15,7 @@ function artifactRoot(root: string, harness: string, profileId: string): string 
 
 interface SetupState {
   root: string;
+  homeDir: string;
   configPath: string;
   stdout: string[];
   stderr: string[];
@@ -34,6 +35,8 @@ async function createState(options: {
 } = {}): Promise<SetupState> {
   const root = await mkdtemp(join(tmpdir(), "kintsugi-cli-plugins-"));
   folders.push(root);
+  const homeDir = join(root, "user home");
+  await mkdir(homeDir, { recursive: true });
   const configPath = join(root, "Kintsugi config", "config.json");
   const unrelatedPath = join(root, "unrelated-client-settings.json");
   await mkdir(join(root, "Kintsugi config"), { recursive: true });
@@ -60,6 +63,7 @@ async function createState(options: {
     fetch: globalThis.fetch,
     serveMcp: async () => undefined,
     cwd: root,
+    homeDir,
     env: { KINTSUGI_CONFIG: configPath },
     isTTY: false,
     promptSecret: async () => "TEST-prompt-must-not-run",
@@ -71,7 +75,7 @@ async function createState(options: {
     getClientVersion,
     runClientCommand,
   } as unknown as CliDeps;
-  return { root, configPath, stdout, stderr, profiles: deps.profiles as FileProfileStore, getClientVersion, getCredential, setCredential, deleteCredential, runClientCommand, deps };
+  return { root, homeDir, configPath, stdout, stderr, profiles: deps.profiles as FileProfileStore, getClientVersion, getCredential, setCredential, deleteCredential, runClientCommand, deps };
 }
 
 afterEach(async () => {
@@ -79,6 +83,73 @@ afterEach(async () => {
 });
 
 describe("plugins setup command", () => {
+  it("prepares Codex Desktop's personal marketplace without invoking Codex CLI", async () => {
+    const state = await createState();
+    const result = await runCli([
+      "plugins", "setup", "--install-mode", "desktop-ui", "--harness", "codex", "--url", "https://kintsugi.example", "--project", "billing",
+    ], state.deps);
+
+    expect(result, state.stderr.join("")).toBe(0);
+    expect(state.getClientVersion).not.toHaveBeenCalled();
+    expect(state.runClientCommand).not.toHaveBeenCalled();
+    const catalogPath = join(state.homeDir, ".agents", "plugins", "marketplace.json");
+    const catalog = JSON.parse(await readFile(catalogPath, "utf8")) as { name: string; plugins: Array<{ name: string; source: { source: string; path: string }; policy: { installation: string; authentication: string } }> };
+    expect(catalog.name).toBe("kintsugi-personal");
+    expect(catalog.plugins).toHaveLength(1);
+    const pluginName = catalog.plugins[0]!.name;
+    expect(pluginName).toMatch(/^kintsugi-coding-agent-workflow-[a-f0-9]{12}$/);
+    expect(catalog.plugins[0]!.source).toEqual({ source: "local", path: `./.codex/plugins/${pluginName}` });
+    expect(catalog.plugins[0]!.policy).toEqual({ installation: "AVAILABLE", authentication: "ON_INSTALL" });
+    const pluginRoot = join(state.homeDir, ".codex", "plugins", pluginName);
+    const manifest = JSON.parse(await readFile(join(pluginRoot, "plugin.json"), "utf8")) as { name: string; extensions: { "com.openai": { interface: { displayName: string } } } };
+    const mcp = JSON.parse(await readFile(join(pluginRoot, "mcp.json"), "utf8")) as { mcpServers: { kintsugi: { command: string; args: string[] } } };
+    expect(manifest.name).toBe(pluginName);
+    expect(manifest.extensions["com.openai"].interface.displayName).toBe("Kintsugi Workflow · billing");
+    const profiles = await state.profiles.load();
+    const profile = Object.values(profiles.profiles).find((item) => item.baseUrl === "https://kintsugi.example" && item.projectId === "billing");
+    expect(profile).toBeDefined();
+    expect(mcp.mcpServers.kintsugi).toMatchObject({ command: "node", args: [process.execPath, "mcp", "serve", "--profile", profile!.id] });
+    expect(state.stdout.join("")).toContain("prepared");
+    expect(state.stdout.join("")).toContain("Restart Codex Desktop");
+    expect(state.stdout.join("")).toContain("Plugins Directory");
+    expect(state.stdout.join("")).not.toContain("installation completed");
+    expect(state.getCredential).not.toHaveBeenCalled();
+    expect(state.setCredential).not.toHaveBeenCalled();
+  });
+
+  it("reports desktop marketplace staging honestly in JSON and rejects other UI harnesses", async () => {
+    const state = await createState();
+    const result = await runCli([
+      "plugins", "setup", "--install-mode", "desktop-ui", "--harness", "codex", "--url", "https://kintsugi.example", "--project", "billing", "--json",
+    ], state.deps);
+    expect(result, state.stderr.join("")).toBe(0);
+    const output = JSON.parse(state.stdout.join("")) as { success: boolean; data: { installed: boolean; staged: boolean; marketplacePath: string } };
+    expect(output).toMatchObject({ success: true, data: { installed: false, staged: true } });
+    expect(output.data.marketplacePath).toBe(join(state.homeDir, ".agents", "plugins", "marketplace.json"));
+    expect(state.runClientCommand).not.toHaveBeenCalled();
+
+    const unsupported = await createState();
+    expect(await runCli([
+      "plugins", "setup", "--install-mode", "desktop-ui", "--harness", "claude-code", "--url", "https://kintsugi.example", "--project", "billing",
+    ], unsupported.deps)).toBe(2);
+    expect(unsupported.getClientVersion).not.toHaveBeenCalled();
+    expect(unsupported.runClientCommand).not.toHaveBeenCalled();
+    expect(unsupported.stderr.join("")).toContain("PLUGIN_INSTALL_MODE_UNSUPPORTED");
+  });
+
+  it("does not report a staged plugin as ready when it cannot save its local Kintsugi profile", async () => {
+    const state = await createState();
+    vi.spyOn(state.profiles, "save").mockRejectedValue(new Error("disk full"));
+    const result = await runCli([
+      "plugins", "setup", "--install-mode", "desktop-ui", "--harness", "codex", "--url", "https://kintsugi.example", "--project", "billing",
+    ], state.deps);
+    expect(result).toBe(2);
+    expect(state.stderr.join("")).toContain("PLUGIN_PROFILE_SAVE_FAILED");
+    expect(state.stderr.join("")).toContain("Do not install the plugin yet");
+    expect(state.stderr.join("")).toContain(join(state.homeDir, ".codex", "plugins"));
+    expect(state.runClientCommand).not.toHaveBeenCalled();
+  });
+
   it("installs the project plugin without credentials and saves only the nonsecret profile fields", async () => {
     const state = await createState();
     const unrelatedPath = join(state.root, "unrelated-client-settings.json");
@@ -104,7 +175,8 @@ describe("plugins setup command", () => {
       },
     });
     const pluginRoot = join(artifactRoot(state.root, "claude-code", "work"), "plugins", "claude", "kintsugi-coding-agent-workflow");
-    const manifest = JSON.parse(await readFile(join(pluginRoot, ".mcp.json"), "utf8")) as { mcpServers: { kintsugi: { args: string[] } } };
+    const manifest = JSON.parse(await readFile(join(pluginRoot, ".mcp.json"), "utf8")) as { mcpServers: { kintsugi: { command: string; args: string[] } } };
+    expect(manifest.mcpServers.kintsugi.command).toBe(process.execPath);
     expect(manifest.mcpServers.kintsugi.args).toEqual([process.execPath, "mcp", "serve", "--profile", "work"]);
     expect(state.stdout.join("")).toContain("Planned native commands:");
     expect(state.stdout.join("")).toContain("Rollback commands:");
@@ -126,12 +198,13 @@ describe("plugins setup command", () => {
     expect(profileId).toMatch(/^kintsugi-[a-f0-9]{12}$/);
     expect(profile).toMatchObject({ id: profileId, baseUrl: "https://kintsugi.example", projectId: "project/with spaces" });
     const pluginRoot = join(artifactRoot(state.root, "codex", profileId!), "plugins", "codex", "kintsugi-coding-agent-workflow");
-    const manifest = JSON.parse(await readFile(join(pluginRoot, "mcp.json"), "utf8")) as { mcpServers: { kintsugi: { args: string[] } } };
+    const manifest = JSON.parse(await readFile(join(pluginRoot, "mcp.json"), "utf8")) as { mcpServers: { kintsugi: { command: string; args: string[]; type: string } } };
+    expect(manifest.mcpServers.kintsugi).toMatchObject({ type: "stdio", command: "node" });
     expect(manifest.mcpServers.kintsugi.args).toEqual([process.execPath, "mcp", "serve", "--profile", profileId]);
     const marketplace = JSON.parse(await readFile(join(artifactRoot(state.root, "codex", profileId!), ".agents", "plugins", "marketplace.json"), "utf8")) as { name: string };
     expect(state.runClientCommand.mock.calls.map(([executable, args]) => [executable, args])).toEqual([
-      ["codex", ["plugin", "marketplace", "add", artifactRoot(state.root, "codex", profileId!)]],
-      ["codex", ["plugin", "add", `kintsugi-coding-agent-workflow@${marketplace.name}`]],
+      ["codex", ["--no-daemon", "plugin", "marketplace", "add", artifactRoot(state.root, "codex", profileId!)]],
+      ["codex", ["--no-daemon", "plugin", "add", `kintsugi-coding-agent-workflow@${marketplace.name}`]],
     ]);
     expect(config.activeProfile).toBeUndefined();
   });

@@ -12,7 +12,7 @@ const NATIVE_CLIENT_COMMANDS: Record<CodingAgentClient, string> = {
 interface NativeClientExecOptions {
   timeout: number;
   windowsHide: boolean;
-  shell?: boolean;
+  shell: false;
 }
 
 type NativeClientExecutor = (
@@ -28,13 +28,13 @@ const executeNativeClient: NativeClientExecutor = async (command, args, options)
 
 export async function getNativeClientVersion(
   target: CodingAgentClient,
-  platform: NodeJS.Platform = process.platform,
+  _platform: NodeJS.Platform = process.platform,
   execute: NativeClientExecutor = executeNativeClient,
 ): Promise<string> {
   const { stdout, stderr } = await execute(NATIVE_CLIENT_COMMANDS[target], ["--version"], {
     timeout: 5_000,
     windowsHide: true,
-    ...(platform === "win32" ? { shell: true } : {}),
+    shell: false,
   });
   const match = /\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/.exec(`${stdout}\n${stderr}`);
   if (match?.[0] === undefined) throw new Error("Native client did not report a semantic version");

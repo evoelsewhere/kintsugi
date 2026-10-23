@@ -29,7 +29,7 @@ interface NativeChild {
 type NativeSpawn = (
   command: string,
   args: string[],
-  options: { cwd?: string; env: NodeJS.ProcessEnv; shell: false; windowsHide: true; stdio: ["ignore", "pipe", "pipe"] },
+  options: { cwd?: string; env: NodeJS.ProcessEnv; shell: false; windowsHide: true; stdio: ["inherit", "inherit", "inherit"] },
 ) => NativeChild;
 
 export interface NativeClientCommandOptions {
@@ -59,11 +59,13 @@ export async function runNativeClientCommand(
   const env = { ...process.env, ...options.env };
   let command = executable;
   let commandArgs = [...args];
-  if (platform === "win32") {
+  // Codex installs a native Windows executable. Spawning it directly preserves
+  // argv; Windows PowerShell 5 otherwise joins the splatted arguments into one.
+  if (platform === "win32" && executable !== "codex") {
     const serializedArgs = JSON.stringify(args);
     if (serializedArgs.length > 24_000) throw new CliError("NATIVE_ARGUMENT_INVALID", "Native client arguments exceed the Windows command limit");
     command = windowsPowerShellPath(env);
-    commandArgs = ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(WINDOWS_LAUNCHER, "utf16le").toString("base64")];
+    commandArgs = ["-NoLogo", "-NoProfile", "-EncodedCommand", Buffer.from(WINDOWS_LAUNCHER, "utf16le").toString("base64")];
     env.KINTSUGI_NATIVE_EXECUTABLE = executable;
     env.KINTSUGI_NATIVE_ARGS = serializedArgs;
   }
@@ -76,7 +78,7 @@ export async function runNativeClientCommand(
       env,
       shell: false,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["inherit", "inherit", "inherit"],
     });
   } catch {
     throw new CliError("NATIVE_COMMAND_FAILED", `Could not start the ${executable} CLI command`);

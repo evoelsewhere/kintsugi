@@ -1,6 +1,6 @@
 import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { assertClientCompatibility } from "./compatibility.js";
 import { CODING_AGENT_WORKFLOW_PLUGIN_NAME, generateAccessPlugin, PluginSetupError, type AccessPluginInput, type CodingAgentClient } from "./generate.js";
 
@@ -17,6 +17,7 @@ export interface SetupChange {
   target: CodingAgentClient;
   pluginName: string;
   marketplaceName: string;
+  installationMode?: "native-cli" | "desktop-ui";
 }
 
 /** A native client invocation represented as executable plus literal argv. */
@@ -36,6 +37,14 @@ export interface SetupReport {
   rollbackSteps: NativeClientCommand[];
   installCommands: string[];
   rollbackCommands: string[];
+  installationMode?: "native-cli" | "desktop-ui";
+  marketplacePath?: string;
+  staged?: boolean;
+}
+
+export interface CodexDesktopSetupInput extends Omit<AccessPluginInput, "target"> {
+  /** OS home directory. The marketplace and package are always derived below this directory. */
+  homeDir: string;
 }
 
 export interface SetupFileDeps {
@@ -62,6 +71,14 @@ function marketplaceNameForProfile(profileId: string): string {
   const slug = profileId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "profile";
   const suffix = createHash("sha256").update(profileId, "utf8").digest("hex").slice(0, 12);
   return `${CODING_AGENT_WORKFLOW_PLUGIN_NAME}-${slug}-${suffix}`;
+}
+
+/** Stable Codex plugin identity so multiple Kintsugi project profiles can coexist in one personal marketplace. */
+export function codexDesktopPluginName(profileId: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(profileId)) {
+    throw new PluginSetupError("PLUGIN_PROFILE_INVALID", "Plugin marketplace profile ID is invalid");
+  }
+  return `${CODING_AGENT_WORKFLOW_PLUGIN_NAME}-${createHash("sha256").update(profileId, "utf8").digest("hex").slice(0, 12)}`;
 }
 
 function within(root: string, child: string): boolean {
@@ -156,8 +173,8 @@ function nativeCommands(target: CodingAgentClient, root: string, pluginName: str
       { executable: "claude", args: ["plugin", "install", "--scope", "user", "--yes", `${pluginName}@${marketplaceName}`] },
     ],
     codex: [
-      { executable: "codex", args: ["plugin", "marketplace", "add", root] },
-      { executable: "codex", args: ["plugin", "add", `${pluginName}@${marketplaceName}`] },
+      { executable: "codex", args: ["--no-daemon", "plugin", "marketplace", "add", root] },
+      { executable: "codex", args: ["--no-daemon", "plugin", "add", `${pluginName}@${marketplaceName}`] },
     ],
     copilot: [
       { executable: "copilot", args: ["plugin", "marketplace", "add", root] },
@@ -170,8 +187,8 @@ function nativeCommands(target: CodingAgentClient, root: string, pluginName: str
       { executable: "claude", args: ["plugin", "marketplace", "remove", "--scope", "user", marketplaceName] },
     ],
     codex: [
-      { executable: "codex", args: ["plugin", "remove", `${pluginName}@${marketplaceName}`] },
-      { executable: "codex", args: ["plugin", "marketplace", "remove", marketplaceName] },
+      { executable: "codex", args: ["--no-daemon", "plugin", "remove", `${pluginName}@${marketplaceName}`] },
+      { executable: "codex", args: ["--no-daemon", "plugin", "marketplace", "remove", marketplaceName] },
     ],
     copilot: [
       { executable: "copilot", args: ["plugin", "uninstall", pluginName] },
@@ -199,7 +216,29 @@ export function planClientSetup(input: SetupInput): SetupChange[] {
     assertRelativeFile(relativePath);
     const destination = resolve(root, relativePath);
     if (!within(root, destination)) throw new PluginSetupError("SETUP_PATH_INVALID", "A generated path escaped the Kintsugi artifact root");
-    return { root, relativePath, content, target: input.target, pluginName: generated.pluginName, marketplaceName };
+    return { root, relativePath, content, target: input.target, pluginName: generated.pluginName, marketplaceName, installationMode: "native-cli" };
+  });
+}
+
+/** Plans only the package files that Codex Desktop will discover through the user's local marketplace. */
+export function planCodexDesktopSetup(input: CodexDesktopSetupInput): SetupChange[] {
+  if (!isAbsolute(input.homeDir)) throw new PluginSetupError("SETUP_ROOT_INVALID", "The user home directory must be an absolute path");
+  if (hasControlCharacters(input.homeDir)) throw new PluginSetupError("SETUP_ROOT_INVALID", "The user home directory cannot contain control characters");
+  const homeDir = resolve(input.homeDir);
+  const pluginName = codexDesktopPluginName(input.profileId);
+  const root = resolve(homeDir, ".codex", "plugins", pluginName);
+  if (!within(homeDir, root)) throw new PluginSetupError("SETUP_PATH_INVALID", "The generated Codex plugin path escaped the user home directory");
+  const generated = generateAccessPlugin({ ...input, target: "codex", pluginName });
+  const marketplaceName = "kintsugi-personal";
+  const entries: Array<[string, string]> = [
+    [MARKER_PATH, SETUP_MARKER("codex")],
+    ...Object.entries(generated.files).map(([path, content]): [string, string] => [path, content]),
+  ];
+  return entries.map(([relativePath, content]) => {
+    assertRelativeFile(relativePath);
+    const destination = resolve(root, relativePath);
+    if (!within(root, destination)) throw new PluginSetupError("SETUP_PATH_INVALID", "A generated Codex plugin path escaped its package directory");
+    return { root, relativePath, content, target: "codex", pluginName: generated.pluginName, marketplaceName, installationMode: "desktop-ui" };
   });
 }
 
@@ -221,16 +260,16 @@ async function assertNoSymlinkPath(path: string, deps: SetupFileDeps): Promise<v
   }
 }
 
-function validateChanges(changes: readonly SetupChange[]): { root: string; target: CodingAgentClient; pluginName: string; marketplaceName: string } {
+function validateChanges(changes: readonly SetupChange[]): { root: string; target: CodingAgentClient; pluginName: string; marketplaceName: string; installationMode: "native-cli" | "desktop-ui" } {
   if (changes.length === 0) throw new PluginSetupError("SETUP_CHANGES_EMPTY", "No plugin setup files were planned");
   const first = changes[0]!;
   const root = resolve(first.root);
-  const metadata = { root, target: first.target, pluginName: first.pluginName, marketplaceName: first.marketplaceName };
+  const metadata = { root, target: first.target, pluginName: first.pluginName, marketplaceName: first.marketplaceName, installationMode: first.installationMode ?? "native-cli" };
   const paths = new Set<string>();
   for (const change of changes) {
     assertRelativeFile(change.relativePath);
     const destination = resolve(root, change.relativePath);
-    if (resolve(change.root) !== root || change.target !== metadata.target || change.pluginName !== metadata.pluginName || change.marketplaceName !== metadata.marketplaceName || !within(root, destination)) {
+    if (resolve(change.root) !== root || change.target !== metadata.target || change.pluginName !== metadata.pluginName || change.marketplaceName !== metadata.marketplaceName || (change.installationMode ?? "native-cli") !== metadata.installationMode || !within(root, destination)) {
       throw new PluginSetupError("SETUP_CHANGES_INVALID", "All setup changes must belong to one client and one managed artifact root");
     }
     if (paths.has(change.relativePath)) throw new PluginSetupError("SETUP_CHANGES_INVALID", "Setup changes cannot write a path more than once");
@@ -296,11 +335,13 @@ export async function applyClientSetup(changes: readonly SetupChange[], deps: Se
     }
   }
 
-  const commands = nativeCommands(metadata.target, metadata.root, metadata.pluginName, metadata.marketplaceName);
+  const commands = metadata.installationMode === "desktop-ui"
+    ? { install: [] as NativeClientCommand[], rollback: [] as NativeClientCommand[] }
+    : nativeCommands(metadata.target, metadata.root, metadata.pluginName, metadata.marketplaceName);
   return {
     target: metadata.target,
     artifactRoot: metadata.root,
-    pluginRoot: join(metadata.root, "plugins", metadata.target, metadata.pluginName),
+    pluginRoot: metadata.installationMode === "desktop-ui" ? metadata.root : join(metadata.root, "plugins", metadata.target, metadata.pluginName),
     marketplaceName: metadata.marketplaceName,
     written,
     unchanged,
@@ -308,5 +349,145 @@ export async function applyClientSetup(changes: readonly SetupChange[], deps: Se
     rollbackSteps: commands.rollback,
     installCommands: commands.install.map((command) => formatNativeCommand(command)),
     rollbackCommands: commands.rollback.map((command) => formatNativeCommand(command)),
+    installationMode: metadata.installationMode,
+  };
+}
+
+interface CodexMarketplace {
+  name: string;
+  plugins: Array<Record<string, unknown>>;
+  interface?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+function readCodexMarketplace(value: string | undefined): CodexMarketplace {
+  if (value === undefined) return { name: "kintsugi-personal", interface: { displayName: "Kintsugi" }, plugins: [] };
+  let parsed: unknown;
+  try { parsed = JSON.parse(value) as unknown; } catch {
+    throw new PluginSetupError("CODEX_MARKETPLACE_INVALID", "The existing Codex personal marketplace is not valid JSON");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new PluginSetupError("CODEX_MARKETPLACE_INVALID", "The Codex personal marketplace must be a JSON object");
+  }
+  const catalog = parsed as Partial<CodexMarketplace>;
+  if (typeof catalog.name !== "string" || catalog.name.trim().length === 0 || !Array.isArray(catalog.plugins)) {
+    throw new PluginSetupError("CODEX_MARKETPLACE_INVALID", "The Codex personal marketplace must include a name and a plugins array");
+  }
+  if (catalog.interface !== undefined && (typeof catalog.interface !== "object" || catalog.interface === null || Array.isArray(catalog.interface))) {
+    throw new PluginSetupError("CODEX_MARKETPLACE_INVALID", "The Codex marketplace interface must be a JSON object");
+  }
+  if (catalog.plugins.some((plugin) => typeof plugin !== "object" || plugin === null || Array.isArray(plugin)
+    || typeof (plugin as Record<string, unknown>).name !== "string" || ((plugin as Record<string, unknown>).name as string).trim() === "")) {
+    throw new PluginSetupError("CODEX_MARKETPLACE_INVALID", "Every Codex marketplace plugin entry must be an object with a name");
+  }
+  return catalog as CodexMarketplace;
+}
+
+async function readOptionalFile(path: string, deps: SetupFileDeps): Promise<string | undefined> {
+  try { return (await deps.readFile(path)).toString("utf8"); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+function mergeCodexMarketplace(value: string | undefined, pluginName: string, cliVersion: string): string {
+  const catalog = readCodexMarketplace(value);
+  if (catalog.interface === undefined) catalog.interface = { displayName: "Kintsugi" };
+  else if (typeof catalog.interface.displayName !== "string" || catalog.interface.displayName.trim() === "") {
+    catalog.interface = { ...catalog.interface, displayName: "Kintsugi" };
+  }
+  const sourcePath = `./.codex/plugins/${pluginName}`;
+  const matches = catalog.plugins.filter((plugin) => plugin.name === pluginName);
+  if (matches.length > 1) throw new PluginSetupError("CODEX_MARKETPLACE_CONFLICT", "The Codex marketplace contains duplicate entries for this Kintsugi profile");
+  const entry = {
+    name: pluginName,
+    source: { source: "local", path: sourcePath },
+    version: cliVersion,
+    policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+    category: "Developer tools",
+  };
+  if (matches.length === 1) {
+    const existing = matches[0]!;
+    const source = existing.source;
+    if (typeof source !== "object" || source === null || Array.isArray(source)
+      || (source as Record<string, unknown>).source !== "local" || (source as Record<string, unknown>).path !== sourcePath) {
+      throw new PluginSetupError("CODEX_MARKETPLACE_CONFLICT", "A Codex marketplace entry already uses this Kintsugi plugin name with a different source");
+    }
+    catalog.plugins = catalog.plugins.map((plugin) => plugin === existing ? { ...plugin, ...entry } : plugin);
+  } else {
+    catalog.plugins.push(entry);
+  }
+  return `${JSON.stringify(catalog, null, 2)}\n`;
+}
+
+async function writeAtomic(path: string, content: string, deps: SetupFileDeps): Promise<boolean> {
+  await assertNoSymlinkPath(path, deps);
+  try {
+    const info = await deps.lstat(path);
+    if (!info.isFile()) throw new PluginSetupError("SETUP_PATH_UNSAFE", "The Codex marketplace catalog path is not a regular file");
+    if ((await deps.readFile(path)).toString("utf8") === content) return false;
+  } catch (error) {
+    if (error instanceof PluginSetupError) throw error;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  await deps.mkdir(dirname(path), { recursive: true });
+  await assertNoSymlinkPath(path, deps);
+  const temporaryPath = `${path}.${randomUUID()}.tmp`;
+  try {
+    await deps.writeFile(temporaryPath, content, { flag: "wx", mode: 0o600 });
+    await deps.rename(temporaryPath, path);
+  } catch (error) {
+    await deps.rm(temporaryPath, { force: true });
+    throw error;
+  }
+  return true;
+}
+
+/** Stages a Codex Desktop plugin in the personal local marketplace without running Codex CLI. */
+export async function stageCodexDesktopPlugin(input: CodexDesktopSetupInput, deps: SetupFileDeps = FILES): Promise<SetupReport & { marketplacePath: string; staged: true }> {
+  if (!isAbsolute(input.homeDir)) throw new PluginSetupError("SETUP_ROOT_INVALID", "The user home directory must be an absolute path");
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(input.cliVersion)) {
+    throw new PluginSetupError("PLUGIN_VERSION_INVALID", "Kintsugi CLI version must be an exact semantic version");
+  }
+  const homeDir = resolve(input.homeDir);
+  const marketplaceRoot = resolve(homeDir, ".agents", "plugins");
+  const marketplacePath = join(marketplaceRoot, "marketplace.json");
+  const pluginName = codexDesktopPluginName(input.profileId);
+  const pluginRoot = resolve(homeDir, ".codex", "plugins", pluginName);
+  if (!within(homeDir, marketplacePath) || !within(homeDir, pluginRoot)) {
+    throw new PluginSetupError("SETUP_PATH_INVALID", "The generated Codex marketplace paths escaped the user home directory");
+  }
+  await assertNoSymlinkPath(marketplaceRoot, deps);
+  await assertNoSymlinkPath(marketplacePath, deps);
+  const initialCatalog = await readOptionalFile(marketplacePath, deps);
+  // Validate before creating the package so malformed and conflicting catalogs leave no partial staging.
+  mergeCodexMarketplace(initialCatalog, pluginName, input.cliVersion);
+
+  let packageReport: SetupReport;
+  try {
+    packageReport = await applyClientSetup(planCodexDesktopSetup({ ...input, homeDir }), deps);
+  } catch (error) {
+    const code = error instanceof PluginSetupError ? error.code : "CODEX_PLUGIN_STAGE_FAILED";
+    throw new PluginSetupError(code, `Could not safely stage the Codex plugin package at ${pluginRoot}: ${(error as Error).message}`);
+  }
+  let catalogChanged: boolean;
+  try {
+    await assertNoSymlinkPath(marketplaceRoot, deps);
+    const currentCatalog = await readOptionalFile(marketplacePath, deps);
+    const mergedCatalog = mergeCodexMarketplace(currentCatalog, pluginName, input.cliVersion);
+    catalogChanged = await writeAtomic(marketplacePath, mergedCatalog, deps);
+  } catch (error) {
+    throw new PluginSetupError("CODEX_MARKETPLACE_WRITE_FAILED", `The plugin package is staged at ${pluginRoot}, but the Codex marketplace catalog could not be updated: ${(error as Error).message}. The plugin is not installed; inspect only Kintsugi-managed package files before cleanup.`);
+  }
+  return {
+    ...packageReport,
+    artifactRoot: marketplaceRoot,
+    pluginRoot,
+    marketplaceName: "kintsugi-personal",
+    marketplacePath,
+    written: catalogChanged ? [...packageReport.written, marketplacePath] : packageReport.written,
+    unchanged: catalogChanged ? packageReport.unchanged : [...packageReport.unchanged, marketplacePath],
+    installationMode: "desktop-ui",
+    staged: true,
   };
 }

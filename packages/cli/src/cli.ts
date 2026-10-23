@@ -3,6 +3,7 @@ import { serveCodingAgentStdio } from "@kintsugi/harness-hub";
 import type { CodingAgentClient } from "@kintsugi/harness-hub";
 import type { CodingAgentWorkflowCapabilities, CodingAgentWorkflowPort } from "@kintsugi/harness-sdk";
 import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { emitKeypressEvents } from "node:readline";
 import { CodingAgentClientError } from "@kintsugi/kintsugi-client";
 import { getNativeClientVersion } from "./client-version.js";
@@ -23,6 +24,7 @@ import { KINTSUGI_CLI_VERSION } from "./version.js";
 export interface OAuthLoopbackCallback {
   redirectUri: string;
   waitForCode(): Promise<{ code: string; state: string }>;
+  complete?(outcome: "success" | "error"): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -46,6 +48,8 @@ export interface CliDeps {
   stderr: { write(value: string): unknown };
   sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   launcher?: { launcherPath: string; cliEntrypointPath: string; cliVersion: string };
+  /** User home directory, injectable so personal marketplace staging can be tested safely. */
+  homeDir?: string;
   getClientVersion?: (target: CodingAgentClient) => Promise<string>;
   signal?: AbortSignal;
   /** Subscription lifetime, independent of the ordinary request deadline. */
@@ -101,6 +105,7 @@ export function createDefaultCliDeps(): CliDeps {
       stderr: process.stderr,
     }),
     cwd: process.cwd(),
+    homeDir: homedir(),
     env: process.env,
     isTTY: Boolean(process.stdin.isTTY),
     promptSecret: async () => {

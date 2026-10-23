@@ -29,8 +29,12 @@ export {
 } from "./plugins/compatibility.js";
 export {
   applyClientSetup,
+  codexDesktopPluginName,
   generateAccessMarketplace,
+  planCodexDesktopSetup,
   planClientSetup,
+  stageCodexDesktopPlugin,
+  type CodexDesktopSetupInput,
   type SetupChange,
   type SetupFileDeps,
   type SetupInput,

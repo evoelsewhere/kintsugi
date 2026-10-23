@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPluginInstallCommand,
+  codingAgentAuthorizationPayload,
   parseCodingAgentAuthorizationRequest,
   safeCodingAgentReturnTo,
   validatedAuthorizationRedirect,
@@ -15,6 +16,18 @@ describe("project plugin install command", () => {
       profileId: "kintsugi-billing-api",
       shell: "powershell",
     })).toBe("kintsugi plugins setup --harness claude-code --url 'https://kintsugi.example/tenant' --project 'billing-api' --profile 'kintsugi-billing-api'");
+  });
+
+  it("prepares the Codex Desktop marketplace without claiming that the app installed the plugin", () => {
+    expect(buildPluginInstallCommand({
+      baseUrl: "http://127.0.0.1:5175",
+      projectId: "test",
+      harness: "codex",
+      installMode: "desktop-ui",
+      profileId: "kintsugi-test",
+      shell: "powershell",
+    })).toBe("kintsugi plugins setup --install-mode desktop-ui --harness codex --url 'http://127.0.0.1:5175' --project 'test' --profile 'kintsugi-test'");
+    expect(() => buildPluginInstallCommand({ baseUrl: "https://kintsugi.example", projectId: "billing", harness: "claude-code", installMode: "desktop-ui", shell: "posix" })).toThrow("Codex Desktop");
   });
 
   it("quotes project IDs safely for PowerShell and POSIX shells", () => {
@@ -52,8 +65,18 @@ describe("Coding Agent Workflow consent handoff", () => {
     expect(parseCodingAgentAuthorizationRequest(request + "&next=https://evil.example")).toBeUndefined();
   });
 
+  it("carries the sign-in expiry so the approval screen can show time remaining", () => {
+    const expiresAt = Date.now() + 90_000;
+    const parsed = parseCodingAgentAuthorizationRequest(`${request}&expiresAt=${expiresAt}`)!;
+    expect(parsed).toMatchObject({ expiresAt });
+    expect(codingAgentAuthorizationPayload(parsed)).not.toHaveProperty("expiresAt");
+    expect(parseCodingAgentAuthorizationRequest(`${request}&expiresAt=${expiresAt}&expiresAt=${expiresAt + 1}`)).toBeUndefined();
+    expect(parseCodingAgentAuthorizationRequest(`${request}&expiresAt=soon`)).toBeUndefined();
+    expect(parseCodingAgentAuthorizationRequest(`${request}&expiresAt=${Date.now() + 130_000}`)).toBeUndefined();
+  });
   it("preserves only a local coding-agent authorization URL through login", () => {
-    expect(safeCodingAgentReturnTo(`/coding-agent/authorize${request}`)).toBe(`/coding-agent/authorize${request}`);
+    const expiringRequest = `${request}&expiresAt=${Date.now() + 90_000}`;
+    expect(safeCodingAgentReturnTo(`/coding-agent/authorize${expiringRequest}`)).toBe(`/coding-agent/authorize${expiringRequest}`);
     for (const unsafe of ["https://evil.example", "//evil.example/coding-agent/authorize", "/\\evil.example/coding-agent/authorize", "/projects?next=https://evil.example", null]) {
       expect(safeCodingAgentReturnTo(unsafe)).toBe("/");
     }

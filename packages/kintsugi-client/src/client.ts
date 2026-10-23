@@ -166,7 +166,8 @@ export function createCodingAgentWorkflowClient(options: CodingAgentWorkflowClie
     signalOverride?: AbortSignal,
     prepareSnapshot = false,
   ): Promise<T> {
-    const signal = signalOverride ?? options.signalProvider?.() ?? options.signal;
+    let signal = signalOverride ?? options.signal;
+    let signalResolved = signal !== undefined;
     const basePath = baseUrl.pathname.replace(/\/+$/, "");
     const url = new URL(`${basePath}${API_PREFIX}/${endpoint}`, baseUrl.origin);
     const urlQuery = { ...query };
@@ -180,6 +181,13 @@ export function createCodingAgentWorkflowClient(options: CodingAgentWorkflowClie
     while (true) {
       if (signal?.aborted) throw cancelledError();
       const token = await options.tokenProvider();
+      if (signal?.aborted) throw cancelledError();
+      // Browser sign-in can outlast the HTTP request budget, so start it after token acquisition.
+      if (!signalResolved) {
+        signal = options.signalProvider?.() ?? options.signal;
+        signalResolved = true;
+      }
+      if (signal?.aborted) throw cancelledError();
       if (token === undefined || token.length === 0) throw new CodingAgentClientError({ code: "UNAUTHENTICATED", status: 401, message: "No Kintsugi credential is configured for this profile" });
       let response: Response;
       try {

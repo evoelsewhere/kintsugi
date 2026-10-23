@@ -35,11 +35,21 @@ function sameState(actual: string, expected: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+const OAUTH_LOGIN_TIMEOUT_MS = 120_000;
+
+function timeoutMessage(timeoutMs = OAUTH_LOGIN_TIMEOUT_MS): string {
+  const count = timeoutMs >= 60_000 ? Math.ceil(timeoutMs / 60_000) : Math.ceil(timeoutMs / 1000);
+  const unit = timeoutMs >= 60_000 ? (count === 1 ? "minute" : "minutes") : (count === 1 ? "second" : "seconds");
+  const duration = `${count} ${unit}`;
+  return `Browser sign-in timed out after ${duration}; return to your coding agent and retry the Kintsugi request, or run kintsugi auth login`;
+}
+
 function cancelled(signal?: AbortSignal): CliError {
   return signal?.reason instanceof Error && signal.reason.name === "TimeoutError"
-    ? new CliError("OAUTH_TIMEOUT", "Browser sign-in timed out; run auth login again")
+    ? new CliError("OAUTH_TIMEOUT", timeoutMessage())
     : new CliError("CANCELLED", "Browser sign-in cancelled");
 }
+
 function reauthenticate(): CliError { return new CliError("REAUTHENTICATION_REQUIRED", "Sign in again with auth login; the connection expired, was revoked, or could not be saved securely", 401); }
 
 export function parseOAuthCredential(value: string): OAuthCredential | undefined {
@@ -62,34 +72,108 @@ export async function openSystemBrowser(url: string): Promise<void> {
   });
 }
 
+function oauthCallbackPage(nonce: string): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Kintsugi sign-in</title>
+<style nonce="${nonce}">
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light dark;background:#f7f7f7;color:#171717;font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}body{min-height:100vh;margin:0;display:grid;place-items:center;padding:24px;background:#f7f7f7;color:#171717}
+main{width:min(100%,460px);padding:24px;border:1px solid #e5e5e5;border-radius:12px;background:#fff;box-shadow:0 8px 28px #0000000a}
+.mark{width:40px;height:40px;display:grid;place-items:center;border-radius:9px;background:#f3f4f6;color:#0072f5}.mark svg{width:21px;height:21px}
+.eyebrow{margin:20px 0 6px;color:#606060;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+h1{margin:0;font-size:22px;line-height:1.25;letter-spacing:-.02em}p{margin:10px 0 0;color:#555;font-size:14px;line-height:1.55}
+.progress{display:flex;align-items:center;gap:9px;margin-top:20px;padding-top:14px;border-top:1px solid #ededed;color:#555;font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:#0072f5;animation:pulse 1.2s ease-in-out infinite}.done .dot{background:#16803c;animation:none}.failed .dot{background:#c2362b;animation:none}
+.hint{margin-top:16px;color:#777;font-size:12px}
+@keyframes pulse{50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.dot{animation:none}}
+@media(prefers-color-scheme:dark){:root,body{background:#101010;color:#f5f5f5}main{border-color:#2a2a2a;background:#171717;box-shadow:none}.mark{background:#222;color:#70aaff}p,.progress{color:#bbb}.eyebrow,.hint{color:#999}.progress{border-color:#2a2a2a}}
+</style>
+</head>
+<body>
+<main id="panel" aria-labelledby="title">
+  <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19 6v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+  <p class="eyebrow" id="phase">Project access approved</p>
+  <h1 id="title">Completing your Kintsugi sign-in</h1>
+  <p id="message">Kintsugi is securely saving your connection. Keep this page open for a moment.</p>
+  <div class="progress" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="detail">Waiting for Kintsugi to finish saving the connection…</span></div>
+  <p class="hint" id="hint">Keep this page open while Kintsugi finishes sign-in.</p>
+</main>
+<script nonce="${nonce}">
+history.replaceState(null,"","/oauth/complete");
+const panel=document.getElementById("panel"),phase=document.getElementById("phase"),title=document.getElementById("title"),message=document.getElementById("message"),detail=document.getElementById("detail"),hint=document.getElementById("hint");
+const started=Date.now();
+function show(status){
+  if(status==="success"){panel.classList.add("done");phase.textContent="Sign-in complete";title.textContent="Kintsugi connection ready";message.textContent="Your connection has been saved securely. Return to your coding agent and retry your request.";detail.textContent="Your connection is ready.";hint.textContent="You can close this page.";document.title="Kintsugi connection ready";return true}
+  if(status==="error"){panel.classList.add("failed");phase.textContent="Sign-in not completed";title.textContent="Kintsugi could not finish sign-in";message.textContent="Check the terminal for details, then ask your coding agent to retry the request.";detail.textContent="Check the terminal for next steps.";hint.textContent="You can close this page and retry from your coding agent.";document.title="Kintsugi sign-in not completed";return true}
+  return false
+}
+async function poll(){
+  try{const response=await fetch("/oauth/status",{cache:"no-store"});if(response.ok){const value=await response.json();if(show(value.status))return}}catch{}
+  if(Date.now()-started>90000){show("error");return}
+  window.setTimeout(poll,500)
+}
+poll();
+</script>
+</body>
+</html>`;
+}
+
 export async function createOAuthCallback(options: { state: string; signal?: AbortSignal; timeoutMs?: number }): Promise<OAuthLoopbackCallback> {
   if (options.signal?.aborted) throw cancelled(options.signal);
   let resolveCode!: (result: { code: string; state: string }) => void;
   let rejectCode!: (error: Error) => void;
   let settled = false;
+  let callbackAccepted = false;
+  let closed = false;
+  let completion: "pending" | "success" | "error" = "pending";
+  let acknowledgeFinalStatus!: () => void;
+  const finalStatusAcknowledged = new Promise<void>((resolve) => { acknowledgeFinalStatus = resolve; });
   const code = new Promise<{ code: string; state: string }>((resolve, reject) => { resolveCode = resolve; rejectCode = reject; });
-  // The callback can receive a request before the browser launcher returns.
   void code.catch(() => undefined);
+  const nonce = randomBytes(18).toString("base64url");
+  const page = oauthCallbackPage(nonce);
   const server = createServer((request, response) => {
     response.setHeader("cache-control", "no-store");
-    response.setHeader("content-type", "text/plain; charset=utf-8");
-    if (settled) { response.writeHead(410).end("Sign-in callback already consumed"); return; }
+    response.setHeader("x-content-type-options", "nosniff");
+    response.setHeader("referrer-policy", "no-referrer");
     const address = server.address();
-    if (address === null || typeof address === "string" || request.headers.host !== `127.0.0.1:${address.port}` || !request.url?.startsWith("/") || request.url.startsWith("//")) { response.writeHead(400).end("Invalid callback origin"); return; }
+    if (address === null || typeof address === "string" || request.headers.host !== `127.0.0.1:${address.port}` || !request.url?.startsWith("/") || request.url.startsWith("//")) { response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("Invalid callback origin"); return; }
     let url: URL;
     try { url = new URL(request.url, "http://127.0.0.1"); }
-    catch { response.writeHead(400).end("Invalid callback URL"); return; }
-    if (request.method !== "GET" || url.pathname !== "/oauth/callback") { response.writeHead(404).end("Unknown callback"); return; }
+    catch { response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("Invalid callback URL"); return; }
+    if (request.method !== "GET") { response.writeHead(405, { "content-type": "text/plain; charset=utf-8", allow: "GET" }).end("Method not allowed"); return; }
+    if (url.pathname === "/oauth/status" && url.search === "") {
+      response.setHeader("content-type", "application/json; charset=utf-8");
+      if (completion !== "pending") response.once("finish", acknowledgeFinalStatus);
+      response.writeHead(200).end(JSON.stringify({ status: completion }));
+      return;
+    }
+    if (url.pathname === "/oauth/complete" && url.search === "") {
+      if (!callbackAccepted) { response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("Unknown callback"); return; }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "content-security-policy": `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      }).end(page);
+      return;
+    }    if (url.pathname !== "/oauth/callback") { response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("Unknown callback"); return; }
+    if (settled) { response.writeHead(410, { "content-type": "text/plain; charset=utf-8" }).end("Sign-in callback already consumed"); return; }
     const authorizationCode = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     if (!authorizationCode || authorizationCode.length > 200 || !/^[A-Za-z0-9_-]+$/.test(authorizationCode) || url.searchParams.getAll("code").length !== 1 || url.searchParams.getAll("state").length !== 1 || state === null || !sameState(state, options.state)) {
       settled = true;
-      response.writeHead(400).end("Invalid sign-in callback");
+      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("Invalid sign-in callback");
       rejectCode(new CliError("OAUTH_CALLBACK_INVALID", "The sign-in callback was invalid; start sign-in again"));
       return;
     }
     settled = true;
-    response.writeHead(200).end("Kintsugi sign-in complete. You can close this page.");
+    callbackAccepted = true;
+    response.writeHead(303, { location: "/oauth/complete", "content-type": "text/plain; charset=utf-8" }).end();
     resolveCode({ code: authorizationCode, state });
   });
   await new Promise<void>((resolve, reject) => {
@@ -99,19 +183,34 @@ export async function createOAuthCallback(options: { state: string; signal?: Abo
   const address = server.address();
   if (address === null || typeof address === "string") throw new CliError("OAUTH_CALLBACK_UNAVAILABLE", "No local callback address");
   const close = async () => {
+    if (closed) return;
+    closed = true;
     clearTimeout(timer);
     options.signal?.removeEventListener("abort", onAbort);
     if (!settled) { settled = true; rejectCode(cancelled()); }
-    await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+    await new Promise<void>((resolve) => {
+      if (!server.listening) { resolve(); return; }
+      server.close(() => resolve());
+      server.closeAllConnections();
+    });
+  };
+  const complete = async (outcome: "success" | "error") => {
+    if (closed || !settled) return;
+    completion = outcome;
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 3000);
+      void finalStatusAcknowledged.then(() => { clearTimeout(timer); resolve(); });
+    });
   };
   const onAbort = () => { if (!settled) { settled = true; rejectCode(cancelled(options.signal)); } void close(); };
+  const timeoutMs = options.timeoutMs ?? OAUTH_LOGIN_TIMEOUT_MS;
   const timer = setTimeout(() => {
-    if (!settled) { settled = true; rejectCode(new CliError("OAUTH_TIMEOUT", "Browser sign-in timed out; run auth login again")); }
+    if (!settled) { settled = true; rejectCode(new CliError("OAUTH_TIMEOUT", timeoutMessage(timeoutMs))); }
     void close();
-  }, options.timeoutMs ?? 120_000);
+  }, timeoutMs);
   options.signal?.addEventListener("abort", onAbort, { once: true });
   if (options.signal?.aborted) onAbort();
-  return { redirectUri: `http://127.0.0.1:${address.port}/oauth/callback`, waitForCode: () => code, close };
+  return { redirectUri: `http://127.0.0.1:${address.port}/oauth/callback`, waitForCode: () => code, complete, close };
 }
 
 async function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -184,21 +283,28 @@ export class OAuthSession {
 
   private async browserLoginUnlocked(profile: Profile, projectId: string): Promise<OAuthCredential> {
     const pkce = createPkce();
-    const signal = AbortSignal.any([AbortSignal.timeout(120_000), ...(this.deps.signal === undefined ? [] : [this.deps.signal])]);
+    const expiresAt = Date.now() + OAUTH_LOGIN_TIMEOUT_MS;
+    const signal = AbortSignal.any([AbortSignal.timeout(OAUTH_LOGIN_TIMEOUT_MS), ...(this.deps.signal === undefined ? [] : [this.deps.signal])]);
     const callback = await (this.deps.createOAuthCallback ?? createOAuthCallback)({ state: pkce.state, signal });
+    let outcome: "success" | "error" = "error";
     try {
       const redirect = new URL(callback.redirectUri);
       if (redirect.protocol !== "http:" || redirect.hostname !== "127.0.0.1" || !redirect.port || redirect.pathname !== "/oauth/callback" || redirect.search || redirect.hash || redirect.username || redirect.password) throw new CliError("OAUTH_CALLBACK_INVALID", "Sign-in requires a local loopback callback");
       const url = new URL(`${profile.baseUrl}/coding-agent/authorize`);
-      for (const [key, value] of Object.entries({ projectId, clientName: "Kintsugi CLI", redirectUri: callback.redirectUri, state: pkce.state, codeChallenge: pkce.codeChallenge, codeChallengeMethod: "S256" })) url.searchParams.set(key, value);
+      for (const [key, value] of Object.entries({ projectId, clientName: "Kintsugi CLI", redirectUri: callback.redirectUri, state: pkce.state, codeChallenge: pkce.codeChallenge, codeChallengeMethod: "S256", expiresAt: String(expiresAt) })) url.searchParams.set(key, value);
       this.deps.stderr.write(`Sign in to Kintsugi in your browser:\n${url.href}\n`);
       try { await awaitWithSignal((this.deps.openBrowser ?? openSystemBrowser)(url.href), signal); }
       catch (error) { if (signal.aborted) throw error; this.deps.stderr.write("Browser could not open automatically. Open the URL above on this machine.\n"); }
       const result = await awaitWithSignal(callback.waitForCode(), signal);
       if (!result.code || !sameState(result.state, pkce.state)) throw new CliError("OAUTH_CALLBACK_INVALID", "The sign-in callback was invalid; start sign-in again");
       const response = await this.request(profile, "token", { grantType: "authorization_code", code: result.code, codeVerifier: pkce.codeVerifier, redirectUri: callback.redirectUri }, signal);
-      return await this.accept(profile, response);
-    } finally { await callback.close(); }
+      const credential = await this.accept(profile, response);
+      outcome = "success";
+      return credential;
+    } finally {
+      try { await callback.complete?.(outcome); } catch { /* Browser feedback must not change CLI authentication. */ }
+      await callback.close();
+    }
   }
 
   accessTokenFor(profile: Profile): Promise<string> {
