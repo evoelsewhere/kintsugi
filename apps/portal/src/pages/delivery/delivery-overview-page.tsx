@@ -63,10 +63,10 @@ function ProjectOverview({ projectId }: { projectId: string }): React.JSX.Elemen
   const [params] = useSearchParams();
   const stages = useLoader("stages", jobRunsApi.stages);
   const runs = useLoader(`project-runs/${projectId}`, async () => (await jobRunsApi.listAll({ projectId, limit: 200 })).items, {
-    refresh: (list) => (list.some((run) => isActiveStatus(run.status) || run.documentWrite?.status === "queued") ? 3000 : 30000),
+    live: [`job-runs:${projectId}`, `document-writes:${projectId}`],
   });
   const writes = useLoader(`writes/${projectId}`, async () => (await projectsApi.documentWrites(projectId, 15)).items, {
-    refresh: (list) => (list.some((write) => write.status === "queued") ? 3000 : 30000),
+    live: [`document-writes:${projectId}`],
   });
   const section = params.get("section");
 

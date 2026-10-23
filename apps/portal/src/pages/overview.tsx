@@ -20,13 +20,14 @@ import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { deliveryLink, governanceLink, monitoringLink } from "@/lib/links";
 import { useHealth } from "@/lib/use-health";
+import { OVERVIEW_TOPICS, WORKER_AGES } from "@/lib/live";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
 import { Portfolio } from "./overview-portfolio";
 
 
 export function OverviewPage(): React.JSX.Element {
-  const overview = useLoader("overview", monitoringApi.overview, { refresh: (data) => (data.counts.activeRuns > 0 ? 5000 : 20000) });
+  const overview = useLoader("overview", monitoringApi.overview, { live: OVERVIEW_TOPICS, refresh: WORKER_AGES });
   const counts = overview.data?.counts;
   const { can } = useAuth();
 

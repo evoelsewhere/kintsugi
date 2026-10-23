@@ -27,7 +27,7 @@ const repositoriesOf = (project: ProjectDetail): Array<{ repositoryId: string; s
 export function ProjectsInsights({ projects }: { projects: ProjectView[] }): React.JSX.Element | null {
   const key = projects.map((project) => project.id).join(",");
   const details = useLoader(`projects-insight-details/${key}`, () => Promise.all(projects.map((project) => projectsApi.get(project.id))));
-  const runs = useLoader("projects-insight-runs", async () => (await jobRunsApi.listAll({ limit: 200 })).items, { refresh: () => 30000 });
+  const runs = useLoader("projects-insight-runs", async () => (await jobRunsApi.listAll({ limit: 200 })).items, { live: ["job-runs"] });
   if (projects.length === 0 || details.data === undefined) return null;
   const list = details.data;
   const applications = list.flatMap((project) => project.applications);
@@ -64,7 +64,7 @@ export function ProjectsInsights({ projects }: { projects: ProjectView[] }): Rea
 export function ProjectInsights({ project }: { project: ProjectDetail }): React.JSX.Element | null {
   const stages = useLoader("stages", jobRunsApi.stages);
   const runs = useLoader(`project-insight-runs/${project.id}`, async () => (await jobRunsApi.listAll({ projectId: project.id, limit: 200 })).items, {
-    refresh: (list) => (list.some((run) => isActiveStatus(run.status)) ? 5000 : 30000),
+    live: [`job-runs:${project.id}`],
   });
   if (runs.data === undefined || stages.data === undefined) return null;
   const top = runs.data.filter((run) => run.kind === "stage");

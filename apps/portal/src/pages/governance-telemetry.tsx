@@ -83,9 +83,9 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
 
   const range = () => ({ ...windowRange(windowId), ...(projectId === "" ? {} : { projectId }) });
   const summary = useLoader<TelemetrySummary>(`telemetry/summary/${windowId}/${projectId}/${agent}`, () => telemetryApi.summary({ ...range(), ...(agent === "" ? {} : { agent }) }), {
-    refresh: () => 30_000,
+    live: ["telemetry"],
   });
-  const runs = useLoader(`telemetry/runs/${windowId}/${projectId}`, async () => (await telemetryApi.runs({ ...range(), limit: RUN_SAMPLE })).items, { refresh: () => 30_000 });
+  const runs = useLoader(`telemetry/runs/${windowId}/${projectId}`, async () => (await telemetryApi.runs({ ...range(), limit: RUN_SAMPLE })).items, { live: ["telemetry"] });
 
   const agentOptions = useMemo(() => {
     const names = [...new Set([...(runs.data ?? []).map((run) => run.agent), ...(agent === "" ? [] : [agent])])].sort();

@@ -60,7 +60,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const runs = useLoader(`runs/${project.id}/${application.id}/understand`, async () => (await jobRunsApi.list(project.id, application.id, RUN_LIMIT)).items, {
-    refresh: (list) => (list.some((run) => isActiveStatus(run.status) || run.documentWrite?.status === "queued") ? 3000 : 30000),
+    live: [`job-runs:${project.id}`, `document-writes:${project.id}`],
   });
   const understandRuns = runs.data === undefined ? undefined : runsOfStage(runs.data, "understand");
   const rebuilds = runs.data === undefined ? [] : runsOfStage(runs.data, "rebuild");
