@@ -38,7 +38,6 @@
 
 - **Built-in plugin hooks** refuse writes to legacy repos and report activity. They are assistive: members can disable them and support varies by harness, so the authoritative controls stay server-side (gates, trailers, gate review).
 - **Project plugins** can run hooks and scripts on members' machines. They change only through reviewed PRs to the document repo's `plugins/` and are validated on every change.
-- **The PAT** for the Kintsugi MCP server is a sensitive `userConfig` value, kept in the harness's secure storage, not in files.
 - `HarnessPolicy` distribution covers allowed models, allowed MCP servers, content exclusions for sensitive files, required commit trailers and required plugins.
 - Gates check trailers and AI-usage declarations on PRs.
 - The MCP server authenticates every call with the member's PAT and checks project scope plus the member's effective installation access-role permissions.

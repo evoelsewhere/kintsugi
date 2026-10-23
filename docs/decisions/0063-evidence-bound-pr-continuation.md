@@ -1,6 +1,6 @@
 # ADR-0063: Continue workflows from evidence-bound pull requests and gates
 
-- Status: Accepted
+- Status: Superseded by [ADR-0067](0067-remove-access-and-review-plugins.md)
 - Date: 2026-10-20
 - Decision register: D77
 - Amends: [ADR-0007](0007-git-as-source-of-truth.md), [ADR-0028](0028-remove-rulebook-single-document-repo.md), [ADR-0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md), [ADR-0051](0051-document-repo-layout-legacy-and-modern.md)
@@ -21,7 +21,7 @@ Members implement work in their chosen harness and open ordinary Git pull reques
 8. The portal and CLI can stream durable workflow events over authorized SSE and resume from event IDs. Provider discovery and review continue while clients are disconnected; an SSE connection is a view of workflow progress, not its trigger.
 9. The pilot ordering is automated review, required provider checks and human approvals, merge of every required deliverable, evidence-bound G4 decision and merged gate record, then exactly-once next-step continuation.
 
-The implemented version 1 [gate-record schema](../reference/gate-records.md) binds artifact paths as well as provider PR and revision identities. Source approvals use this immutable path binding after a task changes its required output list. Publication effectiveness is projected atomically with a durable `gate.effective` event; the next-step planner consumes that handoff.
+The implemented version 1 gate-record schema binds artifact paths as well as provider PR and revision identities. Source approvals use this immutable path binding after a task changes its required output list. Publication effectiveness is projected atomically with a durable `gate.effective` event; the next-step planner consumes that handoff.
 
 ## Consequences
 

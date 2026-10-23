@@ -50,10 +50,6 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Runtime agents](reference/runtime-agents.md): job contract, agent definition, kernel tools, events
 - [Debug MCP server](reference/debug-mcp.md): the read-only tools of a development installation over runs, sandboxes, logs, queues and the database (ADR-0056)
 - [Job workspace](reference/job-workspace.md): the layout of a job's workspace, the guide, attempts, the ledger and the lifecycle (ADR-0055)
-- [Harness integration](reference/harness-integration.md): MCP tools, CLI, task packs, asset rendering, telemetry
-- [Coding Agent Workflow CLI](reference/coding-agent-cli.md): install, authenticate, fetch task context and inspect current limits
-- [Coding Agent Workflow compatibility](reference/coding-agent-workflow-compatibility.md): tested client versions and setup probes
-- [Evidence-bound gate records](reference/gate-records.md): reviewed publication and effective approval
 - [Data model](reference/data-model.md)
 - [Document repository layout](reference/document-repo.md): the numbered layout, each application split into legacy and modern (ADR-0051), who writes what and auto-commit
 - [Document formats](reference/document-formats.md): the Markdown shapes of every committed document (front matter, tables, cards)
@@ -73,14 +69,9 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Build a project (register repos, write standards)](guides/build-project.md)
 - [Define a project's design templates](guides/define-design-templates.md)
 - [Configure LLM providers for the runtime](guides/configure-llm-providers.md)
-- [Work on a migration task as a member](guides/member-workflow.md)
-- [Test the Coding Agent Workflow locally](guides/coding-agent-workflow-pilot.md): automated smoke, plugin sign-in, synthetic context, and GitHub PR pilot
-- **Interactive Coding Agent Workflow guide**: in the portal, open Workspace → AI workflow (`/coding-agent-workflow`)
-- [Coding Agent Workflow architecture and current limits](guides/coding-agent-workflow.md)
-- [Extend the Coding Agent Workflow CLI and harness plugins](guides/coding-agent-workflow-contributing.md)
 
 **Delivery record**
-- [Implementation and verification record](development/implementation-delivery-record.md): consolidated design, progress, test plan, evidence, and remaining release work
+- [Implementation and verification record](development/implementation-delivery-record.md): the deployment work, its status and evidence; remaining release work
 
 ## Conventions
 

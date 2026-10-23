@@ -1,6 +1,6 @@
 # ADR-0066: Install the Coding Agent Workflow plugin from Codex Desktop
 
-- Status: Accepted
+- Status: Superseded by [ADR-0067](0067-remove-access-and-review-plugins.md)
 - Date: 2026-10-22
 - Decision register: D80
 - Amends: ADR-0061 decisions 1 and 6

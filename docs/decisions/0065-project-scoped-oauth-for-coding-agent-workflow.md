@@ -1,6 +1,6 @@
 # ADR-0065: Use project-scoped browser authorization for the local Coding Agent Workflow
 
-- Status: Accepted
+- Status: Superseded by [ADR-0067](0067-remove-access-and-review-plugins.md)
 - Date: 2026-10-22
 - Decision register: D79
 - Supersedes: ADR-0061 decision 7 only (OAuth deferral for the local Coding Agent Workflow)

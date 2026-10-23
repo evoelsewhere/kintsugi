@@ -125,7 +125,7 @@ flowchart LR
   - base source / skeleton, landing zone and IaC, CI/CD;
   - deliverable creation guidelines;
   - **agent plugins (skills, agents, hooks), prompt libraries and task-pack templates** for members' harnesses, per type of work (reverse design, design generation, code generation, unit-test generation, test-case generation, data migration);
-  - configure the runtime agents (task-planner, gate-reviewer) and their eval sets;
+  - configure the runtime agents (task-planner) and their eval sets;
   - run pilot units, each through basic design, detail design and code, and fix the standards and the design templates where they were unclear or wrong.
 - **Outputs**: runnable base source, CI/CD pipeline, piloted agent plugins and task-pack templates, piloted design templates, configured runtime agents, complete TO-BE KB.
 - **Gate G3**: a pilot of 1–2 units per unit kind meets quality, and the architect confirms the target repos are scaffolded and the standards are written (a human decision; there is no automatic readiness check).
@@ -135,7 +135,6 @@ flowchart LR
 - **How the work is done**:
   1. Members work in their own AI harness, following the **task pack** produced by the runtime.
   2. Each unit runs the stages `detail-design` (the runtime `design` stage, run from the portal) → `design-review` → `implement` → `unit-test` → `code-review`; the review points between them are stage gates (`stage:<id>`), and a pipeline may name the design set a stage produces (`produces:`).
-  3. `gate-reviewer` (runtime) reviews each PR first.
   4. A human approves.
 - **Outputs**: new source code and unit tests, detail designs, migration scripts, PRs.
 - **Gate G4** (per unit): green build, static checks, AI code review, human PR approval.

@@ -195,4 +195,4 @@ The review is the description of the pull request: each unit is `ready` (the fin
 
 The scaffold's manifest (`--manifest`) names, per unit, the `profile` of its kind and, per document, the `templateFile` it follows, the `ref` its front matter names and the `example`; `check_design.py` reports `ref` per file.
 
-The two implementations are held to the shared fixtures in `packages/agents/builtin/plugins/design/scripts/tests/fixtures/design/` by both test suites.
+The two implementations are held to the shared fixtures in `packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/` by both test suites.

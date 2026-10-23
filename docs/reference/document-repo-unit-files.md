@@ -50,7 +50,7 @@ Gate results are not in the card: gate decisions are recorded in the portal (Gov
 **Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one card per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a card is left unchanged.
 
 **Rules**:
-- **Write path**: state changes go through authorized portal or administrative API actions. The API validates the actor's effective permissions and allowed transition, updates the index, and the worker commits as the Kintsugi bot with a Kintsugi actor trailer. The Coding Agent Workflow CLI and MCP are read-only. The card and task pack are auto-commit paths; other unit documents arrive through reviewed pull requests.
+- **Write path**: state changes go through authorized portal or administrative API actions. The API validates the actor's effective permissions and allowed transition, updates the index, and the worker commits as the Kintsugi bot with a Kintsugi actor trailer. The card and task pack are auto-commit paths; other unit documents arrive through reviewed pull requests.
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 

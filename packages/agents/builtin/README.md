@@ -38,11 +38,8 @@ The content is a set of **plugins** (ADR-0035), one folder each under `plugins/`
 
 | Plugin | Audience | What it carries |
 | --- | --- | --- |
-| `understand` | runtime | Commands `assess` and `understand`; the agents `legacy-analyst`, `business-rules-extractor` and `security-auditor`; the workflows `extract-rules`, `harden-scan` and `portfolio-assess`; the item-catalog, rules, findings and work-item scripts; the JobOutput hook and the artifact readers. |
-| `design` | runtime | The command `design` and the agent `designer`: one design set for a selection of units; the design-set scripts (`scaffold_design.py`, `check_design.py`, `validate_design_templates.py`) with their shared fixtures. Requires `reverse_engineering`. |
-| `modernize` | member | Commands `design-architecture`, `scaffold` and `implement`; the agents `test-engineer`, `scaffolder` and `architecture-critic`; the `scaffold` workflow. Requires `reverse_engineering` and `design` (`implement` runs `check_design.py`). |
-| `access` | member | The kintsugi-task skill: cited task context and workflow evidence through read-only local MCP tools. No hooks, scripts or dependency on method plugins. |
-| `review` | runtime | The constrained gate-reviewer agent and its canonical report schema for fixed-revision member PR review. |
+| `reverse_engineering` | runtime | Commands `assess` and `understand`; the agents `legacy-analyst`, `business-rules-extractor` and `security-auditor`; the workflows `extract-rules`, `harden-scan` and `portfolio-assess`; the item-catalog, rules, findings and work-item scripts; the JobOutput hook and the artifact readers. |
+| `modernize` | runtime | The command `design` and the agents `designer`, `design-reviewer` and `architecture-critic`: one design set for a selection of units, checked by the design-set scripts (`scaffold_design.py`, `check_design.py`, `check_review.py`, `validate_design_templates.py`) with their shared fixtures and the skills `design-template-contract` and `design-writing`. The later stages (implement, test, ...) are added here ([ADR-0068](../../docs/decisions/0068-design-generation-in-the-modernize-plugin.md)). Requires `reverse_engineering`. |
 
 Inside a plugin folder:
 
