@@ -43,6 +43,9 @@ DISCOURAGED = {
     "gantt": "draw phases as a `flowchart LR` of sequence and dependencies; a gantt encodes durations",
 }
 DIRECTIONS = {"TB", "TD", "BT", "RL", "LR"}
+# A colour written as a function (rgba(37,99,235,0.12)) has commas, which split the style list of classDef, style and linkStyle.
+COLOR_FUNCTION = re.compile(r"\b(?:rgba?|hsla?)\s*\(", re.IGNORECASE)
+COLOR_FUNCTION_HINT = "write colours as #rrggbb and transparency as fill-opacity / stroke-opacity: the commas of rgba() or hsla() split the style list and the diagram fails to parse"
 RESERVED = {
     "end", "default", "style", "class", "classdef", "linkstyle", "click", "call", "href", "subgraph",
     "graph", "flowchart", "interpolate",
@@ -275,6 +278,8 @@ def _lint_flowchart(lines: list[tuple[int, str]], header_line: int, problems: li
                 problems.append(Problem(number, "unparsed-line", "classDef needs a name and styles"))
             else:
                 defined.update(name for name in parts[1].split(",") if name)
+            if COLOR_FUNCTION.search(statement):
+                problems.append(Problem(number, "color-function", COLOR_FUNCTION_HINT))
             continue
         if keyword == "class":
             parts = statement.split()
@@ -284,6 +289,8 @@ def _lint_flowchart(lines: list[tuple[int, str]], header_line: int, problems: li
                 used.append((number, parts[2]))
             continue
         if keyword in ("style", "linkStyle"):
+            if COLOR_FUNCTION.search(statement):
+                problems.append(Problem(number, "color-function", COLOR_FUNCTION_HINT))
             continue
         tokens = _FlowLine(statement, number, problems)
         tokens.parse()

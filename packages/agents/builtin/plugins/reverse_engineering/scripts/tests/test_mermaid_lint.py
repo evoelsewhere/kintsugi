@@ -127,6 +127,11 @@ class Structure(unittest.TestCase):
         self.assertEqual(rules('flowchart TD\n% one percent\n'), ['bad-comment'])
         self.assertEqual(rules('flowchart TD\n    svc_a["100%% sure"]\n'), [])
 
+    def test_colour_functions_in_style_lines_are_refused(self):
+        for line in ('classDef ui fill:rgba(37,99,235,0.12),stroke:#2563eb', 'classDef ui fill:hsl(10,50%,50%)', 'style A fill:rgb(1,2,3)', 'linkStyle 0 stroke:rgba(0,0,0,.5)'):
+            self.assertIn('color-function', rules('flowchart LR\n    A --> B\n    ' + line + '\n'), line)
+        self.assertNotIn('color-function', rules('flowchart LR\n    A:::ui --> B\n    classDef ui fill:#2563eb,fill-opacity:0.12,stroke:#2563eb\n'))
+
     def test_unbalanced_subgraphs(self):
         self.assertEqual(lines_of('flowchart TD\n    subgraph dom_a["A"]\n    svc_a["A"]\n', 'unbalanced-block'), [2])
         self.assertEqual(lines_of('flowchart TD\n    svc_a["A"]\n    end\n', 'unbalanced-block'), [3])
