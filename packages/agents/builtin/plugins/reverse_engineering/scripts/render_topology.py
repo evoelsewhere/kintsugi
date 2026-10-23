@@ -33,6 +33,37 @@ def is_string_list(value):
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
+OBSERVATION_TEXT_KEYS = ('observation', 'text', 'description', 'summary', 'finding', 'note', 'title', 'message')
+
+
+def observation_text(item):
+    """An observation as a string: the model-written script often emits objects ({"text": ...}) or numbers instead of plain strings."""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        for key in OBSERVATION_TEXT_KEYS:
+            if isinstance(item.get(key), str) and item[key].strip():
+                return item[key]
+        parts = [value for value in item.values() if isinstance(value, str) and value.strip()]
+        return ': '.join(parts) if parts else None
+    if isinstance(item, (int, float)) and not isinstance(item, bool):
+        return str(item)
+    return None
+
+
+def normalize(topology):
+    """Coerce "observations" to a list of strings when each item carries a text (a lone string becomes a one-item list)."""
+    if not isinstance(topology, dict):
+        return
+    observations = topology.get('observations')
+    if isinstance(observations, str):
+        observations = [observations]
+    if isinstance(observations, list):
+        texts = [observation_text(item) for item in observations]
+        if all(text is not None for text in texts):
+            topology['observations'] = texts
+
+
 def valid_node(node, depth=0):
     if depth > 100 or not isinstance(node, dict):
         return False
@@ -59,7 +90,7 @@ def check(topology):
         raise docmd.DataError('topology.json: every edge needs a string source, target and kind')
     for key in ('entryPoints', 'deadEnds', 'observations'):
         if not is_string_list(topology[key]):
-            raise docmd.DataError(f'topology.json: "{key}" must be a list of strings')
+            raise docmd.DataError(f'topology.json: "{key}" must be a list of strings (not objects or numbers), for example ["<one sentence>"]')
     if not isinstance(topology['flows'], list):
         raise docmd.DataError('topology.json: "flows" must be a list')
     for flow in topology['flows']:
@@ -163,6 +194,7 @@ def main(argv):
     args = ap.parse_args(argv[1:])
     try:
         topology = docmd.read_json(args.topology, 'topology.json')
+        normalize(topology)
         check(topology)
         text = render(topology, args.app)
         docmd.write_text(os.path.join(os.path.abspath(args.out), os.path.basename(paths.assessment_topology_path(args.app))), text)
