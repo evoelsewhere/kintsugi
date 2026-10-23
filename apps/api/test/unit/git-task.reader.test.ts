@@ -22,8 +22,9 @@ function unitMarkdown(id: string): string {
 
 describe("GitTaskReader", () => {
   it("indexes README cards and derives inputs from current unit design sets", async () => {
-    const detailSet = ["---", "id: detail", "title: Detailed design", "version: 1", "appliesTo: []", "needs: []", "---", "| Path | Template | Required | When |", "| --- | --- | --- | --- |", "| logic.md | logic.md | yes | |", "| data-access.md | data-access.md | yes | |"].join("\n");
-    const appSet = ["---", "id: architecture", "title: Application architecture", "version: 1", "scope: application", "needs: []", "---", "| Path | Template | Required | When |", "| --- | --- | --- | --- |", "| overview.md | overview.md | yes | |"].join("\n");
+    const detailSet = ["---", "id: detail", "title: Detailed design", "version: 1", "needs: []", "---", "| Path | Template | Required |", "| --- | --- | --- |", "| logic.md | logic.md | yes |"].join("\n");
+    const moduleProfile = ["---", "kind: module", "version: 1", "---", "| Path | Template | Required |", "| --- | --- | --- |", "| module-contract.md | module-contract.md | yes |", "| data-access.md | data-access.md | yes |"].join("\n");
+    const appSet = ["---", "id: architecture", "title: Application architecture", "version: 1", "scope: application", "needs: []", "---", "| Path | Template | Required |", "| --- | --- | --- |", "| overview.md | overview.md | yes |"].join("\n");
     const card = unitMarkdown("web/core/task").replace("assignee: alice", "links:\n  businessRules: [RULE-001]\n  mappings: [01-standards/mappings/example.md]\nwaived:\n  - \"detail/data-access.md: no data store\"\nassignee: alice");
     const extraTemplateFiles = Array.from({ length: 40 }, (_, index) => "unused-" + index + ".md");
     let activeTemplateReads = 0;
@@ -34,7 +35,9 @@ describe("GitTaskReader", () => {
       ["10-applications/web/02-modern/_design/architecture/overview.md", "# App design"],
       ["01-standards/templates/detail/set.md", detailSet],
       ["01-standards/templates/detail/logic.md", "# Unit logic"],
-      ["01-standards/templates/detail/data-access.md", "# Data access"],
+      ["01-standards/templates/detail/module/profile.md", moduleProfile],
+      ["01-standards/templates/detail/module/module-contract.md", "# Module contract"],
+      ["01-standards/templates/detail/module/data-access.md", "# Data access"],
       ["10-applications/web/02-modern/core/task/task.md", "# Task"],
       ["10-applications/web/01-legacy/core/task/spec.md", "# AS IS"],
       ["10-applications/web/01-legacy/core/task/rules/RULE-001.md", "# Rule"],
@@ -50,7 +53,8 @@ describe("GitTaskReader", () => {
         if (path === "10-applications/web/02-modern/core/task") return [{ kind: "file", name: "README.md" }];
         if (path === "01-standards/templates") return [{ kind: "dir", name: "architecture" }, { kind: "dir", name: "detail" }];
         if (path === "01-standards/templates/architecture") return ["set.md", "overview.md"].map((name) => ({ kind: "file", name }));
-        if (path === "01-standards/templates/detail") return ["set.md", "logic.md", "data-access.md", ...extraTemplateFiles].map((name) => ({ kind: "file", name }));
+        if (path === "01-standards/templates/detail") return ["set.md", "logic.md", ...extraTemplateFiles].map((name) => ({ kind: "file", name })).concat({ kind: "dir", name: "module" });
+        if (path === "01-standards/templates/detail/module") return ["profile.md", "module-contract.md", "data-access.md"].map((name) => ({ kind: "file", name }));
         return [];
       },
       readText: async (_context: unknown, _commit: string, path: string) => {
@@ -75,7 +79,10 @@ describe("GitTaskReader", () => {
     expect(sources.find((source) => source.role === "task-pack")?.path).toBe("10-applications/web/02-modern/core/task/task.md");
     expect(sources.find((source) => source.role === "as-is-specification")?.path).toBe("10-applications/web/01-legacy/core/task/spec.md");
     expect(sources.find((source) => source.role === "basic-design")?.path).toBe("10-applications/web/02-modern/_design/architecture/overview.md");
-    expect(sources.filter((source) => source.role === "detailed-design").map((source) => source.path)).toEqual(["10-applications/web/02-modern/core/task/detail/logic.md"]);
+    expect(sources.filter((source) => source.role === "detailed-design").map((source) => source.path)).toEqual([
+      "10-applications/web/02-modern/core/task/detail/logic.md",
+      "10-applications/web/02-modern/core/task/detail/module-contract.md",
+    ]);
     expect(sources.find((source) => source.role === "business-rule")?.path).toBe("10-applications/web/01-legacy/core/task/rules/RULE-001.md");
     expect(sources.find((source) => source.role === "mapping")?.path).toBe("01-standards/mappings/example.md");
     expect(maximumTemplateReads).toBeLessThanOrEqual(20);

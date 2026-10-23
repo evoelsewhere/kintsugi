@@ -3,11 +3,16 @@
 import { createHash } from "node:crypto";
 import { ConflictException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import { assertSafeRepoPath } from "@kintsugi/git";
-import { designFilesFor, loadDesignSets, type DesignSetSource, type LoadedDesignSet } from "@kintsugi/agents/reader";
+import { designFilesFor, loadDesignSets, type DesignProfileSource, type DesignSetSource, type LoadedDesignSet } from "@kintsugi/agents/reader";
 import {
+  DESIGN_PROFILE_FILE,
   applicationDesignFilePath,
+  designProfileDir,
+  designProfilePath,
   designSetDir,
+  designSetPath,
   designSetsDir,
+  designTemplatePath,
   isFullUnitId,
   isUnitSegment,
   parseDesignWaiver,
@@ -219,12 +224,12 @@ export class GitTaskReader extends TaskSourceReader {
     for (const loaded of designCatalog.sets) {
       const { set } = loaded;
       if (set.scope === "application") {
-        for (const file of designFilesFor(set, null)) {
+        for (const file of designFilesFor(loaded, null)) {
           if (file.required) await add("basic-design", applicationDesignFilePath(application, set.id, file.path), IMPLEMENTATION_ACTIVITIES, "unknown");
         }
         continue;
       }
-      for (const file of designFilesFor(set, workItem.kind)) {
+      for (const file of designFilesFor(loaded, workItem.kind)) {
         if (file.required && !waived.has(set.id + "/" + file.path)) {
           await add("detailed-design", unitDesignFilePath(application, module, unit, set.id, file.path), IMPLEMENTATION_ACTIVITIES, "unknown", "design");
         }
@@ -272,25 +277,41 @@ export class GitTaskReader extends TaskSourceReader {
       .filter((entry) => entry.kind === "dir" && isUnitSegment(entry.name))
       .map((entry) => entry.name);
     const sources: DesignSetSource[] = [];
-    for (const folder of folders) {
-      const directory = designSetDir(folder);
-      const files = (await this.listNamesBounded(context, commit, directory))
-        .filter((entry) => entry.kind === "file" && entry.name.endsWith(".md"));
-      const entries: (readonly [string, string | undefined])[] = [];
+    const readMarkdown = async (files: readonly (readonly [string, string])[]): Promise<Map<string, string | undefined>> => {
+      const contents: Array<readonly [string, string | undefined]> = [];
       for (const group of chunk(files, 20)) {
-        entries.push(...await Promise.all(group.map(async ({ name }) => {
-          const path = directory + "/" + name;
+        contents.push(...await Promise.all(group.map(async ([name, path]) => {
           const content = await this.documents.readText(context, commit, path, MAX_SOURCE_BYTES);
           if (content !== undefined) this.accountSourceBudget(sourceBudget, content);
           return [name, content] as const;
         })));
       }
-      const content = new Map(entries);
-      sources.push({
-        folder,
-        setText: content.get("set.md"),
-        templates: Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[0] !== "set.md" && entry[1] !== undefined)),
-      });
+      return new Map(contents);
+    };
+
+    for (const folder of folders) {
+      const directory = designSetDir(folder);
+      const entries = await this.listNamesBounded(context, commit, directory);
+      const files = entries.filter((entry) => entry.kind === "file" && entry.name.endsWith(".md")).map((entry) => entry.name);
+      const content = await readMarkdown(files.map((name) => [name, name === "set.md" ? designSetPath(folder) : designTemplatePath(folder, name)] as const));
+      const templates: Record<string, string> = {};
+      for (const [name, text] of content) if (name !== "set.md" && text !== undefined) templates[name] = text;
+
+      const profiles: Record<string, DesignProfileSource> = {};
+      for (const kind of entries.filter((entry) => entry.kind === "dir" && !entry.name.startsWith("_")).map((entry) => entry.name)) {
+        const profileDirectory = designProfileDir(folder, kind);
+        const profileEntries = await this.listNamesBounded(context, commit, profileDirectory);
+        const profileFiles = profileEntries.filter((entry) => entry.kind === "file" && entry.name.endsWith(".md")).map((entry) => entry.name);
+        const profileContent = await readMarkdown(profileFiles.map((name) => [
+          name,
+          name === DESIGN_PROFILE_FILE ? designProfilePath(folder, kind) : designTemplatePath(folder, `${kind}/${name}`),
+        ] as const));
+        const profileTemplates: Record<string, string> = {};
+        for (const [name, text] of profileContent) if (name !== DESIGN_PROFILE_FILE && text !== undefined) profileTemplates[name] = text;
+        profiles[kind] = { profileText: profileContent.get(DESIGN_PROFILE_FILE), templates: profileTemplates };
+      }
+
+      sources.push({ folder, setText: content.get("set.md"), templates, profiles });
     }
     const manifestText = await this.documents.readText(context, commit, "kintsugi.yaml", MAX_SOURCE_BYTES);
     if (manifestText !== undefined) this.accountSourceBudget(sourceBudget, manifestText);
