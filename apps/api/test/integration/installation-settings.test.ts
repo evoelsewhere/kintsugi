@@ -109,5 +109,4 @@ describe.skipIf(!hasDatabase)("installation settings: commit identity (integrati
         expect((await admin.get<SandboxView>("/admin/settings/sandbox")).body.data?.checkoutHours).toBe(48);
       });
     });
-  });
 });

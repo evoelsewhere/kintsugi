@@ -28,6 +28,7 @@ import {
   designSetDir,
   designSetPath,
   designSetsDir,
+  designProfileDir,
   designProfilePath,
   designTemplatePath,
   generatedDir,
@@ -162,6 +163,7 @@ describe("ADR-0051 document-repo layout", () => {
     expect(designSetPath("detail")).toBe("01-standards/templates/detail/set.md");
     expect(designTemplatePath("detail", "logic.md")).toBe("01-standards/templates/detail/logic.md");
     expect(designTemplatePath("detail", "screen/logic.md")).toBe("01-standards/templates/detail/screen/logic.md");
+    expect(designProfileDir("detail", "screen")).toBe("01-standards/templates/detail/screen");
     expect(designProfilePath("detail", "screen")).toBe("01-standards/templates/detail/screen/profile.md");
   });
 

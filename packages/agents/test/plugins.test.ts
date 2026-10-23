@@ -32,7 +32,7 @@ describe("built-in plugins", () => {
 
   it("covers every agent, command and workflow exactly once", async () => {
     const plugins = await loadBuiltinPlugins();
-    for (const [kind, count] of [["agent", 9], ["command", 7], ["workflow", 4]] as const) {
+    for (const [kind, count] of [["agent", 10], ["command", 7], ["workflow", 4]] as const) {
       const all = plugins.flatMap((plugin) => plugin.components.filter((component) => component.kind === kind).map((component) => component.path));
       expect(all.length, kind).toBe(count);
       expect(new Set(all).size, kind).toBe(count);

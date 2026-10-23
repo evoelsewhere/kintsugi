@@ -164,7 +164,7 @@ async function executeGate(
   const executor = new StagePlanExecutor({
     plan: { id: "assess", message: () => "Assessment", steps: [step] },
     run: { id: "run-resume", projectId: "project-1" },
-    values: { app: "app", repo: "repo", commit: "a".repeat(40) },
+    values: { app: "app", sources: `legacy@${"a".repeat(40)}` },
     dirs: { root: "unused", in: "unused", work: "unused", out: "unused" },
     limits: { maxAgents: 10, concurrency: 1 },
     gates: { decide: async (request) => { requests.push(request); return decide(request); } },
