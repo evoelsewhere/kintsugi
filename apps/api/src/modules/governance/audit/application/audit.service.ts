@@ -4,6 +4,7 @@
 // changes that already happened and never throws. Holders of audit.read list it.
 
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import type { PoolClient } from "pg";
 import { type AuditRecord, AuditTrail } from "#common/audit/audit-trail.js";
 import { type Page, toPage } from "#common/application/pagination.js";
 import { AUDIT_ACTION_LIST, type AuditEntry, type AuditQuery } from "../domain/audit-entry.js";
@@ -20,6 +21,10 @@ export class AuditService extends AuditTrail {
   /** Appends the entries (all or none); throws when they cannot be stored. */
   async record(entries: readonly AuditRecord[]): Promise<void> {
     await this.log.append(entries);
+  }
+
+  async recordWithIds(entries: readonly AuditRecord[], client?: PoolClient): Promise<string[]> {
+    return this.log.appendWithIds(entries, client);
   }
 
   async recordChange(entry: AuditRecord): Promise<void> {

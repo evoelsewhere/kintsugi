@@ -16,6 +16,8 @@ export interface GitHttpServer {
   createRepository(name: string, branch?: string): Promise<void>;
   /** Adds a commit to `branch` (on top of its current tip) of an existing repository and returns its id. */
   commit(name: string, file: string, content: string, branch?: string): Promise<string>;
+  /** Adds many files in one commit for large-diff integration tests. */
+  commitFiles(name: string, files: readonly { path: string; content: string | Buffer }[], branch?: string): Promise<string>;
   /** Runs git in the server-side bare repository, e.g. `show main:README.md`; returns stdout. */
   git(name: string, ...args: string[]): string;
   close(): Promise<void>;
@@ -81,16 +83,34 @@ export async function startGitHttpServer(): Promise<GitHttpServer> {
     async commit(name, file, content, branch = "main") {
       const work = join(root, `${name}-work`);
       // Start from the server's tip: someone (the code under test) may have pushed meanwhile.
-      try {
+      if (hasRemoteBranch(root, name, branch)) {
         fixtureGit(work, "fetch", "-q", join(root, `${name}.git`), branch);
         fixtureGit(work, "checkout", "-q", "-B", branch, "FETCH_HEAD");
-      } catch {
+      } else {
         fixtureGit(work, "checkout", "-q", "-B", branch);
       }
       await mkdir(dirname(join(work, file)), { recursive: true });
       await writeFile(join(work, file), content);
       fixtureGit(work, "add", file);
       fixtureGit(work, "commit", "-q", "-m", `write ${file}`);
+      fixtureGit(work, "push", "-q", join(root, `${name}.git`), `HEAD:${branch}`);
+      return execFileSync("git", ["rev-parse", "HEAD"], { cwd: work, encoding: "utf8" }).trim();
+    },
+    async commitFiles(name, files, branch = "main") {
+      const work = join(root, `${name}-work`);
+      if (hasRemoteBranch(root, name, branch)) {
+        fixtureGit(work, "fetch", "-q", join(root, `${name}.git`), branch);
+        fixtureGit(work, "checkout", "-q", "-B", branch, "FETCH_HEAD");
+      } else {
+        fixtureGit(work, "checkout", "-q", "-B", branch);
+      }
+      for (const file of files) {
+        const path = join(work, ...file.path.split("/"));
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, file.content);
+      }
+      fixtureGit(work, "add", "-A");
+      fixtureGit(work, "commit", "-q", "-m", `write ${files.length} files`);
       fixtureGit(work, "push", "-q", join(root, `${name}.git`), `HEAD:${branch}`);
       return execFileSync("git", ["rev-parse", "HEAD"], { cwd: work, encoding: "utf8" }).trim();
     },
@@ -102,4 +122,14 @@ export async function startGitHttpServer(): Promise<GitHttpServer> {
       await rm(root, { recursive: true, force: true });
     },
   };
+}
+
+
+function hasRemoteBranch(root: string, name: string, branch: string): boolean {
+  try {
+    execFileSync("git", ["--git-dir", join(root, `${name}.git`), "show-ref", "--verify", "--quiet", `refs/heads/${branch}`], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }

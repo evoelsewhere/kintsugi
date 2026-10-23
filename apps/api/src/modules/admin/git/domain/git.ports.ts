@@ -13,6 +13,8 @@ export abstract class GitRegistry {
   abstract removeServer(id: string): Promise<boolean>;
   /** Plaintext access for one Git call — "Test access" and the worker only. */
   abstract serverAccess(id: string): Promise<GitAccess | undefined>;
+  /** Decrypted only by the signed GitHub webhook verifier; undefined disables inbound webhook delivery. */
+  abstract githubWebhookSecret(id: string): Promise<string | undefined>;
 
   abstract listRepositories(): Promise<GitRepositoryRecord[]>;
   abstract getRepository(id: string): Promise<GitRepositoryRecord | undefined>;

@@ -1,6 +1,6 @@
 # ADR-0015: Member-harness assets are agent plugins (Claude Code plugin format)
 
-- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): project plugins live in the document repo's `plugins/`, published without a maturity gate. Amended (2026-10-11): the built-in plugin has no source folder of its own; it is assembled from `packages/agents/builtin/member/` and the built-in member agents and commands, and generated into the document repo as `plugins/kintsugi/`.
+- Status: Accepted. Amended by [ADR-0028](0028-remove-rulebook-single-document-repo.md): project plugins live in the document repo's `plugins`, published without a maturity gate. Amended (2026-10-11): the built-in plugin has no source folder of its own; it is assembled from `packages/agents/builtin/member/` and the built-in member agents and commands, and generated into the document repo as `plugins/kintsugi/`. Further amended by [ADR-0061](0061-coding-agent-workflow-through-cli-and-local-mcp.md): the Coding Agent Workflow is a separate hookless local connector. The Codex package manifest layout below is superseded by [ADR-0064](0064-portable-agent-plugin-layouts.md); the canonical Kintsugi source format remains Claude Code.
 - Date: 2026-10-09
 - Decision register: D19, D40, D43
 - Amends: ADR-0005 (canonical asset format), ADR-0013 decision 9 (harness renderers become a fallback)
@@ -63,4 +63,4 @@ Hooks also give Kintsugi something loose skills never could, on members' machine
 - One package works natively in Claude Code and Copilot CLI, and in Codex after an automatic manifest conversion. Members install it with the harness's own plugin commands.
 - Guardrails and telemetry reach members' machines (task context, write guard, activity), but they are best-effort.
 - Vendor formats differ in details and change quickly: Codex hook coverage, Copilot source types, field sets. Codex and Copilot specifics must be re-verified against vendor docs when the generators are implemented, and covered by tests.
-- `kintsugi assets pull` is replaced by plugin installation. The CLI keeps `kintsugi plugins setup --harness <id>`, which runs the harness's marketplace and install commands, or the fallback renderer when the harness has no plugin support.
+- `kintsugi assets pull` is replaced by plugin installation. The later Coding Agent Workflow amendment in [ADR-0061](0061-coding-agent-workflow-through-cli-and-local-mcp.md) defines a separate generated access package; its CLI setup command is `kintsugi plugins setup --harness <id>` and prints native marketplace/install commands for the developer to run.

@@ -7,10 +7,15 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint ."
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@kintsugi/domain": "workspace:*"
+    "@kintsugi/domain": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.3"
   }
 }

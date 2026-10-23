@@ -1,30 +1,33 @@
 // Login — local username/password sign-in (ADR-0008). Dev default: admin / admin@1234.
 
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { BrandMark } from "../components/brand-mark";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
 import { useAuth } from "../lib/auth";
+import { safeCodingAgentReturnTo } from "./agent-context/coding-agent-install-model";
 
 export function LoginPage(): React.JSX.Element {
   const { user, loading, login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = safeCodingAgentReturnTo(searchParams.get("returnTo"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (!loading && user !== null) return <Navigate to="/" replace />;
+  if (!loading && user !== null) return <Navigate to={returnTo} replace />;
 
   async function submit(): Promise<void> {
     setSubmitting(true);
     setError(null);
     try {
       await login(username, password);
-      navigate("/", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : String(loginError));
     } finally {

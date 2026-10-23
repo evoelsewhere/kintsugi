@@ -1,0 +1,16 @@
+{
+  "fixtureSchema": "coding-agent-workflow-v1",
+  "revisionLabel": "B",
+  "projectId": "modernization",
+  "application": "billing",
+  "unitId": "billing/invoices/tax",
+  "replaces": "applications/billing/units/invoices/tax/design.md",
+  "sourceApprovalOverride": {
+    "role": "detailed-design",
+    "status": "pending",
+    "reason": "source content changed after revision A approval",
+    "revisionLabel": "B"
+  },
+  "expectedImplementationBlocker": "detailed-design-approval-pending",
+  "fixtureOnly": true
+}

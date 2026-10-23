@@ -12,6 +12,7 @@ import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import type { AgentDefinition, McpServerSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentResolver } from "../src/jobs/agents.js";
+import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
 import { JobRunner } from "../src/jobs/runner.js";
 import { LocalCheckouts, MemoryJobStore, fixtureRepository, writingAgentRuntime } from "./support/jobs.js";
 
@@ -45,6 +46,7 @@ describe("MCP servers of an agent job", () => {
     const agents = writingAgentRuntime({ "tracker-agent": () => ({}) });
     const runner = new JobRunner({
       store,
+      gates: DEFAULT_GATE_DECIDER,
       storage,
       checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
       agents,

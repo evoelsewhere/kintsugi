@@ -74,26 +74,17 @@ Guide: [build a project](../guides/build-project.md).
 
 ## 6.3 Unit loop (member + harness)
 
-1. `task-planner` produces the unit's task pack. The worker commits `tasks/<id>.md` and sets the unit file's `stage` / `status` in the document repo.
-2. The member runs `kintsugi task start <id>` (or MCP `task.next`).
-   - Kintsugi claims the unit: it sets `assignee`, `harness` and `status: in-progress` through the API, committed as `kintsugi-bot` with `Kintsugi-Actor`.
-   - The member works with the task pack and project-authored plugin sources in `plugins/`; generation of the built-in `plugins/kintsugi/`, marketplace files and harness fallback renderings is planned but not implemented.
-3. The member works in Claude Code / Copilot / ChatGPT-Codex:
-   - queries the KB through MCP;
-   - commits code to the target repo;
-   - commits deliverables to the document repo;
-   - opens PRs;
-   - registers artifacts with `artifact.register`.
-4. The worker detects the PR (webhook or polling) and sets the unit to `awaiting-review`. It then runs a `gate-reviewer` job, which posts PR comments and writes a review record.
-5. A human approves and merges. The approval is recorded in the unit file's `gates`. Git sync triggers `knowledge-ingest` to enrich the TO-BE KB, and Monitoring updates the AI metrics.
+1. The task and unit state are read from their validated Git documents. Kintsugi builds an activity-specific brief with the required designs, standards, deliverables, approval status and an immutable snapshot.
+2. The member signs in through the CLI and connects a chosen AI through the local stdio MCP bridge, or exports a cited Markdown brief for a chat without tools. Reading a task does not claim or assign it.
+3. The AI retrieves authorized sections from the same snapshot and answers with citations. The developer implements in the normal code and document repositories and opens ordinary pull requests.
+4. GitHub notifications and durable reconciliation find current PR state, including changes made while the developer is offline. Kintsugi reviews a complete fixed revision and exposes current, cited findings through the portal, CLI or MCP.
+5. The developer addresses findings and completes provider-required human review. After every required deliverable merges, an authorized human gate decision is recorded in a gate-record PR. Kintsugi advances the workflow only when the merged record validates against the exact final revisions.
 
-Step-by-step instructions for members: [member workflow guide](../guides/member-workflow.md).
+Step-by-step instructions for members: [Coding Agent Workflow guide](../guides/coding-agent-workflow.md).
 
 ## 6.4 KB question & answer
 
-Questions come from the portal chat or from a member's harness (MCP `kb.ask`).
-1. `kb-assistant` runs as an interactive runtime job; follow-up messages are passed with `followUp`.
-2. It answers with citations (`repo@commit:path`, `path:line`).
+For Coding Agent Workflow questions, the developer's chosen AI reads authorized project documents through the local CLI/MCP access path and answers with citations. A Kintsugi-owned conversational assistant is deferred. Server-side review is a separate workflow job over fixed pull-request inputs.
 
 ## 6.5 Git sync and change detection
 
@@ -104,7 +95,7 @@ Questions come from the portal chat or from a member's harness (MCP `kb.ask`).
 3. **Reacting to changes**:
    - New commits on tracked branches enqueue `knowledge-ingest` (incremental).
    - Changes under `plugins/` are revalidated; generation of `plugins/kintsugi/`, marketplace files and harness fallback renderings is planned but not implemented.
-   - New or updated PRs enqueue `gate-reviewer`.
+   - Provider events and current-state reconciliation enqueue review only after PR identity and required inputs are validated; partial evidence cannot pass.
    - Servers without a provider adapter get sync and branch polling only.
 
 ## 6.6 Writing to the document repo

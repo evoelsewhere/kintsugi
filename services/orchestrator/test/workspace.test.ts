@@ -13,6 +13,7 @@ import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { type WorkspaceState, dropExpiredCheckouts } from "../src/jobs/cleanup.js";
+import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
 import { JobRunner } from "../src/jobs/runner.js";
 import { readManifest } from "../src/workspace/manifest.js";
 import { renderGuide } from "../src/workspace/guide.js";
@@ -87,6 +88,7 @@ describe("a job workspace across attempts", () => {
       agents,
       agentDefinitions: builtinAgents(),
       interpreters: interpretersFromEnv(),
+      gates: DEFAULT_GATE_DECIDER,
       ...(mockOutputs === undefined ? {} : { mockOutputs }),
       requestWrite: async () => undefined,
       log: () => undefined,
@@ -287,6 +289,7 @@ describe("the sandbox settings reach the job", () => {
       agents,
       agentDefinitions: builtinAgents(),
       interpreters: interpretersFromEnv(),
+      gates: DEFAULT_GATE_DECIDER,
       sandbox: async () => ({ ...DEFAULT_SANDBOX, ...settings }),
       mockOutputs: false,
       requestWrite: async () => undefined,

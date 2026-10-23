@@ -28,6 +28,7 @@ import {
   designSetDir,
   designSetPath,
   designSetsDir,
+  designProfileDir,
   designProfilePath,
   designTemplatePath,
   generatedDir,
@@ -49,6 +50,7 @@ import {
   unitDesignFilePath,
   unitDesignSetDir,
   unitFindingsPath,
+  unitGateReviewPath,
   unitId,
   unitKeyAsIsPath,
   unitKeyDesignSetDir,
@@ -144,6 +146,8 @@ describe("ADR-0051 document-repo layout", () => {
     expect(unitModernDir("billing", "payroll", "run-period")).toBe(base);
     expect(unitStatePath("billing", "payroll", "run-period")).toBe(`${base}/README.md`);
     expect(unitTaskPath("billing", "payroll", "run-period")).toBe(`${base}/task.md`);
+    expect(unitGateReviewPath("billing", "payroll", "run-period")).toBe(base + "/reviews/G4.md");
+    expect(unitGateReviewPath("billing", "payroll", "run-period", "stage:understand")).toBe(base + "/reviews/stage%3Aunderstand.md");
     expect(unitDesignSetDir("billing", "payroll", "run-period", "detail")).toBe(`${base}/detail`);
     expect(unitDesignFilePath("billing", "payroll", "run-period", "detail", "logic.md")).toBe(`${base}/detail/logic.md`);
     expect(unitKeyDesignSetDir("billing", "payroll/run-period", "basic")).toBe(`${base}/basic`);
@@ -159,6 +163,7 @@ describe("ADR-0051 document-repo layout", () => {
     expect(designSetPath("detail")).toBe("01-standards/templates/detail/set.md");
     expect(designTemplatePath("detail", "logic.md")).toBe("01-standards/templates/detail/logic.md");
     expect(designTemplatePath("detail", "screen/logic.md")).toBe("01-standards/templates/detail/screen/logic.md");
+    expect(designProfileDir("detail", "screen")).toBe("01-standards/templates/detail/screen");
     expect(designProfilePath("detail", "screen")).toBe("01-standards/templates/detail/screen/profile.md");
   });
 

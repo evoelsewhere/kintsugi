@@ -49,7 +49,7 @@ A folder whose name starts with `_` belongs to the application and is never a mo
 
 ## Gates
 
-Gate decisions (G0-G4 and the stage gates) are requested, approved, rejected or waived in the portal (Governance → Gates); each request and decision is audited. The document repo holds no gate records: a decision cites the documents of this repo as its evidence.
+Gate decisions (G0-G4 and stage gates) are requested, approved, rejected or waived in the portal (Governance → Gates); each request and decision is audited. The portal decision remains authoritative. For evidence-bound Coding Agent Workflow continuation, Kintsugi publishes a readable record under 10-applications/<app>/02-modern/<module>/<unit>/reviews/ as a reviewed pull request. The record is a Git proof of the decision and its exact deliverables; it becomes effective only after merge and validation. It does not replace the audited decision in the portal ([gate-record contract](gate-records.md), ADR-0054).
 
 ## Auto-commit
 
@@ -73,7 +73,7 @@ Straight-to-default-branch commits are limited to the default auto-commit paths:
 
 ## Repository model
 
-The document repo is a Git repository registered with role `document`; application code repositories use `legacy`, `legacy-data`, or `target` roles. The document repo is the source of truth for project documents and records, while Postgres indexes unit state and Git history records changes ([ADR-0019](../decisions/0019-workspace-repo-write-path.md), [ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md)).
+The document repo is a Git repository registered with role document; application code repositories use legacy, legacy-data, or target roles. Git is the source of truth for project documents and member deliverables. Postgres indexes unit state and stores audited gate decisions; a published evidence record is accepted only at its validated merge revision ([ADR-0019](../decisions/0019-workspace-repo-write-path.md), [ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md), [ADR-0063](../decisions/0063-evidence-bound-pr-continuation.md)).
 
 ## Related references
 

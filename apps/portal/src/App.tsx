@@ -14,11 +14,14 @@ import { DeliveryOverviewPage } from "./pages/delivery/delivery-overview-page";
 import { DeliveryStagePage } from "./pages/delivery/delivery-stage-page";
 import { GovernancePage } from "./pages/governance";
 import { LoginPage } from "./pages/login";
+import { CodingAgentAuthorizePage } from "./pages/coding-agent-authorize";
 import { MonitoringPage } from "./pages/monitoring";
 import { OverviewPage } from "./pages/overview";
 import { MembersPermissionsPage } from "./pages/members-permissions";
 import { ProjectDetailPage } from "./pages/projects/project-detail-page";
+import { MemberTaskPage } from "./pages/agent-context/member-task";
 import { ProjectsPage } from "./pages/projects/projects-page";
+import { DeveloperDocumentsPage } from "./pages/developer-documents";
 
 function RequireAuth({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { user, loading } = useAuth();
@@ -39,6 +42,7 @@ export function App(): React.JSX.Element {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/coding-agent/authorize" element={<CodingAgentAuthorizePage />} />
           <Route
             element={
               <RequireAuth>
@@ -55,6 +59,9 @@ export function App(): React.JSX.Element {
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="governance" element={<GovernancePage />} />
             <Route path="projects" element={<ProjectsPage />} />
+            <Route path="developer" element={<DeveloperDocumentsPage />} />
+            <Route path="coding-agent-workflow" element={<Navigate to="/developer#start" replace />} />
+            <Route path="projects/:projectId/coding-agent" element={<MemberTaskPage />} />
             <Route path="projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="plugins" element={<PluginsPage />} />
             <Route path="plugins/builder" element={<AgentsPage />} />

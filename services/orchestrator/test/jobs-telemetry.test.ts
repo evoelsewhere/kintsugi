@@ -11,6 +11,7 @@ import { CheckoutStorage } from "@kintsugi/git";
 import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
+import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
 import { JobRunner } from "../src/jobs/runner.js";
 import { LocalCheckouts, MemoryJobStore, fixtureRepository, writingAgentRuntime } from "./support/jobs.js";
 
@@ -37,6 +38,7 @@ describe("telemetry of an agent job", () => {
     const store = new MemoryJobStore();
     const runner = new JobRunner({
       store,
+      gates: DEFAULT_GATE_DECIDER,
       storage,
       checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }),
       agents: writingAgentRuntime({ "legacy-analyst": () => ({}) }),

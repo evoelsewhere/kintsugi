@@ -1,16 +1,21 @@
 # services/harness-hub
 
-Bridge between Kintsugi and the AI harnesses members run on their own machines (Claude Code, GitHub Copilot, Codex, ChatGPT, …). Implements the contracts in `packages/harness-sdk`.
+Status: the local stdio MCP adapter, generated client plugins and CLI setup tooling are implemented in the unreleased workspace. Native setup is enabled only for the exact Claude Code and Codex CLI versions listed in the [compatibility evidence](../../docs/reference/coding-agent-workflow-compatibility.md); authenticated MCP calls and provider workflow pilots remain release gates.
 
-| Capability | Description |
+Harness Hub adapts the shared Coding Agent Workflow port to member-harness protocols. The local MCP server is started by the CLI and calls the same typed HTTPS API as the CLI commands. It has no network listener and contains no Project Access or authorization rules.
+
+| Capability | Responsibility |
 |---|---|
-| Kintsugi MCP server | Remote Streamable HTTP on `kintsugi-app`, Personal Access Token auth (OAuth once Entra ID is enabled): `kb.*`, `task.*`, `artifact.register`, `gate.status`, `guideline.get`. Bundled in the built-in `kintsugi` plugin |
-| Plugins & marketplaces | Planned, not implemented: validate project plugins from `plugins/`, generate the built-in `plugins/kintsugi/` from `packages/agents/builtin/member/`, and write the marketplace paths declared in `packages/harness-sdk` for Claude Code / Copilot CLI / Codex (ADR-0015). No current code writes these document-repo files. |
-| Fallback rendering | `AssetRenderer` per harness without plugin support: skills, agents, project context, MCP config |
-| CLI API | Backend for the `kintsugi` CLI (`plugins setup`, `task start`, `artifact register`, `hook <event>`) |
-| Policy distribution | `HarnessPolicy` → managed settings / org policies per harness |
-| Telemetry ingest | Plugin hooks, optional OTLP endpoint, vendor metrics API pollers, git/PR polling or webhooks → `HarnessActivity` |
+| Local stdio MCP adapter | Registers read-only tools over `CodingAgentWorkflowPort`; one explicit project/task/snapshot selection per call; errors are converted to safe MCP tool errors. |
+| Coding Agent Workflow plugin generation | Generates a small hookless skill and client-specific MCP configuration, installed separately from project method plugins. The CLI checks the exact native client version and runs its plugin setup commands; it prints rollback instructions if setup fails partway through. |
+| Typed Coding Agent Context API contract | Shared query and result schemas. CLI and MCP use the same project, task, snapshot, citation and error vocabulary. |
+| Provider PR observation | Owned by Git provider adapters and workflow services, not by this package. GitHub.com is first; webhook receipts and durable reconciliation feed the review workflow. |
+| Existing harness policy and telemetry concepts | Future integrations. Client hooks and telemetry are optional later capabilities and do not enforce access or gate decisions. |
 
-Deliverables are never uploaded to Kintsugi: members commit them to Git, and `artifact.register` records `repo@commit:path` plus provenance (harness, AI share) — ADR-0007.
+The current CLI bridge advertises seven tools: `project_list`, `task_list`, `task_brief`, `document_get`, `document_search`, `review_get` and `task_status`. `review_get` is registered only when the caller provides a functioning review capability; the API reads validated reports from PostgreSQL and scopes them to the requested project. Every contextual read requires the project and task identity, and document retrieval/search also require the snapshot returned by `task_brief`.
 
-Vendor plugin formats and native paths change often. Verify them against current vendor docs when implementing each generator or renderer.
+Run `kintsugi mcp serve --profile work` from the installed CLI. On first use, an empty profile opens browser sign-in and project consent. The process keeps short-lived access credentials in memory and reads the rotating refresh credential from the OS credential store, allowing server-side revocation to take effect on the next call. Stdin and stdout carry only MCP protocol messages; diagnostics go to stderr. The bridge is read-only and cannot claim tasks, change status, register arbitrary files, approve gates or administer the installation.
+
+The developer's AI reads documents and answers with citations under the developer's existing subscription. Kintsugi continues after ordinary pull requests through server-side provider reconciliation and review. Effective phase exit still requires an authenticated human decision and a merged Git gate record bound to the final required deliverables.
+
+See [the approved Coding Agent Workflow ADR](../../docs/decisions/0052-coding-agent-workflow-through-cli-and-local-mcp.md), [task and snapshot contract](../../docs/decisions/0053-coding-agent-context-and-project-access.md), and [PR continuation contract](../../docs/decisions/0054-evidence-bound-pr-continuation.md).

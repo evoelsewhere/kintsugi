@@ -40,7 +40,8 @@ The frontmatter is the unit's state ([ADR-0012](../decisions/0012-work-items-as-
 | `phase`, `stage`, `status` | Progress. `status`: `pending`, `in-progress`, `awaiting-review`, `approved`, `rejected`, `blocked`, `done`, `skipped` |
 | `assignee`, `harness` | Who works on it, and with which member harness |
 | `dependsOn` | Unit ids (used for leaves-first ordering) |
-| `source`, `target` | `{repo, paths}` lists in the legacy (read-only) and target repos: one `source` entry per legacy repository the unit's files come from, `paths` inside that repository ([ADR-0052](../decisions/0052-several-legacy-repositories-per-application.md)) |
+| `source`, `target` | `{repo, paths}` lists in the legacy (read-only) and target repos. A unit may have one `source` entry per legacy repository it reads; paths are relative to that repository ([ADR-0052](../decisions/0052-several-legacy-repositories-per-application.md)). |
+| `requiredDeliverables` | Optional bounded {id, repositoryId, path} declarations; stable IDs flow into briefs, snapshots and gate evidence |
 | `links` | Task pack, AS-IS specification, mappings (paths under `01-standards/mappings/`), business rules, pull requests |
 | `waived` | Design files the unit does not need, a list of `<set>/<file>: <reason>`; written by a person, never by an agent ([design templates](design-templates.md#conformance)) |
 
@@ -49,7 +50,7 @@ Gate results are not in the card: gate decisions are recorded in the portal (Gov
 **Proposed by the `understand` stage** ([ADR-0031](../decisions/0031-understand-stage-as-is-specification.md)): one card per unit the stage derives from the application's topology and catalog, with `phase: discover-assess`, `stage: understand`, `status: pending`, `complexity` from size, `dependsOn` from the traceability matrix, the legacy `source` paths and `links.asIs` / `links.businessRules`. They arrive in the stage's pull request, not as auto-commits; a unit that already has a card is left unchanged.
 
 **Rules**:
-- **Write path**: state changes go through the Kintsugi API (portal, CLI, MCP, runtime agents). The API validates the actor's effective access-role permissions and the allowed transition, updates the index, and the worker commits as `kintsugi-bot` with `Kintsugi-Actor`. The card and `task.md` are auto-commit paths; every other file of the unit's two folders arrives as a pull request.
+- **Write path**: state changes go through authorized portal or administrative API actions. The API validates the actor's effective permissions and allowed transition, updates the index, and the worker commits as the Kintsugi bot with a Kintsugi actor trailer. The Coding Agent Workflow CLI and MCP are read-only. The card and task pack are auto-commit paths; other unit documents arrive through reviewed pull requests.
 - **Direct edits** are allowed only through PRs. They are validated on sync; invalid changes are flagged and not indexed.
 - **History** is Git history; there is no separate transition log.
 

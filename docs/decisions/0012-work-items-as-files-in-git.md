@@ -1,6 +1,6 @@
 # ADR-0012: Work items are files in the workspace repo; Postgres indexes them
 
-- Status: Accepted. Unit frontmatter extended by [ADR-0013](0013-composable-open-rulebook.md) (`packs`, `rulesApplied`, `stale`, `waivers`); those fields removed by [ADR-0028](0028-remove-rulebook-single-document-repo.md), which also renames the workspace repo to the document repo.
+- Status: Accepted. Unit frontmatter extended by [ADR-0013](0013-composable-open-rulebook.md) (`packs`, `rulesApplied`, `stale`, `waivers`); those fields removed by [ADR-0028](0028-remove-rulebook-single-document-repo.md), which also renames the workspace repo to the document repo. Coding Agent Workflow context is read-only under [ADR-0061](0061-coding-agent-workflow-through-cli-and-local-mcp.md); task projection and immutable source context are further specified by [ADR-0062](0062-coding-agent-context-and-project-access.md).
 - Date: 2026-10-09
 - Decision register: D20
 - Amends: ADR-0003 (where pipeline state is persisted)
@@ -18,7 +18,7 @@ Git is the source of truth for code, documents and the rulebook (ADR-0007, ADR-0
   - Format: [workspace repository reference](../reference/document-repo-unit-files.md).
 - **Postgres keeps an index of the unit files** for the board, queries and metrics. It is rebuilt from Git at any time, and refreshed on every sync of the workspace repo.
 - **Single write path**:
-  - Portal actions, CLI / MCP calls (`task start`, `task.update`) and runtime agents change state through the Kintsugi API.
+  - Portal and separately authorized API actions can change state through the Kintsugi API. The member CLI/MCP connector defined by ADR-0041 is read-only and does not claim or update a task; authorized administrative and runtime state changes continue through the API.
   - The API validates the actor's effective access-role permissions and the allowed transition, updates the index, and the worker commits the file change as `kintsugi-bot` with an actor trailer (`Kintsugi-Actor: <user>`).
   - If the commit fails, the index change is rolled back.
 - **Direct edits** of unit files are allowed only through PRs. On sync, Kintsugi validates them (schema, transitions). Invalid changes are flagged on the board and are not applied to the index.

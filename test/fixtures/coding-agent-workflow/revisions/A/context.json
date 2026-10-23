@@ -1,0 +1,32 @@
+{
+  "fixtureSchema": "coding-agent-workflow-v1",
+  "revisionLabel": "A",
+  "projectId": "modernization",
+  "application": "billing",
+  "unitId": "billing/invoices/tax",
+  "memberIdentities": {
+    "reader-a": "user-fixture-001",
+    "reader-b": "user-fixture-002",
+    "maintainer": "user-fixture-003"
+  },
+  "repositories": [
+    { "id": "project-docs", "role": "document" },
+    { "id": "billing-api", "role": "target" },
+    { "id": "legacy-ledger", "role": "legacy", "readOnly": true }
+  ],
+  "requiredDeliverables": [
+    { "id": "code", "repositoryId": "billing-api", "path": "src/billing/tax" },
+    { "id": "design", "repositoryId": "project-docs", "path": "applications/billing/units/invoices/tax/design.md" }
+  ],
+  "sources": [
+    { "role": "task", "path": "applications/billing/units/invoices/tax/task.md", "availability": "present", "publication": "published" },
+    { "role": "basic-design", "path": "applications/billing/to-be/design.md", "availability": "present", "publication": "published", "approval": { "status": "approved", "actorId": "user-fixture-003", "evidenceId": "TAX-ROUND-01", "revisionLabel": "A" } },
+    { "role": "detailed-design", "path": "applications/billing/units/invoices/tax/design.md", "availability": "present", "publication": "published", "approval": { "status": "approved", "actorId": "user-fixture-003", "evidenceId": "TAX-ROUND-01", "revisionLabel": "A" } },
+    { "role": "typescript-conventions", "path": "standards/conventions/typescript.md", "availability": "present", "publication": "published", "approval": { "status": "approved", "actorId": "user-fixture-003", "evidenceId": "STD-TS-01", "revisionLabel": "A" } },
+    { "role": "review-rules", "path": "standards/review-rules.md", "availability": "present", "publication": "published", "approval": { "status": "approved", "actorId": "user-fixture-003", "evidenceId": "STD-REV-01", "revisionLabel": "A" } },
+    { "role": "gate-G3", "path": "applications/billing/units/invoices/tax/reviews/G3.md", "availability": "present", "publication": "published", "approval": { "status": "approved", "actorId": "user-fixture-003", "evidenceId": "G3-READY-01", "revisionLabel": "A" } },
+    { "role": "gate-G4", "path": "applications/billing/units/invoices/tax/reviews/G4.md", "availability": "present", "publication": "published", "approval": { "status": "pending", "revisionLabel": "A" } }
+  ],
+  "expectedActivity": "implementation",
+  "fixtureOnly": true
+}

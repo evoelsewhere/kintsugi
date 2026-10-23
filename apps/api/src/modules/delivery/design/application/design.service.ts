@@ -42,6 +42,8 @@ import {
   applicationRequirementsPath,
   commonComponentPath,
   commonComponentsDir,
+  designProfileDir,
+  designProfilePath,
   designSetDir,
   designSetPath,
   designSetsDir,
@@ -423,11 +425,12 @@ export class DesignService {
               // A folder that does not start with `_` is the profile of the unit kind it is named after (ADR-0053).
               const profiles: Record<string, DesignProfileSource> = {};
               for (const kind of entries.filter((entry) => entry.kind === "dir" && !entry.name.startsWith("_")).map((entry) => entry.name)) {
-                const inside = markdown(await this.documents.listNames(context, commit, `${dir}/${kind}`));
+                const profileDir = designProfileDir(folder, kind);
+                const inside = markdown(await this.documents.listNames(context, commit, profileDir));
                 profiles[kind] = {
-                  profileText: inside.includes(DESIGN_PROFILE_FILE) ? await read(`${dir}/${kind}/${DESIGN_PROFILE_FILE}`) : undefined,
-                  templates: await readAll(`${dir}/${kind}`, inside.filter((name) => name !== DESIGN_PROFILE_FILE)),
-                  examples: await examples(`${dir}/${kind}`),
+                  profileText: inside.includes(DESIGN_PROFILE_FILE) ? await read(designProfilePath(folder, kind)) : undefined,
+                  templates: await readAll(profileDir, inside.filter((name) => name !== DESIGN_PROFILE_FILE)),
+                  examples: await examples(profileDir),
                 };
               }
               return {

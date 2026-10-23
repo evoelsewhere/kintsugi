@@ -16,6 +16,9 @@ export const GIT_SYNC_QUEUE = "git-sync";
  */
 export const DOCUMENT_WRITE_QUEUE = "document-write";
 
+/** Pins one immutable Coding Agent Workflow snapshot in every participating Git mirror. */
+export const SNAPSHOT_RETENTION_QUEUE = "snapshot-retention";
+
 /**
  * Runs one runtime job run (workflow.job_run, migration 010): a stage, script, agent job or
  * workflow, in its job workspace (ADR-0029). Not retried: a job that failed half-way is
@@ -45,21 +48,31 @@ export const JOB_RUN_QUEUE_OPTIONS: QueueOptions = {
   expireInSeconds: 4 * 60 * 60,
 };
 
+export const SNAPSHOT_RETENTION_QUEUE_OPTIONS: QueueOptions = {
+  policy: "stately",
+  retryLimit: 5,
+  retryDelay: 2,
+  retryBackoff: true,
+  expireInSeconds: 60 * 60,
+};
+
 export const WORKSPACE_CLEANUP_QUEUE_OPTIONS: QueueOptions = {
   policy: "standard",
   retryLimit: 0,
   expireInSeconds: 30 * 60,
 };
 
-/** Payload of a `workspace-cleanup` job. */
+/** Payload of a workspace-cleanup job. */
 export interface WorkspaceCleanupRequest {
-  /** The job (run) id: the folder name under `<data>/jobs/`. */
   jobId: string;
-  /** Who asked, for the worker's log. */
   actor?: string;
 }
-
 /** Payload of a `job-run` job; the API creates the row as `queued` first. */
+/** Durable outbox intent consumed by the worker to retain a snapshot. */
+export interface SnapshotRetentionRequest {
+  snapshotId: string;
+}
+
 export interface JobRunRequest {
   jobRunId: string;
 }
@@ -117,9 +130,14 @@ export async function ensureJobRunQueue(boss: PgBoss): Promise<void> {
   await boss.createQueue(JOB_RUN_QUEUE, JOB_RUN_QUEUE_OPTIONS);
 }
 
-/** Enqueues a job run for the worker. */
+/** Creates the local-ref retention queue; duplicate deliveries use the outbox operation id. */
+export async function ensureSnapshotRetentionQueue(boss: PgBoss): Promise<void> {
+  await boss.createQueue(SNAPSHOT_RETENTION_QUEUE, SNAPSHOT_RETENTION_QUEUE_OPTIONS);
+}
+
+/** Enqueues one delivery per run id; outbox replay and recovery can safely send it again. */
 export async function sendJobRun(boss: PgBoss, request: JobRunRequest): Promise<void> {
-  await boss.send(JOB_RUN_QUEUE, request);
+  await boss.send(JOB_RUN_QUEUE, request, { singletonKey: request.jobRunId });
 }
 
 /** Creates the workspace-cleanup queue if missing; safe on every start, from any process. */

@@ -92,10 +92,12 @@ export interface ExecutorDeps {
    * the same fingerprint are not run again; their outputs are in the stage's out/ and work/. Script steps
    * always run again: they are cheap, deterministic, and the guard before publication.
    */
+  /** Earlier run id for legacy persisted gate decisions. */
+  resumeOf?: string;
   reuse?: StepReuse;
-  /** The gate choices an earlier attempt recorded, replayed instead of asking again. */
+  /** Gate choices already accepted in a previous attempt. */
   gateChoices?: ReadonlyMap<string, string>;
-  /** Called with the choice taken at a gate, to record it for a later attempt. */
+  /** Record the choice for a later attempt. */
   onGate?: (id: string, choice: string) => Promise<void>;
 }
 
@@ -517,11 +519,23 @@ export class StagePlanExecutor {
     const question = await this.#resolve(step.question);
     const { run, plan, gates, signal } = this.#deps;
     const replayed = this.#deps.gateChoices?.get(step.id);
-    const decision = replayed !== undefined && step.options.includes(replayed) ? { choice: replayed, defaulted: false, by: "an earlier attempt" } : await gates.decide(
-      { runId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }), stage: plan.id, gate: step.id, question, options: step.options, default: step.default },
-      signal,
-    );
-    const choice = step.options.includes(decision.choice) ? decision.choice : step.default;
+    const decision = replayed !== undefined && step.options.includes(replayed)
+      ? { choice: replayed, defaulted: false, by: "an earlier attempt" }
+      : await gates.decide(
+          { runId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }), stage: plan.id, gate: step.id, question, options: step.options, default: step.default, decisionMode: step.decisionMode, ...(this.#deps.resumeOf === undefined ? {} : { resumeOf: this.#deps.resumeOf }) },
+          signal,
+        );
+    if (!step.options.includes(decision.choice)) throw new JobFailure("Gate " + step.id + " returned a choice outside its allowed options");
+    if (replayed === undefined && step.decisionMode === "required-human" && (decision.defaulted || decision.by === undefined || decision.by.trim() === "")) {
+      throw new JobFailure("Gate " + step.id + " requires a decision from an authenticated human");
+    }
+    if (replayed === undefined && step.decisionMode === "default" && (!decision.defaulted || decision.choice !== step.default)) {
+      throw new JobFailure("Gate " + step.id + " must use its documented default");
+    }
+    if (replayed !== undefined && step.decisionMode === "default" && decision.choice !== step.default) {
+      throw new JobFailure("Gate " + step.id + " must use its documented default");
+    }
+    const choice = decision.choice;
     await this.#deps.onGate?.(step.id, choice);
     this.#chain = chainAfter(this.#chain, [digestOf(["gate", step.id, choice])]);
     this.#gates.set(step.id, { id: step.id, question, choice, defaulted: decision.defaulted, ...(decision.by === undefined ? {} : { by: decision.by }) });

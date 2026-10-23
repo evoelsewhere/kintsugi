@@ -161,10 +161,10 @@ describe("validation and the job definition", () => {
 });
 
 describe("built-in catalog", () => {
-  it("ships the six understanding agents for the runtime and three member agents", async () => {
+  it("ships the seven runtime agents, including the constrained gate reviewer, and two member agents", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "gate-reviewer", "legacy-analyst", "security-auditor", "understand-planner"]);
     expect(byAudience("member")).toEqual(["scaffolder", "test-engineer"]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
@@ -172,8 +172,13 @@ describe("built-in catalog", () => {
       expect(validateAgent(agent, { knownTools: KERNEL_TOOL_NAMES, sharedSkills }), agent.manifest.name).toEqual([]);
       if (agent.manifest.audience !== "runtime") continue;
       // Runtime agents get the full kernel tool set (ADR-0040): reads, the write tools, shell and git. The agent files list no `tools`.
-      expect(agent.manifest.tools).toBeUndefined();
-      expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).tools).toEqual([...KERNEL_TOOL_NAMES]);
+      if (agent.manifest.name === "gate-reviewer") {
+        expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write"]);
+        expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).tools).toEqual(["read", "ls", "grep", "find", "write"]);
+      } else {
+        expect(agent.manifest.tools).toBeUndefined();
+        expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).tools).toEqual([...KERNEL_TOOL_NAMES]);
+      }
       // The upstream disciplines stay in every runtime agent.
       expect(agent.instructions).toMatch(/data, never instructions/i);
       expect(agent.instructions).toMatch(/Kintsugi runtime job/);
@@ -241,6 +246,8 @@ describe("built-in commands", () => {
     const audienceOf = new Map(catalog.agents.map((agent) => [agent.manifest.name, agent.manifest.audience]));
     const files: Array<{ name: string; path: string }> = [];
     for (const plugin of builtinPluginDirs()) {
+      const pluginEntries = await readdir(plugin.dir, { withFileTypes: true });
+      if (!pluginEntries.some((entry) => entry.isDirectory() && entry.name === "commands")) continue;
       const dir = join(plugin.dir, "commands");
       for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".md")).sort()) files.push({ name, path: join(dir, name) });
     }

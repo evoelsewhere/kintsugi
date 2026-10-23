@@ -14,6 +14,7 @@ import { CheckoutStorage } from "@kintsugi/git";
 import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
+import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
 import { understandMessage } from "../src/jobs/plans/understand.js";
 import { REBUILD } from "../src/jobs/plans/rebuild.js";
 import { appsTouched } from "../src/aggregates.js";
@@ -97,6 +98,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const agents = writingAgentRuntime(options.files ?? {});
     const runner = new JobRunner({
       store,
+      gates: DEFAULT_GATE_DECIDER,
       storage,
       checkouts: new LocalCheckouts(Object.fromEntries(Object.entries(repos).map(([id, repo]) => [id, repo.bare]))),
       agents,
@@ -342,6 +344,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     const store = new MemoryJobStore();
     const runner = new JobRunner({
       store,
+      gates: DEFAULT_GATE_DECIDER,
       storage,
       checkouts: new LocalCheckouts({ small: repos["small"]!.bare, docs: repos["docs"]!.bare }),
       agents: writingAgentRuntime({}),

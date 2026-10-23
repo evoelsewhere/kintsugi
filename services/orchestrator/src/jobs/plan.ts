@@ -160,6 +160,8 @@ export interface GateStep extends StepBase {
   question: Dynamic<string>;
   options: readonly string[];
   default: string;
+  /** Required gates wait for an authenticated human choice; default gates record the documented default. */
+  decisionMode: "required-human" | "default";
   /** Choices that end the stage here (it fails with "stopped at gate …"). */
   stopOn?: readonly string[];
 }

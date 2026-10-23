@@ -1,0 +1,26 @@
+{
+  "name": "@kintsugi/harness-hub",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.19" },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kintsugi/agents": "workspace:*",
+    "@kintsugi/harness-sdk": "workspace:*",
+    "@modelcontextprotocol/server": "2.3.1"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@types/node": "^22.19.0",
+    "vitest": "^5.0.3"
+  }
+}
