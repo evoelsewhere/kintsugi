@@ -1,14 +1,44 @@
 # Runtime and member harnesses
 
-Kintsugi has one agent execution world today: the Kintsugi Runtime ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md)). Member harnesses (Claude Code, GitHub Copilot, ChatGPT/Codex) are not integrated: the Coding Agent Workflow was removed ([ADR-0067](../../decisions/0067-remove-access-and-review-plugins.md)) and later plugins attach any such integration.
+Kintsugi has two agent execution worlds with separate ownership ([ADR-0023](../../decisions/0023-runtime-as-generic-agent-kernel.md), [ADR-0069](../../decisions/0069-common-member-base-and-plugin-distribution.md)).
 
-| | **Kintsugi Runtime (pi)** |
-|---|---|
-| Where it runs | The Kintsugi installation, in the worker, in a per-job workspace |
-| Who drives it | Kintsugi's orchestrator, automatically or from the portal |
-| What it does | Platform intelligence: assess, understand, generate selected design sets, request decisions at the gates |
-| Writes to project repos | The runtime writes only to job output; the worker commits or opens a PR in the document repo |
-| LLM license / cost | Providers configured in Kintsugi |
+| | **Kintsugi Runtime (pi)** | **Member harnesses** (Claude Code, GitHub Copilot, ChatGPT/Codex) |
+|---|---|---|
+| Where it runs | The Kintsugi installation, in the worker, in a per-job workspace | The member's machine; the installed CLI starts a local stdio MCP bridge that calls the HTTPS member API |
+| Who drives it | Kintsugi's orchestrator, automatically or from the portal | The member's chosen AI works interactively |
+| What it does | Platform intelligence: assess, understand, generate selected design sets, request decisions at the gates | Whatever the installed plugins describe; the common base only signs in and reads projects and documents |
+| Writes to project repos | The runtime writes only to job output; the worker commits or opens a PR in the document repo | The member works in normal repos with their own tools |
+| LLM license / cost | Providers configured in Kintsugi | The member's or customer's existing licenses |
+
+## The common member base
+
+The CLI and the MCP bridge are a base that every member plugin shares ([member CLI reference](../../reference/member-cli.md)):
+
+- **Auth.** Project-scoped browser authorization with PKCE: a five-minute access token in memory, a rotating refresh credential in the operating system credential store, an administrator-set maximum connection age and revocation in the portal.
+- **Get resource.** `/api/member/v1` returns the projects the connection covers and the project's document repository (tree and file at a branch or commit). The server checks the token's project scope, `member.read` and explicit Project Access on every request.
+- **Update information** (later). Recording activity and results back goes through the same base once a plugin needs it, with a security review.
+
+The bridge runs only when the AI client starts it and has no inbound listener. Plugins plug into it: Kintsugi generates the connector for each kind of harness, and a plugin from the built-in set or the document repository's `plugins/` carries the flow. Kintsugi decides who may use which plugin and observes its use per member (plugin distribution and per-member monitoring are the direction of [ADR-0069](../../decisions/0069-common-member-base-and-plugin-distribution.md), not shipped yet). The member harness never receives a Kintsugi service credential.
+
+```mermaid
+sequenceDiagram
+    actor Member
+    participant AI as Chosen coding agent
+    participant Bridge as Local Kintsugi CLI MCP
+    participant API as Kintsugi member API
+    participant Mirror as Document repo mirror
+
+    Member->>AI: Ask about the project
+    AI->>Bridge: document_get (project, path)
+    Bridge->>Bridge: Read credential store, refresh access token
+    Bridge->>API: Authenticated request
+    API->>API: Check token scope, member.read and Project Access
+    API->>Mirror: Read the file at the ref
+    Mirror-->>API: Markdown
+    API-->>Bridge: File and commit
+    Bridge-->>AI: Structured result
+    AI-->>Member: Answer from the document
+```
 
 ## Why pi for the runtime
 

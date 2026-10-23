@@ -67,7 +67,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 | E2 Knowledge Hub | AS-IS / TO-BE KB: sources in Git, text chunks + embeddings (pgvector) in Postgres, no code graph; ingestion; search API |
 | E3 Standards & Assets | Reads `kintsugi.yaml`, `01-standards/` and `plugins/` from the document repo at a fixed commit, and combines them with built-in assets for runtime jobs and harness rendering ([document repository](../reference/document-repo.md)) |
 | E4 Kintsugi Runtime (pi) | Generic agent kernel ([ADR-0023](../decisions/0023-runtime-as-generic-agent-kernel.md)): runs one agent job whose [agent definition](../reference/runtime-agents.md) is supplied with the job, in the job's workspace ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)); knows no agent. Built-in and custom agents are installation data managed in the Agent Builder ([ADR-0026](../decisions/0026-runtime-agents-and-agent-builder.md)) |
-| E5 Harness Hub | Not shipped ([ADR-0067](../decisions/0067-remove-access-and-review-plugins.md)): plugins will attach MCP, CLI and harness integration later |
+| E5 Harness Hub | The local MCP bridge and the generation of the connector plugin for member harnesses ([ADR-0069](../decisions/0069-common-member-base-and-plugin-distribution.md)); plugin distribution and per-member monitoring come later |
 | E6 Git Sync & Writer | Sync many repos across many Git servers; the writer, the only component that commits to project repos: commits / PRs runtime results, unit state changes and portal-published files (e.g. `kintsugi.yaml`) to the document repo through the `document-write` queue, one write per repository at a time (fetch → rebase → retry, [ADR-0019](../decisions/0019-workspace-repo-write-path.md)) |
 | E7 Events | Domain events (job.started, pr.opened, gate.passed, artifact.registered…) via outbox + `LISTEN/NOTIFY` |
 | E8 Connectors | Git provider APIs (PRs, comments, webhooks), trackers, wikis, observability |
@@ -89,7 +89,7 @@ Maps one-to-one onto pipeline phases ([delivery pipeline](../methodology/deliver
 
 | Container | Modules | Code |
 |---|---|---|
-| `kintsugi-app` | API, portal, job gateway | `apps/api`, `apps/portal` |
+| `kintsugi-app` | API (including the member API), portal, job gateway | `apps/api`, `apps/portal` |
 | `kintsugi-worker` | Orchestrator, Git Sync & Writer, ingestion, job launcher | `services/orchestrator`, `services/knowledge`, `services/runtime` (launcher) |
 
 Shared libraries and assets:

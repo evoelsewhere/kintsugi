@@ -1,6 +1,6 @@
 # ADR-0062: Scope Coding Agent Workflow context with Project Access and immutable snapshots
 
-- Status: Superseded by [ADR-0067](0067-remove-access-and-review-plugins.md)
+- Status: Partly superseded by [ADR-0067](0067-remove-access-and-review-plugins.md): explicit Project Access stays, task context and snapshots are gone
 - Date: 2026-10-20
 - Decision register: D76
 - Amends: [ADR-0012](0012-work-items-as-files-in-git.md), [ADR-0024](0024-access-roles-vs-project-roles.md), [ADR-0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md), [ADR-0051](0051-document-repo-layout-legacy-and-modern.md)
