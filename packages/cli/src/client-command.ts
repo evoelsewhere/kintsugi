@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { win32 } from "node:path";
 import type { NativeClientCommandResult } from "./cli.js";
 import { CliError } from "./profile.js";
 
@@ -44,7 +44,7 @@ export interface NativeClientCommandOptions {
 function windowsPowerShellPath(env: NodeJS.ProcessEnv): string {
   const root = env.SystemRoot ?? env.windir;
   if (root === undefined || root.trim() === "") throw new CliError("NATIVE_COMMAND_UNAVAILABLE", "Windows PowerShell could not be located through SystemRoot");
-  return resolve(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  return win32.resolve(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
 export async function runNativeClientCommand(
