@@ -84,7 +84,8 @@ export class PermissionsGuard implements CanActivate {
     }
 
     if (scope !== undefined) {
-      if (request.method !== "GET") throw new ForbiddenException("Kintsugi member routes are read-only");
+      const allowed = request.method === "GET" || (scope.write === true && request.method === "POST");
+      if (!allowed) throw new ForbiddenException("Kintsugi member routes are read-only except the activity record");
       if (!user.permissions.includes("member.read")) throw new ForbiddenException("Missing permission: member.read");
       if (required?.some((code) => code !== "member.read")) throw new ForbiddenException("Kintsugi member tokens cannot satisfy installation permissions");
       if (scope.projectIdFrom === "token-projects") {
@@ -111,7 +112,8 @@ export class PermissionsGuard implements CanActivate {
 
   #projectId(request: AuthenticatedRequest, scope: MemberReadScope): string | undefined {
     if (scope.projectIdFrom === "token-projects") return undefined;
-    const raw = scope.projectIdFrom === "query" ? request.query["projectId"] : request.params["projectId"];
+    const body = request.body as { projectId?: unknown } | undefined;
+    const raw = scope.projectIdFrom === "query" ? request.query["projectId"] : scope.projectIdFrom === "body" ? body?.projectId : request.params["projectId"];
     return typeof raw === "string" && raw.length > 0 ? raw : undefined;
   }
 }

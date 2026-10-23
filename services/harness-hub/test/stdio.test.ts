@@ -35,8 +35,8 @@ describe("member stdio MCP process", () => {
     const listed = await client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
 
-    expect(names).toEqual(["document_get", "document_tree", "project_list"]);
-    expect(listed.tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
+    expect(names).toEqual(["activity_record", "document_get", "document_tree", "plugin_list", "project_list"]);
+    expect(listed.tools.filter((tool) => tool.annotations?.readOnlyHint !== true).map((tool) => tool.name)).toEqual(["activity_record"]);
 
     const documentTool = listed.tools.find((tool) => tool.name === "document_get");
     expect(documentTool?.inputSchema.required).toEqual(expect.arrayContaining(["projectId", "path"]));
@@ -50,6 +50,15 @@ describe("member stdio MCP process", () => {
 
     const second = await client.callTool({ name: "document_get", arguments: { projectId: "other", path: "00-project/b.md" } });
     expect(second.structuredContent).toMatchObject({ projectId: "other", content: "other:00-project/b.md" });
+  });
+
+  it("records activity through the write tool and validates its input", async () => {
+    const client = await connect("legacy");
+    const recorded = await client.callTool({ name: "activity_record", arguments: { projectId: "shop", kind: "result", pluginName: "context", summary: "Reviewed the standards" } });
+    expect(recorded.isError).not.toBe(true);
+    expect(recorded.structuredContent).toMatchObject({ id: "act-result" });
+    const invalid = await client.callTool({ name: "activity_record", arguments: { projectId: "shop", kind: "Bad Kind" } });
+    expect(invalid.isError).toBe(true);
   });
 
   it("rejects calls that omit the project before reaching the adapter", async () => {

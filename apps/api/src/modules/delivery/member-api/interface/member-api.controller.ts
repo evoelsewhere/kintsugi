@@ -1,11 +1,19 @@
-// Versioned, read-only HTTP interface for member harnesses (CLI and local MCP bridge). It is the common
-// base every plugin builds on: which projects the member may read and those projects' documents.
+// Versioned HTTP interface for member harnesses (CLI and local MCP bridge). It is the common base every
+// plugin builds on: the projects the member may read, those projects' documents, the member plugins the
+// member may install, and one write: the record of what a plugin did (ADR-0069).
 
-import { Controller, createParamDecorator, type ExecutionContext, Get, Query, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, createParamDecorator, type ExecutionContext, Get, HttpCode, Param, Post, Query, UnauthorizedException } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
-import { documentFileQuerySchema, documentTreeQuerySchema, projectQuerySchema } from "@kintsugi/harness-sdk";
+import {
+  activityInputSchema,
+  documentFileQuerySchema,
+  documentTreeQuerySchema,
+  pluginBundleQuerySchema,
+  pluginListQuerySchema,
+  projectQuerySchema,
+} from "@kintsugi/harness-sdk";
 import type { z } from "zod";
-import { AllowMemberRead, RequirePermission } from "#common/auth/decorators.js";
+import { AllowMemberRead, type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import type { AuthenticatedRequest, MemberPrincipal } from "#modules/core/auth/index.js";
 import { MemberApiService } from "../application/member-api.service.js";
 
@@ -40,7 +48,36 @@ export class MemberApiController {
   @RequirePermission("member.read")
   @AllowMemberRead({ projectIdFrom: "query" })
   @ApiOperation({ summary: "Read a Markdown file of an authorized project's document repository" })
-  file(@Query({ schema: documentFileQuerySchema }) query: z.infer<typeof documentFileQuerySchema>) {
-    return this.member.documentFile(query.projectId, query.ref, query.path);
+  file(@CurrentActor() actor: Actor, @Query({ schema: documentFileQuerySchema }) query: z.infer<typeof documentFileQuerySchema>) {
+    return this.member.documentFile(actor.id, query.projectId, query.ref, query.path);
+  }
+
+  @Get("plugins")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "List the member plugins the caller may install in an authorized project" })
+  plugins(@CurrentActor() actor: Actor, @Query({ schema: pluginListQuerySchema }) query: z.infer<typeof pluginListQuerySchema>) {
+    return this.member.listPlugins(actor.id, query.projectId);
+  }
+
+  @Get("plugins/:name")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "Download the files of one member plugin the caller may install" })
+  plugin(
+    @CurrentActor() actor: Actor,
+    @Param("name") name: string,
+    @Query({ schema: pluginBundleQuerySchema.omit({ name: true }) }) query: Omit<z.infer<typeof pluginBundleQuerySchema>, "name">,
+  ) {
+    return this.member.pluginBundle(actor.id, query.projectId, name);
+  }
+
+  @Post("activity")
+  @HttpCode(201)
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "body", write: true })
+  @ApiOperation({ summary: "Record what a plugin did in the caller's harness (bounded, per member, shown in Monitoring)" })
+  activity(@CurrentActor() actor: Actor, @Body({ schema: activityInputSchema }) body: z.infer<typeof activityInputSchema>) {
+    return this.member.recordActivity(actor.id, body);
   }
 }

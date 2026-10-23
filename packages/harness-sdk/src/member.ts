@@ -64,9 +64,66 @@ export interface DocumentFile {
   content: string;
 }
 
+/** A member plugin the member may use in a project. */
+export interface PluginSummary {
+  name: string;
+  title: string;
+  version: string;
+  description: string;
+}
+
+export interface PluginListQuery {
+  schemaVersion?: MemberSchemaVersion;
+  projectId: string;
+}
+
+export interface PluginBundleQuery {
+  schemaVersion?: MemberSchemaVersion;
+  projectId: string;
+  name: string;
+}
+
+export interface PluginBundleFile {
+  /** Relative to the plugin's folder: skills/**, agents/*.md or commands/*.md. */
+  path: string;
+  content: string;
+  sha256: string;
+}
+
+/** The files of one member plugin, in the Claude Code plugin layout, as Kintsugi distributes them. */
+export interface PluginBundle extends PluginSummary {
+  schemaVersion: MemberSchemaVersion;
+  projectId: string;
+  /** Hash over the paths and hashes of all files; changes whenever the content does. */
+  contentHash: string;
+  files: PluginBundleFile[];
+}
+
+export type ActivityDetail = Record<string, string | number | boolean | null>;
+
+/** What a plugin records back to Kintsugi: a short, named fact about work done in the member's harness. */
+export interface ActivityInput {
+  schemaVersion?: MemberSchemaVersion;
+  projectId: string;
+  /** The kind of fact (run, result, note, ...). plugin.* and document.* are set by Kintsugi itself. */
+  kind: string;
+  pluginName?: string;
+  harness?: string;
+  summary?: string;
+  detail?: ActivityDetail;
+}
+
+export interface ActivityReceipt {
+  schemaVersion: MemberSchemaVersion;
+  id: string;
+}
+
 /** The operations shared by the CLI, the local MCP adapter and the API composition. */
 export interface MemberPort {
   listProjects(query: ProjectQuery): Promise<ListResult<ProjectSummary>>;
   documentTree(query: DocumentTreeQuery): Promise<DocumentTree>;
   documentFile(query: DocumentFileQuery): Promise<DocumentFile>;
+  listPlugins(query: PluginListQuery): Promise<ListResult<PluginSummary>>;
+  pluginBundle(query: PluginBundleQuery): Promise<PluginBundle>;
+  recordActivity(input: ActivityInput): Promise<ActivityReceipt>;
 }

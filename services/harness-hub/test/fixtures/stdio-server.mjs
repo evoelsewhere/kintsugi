@@ -23,6 +23,15 @@ const member = {
       size: 5, content: query.projectId + ":" + query.path,
     };
   },
+  async listPlugins() {
+    return { schemaVersion: "1", items: [{ name: "context", title: "Project context", version: "1.0.0", description: "Read the documents" }], limit: 100 };
+  },
+  async pluginBundle() {
+    throw new Error("not served over MCP");
+  },
+  async recordActivity(input) {
+    return { schemaVersion: "1", id: "act-" + input.kind };
+  },
 };
 
 await serveMemberStdio({ member });

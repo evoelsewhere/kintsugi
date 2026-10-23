@@ -10,6 +10,7 @@ import { getNativeClientVersion } from "./client-version.js";
 import { runNativeClientCommand } from "./client-command.js";
 import type { CredentialStore } from "./credential-store.js";
 import { NativeCredentialStore } from "./credential-store.js";
+import { registerActivityCommands } from "./commands/activity.js";
 import { registerAuthCommands } from "./commands/auth.js";
 import { registerDocumentCommands } from "./commands/document.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
@@ -200,6 +201,7 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
   registerAuthCommands(program, deps);
   registerProjectCommands(program, deps);
   registerDocumentCommands(program, deps);
+  registerActivityCommands(program, deps);
   registerDoctorCommand(program, deps);
   registerMcpCommands(program, deps);
   registerPluginsCommand(program, deps);

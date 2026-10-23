@@ -2,22 +2,15 @@ import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { Command } from "commander";
-import { applyClientSetup, planClientSetup, stageCodexDesktopPlugin, type HarnessClient, type SetupReport } from "@kintsugi/harness-hub";
+import { applyClientSetup, planClientSetup, stageCodexDesktopPlugin, type SetupReport } from "@kintsugi/harness-hub";
 import type { CliDeps } from "../cli.js";
+import { registerPluginDistribution } from "./plugin-distribution.js";
+import { HARNESS_TARGETS, runInstallSteps, safeProfileDirectory } from "./plugin-native.js";
 import { CliError, isProfileId, profileConfigPathFromEnv, validateInstallationUrl } from "../profile.js";
-
-const HARNESS_TARGETS = {
-  "claude-code": "claude",
-  codex: "codex",
-} as const satisfies Record<string, HarnessClient>;
 
 function stableProjectProfileId(baseUrl: string, projectId: string): string {
   const identity = `${baseUrl}\0${projectId}`;
   return `kintsugi-${createHash("sha256").update(identity, "utf8").digest("hex").slice(0, 12)}`;
-}
-
-function safeProfileDirectory(profileId: string): string {
-  return `profile-${createHash("sha256").update(profileId, "utf8").digest("hex").slice(0, 16)}`;
 }
 
 function hasControlCharacters(value: string): boolean {
@@ -57,16 +50,8 @@ function renderSetupPlan(deps: CliDeps, input: { harness: string; profileId: str
   deps.stdout.write(`Restart or reload ${input.harness === "claude-code" ? "Claude Code" : "Codex"} after installation to load the plugin. The first MCP connection will open Kintsugi browser sign-in.\n`);
 }
 
-function rollbackInstructions(report: SetupReport): string {
-  return [
-    "To roll back this Kintsugi plugin setup, run:",
-    ...report.rollbackCommands.map((command) => `  ${command}`),
-    `Then remove the generated package directory: ${report.artifactRoot}`,
-  ].join("\n");
-}
-
 export function registerPluginsCommand(program: Command, deps: CliDeps): void {
-  const plugins = program.command("plugins").description("Install the Kintsugi connector plugin");
+  const plugins = program.command("plugins").description("Install the Kintsugi connector and the member plugins Kintsugi distributes");
   plugins.command("setup")
     .description("Prepare or install the project-scoped Kintsugi connector plugin")
     .option("--install-mode <mode>", "Install mode: native-cli or desktop-ui", "native-cli")
@@ -137,25 +122,7 @@ export function registerPluginsCommand(program: Command, deps: CliDeps): void {
       const jsonOutput = options.json === true || options.format === "json";
       if (!jsonOutput) renderSetupPlan(deps, { harness, profileId, report });
 
-      for (let index = 0; index < report.installSteps.length; index++) {
-        const command = report.installSteps[index]!;
-        if (deps.runClientCommand === undefined) throw new CliError("PLUGIN_SETUP_UNAVAILABLE", "This CLI has no native client command runner");
-        let result: Awaited<ReturnType<NonNullable<CliDeps["runClientCommand"]>>>;
-        try {
-          result = await deps.runClientCommand(command.executable, command.args);
-        } catch {
-          throw new CliError(
-            "PLUGIN_SETUP_COMMAND_FAILED",
-            `Native setup failed to start at command ${index + 1} of ${report.installSteps.length}. Completed ${index} of ${report.installSteps.length} commands.\n${rollbackInstructions(report)}`,
-          );
-        }
-        if (result.exitCode !== 0) {
-          throw new CliError(
-            "PLUGIN_SETUP_COMMAND_FAILED",
-            `Native setup stopped at command ${index + 1} of ${report.installSteps.length} (exit code ${result.exitCode}). Completed ${index} of ${report.installSteps.length} commands.\n${rollbackInstructions(report)}`,
-          );
-        }
-      }
+      await runInstallSteps(deps, report);
 
       if (jsonOutput) {
         const desktopUi = report.installationMode === "desktop-ui";
@@ -167,4 +134,5 @@ export function registerPluginsCommand(program: Command, deps: CliDeps): void {
       }
       deps.stdout.write(report.installationMode === "desktop-ui" ? "Codex Desktop marketplace package prepared; install it from the Codex app to finish.\n" : "Plugin installation completed.\n");
     });
+  registerPluginDistribution(plugins, deps);
 }

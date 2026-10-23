@@ -33,12 +33,14 @@ describe.skipIf(!hasDatabase)("plugins (integration)", () => {
     const list = await client.get<Summary[]>("/admin/plugins");
     expect(list.status).toBe(200);
     expect(list.body.data!.map((plugin) => [plugin.name, plugin.audience, plugin.source])).toEqual([
+      ["context", "member", "builtin"],
       ["reverse_engineering", "runtime", "builtin"],
       ["modernize", "runtime", "builtin"],
     ]);
     const pluginsByName = new Map(list.body.data!.map((plugin) => [plugin.name, plugin]));
     expect(pluginsByName.get("reverse_engineering")!.counts).toMatchObject({ agent: 4, command: 3, workflow: 3, skill: 3 });
     expect(pluginsByName.get("modernize")!.counts).toMatchObject({ agent: 3, command: 1, skill: 3 });
+    expect(pluginsByName.get("context")!.counts).toMatchObject({ skill: 1 });
   });
 
   it("opens a plugin and reads one of its files", async () => {
