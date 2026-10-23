@@ -480,8 +480,7 @@ const verifyAndFold = async fresh => {
   if (toVerify.length === 0) return
 
   spawned += toVerify.length
-  const verdicts = await parallel(
-    toVerify.map(rule => () =>
+  const refereeThunk = rule => () =>
       agent(
         `You are refereeing one extracted business rule against the legacy source. Read ONLY the cited location plus enough surrounding code to judge it (do not survey the rest of the application).
 
@@ -500,9 +499,23 @@ ${UNTRUSTED}`,
           phase: 'Verify',
           schema: VERDICT_SCHEMA,
         },
-      ),
-    ),
-  )
+      )
+  const verdicts = await parallel(toVerify.map(refereeThunk))
+
+  // A referee that died (usually a result file of the wrong shape) gets one more try while the agent cap has room,
+  // so the rule is judged instead of waiting for an SME. What still has no verdict is returned as unverified.
+  const failedAt = toVerify.map((_, i) => i).filter(i => !verdicts[i])
+  const retryRoom = budgetExhausted() ? 0 : Math.max(0, Math.floor(agentRoom() / 2))
+  const retried = failedAt.slice(0, retryRoom)
+  if (retried.length > 0) {
+    spawned += retried.length
+    const again = await parallel(retried.map(i => refereeThunk(toVerify[i])))
+    retried.forEach((i, j) => {
+      verdicts[i] = again[j]
+    })
+    log(`Verify: ${retried.length} referee(s) with no verdict were run once more; ${again.filter(Boolean).length} judged`)
+  }
+  if (failedAt.length > retried.length) log(`Verify: ${failedAt.length - retried.length} referee(s) with no verdict were not retried (agent cap)`)
 
   toVerify.forEach((rule, i) => {
     const v = verdicts[i]
