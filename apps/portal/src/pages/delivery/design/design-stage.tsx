@@ -196,7 +196,7 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
                 onFilters={(patch) => update({ ...patch })}
                 selected={params.get("item") ?? undefined}
                 onOpen={(key) => open(key)}
-                understandLink={deliveryLink({ projectId: project.id, applicationId: application.id, stage: "understand" })}
+                understandLink={`${deliveryLink({ projectId: project.id, applicationId: application.id, stage: "understand" })}&tab=catalog`}
               />
             ) : (
               <DesignCoverageTab overview={view} filter={coverageFilter} onFilter={(next) => update({ cov: next === "all" ? undefined : next })} onOpenUnit={(key) => open(key, "coverage")} />
