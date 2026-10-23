@@ -13,10 +13,6 @@
     "./reader": {
       "types": "./dist/reader/index.d.ts",
       "import": "./dist/reader/index.js"
-    },
-    "./access-plugin": {
-      "types": "./dist/access-plugin.d.ts",
-      "import": "./dist/access-plugin.js"
     }
   },
   "files": [

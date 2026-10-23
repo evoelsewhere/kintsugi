@@ -28,7 +28,6 @@ import { errorText, formatDateTime, formatRelative } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
-import { GatePublicationList } from "./agent-context/gate-publication";
 
 const PAGE_SIZE = 25;
 
@@ -127,7 +126,6 @@ export function GatesView({ status, onStatus, projectOptions }: { status: string
           }
         </Loaded>
       </div>
-      {projectId === "" ? <p className="mt-5 border-t border-[var(--color-border)] pt-4 text-[12px] text-text-muted">Select a project above to see its Coding Agent Workflow gate-publication and Git effectiveness status.</p> : <GatePublicationList projectId={projectId} />}
 
       <DecideGateDialog gate={deciding} onClose={() => setDeciding(null)} onDecided={() => void gates.reload()} />
       <GateHistoryDialog gate={history} onClose={() => setHistory(null)} />

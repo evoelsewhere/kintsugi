@@ -19,25 +19,8 @@ export interface GitServerRecord {
   knownHosts?: string;
   /** Whether the write-only credential (token or SSH key) is stored. */
   hasCredential: boolean;
-  /** Whether a write-only GitHub webhook secret is stored for event-driven PR refresh. */
-  hasGithubWebhookSecret: boolean;
-  /** GitHub App metadata is visible, but its PEM private key remains write-only. */
-  githubApp?: GitHubAppConfigRecord;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface GitHubAppConfigRecord {
-  appId: string;
-  installationId: string;
-  hasPrivateKey: boolean;
-}
-
-/** Write-only server-side GitHub App configuration. */
-export interface GitHubAppRegistration {
-  appId: string;
-  installationId: string;
-  privateKey: string;
 }
 
 /** Write-only credential material; stored encrypted, never returned. */
@@ -55,10 +38,6 @@ export interface RegisterGitServer {
   username?: string;
   knownHosts?: string;
   credential: GitServerCredential;
-  /** Omitted keeps the stored value; null clears it. Plaintext is encrypted and never returned. */
-  githubWebhookSecret?: string | null;
-  /** Omitted on replacement to keep it; null removes the App integration. */
-  githubApp?: GitHubAppRegistration | null;
 }
 
 export type SyncStatus = "pending" | "cloning" | "ready" | "error";

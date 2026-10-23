@@ -2,7 +2,6 @@
 // Depends on the domain ports only; knows nothing about HTTP, Postgres or the git CLI.
 
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { createPrivateKey } from "node:crypto";
 import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
@@ -64,65 +63,7 @@ function changedServerFields(existing: GitServerRecord, input: RegisterGitServer
   const keys = ["kind", "name", "baseUrl", "authType", "username", "knownHosts"] as const;
   const fields: string[] = keys.filter((key) => (existing[key] ?? "") !== (input[key] ?? ""));
   if (hasCredential(input)) fields.push("credential");
-  if (
-    input.githubApp !== undefined &&
-    (input.githubApp === null ||
-      existing.githubApp?.appId !== input.githubApp.appId ||
-      existing.githubApp?.installationId !== input.githubApp.installationId ||
-      input.githubApp.privateKey !== undefined)
-  ) fields.push("githubApp");
-  if (input.githubWebhookSecret !== undefined) fields.push("githubWebhookSecret");
   return fields.sort();
-}
-
-function githubAppHostProblem(input: Pick<RegisterGitServer, "kind" | "baseUrl">): string | undefined {
-  if (input.kind !== "github" && input.kind !== "github-enterprise") return "GitHub App credentials can only be configured for GitHub.com or GitHub Enterprise.";
-  let base: URL;
-  try {
-    base = new URL(input.baseUrl);
-  } catch {
-    return "GitHub App credentials require a valid GitHub host URL.";
-  }
-  if (
-    base.protocol !== "https:" ||
-    base.username !== "" ||
-    base.password !== "" ||
-    base.search !== "" ||
-    base.hash !== "" ||
-    (base.pathname !== "/" && base.pathname !== "") ||
-    (input.kind === "github" && base.hostname.toLowerCase() !== "github.com") ||
-    (input.kind === "github-enterprise" && base.hostname.toLowerCase() === "github.com")
-  ) return "GitHub App credentials must match the registered GitHub HTTPS host.";
-  return undefined;
-}
-
-function githubAppProblem(input: RegisterGitServer): string | undefined {
-  const app = input.githubApp;
-  if (app === undefined || app === null) return undefined;
-  const hostProblem = githubAppHostProblem(input);
-  if (hostProblem !== undefined) return hostProblem;
-  if (!/^\d+$/.test(app.appId) || !/^\d+$/.test(app.installationId)) return "GitHub App and installation IDs must be numeric.";
-  try {
-    const key = createPrivateKey(app.privateKey);
-    if (key.asymmetricKeyType !== "rsa" || (key.asymmetricKeyDetails?.modulusLength ?? 0) < 2048) {
-      return "GitHub App private keys must use RSA with at least 2048 bits.";
-    }
-  } catch {
-    return "GitHub App private key must be a valid RSA private key.";
-  }
-  return undefined;
-}
-
-function githubWebhookSecretProblem(input: RegisterGitServer): string | undefined {
-  if (input.githubWebhookSecret === undefined || input.githubWebhookSecret === null) return undefined;
-  if (input.githubWebhookSecret.trim().length < 32 || input.githubWebhookSecret.length > 8192) {
-    return "GitHub webhook secrets must contain at least 32 non-whitespace characters and no more than 8192 characters.";
-  }
-  if (input.kind !== "github" && input.kind !== "github-enterprise") {
-    return "GitHub webhook secrets can only be configured for GitHub.com or GitHub Enterprise.";
-  }
-  const hostProblem = githubAppHostProblem(input);
-  return hostProblem?.replace("GitHub App credentials", "GitHub webhook secrets");
 }
 
 @Injectable()
@@ -148,10 +89,6 @@ export class GitService {
     if ((await this.registry.getServer(input.id)) !== undefined) throw new ConflictException(`Git server ${input.id} already exists`);
     const problem = credentialProblem(input);
     if (problem !== undefined) throw new BadRequestException(problem);
-    const appProblem = githubAppProblem(input);
-    if (appProblem !== undefined) throw new BadRequestException(appProblem);
-    const webhookProblem = githubWebhookSecretProblem(input);
-    if (webhookProblem !== undefined) throw new BadRequestException(webhookProblem);
     const server = await this.registry.createServer(input);
     await this.audit.recordChange(
       auditRecord(actor, AUDIT_ACTIONS.gitServerCreate, {
@@ -161,8 +98,6 @@ export class GitService {
           name: server.name,
           baseUrl: auditUrl(server.baseUrl),
           authType: server.authType,
-          githubAppConfigured: input.githubApp != null,
-          githubWebhookSecretConfigured: input.githubWebhookSecret != null,
         },
       }),
     );
@@ -171,33 +106,6 @@ export class GitService {
 
   async replaceServer(id: string, input: RegisterGitServer, actor: Actor): Promise<GitServerRecord> {
     const existing = await this.#mustGetServer(id);
-    const appProblem = githubAppProblem(input);
-    if (appProblem !== undefined) throw new BadRequestException(appProblem);
-    const webhookProblem = githubWebhookSecretProblem(input);
-    if (webhookProblem !== undefined) throw new BadRequestException(webhookProblem);
-    const githubKind = input.kind === "github" || input.kind === "github-enterprise";
-    if (existing.hasGithubWebhookSecret && input.githubWebhookSecret === undefined) {
-      if (!githubKind) {
-        throw new BadRequestException("Remove the GitHub webhook secret explicitly before changing this server to another provider.");
-      }
-      const existingOrigin = new URL(existing.baseUrl).origin;
-      const replacementOrigin = new URL(input.baseUrl).origin;
-      if (existingOrigin !== replacementOrigin) {
-        throw new BadRequestException("Changing the GitHub host requires re-entering its webhook secret or explicitly removing it.");
-      }
-    }
-    if (existing.githubApp !== undefined && !githubKind && input.githubApp === undefined) {
-      throw new BadRequestException("Remove the GitHub App configuration explicitly before changing this server to another provider.");
-    }
-    if (existing.githubApp !== undefined && input.githubApp === undefined) {
-      const appHostProblem = githubAppHostProblem(input);
-      if (appHostProblem !== undefined) throw new BadRequestException(appHostProblem);
-      const existingOrigin = new URL(existing.baseUrl).origin;
-      const replacementOrigin = new URL(input.baseUrl).origin;
-      if (existingOrigin !== replacementOrigin) {
-        throw new BadRequestException("Changing the GitHub API origin requires re-entering its App configuration.");
-      }
-    }
     const fresh = hasCredential(input);
     if (fresh) {
       const problem = credentialProblem(input);

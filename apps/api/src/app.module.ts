@@ -20,8 +20,6 @@ import { FactorySetupsModule } from "./modules/delivery/factory/factory-setups.m
 import { CatalogModule } from "./modules/delivery/catalog/catalog.module.js";
 import { DesignModule } from "./modules/delivery/design/design.module.js";
 import { DocumentsModule } from "./modules/delivery/documents/documents.module.js";
-import { AgentContextModule } from "./modules/delivery/agent-context/agent-context.module.js";
-import { MemberReviewsModule } from "./modules/delivery/member-reviews/index.js";
 import { RuntimeJobsModule } from "./modules/delivery/runtime-jobs/runtime-jobs.module.js";
 import { WorkItemsModule } from "./modules/delivery/workbench/work-items.module.js";
 import { AiMetricsModule } from "./modules/monitoring/ai-metrics/ai-metrics.module.js";
@@ -35,7 +33,6 @@ import { TelemetryModule } from "./modules/monitoring/telemetry/telemetry.module
 import { HealthChecksModule } from "./modules/monitoring/target-health/health-checks.module.js";
 import { AuditEntriesModule } from "./modules/governance/audit/audit-entries.module.js";
 import { GatesModule } from "./modules/governance/gates/gates.module.js";
-import { GatePublicationModule } from "./modules/governance/gate-publication/index.js";
 import { StageDecisionsModule } from "./modules/governance/stage-decisions/index.js";
 import { PoliciesModule } from "./modules/governance/policies/policies.module.js";
 import { ReviewsModule } from "./modules/governance/reviews/reviews.module.js";
@@ -78,8 +75,6 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     // delivery
     RuntimeJobsModule,
     DocumentsModule,
-    AgentContextModule,
-    MemberReviewsModule,
     CatalogModule,
     DesignModule,
     ArchitectureViewsModule,
@@ -98,7 +93,6 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     // governance
     PoliciesModule,
     GatesModule,
-    GatePublicationModule,
     StageDecisionsModule,
     ReviewsModule,
     AuditEntriesModule,

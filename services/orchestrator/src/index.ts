@@ -7,17 +7,13 @@ export {
   DOCUMENT_WRITE_QUEUE_OPTIONS,
   JOB_RUN_QUEUE,
   JOB_RUN_QUEUE_OPTIONS,
-  SNAPSHOT_RETENTION_QUEUE,
-  SNAPSHOT_RETENTION_QUEUE_OPTIONS,
   ensureDocumentWriteQueue,
   ensureJobRunQueue,
-  ensureSnapshotRetentionQueue,
   sendDocumentWrite,
   sendJobRun,
   type DocumentWriteFile,
   type DocumentWriteRequest,
   type JobRunRequest,
-  type SnapshotRetentionRequest,
 } from "./queues.js";
 export { RepositoryStore, type SyncStatus, type SyncTarget } from "./git-sync/repositories.js";
 export { pruneMirrors, syncRepository, withMirrorLock, type SyncDeps, type SyncResult } from "./git-sync/sync.js";
