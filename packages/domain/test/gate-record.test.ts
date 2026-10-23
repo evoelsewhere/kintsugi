@@ -59,6 +59,3 @@ describe("evidence-bound gate records", () => {
     expect(parseGateRecord(markdown)).toEqual({ status: "valid", evidence: waived });
   });
 });
-
-
-
