@@ -38,7 +38,7 @@ import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepReuse } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
 import { runJobOutputHook } from "./hook.js";
-import { shapeProblem } from "./result-shape.js";
+import { exampleOf, keysOf, shapeProblem, unwrapResult } from "./result-shape.js";
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
@@ -232,10 +232,15 @@ const missingFilesNote = (missing: readonly string[], written: readonly string[]
   "Write each missing file at exactly that path (reuse what you already wrote), then stop.";
 
 /** Appended to an agent's task when its structured result is missing or not JSON: where it goes, never what was in it. */
-const resultFileNote = (problem: string, written: readonly string[]): string =>
-  `\n\nThe step needs your structured result and ${problem}. ` +
-  `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
-  `Write the JSON result with write to the bare path "${RESULT_FILE}" (no folder, the one exception to the full-path rule), matching the schema above, nothing else in that file, then stop.`;
+const resultFileNote = (problem: string, written: readonly string[], schema?: unknown): string => {
+  const example = exampleOf(schema);
+  return (
+    `\n\nThe step needs your structured result and ${problem}. ` +
+    `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
+    `Write the JSON result with write to the bare path "${RESULT_FILE}" (no folder, the one exception to the full-path rule), matching the schema above, nothing else in that file, then stop.` +
+    (example === undefined ? "" : ` The file is one JSON object with these top-level properties, not wrapped in another key and not a report; replace the placeholder values: ${example}`)
+  );
+};
 
 /** Appended to an agent's task when an earlier try of the step left files in its output folder: names only, never content. */
 const carriedNote = (paths: readonly string[]): string =>
@@ -848,14 +853,14 @@ export class JobRunner {
           if (text === undefined) continue;
           missing = false;
           try {
-            const parsed = JSON.parse(text) as unknown;
+            const parsed = unwrapResult(schema, JSON.parse(text) as unknown);
             const wrong = shapeProblem(schema, parsed);
             if (wrong === undefined) {
               value = parsed;
               ok = true;
               break;
             }
-            problem = `${RESULT_FILE} does not match the schema (${wrong})`;
+            problem = `${RESULT_FILE} does not match the schema (${wrong}; the file has: ${keysOf(parsed)})`;
           } catch {
             problem = `${RESULT_FILE} is not valid JSON`;
           }
@@ -869,7 +874,7 @@ export class JobRunner {
       if (!taken.ok && signal?.aborted !== true) {
         await this.#event(ws, stepId, "log", `agent ${run.name}: ${taken.problem}; asking it to write the result once`);
         const written = (await listFiles(ws.out)).map((entry) => entry.path);
-        done = await attempt(`${spec.task}${resultFileNote(taken.problem, written)}`);
+        done = await attempt(`${spec.task}${resultFileNote(taken.problem, written, schema)}`);
         if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
         await writeMock();
         taken = await take();
