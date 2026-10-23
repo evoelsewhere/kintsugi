@@ -16,3 +16,6 @@ coverage/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# CLI packages built by `pnpm release:cli`
+/releases/

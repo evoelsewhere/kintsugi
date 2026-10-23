@@ -1,9 +1,5 @@
-import { readFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const ASSET_DIR = fileURLToPath(new URL("../../assets/", import.meta.url));
-const MARKS = ["kintsugi-mark-light.svg", "kintsugi-mark-dark.svg"] as const;
+import { isAbsolute } from "node:path";
+import { KINTSUGI_MARKS } from "./marks.js";
 
 export type HarnessClient = "claude" | "codex" | "copilot";
 
@@ -94,7 +90,7 @@ export function generateConnectorPlugin(input: ConnectorPluginInput): GeneratedP
   const files: Record<string, string> = {};
 
   if (input.target === "codex") {
-    for (const mark of MARKS) files[`assets/${mark}`] = readFileSync(join(ASSET_DIR, mark), "utf8");
+    for (const [name, svg] of Object.entries(KINTSUGI_MARKS)) files[`assets/${name}`] = svg;
   }
 
   if (input.target === "claude") {

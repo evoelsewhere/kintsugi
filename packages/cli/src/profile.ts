@@ -142,3 +142,25 @@ export function profileConfigPathFromEnv(env: NodeJS.ProcessEnv, cwd: string): s
   const explicit = env.KINTSUGI_CONFIG;
   return explicit === undefined ? defaultConfigPath(env) : resolve(cwd, explicit);
 }
+
+/**
+ * The installation the CLI came from: the installers write `install.json` beside the app folder (ADR-0070), so a
+ * member does not retype the URL. Order: KINTSUGI_URL, the active profile, install.json.
+ */
+export async function defaultInstallationUrl(
+  env: NodeJS.ProcessEnv,
+  entrypoint: string | undefined,
+  activeProfileUrl?: string,
+): Promise<string | undefined> {
+  const explicit = env.KINTSUGI_URL;
+  if (explicit !== undefined && explicit !== "") return validateInstallationUrl(explicit);
+  if (activeProfileUrl !== undefined) return activeProfileUrl;
+  const home = env.KINTSUGI_HOME ?? (entrypoint === undefined ? undefined : resolve(dirname(entrypoint), "..", ".."));
+  if (home === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(await readFile(join(home, "install.json"), "utf8")) as { baseUrl?: unknown };
+    return typeof parsed.baseUrl === "string" ? validateInstallationUrl(parsed.baseUrl) : undefined;
+  } catch {
+    return undefined;
+  }
+}

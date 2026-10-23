@@ -13,6 +13,7 @@ import { PluginsPage } from "./pages/plugins/plugins-page";
 import { DeliveryOverviewPage } from "./pages/delivery/delivery-overview-page";
 import { DeliveryStagePage } from "./pages/delivery/delivery-stage-page";
 import { GovernancePage } from "./pages/governance";
+import { GuidelinePage } from "./pages/guideline/guideline-page";
 import { LoginPage } from "./pages/login";
 import { MemberAuthorizePage } from "./pages/member/authorize";
 import { MonitoringPage } from "./pages/monitoring";
@@ -65,6 +66,8 @@ export function App(): React.JSX.Element {
             <Route path="plugins/:name" element={<PluginPage />} />
             <Route path="agents/*" element={<Navigate to="/plugins/builder" replace />} />
             <Route path="members" element={<MembersPermissionsPage />} />
+            <Route path="guideline" element={<GuidelinePage />} />
+            <Route path="guideline/:page" element={<GuidelinePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

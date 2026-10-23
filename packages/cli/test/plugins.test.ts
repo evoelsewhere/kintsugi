@@ -206,7 +206,7 @@ describe("plugins setup command", () => {
       ["codex", ["--no-daemon", "plugin", "marketplace", "add", artifactRoot(state.root, "codex", profileId!)]],
       ["codex", ["--no-daemon", "plugin", "add", `kintsugi@${marketplace.name}`]],
     ]);
-    expect(config.activeProfile).toBeUndefined();
+    expect(config.activeProfile).toBe(profileId);
   });
 
   it("prints the planned commands before invoking the native client", async () => {

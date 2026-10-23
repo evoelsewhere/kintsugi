@@ -12,7 +12,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "kintsugi": "node packages/cli/dist/main.js"
+    "kintsugi": "node packages/cli/dist/main.js",
+    "release:cli": "node packages/cli/dist/release/main.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

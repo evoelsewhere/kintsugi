@@ -3,7 +3,6 @@
 // against their hashes, and are written only into the Kintsugi-owned package, never into the client's own settings.
 
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
 import type { Command } from "commander";
 import {
   applyClientSetup,
@@ -17,8 +16,8 @@ import {
 } from "@kintsugi/harness-hub";
 import type { PluginBundle } from "@kintsugi/harness-sdk";
 import type { CliDeps } from "../cli.js";
-import { CliError, profileConfigPathFromEnv } from "../profile.js";
-import { HARNESS_TARGETS, runInstallSteps, safeProfileDirectory } from "./plugin-native.js";
+import { CliError } from "../profile.js";
+import { HARNESS_TARGETS, artifactRootFor, detectHarness, normalizeHarness, runInstallSteps } from "./plugin-native.js";
 import { apiFor, emit, projectId, selectedProfile, type CommandOptions } from "./shared.js";
 
 type HarnessName = keyof typeof HARNESS_TARGETS;
@@ -38,13 +37,8 @@ export function verifyBundle(bundle: PluginBundle): void {
   if (bundleContentHash(bundle.files) !== bundle.contentHash) throw new CliError("PLUGIN_BUNDLE_CORRUPT", "The downloaded plugin does not match its content hash");
 }
 
-function harnessOf(value: string): HarnessName {
-  if (!Object.hasOwn(HARNESS_TARGETS, value)) throw new CliError("PLUGIN_HARNESS_INVALID", "Harness must be claude-code or codex");
-  return value as HarnessName;
-}
-
 /** Everything a native package change needs, checked once: the launcher, the client version and the package root. */
-async function nativePackage(deps: CliDeps, command: Command, harnessValue: string): Promise<{
+async function nativePackage(deps: CliDeps, command: Command, harnessValue: string | undefined): Promise<{
   harness: HarnessName;
   target: (typeof HARNESS_TARGETS)[HarnessName];
   profileId: string;
@@ -52,9 +46,9 @@ async function nativePackage(deps: CliDeps, command: Command, harnessValue: stri
   artifactRoot: string;
   launcher: NonNullable<CliDeps["launcher"]>;
 }> {
-  const harness = harnessOf(harnessValue);
-  const target = HARNESS_TARGETS[harness];
   const { profile } = await selectedProfile(deps, command);
+  const harness = harnessValue === undefined ? await detectHarness(deps, profile.id) : normalizeHarness(harnessValue);
+  const target = HARNESS_TARGETS[harness];
   if (deps.launcher === undefined) throw new CliError("PLUGIN_SETUP_UNAVAILABLE", "This CLI cannot verify its local Node launcher and installed CLI entrypoint");
   if (deps.getClientVersion === undefined || deps.runClientCommand === undefined) {
     throw new CliError("PLUGIN_SETUP_UNAVAILABLE", "This CLI cannot verify its native client version and command runner");
@@ -65,7 +59,7 @@ async function nativePackage(deps: CliDeps, command: Command, harnessValue: stri
   } catch {
     throw new CliError("PLUGIN_CLIENT_UNAVAILABLE", `Could not read the ${target} CLI version; install it or make it available on PATH`);
   }
-  const artifactRoot = join(dirname(profileConfigPathFromEnv(deps.env, deps.cwd)), "plugins", "connector", safeProfileDirectory(profile.id), harness);
+  const artifactRoot = artifactRootFor(deps, profile.id, harness);
   return { harness, target, profileId: profile.id, clientVersion, artifactRoot, launcher: deps.launcher };
 }
 
@@ -75,28 +69,31 @@ function report(deps: CliDeps, command: Command, value: Record<string, unknown>,
   else deps.stdout.write(`${lines.join("\n")}\n`);
 }
 
-export function registerPluginDistribution(plugins: Command, deps: CliDeps): void {
-  plugins.command("list")
+const CLIENT_OPTION = "-H, --harness <client>";
+const CLIENT_HELP = "claude or codex (default: the client you connected)";
+
+/** `plugins list|install|remove`, and the short `add` and `remove` at the top level. */
+export function registerPluginDistribution(plugins: Command, deps: CliDeps, names: { list?: string; install: string; remove: string } = { list: "list", install: "install", remove: "remove" }): void {
+  if (names.list !== undefined) plugins.command(names.list)
     .description("List the member plugins you may install in the project, and which are installed")
     .option("--project <id>", "Project id")
-    .option("--harness <harness>", "Show what is installed for claude-code or codex", "claude-code")
+    .option(CLIENT_OPTION, CLIENT_HELP)
     .action(async function(this: Command) {
-      const options = this.optsWithGlobals() as CommandOptions & { harness: string };
+      const options = this.optsWithGlobals() as CommandOptions & { harness?: string };
       const { client, profile } = await apiFor(deps, this);
       const available = await client.listPlugins({ projectId: projectId(options, profile.projectId) });
-      const harness = harnessOf(options.harness);
-      const artifactRoot = join(dirname(profileConfigPathFromEnv(deps.env, deps.cwd)), "plugins", "connector", safeProfileDirectory(profile.id), harness);
-      const installed = (await readPluginState(artifactRoot)).plugins;
+      const harness = options.harness === undefined ? await detectHarness(deps, profile.id).catch(() => undefined) : normalizeHarness(options.harness);
+      const installed = harness === undefined ? {} : (await readPluginState(artifactRootFor(deps, profile.id, harness))).plugins;
       const items = available.items.map((item) => ({ ...item, installed: installed[item.name]?.version ?? null }));
       report(deps, this, { harness, items }, items.length === 0 ? ["No member plugins are available to you in this project."] : items.map((item) => `${item.name} ${item.version} — ${item.title}${item.installed === null ? "" : ` (installed ${item.installed})`}`));
     });
 
-  plugins.command("install <name>")
-    .description("Install or update a member plugin into the Kintsugi package of a client")
-    .requiredOption("--harness <harness>", "Harness: claude-code or codex")
+  plugins.command(`${names.install} <name>`)
+    .description("Install or update a member plugin for your AI client")
+    .option(CLIENT_OPTION, CLIENT_HELP)
     .option("--project <id>", "Project id")
     .action(async function(this: Command, name: string) {
-      const options = this.optsWithGlobals() as CommandOptions & { harness: string };
+      const options = this.optsWithGlobals() as CommandOptions & { harness?: string };
       const native = await nativePackage(deps, this, options.harness);
       const { client, profile } = await apiFor(deps, this);
       const bundle = await client.pluginBundle({ projectId: projectId(options, profile.projectId), name });
@@ -126,11 +123,11 @@ export function registerPluginDistribution(plugins: Command, deps: CliDeps): voi
       ]);
     });
 
-  plugins.command("remove <name>")
-    .description("Remove a member plugin from the Kintsugi package of a client")
-    .requiredOption("--harness <harness>", "Harness: claude-code or codex")
+  plugins.command(`${names.remove} <name>`)
+    .description("Remove a member plugin from your AI client")
+    .option(CLIENT_OPTION, CLIENT_HELP)
     .action(async function(this: Command, name: string) {
-      const options = this.optsWithGlobals() as CommandOptions & { harness: string };
+      const options = this.optsWithGlobals() as CommandOptions & { harness?: string };
       const native = await nativePackage(deps, this, options.harness);
       const { state, stale } = withoutPlugin(await readPluginState(native.artifactRoot), name);
       const setup: SetupReport = await applyClientSetup(planClientSetup({

@@ -7,33 +7,22 @@ import {
   validatedAuthorizationRedirect,
 } from "./install-model";
 
-describe("project plugin install command", () => {
-  it("uses the configured Kintsugi URL and selected project in one command", () => {
-    expect(buildPluginInstallCommand({
-      baseUrl: "https://kintsugi.example/tenant",
-      projectId: "billing-api",
-      harness: "claude-code",
-      profileId: "kintsugi-billing-api",
-      shell: "powershell",
-    })).toBe("kintsugi plugins setup --harness claude-code --url 'https://kintsugi.example/tenant' --project 'billing-api' --profile 'kintsugi-billing-api'");
+describe("connect command", () => {
+  it("is one short command with the project", () => {
+    expect(buildPluginInstallCommand({ baseUrl: "https://kintsugi.example/tenant", projectId: "billing-api", harness: "claude-code", shell: "powershell" })).toBe("kintsugi connect claude billing-api");
+    expect(buildPluginInstallCommand({ baseUrl: "https://kintsugi.example", projectId: "billing-api", harness: "codex", shell: "posix" })).toBe("kintsugi connect codex billing-api");
   });
 
-  it("prepares the Codex Desktop marketplace without claiming that the app installed the plugin", () => {
-    expect(buildPluginInstallCommand({
-      baseUrl: "http://127.0.0.1:5175",
-      projectId: "test",
-      harness: "codex",
-      installMode: "desktop-ui",
-      profileId: "kintsugi-test",
-      shell: "powershell",
-    })).toBe("kintsugi plugins setup --install-mode desktop-ui --harness codex --url 'http://127.0.0.1:5175' --project 'test' --profile 'kintsugi-test'");
+  it("names Codex Desktop separately, and adds the URL only on request", () => {
+    expect(buildPluginInstallCommand({ baseUrl: "http://127.0.0.1:5175", projectId: "test", harness: "codex", installMode: "desktop-ui", shell: "powershell" })).toBe("kintsugi connect codex-desktop test");
+    expect(buildPluginInstallCommand({ baseUrl: "http://127.0.0.1:5175", projectId: "test", harness: "codex", installMode: "desktop-ui", shell: "powershell", withUrl: true })).toBe("kintsugi connect codex-desktop test --url 'http://127.0.0.1:5175'");
     expect(() => buildPluginInstallCommand({ baseUrl: "https://kintsugi.example", projectId: "billing", harness: "claude-code", installMode: "desktop-ui", shell: "posix" })).toThrow("Codex Desktop");
   });
 
-  it("quotes project IDs safely for PowerShell and POSIX shells", () => {
-    const input = { baseUrl: "http://localhost:8080", projectId: "bill ' api & web", harness: "codex" as const, profileId: "kintsugi-billing", shell: "powershell" as const };
-    expect(buildPluginInstallCommand(input)).toContain("--project 'bill '' api & web'");
-    expect(buildPluginInstallCommand({ ...input, shell: "posix" })).toContain("--project 'bill '\\'' api & web'");
+  it("quotes only a project ID that needs it, for PowerShell and POSIX shells", () => {
+    const input = { baseUrl: "http://localhost:8080", projectId: "bill ' api & web", harness: "codex" as const, shell: "powershell" as const };
+    expect(buildPluginInstallCommand(input)).toBe("kintsugi connect codex 'bill '' api & web'");
+    expect(buildPluginInstallCommand({ ...input, shell: "posix" })).toBe("kintsugi connect codex 'bill '\\'' api & web'");
   });
 
   it("rejects noncanonical or unsafe installation URLs and malformed identifiers", () => {
@@ -49,7 +38,7 @@ describe("project plugin install command", () => {
   });
 
   it("never includes an access token or refresh credential", () => {
-    const command = buildPluginInstallCommand({ baseUrl: "https://kintsugi.example", projectId: "billing", harness: "codex", shell: "posix" });
+    const command = buildPluginInstallCommand({ baseUrl: "https://kintsugi.example", projectId: "billing", harness: "codex", shell: "posix", withUrl: true });
     expect(command).not.toMatch(/knt_(?:caw|crt)_/);
     expect(command).not.toContain("token");
   });

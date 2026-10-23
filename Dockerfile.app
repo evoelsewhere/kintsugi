@@ -5,7 +5,7 @@ RUN corepack enable && corepack prepare pnpm@10.18.0 --activate
 COPY . .
 RUN pnpm install --frozen-lockfile \
     && pnpm --filter @kintsugi/api... build \
-    && pnpm --filter @kintsugi/portal build
+    && pnpm --filter @kintsugi/portal build \n    && pnpm --filter @kintsugi/cli... build \n    && node packages/cli/dist/release/main.js --out /workspace/releases
 
 FROM node:22-trixie-slim
 
@@ -16,7 +16,7 @@ ENV NODE_ENV=production \
     KINTSUGI_BUILD_COMMIT=$KINTSUGI_BUILD_COMMIT \
     KINTSUGI_BUILD_TIME=$KINTSUGI_BUILD_TIME \
     PORT=3000 \
-    KINTSUGI_PORTAL_DIR=/app/apps/portal/dist
+    KINTSUGI_PORTAL_DIR=/app/apps/portal/dist \n    KINTSUGI_RELEASES_DIR=/app/releases
 
 RUN groupadd --system --gid 10001 kintsugi \
     && useradd --system --uid 10001 --gid 10001 --home-dir /app --no-create-home kintsugi \

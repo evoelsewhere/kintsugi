@@ -24,12 +24,13 @@ function bundleOf(name: string, version: string, files: Record<string, string>, 
   };
 }
 
-async function createState(responses: Record<string, unknown>) {
+async function createState(responses: Record<string, unknown>, options: { signedUp?: boolean; env?: Record<string, string> } = {}) {
   const root = await mkdtemp(join(tmpdir(), "kintsugi-cli-distribution-"));
   folders.push(root);
   const configPath = join(root, "Kintsugi config", "config.json");
   await mkdir(join(root, "Kintsugi config"), { recursive: true });
-  await writeFile(configPath, `${JSON.stringify({ schemaVersion: "1", activeProfile: "work", profiles: { work: { id: "work", baseUrl: "https://kintsugi.example", projectId: "shop" } } }, null, 2)}\n`, "utf8");
+  const profiles = options.signedUp === false ? { schemaVersion: "1", profiles: {} } : { schemaVersion: "1", activeProfile: "work", profiles: { work: { id: "work", baseUrl: "https://kintsugi.example", projectId: "shop" } } };
+  await writeFile(configPath, JSON.stringify(profiles, null, 2), "utf8");
   const stdout: string[] = [];
   const stderr: string[] = [];
   const requested: string[] = [];
@@ -46,7 +47,7 @@ async function createState(responses: Record<string, unknown>) {
     serveMcp: async () => undefined,
     cwd: root,
     homeDir: root,
-    env: { KINTSUGI_CONFIG: configPath },
+    env: { KINTSUGI_CONFIG: configPath, ...(options.env ?? {}) },
     isTTY: false,
     promptSecret: async () => "unused",
     readStdin: async () => "TEST-token",
@@ -58,6 +59,12 @@ async function createState(responses: Record<string, unknown>) {
     runClientCommand,
   } as unknown as CliDeps;
   return { root, stdout, stderr, requested, runClientCommand, deps };
+}
+
+async function temp(): Promise<string> {
+  const folder = await mkdtemp(join(tmpdir(), "kintsugi-cli-home-"));
+  folders.push(folder);
+  return folder;
 }
 
 afterEach(async () => {
@@ -75,7 +82,7 @@ describe("member plugin distribution", () => {
   it("lists what the member may install and what is installed", async () => {
     const state = await createState({ "/api/member/v1/plugins": { schemaVersion: "1", items: [{ name: "context", title: "Project context", version: "1.0.0", description: "d" }], limit: 100 } });
     expect(await runCli(["plugins", "list", "--token-stdin", "--json"], state.deps), state.stderr.join("")).toBe(0);
-    expect(JSON.parse(state.stdout.join(""))).toMatchObject({ harness: "claude-code", items: [{ name: "context", installed: null }] });
+    expect(JSON.parse(state.stdout.join(""))).toMatchObject({ items: [{ name: "context", installed: null }] });
     expect(state.requested).toEqual(["/api/member/v1/plugins?projectId=shop"]);
   });
 
@@ -144,5 +151,34 @@ describe("member plugin distribution", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.method).toBe("POST");
     expect(JSON.parse(calls[0]!.body)).toEqual({ schemaVersion: "1", projectId: "shop", kind: "result", pluginName: "context", summary: "Reviewed", detail: { documents: 3, ok: true } });
+  });
+});
+
+describe("short commands", () => {
+  it("connects a client to a project with the installation recorded by the installer, then adds a plugin to it", async () => {
+    const home = await temp();
+    await writeFile(join(home, "install.json"), JSON.stringify({ baseUrl: "https://kintsugi.example" }));
+    const state = await createState({ "/api/member/v1/plugins/context": bundleOf("context", "1.0.0", FILES) }, { signedUp: false, env: { KINTSUGI_HOME: home } });
+
+    expect(await runCli(["connect", "claude", "shop"], state.deps), state.stderr.join("")).toBe(0);
+    expect(state.stdout.join("")).toBe("Connected Claude Code to project shop. Restart it to load Kintsugi; the first use opens browser sign-in.\n");
+    const config = JSON.parse(await readFile(join(state.root, "Kintsugi config", "config.json"), "utf8")) as { activeProfile: string; profiles: Record<string, { baseUrl: string; projectId: string }> };
+    expect(config.profiles[config.activeProfile]).toMatchObject({ baseUrl: "https://kintsugi.example", projectId: "shop" });
+
+    state.stdout.length = 0;
+    expect(await runCli(["add", "context", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
+    expect(state.stdout.join("")).toContain("Installed context 1.0.0 for claude-code");
+    expect(await runCli(["remove", "context"], state.deps), state.stderr.join("")).toBe(0);
+  });
+
+  it("asks for the installation when it is not known, and for the client when it is not clear", async () => {
+    const state = await createState({}, { signedUp: false, env: { KINTSUGI_HOME: join(tmpdir(), "kintsugi-no-install-json") } });
+    expect(await runCli(["connect", "claude", "shop"], state.deps)).toBe(2);
+    expect(state.stderr.join("")).toContain("URL_REQUIRED");
+    expect(await runCli(["connect", "emacs", "shop", "--url", "https://kintsugi.example"], state.deps)).toBe(2);
+    expect(state.stderr.join("")).toContain("PLUGIN_HARNESS_INVALID");
+    const unconnected = await createState({ "/api/member/v1/plugins/context": bundleOf("context", "1.0.0", FILES) });
+    expect(await runCli(["add", "context", "--token-stdin"], unconnected.deps)).toBe(2);
+    expect(unconnected.stderr.join("")).toContain("PLUGIN_HARNESS_REQUIRED");
   });
 });

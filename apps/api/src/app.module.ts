@@ -44,6 +44,7 @@ import { RealtimeModule } from "./common/realtime/realtime.module.js";
 import { EventsModule } from "./modules/system/events/events.module.js";
 import { DebugModule } from "./modules/system/debug/debug.module.js";
 import { HealthModule } from "./modules/system/health/health.module.js";
+import { ReleasesModule } from "./modules/system/releases/index.js";
 
 /**
  * Root module. Feature modules map one-to-one onto the functional areas of the
@@ -56,6 +57,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     AuthModule,
     // system
     HealthModule,
+    ReleasesModule,
     RealtimeModule,
     EventsModule,
     // the debug MCP server exists only on a development installation (ADR-0056)
