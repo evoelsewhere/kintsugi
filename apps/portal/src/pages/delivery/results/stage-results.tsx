@@ -62,9 +62,13 @@ export default function StageResults({ project, application, stage, version, run
   const ref = params.get("ref") ?? undefined;
   const compare = params.get("compare") === "1";
   const refs = useLoader(`doc-refs/${project.id}/${version}`, () => documentsApi.refs(project.id));
+  const defaultRef = refs.data?.refs.find((entry) => entry.kind === "default");
+  // Once the latest successful run is merged its output is the default branch: that is what is shown until a ref is picked.
+  const merged = runs?.find((run) => run.status === "succeeded")?.documentWrite?.status === "merged";
+  const effectiveRef = ref ?? (merged ? defaultRef?.ref : undefined);
   // The previous run's counts come along every time (a few small reads), so the toggle never reloads.
-  const results = useLoader(`results/${project.id}/${application.id}/${stage}/${ref ?? "latest"}/${version}`, () =>
-    documentsApi.results(project.id, application.id, stage, { ref, compare: true }),
+  const results = useLoader(`results/${project.id}/${application.id}/${stage}/${effectiveRef ?? "latest"}/${version}`, () =>
+    documentsApi.results(project.id, application.id, stage, { ref: effectiveRef, compare: true }),
   );
 
   const update = (key: string, value: string | undefined): void =>
@@ -81,7 +85,6 @@ export default function StageResults({ project, application, stage, version, run
   // With no output at all (and no ref picked) there is nothing to select or compare: the first-run panel stands alone.
   const firstRunOnly = firstRun !== undefined && ref === undefined && results.data?.empty === true;
   const stageRefs = (refs.data?.refs ?? []).filter((entry) => entry.kind === "run" && entry.stage === stage && entry.applicationId === application.id);
-  const defaultRef = refs.data?.refs.find((entry) => entry.kind === "default");
   const options = [
     { value: "", label: "Latest result", hint: "The newest successful run's output" },
     ...(defaultRef === undefined ? [] : [{ value: defaultRef.ref, label: defaultRef.label, hint: shortSha(defaultRef.commit) }]),
@@ -96,7 +99,7 @@ export default function StageResults({ project, application, stage, version, run
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[10px] tracking-wide text-text-muted uppercase">Showing</span>
           <div className="w-full sm:w-[280px] [&>div>button]:h-[var(--geist-form-small-height)] [&>div>button]:text-[13px]">
-            <Select value={ref ?? ""} options={options} onChange={(value) => update("ref", value === "" ? undefined : value)} />
+            <Select value={effectiveRef ?? ""} options={options} onChange={(value) => update("ref", value === "" ? undefined : value)} />
           </div>
           <div className="ml-auto flex items-center gap-1.5">
             <Button size="small" variant={compare ? "solid" : "ghost"} aria-pressed={compare} onClick={() => update("compare", compare ? undefined : "1")} className={compare ? undefined : "shadow-border"}>
