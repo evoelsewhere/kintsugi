@@ -21,3 +21,7 @@
 
 Every worker process writes a heartbeat to Postgres every 15 seconds (host, pid, version, active jobs, queues; [ADR-0030](../../decisions/0030-worker-heartbeat-in-postgres.md)). The monitoring overview reports a worker as up when it was seen less than 45 seconds ago and flags *No worker is running* otherwise; Monitoring → Worker lists every worker next to the queue counts.
 
+
+## Member harnesses
+
+The connection of a member (who connected which client to which project, when, and when it was last used) is recorded by the common member base and can be revoked in the portal. Per-member activity and plugin usage are normalized into `HarnessActivity` ([`packages/harness-sdk`](../../../packages/harness-sdk/src/index.ts)) once plugins record them; no activity source ships yet ([ADR-0069](../../decisions/0069-common-member-base-and-plugin-distribution.md)). These will feed the [AI metrics](../../methodology/ai-metrics.md).

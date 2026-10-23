@@ -52,8 +52,8 @@ Start at the [documentation map](docs/README.md). It is organized by purpose (Di
 
 ```
 apps/        portal (React SPA) · api (REST + OpenAPI)
-services/    orchestrator (pg-boss jobs, git sync/writer) · knowledge (KB) · runtime (generic agent kernel on pi + launcher)
-packages/    domain · manifest · agents (agent packages; builtin plugins: reverse_engineering, modernize) · git · runtime-sdk · secrets
+services/    orchestrator (pg-boss jobs, git sync/writer) · knowledge (KB) · runtime (generic agent kernel on pi + launcher) · harness-hub (local MCP bridge, connector plugin generation)
+packages/    domain · manifest · agents (agent packages; builtin plugins: reverse_engineering, modernize) · git · runtime-sdk · harness-sdk · kintsugi-client · cli · secrets
 templates/   document repo starter template (neutral standards and plugin samples)
 deploy/      Docker Compose package
 assets/      brand marks · README diagrams (HTML sources + PNG exports)

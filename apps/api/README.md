@@ -3,6 +3,8 @@
 REST + OpenAPI surface of `kintsugi-app` (ADR-0016: **NestJS 12**, ESM). Serves `/api`,
 OpenAPI UI at `/api/docs`. The container also serves the portal's static build.
 
+Member API: versioned read-only `/api/member/v1` endpoints (projects, document tree and file) for the Kintsugi CLI and local MCP bridge; see the [member CLI reference](../../docs/reference/member-cli.md).
+
 Responsibilities beyond the feature modules below:
 
 - Auth: local username/password sessions (httpOnly cookie) and personal project-scoped
