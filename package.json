@@ -11,7 +11,8 @@
     "dev": "node scripts/dev.mjs",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "kintsugi": "node packages/cli/dist/main.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

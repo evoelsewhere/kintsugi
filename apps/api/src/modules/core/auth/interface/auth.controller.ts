@@ -49,6 +49,14 @@ export class AuthController {
     clearSessionCookie(response, { secure: this.#env.secureCookies });
   }
 
+  @Get("coding-agent/installation")
+  @Public()
+  @ApiOperation({ summary: "Read the canonical Kintsugi installation URL for member setup" })
+  @ApiOkResponse({ description: "The configured public URL; never derived from request headers." })
+  codingAgentInstallation(): { baseUrl: string } {
+    return { baseUrl: this.#env.publicUrl };
+  }
+
   @Get("me")
   @ApiOperation({ summary: "The signed-in user with roles and effective permissions" })
   @ApiOkResponse({ description: "The current session user." })

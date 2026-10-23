@@ -14,6 +14,7 @@ import { DeliveryOverviewPage } from "./pages/delivery/delivery-overview-page";
 import { DeliveryStagePage } from "./pages/delivery/delivery-stage-page";
 import { GovernancePage } from "./pages/governance";
 import { LoginPage } from "./pages/login";
+import { MemberAuthorizePage } from "./pages/member/authorize";
 import { MonitoringPage } from "./pages/monitoring";
 import { OverviewPage } from "./pages/overview";
 import { MembersPermissionsPage } from "./pages/members-permissions";
@@ -39,6 +40,7 @@ export function App(): React.JSX.Element {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/member/authorize" element={<MemberAuthorizePage />} />
           <Route
             element={
               <RequireAuth>

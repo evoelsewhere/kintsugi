@@ -20,6 +20,7 @@ import { FactorySetupsModule } from "./modules/delivery/factory/factory-setups.m
 import { CatalogModule } from "./modules/delivery/catalog/catalog.module.js";
 import { DesignModule } from "./modules/delivery/design/design.module.js";
 import { DocumentsModule } from "./modules/delivery/documents/documents.module.js";
+import { MemberApiModule } from "./modules/delivery/member-api/index.js";
 import { RuntimeJobsModule } from "./modules/delivery/runtime-jobs/runtime-jobs.module.js";
 import { WorkItemsModule } from "./modules/delivery/workbench/work-items.module.js";
 import { AiMetricsModule } from "./modules/monitoring/ai-metrics/ai-metrics.module.js";
@@ -75,6 +76,7 @@ import { HealthModule } from "./modules/system/health/health.module.js";
     // delivery
     RuntimeJobsModule,
     DocumentsModule,
+    MemberApiModule,
     CatalogModule,
     DesignModule,
     ArchitectureViewsModule,
