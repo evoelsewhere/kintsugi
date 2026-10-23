@@ -83,6 +83,11 @@ def standards_dir():
     return STANDARDS_ROOT
 
 
+def specification_profiles_dir():
+    """The project's specification profiles by item kind (ADR-0060): `<kind>.md` files."""
+    return f'{STANDARDS_ROOT}/specifications'
+
+
 def glossary_path():
     return f'{PROJECT_ROOT}/glossary.md'
 

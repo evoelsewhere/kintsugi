@@ -24,7 +24,7 @@ import { type CatalogItem, type CatalogView, catalogApi, type ItemStatus, type S
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
-import { ASSET_CLASS_LABEL, assetClassOf, BATCH_MAX_LOC, estimateRun, formatEstimate, recommendBatch } from "@/lib/catalog-batch";
+import { ASSET_CLASS_LABEL, assetClassOf, BATCH_MAX_LOC, dependenciesOf, estimateRun, formatEstimate, recommendBatch } from "@/lib/catalog-batch";
 import { isActiveStatus, ITEM_STATUS, styleOf } from "@/lib/status";
 import { runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
@@ -296,6 +296,21 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
     );
   }
 
+  const shownSelectable = filtered.items.filter((item) => blockedReason(item) === undefined).map((item) => item.id);
+  function selectShown(): void {
+    setSelected((previous) => new Set([...previous, ...shownSelectable]));
+    setConflicts([]);
+  }
+  const dependencies = dependenciesOf(view.items, chosen).filter((id) => {
+    const item = view.items.find((entry) => entry.id === id);
+    return item !== undefined && blockedReason(item) === undefined;
+  });
+  function addDependencies(): void {
+    setSelected((previous) => new Set([...previous, ...dependencies]));
+    setConflicts([]);
+    toast.success(`${dependencies.length} item${dependencies.length === 1 ? "" : "s"} added`, "The items the selection calls: a screen with the APIs it uses is one run and one pull request.");
+  }
+
   const over = chosen.length > MAX_ITEMS;
   const runBlocked = disabledReason ?? (chosen.length === 0 ? "Select items or modules to run understand on." : over ? `A run takes at most ${MAX_ITEMS} items.` : conflicts.length > 0 ? "Some selected items are blocked: see below." : undefined);
 
@@ -324,7 +339,7 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
             <Select value={status} onChange={setStatus} options={[{ value: "", label: "Any status" }, ...STATUSES.map((value) => ({ value, label: styleOf(ITEM_STATUS, value).label }))]} />
           </div>
           <div className="w-40">
-            <Select value={kind} onChange={setKind} options={[{ value: "", label: "Any kind" }, ...kinds.map((value) => ({ value, label: value }))]} />
+            <Select value={kind} onChange={setKind} options={[{ value: "", label: "Any kind" }, ...kinds.map((value) => ({ value, label: `${value} (${view.items.filter((item) => item.kind === value).length})` }))]} />
           </div>
           <div className="w-44">
             <Select value={module} onChange={setModule} options={[{ value: "", label: "Any module" }, ...view.catalog.modules.map((entry) => ({ value: entry.id, label: entry.name }))]} />
@@ -332,6 +347,9 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
           <div className="w-36">
             <Select value={assetClass} onChange={setAssetClass} options={[{ value: "", label: "Any class" }, ...(["code", "test", "generated"] as const).map((value) => ({ value, label: ASSET_CLASS_LABEL[value] }))]} />
           </div>
+          <Button size="small" variant="ghost" className="shadow-border" disabled={shownSelectable.length === 0 || shownSelectable.every((id) => selected.has(id))} onClick={selectShown} title="Adds every selectable item the filters show">
+            Select shown ({shownSelectable.length})
+          </Button>
           {search === "" && status === "" && kind === "" && module === "" && assetClass === "" ? null : (
             <Button size="small" variant="ghost" onClick={() => { setSearch(""); setStatus(""); setKind(""); setModule(""); setAssetClass(""); }}>
               <X className="size-3.5" />
@@ -360,6 +378,11 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
               <Sparkles className="size-3.5" />
               Quick pick
             </Button>
+            {dependencies.length === 0 ? null : (
+              <Button size="small" variant="ghost" className="shadow-border" onClick={addDependencies} title="Adds the items the selected ones call (calls, dispatches, reads), one level deep">
+                Add dependencies ({dependencies.length})
+              </Button>
+            )}
             {chosen.length === 0 ? null : (
               <Button size="small" variant="ghost" onClick={() => { setSelected(new Set()); setConflicts([]); }}>
                 Clear selection

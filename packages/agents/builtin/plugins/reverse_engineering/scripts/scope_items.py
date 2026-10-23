@@ -2,7 +2,7 @@
 """Prepare a scoped understand run (ADR-0033): per selected catalog item, its topology document, its
 brief and its rule-extraction shard.
 
-    python3 scope_items.py <app> --catalog DIR --items ID,ID,... --out DIR
+    python3 scope_items.py <app> --catalog DIR --items ID,ID,... --out DIR [--standards DIR]
 
 --catalog is 10-applications/<app>/01-legacy/_catalog/ (the committed catalog: each card holds the item's
 leaves, the items it depends on and that use it, the data stores it touches); --items the selected item
@@ -11,7 +11,8 @@ ids (active items only). --out is the document-repository root the files are wri
 - 10-applications/<app>/01-legacy/<module>/<unit>/topology.md - the item's leaves, the items it
   depends on and that use it, the data stores it reads and writes (published).
 - scratch/<app>/understand/briefs/<module>/<unit>.json - what the specification job of the item starts
-  from: name, kind, files, size, entry points, links, and where its rules and findings will be (scratch).
+  from: name, kind, files, size, entry points, links, where its rules and findings will be, and the
+  specification profile of its kind (ADR-0060: the sections to add, from --standards or the built-in ones) (scratch).
 - scratch/<app>/understand/shards.json - one extract-rules shard per item ({name, domain, files, loc}).
 - scratch/<app>/understand/scope.json - the items and their files.
 
@@ -26,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
 import docmd  # noqa: E402
 import paths  # noqa: E402
+import spec_profiles  # noqa: E402
 
 
 def topology_document(app, item):
@@ -74,18 +76,24 @@ def topology_document(app, item):
     return '\n'.join(out).rstrip() + '\n'
 
 
-def build(app, chosen):
+def build(app, chosen, standards_dir=None, notes=None):
     files, shards, texts, scratch = set(), [], {}, {}
+    profiles = {}
     for item in chosen:
         def at(file):
             return paths.unit_key_legacy_path(app, item['id'], file)
         brief_leaves = item.get('leafNodes') or []
+        kind = cc.clean_text(item.get('kind'), 40) or 'module'
+        if kind not in profiles:
+            profiles[kind], why = spec_profiles.load(kind, standards_dir)
+            if notes is not None:
+                notes.extend(why)
         brief = {
             'app': app,
             'id': f'{app}/{item["id"]}',
             'key': item['id'],
             'name': cc.clean_text(item.get('name'), cc.MAX_NAME) or item['id'],
-            'kind': cc.clean_text(item.get('kind'), 40) or 'module',
+            'kind': kind,
             'summary': cc.clean_text(item.get('summary'), cc.MAX_SUMMARY),
             'files': item['files'],
             'loc': item.get('loc') if isinstance(item.get('loc'), int) else 0,
@@ -95,6 +103,7 @@ def build(app, chosen):
             'usedBy': sorted(item.get('usedBy') or []),
             'dataStores': [{'id': store['id'], 'access': sorted(store.get('access') or [])} for store in item.get('dataStores') or []],
             'parts': [part for part in item.get('parts') or [] if isinstance(part, dict)][:cc.MAX_PARTS],
+            'profile': profiles[kind],
             'topology': at('topology.md'),
             'rules': at('rules.md'),
             'findings': at('findings.md'),
@@ -114,13 +123,15 @@ def main(argv):
     ap.add_argument('--catalog', required=True, help='the catalog folder (assessment/catalog/)')
     ap.add_argument('--items', required=True, help='comma-separated catalog item ids')
     ap.add_argument('--out', required=True, help='the document-repository root to write under')
+    ap.add_argument('--standards', help='01-standards/specifications/ of the document repository (its <kind>.md replace the built-in profiles)')
     args = ap.parse_args(argv[1:])
     try:
         if not cc.APP_RE.match(args.app):
             raise cc.DataError('the application id must be kebab-case')
         items, _ = cc.load_catalog(args.catalog)
         chosen = cc.selected(items, args.items)
-        texts, scratch = build(args.app, chosen)
+        notes = []
+        texts, scratch = build(args.app, chosen, args.standards, notes)
         root = os.path.abspath(args.out)
         for path, text in texts.items():
             docmd.write_text(os.path.join(root, *path.split('/')), text)
@@ -132,6 +143,8 @@ def main(argv):
     print(f'{len(chosen)} item(s) in scope, {sum(len(item["files"]) for item in chosen)} file(s)')
     for item in chosen[:60]:
         print(f'- {item["id"]}: {len(item["files"])} file(s)')
+    for note in notes[:20]:
+        print(f'- not used: {note}')
     return 0
 
 

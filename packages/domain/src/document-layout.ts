@@ -74,6 +74,11 @@ export function standardsDir(): string {
   return STANDARDS_ROOT;
 }
 
+/** The project's specification profiles by item kind (ADR-0060): `<kind>.md` files. */
+export function specificationProfilesDir(): string {
+  return `${STANDARDS_ROOT}/specifications`;
+}
+
 export function transitionDir(): string {
   return TRANSITION_ROOT;
 }

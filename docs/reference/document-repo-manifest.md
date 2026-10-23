@@ -51,7 +51,7 @@ Schema (`validateManifest` in `packages/domain`, `parseKintsugiYaml` in `package
 | `schemaVersion` | yes | `1` |
 | `project` | yes | `id` (kebab-case), `name`, optional `description` |
 | `document` | yes | The document repo: `server` (Git server id), `path` |
-| `unitKinds` | yes | Non-empty list of unit kinds, without duplicates; topology-to-kind mapping is described in the [item catalog reference](document-repo-item-catalog.md) |
+| `unitKinds` | yes | Non-empty list of unit kinds, without duplicates. The portal renders the core kinds (`screen`, `api`, `batch-job`, `report`, `event`, `integration`, `module`) until a project declares its own; the kinds and the topology-to-kind mapping are described in the [item catalog reference](document-repo-item-catalog.md#item-kinds) |
 | `applications` | yes | List (may be empty). Each: `id` (kebab-case, unique), optional `name`, optional `pipeline` (id of a pipeline declared under `pipelines:`), `repos` |
 | `applications[].repos` | no | Each: `server`, `path`, `role` (`legacy`, `legacy-data` or `target`; `document` is not allowed here), `component` (required for `target`, unique per application, forbidden otherwise). A `server` + `path` pair appears once in the file, the document repo included |
 | `pipelines` | no (default `[]`) | Each: `id` (unique), non-empty `phases` (`id`; `category` required for a custom phase; optional `perUnit`; non-empty `stages` with `id`, `performer` = `{agent: <id>}` or `{member: [<roles>]}`, optional `gate`, optional `produces` = the id of the [design set](design-templates.md) the stage writes), optional `gates` |
