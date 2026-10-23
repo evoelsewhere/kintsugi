@@ -1,11 +1,14 @@
 // useLoader — loads a resource for a section: data, error, loading and a `slow` flag after a
 // few seconds without an answer (so a hanging request says so instead of "Loading…"
-// forever), plus reload and optional auto-refresh. Data belongs to a `key` (e.g. the project
-// id): when the key changes, the old data is not shown for the new key. Auto-refresh pauses
-// while the tab is hidden.
+// forever), plus reload and live updates. Data belongs to a `key` (e.g. the project
+// id): when the key changes, the old data is not shown for the new key. `live` names the
+// topics the data comes from: it is read again, keeping what is shown, when the server says one
+// changed (lib/live.ts). `refresh` is a timer for data that ages by itself (a worker not seen
+// for a while changes nothing in the database); it pauses while the tab is hidden.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorText } from "./format";
+import { type LiveSpec, subscribeLive } from "./live";
 
 export interface Loader<T> {
   data: T | undefined;
@@ -28,7 +31,9 @@ interface State<T> {
 }
 
 export interface LoaderOptions<T> {
-  /** Milliseconds until the next refresh given the current data, or false for none. */
+  /** The topics the data comes from: it is read again when one of them changes. */
+  live?: readonly LiveSpec[];
+  /** Milliseconds until the next refresh given the current data, or false for none; only for data that ages by itself. */
   refresh?: (data: T) => number | false;
 }
 
@@ -64,6 +69,12 @@ export function useLoader<T>(key: string, load: () => Promise<T>, options: Loade
     // reload() sets state only after awaiting the request, never synchronously.
     void reload();
   }, [key, reload]);
+
+  const liveKey = options.live?.join(",") ?? "";
+  useEffect(() => {
+    if (liveKey === "") return;
+    return subscribeLive(liveKey.split(",") as LiveSpec[], () => void reload());
+  }, [liveKey, reload]);
 
   const current = state.key === key;
   const data = current ? state.data : undefined;
