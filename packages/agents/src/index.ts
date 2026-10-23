@@ -54,5 +54,3 @@ export {
 } from "./catalog.js";
 export { unzipFiles, zipFiles, type UnzipLimits } from "./zip.js";
 
-export { MAX_UNIT_DOCUMENT_BYTES, parseUnitDocument } from "./unit-document.js";
-export { ACCESS_PLUGIN_SOURCE_PATHS, readAccessPluginSources, type AccessPluginSourcePath } from "./access-plugin.js";

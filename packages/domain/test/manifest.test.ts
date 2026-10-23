@@ -30,7 +30,7 @@ describe("kintsugi.yaml validation", () => {
 
   it("keeps the design set a pipeline stage produces", () => {
     const stage = { id: "detail-design", performer: { member: ["dev"] }, produces: "detail" };
-    const result = validateManifest({ ...minimal, pipelines: [{ id: "payroll-rebuild", phases: [{ id: "migrate", perUnit: true, stages: [stage, { id: "review", performer: { agent: "gate-reviewer" } }] }] }] });
+    const result = validateManifest({ ...minimal, pipelines: [{ id: "payroll-rebuild", phases: [{ id: "migrate", perUnit: true, stages: [stage, { id: "review", performer: { agent: "design-reviewer" } }] }] }] });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const stages = result.manifest.pipelines[0]!.phases[0]!.stages;

@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { databaseUrlFromEnvironment } from "../../../../scripts/member-db-config.mjs";
+import { databaseUrlFromEnvironment } from "../../../../scripts/test-db-config.mjs";
 import pg from "pg";
 
 const repoRoot = resolve(import.meta.dirname, "../../../..");

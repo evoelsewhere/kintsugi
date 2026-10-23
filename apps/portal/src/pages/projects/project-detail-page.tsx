@@ -6,7 +6,7 @@
 // document writes live in Delivery. Repository sync states refresh while not ready.
 
 import type { ApplicationRepositoryRole } from "@kintsugi/domain";
-import { Bot, FolderGit2, GitPullRequestArrow, Package, Pencil, Plus, Trash2, Unlink } from "lucide-react";
+import { FolderGit2, GitPullRequestArrow, Package, Pencil, Plus, Trash2, Unlink } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -25,6 +25,7 @@ import { useAuth } from "@/lib/auth";
 import { deliveryLink } from "@/lib/links";
 import { subscribeLive } from "@/lib/live";
 import { DesignSetsCard } from "./design-sets-card";
+import { ProjectAccessPanel } from "./project-access-panel";
 import { ProjectInsights } from "./projects-insights";
 import { NoRepositories } from "./no-repositories";
 import { ApplicationDialog, LinkDialog, ProjectDialog } from "./project-dialogs";
@@ -124,10 +125,6 @@ export function ProjectDetailPage(): React.JSX.Element {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <Link to={`/projects/${encodeURIComponent(project.id)}/coding-agent`} className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-3 text-[14px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
-              <Bot className="size-4" />
-              Work in your AI
-            </Link>
             <Link to={deliveryLink({ projectId: project.id })} className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-3 text-[14px] text-text-secondary hover:bg-hover hover:text-text">
               <Package className="size-4" />
               Open in Delivery
@@ -189,6 +186,8 @@ export function ProjectDetailPage(): React.JSX.Element {
       )}
 
       <DesignSetsCard project={project} />
+
+      <ProjectAccessPanel projectId={projectId} canManage={can("project.access.manage")} />
 
       <Card>
         <CardHeader>

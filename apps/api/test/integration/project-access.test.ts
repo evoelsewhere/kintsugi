@@ -1,12 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { adminClient, memberClient, startTestApp, subRole, type TestApp } from "../support/app.js";
-import { MemberContextProbeModule } from "../support/member-context-probe.js";
 
 describe.skipIf(!hasDatabase)("Project Access (integration)", () => {
   let app: TestApp;
   beforeAll(async () => {
-    app = await startTestApp([MemberContextProbeModule]);
+    app = await startTestApp();
   });
   afterAll(async () => {
     await app?.close();

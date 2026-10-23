@@ -50,7 +50,6 @@ export const AUDIT_ACTIONS = {
   skillUpdate: "skill.update",
   skillDelete: "skill.delete",
   commitIdentityUpdate: "commit-identity.update",
-  codingAgentConnectionLifetimeUpdate: "coding-agent.connection-lifetime.update",
   gateRequest: "gate.request",
   gateDecide: "gate.decide",
   gateDecisionRequest: "gate.decision.request",
@@ -62,15 +61,8 @@ export const AUDIT_ACTIONS = {
   userUpdate: "user.update",
   userPasswordReset: "user.password",
   userDelete: "user.delete",
-  memberTokenIssue: "member-token.issue",
-  memberTokenRevoke: "member-token.revoke",
-  codingAgentConnectionAuthorize: "coding-agent.connection.authorize",
-  codingAgentConnectionRevoke: "coding-agent.connection.revoke",
-  codingAgentConnectionReplay: "coding-agent.connection.replay",
   projectAccessGrant: "project-access.grant",
   projectAccessRevoke: "project-access.revoke",
-  providerActorMap: "provider-actor.map",
-  memberPrAssociate: "member-pr.associate",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

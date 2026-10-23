@@ -2,7 +2,6 @@
 // Adding a page: append an item here and register its route in App.tsx.
 import {
   Activity,
-  BookOpenText,
   Blocks,
   FolderKanban,
   Gauge,
@@ -57,7 +56,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: "delivery", label: "Delivery", icon: Package, to: "/delivery", childrenFrom: "delivery-stages" },
       { id: "monitoring", label: "Monitoring", icon: Activity, to: "/monitoring" },
       { id: "governance", label: "Governance", icon: ShieldCheck, to: "/governance" },
-      { id: "coding-agent-guide", label: "Developer docs", icon: BookOpenText, to: "/developer" },
     ],
   },
   {

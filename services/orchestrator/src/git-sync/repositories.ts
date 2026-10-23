@@ -3,7 +3,7 @@
 // Git call. Writes only the sync columns the API shows (sync_status, last_*).
 
 import { decryptSecret } from "@kintsugi/secrets";
-import { githubRepositoryPathFromRemote, type GitCredential, type GitHubAppConnection, type GitHubObservationConnection, type GitHubTokenConnection } from "@kintsugi/git";
+import type { GitCredential } from "@kintsugi/git";
 import type { Pool } from "pg";
 
 export type SyncStatus = "pending" | "cloning" | "ready" | "error";
@@ -28,20 +28,8 @@ interface TargetRow {
   known_hosts: string | null;
 }
 
-interface GitHubAppConnectionRow {
-  id: string;
-  server_id: string;
-  url: string;
-  kind: "github" | "github-enterprise" | string;
-  base_url: string;
-  github_app_id: string | null;
-  github_installation_id: string | null;
-  auth_type: "none" | "token" | "ssh-key";
-}
-
 const tokenSecretId = (serverId: string): string => `git-server:${serverId}:token`;
 const sshKeySecretId = (serverId: string): string => `git-server:${serverId}:ssh-key`;
-const githubAppKeySecretId = (serverId: string): string => `git-server:${serverId}:github-app-private-key`;
 
 const MAX_ERROR_LENGTH = 2000;
 
@@ -81,43 +69,6 @@ export class RepositoryStore {
       credential: await this.#credential(row),
       ...(row.known_hosts === null ? {} : { knownHosts: row.known_hosts }),
     };
-  }
-
-  /** The App credential for one registered GitHub repository; plaintext stays in worker memory. */
-  async githubProviderConnection(repositoryId: string): Promise<GitHubObservationConnection | undefined> {
-    const result = await this.pool.query<GitHubAppConnectionRow>(
-      `select r.id, r.server_id, r.url, s.kind, s.base_url, s.github_app_id, s.github_installation_id, s.auth_type
-         from admin.git_repository r join admin.git_server s on s.id = r.server_id
-        where r.id = $1`,
-      [repositoryId],
-    );
-    const row = result.rows[0];
-    if (row === undefined || (row.kind !== "github" && row.kind !== "github-enterprise")) return undefined;
-    const repositoryPath = githubRepositoryPathFromRemote(row.url, row.kind, row.base_url);
-    if (row.github_app_id !== null || row.github_installation_id !== null) {
-      if (row.github_app_id === null || row.github_installation_id === null) {
-        throw new Error(`GitHub App configuration for repository ${repositoryId} is incomplete`);
-      }
-      const secret = await this.#readSecret(row.server_id, githubAppKeySecretId(row.server_id));
-      if (secret === undefined) throw new Error(`GitHub App private key for repository ${repositoryId} is not configured`);
-      return {
-        kind: row.kind,
-        baseUrl: row.base_url,
-        appId: row.github_app_id,
-        installationId: row.github_installation_id,
-        privateKey: decryptSecret(secret),
-        repositoryPath,
-      } satisfies GitHubAppConnection;
-    }
-    if (row.auth_type !== "token") return undefined;
-    const secret = await this.#readSecret(row.server_id, tokenSecretId(row.server_id));
-    if (secret === undefined) throw new Error(`GitHub server token for repository ${repositoryId} is not configured`);
-    return {
-      kind: row.kind,
-      baseUrl: row.base_url,
-      token: decryptSecret(secret),
-      repositoryPath,
-    } satisfies GitHubTokenConnection;
   }
 
   async markCloning(id: string): Promise<void> {

@@ -247,13 +247,6 @@ export interface CompareReport {
 // Projects and the kintsugi.yaml manifest (ADR-0028).
 export * from "./project.js";
 export * from "./validation.js";
-export * from "./member-task.js";
-export * from "./member-association.js";
-export * from "./member-task-summary.js";
-export * from "./gate-evidence.js";
-export * from "./gate-decision.js";
-export * from "./gate-publication.js";
-export * from "./review-policy.js";
 export * from "./manifest.js";
 
 // Application and per-unit document-repo paths (ADR-0038), with catalog vocabulary (ADR-0033).
@@ -264,5 +257,4 @@ export * from "./sandbox.js";
 export * from "./source.js";
 export * from "./design-template.js";
 export * from "./traceability.js";
-export * from "./gate-record.js";
 export * from "./mcp.js";

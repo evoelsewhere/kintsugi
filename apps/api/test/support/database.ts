@@ -4,7 +4,7 @@
 
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
-import { databaseUrlFromEnvironment } from "../../../../scripts/member-db-config.mjs";
+import { databaseUrlFromEnvironment } from "../../../../scripts/test-db-config.mjs";
 import pg from "pg";
 
 function serverUrl(): URL | undefined {

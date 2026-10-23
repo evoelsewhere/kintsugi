@@ -3,7 +3,6 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { Client, adminClient, memberClient, startTestApp, subRole, type TestApp } from "../support/app.js";
-import { seedLegacyMemberToken } from "../support/legacy-member-token.js";
 
 interface StageDecision {
   runId: string;
@@ -164,21 +163,6 @@ describe.skipIf(!hasDatabase)("procedural stage decisions (integration)", () => 
       if (functionCreated) await app.db.query("drop function workflow.wait_for_stage_decision_event()");
       await lockClient.end();
     }
-  });
-
-  it("rejects read-only member bearer tokens on the session-authorized decision route", async () => {
-    const { projectId, runId } = await seedOpenDecision(app, "stage-decision-bearer", adminId, adminId);
-    const issued = await seedLegacyMemberToken(app, {
-      userId: adminId,
-      name: "stage decision read token",
-      projectIds: [projectId],
-    });
-    const response = await new Client(app).request("POST", `/governance/stage-decisions/${runId}/rebuild/continue-check`, {
-      body: { choice: "continue" },
-      csrf: false,
-      headers: { authorization: `Bearer ${issued.token}` },
-    });
-    expect(response.status).toBe(403);
   });
 
   it("rolls back the choice, audit and transition when durable event insertion fails", async () => {

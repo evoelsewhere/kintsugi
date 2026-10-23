@@ -2,4 +2,4 @@
 
 export { InstallationSettingsModule } from "./installation-settings.module.js";
 export { InstallationSettingsService } from "./application/installation-settings.service.js";
-export type { CodingAgentConnectionLifetime, CodingAgentConnectionLifetimeView, CommitIdentity, CommitIdentityView, SandboxSettingsView } from "./domain/installation-settings.js";
+export type { CommitIdentity, CommitIdentityView, SandboxSettingsView } from "./domain/installation-settings.js";
