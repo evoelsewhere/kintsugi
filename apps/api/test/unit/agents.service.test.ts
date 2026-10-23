@@ -116,7 +116,7 @@ describe("agents service", () => {
     const { service } = setup([{ agent: "legacy-analyst", provider: "gateway", model: "m1" }]);
     const list = await service.list();
     expect(list.find((agent) => agent.name === "legacy-analyst")).toMatchObject({ source: "builtin", audience: "runtime", enabled: true, problems: [], binding: { provider: "gateway", model: "m1" } });
-    expect(list.find((agent) => agent.name === "scaffolder")).toMatchObject({ source: "builtin", audience: "member" });
+    expect(list.find((agent) => agent.name === "designer")).toMatchObject({ source: "builtin", audience: "runtime" });
     expect((await service.context()).kernelTools).toEqual(KERNEL_TOOL_NAMES);
     expect(await rejection(service.remove("legacy-analyst", admin))).toMatchObject({ type: BadRequestException });
     expect(await rejection(service.setEnabled("legacy-analyst", false, admin))).toMatchObject({ type: BadRequestException });
@@ -224,7 +224,6 @@ describe("agents service", () => {
     await service.setEnabled("house-reviewer", false, admin);
     expect(await rejection(service.definition("house-reviewer"))).toMatchObject({ type: BadRequestException, messages: ['Agent "house-reviewer" is disabled'] });
     expect(await rejection(service.definition("nobody"))).toMatchObject({ type: NotFoundException });
-    expect(await rejection(service.definition("scaffolder"))).toMatchObject({ type: BadRequestException });
 
     await service.remove("house-reviewer", admin);
     await service.removeSkill("house-style", admin);

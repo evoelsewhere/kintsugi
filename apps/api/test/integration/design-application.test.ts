@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { adminClient, Client, memberClient, startTestApp, type TestApp } from "../support/app.js";
 
-const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/design/scripts/tests/fixtures/design/", import.meta.url));
+const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/", import.meta.url));
 const fixture = (...parts: string[]): string => readFileSync(join(FIXTURES, ...parts), "utf8");
 
 const MANIFEST = ["schemaVersion: 1", "project:", "  id: shop", "  name: Shop", "document:", "  server: local", "  path: docs", "unitKinds: [screen, api]", "applications:", "  - id: web", "    repos:", "      - {server: local, path: legacy, role: legacy}", ""].join("\n");

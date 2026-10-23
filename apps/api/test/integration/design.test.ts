@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
 
-const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/design/scripts/tests/fixtures/design/", import.meta.url));
+const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/", import.meta.url));
 const fixture = (...parts: string[]): string => readFileSync(join(FIXTURES, ...parts), "utf8");
 /** Every file under a fixture folder, as paths relative to it (a set holds kind folders, ADR-0053). */
 const filesUnder = (dir: string, prefix = ""): string[] => readdirSync(join(FIXTURES, dir, prefix)).flatMap((name) => (statSync(join(FIXTURES, dir, prefix, name)).isDirectory() ? filesUnder(dir, `${prefix}${name}/`) : [`${prefix}${name}`]));

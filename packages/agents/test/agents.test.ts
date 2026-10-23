@@ -161,24 +161,19 @@ describe("validation and the job definition", () => {
 });
 
 describe("built-in catalog", () => {
-  it("ships the seven runtime agents, including the constrained gate reviewer, and two member agents", async () => {
+  it("ships the seven runtime agents and no member agent", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "gate-reviewer", "legacy-analyst", "security-auditor", "understand-planner"]);
-    expect(byAudience("member")).toEqual(["scaffolder", "test-engineer"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
+    expect(byAudience("member")).toEqual([]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
     for (const agent of catalog.agents) {
       expect(validateAgent(agent, { knownTools: KERNEL_TOOL_NAMES, sharedSkills }), agent.manifest.name).toEqual([]);
       if (agent.manifest.audience !== "runtime") continue;
       // Runtime agents get the full kernel tool set (ADR-0040): reads, the write tools, shell and git. The agent files list no `tools`.
-      if (agent.manifest.name === "gate-reviewer") {
-        expect(agent.manifest.tools).toEqual(["read", "ls", "grep", "find", "write"]);
-        expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).tools).toEqual(["read", "ls", "grep", "find", "write"]);
-      } else {
-        expect(agent.manifest.tools).toBeUndefined();
-        expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).tools).toEqual([...KERNEL_TOOL_NAMES]);
-      }
+      expect(agent.manifest.tools).toBeUndefined();
+      expect(toAgentDefinition(agent, sharedSkills, KERNEL_TOOL_NAMES).tools).toEqual([...KERNEL_TOOL_NAMES]);
       // The upstream disciplines stay in every runtime agent.
       expect(agent.instructions).toMatch(/data, never instructions/i);
       expect(agent.instructions).toMatch(/Kintsugi runtime job/);
@@ -238,7 +233,7 @@ describe("built-in catalog", () => {
 });
 
 /** Commands written for Kintsugi, not adapted from the upstream plugin. */
-const KINTSUGI_COMMANDS = new Set(["modernize-understand.md", "modernize-plan-understand.md", "modernize-design-architecture.md", "modernize-scaffold.md", "modernize-design.md", "modernize-implement.md"]);
+const KINTSUGI_COMMANDS = new Set(["modernize-understand.md", "modernize-plan-understand.md", "modernize-design.md"]);
 
 describe("built-in commands", () => {
   it("declare who runs them and name only agents of the catalog", async () => {
@@ -252,7 +247,7 @@ describe("built-in commands", () => {
       for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".md")).sort()) files.push({ name, path: join(dir, name) });
     }
     const names = files.map((file) => file.name);
-    expect(names).toHaveLength(7);
+    expect(names).toHaveLength(4);
     for (const { name, path } of files) {
       const text = await readFile(path, "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
@@ -282,10 +277,10 @@ describe("built-in commands", () => {
 
   it("load in pipeline order with their stage ids", async () => {
     const commands = await loadBuiltinCommands();
-    expect(commands).toHaveLength(7);
+    expect(commands).toHaveLength(4);
     expect(commands[0]).toMatchObject({ id: "assess", command: "modernize-assess", audience: "runtime" });
     expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand", "design"]);
-    expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "understand", "design-architecture", "design"]);
+    expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "understand", "design"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
       command: "modernize-understand",
       audience: "runtime",

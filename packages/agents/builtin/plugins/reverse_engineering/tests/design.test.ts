@@ -31,11 +31,11 @@ import {
 } from '../hooks/reader/design.js'
 
 /**
- * The fixtures are shared with `design/scripts/tests/test_design.py`: the two checkers (this one, which the API runs,
+ * The fixtures are shared with `modernize/scripts/tests/test_design.py`: the two checkers (this one, which the API runs,
  * and `scripts/design_lib.py`, which the member's harness runs) must give the same answers for the same files.
  * UPDATE_DESIGN_FIXTURES=1 rewrites `expected.json` from this implementation; read the diff before committing it.
  */
-const DIR = fileURLToPath(new URL('../../design/scripts/tests/fixtures/design/', import.meta.url))
+const DIR = fileURLToPath(new URL('../../modernize/scripts/tests/fixtures/design/', import.meta.url))
 const read = (...parts: string[]): string => readFileSync(join(DIR, ...parts), 'utf8')
 
 const mdIn = (...parts: string[]): string[] => (existsSync(join(DIR, ...parts)) ? readdirSync(join(DIR, ...parts)).filter(name => name.endsWith('.md')) : [])

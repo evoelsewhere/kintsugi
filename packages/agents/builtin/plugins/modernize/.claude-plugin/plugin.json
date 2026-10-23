@@ -1,12 +1,12 @@
 {
   "name": "modernize",
-  "version": "1.0.0",
-  "description": "Move the understood system to its target: the common design, the skeleton and the implementation with its unit tests, on top of the design the portal generated from the project's own templates. Driven by members in their own harness; Kintsugi supplies context and ingests results.",
+  "version": "2.0.0",
+  "description": "Move the understood system to its target as runtime stages: the design of each understood unit, generated from the project's own design templates and checked against them by an independent reviewer. The later stages (implement, test, ...) are added to this plugin.",
   "author": {
     "name": "Kintsugi"
   },
   "keywords": [
     "kintsugi",
-    "member"
+    "runtime"
   ]
 }
