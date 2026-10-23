@@ -161,7 +161,7 @@ try to keep them yourself.
 Every file of the inventory must stay in exactly one item or in "unassigned", and no item may end up without files.
 Improve the catalog where it helps a person choose what to analyse, and only there:
 - give items and modules business names and one-sentence summaries (rename, rename-module, describe);
-- fix kinds (set-kind, one of unitKinds): a screen, an API, a batch job, a report, a service;
+- fix kinds (set-kind, one of unitKinds): screen (an interactive page or form), api (a synchronous interface others call), batch-job (unattended scheduled work), report, event (a message handler), integration (an exchange with an external system), module (logic with no entry point of its own); an item has one kind, its main role;
 - merge items that are one piece of behaviour (merge, into the first item), split an item that holds unrelated
   behaviour (split: the pieces together hold exactly the item's files), move an item to its module (move-item);
 - place unassigned source files that belong to an item (move-files with "to"); leave documentation and build files

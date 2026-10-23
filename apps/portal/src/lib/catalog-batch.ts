@@ -53,6 +53,31 @@ export function recommendBatch(items: readonly CatalogItem[], options: { maxItem
   return { ids: picked.map((item) => item.id), loc, high: picked.filter((item) => item.complexity === "high").length, budgetHit };
 }
 
+/**
+ * The items the given ones depend on, `depth` levels deep (ADR-0060): a screen brings the APIs it calls, those
+ * bring the items they call. Retired items are left out, and so are the given ids themselves.
+ */
+export function dependenciesOf(items: readonly CatalogItem[], ids: readonly string[], depth = 1): string[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const seen = new Set(ids);
+  const found: string[] = [];
+  let frontier = [...ids];
+  for (let level = 0; level < depth && frontier.length > 0; level += 1) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const edge of byId.get(id)?.dependsOn ?? []) {
+        const target = byId.get(edge.item);
+        if (target === undefined || target.status === "retired" || seen.has(target.id)) continue;
+        seen.add(target.id);
+        found.push(target.id);
+        next.push(target.id);
+      }
+    }
+    frontier = next;
+  }
+  return found.sort();
+}
+
 export interface RunEstimate {
   /** Median run time per item over the earlier successful runs, and the total for the selection. */
   perItemMs: number;

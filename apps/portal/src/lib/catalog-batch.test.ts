@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogItem } from "./api/catalog";
 import type { JobRunView } from "./api/job-runs";
-import { assetClassOf, estimateRun, formatEstimate, recommendBatch } from "./catalog-batch";
+import { assetClassOf, dependenciesOf, estimateRun, formatEstimate, recommendBatch } from "./catalog-batch";
 
 const item = (id: string, over: Partial<CatalogItem> = {}): CatalogItem =>
   ({ id, module: id.split("/")[0], kind: "module", name: id, summary: "", files: [`src/main/${id}.java`], leaves: [], entryPoints: [], loc: 100, complexity: "medium", digest: "", status: "not-analysed", aliases: [], parts: [], ...over }) as CatalogItem;
@@ -67,5 +67,25 @@ describe("formatEstimate", () => {
     expect(formatEstimate(12 * 60000)).toBe("12 min");
     expect(formatEstimate(80 * 60000)).toBe("1 h 20 min");
     expect(formatEstimate(120 * 60000)).toBe("2 h");
+  });
+});
+
+describe("dependenciesOf", () => {
+  const graph = [
+    item("ui/order", { kind: "screen", dependsOn: [{ item: "api/orders", kinds: ["call"], edges: 2 }] }),
+    item("api/orders", { kind: "api", dependsOn: [{ item: "core/pricing", kinds: ["call"], edges: 1 }, { item: "core/old", kinds: ["call"], edges: 1 }] }),
+    item("core/pricing", { dependsOn: [{ item: "ui/order", kinds: ["call"], edges: 1 }] }),
+    item("core/old", { status: "retired" }),
+  ];
+
+  it("adds what the selection calls, one level by default, never the selection itself or a retired item", () => {
+    expect(dependenciesOf(graph, ["ui/order"])).toEqual(["api/orders"]);
+    expect(dependenciesOf(graph, ["api/orders"])).toEqual(["core/pricing"]);
+  });
+
+  it("follows deeper levels and survives a cycle", () => {
+    expect(dependenciesOf(graph, ["ui/order"], 2)).toEqual(["api/orders", "core/pricing"]);
+    expect(dependenciesOf(graph, ["ui/order"], 5)).toEqual(["api/orders", "core/pricing"]);
+    expect(dependenciesOf(graph, ["nope"])).toEqual([]);
   });
 });

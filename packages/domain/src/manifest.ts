@@ -14,6 +14,7 @@ import {
 } from "./index.js";
 import { APPLICATION_REPOSITORY_ROLES, type ApplicationRepositoryRole, type ValidationProblem } from "./project.js";
 import { DEFAULT_DOCUMENT_AUTO_COMMIT_PATHS } from "./document-layout.js";
+import { CORE_ITEM_KINDS } from "./catalog.js";
 
 export const MANIFEST_SCHEMA_VERSION = 1;
 
@@ -384,7 +385,7 @@ export interface ManifestSource {
 }
 
 /** Unit kind used when the project has not declared any. */
-export const DEFAULT_UNIT_KINDS: readonly string[] = ["module"];
+export const DEFAULT_UNIT_KINDS: readonly string[] = CORE_ITEM_KINDS;
 
 /** Builds the manifest for a project's database state (render only; see docs/reference/document-repo.md). */
 export function manifestFromProject(source: ManifestSource): KintsugiManifest {

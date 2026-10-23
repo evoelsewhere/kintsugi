@@ -16,6 +16,14 @@ export const CATALOG_ITEM_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}\/[a-z0-9][a-z0-
 export const CATALOG_ITEM_STATES = ["active", "retired"] as const;
 export type CatalogItemState = (typeof CATALOG_ITEM_STATES)[number];
 
+/**
+ * The core item kinds (ADR-0060), by what an item is to the outside world. The first six are entry kinds
+ * (how the system is triggered); `module` is the internal kind and the default. A project's `unitKinds` is the
+ * list it allows and may add kinds of its own, which have no built-in specification profile.
+ */
+export const CORE_ITEM_KINDS = ["screen", "api", "batch-job", "report", "event", "integration", "module"] as const;
+export type CoreItemKind = (typeof CORE_ITEM_KINDS)[number];
+
 export const COMPLEXITY_BANDS = ["low", "medium", "high"] as const;
 export type ComplexityBand = (typeof COMPLEXITY_BANDS)[number];
 

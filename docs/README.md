@@ -61,6 +61,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Commit conventions](reference/document-repo-commit-conventions.md): identity, trailers and auto-commit defaults
 - [Unit files](reference/document-repo-unit-files.md): the unit directory, unit state, rule verdicts and traceability
 - [Design templates](reference/design-templates.md): design sets, template directives, checks, conformance (ADR-0044, ADR-0045)
+- [Specification profiles](reference/specification-profiles.md): the sections of an AS-IS specification by item kind (ADR-0060)
 - [Configuration](reference/configuration.md): installation environment variables
 
 **Guides**

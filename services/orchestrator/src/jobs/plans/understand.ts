@@ -28,6 +28,7 @@ import {
   assessmentTopologyPath,
   legacyDir,
   modernDir,
+  specificationProfilesDir,
   understandRunDir,
   understandRunFilePath,
   understandScopePath,
@@ -80,7 +81,7 @@ findings ${unitKeyLegacyPath(APP_TOKEN, "{key}", "findings.md")} (ids SEC-<modul
 application) and ${assessmentSynthesisPath(APP_TOKEN)}. Read the item's source files and follow its calls only as far as needed to
 describe it; the other items have their own specifications.
 
-Write ${unitKeyAsIsPath(APP_TOKEN, "{key}")} with write, with exactly these sections, in this order:
+Write ${unitKeyAsIsPath(APP_TOKEN, "{key}")} with write, with exactly these sections, in this order (a kind profile in the brief adds sections, see below):
 1. Purpose — what the item does for the business, in two to four sentences.
 2. Entry points — how the item is started (routes, transactions, screens, job steps, main programs), file:line each.
 3. Main flows — the main processing paths, step by step; add a Mermaid sequenceDiagram per main flow (autonumber;
@@ -103,6 +104,11 @@ Write ${unitKeyAsIsPath(APP_TOKEN, "{key}")} with write, with exactly these sect
    a copybook, a called program, a job descriptor or a table definition the code names may not be in the
    repositories, so search for it, then record it as a gap instead of guessing. A rule of the item below High
    confidence is a row too (kind ambiguous, Where = its RULE id). Write "None." when there is no gap.
+The brief's "profile" (null when the kind has none) is the specification profile of the item's kind: its "sections" are
+sections you add, each as a "## <name>" heading with exactly that name, in the order given, between 3 (Main flows) and
+4 (Dependencies); "holds" says what the section contains and "evidence" where to look for it; "instructions" says how to
+write them. A section with nothing to say reads "None." with the reason. They come on top of the eleven above, never
+instead of one, and the item's other sections keep their place.
 Mark anything inferred rather than read from code as "(inferred)", and a statement the code cannot settle as
 "(gap: GAP-…)" with its row in section 11.
 
@@ -141,7 +147,7 @@ export const UNDERSTAND: StagePlan = {
   id: "understand",
   message: understandMessage,
   // The legacy half (catalog, assessment, what earlier runs understood) and the unit cards of the modern half.
-  documents: ["kintsugi.yaml", `${legacyDir(APP_TOKEN)}/`, `${modernDir(APP_TOKEN)}/`],
+  documents: ["kintsugi.yaml", `${specificationProfilesDir()}/`, `${legacyDir(APP_TOKEN)}/`, `${modernDir(APP_TOKEN)}/`],
   requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   reviewAll: true,
   steps: [
@@ -149,7 +155,7 @@ export const UNDERSTAND: StagePlan = {
       id: "scope",
       kind: "script",
       script: "scope_items.py",
-      args: (ctx) => ["{app}", "--catalog", `{in}/${assessmentCatalogDir(APP_TOKEN)}`, "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--catalog", `{in}/${assessmentCatalogDir(APP_TOKEN)}`, "--items", itemsArg(ctx), "--out", "{out}", "--standards", `{in}/${specificationProfilesDir()}`],
       intermediate: [`${RUN}/`],
       expects: [SCOPE],
     },
