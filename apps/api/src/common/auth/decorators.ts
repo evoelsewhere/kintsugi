@@ -8,6 +8,11 @@ import { createParamDecorator, type ExecutionContext, SetMetadata, UnauthorizedE
 
 export const IS_PUBLIC_KEY = "kintsugi:is-public";
 export const PERMISSION_KEY = "kintsugi:required-permission";
+export const MEMBER_READ_SCOPE_KEY = "kintsugi:member-read-scope";
+
+export interface MemberReadScope {
+  projectIdFrom: "query" | "params" | "token-projects";
+}
 
 export const SKIP_CSRF_KEY = "kintsugi:skip-csrf";
 
@@ -33,6 +38,9 @@ export const Public = (): MethodDecorator & ClassDecorator => SetMetadata(IS_PUB
  * A method-level decorator overrides the class-level one.
  */
 export const RequirePermission = (...codes: [string, ...string[]]): MethodDecorator & ClassDecorator => SetMetadata(PERMISSION_KEY, codes);
+
+/** Marks a GET endpoint as a project-scoped Kintsugi member read route. */
+export const AllowMemberRead = (scope: MemberReadScope): MethodDecorator & ClassDecorator => SetMetadata(MEMBER_READ_SCOPE_KEY, scope);
 
 /** The caller set by AuthGuard; only valid on authenticated (non-@Public) routes. */
 export const CurrentActor = createParamDecorator((_data: unknown, context: ExecutionContext): Actor => {

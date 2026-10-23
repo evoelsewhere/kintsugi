@@ -8,6 +8,10 @@ import { SANDBOX_SETTING, type SandboxSettings, resolveSandbox, sandboxProblems 
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import {
+  CODING_AGENT_CONNECTION_LIFETIME_SETTING,
+  DEFAULT_CODING_AGENT_CONNECTION_LIFETIME,
+  type CodingAgentConnectionLifetime,
+  type CodingAgentConnectionLifetimeView,
   type CommitIdentity,
   type CommitIdentityView,
   InstallationSettings,
@@ -73,5 +77,33 @@ export class InstallationSettingsService {
     // Name and email are public commit metadata, not secrets.
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.commitIdentityUpdate, { subject: COMMIT_IDENTITY_SETTING, detail: identity }));
     return this.commitIdentity();
+  }
+
+  async codingAgentConnectionLifetime(): Promise<CodingAgentConnectionLifetimeView> {
+    const stored = await this.settings.get<{ maxAgeDays?: unknown }>(CODING_AGENT_CONNECTION_LIFETIME_SETTING);
+    const maxAgeDays = stored?.value.maxAgeDays;
+    if (stored === undefined || (maxAgeDays !== 15 && maxAgeDays !== 30)) {
+      return { maxAgeDays: DEFAULT_CODING_AGENT_CONNECTION_LIFETIME, isDefault: true };
+    }
+    return {
+      maxAgeDays,
+      isDefault: false,
+      ...(stored.updatedBy === undefined ? {} : { updatedBy: stored.updatedBy }),
+      updatedAt: stored.updatedAt,
+    };
+  }
+
+  async setCodingAgentConnectionLifetime(maxAgeDays: CodingAgentConnectionLifetime, actor: Actor): Promise<CodingAgentConnectionLifetimeView> {
+    if (maxAgeDays !== 15 && maxAgeDays !== 30) {
+      throw new BadRequestException("Kintsugi member connection age must be 15 or 30 days.");
+    }
+    await this.settings.put(CODING_AGENT_CONNECTION_LIFETIME_SETTING, { maxAgeDays }, actor.username ?? actor.id);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.codingAgentConnectionLifetimeUpdate, {
+        subject: CODING_AGENT_CONNECTION_LIFETIME_SETTING,
+        detail: { maxAgeDays },
+      }),
+    );
+    return this.codingAgentConnectionLifetime();
   }
 }

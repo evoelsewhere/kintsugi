@@ -1,11 +1,12 @@
 // Settings sections + navigation — macOS System-Settings style: a sidebar of icon
 // rows on the left, the active section on the right. Adding a section: append to TABS.
 
-import { Activity, Box, Cpu, GitBranch, type LucideIcon, Palette, Plug, Settings } from "lucide-react";
+import { Activity, Box, Cpu, GitBranch, type LucideIcon, Palette, Plug, Settings, Shield } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { AppearanceSection } from "./sections/appearance-section";
+import { CodingAgentSecuritySection } from "./sections/coding-agent-security-section";
 import { DiagnosticsSection } from "./sections/diagnostics-section";
 import { GitSection } from "./sections/git-section";
 import { McpServersSection } from "./sections/mcp-servers-section";
@@ -29,6 +30,7 @@ const TABS: SettingsTab[] = [
   { id: "mcp", label: "MCP servers", icon: Plug, component: () => <McpServersSection />, permission: "mcp.manage" },
   { id: "git", label: "Git", icon: GitBranch, component: () => <GitSection />, permission: "git.manage" },
   { id: "sandbox", label: "Sandbox", icon: Box, component: () => <SandboxSection />, permission: "sandbox.manage" },
+  { id: "security", label: "Security", icon: Shield, component: () => <CodingAgentSecuritySection />, permission: "security.manage" },
   { id: "diagnostics", label: "Diagnostics", icon: Activity, component: () => <DiagnosticsSection /> },
 ];
 

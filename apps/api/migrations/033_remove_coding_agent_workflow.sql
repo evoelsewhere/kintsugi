@@ -1,10 +1,11 @@
--- Removes the Coding Agent Workflow and the pull request review (ADR-0067): member credentials and
--- connections, task and snapshot projections, provider observations, reviews and gate publications, the
--- GitHub App configuration of a Git server, and the permissions that guarded them.
+-- Removes the Coding Agent Workflow and the pull request review (ADR-0067): task and snapshot projections,
+-- provider observations, reviews and gate publications, the GitHub App configuration of a Git server, and the
+-- permission that guarded gate publication.
 --
--- Kept: explicit Project Access (admin.project_access and project.access.manage), which stage decisions use,
--- and the workflow event log and outbox (workflow.member_transition, member_event, member_event_cursor, outbox)
--- that stage decisions record into.
+-- Kept: the common member base the CLI and the local MCP bridge use (member tokens and OAuth connections in
+-- core.member_*, and the member.read, tokens.manage-own and security.manage permissions), explicit Project Access
+-- (admin.project_access and project.access.manage), and the workflow event log and outbox (workflow.member_transition,
+-- member_event, member_event_cursor, outbox) that stage decisions record into.
 
 -- Reviews, gate publications and provider observations (children first).
 drop table if exists workflow.gate_publication cascade;
@@ -29,14 +30,6 @@ drop function if exists delivery.prevent_member_snapshot_manifest_update();
 drop function if exists delivery.prevent_member_snapshot_source_update();
 drop function if exists delivery.invalidate_member_task_configuration();
 
--- Credentials and browser-authorized connections.
-drop table if exists core.member_connection_refresh_token cascade;
-drop table if exists core.member_authorization_code cascade;
-drop table if exists core.member_connection_project cascade;
-drop table if exists core.member_token_project cascade;
-drop table if exists core.member_token cascade;
-drop table if exists core.member_connection cascade;
-
 -- GitHub App configuration and webhook secrets of a Git server.
 alter table admin.git_repository drop constraint if exists git_repository_id_server_id_unique;
 alter table admin.git_server
@@ -47,8 +40,8 @@ delete from admin.git_secret
  where secret_id like 'git-server:%:github-app-private-key'
     or secret_id like 'git-server:%:github-webhook-secret';
 
--- Permissions of the removed feature.
+-- Permission of the removed gate publication.
 delete from core.role_permission
- where permission_code in ('member.read', 'tokens.manage-own', 'gates.view', 'security.manage');
+ where permission_code = 'gates.view';
 delete from core.permission
- where code in ('member.read', 'tokens.manage-own', 'gates.view', 'security.manage');
+ where code = 'gates.view';
