@@ -71,7 +71,8 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Configure LLM providers for the runtime](guides/configure-llm-providers.md)
 
 **Delivery record**
-- [Member CLI and local MCP bridge](reference/member-cli.md): install the connector plugin, sign in, read projects and documents
+- [Member CLI and local MCP bridge](reference/member-cli.md): install the CLI, connect a client, sign in, add plugins, read projects and documents
+- **Guideline**: the portal page `/guideline` on every installation (quick start, install, connect, plugins, reference)
 - [Member client compatibility](reference/member-client-compatibility.md): tested client versions and setup probes
 - [Implementation and verification record](development/implementation-delivery-record.md): the deployment work, its status and evidence; remaining release work
 
