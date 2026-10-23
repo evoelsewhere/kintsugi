@@ -36,7 +36,7 @@
 | T2 | Idempotent personal marketplace writer and desktop-UI package layout | T1 |
 | T3 | CLI desktop-ui mode with no native client invocation | T2 |
 | T4 | Portal guide, generated command, exact desktop steps, and pilot limits | T3 |
-| T5 | ADR-0065, D80/register update, and testing runbook | T1–T4 |
+| T5 | ADR-0065, D81/register update, and testing runbook | T1–T4 |
 | T6 | Focused suites, root checks, combined diff review, app pilot if safe | T1–T5 |
 
 ### T1: Write failing setup tests first
@@ -90,7 +90,7 @@ Verification: Portal model/page tests and production build passed. Direct render
 
 Files: docs/decisions/0065-codex-desktop-plugin-installation.md, docs/decisions/README.md, docs/superpowers/specs/2026-10-22-kintsugi-native-app-install-design.md, docs/superpowers/plans/2026-10-22-kintsugi-codex-desktop-install-testing.md
 
-- [x] Add the accepted ADR and amend D80 without rewriting ADR-0060 or ADR-0064.
+- [x] Add the accepted ADR and amend D81 without rewriting ADR-0060 or ADR-0064.
 - [x] Add a step-by-step testing plan covering local package staging, Codex Desktop installation, OAuth consent, read-only context, PR observation, and cleanup.
 - [x] Keep release-gate language honest: automated MCP/protocol tests do not prove desktop-client installation.
 

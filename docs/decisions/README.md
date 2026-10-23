@@ -54,7 +54,7 @@ This page has two parts:
 | [0033](0033-assess-catalog-understand-selection.md) | Two runtime stages: assess builds the item catalog; understand runs on a selection | Accepted (layout statements amended by 0038) |
 | [0034](0034-understand-command-merges-map-rules-harden.md) | One understand command; map, extract-rules and harden are parts of it | Accepted |
 | [0037](0037-kernel-write-and-edit-tools-from-pi.md) | The kernel writes with pi's `write` and `edit`, not a custom `outputs_write` | Accepted (amends 0023) |
-| [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted (tree superseded by 0042 and 0051; task context and evidence-bound continuation amended by 0059–0061) |
+| [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted (tree superseded by 0042 and 0051; task context and evidence-bound continuation amended by 0061–0062) |
 | [0039](0039-github-actions-ghcr-deployment.md) | Build and deploy the self-hosted package with GitHub Actions | Accepted |
 | [0040](0040-kernel-shell-and-git-tools.md) | The kernel gets `shell` and `git` tools and an `ls` tree mode | Accepted (supersedes 0037 D4 and 0029's no-shell statements) |
 | [0041](0041-ai-plan-for-understanding-order.md) | An AI plan for what to understand next, from the relationships between catalog items | Accepted (paths amended by 0042) |
@@ -83,7 +83,7 @@ This page has two parts:
 | [0064](0064-project-scoped-oauth-for-coding-agent-workflow.md) | Use project-scoped browser authorization for the local Coding Agent Workflow | Accepted (amends the OAuth deferral in 0060) |
 | [0065](0065-codex-desktop-plugin-installation.md) | Stage the Coding Agent Workflow plugin and install it through Codex Desktop | Accepted (amends 0060 decisions 1 and 6) |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
-| [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0059) |
+| [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0060) |
 
 ## Decision register
 
