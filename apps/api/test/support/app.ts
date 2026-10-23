@@ -18,8 +18,29 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function startTestApp(): Promise<TestApp> {
+export async function startTestApp(extraModules: import("@nestjs/common").Type[] = []): Promise<TestApp> {
   const db = await createTestDatabase();
+  try {
+    return await bootTestApp(db, extraModules, true);
+  } catch (error) {
+    await db.drop();
+    throw error;
+  }
+}
+
+/** Boots a fresh API process facade against an existing test database without dropping it on close. */
+export async function startTestAppWithDatabase(
+  db: TestDatabase,
+  extraModules: import("@nestjs/common").Type[] = [],
+): Promise<TestApp> {
+  return bootTestApp(db, extraModules, false);
+}
+
+async function bootTestApp(
+  db: TestDatabase,
+  extraModules: import("@nestjs/common").Type[],
+  dropDatabaseOnClose: boolean,
+): Promise<TestApp> {
   // Configuration is read when modules load: set it before importing the app.
   process.env["DATABASE_URL"] = db.url;
   process.env["KINTSUGI_SECRET_KEY"] = randomBytes(32).toString("base64");
@@ -28,16 +49,19 @@ export async function startTestApp(): Promise<TestApp> {
 
   let app: INestApplication | undefined;
   try {
-    const { Logger, StandardSchemaValidationPipe } = await import("@nestjs/common");
+    const { Logger, Module, StandardSchemaValidationPipe } = await import("@nestjs/common");
     const { NestFactory } = await import("@nestjs/core");
     const { AppModule } = await import("../../src/app.module.js");
+    @Module({ imports: [AppModule, ...extraModules] })
+    class TestRootModule {}
     const { ensureSchema } = await import("#common/db/pool.js");
     const { HttpExceptionFilter } = await import("#common/filters/http-exception.filter.js");
     const { ResponseInterceptor } = await import("#common/interface/response.js");
 
     Logger.overrideLogger(false);
-    const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(AppModule, { logger: false });
-    nest.useBodyParser("json", { limit: "4mb" });
+    const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(TestRootModule, { logger: false, bodyParser: false });
+    const { configureApiBodyParser } = await import("../../src/common/interface/body-parser.js");
+    configureApiBodyParser(nest);
     app = nest;
     await ensureSchema();
     app.setGlobalPrefix("api");
@@ -47,7 +71,8 @@ export async function startTestApp(): Promise<TestApp> {
     await app.listen(0, "127.0.0.1");
   } catch (error) {
     await app?.close();
-    await db.drop();
+    const { closePool } = await import("#common/db/pool.js");
+    await closePool();
     throw error;
   }
 
@@ -59,9 +84,9 @@ export async function startTestApp(): Promise<TestApp> {
     nest: started,
     close: async () => {
       await started.close();
-      const { getPool } = await import("#common/db/pool.js");
-      await getPool().end();
-      await db.drop();
+      const { closePool } = await import("#common/db/pool.js");
+      await closePool();
+      if (dropDatabaseOnClose) await db.drop();
     },
   };
 }

@@ -222,6 +222,11 @@ export function designSetPath(set: string): string {
   return `${designSetDir(set)}/set.md`;
 }
 
+/** One unit-kind profile and its templates under a design set (ADR-0053). */
+export function designProfileDir(set: string, kind: string): string {
+  return `${designSetDir(set)}/${kind}`;
+}
+
 /** A template file of a set, named by the `Template` column of its files table; `<kind>/<name>` for a template of a profile (ADR-0053). */
 export function designTemplatePath(set: string, template: string): string {
   return `${designSetDir(set)}/${template}`;
@@ -229,7 +234,7 @@ export function designTemplatePath(set: string, template: string): string {
 
 /** The profile of a set for one unit kind: its version, the files it adds or removes, its instructions (ADR-0053). */
 export function designProfilePath(set: string, kind: string): string {
-  return `${designSetDir(set)}/${kind}/profile.md`;
+  return `${designProfileDir(set, kind)}/profile.md`;
 }
 
 /** The design of the application as a whole, one folder per design set of scope `application` (ADR-0050). */
@@ -468,6 +473,11 @@ export function unitKeyLegacyPath(app: string, unitKey: string, file: string): s
 
 export function unitTaskPath(app: string, module: string, unit: string): string {
   return unitModernFilePath(app, module, unit, "task.md");
+}
+
+/** Evidence-bound gate publication lives beside the unit's modern documents. */
+export function unitGateReviewPath(app: string, module: string, unit: string, gate = "G4"): string {
+  return unitModernFilePath(app, module, unit, "reviews/" + encodeURIComponent(gate) + ".md");
 }
 
 /** The unit's documents of one design set the project defines. */

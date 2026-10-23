@@ -166,7 +166,13 @@ export interface GateRequest {
   options: readonly string[];
   /** The documented default, taken when nobody answers. */
   default: string;
+  /** Whether a human must answer or this procedural gate uses its documented default. */
+  decisionMode: GateDecisionMode;
+  /** Original stage run whose decision is reused when this stage run resumes. */
+  resumeOf?: string;
 }
+
+export type GateDecisionMode = "required-human" | "default";
 
 export interface GateDecision {
   choice: string;
@@ -176,16 +182,17 @@ export interface GateDecision {
 }
 
 /**
- * Decides gates. Persisted gates (portal tasks with a deadline) plug in here; until then the
- * default decider takes the documented default at once and the stage records it.
+ * Decides procedural stage gates. Required-human choices must never be inferred from a default.
  */
 export interface GateDecider {
   decide(request: GateRequest, signal?: AbortSignal): Promise<GateDecision>;
 }
 
-/** TODO(gates): replace with a decider backed by persisted gates once they exist. */
 export const DEFAULT_GATE_DECIDER: GateDecider = {
-  decide: async (request) => ({ choice: request.default, defaulted: true }),
+  decide: async (request) => {
+    if (request.decisionMode === "required-human") throw new Error(`Gate ${request.gate} requires a human decision`);
+    return { choice: request.default, defaulted: true };
+  },
 };
 
 /** The abort reason of a run a person cancelled (as opposed to the worker stopping). */

@@ -15,6 +15,9 @@ export interface GitServerView {
   username?: string;
   knownHosts?: string;
   hasCredential: boolean;
+  hasGithubWebhookSecret: boolean;
+  /** Public App IDs and write-only key presence; private key material is never returned. */
+  githubApp?: { appId: string; installationId: string; hasPrivateKey: boolean };
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +32,10 @@ export interface GitServerInput {
   token?: string;
   /** Write-only; omit to keep the stored one. */
   privateKey?: string;
+  /** Write-only; omit to keep the stored App, or null to remove it. */
+  githubApp?: { appId: string; installationId: string; privateKey: string } | null;
+  /** Write-only; omit to keep the stored secret, or null to remove it. */
+  githubWebhookSecret?: string | null;
   knownHosts?: string;
 }
 

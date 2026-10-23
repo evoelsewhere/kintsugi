@@ -57,7 +57,7 @@ async function attempt(ledger: Ledger, plan: StagePlan, options: { failOn?: stri
     values: { app: "demo", sources: `legacy@${"a".repeat(40)}` },
     dirs: { root, in: join(root, "in"), work: join(root, "work"), out: join(root, "out") },
     limits: { maxAgents: 50, concurrency: 3 },
-    gates: { decide: async (request: { default: string }) => ({ choice: request.default, defaulted: true }) } as never,
+    gates: { decide: async (request: { default: string }) => ({ choice: request.default, defaulted: false, by: "test-user" }) } as never,
     runLeaf,
     reuse,
     gateChoices: ledger.gates(),
@@ -142,7 +142,7 @@ describe("reusing the steps of an earlier attempt", () => {
 
   it("replays the choice taken at a gate instead of asking again, and a changed choice changes what follows", async () => {
     const ledger = await Ledger.open(join(root, "state", "ledger.json"));
-    const withGate = planOf([agent("one"), { id: "which", kind: "gate", question: "Which?", options: ["a", "b"], default: "a" }, agent("two")]);
+    const withGate = planOf([agent("one"), { id: "which", kind: "gate", question: "Which?", options: ["a", "b"], default: "a", decisionMode: "required-human" }, agent("two")]);
     await attempt(ledger, withGate);
     expect(ledger.gates().get("which")).toBe("a");
     await ledger.recordGate("which", "b");

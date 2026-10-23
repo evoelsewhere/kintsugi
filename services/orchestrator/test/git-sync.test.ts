@@ -89,6 +89,41 @@ describe.skipIf(!hasDatabase)("git sync (integration)", () => {
     expect((await row("over-tls"))?.last_error).not.toContain(token);
   });
 
+  it("keeps a GitHub App key separate from the clone credential and binds it to one repository", async () => {
+    const cloneToken = "TEST-github-clone-token";
+    const appPrivateKey = "TEST-github-app-private-key";
+    await db.pool.query(
+      `insert into admin.git_server (id, kind, name, base_url, auth_type, github_app_id, github_installation_id)
+       values ('ghes-connected', 'github-enterprise', 'GHES', 'https://ghe.example.invalid', 'token', '12345', '67890')`,
+    );
+    for (const [secretId, plaintext] of [
+      [`git-server:ghes-connected:github-app-private-key`, appPrivateKey],
+      [`git-server:ghes-connected:token`, cloneToken],
+    ] as const) {
+      const secret = encryptSecret(plaintext);
+      await db.pool.query("insert into admin.git_secret (secret_id, server_id, ciphertext, iv, auth_tag) values ($1, 'ghes-connected', $2, $3, $4)", [
+        secretId,
+        secret.ciphertext,
+        secret.iv,
+        secret.authTag,
+      ]);
+    }
+    await repository("ghes-billing", "https://ghe.example.invalid/Acme/Billing.git", "ghes-connected");
+
+    const cloneTarget = await deps.store.target("ghes-billing");
+    const appConnection = await deps.store.githubProviderConnection("ghes-billing");
+
+    expect(cloneTarget?.credential).toEqual({ kind: "token", token: cloneToken });
+    expect(appConnection).toMatchObject({
+      kind: "github-enterprise",
+      baseUrl: "https://ghe.example.invalid",
+      appId: "12345",
+      installationId: "67890",
+      privateKey: appPrivateKey,
+      repositoryPath: "Acme/Billing",
+    });
+  });
+
   it("prunes mirrors of removed repositories", async () => {
     await db.pool.query("delete from admin.git_repository where id = 'legacy-app'");
     expect(await pruneMirrors(deps)).toEqual(["internal/legacy-app"]);

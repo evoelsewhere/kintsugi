@@ -42,7 +42,6 @@ import { exampleOf, keysOf, shapeProblem, unwrapResult } from "./result-shape.js
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
-  DEFAULT_GATE_DECIDER,
   type GateDecider,
   type JobEventKind,
   JobFailure,
@@ -98,8 +97,8 @@ export interface JobRunnerDeps {
   scriptsDir?: string;
   workflowsDir?: string;
   hookFile?: string;
-  /** Decides the gates of stage plans; default: the documented default, recorded as defaulted. */
-  gates?: GateDecider;
+  /** Every registered runner must explicitly choose how stage decisions are persisted. */
+  gates: GateDecider;
   /**
    * Fill in what a mock agent job would have written (expected files, structured results);
    * default: when the agent runtime is the mock backend.
@@ -341,7 +340,7 @@ export class JobRunner {
       manifest = provisioned.manifest;
       const outcome = await this.#step(run, ws, signal, provisioned.ledger);
       const { summary } = await this.#finish(run, ws, outcome);
-      const write = await this.#publish(run, ws, outcome);
+      const write = run.inputs["publishOutput"] === false ? undefined : await this.#publish(run, ws, outcome);
       await store.succeed(id, { ...summary, ...(write === undefined ? {} : { documentWriteId: write }) });
       ended = "succeeded";
       await this.#event(ws, undefined, "status", `succeeded${write === undefined ? "" : ", output handed to the document repo writer"}`, { status: "succeeded" });
@@ -702,6 +701,15 @@ export class JobRunner {
 
   async #agent(run: JobRun, ws: StepWorkspace, signal?: AbortSignal): Promise<StepOutcome> {
     const definition = await materializeSkillFiles(await this.#deps.agentDefinitions.definition(run.name), ws.in, { readOnly: ws.sandbox.markReadOnly });
+    const expectedAgentVersion = run.inputs["expectedAgentVersion"];
+    if (expectedAgentVersion !== undefined) {
+      if (typeof expectedAgentVersion !== "string" || expectedAgentVersion.trim() === "") {
+        throw new JobFailure("inputs.expectedAgentVersion must be a non-empty version string");
+      }
+      if (definition.version !== expectedAgentVersion) {
+        throw new JobFailure("Agent " + run.name + " has version " + definition.version + ", expected agent version " + expectedAgentVersion);
+      }
+    }
     const mock = this.#deps.agents.engine.startsWith("mock");
     const binding = (await this.#deps.store.modelBinding(run.name, run.projectId)) ?? (mock ? { provider: "mock", model: "mock" } : undefined);
     if (binding === undefined) throw new JobFailure(`No model is bound to agent "${run.name}" (Settings → LLM Providers)`);
@@ -806,7 +814,7 @@ export class JobRunner {
     };
     let done = await attempt();
     // A provider that drops its response stalls the job (the launcher's idle watchdog): try once more.
-    if (done.type === "job.failed" && done.reason === "timeout" && done.error.startsWith("stalled") && signal?.aborted !== true) {
+    if (run.inputs["disableStalledRetry"] !== true && done.type === "job.failed" && done.reason === "timeout" && done.error.startsWith("stalled") && signal?.aborted !== true) {
       await this.#event(ws, stepId, "log", `agent ${run.name} stalled (${redactText(done.error).slice(0, 120)}); retrying once`);
       done = await attempt();
     }
@@ -1033,7 +1041,7 @@ export class JobRunner {
         // Group members stage their outputs under steps/, beside the folders of the steps.
         dirs: { root: paths.steps, in: ws.in, work, out: ws.out },
         limits: ws.defaults.stage,
-        gates: this.#deps.gates ?? DEFAULT_GATE_DECIDER,
+        gates: this.#deps.gates,
         runLeaf,
         log: (line, data) => {
           this.#log(`stage ${run.name} (${run.id}): ${line}`);
@@ -1041,6 +1049,7 @@ export class JobRunner {
         },
         ...(signal === undefined ? {} : { signal }),
         ...(scope === undefined ? {} : { scope }),
+        ...(typeof run.inputs["resumeOf"] === "string" ? { resumeOf: run.inputs["resumeOf"] } : {}),
         ...(reuse === undefined || ledger === undefined ? {} : { reuse, gateChoices: ledger.gates(), onGate: (id: string, choice: string) => ledger.recordGate(id, choice) }),
       });
       const outcome = await executor.run();

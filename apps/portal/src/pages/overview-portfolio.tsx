@@ -283,4 +283,3 @@ function PortfolioRow({ application }: { application: PortfolioApplication }): R
     </tr>
   );
 }
-

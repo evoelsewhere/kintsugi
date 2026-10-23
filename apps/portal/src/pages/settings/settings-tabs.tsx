@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { AppearanceSection } from "./sections/appearance-section";
 import { DiagnosticsSection } from "./sections/diagnostics-section";
+import { CodingAgentSecuritySection } from "./sections/coding-agent-security-section";
 import { GitSection } from "./sections/git-section";
 import { McpServersSection } from "./sections/mcp-servers-section";
 import { PlaceholderSection } from "./sections/placeholder-section";
@@ -29,7 +30,7 @@ const TABS: SettingsTab[] = [
   { id: "mcp", label: "MCP servers", icon: Plug, component: () => <McpServersSection />, permission: "mcp.manage" },
   { id: "git", label: "Git", icon: GitBranch, component: () => <GitSection />, permission: "git.manage" },
   { id: "sandbox", label: "Sandbox", icon: Box, component: () => <SandboxSection />, permission: "sandbox.manage" },
-  { id: "security", label: "Security", icon: Shield, component: () => <PlaceholderSection title="Security" description="Sessions, PAT lifetime, secret rotation and data-residency policy." /> },
+  { id: "security", label: "Security", icon: Shield, component: () => <CodingAgentSecuritySection />, permission: "security.manage" },
   { id: "diagnostics", label: "Diagnostics", icon: Activity, component: () => <DiagnosticsSection /> },
 ];
 

@@ -12,6 +12,7 @@ import { CheckoutStorage } from "@kintsugi/git";
 import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
+import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
 import { JobRunner } from "../src/jobs/runner.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
 import { LocalCheckouts, MemoryJobStore, fixtureRepository, writingAgentRuntime } from "./support/jobs.js";
@@ -50,6 +51,7 @@ describe("an application with two legacy repositories", () => {
       agents,
       agentDefinitions: builtinAgents(),
       interpreters: interpretersFromEnv(),
+      gates: DEFAULT_GATE_DECIDER,
       requestWrite: async (_repository, request) => {
         writes.push(request);
       },

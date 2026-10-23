@@ -20,6 +20,14 @@ const serverFields = {
   privateKey: z.string().min(1).max(16384).optional(),
   /** Pinned SSH host keys (known_hosts lines), required with an SSH key. */
   knownHosts: z.string().max(16384).optional(),
+  /** Write-only webhook secret; omit to keep it, null explicitly removes it. */
+  githubWebhookSecret: z.string().min(32).max(8192).nullable().optional(),
+  /** Write-only GitHub App configuration for PR/check observation; null explicitly removes it. */
+  githubApp: z.object({
+    appId: z.string().regex(/^\d+$/).max(30),
+    installationId: z.string().regex(/^\d+$/).max(30),
+    privateKey: z.string().min(1).max(16384),
+  }).strict().nullable().optional(),
 };
 
 export const createGitServerSchema = z.object({ id: idSchema, ...serverFields });
@@ -51,12 +59,14 @@ export type SetRepositoryBranchInput = z.infer<typeof setRepositoryBranchSchema>
 
 /** Maps a server request to the application command. */
 export function toServerCommand(id: string, input: ReplaceGitServerInput): RegisterGitServer {
-  const { token, privateKey, username, knownHosts, ...fields } = input;
+  const { token, privateKey, username, knownHosts, githubApp, githubWebhookSecret, ...fields } = input;
   return {
     id,
     ...fields,
     ...(username === undefined ? {} : { username }),
     ...(knownHosts === undefined || knownHosts.trim() === "" ? {} : { knownHosts: knownHosts.trim() }),
     credential: { ...(token === undefined ? {} : { token }), ...(privateKey === undefined ? {} : { privateKey }) },
+    ...(githubApp === undefined ? {} : { githubApp }),
+    ...(githubWebhookSecret === undefined ? {} : { githubWebhookSecret }),
   };
 }

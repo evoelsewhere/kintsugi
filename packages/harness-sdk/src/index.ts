@@ -159,3 +159,6 @@ export interface HarnessPolicy {
   /** Plugins that must be enabled for members of the project (always includes "kintsugi"). */
   requiredPlugins?: string[];
 }
+
+export * from "./agent-context.js";
+export * from "./agent-context-schemas.js";

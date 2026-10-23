@@ -168,6 +168,12 @@ export class DocumentsService {
     return read.status === "ok" ? read.content : undefined;
   }
 
+  /** True only when both immutable commits are available in this project's document mirror. */
+  async isAncestor(context: DocumentContext, ancestor: string, descendant: string): Promise<boolean> {
+    if (!COMMIT_ID.test(ancestor) || !COMMIT_ID.test(descendant)) return false;
+    return this.reader.isAncestor(context.repo, ancestor, descendant);
+  }
+
   /** The entry names of a directory at a commit; [] when it is not a directory. */
   async listNames(context: DocumentContext, commit: string, path: string): Promise<Array<{ name: string; kind: "file" | "dir" }>> {
     const entries = await this.reader.list(context.repo, commit, servablePath(path, true));

@@ -1,0 +1,7 @@
+{
+  "name": "review",
+  "version": "1.0.0",
+  "description": "Read-only, revision-bound pull request reviews for the Coding Agent Workflow.",
+  "author": { "name": "Kintsugi" },
+  "keywords": ["kintsugi", "runtime", "review"]
+}

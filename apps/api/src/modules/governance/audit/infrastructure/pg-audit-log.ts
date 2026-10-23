@@ -1,7 +1,7 @@
 // Postgres adapter of the audit log (migration 011: governance.audit_event, append-only).
 
 import { Injectable } from "@nestjs/common";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { getPool, withTransaction } from "#common/db/pool.js";
 import type { AuditEntry, AuditQuery, NewAuditEntry } from "../domain/audit-entry.js";
 import { AuditLog } from "../domain/audit-log.port.js";
@@ -33,18 +33,25 @@ export class PgAuditLog extends AuditLog {
   }
 
   async append(entries: readonly NewAuditEntry[]): Promise<void> {
-    if (entries.length === 0) return;
-    await withTransaction(async (client) => {
+    await this.appendWithIds(entries);
+  }
+
+  async appendWithIds(entries: readonly NewAuditEntry[], transaction?: PoolClient): Promise<string[]> {
+    if (entries.length === 0) return [];
+    const append = async (client: PoolClient): Promise<string[]> => {
+      const ids: string[] = [];
       for (const entry of entries) {
-        await client.query("insert into governance.audit_event (actor, action, project_id, subject, detail) values ($1, $2, $3, $4, $5)", [
-          entry.actor,
-          entry.action,
-          entry.projectId ?? null,
-          entry.subject ?? null,
-          JSON.stringify(entry.detail ?? {}),
-        ]);
+        const inserted = await client.query<{ id: string }>(
+          "insert into governance.audit_event (actor, action, project_id, subject, detail) values ($1, $2, $3, $4, $5) returning id::text as id",
+          [entry.actor, entry.action, entry.projectId ?? null, entry.subject ?? null, JSON.stringify(entry.detail ?? {})],
+        );
+        const id = inserted.rows[0]?.id;
+        if (id === undefined) throw new Error("audit insert did not return its event ID");
+        ids.push(id);
       }
-    });
+      return ids;
+    };
+    return transaction === undefined ? withTransaction(append) : append(transaction);
   }
 
   async list(query: AuditQuery): Promise<{ items: AuditEntry[]; total: number }> {

@@ -41,15 +41,8 @@ export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhig
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 /** Work item status as stored in the unit file frontmatter. */
-export type WorkItemStatus =
-  | "pending"
-  | "in-progress"
-  | "awaiting-review"
-  | "approved"
-  | "rejected"
-  | "blocked"
-  | "done"
-  | "skipped";
+export const WORK_ITEM_STATUSES = ["pending", "in-progress", "awaiting-review", "approved", "rejected", "blocked", "done", "skipped"] as const;
+export type WorkItemStatus = (typeof WORK_ITEM_STATUSES)[number];
 
 /**
  * Frontmatter of the unit-state path returned by `unitStatePath` in the document repo (ADR-0012, ADR-0028).
@@ -72,6 +65,10 @@ export interface WorkItemFile {
   dependsOn?: string[];
   source?: { repo: string; paths: string[] }[];
   target?: { repo: string; paths: string[] }[];
+  /** Authoritative declarations only; never inferred from prose or observed pull requests. */
+  requiredDeliverables?: { id: string; repositoryId: string; path: string }[];
+  /** Design-set files a person explicitly waived for this unit. */
+  waived?: string[];
   links?: {
     taskPack?: string;
     asIs?: string;
@@ -79,7 +76,6 @@ export interface WorkItemFile {
     businessRules?: string[];
     pullRequests?: string[];
   };
-  gates?: Partial<Record<GateId | string, { status: "pending" | "approved" | "rejected"; by?: string; at?: string; review?: string }>>;
 }
 
 /** Index row derived from a unit file; rebuildable from Git. */
@@ -250,6 +246,14 @@ export interface CompareReport {
 
 // Projects and the kintsugi.yaml manifest (ADR-0028).
 export * from "./project.js";
+export * from "./validation.js";
+export * from "./member-task.js";
+export * from "./member-association.js";
+export * from "./member-task-summary.js";
+export * from "./gate-evidence.js";
+export * from "./gate-decision.js";
+export * from "./gate-publication.js";
+export * from "./review-policy.js";
 export * from "./manifest.js";
 
 // Application and per-unit document-repo paths (ADR-0038), with catalog vocabulary (ADR-0033).
@@ -260,4 +264,5 @@ export * from "./sandbox.js";
 export * from "./source.js";
 export * from "./design-template.js";
 export * from "./traceability.js";
+export * from "./gate-record.js";
 export * from "./mcp.js";

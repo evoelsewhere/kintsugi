@@ -33,4 +33,16 @@ describe("loadEnv", () => {
     process.env["KINTSUGI_PUBLIC_URL"] = "http://localhost:8080";
     expect(loadEnv().secureCookies).toBe(false);
   });
+
+  it("exposes a normalized canonical installation URL", () => {
+    process.env["KINTSUGI_PUBLIC_URL"] = "https://kintsugi.example/tenant/";
+    expect(loadEnv().publicUrl).toBe("https://kintsugi.example/tenant");
+    delete process.env["KINTSUGI_PUBLIC_URL"];
+    expect(loadEnv().publicUrl).toBe("http://localhost:8080");
+  });
+
+  it.each(["http://kintsugi.example", "https://user:pass@kintsugi.example", "https://kintsugi.example/?x=1", "https://kintsugi.example/#fragment"])("rejects an unsafe canonical URL: %s", (value) => {
+    process.env["KINTSUGI_PUBLIC_URL"] = value;
+    expect(() => loadEnv()).toThrow(/KINTSUGI_PUBLIC_URL/);
+  });
 });

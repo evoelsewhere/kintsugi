@@ -17,6 +17,10 @@
     "./stages": {
       "types": "./dist/jobs/stages.d.ts",
       "import": "./dist/jobs/stages.js"
+    },
+    "./outbox": {
+      "types": "./dist/outbox/index.d.ts",
+      "import": "./dist/outbox/index.js"
     }
   },
   "engines": {
@@ -34,6 +38,7 @@
     "@kintsugi/agents": "workspace:*",
     "@kintsugi/domain": "workspace:*",
     "@kintsugi/git": "workspace:*",
+    "@kintsugi/harness-sdk": "workspace:*",
     "@kintsugi/manifest": "workspace:*",
     "@kintsugi/runtime": "workspace:*",
     "@kintsugi/runtime-sdk": "workspace:*",

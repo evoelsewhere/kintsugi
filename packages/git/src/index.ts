@@ -55,3 +55,35 @@ export {
   type PullRequestStatusQuery,
   type PullRequestServerKind,
 } from "./pull-requests.js";
+export {
+  GITHUB_REST_API_VERSION,
+  GitHubAppError,
+  GitHubInstallationCredentialProvider,
+  GitHubProviderCredentialProvider,
+  githubApiTarget,
+  githubRepositoryPathFromRemote,
+  type GitHubAppConnection,
+  type GitHubAppPurpose,
+  type GitHubCredentialResolver,
+  type GitHubObservationConnection,
+  type GitHubPermission,
+  type GitHubProviderCredential,
+  type GitHubRepositoryConnection,
+  type GitHubTokenConnection,
+  type GitHubApiTarget,
+} from "./github-app.js";
+export { GitHubPullRequestObserver } from "./github-observer.js";
+export type {
+  CapabilityState,
+  ChangePage,
+  ObservedCheckRun,
+  ObservedPullRequest,
+  ObservedPullRequestState,
+  ObservedPullRequestSummary,
+  ObservedReview,
+  ProviderCapabilities,
+  ProviderCapability,
+  PullRequestIdentity,
+  PullRequestObserver,
+} from "./pull-request-observer.js";
+export { fetchPullRequestRefs, listChangedPaths, type PullRequestRevision, type PullRequestRevisionRequest } from "./github-review.js";

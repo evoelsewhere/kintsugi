@@ -4,6 +4,7 @@
 // the content that was acted on, credentials or key values: only ids, names and small detail.
 
 import type { Actor } from "#common/auth/decorators.js";
+import type { PoolClient } from "pg";
 
 /** Actions recorded in the audit log. New actions are added here (the portal lists them). */
 export const AUDIT_ACTIONS = {
@@ -49,8 +50,11 @@ export const AUDIT_ACTIONS = {
   skillUpdate: "skill.update",
   skillDelete: "skill.delete",
   commitIdentityUpdate: "commit-identity.update",
+  codingAgentConnectionLifetimeUpdate: "coding-agent.connection-lifetime.update",
   gateRequest: "gate.request",
   gateDecide: "gate.decide",
+  gateDecisionRequest: "gate.decision.request",
+  stageDecisionRecord: "stage.decision.recorded",
   roleCreate: "role.create",
   rolePermissionsUpdate: "role.permissions",
   roleDelete: "role.delete",
@@ -58,6 +62,15 @@ export const AUDIT_ACTIONS = {
   userUpdate: "user.update",
   userPasswordReset: "user.password",
   userDelete: "user.delete",
+  memberTokenIssue: "member-token.issue",
+  memberTokenRevoke: "member-token.revoke",
+  codingAgentConnectionAuthorize: "coding-agent.connection.authorize",
+  codingAgentConnectionRevoke: "coding-agent.connection.revoke",
+  codingAgentConnectionReplay: "coding-agent.connection.replay",
+  projectAccessGrant: "project-access.grant",
+  projectAccessRevoke: "project-access.revoke",
+  providerActorMap: "provider-actor.map",
+  memberPrAssociate: "member-pr.associate",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -107,6 +120,9 @@ export abstract class AuditTrail {
    * it before returning protected content (a restricted-record read): no entry, no content.
    */
   abstract record(entries: readonly AuditRecord[]): Promise<void>;
+
+  /** Appends atomically and returns the durable database IDs in input order. */
+  abstract recordWithIds(entries: readonly AuditRecord[], client?: PoolClient): Promise<string[]>;
 
   /**
    * After a change succeeded: appends the entry and never throws (the change already happened;

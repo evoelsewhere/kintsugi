@@ -9,7 +9,12 @@ export const commitIdentitySchema = z.object({
 });
 export type CommitIdentityInput = z.infer<typeof commitIdentitySchema>;
 
-/** Body of PUT sandbox: every field; the use case checks the ranges with the rules the worker applies (@kintsugi/domain). */
+export const codingAgentConnectionLifetimeSchema = z.object({
+  maxAgeDays: z.union([z.literal(15), z.literal(30)]),
+});
+export type CodingAgentConnectionLifetimeInput = z.infer<typeof codingAgentConnectionLifetimeSchema>;
+
+/** Body of PUT sandbox: every field; the use case checks ranges using the worker rules (@kintsugi/domain). */
 export const sandboxSettingsSchema = z.object({
   checkoutHours: z.number(),
   retentionDays: z.number(),
