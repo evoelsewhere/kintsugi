@@ -16,9 +16,10 @@ The CLI and the MCP bridge are a base that every member plugin shares ([member C
 
 - **Auth.** Project-scoped browser authorization with PKCE: a five-minute access token in memory, a rotating refresh credential in the operating system credential store, an administrator-set maximum connection age and revocation in the portal.
 - **Get resource.** `/api/member/v1` returns the projects the connection covers and the project's document repository (tree and file at a branch or commit). The server checks the token's project scope, `member.read` and explicit Project Access on every request.
-- **Update information** (later). Recording activity and results back goes through the same base once a plugin needs it, with a security review.
+- **Receive plugins.** The member API serves the member plugins a member may use in a project as text bundles with hashes; the CLI installs them into the client's Kintsugi package, and removes them again.
+- **Update information.** One bounded write: a plugin records a short, named fact about its work (`activity_record`). Other writes are added only with a security review.
 
-The bridge runs only when the AI client starts it and has no inbound listener. Plugins plug into it: Kintsugi generates the connector for each kind of harness, and a plugin from the built-in set or the document repository's `plugins/` carries the flow. Kintsugi decides who may use which plugin and observes its use per member (plugin distribution and per-member monitoring are the direction of [ADR-0069](../../decisions/0069-common-member-base-and-plugin-distribution.md), not shipped yet). The member harness never receives a Kintsugi service credential.
+The bridge runs only when the AI client starts it and has no inbound listener. Plugins plug into it: Kintsugi generates the connector for each kind of harness, and a member plugin carries the flow. Kintsugi decides who may use which plugin (`admin.plugin_access`, per project and member) and observes its use per member (`monitoring.member_activity`, shown in Monitoring → Members); see [ADR-0069](../../decisions/0069-common-member-base-and-plugin-distribution.md). Project plugins from the document repository's `plugins/` are not served yet. The member harness never receives a Kintsugi service credential.
 
 ```mermaid
 sequenceDiagram

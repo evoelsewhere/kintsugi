@@ -2,7 +2,7 @@
 
 Status: the typed client, the CLI, the local stdio MCP bridge, the generated Kintsugi connector plugin, browser authorization, rotating credentials and the connection-age policy are implemented in the unreleased workspace. Native setup is enabled only for the exact Claude Code and Codex CLI versions listed in the [compatibility evidence](member-client-compatibility.md); authenticated native MCP calls remain a release gate.
 
-The CLI and the MCP bridge are the **common base** between a member's own AI client (Claude Code, Codex, Copilot, ChatGPT) and Kintsugi ([ADR-0069](../decisions/0069-common-member-base-and-plugin-distribution.md)): sign-in, project access and document reads. They know no stage, task or review; flows are added by plugins on top of them. The CLI does not call a model, inject text into an existing conversation or do any coding work.
+The CLI and the MCP bridge are the **common base** between a member's own AI client (Claude Code, Codex, Copilot, ChatGPT) and Kintsugi ([ADR-0069](../decisions/0069-common-member-base-and-plugin-distribution.md)): sign-in, project access and document reads. They know no stage, task or review; flows are added by member plugins, which Kintsugi distributes, permits and monitors. The CLI does not call a model, inject text into an existing conversation or do any coding work.
 
 ## Build and run from the workspace
 
@@ -52,6 +52,28 @@ kintsugi document get 01-standards/conventions/typescript.md --ref refs/heads/ma
 
 `--project` selects one command's project; otherwise the profile default from `project use` applies. Every request is authorized again by the API: the token's project scope, the member's `member.read` permission and explicit Project Access. Documents come from the project's document repository mirror ([ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md)), read-only, at a branch or commit (default branch when `--ref` is omitted); `restricted/` and `.git` are never served and files over 2 MiB are refused. Lists use cursor pagination (`--cursor`, `--limit` 1–100). Output supports `--format text|json|markdown`; `--json` is an alias. Results go to stdout, errors to stderr, and `--no-input` disables prompts.
 
+## Install member plugins
+
+A member plugin (`audience: member`) carries a flow for the member's own AI client, as skills, agents and commands. Kintsugi offers it to a project's members (Project → Member plugins, `plugin.access.manage`); the CLI installs it:
+
+```sh
+kintsugi plugins list                                  # what you may install, and what is installed
+kintsugi plugins install context --harness claude-code
+kintsugi plugins remove context --harness claude-code
+```
+
+`install` downloads the plugin from the installation, checks every file against its SHA-256 and the bundle against its content hash, writes the files into the Kintsugi package of the client next to the connector, and re-runs the client's native plugin commands. Re-running it updates the plugin and deletes the files the new version no longer carries; `remove` deletes exactly the files the plugin put there. A record (`.kintsugi-plugins.json`) in the package keeps which plugin owns which files, and two plugins cannot write the same file. Claude Code receives skills, agents and commands; Codex receives skills. Start a new client session afterwards. Hooks, scripts, workflows and MCP entries are never distributed: a plugin is text the AI reads. Installing needs `--harness`, a signed-in profile and the exact client versions listed in the [compatibility evidence](member-client-compatibility.md); Codex Desktop's staged install does not carry plugins yet.
+
+The built-in `context` plugin is the first one: a skill that reads the project's documents through the tools below, answers with citations and records what it did.
+
+## Record activity
+
+```sh
+kintsugi activity record result --plugin context --summary "Reviewed the standards" --detail documents=3
+```
+
+This is the only write of the base. It adds one record to the project's monitoring (Monitoring → Members): a `kind` (not `plugin.*` or `document.*`, which Kintsugi sets itself), the plugin it belongs to (one you may use), a summary of at most 500 characters and up to 20 scalar details. Never put document content, credentials or personal data in it. At most 600 records an hour per member; the worker deletes records after `KINTSUGI_TELEMETRY_RETENTION_DAYS` (30 by default). The request is sent once and never retried, so a lost response cannot record twice. Kintsugi also records, without the plugin asking, each plugin download and each document read.
+
 ## Serve the local MCP bridge
 
 ```sh
@@ -65,9 +87,11 @@ The bridge has no inbound listener. It uses the selected profile and refreshes c
 | `project_list` | Projects the member's connection covers and may read |
 | `document_tree` | A directory of the document repository at a branch or commit |
 | `document_get` | A Markdown file of the document repository |
+| `plugin_list` | The member plugins the member may install in a project |
+| `activity_record` | Records one bounded note for the project's monitoring (the only tool that is not read-only) |
 
-All tools are read-only. Plugins add their own tools and commands on top of this set.
+Plugins add their own commands and skills on top of this set.
 
 ## Current limits
 
-The CLI and the bridge cannot change a project, a document or a repository. `doctor` checks the runtime, the profile credential and an authorized API read; it does not certify support for a Claude Code, Codex or Copilot version.
+The CLI and the bridge cannot change a project, a document or a repository; their one write is the activity record. `doctor` checks the runtime, the profile credential and an authorized API read; it does not certify support for a Claude Code, Codex or Copilot version.
