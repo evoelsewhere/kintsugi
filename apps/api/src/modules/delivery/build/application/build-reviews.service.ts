@@ -12,13 +12,6 @@ import { BuildService } from "./build.service.js";
 
 /** Units per run: a reviewer job each, and a pull request a person can read. */
 export const MAX_REVIEW_UNITS_PER_RUN = 20;
-const DEFAULT_STAGE_MAX_AGENTS = 200;
-
-/** KINTSUGI_STAGE_MAX_AGENTS, the worker's agent cap per stage run: one reviewer job per unit. */
-function stageMaxAgents(): number {
-  const value = Number(process.env["KINTSUGI_STAGE_MAX_AGENTS"]);
-  return Number.isInteger(value) && value > 0 ? value : DEFAULT_STAGE_MAX_AGENTS;
-}
 
 interface Conflict {
   unit: string;
@@ -52,7 +45,7 @@ export class BuildReviewsService {
       );
     }
 
-    const cap = Math.min(MAX_REVIEW_UNITS_PER_RUN, Math.max(1, stageMaxAgents()));
+    const cap = MAX_REVIEW_UNITS_PER_RUN;
     if (wanted.length > cap) {
       throw new UnprocessableEntityException({ message: `${wanted.length} units selected: a run takes at most ${cap}; split the selection`, details: { selected: wanted.length, max: cap } });
     }

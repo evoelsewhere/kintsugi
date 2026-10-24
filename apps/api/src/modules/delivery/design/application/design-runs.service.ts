@@ -16,7 +16,6 @@ import { DesignService } from "./design.service.js";
 
 /** Units per run: one designer job each, and a pull request a person can review. */
 export const MAX_UNITS_PER_RUN = 20;
-const DEFAULT_STAGE_MAX_AGENTS = 200;
 /** How many recent runs of the application are looked at. */
 const RECENT_RUNS = 200;
 
@@ -28,12 +27,6 @@ export interface DesignSelection {
 }
 
 type Conflict = { unit: string; state: "running" | "in-pr"; runId: string } | { unit: string; state: "written" } | { unit: string; state: "needs"; needs: string[] };
-
-/** KINTSUGI_STAGE_MAX_AGENTS, the worker's agent cap per stage run: a designer job and a reviewer job per unit and a fix job for some (ADR-0054). */
-function stageMaxAgents(): number {
-  const value = Number(process.env["KINTSUGI_STAGE_MAX_AGENTS"]);
-  return Number.isInteger(value) && value > 0 ? value : DEFAULT_STAGE_MAX_AGENTS;
-}
 
 const reasonOf = (conflict: Conflict): string => {
   switch (conflict.state) {
@@ -89,7 +82,7 @@ export class DesignRunsService {
         });
       }
     }
-    const cap = Math.min(MAX_UNITS_PER_RUN, Math.max(1, Math.floor(stageMaxAgents() / 3)));
+    const cap = MAX_UNITS_PER_RUN;
     if (wanted.length > cap) {
       throw new UnprocessableEntityException({ message: `${wanted.length} units selected: a run takes at most ${cap}; split the selection`, details: { selected: wanted.length, max: cap } });
     }

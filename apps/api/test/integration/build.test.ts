@@ -163,12 +163,6 @@ describe.skipIf(!hasDatabase)("units members build and the review of their merge
     expect(several.status).toBe(409);
     expect((several.body as unknown as Failure).details?.conflicts?.map((conflict) => conflict.unit)).toEqual(["billing/invoice", "billing/tax"]);
 
-    process.env["KINTSUGI_STAGE_MAX_AGENTS"] = "1";
-    try {
-      expect((await admin.request("POST", REVIEWS, { body: { units: ["billing/tax", "billing/invoice"] } })).status).toBe(422);
-    } finally {
-      delete process.env["KINTSUGI_STAGE_MAX_AGENTS"];
-    }
   });
 
   it("queues the review of a merge request pinned to its head commit, shows it as running, and refuses the same unit again", async () => {

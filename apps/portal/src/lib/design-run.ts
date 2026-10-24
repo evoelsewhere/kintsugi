@@ -5,7 +5,7 @@
 import { APPLICATION_UNIT_KEY } from "@kintsugi/domain";
 import type { DesignOverview, DesignSet, UnitDesignRow, UnitSetActivity, UnitSetSummary } from "@/lib/api/design";
 
-/** Units a run takes at most (the API's cap, MAX_UNITS_PER_RUN; the API may lower it with KINTSUGI_STAGE_MAX_AGENTS). */
+/** Units a run takes at most (the API's cap, MAX_UNITS_PER_RUN). */
 export const MAX_UNITS_PER_RUN = 20;
 
 export type Eligibility = { ok: true } | { ok: false; reason: string };

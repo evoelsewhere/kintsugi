@@ -306,12 +306,6 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     const needs = await admin.request<Failure>("POST", RUNS, { body: { set: "detail", units: ["customers/lookup"] } });
     expect(needs.status).toBe(409);
 
-    process.env["KINTSUGI_STAGE_MAX_AGENTS"] = "1";
-    try {
-      expect((await admin.request("POST", RUNS, { body: { set: "basic", units: ["customers/lookup", "billing/tax"] } })).status).toBe(422);
-    } finally {
-      delete process.env["KINTSUGI_STAGE_MAX_AGENTS"];
-    }
   });
 
   it("starts a design run on a set and units pinned to the default branch, shows what it holds as activity, and refuses the same units again", async () => {
