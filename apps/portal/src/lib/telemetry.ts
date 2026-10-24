@@ -364,3 +364,64 @@ export function pickRun<T extends { runId: string; stepRunId: string | null; att
 export function formatAttribute(value: string | number | boolean): string {
   return typeof value === "number" ? value.toLocaleString("en-US", { maximumFractionDigits: 4 }) : String(value);
 }
+
+// ---------------------------------------------------------------------------
+// The overview: change against the previous period, chart metrics and axes.
+
+/** The window of the same length that ends where `range` starts, for "vs the previous period". */
+export function previousRange(range: { from: string; to: string }): { from: string; to: string } {
+  const to = Date.parse(range.from);
+  const length = Date.parse(range.to) - to;
+  return { from: new Date(to - length).toISOString(), to: new Date(to).toISOString() };
+}
+
+/** (current − previous) / previous; null when there is nothing to compare with (no previous value, or zero). */
+export function changeOf(current: number, previous: number | null | undefined): number | null {
+  if (previous === null || previous === undefined || previous === 0) return null;
+  return (current - previous) / previous;
+}
+
+/** 0.124 → "+12%", -0.5 → "−50%", 12 → "+1200%" capped as "+999%+"; 0 → "0%". */
+export function formatChange(change: number | null): string {
+  if (change === null) return "—";
+  const percent = Math.round(change * 100);
+  if (percent === 0) return "0%";
+  if (percent > 999) return "+999%+";
+  return `${percent > 0 ? "+" : "−"}${Math.abs(percent)}%`;
+}
+
+export const tokenTotal = (row: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }): number => row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheWriteTokens;
+
+/** Share of jobs that did not fail, 0-1; null without jobs. */
+export function successRate(totals: { jobs: number; failedJobs: number }): number | null {
+  return totals.jobs === 0 ? null : (totals.jobs - totals.failedJobs) / totals.jobs;
+}
+
+export type UsageMetric = "cost" | "tokens" | "jobs";
+
+export const USAGE_METRICS: ReadonlyArray<{ id: UsageMetric; label: string }> = [
+  { id: "cost", label: "Cost" },
+  { id: "tokens", label: "Tokens" },
+  { id: "jobs", label: "Jobs" },
+];
+
+export const isUsageMetric = (value: string | null): value is UsageMetric => USAGE_METRICS.some((entry) => entry.id === value);
+
+export function dayMetric(day: TelemetryDay, metric: UsageMetric): number {
+  return metric === "cost" ? day.costUsd : metric === "jobs" ? day.jobs : tokenTotal(day);
+}
+
+/** The cache hit rate of each day (0-1), a day without prompt tokens carrying the previous value so a sparkline stays continuous. */
+export function dailyCacheRate(days: readonly TelemetryDay[]): number[] {
+  let last = 0;
+  return days.map((day) => (last = cacheHitRate(day) ?? last));
+}
+
+/** The smallest "round" number (1, 2, 2.5 or 5 times a power of ten) not below `value`: the top of a chart axis. */
+export function niceCeil(value: number): number {
+  if (!(value > 0)) return 1;
+  const power = 10 ** Math.floor(Math.log10(value));
+  const fraction = value / power;
+  const step = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 2.5 ? 2.5 : fraction <= 5 ? 5 : 10;
+  return step * power;
+}
