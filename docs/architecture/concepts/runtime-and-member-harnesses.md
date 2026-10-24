@@ -8,6 +8,7 @@ Kintsugi has two agent execution worlds with separate ownership ([ADR-0023](../.
 | Who drives it | Kintsugi's orchestrator, automatically or from the portal | The member's chosen AI works interactively |
 | What it does | Platform intelligence: assess, understand, generate selected design sets, request decisions at the gates | Whatever the installed plugins describe; the common base only signs in and reads projects and documents |
 | Writes to project repos | The runtime writes only to job output; the worker commits or opens a PR in the document repo | The member works in normal repos with their own tools |
+| Builds a unit | Never: it designs units and reviews the merge request a member opened | Implements and tests the unit in the target repository (`/kintsugi:build`) and records which unit and which merge request |
 | LLM license / cost | Providers configured in Kintsugi | The member's or customer's existing licenses |
 
 ## The common member base
@@ -40,6 +41,10 @@ sequenceDiagram
     Bridge-->>AI: Structured result
     AI-->>Member: Answer from the document
 ```
+
+## After the design: members build, the runtime reviews
+
+Once a unit's design is merged, the member implements and tests it on their own machine, in the target repository, with the member command `build` of the `modernize` plugin ([ADR-0071](../../decisions/0071-members-build-runtime-reviews.md)). Kintsugi only collects which unit was built in which merge request and at which commit (`activity_record`, kinds `build.test` and `build.mr`). The portal's Build page then lets a person send that merge request to the runtime: the target repository is mounted read-only at the recorded commit, an independent `code-reviewer` job per unit reads the code and the tests against the unit's rules, design and the project's standards, and the findings are proposed as a document (`_build/review.md`) in a pull request on the document repository. The runtime changes nothing in the merge request and runs none of its code; the member fixes the findings and runs the command again. The proof that a merged unit builds and passes from clean (`verify`) is a later stage.
 
 ## Why pi for the runtime
 

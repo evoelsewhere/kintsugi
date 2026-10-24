@@ -13,6 +13,17 @@ Changes from the upstream content:
 
 The complete Kintsugi adaptation history is recorded in the repository. No Claude Code plugin or plugin marketplace is shipped.
 
+Build and review
+
+The member command `build` and the runtime stage `review` of the `modernize` plugin (ADR-0071) are written for Kintsugi; they have
+no upstream counterpart, but their method was read from, and credits, these Apache License 2.0 plugins of
+https://github.com/anthropics/claude-plugins-official: code-modernization (commands/modernize-transform.md and
+modernize-verify.md; agents/test-engineer.md and architecture-critic.md: tests that name the rule they pin, a suite that executed
+no case proves nothing, the canary, a reviewer who did not write the code), feature-dev (agents/code-architect.md and
+code-reviewer.md: read, plan, build, then review by someone else) and pr-review-toolkit (agents/pr-test-analyzer.md,
+silent-failure-hunter.md, code-reviewer.md: reviewers that each look for one kind of fault). No text was copied; the skills
+`build-method`, `unit-testing` and `code-review` and the agent `code-reviewer` are Kintsugi's own words.
+
 Mermaid diagrams skill
 
 skills/mermaid-diagrams is the mermaid skill of WH-2099
