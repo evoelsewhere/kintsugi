@@ -430,7 +430,7 @@ class Validate(unittest.TestCase):
         starter = os.path.join(os.path.dirname(HERE), '..', '..', '..', '..', '..', '..', 'templates', 'document-repo')
         code, out, _ = run(vt.main, ['--root', starter])
         # basic, detail, api and test (ADR-0051).
-        self.assertEqual((code, out.strip()), (0, '4 design set(s), 0 problem(s)'))
+        self.assertEqual((code, out.strip()), (0, '6 design set(s), 0 problem(s)'))
 
     def test_a_project_with_no_sets_has_nothing_to_validate(self):
         root = tempfile.mkdtemp()

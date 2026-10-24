@@ -14,17 +14,28 @@ The project's **design sets**: what each design document of a unit contains, in 
   <kind>/         the profile of one unit kind (optional): see "A profile per unit kind"
 ```
 
-The starter has four sets: `basic` (what the unit is, written for every unit in scope), `detail` (how it is built, written just before the unit is coded; it has a profile for screens, batch jobs, database objects and reports), `api` (the interface the unit offers, in Markdown; only for units of kind `api`) and `test` (the cases that prove each business rule). Replace them with the sets your project needs; a project may have one set, or six (`basic`, `detail`, `api`, `test`, `db`, `report`).
+The starter has one set for each unit kind it declares in `unitKinds`, each only for units of that kind (the set has no files table; its documents come from the profile folder named after the kind), and a `test` set for every kind:
+
+| Set | For units of kind | Documents |
+| --- | --- | --- |
+| `screen` | `screen` | `overview.md`, `layout.md`, `events.md`, `data.md` (optional) |
+| `api` | `api` | `overview.md`, `endpoints.md`, `security.md` (optional) |
+| `batch-job` | `batch-job` | `overview.md`, `schedule.md`, `steps.md`, `operations.md` (optional) |
+| `db-object` | `db-object` | `overview.md`, `definition.md`, `migration.md` |
+| `report` | `report` | `overview.md`, `parameters.md`, `layout.md`, `data.md` |
+| `test` | every kind | `cases.md`, `test-data.md` (optional) |
+
+Every document carries the contract of its sections (tables, id patterns, vocabularies, checks) and guidance for the designer; `_examples/` holds a finished document of a kind. Replace them with the sets your project needs: keep a set per kind, or give one set a profile per kind (below), or define the sets by level of design (`basic`, `detail`, ...) as your customer does.
 
 ## `set.md`
 
 ```markdown
 ---
-id: detail                 # the folder name: lowercase letters, digits, hyphens
+id: design                 # the folder name: lowercase letters, digits, hyphens
 title: Detail design
 version: 1                 # raise it when a change affects the designs already written
-needs: ["basic"]           # sets that must be written first
-stage: detail-design       # the pipeline stage that produces it (optional)
+needs: ["architecture"]    # sets that must be written first
+stage: design              # the pipeline stage that produces it (optional)
 ---
 A description for people: when the set is written and by whom.
 
@@ -41,7 +52,7 @@ A description for people: when the set is written and by whom.
 Units of different kinds (a screen, a batch job, a database object) need different documents and different sections. A folder named after a unit kind of `unitKinds` holds the profile of that kind for this set:
 
 ```text
-detail/
+design/
   set.md
   logic.md                     the base template, used by every kind without its own
   screen/
@@ -67,7 +78,7 @@ removes: ["data-access.md"]   # base files this kind does not have
 Read by the designer after the set's own.
 ```
 
-The files of a set for a kind are the set's, plus the profile's table (a path the set also lists is redefined), minus `removes`. The template of a file is `<kind>/<template>.md` when it exists, else `<template>.md`: a whole file, never merged. A set with no files table is only for the kinds that have a profile (the starter's `api` set is only for `api` units). A design names the template it was written with: `template: "detail@1"`, or `template: "detail/screen@1"` for a profile's, so raising the screen profile makes only the screen designs stale. A profile folder needs its kind in `unitKinds`.
+The files of a set for a kind are the set's, plus the profile's table (a path the set also lists is redefined), minus `removes`. The template of a file is `<kind>/<template>.md` when it exists, else `<template>.md`: a whole file, never merged. A set with no files table is only for the kinds that have a profile (each starter set is only for units of its kind). A design names the template it was written with: `template: "design@1"`, or `template: "design/screen@1"` for a profile's, so raising the screen profile makes only the screen designs stale. A profile folder needs its kind in `unitKinds`.
 
 ## A template
 

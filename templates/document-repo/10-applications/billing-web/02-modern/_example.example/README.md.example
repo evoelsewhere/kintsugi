@@ -25,7 +25,7 @@ links:
   pullRequests: []
 # Design files this unit does not need, one entry per file, written by a person:
 waived:
-  - "detail/data-access.md: no data store"
+  - "screen/data.md: the screen reads and writes nothing"
 ---
 
 Search invoices by customer, date range and status; results grid with paging and export.

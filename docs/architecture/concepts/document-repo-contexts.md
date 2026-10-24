@@ -65,7 +65,7 @@ An **item** is a catalog entry (`<module>/<item>`); it becomes a **unit** (`<app
 | Plan | `01-legacy/plan.md`: batches of items to understand next, advice replaced by every planning run |
 | Rule, finding | Items of the AS-IS knowledge with stable ids (`RULE-<module>.<unit>-<hash>`, `SEC-<module>.<unit>-NN`) |
 | Verdict | A person's `confirmed`, `refuted` or `clarify` on a rule, in `rules-review.md` |
-| Design set | A group of documents written together for a unit (`basic`, `detail`, `api`, `test`, …); defined by the project in `01-standards/templates/<set>/` |
+| Design set | A group of documents written together for a unit (`screen`, `api`, `batch-job`, `test`, …); defined by the project in `01-standards/templates/<set>/` |
 | Common component | Something every unit reuses, designed once by the foundation team: `02-architecture/common/COM-<AREA>-<NN>.md` |
 | Design item | A row with an `ID` in a unit's design document; a later set refers to it by id |
 | Read model | A document rebuilt from the units; never edited by hand |

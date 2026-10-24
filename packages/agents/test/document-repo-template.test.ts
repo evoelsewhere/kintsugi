@@ -68,13 +68,19 @@ describe("the document repo starter template", () => {
     const kinds = /^unitKinds:\s*\[([^\]]*)\]/m.exec(manifest)?.[1]?.split(",").map((kind) => kind.trim()) ?? [];
     const loaded = loadDesignSets(sources, { unitKinds: kinds });
     expect(loaded.problems).toEqual([]);
-    expect(loaded.sets.map((entry) => [entry.set.id, entry.set.version, entry.set.needs])).toEqual([["api", 1, ["basic"]], ["basic", 1, []], ["detail", 1, ["basic"]], ["test", 1, ["basic"]]]);
-    // The profiles (ADR-0053): the API specification is only for api units; the detail design varies with the kind.
-    expect(loaded.sets.map((entry) => [entry.set.id, Object.keys(entry.profiles)])).toEqual([["api", ["api"]], ["basic", []], ["detail", ["batch-job", "db-object", "report", "screen"]], ["test", []]]);
-    const detail = loaded.sets.find((entry) => entry.set.id === "detail")!;
-    expect(designFilesFor(detail, "db-object").map((file) => file.path)).toEqual(["logic.md", "ddl.md"]);
-    expect(designFilesFor(detail, "screen").map((file) => [file.path, file.ref.id, file.example])).toEqual([["logic.md", "detail/screen", "screen/_examples/logic.md"], ["data-access.md", "detail", null]]);
-    expect(designFilesFor(detail, "api").map((file) => file.ref.id)).toEqual(["detail", "detail"]);
-    expect(designFilesFor(loaded.sets.find((entry) => entry.set.id === "api")!, "screen")).toEqual([]);
+    expect(loaded.sets.map((entry) => [entry.set.id, entry.set.needs])).toEqual([["api", []], ["batch-job", []], ["db-object", []], ["report", []], ["screen", []], ["test", []]]);
+    // The profiles (ADR-0053): each kind has its own set, which is only for units of that kind; the test set is for every kind.
+    expect(loaded.sets.map((entry) => [entry.set.id, Object.keys(entry.profiles)])).toEqual([["api", ["api"]], ["batch-job", ["batch-job"]], ["db-object", ["db-object"]], ["report", ["report"]], ["screen", ["screen"]], ["test", []]]);
+    const set = (id: string) => loaded.sets.find((entry) => entry.set.id === id)!;
+    expect(designFilesFor(set("screen"), "screen").map((file) => [file.path, file.required])).toEqual([["overview.md", true], ["layout.md", true], ["events.md", true], ["data.md", false]]);
+    expect(designFilesFor(set("screen"), "screen").map((file) => [file.path, file.ref.id, file.example])).toContainEqual(["events.md", "screen/screen", "screen/_examples/events.md"]);
+    expect(designFilesFor(set("db-object"), "db-object").map((file) => file.path)).toEqual(["overview.md", "definition.md", "migration.md"]);
+    expect(designFilesFor(set("api"), "api").map((file) => file.path)).toEqual(["overview.md", "endpoints.md", "security.md"]);
+    expect(designFilesFor(set("batch-job"), "batch-job").map((file) => file.path)).toEqual(["overview.md", "schedule.md", "steps.md", "operations.md"]);
+    expect(designFilesFor(set("report"), "report").map((file) => file.path)).toEqual(["overview.md", "parameters.md", "layout.md", "data.md"]);
+    // A set of a kind is not for the others; the test set is for all of them.
+    expect(designFilesFor(set("api"), "screen")).toEqual([]);
+    expect(designFilesFor(set("screen"), "batch-job")).toEqual([]);
+    for (const kind of kinds) expect(designFilesFor(set("test"), kind).map((file) => file.path), kind).toEqual(["cases.md", "test-data.md"]);
   });
 });
