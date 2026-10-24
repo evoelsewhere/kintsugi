@@ -46,6 +46,7 @@ function ofFlow(nodes: readonly FlowNode[]): Shape[] {
       case "each":
         return [{ kind: "each", step: ofFlow([node.step])[0]! }];
       case "gate":
+      case "step":
         return [];
     }
   });
