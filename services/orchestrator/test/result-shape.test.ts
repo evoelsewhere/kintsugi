@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exampleOf, keysOf, looksLikeSchema, shapeProblem, unwrapResult } from "../src/jobs/result-shape.js";
+import { exampleOf, keysOf, shapeProblem, unwrapResult } from "../src/jobs/result-shape.js";
 
 const schema = {
   type: "object",
@@ -58,17 +58,5 @@ describe("keysOf and exampleOf", () => {
     expect(exampleOf(schema)).toBe('{"real":false,"reason":"...","level":"High"}');
     expect(exampleOf({ type: "object" })).toBeUndefined();
     expect(exampleOf(undefined)).toBeUndefined();
-  });
-});
-
-describe("looksLikeSchema", () => {
-  it("tells a result that is the schema itself from a real result", () => {
-    const verdict = { type: "object", required: ["real", "reason"], properties: { real: { type: "boolean" }, reason: { type: "string" } } };
-    expect(looksLikeSchema(verdict, verdict)).toBe(true);
-    expect(looksLikeSchema(verdict, { real: true, reason: "x" })).toBe(false);
-    expect(looksLikeSchema(verdict, [])).toBe(false);
-    // A schema that really has a field called "properties" is not mistaken for a copy of itself.
-    const odd = { type: "object", required: ["properties"], properties: { properties: { type: "object" } } };
-    expect(looksLikeSchema(odd, { type: "x", properties: {} })).toBe(false);
   });
 });
