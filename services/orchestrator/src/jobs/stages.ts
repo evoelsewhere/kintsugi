@@ -8,6 +8,7 @@ import { ASSESS } from "./plans/assess.js";
 import { DESIGN } from "./plans/design.js";
 import { PLAN_UNDERSTAND } from "./plans/plan-understand.js";
 import { REBUILD } from "./plans/rebuild.js";
+import { REVIEW } from "./plans/review.js";
 import { UNDERSTAND } from "./plans/understand.js";
 
 export const STAGES: Readonly<Record<string, StagePlan>> = {
@@ -15,6 +16,7 @@ export const STAGES: Readonly<Record<string, StagePlan>> = {
   understand: UNDERSTAND,
   "plan-understand": PLAN_UNDERSTAND,
   design: DESIGN,
+  review: REVIEW,
   rebuild: REBUILD,
 };
 

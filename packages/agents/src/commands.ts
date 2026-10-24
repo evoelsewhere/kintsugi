@@ -44,6 +44,8 @@ export const COMMAND_ORDER: readonly string[] = [
   "understand",
   "plan-understand",
   "design",
+  "build",
+  "review",
 ];
 
 const PREFIX = "modernize-";

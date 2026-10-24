@@ -160,12 +160,20 @@ function sourcesOf(run: JobRun): SourceRepo[] {
 }
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** inputs.scope of a scoped run: catalog item ids (or units) and their files, and the design set of a design run; undefined when absent or malformed. */
+/** inputs.scope of a scoped run: catalog item ids (or units) and their files, the design set of a design run, the target repository and merge request of a review run; undefined when absent or malformed. */
 export function scopeOf(inputs: Record<string, unknown>): StageScope | undefined {
   const scope = inputs["scope"];
   if (!isRecord(scope) || !Array.isArray(scope["items"])) return undefined;
   const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
-  return { items: strings(scope["items"]), files: strings(scope["files"]), ...(typeof scope["set"] === "string" ? { set: scope["set"] } : {}) };
+  const mr = scope["mr"];
+  const request = isRecord(mr) && typeof mr["url"] === "string" && typeof mr["commit"] === "string" ? { url: mr["url"], commit: mr["commit"], ...(typeof mr["branch"] === "string" && mr["branch"] !== "" ? { branch: mr["branch"] } : {}) } : undefined;
+  return {
+    items: strings(scope["items"]),
+    files: strings(scope["files"]),
+    ...(typeof scope["set"] === "string" ? { set: scope["set"] } : {}),
+    ...(typeof scope["target"] === "string" ? { target: scope["target"] } : {}),
+    ...(request === undefined ? {} : { mr: request }),
+  };
 }
 
 interface StepOutcome {

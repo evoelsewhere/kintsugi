@@ -20,6 +20,8 @@ export interface PluginSummary {
 export interface PluginDetail extends PluginSummary {
   components: PluginComponent[];
   files: PluginFile[];
+  /** The files a member receives (ADR-0071): all of a member plugin, the member part of a plugin of both, none for a runtime plugin. */
+  memberFiles: string[];
   /** How each command works end to end. */
   flows: PluginFlow[];
   /** Which command feeds which: the plugin's pipeline. */

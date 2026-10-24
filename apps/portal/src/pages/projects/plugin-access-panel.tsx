@@ -28,7 +28,7 @@ export function PluginAccessPanel({ projectId, canManage }: { projectId: string;
     if (!canManage) return;
     try {
       const [catalog, access, userList] = await Promise.all([pluginsApi.list(), pluginAccessApi.list(projectId), identityApi.users().catch(() => [])]);
-      setPlugins(catalog.filter((plugin) => plugin.audience === "member"));
+      setPlugins(catalog.filter((plugin) => plugin.audience !== "runtime"));
       setGrants(access.items);
       setUsers(userList.filter((user) => user.enabled));
       setError(null);

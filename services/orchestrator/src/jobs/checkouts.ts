@@ -22,7 +22,14 @@ export class MirrorCheckouts implements SourceCheckouts {
   async checkout(repositoryId: string, commit: string, dest: string, options: { readOnly?: boolean } = {}): Promise<void> {
     const target = await this.deps.repositories.target(repositoryId);
     if (target === undefined) throw new JobFailure(`Repository ${repositoryId} is no longer registered`);
-    await addWorktree(this.deps.storage.mirror(target.serverId, target.id), dest, commit, remoteOptions(target));
+    const mirror = this.deps.storage.mirror(target.serverId, target.id);
+    await addWorktree(mirror, dest, commit, remoteOptions(target)).catch(async (error: unknown) => {
+      // A commit pinned by a person (the head of a member's merge request) may have been pushed after the last sync: fetch, then try once more.
+      await syncRepository({ store: this.deps.repositories, storage: this.deps.storage }, repositoryId);
+      await addWorktree(mirror, dest, commit, remoteOptions(target)).catch(() => {
+        throw error;
+      });
+    });
     if (options.readOnly !== false) await makeReadOnly(dest);
   }
 

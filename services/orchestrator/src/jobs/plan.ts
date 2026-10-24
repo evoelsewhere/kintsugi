@@ -49,6 +49,10 @@ export interface StageScope {
   readonly files: readonly string[];
   /** The design set a design run generates for its units (ADR-0049). */
   readonly set?: string;
+  /** The target repository a review run reads (ADR-0071). */
+  readonly target?: string;
+  /** The merge request a review run reads: the member recorded it for the units; the reviewer reads the repository at `commit`. */
+  readonly mr?: { readonly url: string; readonly commit: string; readonly branch?: string };
 }
 
 /** What a plan's dynamic parts (conditions, arguments, items) can look at while the stage runs. */

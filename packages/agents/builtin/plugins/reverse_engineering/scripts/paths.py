@@ -453,3 +453,44 @@ def unit_design_set_dir(app, module, unit, set_id):
 
 def unit_design_file_path(app, module, unit, set_id, file):
     return f'{unit_design_set_dir(app, module, unit, set_id)}/{file}'
+
+
+# ---------------------------------------------------------------------------
+# Review of a member's build (ADR-0071)
+# ---------------------------------------------------------------------------
+
+
+def build_run_dir(app):
+    return scratch_file_path(app, 'build')
+
+
+def build_run_file_path(app, file):
+    return f'{build_run_dir(app)}/{file}'
+
+
+def build_manifest_path(app):
+    return build_run_file_path(app, 'manifest.json')
+
+
+def build_changes_path(app):
+    return build_run_file_path(app, 'changes.json')
+
+
+def build_review_note_path(app, unit_key):
+    return build_run_file_path(app, f'review/{unit_key}.md')
+
+
+def build_review_report_path(app):
+    return build_run_file_path(app, 'review-report.json')
+
+
+def build_summary_path(app):
+    return build_run_file_path(app, 'summary.md')
+
+
+def unit_key_build_dir(app, unit_key):
+    return f'{modern_dir(app)}/{unit_key}/_build'
+
+
+def unit_code_review_path(app, unit_key):
+    return f'{unit_key_build_dir(app, unit_key)}/review.md'

@@ -10,7 +10,7 @@ describe("built-in plugins", () => {
     expect(plugins.map((plugin) => [plugin.name, plugin.audience])).toEqual([
       ["context", "member"],
       ["reverse_engineering", "runtime"],
-      ["modernize", "runtime"],
+      ["modernize", "both"],
     ]);
     const understand = plugins.find((plugin) => plugin.name === "reverse_engineering")!;
     const names = (kind: string): string[] => understand.components.filter((component) => component.kind === kind).map((component) => component.name);
@@ -22,13 +22,30 @@ describe("built-in plugins", () => {
       expect.arrayContaining([PLUGIN_MANIFEST_FILE, "skills/mermaid-diagrams/references/c4.md", "hooks/job_output.py", "scripts/inventory.py"]),
     );
     const modernize = plugins.find((plugin) => plugin.name === "modernize")!;
-    expect(modernize.components.filter((component) => component.kind === "command").map((component) => component.name)).toEqual(["design"]);
-    expect(modernize.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["architecture-critic", "design-reviewer", "designer"]);
+    expect(modernize.components.filter((component) => component.kind === "command").map((component) => component.name)).toEqual(["design", "build", "review"]);
+    expect(modernize.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["architecture-critic", "code-reviewer", "design-reviewer", "designer"]);
+  });
+
+  it("sends a member only the member part of a plugin of both, and everything of a member plugin (ADR-0071)", async () => {
+    const plugins = await loadBuiltinPlugins();
+    const byName = (name: string) => plugins.find((plugin) => plugin.name === name)!;
+    expect(byName("reverse_engineering").memberFiles).toEqual([]);
+    expect(byName("context").memberFiles).toEqual(byName("context").files.map((file) => file.path));
+
+    const modernize = byName("modernize");
+    expect(modernize.memberFiles).toEqual(
+      expect.arrayContaining(["commands/build.md", "skills/build-method/SKILL.md", "skills/unit-testing/SKILL.md"]),
+    );
+    // Never a runtime command, agent, script, workflow or a skill only the runtime names.
+    for (const path of modernize.memberFiles) {
+      expect(path, path).toMatch(/^(commands\/build\.md|skills\/(build-method|unit-testing)\/.+)$/);
+    }
+    expect(modernize.memberFiles.some((path) => path.startsWith("scripts/") || path.startsWith("workflows/") || path.includes("modernize-review"))).toBe(false);
   });
 
   it("covers every agent, command and workflow exactly once", async () => {
     const plugins = await loadBuiltinPlugins();
-    for (const [kind, count] of [["agent", 7], ["command", 4], ["workflow", 3]] as const) {
+    for (const [kind, count] of [["agent", 8], ["command", 6], ["workflow", 3]] as const) {
       const all = plugins.flatMap((plugin) => plugin.components.filter((component) => component.kind === kind).map((component) => component.path));
       expect(all.length, kind).toBe(count);
       expect(new Set(all).size, kind).toBe(count);
@@ -53,7 +70,7 @@ describe("built-in plugins", () => {
   it("reads plugin.json from the plugin folder and reads files only from the plugin", async () => {
     const plugins = await loadBuiltinPlugins();
     expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "1.1.0" });
-    expect(JSON.parse((await readBuiltinPluginFile(plugins, "modernize", "kintsugi.json"))!)).toMatchObject({ audience: "runtime", requires: ["reverse_engineering"] });
+    expect(JSON.parse((await readBuiltinPluginFile(plugins, "modernize", "kintsugi.json"))!)).toMatchObject({ audience: "both", requires: ["reverse_engineering"] });
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/modernize-design.md")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "../package.json")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "modernize", "commands/modernize-design.md")).toContain("design");
@@ -81,7 +98,7 @@ describe("plugin flows", () => {
     expect(understand!.pipeline).toEqual(expect.arrayContaining([{ from: "assess", to: "understand", via: expect.arrayContaining(["10-applications/<app>/01-legacy/_catalog/"]) }]));
     // The plan reads what assess wrote and which items understand has finished (their understanding.md); nothing else.
     expect(understand!.pipeline.find((link) => link.to === "plan-understand" && link.from === "understand")?.via).toEqual(["10-applications/<app>/01-legacy/<module>/<unit>/understanding.md"]);
-    expect(modernize!.flows.map((entry) => entry.command)).toEqual(["design"]);
+    expect(modernize!.flows.map((entry) => entry.command)).toEqual(["design", "build", "review"]);
     // The design command runs the design-set scripts, in the order its text names them.
     const design = flow(modernize, "design");
     expect(design.steps.filter((step) => step.kind === "script").map((step) => step.name)).toEqual(["validate_design_templates", "scaffold_design", "check_design"]);

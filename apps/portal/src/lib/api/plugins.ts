@@ -3,7 +3,7 @@
 
 import { apiGet } from "../api";
 
-export type PluginAudience = "runtime" | "member";
+export type PluginAudience = "runtime" | "member" | "both";
 export type PluginComponentKind = "agent" | "command" | "skill" | "workflow" | "script" | "hook";
 
 export interface PluginSummary {

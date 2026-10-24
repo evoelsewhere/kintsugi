@@ -17,7 +17,7 @@ interface Fakes {
   readable?: Array<{ projectId: string; name: string }>;
   documents?: Partial<DocumentsService>;
   granted?: string[];
-  catalog?: Array<{ name: string; title: string; version: string; description: string; audience: "member" | "runtime"; files: Array<{ path: string; size: number }> }>;
+  catalog?: Array<{ name: string; title: string; version: string; description: string; audience: "member" | "runtime" | "both"; files: Array<{ path: string; size: number }>; memberFiles: string[] }>;
   contents?: Record<string, string>;
 }
 
@@ -89,15 +89,23 @@ const CATALOG = [
     { path: "hooks/hooks.json", size: 1 },
     { path: ".claude-plugin/plugin.json", size: 1 },
     { path: "agents/helper.md", size: 1 },
-  ] },
-  { name: "modernize", title: "Modernize", version: "2.0.0", description: "d", audience: "runtime" as const, files: [] },
+  ], memberFiles: ["skills/kintsugi-context/SKILL.md", "skills/kintsugi-context/scripts/run.py", "hooks/hooks.json", ".claude-plugin/plugin.json", "agents/helper.md"] },
+  { name: "analysis", title: "Analysis", version: "1.0.0", description: "d", audience: "runtime" as const, files: [{ path: "agents/legacy.md", size: 1 }], memberFiles: [] },
+  // A plugin of both (ADR-0071): the runtime command and agent are in the folder, a member receives only its own part.
+  { name: "build", title: "Build", version: "3.0.0", description: "d", audience: "both" as const, files: [
+    { path: "commands/modernize-review.md", size: 1 },
+    { path: "commands/build.md", size: 1 },
+    { path: "agents/code-reviewer.md", size: 1 },
+    { path: "skills/build-method/SKILL.md", size: 1 },
+    { path: "scripts/prepare_review.py", size: 1 },
+  ], memberFiles: ["commands/build.md", "skills/build-method/SKILL.md"] },
 ];
 
 describe("MemberApiService plugins", () => {
   it("offers only member plugins that are granted", async () => {
     expect((await service({ catalog: CATALOG, granted: [] }).member.listPlugins("u1", "shop")).items).toEqual([]);
-    const granted = await service({ catalog: CATALOG, granted: ["context", "modernize"] }).member.listPlugins("u1", "shop");
-    expect(granted.items.map((item) => item.name)).toEqual(["context"]);
+    const granted = await service({ catalog: CATALOG, granted: ["context", "analysis", "build"] }).member.listPlugins("u1", "shop");
+    expect(granted.items.map((item) => item.name)).toEqual(["context", "build"]);
   });
 
   it("bundles only text files of skills, agents and commands, with hashes, and records the download", async () => {
@@ -108,10 +116,16 @@ describe("MemberApiService plugins", () => {
     expect(activity.observe).toHaveBeenCalledWith(expect.objectContaining({ kind: "plugin.download", pluginName: "context", projectId: "shop" }));
   });
 
+  it("sends only the member part of a plugin of both", async () => {
+    const { member } = service({ catalog: CATALOG, granted: ["build"], contents: { "commands/build.md": "c", "skills/build-method/SKILL.md": "s", "commands/modernize-review.md": "runtime", "agents/code-reviewer.md": "runtime", "scripts/prepare_review.py": "code" } });
+    const bundle = await member.pluginBundle("u1", "shop", "build");
+    expect(bundle.files.map((file) => file.path)).toEqual(["commands/build.md", "skills/build-method/SKILL.md"]);
+  });
+
   it("refuses a plugin that is not granted or not for members", async () => {
-    const { member } = service({ catalog: CATALOG, granted: ["modernize"] });
+    const { member } = service({ catalog: CATALOG, granted: ["analysis"] });
     await expect(member.pluginBundle("u1", "shop", "context")).rejects.toThrow("not available");
-    await expect(member.pluginBundle("u1", "shop", "modernize")).rejects.toThrow("not available");
+    await expect(member.pluginBundle("u1", "shop", "analysis")).rejects.toThrow("not available");
   });
 });
 

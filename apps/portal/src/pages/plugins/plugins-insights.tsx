@@ -17,7 +17,7 @@ export function PluginsInsights({ plugins }: { plugins: PluginSummary[] }): Reac
   return (
     <div className="flex flex-col gap-4">
       <KpiRow>
-        <Kpi label="Plugins" value={plugins.length} hint={`${plugins.filter((plugin) => plugin.audience === "runtime").length} for the runtime · ${plugins.filter((plugin) => plugin.audience === "member").length} for members`} />
+        <Kpi label="Plugins" value={plugins.length} hint={`${plugins.filter((plugin) => plugin.audience !== "member").length} run in the runtime · ${plugins.filter((plugin) => plugin.audience !== "runtime").length} reach members`} />
         <Kpi label="Components" value={components} hint="across all plugins" />
         <Kpi label="Commands" value={total("command")} hint="started by a person" />
         <Kpi label="Agents" value={total("agent")} hint="runtime or member agents" />
@@ -38,7 +38,7 @@ export function PluginsInsights({ plugins }: { plugins: PluginSummary[] }): Reac
         </Section>
         <Section title="Who runs them" description="Plugins by the side that runs them." className="xl:col-span-2">
           <div className="flex flex-col gap-4">
-            <ShareBar segments={segmentsOf(countBy(plugins, (plugin) => (plugin.audience === "runtime" ? "Kintsugi runtime" : "Members' harnesses")))} format={formatCount} />
+            <ShareBar segments={segmentsOf(countBy(plugins, (plugin) => (plugin.audience === "runtime" ? "Kintsugi runtime" : plugin.audience === "both" ? "Runtime and members" : "Members' harnesses")))} format={formatCount} />
             <ShareBar segments={kinds.filter((entry) => entry.count > 0).map((entry) => ({ label: entry.plural, value: entry.count, color: entry.color }))} format={formatCount} />
           </div>
         </Section>

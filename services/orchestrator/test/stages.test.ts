@@ -128,6 +128,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       { id: "understand", requires: [{ stage: "assess", path: catalog }] },
       { id: "plan-understand", requires: [{ stage: "assess", path: catalog }] },
       { id: "design", requires: [{ stage: "assess", path: catalog }] },
+      { id: "review", requires: [{ stage: "design", path: catalog }] },
       { id: "rebuild", requires: [{ stage: "assess", path: catalog }] },
     ]);
   });

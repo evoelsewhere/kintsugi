@@ -231,9 +231,10 @@ describe("agents service", () => {
     const sharedSkills = await service.listSkills();
     expect(sharedSkills.some((skill) => skill.name === "kintsugi-task")).toBe(false);
     expect(sharedSkills.map((skill) => [skill.name, skill.source, skill.usedBy])).toEqual([
+      ["code-review", "builtin", ["code-reviewer"]],
       ["design-template-contract", "builtin", ["designer"]],
       ["design-writing", "builtin", ["design-reviewer", "designer"]],
-      ["evidence-marks", "builtin", ["business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]],
+      ["evidence-marks", "builtin", ["business-rules-extractor", "code-reviewer", "design-reviewer", "designer", "legacy-analyst"]],
       ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]],
       ["understand-planning", "builtin", ["understand-planner"]],
     ]);
