@@ -8,7 +8,7 @@ Portfolio decisions across the applications of this project:
 
 | File | Content |
 | --- | --- |
-| `scorecard.md` | per-application assessment scorecard: which application to rebuild first |
-| `wave-plan.md` | which units move in which wave, and the dependencies between waves |
+| `scorecard.md` | the assessment scorecard, one row per application: which application to rebuild first and why |
+| `wave-plan.md` | which units move in which wave, the entry and exit criteria of each wave, and the dependencies between waves |
 
-These files are placeholders here: Kintsugi does not generate or validate them.
+The scorecard draws on the assessments the runtime writes in each application's `01-legacy/` folder; the wave plan draws on the catalog. Kintsugi does not generate or validate these files.

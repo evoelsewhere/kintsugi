@@ -14,10 +14,12 @@ A **unit** is the thing being migrated. Its id is always the full `<app>/<module
 
 ```text
 kintsugi.yaml                  project manifest (written by the portal's publish, arrives as a pull request)
-00-project/                    P0-P1: charter.md, raci.md, ai-strategy.md, ai-usage-policy.md, kpi-baseline.md, glossary.md,
+00-project/                    P0-P1: charter.md, raci.md, risks.md, ai-strategy.md, ai-usage-policy.md, kpi-baseline.md, glossary.md,
                                portfolio/ (scorecard.md, wave-plan.md); traceability.md (planned, generated)
 01-standards/                  P2-P3: conventions/, mappings/, review-rules.md, templates/<set>/ (the design sets)
-02-architecture/               P2: blueprint.md, poc-plan.md, adr/, common/<COM-id>.md (the common components)
+02-architecture/               P2: blueprint.md and the overall design (system-context.md, components.md, technology-stack.md,
+                               data-architecture.md, integration.md, security.md, quality-attributes.md, deployment.md),
+                               adr/, common/<COM-id>.md (the common components)
 03-transition/                 P2-P4: coexistence.md, data-migration.md, shared-data/ (master data, shared formats)
 10-applications/<app>/
   README.md                    the application's overview
