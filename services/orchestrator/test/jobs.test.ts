@@ -568,7 +568,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     const retried = await run((call): Record<string, string> => (call === 0 ? {} : { "result.json": result }));
     expect(retried.run?.status).toBe("succeeded");
     expect(retried.agents.specs).toHaveLength(2);
-    expect(retried.agents.specs[1]?.task).toContain('bare path "result.json"');
+    expect(retried.agents.specs[1]?.task).toContain("submit_result");
+    expect(retried.agents.specs[1]?.resultSchema).toBeDefined();
   });
 
   it("keeps no copy of result.json, prefers the root one, and sends a wrongly shaped result back once", async () => {
