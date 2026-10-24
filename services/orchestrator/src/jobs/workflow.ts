@@ -10,9 +10,9 @@
 //   pipeline(items, fn)         fn(item, item, index) for every item, bounded concurrency
 //   phase(title)                marks a phase
 //   budget                      { total, remaining() } in tokens (total 0 = unlimited), and
-//                               budget.agents { total, remaining() }: the agent-job cap
+//                               budget.agents { total, remaining() }: the agent-job cap a stage hands over (Infinity when none)
 //
-// Budgets: at most `maxAgents` agent jobs per workflow and `concurrency` at a time. The code
+// Budgets: `concurrency` agent jobs at a time, and, only when a stage hands over what is left of its own budget, at most `maxAgents` in all. The code
 // runs in a separate VM context with only these globals — a convenience, not a security
 // boundary: workflows are Kintsugi's own reviewed code.
 
@@ -38,7 +38,8 @@ export interface AgentCallResult {
 }
 
 export interface WorkflowBudgets {
-  maxAgents: number;
+  /** Agent jobs the workflow may start in all; absent = no limit (a stage hands over what is left of its own). */
+  maxAgents?: number;
   concurrency: number;
   /** Token budget across the workflow's agent jobs; 0 = unlimited. */
   maxTokens?: number;
@@ -102,12 +103,13 @@ export async function runWorkflow(run: WorkflowRun): Promise<WorkflowOutcome> {
   let failed = 0;
   let tokens = 0;
 
-  const agents = Object.freeze({ total: budgets.maxAgents, remaining: () => Math.max(0, budgets.maxAgents - started) });
+  const maxAgents = budgets.maxAgents ?? Number.POSITIVE_INFINITY;
+  const agents = Object.freeze({ total: maxAgents, remaining: () => Math.max(0, maxAgents - started) });
   const budget = Object.freeze({ total: totalTokens, remaining: () => (totalTokens === 0 ? Number.POSITIVE_INFINITY : totalTokens - tokens), agents });
 
   const agent = async (prompt: unknown, options: AgentCallOptions = {}): Promise<unknown> => {
     if (typeof prompt !== "string" || prompt.trim() === "") throw new Error("agent(prompt) needs a non-empty prompt");
-    if (started >= budgets.maxAgents) throw new Error(`workflow agent cap reached (${budgets.maxAgents})`);
+    if (started >= maxAgents) throw new Error(`workflow agent cap reached (${maxAgents})`);
     if (totalTokens > 0 && tokens >= totalTokens) throw new Error("workflow token budget exhausted");
     started += 1;
     return agentSlots.run(async () => {
