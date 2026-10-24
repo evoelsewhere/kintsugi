@@ -26,8 +26,10 @@ import {
 const UNDERSTAND = "understand";
 /** The design stage (ADR-0049): one design set for a selection of units, several runs at once. */
 export const DESIGN = "design";
+/** The review stage (ADR-0071): the units of one merge request a member recorded, several runs at once. */
+export const REVIEW = "review";
 /** Stages that run on a selection and several at a time. */
-const SCOPED_STAGES: readonly string[] = [UNDERSTAND, DESIGN];
+const SCOPED_STAGES: readonly string[] = [UNDERSTAND, DESIGN, REVIEW];
 
 /**
  * A follower reads again when the database says the run changed (change feed); this is how long it waits at most
@@ -60,6 +62,9 @@ export class JobRunsService {
     }
     if (stage === DESIGN) {
       throw new BadRequestException(`The design stage generates one design set for a selection of units: POST /projects/${projectId}/applications/${applicationId}/design/runs with the set and the units`);
+    }
+    if (stage === REVIEW) {
+      throw new BadRequestException(`The review stage reads the merge request a member recorded for a selection of units: POST /projects/${projectId}/applications/${applicationId}/build/reviews with the units`);
     }
     return this.startRun(projectId, applicationId, stage, actor);
   }
@@ -104,8 +109,12 @@ export class JobRunsService {
    * documentsCommit: ADR-0033). Several understand or design runs may be active at once (each on its own items
    * or units); any other stage runs once at a time per application.
    */
-  async startRun(projectId: string, applicationId: string, stage: string, actor: Actor, options: { inputs?: Record<string, unknown> } = {}): Promise<JobRunView> {
-    const sources = await this.#checkStart(projectId, applicationId, stage);
+  async startRun(projectId: string, applicationId: string, stage: string, actor: Actor, options: { inputs?: Record<string, unknown>; pins?: Record<string, string> } = {}): Promise<JobRunView> {
+    // A repository pinned by the caller (the head commit of a merge request) is read at that commit; the others at their current one.
+    const sources = (await this.#checkStart(projectId, applicationId, stage)).map((source): SourceRepo => {
+      const pin = options.pins?.[source.repositoryId];
+      return pin === undefined ? source : { ...source, commit: pin };
+    });
 
     const run = await this.store.createStageRun({
       id: newId(),

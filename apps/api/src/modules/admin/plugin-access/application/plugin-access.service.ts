@@ -48,7 +48,7 @@ export class PluginAccessService {
 
   async #requireMemberPlugin(name: string): Promise<void> {
     const plugin = await this.plugins.get(name);
-    if (plugin.audience !== "member") throw new BadRequestException(`Plugin ${name} runs in the runtime; only member plugins are granted`);
+    if (plugin.audience === "runtime") throw new BadRequestException(`Plugin ${name} runs in the runtime only; only plugins with a member part are granted`);
   }
 
   #requireManagement(actor: Actor): void {

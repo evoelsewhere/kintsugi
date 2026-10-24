@@ -161,10 +161,10 @@ describe("validation and the job definition", () => {
 });
 
 describe("built-in catalog", () => {
-  it("ships the seven runtime agents and no member agent", async () => {
+  it("ships eight runtime agents and no member agent", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "code-reviewer", "design-reviewer", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
     expect(byAudience("member")).toEqual([]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
@@ -187,7 +187,7 @@ describe("built-in catalog", () => {
     const catalog = await loadBuiltinCatalog();
     const users = (skill: string): string[] => catalog.agents.filter((agent) => agent.manifest.skills.includes(skill)).map((agent) => agent.manifest.name);
     expect(catalog.skills.find((entry) => entry.name === "evidence-marks")?.content).toContain("## The gaps table");
-    expect(users("evidence-marks")).toEqual(["business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]);
+    expect(users("evidence-marks")).toEqual(["business-rules-extractor", "code-reviewer", "design-reviewer", "designer", "legacy-analyst"]);
     expect(users("design-template-contract")).toEqual(["designer"]);
     expect(users("design-writing")).toEqual(["design-reviewer", "designer"]);
     // The kinds and impacts the skill names are the ones finish_items.py checks.
@@ -233,7 +233,7 @@ describe("built-in catalog", () => {
 });
 
 /** Commands written for Kintsugi, not adapted from the upstream plugin. */
-const KINTSUGI_COMMANDS = new Set(["modernize-understand.md", "modernize-plan-understand.md", "modernize-design.md"]);
+const KINTSUGI_COMMANDS = new Set(["modernize-understand.md", "modernize-plan-understand.md", "modernize-design.md", "modernize-review.md", "build.md"]);
 
 describe("built-in commands", () => {
   it("declare who runs them and name only agents of the catalog", async () => {
@@ -247,7 +247,7 @@ describe("built-in commands", () => {
       for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".md")).sort()) files.push({ name, path: join(dir, name) });
     }
     const names = files.map((file) => file.name);
-    expect(names).toHaveLength(4);
+    expect(names).toHaveLength(6);
     for (const { name, path } of files) {
       const text = await readFile(path, "utf8");
       const frontmatter = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))![1]!) as {
@@ -277,9 +277,10 @@ describe("built-in commands", () => {
 
   it("load in pipeline order with their stage ids", async () => {
     const commands = await loadBuiltinCommands();
-    expect(commands).toHaveLength(4);
+    expect(commands).toHaveLength(6);
     expect(commands[0]).toMatchObject({ id: "assess", command: "modernize-assess", audience: "runtime" });
-    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand", "design"]);
+    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand", "design", "review"]);
+    expect(commands.filter((command) => command.audience === "member").map((command) => command.id)).toEqual(["build"]);
     expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "understand", "design"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
       command: "modernize-understand",

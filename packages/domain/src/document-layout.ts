@@ -339,6 +339,40 @@ export function designSummaryPath(app: string): string {
   return designRunFilePath(app, "review.md");
 }
 
+/** Scratch of a review run (ADR-0071): the manifest, the files the merge request changes, the reviewer's notes. */
+export function buildRunDir(app: string): string {
+  return scratchFilePath(app, "build");
+}
+
+export function buildRunFilePath(app: string, file: string): string {
+  return `${buildRunDir(app)}/${file}`;
+}
+
+/** What the prepare step found for each unit of the run and the merge request it reviews (intermediate). */
+export function buildManifestPath(app: string): string {
+  return buildRunFilePath(app, "manifest.json");
+}
+
+/** The files the merge request changes in the target repository, with their status (intermediate). */
+export function buildChangesPath(app: string): string {
+  return buildRunFilePath(app, "changes.json");
+}
+
+/** The reviewer's note on one unit of a review run (intermediate until the unit's review.md is written). */
+export function buildReviewNotePath(app: string, unitKey: string): string {
+  return buildRunFilePath(app, `review/${unitKey}.md`);
+}
+
+/** The findings of the reviewer's notes, per unit, after `check_code_review.py` (intermediate). */
+export function buildReviewReportPath(app: string): string {
+  return buildRunFilePath(app, "review-report.json");
+}
+
+/** The description of the pull request of a review run (intermediate). */
+export function buildSummaryPath(app: string): string {
+  return buildRunFilePath(app, "summary.md");
+}
+
 export function assessmentBriefsDir(app: string): string {
   return `${understandRunDir(app)}/briefs`;
 }
@@ -493,6 +527,16 @@ export function unitKeyDesignSetDir(app: string, unitKey: string, set: string): 
 /** A design document of the unit; `file` is the `Path` of the set's files table. */
 export function unitDesignFilePath(app: string, module: string, unit: string, set: string, file: string): string {
   return `${unitDesignSetDir(app, module, unit, set)}/${file}`;
+}
+
+/** The folder of what the build stages leave for a unit (ADR-0071); the `_` keeps it apart from the project's design sets. */
+export function unitKeyBuildDir(app: string, unitKey: string): string {
+  return `${modernDir(app)}/${unitKey}/_build`;
+}
+
+/** The independent review of the unit's merge request: the findings with their severity. */
+export function unitCodeReviewPath(app: string, unitKey: string): string {
+  return `${unitKeyBuildDir(app, unitKey)}/review.md`;
 }
 
 export function unitId(app: string, module: string, unit: string): string {

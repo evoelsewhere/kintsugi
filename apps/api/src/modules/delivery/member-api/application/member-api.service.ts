@@ -86,7 +86,7 @@ export class MemberApiService {
   async listPlugins(userId: string, projectId: string): Promise<ListResult<PluginSummary>> {
     const granted = new Set(await this.pluginAccess.pluginsFor(userId, projectId));
     const items = (await this.plugins.list())
-      .filter((plugin) => plugin.audience === "member" && granted.has(plugin.name))
+      .filter((plugin) => plugin.audience !== "runtime" && granted.has(plugin.name))
       .map((plugin) => ({ name: plugin.name, title: plugin.title, version: plugin.version, description: plugin.description }));
     return { schemaVersion: MEMBER_SCHEMA_VERSION, items, limit: MAX_LIST_LIMIT };
   }
@@ -97,7 +97,7 @@ export class MemberApiService {
     const summary = available.items.find((item) => item.name === name);
     if (summary === undefined) throw new ForbiddenException("This plugin is not available to you in this project");
     const detail = await this.plugins.get(name);
-    const paths = detail.files.map((file) => file.path).filter((path) => BUNDLE_PATH.test(path) && BUNDLE_TEXT.test(path) && !path.split("/").includes("..")).sort();
+    const paths = detail.memberFiles.filter((path) => BUNDLE_PATH.test(path) && BUNDLE_TEXT.test(path) && !path.split("/").includes("..")).sort();
     if (paths.length > MAX_BUNDLE_FILES) throw new PayloadTooLargeException(`The plugin has more than ${MAX_BUNDLE_FILES} distributable files`);
     let bytes = 0;
     const files: PluginBundle["files"] = [];

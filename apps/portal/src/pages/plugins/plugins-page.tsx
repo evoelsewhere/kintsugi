@@ -13,7 +13,7 @@ import { COMPONENT_KINDS, pluginsApi, type PluginSummary } from "@/lib/api/plugi
 import { useLoader } from "@/lib/use-loader";
 import { PluginsInsights } from "./plugins-insights";
 
-const AUDIENCE_LABEL = { runtime: "Runs in Kintsugi jobs", member: "Runs in members' harnesses" } as const;
+const AUDIENCE_LABEL = { runtime: "Runs in Kintsugi jobs", member: "Runs in members' harnesses", both: "Runs in Kintsugi jobs and in members' harnesses" } as const;
 
 export function PluginsPage(): React.JSX.Element {
   const plugins = useLoader("plugins", () => pluginsApi.list());

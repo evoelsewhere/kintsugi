@@ -47,7 +47,7 @@ describe.skipIf(!hasDatabase)("member plugins (integration)", () => {
     expect(empty.status).toBe(200);
     expect(empty.body.data?.items).toEqual([]);
 
-    expect((await admin.request("PUT", "/admin/plugin-access/plug-one/modernize/*", { body: {} })).status).toBe(400);
+    expect((await admin.request("PUT", "/admin/plugin-access/plug-one/reverse_engineering/*", { body: {} })).status).toBe(400);
     expect((await admin.request("PUT", "/admin/plugin-access/plug-one/no-such-plugin/*", { body: {} })).status).toBe(404);
     expect((await admin.request("PUT", "/admin/plugin-access/plug-one/context/no-such-user", { body: {} })).status).toBe(404);
     expect((await admin.request("PUT", "/admin/plugin-access/plug-one/context/*", { body: {} })).status).toBe(204);
@@ -75,6 +75,21 @@ describe.skipIf(!hasDatabase)("member plugins (integration)", () => {
     // A runtime plugin is never distributed, and a plugin that is not granted is refused.
     expect((await new Client(app).request("GET", "/member/v1/plugins/modernize?projectId=plug-one", bearer(token))).status).toBe(403);
     expect((await new Client(app).request("GET", "/member/v1/plugins/context?projectId=plug-two", bearer(token))).status).toBe(403);
+  });
+
+  it("sends a member only the member part of a plugin of both (ADR-0071)", async () => {
+    expect((await admin.request("PUT", "/admin/plugin-access/plug-one/modernize/*", { body: {} })).status).toBe(204);
+    const listed = await new Client(app).request<{ items: Array<{ name: string }> }>("GET", "/member/v1/plugins?projectId=plug-one", bearer(token));
+    expect(listed.body.data?.items.map((item) => item.name).sort()).toEqual(["context", "modernize"]);
+
+    const response = await new Client(app).request<Bundle>("GET", "/member/v1/plugins/modernize?projectId=plug-one", bearer(token));
+    expect(response.status).toBe(200);
+    const paths = response.body.data!.files.map((file) => file.path);
+    expect(paths).toEqual(expect.arrayContaining(["commands/build.md", "skills/build-method/SKILL.md", "skills/unit-testing/SKILL.md"]));
+    // Never a runtime command or agent (the review is the runtime's), a design skill, or anything that runs.
+    expect(paths.every((path) => /^(commands\/build\.md|skills\/(build-method|unit-testing)\/.+)$/.test(path))).toBe(true);
+
+    expect((await admin.request("DELETE", "/admin/plugin-access/plug-one/modernize/*", { body: {} })).status).toBe(204);
   });
 
   it("records what a plugin did within bounds and keeps Kintsugi's own kinds to itself", async () => {

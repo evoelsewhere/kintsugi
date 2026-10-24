@@ -22,7 +22,7 @@ export class PluginsService {
   async get(name: string): Promise<PluginDetail> {
     const plugin = (await this.catalog.list()).find((entry) => entry.name === name);
     if (plugin === undefined) throw new NotFoundException(`Plugin ${name} not found`);
-    return { ...summary(plugin), components: plugin.components, files: plugin.files, flows: plugin.flows, pipeline: plugin.pipeline };
+    return { ...summary(plugin), components: plugin.components, files: plugin.files, memberFiles: plugin.memberFiles, flows: plugin.flows, pipeline: plugin.pipeline };
   }
 
   async file(name: string, path: string): Promise<PluginFileContent> {

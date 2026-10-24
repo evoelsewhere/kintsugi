@@ -17,8 +17,8 @@ export const AUDIENCE_LABEL: Record<StageAudience, string> = {
   portal: "Portal stages",
 };
 
-/** The stages shown in the pipeline: the runtime stages a person runs (ADR-0033; map, extract-rules and harden are steps of understand; ADR-0049: the design stage generates the design sets of the units). */
-export const PIPELINE_STAGES: readonly string[] = ["assess", "understand", "design"];
+/** The stages shown in the pipeline: the runtime stages a person runs (ADR-0033; map, extract-rules and harden are steps of understand; ADR-0049: the design stage generates the design sets of the units; ADR-0071: Build covers implement, test, review and verify, on the portal or with the CLI). */
+export const PIPELINE_STAGES: readonly string[] = ["assess", "understand", "design", "build"];
 
 /** Display names of the stages whose id alone reads poorly; the rest show their id in title case. */
 const STAGE_LABELS: Record<string, string> = {
@@ -28,6 +28,7 @@ const STAGE_LABELS: Record<string, string> = {
   "design-architecture": "Common Design",
   scaffold: "Skeleton",
   design: "Unit Design",
+  build: "Build",
   implement: "Implementation",
 };
 

@@ -19,6 +19,7 @@ import { AuthModule } from "./modules/core/auth/auth.module.js";
 import { ArchitectureViewsModule } from "./modules/delivery/architecture/architecture-views.module.js";
 import { FactorySetupsModule } from "./modules/delivery/factory/factory-setups.module.js";
 import { CatalogModule } from "./modules/delivery/catalog/catalog.module.js";
+import { BuildModule } from "./modules/delivery/build/build.module.js";
 import { DesignModule } from "./modules/delivery/design/design.module.js";
 import { DocumentsModule } from "./modules/delivery/documents/documents.module.js";
 import { MemberApiModule } from "./modules/delivery/member-api/index.js";
@@ -84,6 +85,7 @@ import { ReleasesModule } from "./modules/system/releases/index.js";
     MemberApiModule,
     CatalogModule,
     DesignModule,
+    BuildModule,
     ArchitectureViewsModule,
     FactorySetupsModule,
     WorkItemsModule,

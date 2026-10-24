@@ -182,6 +182,50 @@ const plugins: GuidePage = {
   ),
 };
 
+const build: GuidePage = {
+  slug: "build-a-unit",
+  title: "Build a unit",
+  group: "CLI and plugins",
+  summary: "Implement and test a designed unit on your machine; the runtime reviews your merge request.",
+  render: (context) => (
+    <>
+      <P>
+        Once a unit&apos;s design is merged, <strong>you</strong> build it: the code and its unit tests are written on your machine, in the target repository, by your own AI client. Kintsugi does not implement or test. It collects <strong>which unit you built in which merge request</strong>,
+        and its runtime reads that merge request as an independent reviewer. (Proving the merged unit builds and passes from clean comes later.)
+      </P>
+      <div className="mt-2">
+        <Step number={1} eyebrow="plugin" title="Get the plugin">
+          <P>An administrator offers <Code>modernize</Code> to you in the project (Project → Member plugins). Then:</P>
+          <CodeBlock label="Add the plugin" code={"kintsugi add modernize"} />
+        </Step>
+        <Step number={2} eyebrow="repository" title="Open the target repository in your AI client">
+          <P>Start a new session in the repository the unit is built in, with the project connected.</P>
+        </Step>
+        <Step number={3} eyebrow="command" title="Run the command for a unit">
+          <CodeBlock label="Build a unit" code={"# Claude Code\n/kintsugi:build billing/invoice my-project"} />
+          <P>The unit is <Code>&lt;module&gt;/&lt;unit&gt;</Code>. The Build page of the portal shows the same commands for each unit.</P>
+        </Step>
+        <Step number={4} eyebrow="build" title="Approve the plan, then let it build">
+          <P>It reads the unit&apos;s rules, merged design and the standards through the Kintsugi tools, plans the files and waits for your yes. Then it writes the code, tests every rule with tests that name it, counts the cases that ran and breaks the code once on purpose (the <em>canary</em>) to show the tests can fail.</P>
+        </Step>
+        <Step number={5} eyebrow="merge request" title="Open the merge request and let it record">
+          <P>You commit and open the merge request. The command then records the unit, the merge request, its branch and head commit and the numbers of your test run, so the runtime can review it. Pushed more commits after a review? Run the command again so it records the new commit.</P>
+        </Step>
+      </div>
+      <H2>What the runtime does</H2>
+      <P>
+        On the Build page, <strong>Review on the portal</strong> sends a merge request to the runtime. A reviewer who did not write the code reads it against the rules and design of each unit — fidelity, tests, hidden failures, design, security — and a pull request on the document repository
+        carries one <Code>review.md</Code> per unit with the findings. It cannot run your code and it changes nothing in your merge request: you fix the findings, push, and ask again.
+      </P>
+      <H2>What Kintsugi keeps</H2>
+      <List>
+        <li>Only counts and links: the unit, the merge request URL, branch and commit, cases run and failed, the canary result. Never code or document content.</li>
+        <li>You see them next to the unit on the Build page ({context.baseUrl}/delivery/build); administrators also see them per member in Monitoring → Members.</li>
+      </List>
+    </>
+  ),
+};
+
 const record: GuidePage = {
   slug: "record-activity",
   title: "Record activity",
@@ -258,5 +302,5 @@ const admin: GuidePage = {
   ),
 };
 
-export const GUIDE_PAGES: GuidePage[] = [overview, install, connect, plugins, record, reference, admin];
+export const GUIDE_PAGES: GuidePage[] = [overview, install, connect, plugins, build, record, reference, admin];
 export const GUIDE_GROUPS: GuidePage["group"][] = ["Get started", "CLI and plugins", "For administrators"];

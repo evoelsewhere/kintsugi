@@ -1,12 +1,13 @@
 {
   "name": "modernize",
-  "version": "2.0.0",
-  "description": "Move the understood system to its target as runtime stages: the design of each understood unit, generated from the project's own design templates and checked against them by an independent reviewer. The later stages (implement, test, ...) are added to this plugin.",
+  "version": "3.0.0",
+  "description": "Move the understood system to its target. At runtime, started from the portal: the design of each unit from the project's own templates, and the independent review of a merge request a member opened. In the member's own AI client: the build command, which implements and tests a designed unit on the member's machine and tells Kintsugi which unit was built in which merge request.",
   "author": {
     "name": "Kintsugi"
   },
   "keywords": [
     "kintsugi",
-    "runtime"
+    "runtime",
+    "member"
   ]
 }

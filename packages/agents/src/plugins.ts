@@ -8,11 +8,13 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { BUILTIN_DIR, builtinPluginDirs, loadBuiltinCatalog } from "./builtin.js";
+import type { AgentPackage } from "./format.js";
 import { type BuiltinCommand, loadBuiltinCommands } from "./commands.js";
 import { type FlowNode, flowComponents } from "./flow.js";
 
 export type PluginComponentKind = "agent" | "command" | "skill" | "workflow" | "script" | "hook";
-export type PluginAudience = "runtime" | "member";
+/** Who a plugin is for: the runtime, members' harnesses, or both (ADR-0071: its commands and agents say who runs each). */
+export type PluginAudience = "runtime" | "member" | "both";
 
 export interface PluginComponent {
   kind: PluginComponentKind;
@@ -75,6 +77,8 @@ export interface BuiltinPlugin {
   skills: string[];
   components: PluginComponent[];
   files: PluginFile[];
+  /** The files a member receives: all of a member plugin, the member commands and agents and the skills they name for a plugin of both, none for a runtime plugin. */
+  memberFiles: string[];
   flows: PluginFlow[];
   pipeline: PluginLink[];
 }
@@ -140,8 +144,8 @@ async function manifestOf(dir: string, problems: string[], folder: string): Prom
     // (marketplace sync): the folder with dashes for underscores.
     const claudeName = folder.replaceAll("_", "-");
     if (base.name !== claudeName) problems.push(`plugin ${folder}: plugin.json names it "${base.name ?? ""}", expected "${claudeName}"`);
-    if (extra.audience !== "runtime" && extra.audience !== "member") problems.push(`plugin ${folder}: kintsugi.json audience must be runtime or member`);
-    return { name: folder, title: extra.title ?? folder, version: base.version ?? "0.0.0", description: base.description ?? "", audience: extra.audience === "member" ? "member" : "runtime", requires: extra.requires ?? [] };
+    if (extra.audience !== "runtime" && extra.audience !== "member" && extra.audience !== "both") problems.push(`plugin ${folder}: kintsugi.json audience must be runtime, member or both`);
+    return { name: folder, title: extra.title ?? folder, version: base.version ?? "0.0.0", description: base.description ?? "", audience: extra.audience === "member" || extra.audience === "both" ? extra.audience : "runtime", requires: extra.requires ?? [] };
   } catch (error) {
     problems.push(`plugin ${folder}: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
@@ -184,6 +188,20 @@ function pipelineOf(flows: readonly PluginFlow[]): PluginLink[] {
   const reaches = (from: string, to: string, skip: PluginLink): boolean =>
     links.some((link) => link !== skip && link.from === from && (link.to === to || reaches(link.to, to, skip)));
   return links.filter((link) => !links.some((other) => other !== link && other.from === link.from && other.to !== link.to && reaches(other.to, link.to, link)));
+}
+
+/**
+ * The files of a plugin a member receives (ADR-0069, ADR-0071). A member plugin sends everything; a plugin of both sends the
+ * commands and agents whose audience is `member` and the skills they name, never a runtime command, agent, script or workflow.
+ */
+function memberFilesOf(audience: PluginAudience, files: readonly PluginFile[], commands: readonly BuiltinCommand[], agents: readonly AgentPackage[], skillNames: readonly string[]): string[] {
+  if (audience === "runtime") return [];
+  if (audience === "member") return files.map((file) => file.path);
+  const memberCommands = commands.filter((command) => command.audience === "member");
+  const memberAgents = agents.filter((agent) => agent.manifest.audience === "member");
+  const chosen = new Set<string>([...memberCommands.map((command) => `commands/${command.command}.md`), ...memberAgents.map((agent) => `agents/${agent.manifest.name}.md`)]);
+  const skills = new Set([...memberCommands.flatMap((command) => command.skills), ...memberAgents.flatMap((agent) => agent.manifest.skills)].filter((name) => skillNames.includes(name)));
+  return files.map((file) => file.path).filter((path) => chosen.has(path) || [...skills].some((name) => path.startsWith(`skills/${name}/`)));
 }
 
 /** The flow of every command of the plugin, from its metadata and the order its text names its parts. */
@@ -266,6 +284,8 @@ export async function loadBuiltinPlugins(dir: string = BUILTIN_DIR): Promise<Bui
         if (used.generated !== true && !known[used.kind].includes(used.name)) problems.push(`plugin ${manifest.name}: /${flow.command} flow uses ${used.kind} ${used.name}, which the plugin does not carry`);
       }
     }
+    const files = (await walk(folder.dir, folder.dir)).sort((a, b) => a.path.localeCompare(b.path));
+    const ownAgents = agentNames.flatMap((name) => catalog.agents.filter((entry) => entry.manifest.name === name));
     plugins.push({
       name: manifest.name,
       title: manifest.title,
@@ -275,7 +295,8 @@ export async function loadBuiltinPlugins(dir: string = BUILTIN_DIR): Promise<Bui
       requires: manifest.requires,
       skills: skillNames,
       components,
-      files: (await walk(folder.dir, folder.dir)).sort((a, b) => a.path.localeCompare(b.path)),
+      files,
+      memberFiles: memberFilesOf(manifest.audience, files, commands, ownAgents, skillNames),
       flows,
       pipeline: pipelineOf(flows),
     });

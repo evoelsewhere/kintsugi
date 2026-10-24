@@ -305,12 +305,15 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     const response = await client.get<Array<{ id: string; command: string; audience: string; agents: string[]; writes: string[]; gates: string[]; runnable: boolean }>>("/stages");
     expect(response.status).toBe(200);
     const stages = response.body.data!;
-    expect(stages).toHaveLength(4);
-    expect(stages.map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design"]);
+    expect(stages).toHaveLength(6);
+    expect(stages.map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design", "build", "review"]);
     expect(stages.find((stage) => stage.id === "design")).toMatchObject({ command: "modernize-design", audience: "runtime", runnable: true, agents: ["designer", "design-reviewer"] });
-    expect(stages.filter((stage) => stage.audience === "runtime").map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design"]);
+    expect(stages.filter((stage) => stage.audience === "runtime").map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design", "review"]);
+    // The member stage is the command a member runs in their own harness: the runtime has no plan for it (ADR-0071).
+    expect(stages.find((stage) => stage.id === "build")).toMatchObject({ command: "build", audience: "member", runnable: false, agents: [] });
+    expect(stages.find((stage) => stage.id === "review")).toMatchObject({ command: "modernize-review", audience: "runtime", runnable: true, agents: ["code-reviewer"] });
     expect(stages.find((stage) => stage.id === "assess")).toMatchObject({ command: "modernize-assess", runnable: true, agents: ["legacy-analyst", "security-auditor"] });
-    expect(stages.filter((stage) => stage.runnable).map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design"]);
+    expect(stages.filter((stage) => stage.runnable).map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design", "review"]);
     expect(stages.find((stage) => stage.id === "plan-understand")).toMatchObject({ command: "modernize-plan-understand", runnable: true, agents: ["understand-planner"] });
     expect(stages.find((stage) => stage.id === "understand")).toMatchObject({ command: "modernize-understand", runnable: true, agents: ["legacy-analyst", "security-auditor", "business-rules-extractor"] });
   });

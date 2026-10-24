@@ -141,6 +141,17 @@ describe("ADR-0051 document-repo layout", () => {
     expect(unitKeyLegacyPath("billing", "payroll/run-period", "trace.md")).toBe(`${base}/trace.md`);
   });
 
+  it("keeps a review run's data in scratch and its evidence in the unit's _build folder (ADR-0071)", () => {
+    expect(layout.buildManifestPath("billing")).toBe("scratch/billing/build/manifest.json");
+    expect(layout.buildChangesPath("billing")).toBe("scratch/billing/build/changes.json");
+    expect(layout.buildReviewNotePath("billing", "payroll/run-period")).toBe("scratch/billing/build/review/payroll/run-period.md");
+    const base = "10-applications/billing/02-modern/payroll/run-period/_build";
+    expect(layout.unitKeyBuildDir("billing", "payroll/run-period")).toBe(base);
+    expect(layout.unitCodeReviewPath("billing", "payroll/run-period")).toBe(`${base}/review.md`);
+    // A design set may not be called `_build`: set ids start with a letter or a digit.
+    expect(layout.isUnitSegment("_build")).toBe(false);
+  });
+
   it("puts the unit's card, design and task pack on the modern side", () => {
     const base = "10-applications/billing/02-modern/payroll/run-period";
     expect(unitModernDir("billing", "payroll", "run-period")).toBe(base);
