@@ -71,6 +71,8 @@ kintsugi remove context
 
 The built-in `context` plugin is the first one: a skill that reads the project's documents through the tools below, answers with citations and records what it did.
 
+The built-in `modernize` plugin is a plugin of **both** audiences ([ADR-0071](../decisions/0071-members-build-runtime-reviews.md)): its runtime part (the `design` and `review` stages) never leaves the installation, and a member receives only the command `build` and the skills it names (`build-method`, `unit-testing`). In Claude Code the command is `/kintsugi:build <module>/<unit> [project]`: it reads the unit's rules and merged design with `document_get`, plans and waits for a yes, implements and tests the unit in the member's own repository, shows with a canary that the tests can fail, and records what was built (below). The member commits and opens the merge request; the runtime's `review` stage reads it.
+
 ## Record activity
 
 ```sh
@@ -78,6 +80,8 @@ kintsugi activity record result --plugin context --summary "Reviewed the standar
 ```
 
 This is the only write of the base. It adds one record to the project's monitoring (Monitoring → Members): a `kind` (not `plugin.*` or `document.*`, which Kintsugi sets itself), the plugin it belongs to (one you may use), a summary of at most 500 characters and up to 20 scalar details. Never put document content, credentials or personal data in it. At most 600 records an hour per member; the worker deletes records after `KINTSUGI_TELEMETRY_RETENTION_DAYS` (30 by default). The request is sent once and never retried, so a lost response cannot record twice. Kintsugi also records, without the plugin asking, each plugin download and each document read.
+
+`modernize` records two kinds, with the unit (`<module>/<unit>`) as the summary: `build.test` (details `cases`, `failed`, `canary` = `killed` or `survived`) and `build.mr` (details `mr`, the URL of the merge request, `branch`, `commit`, the full head commit, and the same counts). The portal's Build page shows the latest `build.mr` of each unit and reviews that merge request at that commit; it displays a link only when it is an `http(s)` URL and a commit only when it is a full hexadecimal id.
 
 ## Serve the local MCP bridge
 
