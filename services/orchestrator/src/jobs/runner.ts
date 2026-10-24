@@ -366,6 +366,8 @@ export class JobRunner {
         await store.fail(id, reason, summary).catch(() => undefined);
         await this.#event(ws, undefined, "status", `failed: ${reason}`, { status: "failed" });
         this.#log(`${run.kind} ${run.name} (${id}) failed: ${reason}`);
+        if (error instanceof ScriptFailure) this.#log(`${id.slice(0, 8)} script output:\n${error.detail}`);
+        if (error instanceof Error && error.stack !== undefined) this.#log(`${id.slice(0, 8)} stack:\n${redactText(error.stack).slice(0, 4000)}`);
       }
     } finally {
       await removeTree(paths.tmp).catch(() => undefined);
@@ -491,6 +493,9 @@ export class JobRunner {
 
   /** Appends to the top-level run's live record (best effort; texts are redacted). */
   async #event(ws: StepWorkspace, stepId: string | undefined, kind: JobEventKind, message: string, data?: Record<string, unknown>): Promise<void> {
+    // The same line goes to the console, so an exported log carries the whole run, not only its start and end.
+    const scope = `${ws.rootId.slice(0, 8)}#${ws.attempt}${stepId === undefined ? "" : `/${stepId.slice(0, 8)}`}`;
+    this.#log(`${scope} ${kind}: ${redactText(message).slice(0, 1000)}${data === undefined ? "" : ` ${redactText(JSON.stringify(data)).slice(0, 500)}`}`);
     await this.#deps.store
       .addEvent({ runId: ws.rootId, attempt: ws.attempt, ...(stepId === undefined ? {} : { stepId }), kind, message: redactText(message).slice(0, 1000), ...(data === undefined ? {} : { data }) })
       .catch(() => undefined);
@@ -818,7 +823,10 @@ export class JobRunner {
         signal?.removeEventListener("abort", onAbort);
         await flushSpans();
       }
-      return handle.done;
+      const end = await handle.done;
+      // The full end of the attempt (the recorded failure reason is cut short).
+      this.#log(`${ws.rootId.slice(0, 8)}${stepId === undefined ? "" : `/${stepId.slice(0, 8)}`} agent ${agentId} attempt ${attempts} ${end.type}${end.type === "job.failed" ? ` (${end.reason}): ${redactText(end.error).slice(0, 4000)}` : ""}; usage ${JSON.stringify(usage)}`);
+      return end;
     };
     let done = await attempt();
     // A provider that drops its response stalls the job (the launcher's idle watchdog): try once more.
