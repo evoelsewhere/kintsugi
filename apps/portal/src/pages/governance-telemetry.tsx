@@ -13,7 +13,7 @@ import { BreakdownTable, StatTile, ToolsTable, UsageChart } from "@/components/t
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { type Column, DataTable } from "@/components/ui/data-table";
-import { Drawer } from "@/components/ui/drawer";
+import { DetailPage } from "@/components/detail-page";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
@@ -188,7 +188,7 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
         </Section>
       </div>
 
-      <TraceDrawer open={target !== undefined} run={opened} looking={opened === undefined && (runs.loading || lookup.loading)} onClose={closeRun} />
+      <TracePage open={target !== undefined} run={opened} looking={opened === undefined && (runs.loading || lookup.loading)} onClose={closeRun} />
     </div>
   );
 }
@@ -364,7 +364,7 @@ function RunsTable({ rows, onOpen, selected }: { rows: readonly TelemetryRun[]; 
   );
 }
 
-function TraceDrawer({ open, run, looking, onClose }: { open: boolean; run: TelemetryRun | undefined; looking: boolean; onClose: () => void }): React.JSX.Element | null {
+function TracePage({ open, run, looking, onClose }: { open: boolean; run: TelemetryRun | undefined; looking: boolean; onClose: () => void }): React.JSX.Element | null {
   const subtitle =
     run === undefined ? undefined : (
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -376,7 +376,7 @@ function TraceDrawer({ open, run, looking, onClose }: { open: boolean; run: Tele
       </span>
     );
   return (
-    <Drawer open={open} title={run === undefined ? "Trace" : `Trace · ${agentName(run.agent)}`} subtitle={subtitle} onClose={onClose} size="wide">
+    <DetailPage open={open} title={run === undefined ? "Trace" : `Trace · ${agentName(run.agent)}`} subtitle={subtitle} onClose={onClose}>
       {run !== undefined ? (
         <TraceBody run={run} />
       ) : looking ? (
@@ -384,7 +384,7 @@ function TraceDrawer({ open, run, looking, onClose }: { open: boolean; run: Tele
       ) : (
         <EmptyState icon={Activity} title="No trace for this attempt" description="It may be older than the retention period (30 days), or the run did not call an agent." />
       )}
-    </Drawer>
+    </DetailPage>
   );
 }
 

@@ -34,7 +34,7 @@ import { DesignOverviewTab } from "./design-overview";
 import { DesignSetsTab } from "./design-sets";
 import { DesignUnitsTab } from "./design-units";
 import type { UnitFilters } from "./design-state";
-import { UnitDesignDrawer } from "./design-unit-drawer";
+import { UnitDesignPage } from "./design-unit-page";
 
 type DesignTab = "overview" | "units" | "runs" | "coverage" | "sets" | "common";
 const TABS: readonly DesignTab[] = ["overview", "units", "runs", "coverage", "sets", "common"];
@@ -69,7 +69,8 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
         }
         return next;
       },
-      { replace: true },
+      // Opening a unit or a set is a page of its own: Back returns to the list.
+      { replace: !("item" in patch || "sets" in patch) },
     );
 
   const runs = useLoader(`runs/${project.id}/${application.id}/design`, async () => (await jobRunsApi.list(project.id, application.id, RUN_LIMIT)).items, {
@@ -205,7 +206,7 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
         </Loaded>
       )}
 
-      <UnitDesignDrawer
+      <UnitDesignPage
         project={project}
         application={application}
         unitKey={params.get("item") ?? undefined}

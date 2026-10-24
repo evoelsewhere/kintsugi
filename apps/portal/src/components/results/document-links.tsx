@@ -9,7 +9,7 @@ import { ExternalLink } from "lucide-react";
 import { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
-import { Drawer } from "@/components/ui/drawer";
+import { DetailPage } from "@/components/detail-page";
 import { documentsApi } from "@/lib/api/documents";
 import { resolveDocumentLink, stageOfDocument } from "@/lib/document-links";
 import { splitFrontMatter } from "@/lib/front-matter";
@@ -38,9 +38,9 @@ export function DocumentLinksProvider({ projectId, commit, children }: { project
   return (
     <DocumentLinksContext.Provider value={value}>
       {children}
-      <Drawer open={shown !== null} size="wide" title={shown?.path.split("/").pop() ?? ""} subtitle={<span className="font-mono">{shown?.path}</span>} onClose={() => setShown(null)}>
+      <DetailPage open={shown !== null} title={shown?.path.split("/").pop() ?? ""} subtitle={<span className="font-mono">{shown?.path}</span>} onClose={() => setShown(null)}>
         {shown === null ? null : <DocumentFile projectId={projectId} commit={commit} path={shown.path} />}
-      </Drawer>
+      </DetailPage>
     </DocumentLinksContext.Provider>
   );
 }

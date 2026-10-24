@@ -14,7 +14,7 @@ import { MermaidDiagram } from "@/components/results/mermaid-diagram";
 import { StatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { type Column, DataTable } from "@/components/ui/data-table";
-import { Drawer } from "@/components/ui/drawer";
+import { DetailPage } from "@/components/detail-page";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -126,9 +126,9 @@ export function UnderstandResultsView({ results, compare, projectId }: { results
       {tab === "graph" && results.matrix !== null ? <GraphTab units={results.units} modules={modules} colors={colors} onOpen={setDetail} /> : null}
       {tab === "readme" || tab === "architecture" || tab === "data-model" || tab === "integrations" ? <DocumentTab id={tab} document={documentOf(tab)} /> : null}
 
-      <Drawer open={opened !== undefined} size="wide" title={opened?.title ?? ""} subtitle={opened?.id} onClose={() => setDetail(undefined)}>
+      <DetailPage open={opened !== undefined} title={opened?.title ?? ""} subtitle={opened?.id} onClose={() => setDetail(undefined)}>
         {opened === undefined ? null : <UnitDetail unit={opened} byId={byId} projectId={projectId} commit={results.ref.commit} onOpen={setDetail} />}
-      </Drawer>
+      </DetailPage>
     </div>
   );
 }
