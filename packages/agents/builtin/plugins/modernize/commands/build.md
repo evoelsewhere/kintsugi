@@ -14,6 +14,22 @@ metadata:
   reads: [10-applications/<app>/02-modern/<module>/<unit>/, 10-applications/<app>/01-legacy/<module>/<unit>/, 01-standards/, 02-architecture/]
   writes: []
   gates: [you approve the plan before any code is written, you decide what to commit and open as a merge request]
+  flow:
+    - step: Check where you are, find the build and test commands and run both once
+    - step: Read the unit's rules, merged design and the standards
+      tool: document_get
+    - step: Write the plan with the files, a table of every rule, the tests and the open questions
+    - gate: you approve the plan before any code is written
+    - step: Implement the unit, building after each file
+      skill: build-method
+    - step: Test every rule and count the cases that ran
+      skill: unit-testing
+    - step: Run the canary, break the code once, see a test fail, restore it
+    - step: Record the test run (build.test)
+      tool: activity_record
+    - gate: you decide what to commit and open as a merge request
+    - step: Record the unit, the merge request and its head commit (build.mr)
+      tool: activity_record
 ---
 
 Build the unit **`$unit`** in the repository you are working in, following the two skills of this plugin (`build-method` and `unit-testing`). The portal does not implement or test: you do, on your machine, with your toolchain and your AI client. Kintsugi collects only **which unit you built and in which merge request**, so that its runtime can then review that merge request (the stage `review`). Nothing here is committed or pushed for you.
