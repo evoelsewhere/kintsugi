@@ -8,7 +8,8 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
 import { CHART_COLOR } from "@/components/results/chart-colors";
-import { BarList, ShareBar, StackedColumns } from "@/components/results/charts";
+import { ShareBar } from "@/components/results/charts";
+import { BreakdownTable, StatTile, ToolsTable, UsageChart } from "@/components/telemetry/telemetry-parts";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { type Column, DataTable } from "@/components/ui/data-table";
@@ -26,7 +27,9 @@ import {
   attentionOf,
   buildTrace,
   cacheHitRate,
+  changeOf,
   contextSeries,
+  dailyCacheRate,
   fillDays,
   flattenTrace,
   formatAttribute,
@@ -36,15 +39,21 @@ import {
   formatRate,
   formatTokens,
   isRunFilter,
+  isUsageMetric,
   matchesRunFilter,
   pickRun,
+  previousRange,
   problemKeys,
   RUN_FILTERS,
   type RunFilter,
   runKey,
   spanDetail,
   spanLabel,
+  successRate,
+  tokenTotal,
   type TraceNode,
+  USAGE_METRICS,
+  type UsageMetric,
   WINDOWS,
   windowRange,
   type WindowId,
@@ -76,6 +85,8 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
   const agent = params.get("agent") ?? "";
   const filterParam = params.get("show");
   const filter: RunFilter = isRunFilter(filterParam) ? filterParam : "all";
+  const metricParam = params.get("metric");
+  const metric: UsageMetric = isUsageMetric(metricParam) ? metricParam : "cost";
   const traceId = params.get("trace");
   const traceStep = params.get("step");
   const attemptParam = params.get("attempt");
@@ -83,6 +94,9 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
 
   const range = () => ({ ...windowRange(windowId), ...(projectId === "" ? {} : { projectId }) });
   const summary = useLoader<TelemetrySummary>(`telemetry/summary/${windowId}/${projectId}/${agent}`, () => telemetryApi.summary({ ...range(), ...(agent === "" ? {} : { agent }) }), {
+    live: ["telemetry"],
+  });
+  const previous = useLoader<TelemetrySummary>(`telemetry/previous/${windowId}/${projectId}/${agent}`, () => telemetryApi.summary({ ...previousRange(range()), ...(projectId === "" ? {} : { projectId }), ...(agent === "" ? {} : { agent }) }), {
     live: ["telemetry"],
   });
   const runs = useLoader(`telemetry/runs/${windowId}/${projectId}`, async () => (await telemetryApi.runs({ ...range(), limit: RUN_SAMPLE })).items, { live: ["telemetry"] });
@@ -114,41 +128,40 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader className="flex-wrap">
-          <div>
-            <CardTitle>Runtime telemetry</CardTitle>
-            <CardDescription>What agent jobs spent and how they behaved: tokens, prompt-cache reads, cost, compactions and tool latency. Counts and names only, never prompts or tool output.</CardDescription>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[16px] font-semibold text-text">Runtime telemetry</h2>
+          <p className="text-[12px] text-text-muted">Tokens, prompt-cache reads, cost, compactions and tool latency of agent jobs, against the period before. Counts and names only, never prompts or tool output.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chips label="Window" options={WINDOWS.map((entry) => ({ id: entry.id, label: entry.label }))} value={windowId} onChange={(id) => update({ window: id === "7" ? undefined : id })} />
+          <div className="w-48">
+            <Select value={projectId} options={projectOptions} onChange={(value) => update({ project: value })} />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Chips label="Window" options={WINDOWS.map((entry) => ({ id: entry.id, label: entry.label }))} value={windowId} onChange={(id) => update({ window: id === "7" ? undefined : id })} />
-            <div className="w-52">
-              <Select value={projectId} options={projectOptions} onChange={(value) => update({ project: value })} />
-            </div>
-            <div className="w-52">
-              <Select value={agent} options={agentOptions} onChange={(value) => update({ agent: value })} />
-            </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label="Refresh the telemetry"
-              onClick={() => {
-                void summary.reload();
-                void runs.reload();
-              }}
-            >
-              <RefreshCw className="size-4" />
-            </Button>
+          <div className="w-48">
+            <Select value={agent} options={agentOptions} onChange={(value) => update({ agent: value })} />
           </div>
-        </CardHeader>
-      </Card>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Refresh the telemetry"
+            onClick={() => {
+              void summary.reload();
+              void previous.reload();
+              void runs.reload();
+            }}
+          >
+            <RefreshCw className="size-4" />
+          </Button>
+        </div>
+      </div>
 
       <Loaded loader={summary} rows={4}>
         {(data) =>
           data.totals.jobs === 0 ? (
             <EmptyState icon={Activity} title="No agent jobs in this window" description="Spans appear here as runtime jobs run, and are kept for 30 days. Widen the window or pick another project." />
           ) : (
-            <SummaryView summary={data} onAgent={(key) => update({ agent: key })} onAttention={showAttention} />
+            <SummaryView summary={data} previous={previous.data ?? undefined} metric={metric} onMetric={(next) => update({ metric: next === "cost" ? undefined : next })} onAgent={(key) => update({ agent: key })} onAttention={showAttention} />
           )
         }
       </Loaded>
@@ -180,43 +193,79 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
   );
 }
 
-function SummaryView({ summary, onAgent, onAttention }: { summary: TelemetrySummary; onAgent: (agent: string) => void; onAttention: (item: Attention) => void }): React.JSX.Element {
+function SummaryView({
+  summary,
+  previous,
+  metric,
+  onMetric,
+  onAgent,
+  onAttention,
+}: {
+  summary: TelemetrySummary;
+  previous: TelemetrySummary | undefined;
+  metric: UsageMetric;
+  onMetric: (metric: UsageMetric) => void;
+  onAgent: (agent: string) => void;
+  onAttention: (item: Attention) => void;
+}): React.JSX.Element {
   const { totals } = summary;
+  const before = previous === undefined || previous.totals.jobs === 0 ? undefined : previous.totals;
   const days = fillDays(summary.daily, summary.from, summary.to);
-  const columns = days.map((day) => ({
-    label: day.day.slice(8),
-    title: `${day.day}: ${day.jobs} jobs, ${formatTokens(day.inputTokens)} new input, ${formatTokens(day.cacheReadTokens)} cached, ${formatTokens(day.outputTokens)} output, ${formatCost(day.costUsd)}`,
-    segments: [
-      { label: "New input", value: day.inputTokens, color: CHART_COLOR.blue },
-      { label: "Cache write", value: day.cacheWriteTokens, color: CHART_COLOR.purple },
-      { label: "Cache read", value: day.cacheReadTokens, color: CHART_COLOR.green },
-      { label: "Output", value: day.outputTokens, color: CHART_COLOR.orange },
-    ],
-  }));
   const reasons = summary.compactionReasons.map((entry) => ({ label: entry.reason, value: entry.count, color: entry.reason === "overflow" ? CHART_COLOR.red : entry.reason === "threshold" ? CHART_COLOR.orange : CHART_COLOR.muted }));
-  const tokens = totals.inputTokens + totals.cacheReadTokens + totals.cacheWriteTokens + totals.outputTokens;
+  const tokens = tokenTotal(totals);
+  const success = successRate(totals);
   const attention = attentionOf(summary);
+  const change = (current: number, earlier: number | null | undefined): number | null => (before === undefined ? null : changeOf(current, earlier));
 
   return (
     <div className="flex flex-col gap-4">
       {attention.length === 0 ? null : <AttentionList items={attention} onShow={onAttention} />}
       <KpiRow>
-        <Kpi label="Jobs" value={totals.jobs} tone={totals.failedJobs > 0 ? "orange" : "green"} hint={`${formatCount(totals.failedJobs)} failed · ${formatCount(totals.retries)} retries`} />
-        <Kpi label="Tokens" value={undefined} display={formatTokens(tokens)} hint={`new in ${formatTokens(totals.inputTokens)} · out ${formatTokens(totals.outputTokens)}`} />
-        <Kpi label="Cache hit rate" value={undefined} display={formatRate(totals.cacheHitRate)} hint={`${formatTokens(totals.cacheReadTokens)} read from cache`} tone={totals.cacheHitRate === null ? undefined : totals.cacheHitRate >= 0.5 ? "green" : "orange"} />
-        <Kpi label="Cost" value={undefined} display={formatCost(totals.costUsd)} hint={totals.jobs === 0 ? undefined : `${formatCost(totals.costUsd / totals.jobs)} per job`} />
-        <Kpi
+        <StatTile label="Spend" value={formatCost(totals.costUsd)} change={change(totals.costUsd, before?.costUsd)} direction="up-bad" spark={days.map((day) => day.costUsd)} sparkColor={CHART_COLOR.teal} hint={totals.jobs === 0 ? undefined : `${formatCost(totals.costUsd / totals.jobs)} per job`} />
+        <StatTile label="Tokens" value={formatTokens(tokens)} change={change(tokens, before === undefined ? undefined : tokenTotal(before))} spark={days.map(tokenTotal)} hint={`new in ${formatTokens(totals.inputTokens)} · out ${formatTokens(totals.outputTokens)}`} />
+        <StatTile
+          label="Jobs"
+          value={formatCount(totals.jobs)}
+          change={change(totals.jobs, before?.jobs)}
+          spark={days.map((day) => day.jobs)}
+          tone={totals.failedJobs > 0 ? "orange" : "green"}
+          hint={`${formatRate(success)} succeeded · ${formatCount(totals.failedJobs)} failed · ${formatCount(totals.retries)} retries`}
+        />
+        <StatTile
+          label="Cache hit rate"
+          value={formatRate(totals.cacheHitRate)}
+          change={totals.cacheHitRate === null ? null : change(totals.cacheHitRate, before?.cacheHitRate)}
+          direction="up-good"
+          spark={dailyCacheRate(days)}
+          sparkColor={CHART_COLOR.green}
+          tone={totals.cacheHitRate === null ? undefined : totals.cacheHitRate >= 0.5 ? "green" : "orange"}
+          hint={`${formatTokens(totals.cacheReadTokens)} read from cache`}
+        />
+        <StatTile
           label="Compactions"
-          value={totals.compactions}
+          value={formatCount(totals.compactions)}
+          change={change(totals.compactions, before?.compactions)}
+          direction="up-bad"
           tone={totals.overflowFailures > 0 ? "red" : undefined}
           hint={totals.overflowFailures > 0 ? `${formatCount(totals.overflowFailures)} job(s) ran out of context` : "no job ran out of context"}
         />
-        <Kpi label="Tool latency p95" value={undefined} display={formatMillis(totals.toolP95Ms)} hint={`${formatCount(totals.toolCalls)} calls · ${formatCount(totals.toolErrors)} failed · codemode ${formatCount(totals.codemodeCalls)} · MCP ${formatCount(totals.mcpCalls)}`} />
+        <StatTile
+          label="Tool latency p95"
+          value={formatMillis(totals.toolP95Ms)}
+          change={totals.toolP95Ms === null ? null : change(totals.toolP95Ms, before?.toolP95Ms)}
+          direction="up-bad"
+          hint={`${formatCount(totals.toolCalls)} calls · ${formatCount(totals.toolErrors)} failed · codemode ${formatCount(totals.codemodeCalls)} · MCP ${formatCount(totals.mcpCalls)}`}
+        />
       </KpiRow>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <Section title="Tokens per day" description="New input, cache writes, cache reads and output (UTC days)." className="xl:col-span-3">
-          <StackedColumns columns={columns} legend={[{ label: "New input", color: CHART_COLOR.blue }, { label: "Cache write", color: CHART_COLOR.purple }, { label: "Cache read", color: CHART_COLOR.green }, { label: "Output", color: CHART_COLOR.orange }]} />
+        <Section
+          title="Usage per day"
+          description={metric === "tokens" ? "Tokens by kind: new input, cache writes, cache reads and output (UTC days)." : metric === "cost" ? "Spend per day (UTC)." : "Agent jobs per day (UTC)."}
+          actions={<Chips label="Metric" options={USAGE_METRICS.map((entry) => ({ id: entry.id, label: entry.label }))} value={metric} onChange={onMetric} />}
+          className="xl:col-span-3"
+        >
+          <UsageChart days={days} metric={metric} />
         </Section>
         <Section title="Compactions" description="What started each one: the window filling up, an overflow error, or a manual request." className="xl:col-span-2">
           {reasons.length === 0 ? (
@@ -230,28 +279,18 @@ function SummaryView({ summary, onAgent, onAttention }: { summary: TelemetrySumm
         </Section>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Section title="Cost by agent" description="Total cost in the window; the note is the cache hit rate. Select an agent to filter the page.">
-          <BarList
-            format={formatCost}
-            color={CHART_COLOR.teal}
-            onSelect={(row) => onAgent(row.key)}
-            rows={summary.byAgent.slice(0, 8).map((row) => ({ key: row.key, label: agentName(row.key), value: row.costUsd, note: `${formatRate(cacheHitRate(row))} cached`, title: `${row.key}: ${row.jobs} jobs, ${row.failedJobs} failed` }))}
-          />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+        <Section title="Spend and tokens" description="Where the spend went. Sort a column; select an agent to filter the page." className="xl:col-span-3">
+          <BreakdownTable byAgent={summary.byAgent} byModel={summary.byModel} onAgent={onAgent} />
         </Section>
-        <Section title="Cost by model" description="Which model the spend went to.">
-          <BarList format={formatCost} color={CHART_COLOR.purple} rows={summary.byModel.slice(0, 8).map((row) => ({ key: row.key, label: row.key, value: row.costUsd, note: `${formatCount(row.jobs)} jobs`, mono: true }))} />
-        </Section>
-        <Section title="Tool calls" description="The most called tools; the note is how many failed and the 95th percentile.">
-          <BarList
-            format={formatCount}
-            rows={summary.tools.slice(0, 8).map((row) => ({ key: row.tool, label: row.tool, value: row.calls, note: `${row.errors > 0 ? `${row.errors} failed · ` : ""}p95 ${formatMillis(row.p95Ms)}`, mono: true }))}
-          />
+        <Section title="Tool calls" description="How often each tool ran, how often it failed, and its 95th percentile latency." className="xl:col-span-2">
+          <ToolsTable tools={summary.tools} />
         </Section>
       </div>
     </div>
   );
 }
+
 
 function AttentionList({ items, onShow }: { items: readonly Attention[]; onShow: (item: Attention) => void }): React.JSX.Element {
   return (

@@ -22,6 +22,15 @@ import {
   spanLabel,
   sumUsage,
   windowRange,
+  changeOf,
+  dailyCacheRate,
+  dayMetric,
+  formatChange,
+  isUsageMetric,
+  niceCeil,
+  previousRange,
+  successRate,
+  tokenTotal,
 } from "./telemetry";
 
 const span = (over: Partial<TraceSpan> & Pick<TraceSpan, "spanId" | "name">): TraceSpan => ({
@@ -256,5 +265,42 @@ describe("formatAttribute", () => {
     expect(formatAttribute(12345.678912)).toBe("12,345.6789");
     expect(formatAttribute("threshold")).toBe("threshold");
     expect(formatAttribute(true)).toBe("true");
+  });
+});
+
+describe("overview helpers", () => {
+  it("takes the previous period of the same length", () => {
+    const range = { from: "2026-10-10T00:00:00.000Z", to: "2026-10-17T00:00:00.000Z" };
+    expect(previousRange(range)).toEqual({ from: "2026-10-03T00:00:00.000Z", to: "2026-10-10T00:00:00.000Z" });
+  });
+
+  it("computes and formats the change, with no comparison against zero", () => {
+    expect(changeOf(12, 10)).toBeCloseTo(0.2);
+    expect(changeOf(5, 0)).toBeNull();
+    expect(changeOf(5, undefined)).toBeNull();
+    expect(formatChange(0.124)).toBe("+12%");
+    expect(formatChange(-0.5)).toBe("−50%");
+    expect(formatChange(0.001)).toBe("0%");
+    expect(formatChange(12)).toBe("+999%+");
+    expect(formatChange(null)).toBe("—");
+  });
+
+  it("sums tokens, rates success and picks the metric of a day", () => {
+    const day = { day: "2026-10-01", jobs: 4, inputTokens: 10, outputTokens: 5, cacheReadTokens: 100, cacheWriteTokens: 20, costUsd: 0.5 };
+    expect(tokenTotal(day)).toBe(135);
+    expect(successRate({ jobs: 4, failedJobs: 1 })).toBe(0.75);
+    expect(successRate({ jobs: 0, failedJobs: 0 })).toBeNull();
+    expect([dayMetric(day, "cost"), dayMetric(day, "jobs"), dayMetric(day, "tokens")]).toEqual([0.5, 4, 135]);
+    expect(isUsageMetric("cost")).toBe(true);
+    expect(isUsageMetric("x")).toBe(false);
+  });
+
+  it("carries the cache rate over a day without prompts", () => {
+    const base = { day: "d", jobs: 0, outputTokens: 0, costUsd: 0 };
+    expect(dailyCacheRate([{ ...base, inputTokens: 50, cacheReadTokens: 50, cacheWriteTokens: 0 }, { ...base, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }])).toEqual([0.5, 0.5]);
+  });
+
+  it("rounds an axis top up to 1, 2, 2.5 or 5 times a power of ten", () => {
+    expect([niceCeil(0), niceCeil(0.7), niceCeil(1.3), niceCeil(2.2), niceCeil(3.4), niceCeil(7), niceCeil(1200)]).toEqual([1, 1, 2, 2.5, 5, 10, 2000]);
   });
 });
