@@ -4,7 +4,8 @@
 
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { COMMIT_IDENTITY_SETTING, DEFAULT_COMMIT_IDENTITY, commitIdentityProblems } from "@kintsugi/git";
-import { SANDBOX_SETTING, type SandboxSettings, resolveSandbox, sandboxProblems } from "@kintsugi/domain";
+import { SANDBOX_SETTING, type SandboxSettings, TELEMETRY_EXPORT_SETTING, resolveSandbox, resolveTelemetryExport, sandboxProblems, telemetryExportProblems, telemetryHeaderProblems } from "@kintsugi/domain";
+import { encryptSecret } from "@kintsugi/secrets";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import {
@@ -16,6 +17,8 @@ import {
   type CommitIdentityView,
   InstallationSettings,
   type SandboxSettingsView,
+  type TelemetryExportInput,
+  type TelemetryExportView,
 } from "../domain/installation-settings.js";
 
 @Injectable()
@@ -67,6 +70,37 @@ export class InstallationSettingsService {
     // Numbers and a switch, no secrets.
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.sandboxUpdate, { subject: SANDBOX_SETTING, detail: { ...settings } }));
     return this.sandbox();
+  }
+
+  /** The telemetry export in effect (ADR-0074): off until an administrator stores it. Header values are never returned. */
+  async telemetryExport(): Promise<TelemetryExportView> {
+    const stored = await this.settings.get<{ headerNames?: unknown }>(TELEMETRY_EXPORT_SETTING);
+    const headerNames = Array.isArray(stored?.value.headerNames) ? stored.value.headerNames.filter((name): name is string => typeof name === "string") : [];
+    return {
+      ...resolveTelemetryExport(stored?.value),
+      headerNames,
+      isDefault: stored === undefined,
+      ...(stored?.updatedBy === undefined ? {} : { updatedBy: stored.updatedBy }),
+      ...(stored === undefined ? {} : { updatedAt: stored.updatedAt }),
+    };
+  }
+
+  async setTelemetryExport(input: TelemetryExportInput, actor: Actor): Promise<TelemetryExportView> {
+    const settings = { enabled: input.enabled, endpoint: input.endpoint.trim(), serviceName: input.serviceName.trim() };
+    const problems = [...telemetryExportProblems(settings), ...(input.headers === undefined ? [] : telemetryHeaderProblems(input.headers))];
+    if (problems.length > 0) throw new BadRequestException(problems);
+    const previous = await this.settings.get<{ headers?: unknown; headerNames?: unknown }>(TELEMETRY_EXPORT_SETTING);
+    let secret: { headers: unknown; headerNames: string[] } | undefined;
+    if (input.headers === undefined) {
+      // Left out: the stored headers stay as they are.
+      if (previous?.value.headers !== undefined) secret = { headers: previous.value.headers, headerNames: Array.isArray(previous.value.headerNames) ? (previous.value.headerNames as string[]) : [] };
+    } else if (Object.keys(input.headers).length > 0) {
+      secret = { headers: encryptSecret(JSON.stringify(input.headers)), headerNames: Object.keys(input.headers) };
+    }
+    await this.settings.put(TELEMETRY_EXPORT_SETTING, { ...settings, ...(secret ?? {}) }, actor.username ?? actor.id);
+    // The endpoint and the names of the headers, never their values.
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.telemetryExportUpdate, { subject: TELEMETRY_EXPORT_SETTING, detail: { ...settings, headerNames: secret?.headerNames ?? [] } }));
+    return this.telemetryExport();
   }
 
   async setCommitIdentity(input: CommitIdentity, actor: Actor): Promise<CommitIdentityView> {

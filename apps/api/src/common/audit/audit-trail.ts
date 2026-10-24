@@ -15,6 +15,7 @@ export const AUDIT_ACTIONS = {
   jobRunRetry: "job-run.retry",
   debugCall: "debug.call",
   sandboxUpdate: "sandbox.update",
+  telemetryExportUpdate: "telemetry-export.update",
   manifestPublish: "manifest.publish",
   projectCreate: "project.create",
   projectUpdate: "project.update",

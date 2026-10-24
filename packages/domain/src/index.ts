@@ -254,6 +254,7 @@ export * from "./document-layout.js";
 export * from "./catalog.js";
 export * from "./debug-log.js";
 export * from "./sandbox.js";
+export * from "./telemetry-export.js";
 export * from "./source.js";
 export * from "./design-template.js";
 export * from "./traceability.js";

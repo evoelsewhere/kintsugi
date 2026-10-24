@@ -1,6 +1,6 @@
 // Domain of installation settings managed in the portal (admin.installation_setting). Pure types and the port.
 
-import type { SandboxSettings } from "@kintsugi/domain";
+import type { SandboxSettings, TelemetryExportSettings } from "@kintsugi/domain";
 
 export interface CommitIdentity {
   name: string;
@@ -26,6 +26,20 @@ export interface CodingAgentConnectionLifetimeView {
 /** The sandbox settings as the portal shows them (ADR-0055). */
 export interface SandboxSettingsView extends SandboxSettings {
   /** True while no administrator has stored any: the defaults apply. */
+  isDefault: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+/** What an administrator sends: `headers` left out keeps the stored ones, `{}` removes them, anything else replaces them. */
+export interface TelemetryExportInput extends TelemetryExportSettings {
+  headers?: Record<string, string> | undefined;
+}
+
+/** The telemetry export as the portal shows it (ADR-0074). The header values are never returned, only their names. */
+export interface TelemetryExportView extends TelemetryExportSettings {
+  headerNames: string[];
+  /** True while no administrator has stored any: export is off. */
   isDefault: boolean;
   updatedBy?: string;
   updatedAt?: string;

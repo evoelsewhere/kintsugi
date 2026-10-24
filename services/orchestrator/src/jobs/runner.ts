@@ -50,6 +50,7 @@ import {
   type JobStore,
   type NewJobRun,
   type SourceCheckouts,
+  type SpanExporter,
   type SpanRecord,
   type StepLimits,
   isCancelled,
@@ -92,6 +93,8 @@ export interface JobRunnerDeps {
   defaults?: JobDefaults;
   /** The sandbox settings (limits, read-only marking), read when a run starts; default: the built-in defaults. */
   sandbox?: SandboxProvider;
+  /** Where stored spans are sent on to, when an administrator turned the export on (ADR-0074). */
+  spanExporter?: SpanExporter;
   /** Hands a write to the document repo writer (queue `document-write`). */
   requestWrite(documentRepositoryId: string, request: DocumentWriteRequest): Promise<void>;
   /** Built-in scripts; defaults to the scripts/ folder of the built-in plugin that has the script. */
@@ -780,6 +783,8 @@ export class JobRunner {
       const batch = spans;
       spans = [];
       await this.#deps.store.addSpans(batch);
+      // Not awaited: a slow backend must not slow the job (ADR-0074).
+      void this.#deps.spanExporter?.export(batch);
     };
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
       attempts += 1;
