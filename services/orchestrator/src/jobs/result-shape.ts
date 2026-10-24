@@ -69,3 +69,14 @@ export function exampleOf(schema: unknown): string | undefined {
   }
   return JSON.stringify(example);
 }
+
+/**
+ * Whether `value` is a JSON Schema rather than an instance of `schema`: a model told to "return JSON matching this
+ * schema" sometimes writes the schema itself (type, required, properties) as its result.
+ */
+export function looksLikeSchema(schema: unknown, value: unknown): boolean {
+  if (typeOf(value) !== "object") return false;
+  const record = value as Record<string, unknown>;
+  const defines = (name: string): boolean => typeof schema === "object" && schema !== null && name in ((schema as Schema).properties ?? {});
+  return typeOf(record["properties"]) === "object" && ("type" in record || "required" in record) && !defines("properties");
+}
