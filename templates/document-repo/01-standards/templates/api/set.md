@@ -1,10 +1,9 @@
 ---
 id: api
-title: API specification
-version: 1
-needs: ["basic"]
-stage: detail-design
+title: API design
+version: 2
+needs: []
 ---
-# API specification
+# API design
 
-The interface the unit offers to other units and systems: each operation, its request and response, and its errors. Written in Markdown, from the basic design, for every unit of kind `api` (its profile adds the document; a unit of another kind has none); an OpenAPI file, when the project wants one, is generated from the target code. TODO: replace this set with the project's own format.
+The interface a unit of kind `api` offers to other units and systems: what it is for, each operation with its request, response and errors, and how callers are authenticated and authorised. Written in Markdown from the unit's AS-IS specification and rules, before the unit is coded; an OpenAPI file, when the project wants one, is generated from the target code. A unit of another kind has no API design (the files come from the profile `api/`). Replace this set with your project's own format.

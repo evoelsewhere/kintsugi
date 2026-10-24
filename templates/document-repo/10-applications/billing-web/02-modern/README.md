@@ -17,7 +17,7 @@ Below it, one folder per unit, `<module>/<unit>/`:
 | File or folder | Content |
 | --- | --- |
 | `README.md` | the unit's card: identity, kind, source → target, wave, state, the design files it waives |
-| `<set>/` | the unit's documents of one design set of `01-standards/templates/` (for example `basic/`, `detail/`, `api/`, `test/`) |
+| `<set>/` | the unit's documents of one design set of `01-standards/templates/` (for example `screen/`, `api/`, `batch-job/`, `test/`) |
 | `task.md` | the task pack a member implements from |
 
 Module notes sit beside the module's units (`<module>/TRANSFORMATION_NOTES.md`). What is known about

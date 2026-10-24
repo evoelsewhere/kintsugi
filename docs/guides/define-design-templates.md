@@ -10,14 +10,14 @@ A **design set** is a group of documents written together for a unit. Start from
 
 | Question | Typical answer |
 |---|---|
-| How many levels of design are there, and which unit kinds does each cover? | basic design for every kind; detail design per kind |
-| Which one needs which? | detail needs basic |
-| Who reviews each? | an analyst reviews the basic design, a developer the detail design |
-| Which pipeline stage produces each? | `basic-design`, `detail-design` |
+| How many levels of design are there, and which unit kinds does each cover? | one design set per unit kind (screen, api, batch job, database object, report), plus a test set for every kind |
+| Which one needs which? | a test set needs nothing; a set may need another whose ids it cites |
+| Who reviews each? | an analyst reviews the screen and report designs, a developer the others |
+| Which pipeline stage produces each? | one stage per set, or one `design` stage that produces several |
 
-The starter in `01-standards/templates/` has `basic` for every unit kind and `detail` with a profile for screens, batch jobs, database objects and reports, plus an `api` set for units of kind `api` and a `test` set. Copy and change it, or add sets (`db`, `report`): a new folder with a `set.md` and its templates, merged by pull request, appears on the Design page with its own Generate button.
+The starter in `01-standards/templates/` has a set for each unit kind it declares (`screen`, `api`, `batch-job`, `db-object`, `report`), each with the documents that kind needs (an overview, then what is specific to the kind: layout and events for a screen, operations and security for an API, schedule and steps for a batch job, definition and migration for a database object, parameters and layout for a report), and a `test` set for every kind. Copy and change it, or add sets: a new folder with a `set.md` and its templates, merged by pull request, appears on the Design page with its own Generate button.
 
-Units of different kinds usually need different documents and different sections. Do not make a set per kind: give the set a **profile** per kind (step 2b).
+Units of different kinds usually need different documents and different sections. There are two ways to say so with a **profile** (step 2b). Give one set a profile per kind when the kinds share most of their documents: one set, one Generate button, a base that every kind has. Or make a set per kind with one profile named after it, as the starter does: the set has no files table, so it applies only to units of that kind, and each kind's design is versioned, reviewed and generated on its own.
 
 Some designs belong to the whole application, not to a unit (an architecture overview, an interface list). Give such a set `scope: application` in its `set.md`: it is written once under `10-applications/<app>/02-modern/_design/<set>/`, generated for the application, and a unit set can `need` it, so a detail design can point to its identifiers. Use `reads:` to name documents the designer should also read, and a `## Instructions` section for what is specific to that kind of design (see the [reference](../reference/design-templates.md)).
 
