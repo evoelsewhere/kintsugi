@@ -245,3 +245,24 @@
 .kt-searching g.node.kt-current :is(rect, path, polygon, circle, ellipse) {
   stroke-width: 6px !important;
 }
+
+/* A running step of a run's progress bar: a band of light travels along it, so a bar that is working does not look stopped. */
+@keyframes run-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.run-bar-active {
+  background-image: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.55) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: run-sweep 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-bar-active {
+    animation: none;
+    background-image: none;
+  }
+}

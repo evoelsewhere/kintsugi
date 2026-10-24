@@ -3,7 +3,7 @@
 // thing it did). Shared by the steps panel and the log console of a run.
 
 import { useEffect, useRef, useState } from "react";
-import { type JobRunEvent, jobRunsApi } from "@/lib/api/job-runs";
+import { type JobRunEvent, type JobRunView, jobRunsApi } from "@/lib/api/job-runs";
 
 /** Lines kept in memory; the log keeps the newest. */
 const MAX_EVENTS = 3000;
@@ -163,3 +163,114 @@ export function withDescendants(id: string, childrenOf: Readonly<Record<string, 
 
 /** One line of the exported log. */
 export const logLine = (event: JobRunEvent, label: string): string => `${event.at}  ${label.padEnd(24)}  ${event.message}`;
+
+/** A burst of the same kind of tool call by one step, told in plain words (the overview's activity feed). */
+export interface FeedGroup {
+  key: string;
+  stepRunId: string | undefined;
+  tool: string;
+  count: number;
+  /** What the burst touched: a folder when they share one, a file name, a pattern. */
+  target: string;
+  /** The burst is the newest thing its step did. */
+  at: string;
+  /** The tool calls were blocked. */
+  blocked: boolean;
+}
+
+export const tidyPath = (text: string): string => text.replaceAll("[redacted]/", "").replace(/^(as-is|to-be)\//, "");
+
+/** Consecutive tool calls of one step with the same tool become one group; a step's other events end its burst. */
+export function feedGroups(events: readonly JobRunEvent[]): FeedGroup[] {
+  const groups: FeedGroup[] = [];
+  const open = new Map<string, { group: FeedGroup; targets: string[] }>();
+  for (const event of events) {
+    if (categoryOf(event) !== "tool") continue;
+    const tool = toolOf(event) ?? "tool";
+    const blocked = event.data["decision"] === "blocked";
+    const step = event.stepRunId ?? "";
+    const body = event.message.startsWith("blocked: ") ? event.message.slice(9) : event.message;
+    const rest = tidyPath(body.startsWith(tool) ? body.slice(tool.length).trimStart() : body);
+    const current = open.get(step);
+    if (current !== undefined && current.group.tool === tool && current.group.blocked === blocked) {
+      current.group.count += 1;
+      current.group.at = event.at;
+      current.targets.push(rest);
+    } else {
+      const group: FeedGroup = { key: event.id, stepRunId: event.stepRunId, tool, count: 1, target: rest, at: event.at, blocked };
+      groups.push(group);
+      open.set(step, { group, targets: [rest] });
+    }
+    const entry = open.get(step)!;
+    const first = entry.targets[0] ?? "";
+    const folders = new Set(entry.targets.map((target) => (target.includes("/") ? target.slice(0, target.lastIndexOf("/")) : "")));
+    entry.group.target = entry.targets.length === 1 ? first : folders.size === 1 && [...folders][0] !== "" ? `${[...folders][0]}/` : `${first.split(" ")[0] ?? first} and others`;
+  }
+  return groups;
+}
+
+const plural = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`;
+
+/** "Read 12 files in app/cbl", "Wrote result.json", "Searched app for “CCDA-MSG”": what a burst of tool calls did. */
+export function describeGroup(group: FeedGroup): string {
+  const { tool, count, target, blocked } = group;
+  const where = target === "" ? "" : ` ${count === 1 ? "" : "in "}${target}`.replace("  ", " ");
+  if (blocked) return `Blocked ${plural(count, "call")} (${tool})${target === "" ? "" : ` ${target}`}`;
+  switch (tool) {
+    case "read":
+      return count === 1 ? `Read ${target}` : `Read ${plural(count, "file")}${where}`;
+    case "write":
+      return count === 1 ? `Wrote ${target}` : `Wrote ${plural(count, "file")}${where}`;
+    case "edit":
+      return count === 1 ? `Edited ${target}` : `Edited ${plural(count, "file")}${where}`;
+    case "grep":
+      return count === 1 ? `Searched ${target}` : `Ran ${plural(count, "search", "searches")}${where}`;
+    case "find":
+      return count === 1 ? `Looked for files ${target}` : `Looked for files ${count} times`;
+    case "ls":
+      return count === 1 ? `Listed ${target || "a folder"}` : `Listed ${plural(count, "folder")}`;
+    case "shell":
+    case "git":
+      return count === 1 ? `Ran a command: ${target}` : `Ran ${plural(count, "command")}`;
+    case "codemode":
+      return count === 1 ? "Ran an analysis script" : `Ran ${plural(count, "analysis script")}`;
+    default:
+      return `${tool}${count > 1 ? ` ×${count}` : ""} ${target}`.trim();
+  }
+}
+
+/** Names like `business-rules-extractor` as people say them. */
+export const humanize = (name: string): string => {
+  const words = name.replace(/[-_]+/g, " ").trim();
+  return words === "" ? name : words[0]!.toUpperCase() + words.slice(1);
+};
+
+/** One step on the run's timeline: where its bar starts and how long it is, as shares of the whole run. */
+export interface TimelineRow {
+  id: string;
+  name: string;
+  status: JobRunView["status"];
+  /** Undefined for a step that has not started. */
+  offsetPct?: number;
+  widthPct?: number;
+  durationMs?: number;
+}
+
+/**
+ * The steps of a run laid on one time axis, from the first start to the last finish (or `now` while a step runs), so
+ * parallel steps overlap and the slow one shows. A step that has not started has a row but no bar.
+ */
+export function timelineOf(steps: readonly JobRunView[], now: number): { rows: TimelineRow[]; totalMs: number; started: number } {
+  const started = steps.filter((step) => step.startedAt !== undefined);
+  if (started.length === 0) return { rows: steps.map((step) => ({ id: step.id, name: step.name, status: step.status })), totalMs: 0, started: 0 };
+  const begin = Math.min(...started.map((step) => Date.parse(step.startedAt!)));
+  const endOf = (step: JobRunView): number => (step.finishedAt === undefined ? now : Date.parse(step.finishedAt));
+  const totalMs = Math.max(1, ...started.map(endOf)) - begin;
+  const rows = steps.map((step): TimelineRow => {
+    if (step.startedAt === undefined) return { id: step.id, name: step.name, status: step.status };
+    const from = Date.parse(step.startedAt) - begin;
+    const durationMs = Math.max(0, endOf(step) - Date.parse(step.startedAt));
+    return { id: step.id, name: step.name, status: step.status, offsetPct: (from / totalMs) * 100, widthPct: Math.max((durationMs / totalMs) * 100, 0.8), durationMs };
+  });
+  return { rows, totalMs, started: started.length };
+}
