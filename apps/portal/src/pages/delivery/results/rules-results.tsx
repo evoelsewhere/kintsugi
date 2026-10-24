@@ -10,7 +10,7 @@ import { Markdown } from "@/components/results/lazy-markdown";
 import { Loaded } from "@/components/loaded";
 import { StatusBadge } from "@/components/status-badges";
 import { type Column, DataTable } from "@/components/ui/data-table";
-import { Drawer } from "@/components/ui/drawer";
+import { DetailPage } from "@/components/detail-page";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import { type CatalogRule, type DataObject, type RulesResults, documentsApi } from "@/lib/api/documents";
@@ -206,9 +206,9 @@ function RulesTab({ results, open, setOpen, projectId, commit }: { results: Rule
           empty="No rule matches these filters."
         />
       </Section>
-      <Drawer open={rule !== undefined} title={rule?.name ?? ""} subtitle={rule === undefined ? undefined : <RuleSubtitle rule={rule} />} onClose={() => setOpen(undefined)}>
+      <DetailPage open={rule !== undefined} title={rule?.name ?? ""} subtitle={rule === undefined ? undefined : <RuleSubtitle rule={rule} />} onClose={() => setOpen(undefined)}>
         {rule === undefined ? null : <RuleDetail rule={rule} rules={results.rules} onOpen={setOpen} projectId={projectId} commit={commit} />}
-      </Drawer>
+      </DetailPage>
     </div>
   );
 }

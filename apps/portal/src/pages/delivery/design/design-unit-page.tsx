@@ -8,7 +8,7 @@ import { Loaded } from "@/components/loaded";
 import { DocumentLinksProvider } from "@/components/results/document-links";
 import { Markdown } from "@/components/results/lazy-markdown";
 import { type Column, DataTable } from "@/components/ui/data-table";
-import { Drawer } from "@/components/ui/drawer";
+import { DetailPage } from "@/components/detail-page";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ export const COVERAGE_VIEW = "coverage";
 
 const fileState = (file: DesignFile): DesignState => (file.state === "problems" ? "problems" : file.state === "missing" ? "missing" : file.state === "waived" ? "waived" : file.stale ? "stale" : "conformant");
 
-export function UnitDesignDrawer({
+export function UnitDesignPage({
   project,
   application,
   unitKey,
@@ -62,9 +62,9 @@ export function UnitDesignDrawer({
   if (unitKey === undefined) return null;
   const unit = loader.data;
   return (
-    <Drawer
+    <DetailPage
       open
-      size="wide"
+     
       title={unitKey === APPLICATION_UNIT_KEY ? "The application" : unitKey}
       subtitle={unit === undefined ? undefined : unitKey === APPLICATION_UNIT_KEY ? `its own design${unit.unit.title === undefined ? "" : ` · ${unit.unit.title}`}` : `${unit.unit.kind}${unit.unit.title === undefined || unit.unit.title === unit.unit.unit ? "" : ` · ${unit.unit.title}`}`}
       onClose={onClose}
@@ -78,7 +78,7 @@ export function UnitDesignDrawer({
           )
         }
       </Loaded>
-    </Drawer>
+    </DetailPage>
   );
 }
 

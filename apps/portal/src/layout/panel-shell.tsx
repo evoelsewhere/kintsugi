@@ -4,6 +4,7 @@
 
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
+import { DetailHost } from "../components/detail-page";
 import type { ShellContext } from "../lib/shell";
 import { SettingsModal } from "../pages/settings/settings-modal";
 import { Sidebar } from "./sidebar";
@@ -20,7 +21,9 @@ export function PanelShell(): React.JSX.Element {
       <Sidebar onOpenSettings={() => setSettings({ open: true })} />
       <main className="min-w-0 flex-1">
         <div className="w-full px-4 py-4 sm:px-5 md:px-5 md:py-5">
-          <Outlet context={context} />
+          <DetailHost>
+            <Outlet context={context} />
+          </DetailHost>
         </div>
       </main>
       <SettingsModal

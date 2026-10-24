@@ -10,7 +10,7 @@ import { MermaidDiagram } from "@/components/results/mermaid-diagram";
 import { StatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { type Column, DataTable } from "@/components/ui/data-table";
-import { Drawer } from "@/components/ui/drawer";
+import { DetailPage } from "@/components/detail-page";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import type { MapNode, MapResults, TopoEdge, TopoFlow } from "@/lib/api/documents";
@@ -64,9 +64,9 @@ export function MapResultsView({ results, compare }: { results: MapResults; comp
       {tab === "flows" && topology !== null ? <FlowsTab topology={topology} onOpen={setDetail} /> : null}
 
       {topology === null ? null : (
-        <Drawer open={detail !== undefined} title={topology.nodes.find((node) => node.id === detail)?.name ?? ""} subtitle={detail} onClose={() => setDetail(undefined)}>
+        <DetailPage open={detail !== undefined} title={topology.nodes.find((node) => node.id === detail)?.name ?? ""} subtitle={detail} onClose={() => setDetail(undefined)}>
           {detail === undefined ? null : <NodeDetail topology={topology} id={detail} onOpen={setDetail} />}
-        </Drawer>
+        </DetailPage>
       )}
     </div>
   );

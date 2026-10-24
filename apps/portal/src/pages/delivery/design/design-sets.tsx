@@ -8,7 +8,7 @@ import { lazy, Suspense } from "react";
 import { designSetDir } from "@kintsugi/domain";
 import { Card } from "@/components/ui/card";
 import { type Column, DataTable } from "@/components/ui/data-table";
-import { Drawer } from "@/components/ui/drawer";
+import { DetailPage } from "@/components/detail-page";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import type { DesignProfile, DesignSet, DesignSetFile, DesignSetsView } from "@/lib/api/design";
@@ -96,9 +96,9 @@ export function DesignSetsTab({
         </Card>
       )}
       {sets.length === 0 ? null : <DataTable label="Design sets" rows={sets} columns={columns} rowKey={(set) => set.id} onRowClick={(set) => onChoose(set.id)} selectedKey={chosen} pageSize={0} minWidth={640} />}
-      <Drawer open={selected !== undefined} size="wide" title={selected?.title ?? ""} subtitle={selected === undefined ? undefined : <span className="font-mono">{setLabel(selected)}</span>} onClose={() => onChoose(undefined)}>
+      <DetailPage open={selected !== undefined} title={selected?.title ?? ""} subtitle={selected === undefined ? undefined : <span className="font-mono">{setLabel(selected)}</span>} onClose={() => onChoose(undefined)}>
         {selected === undefined ? null : <SetDetail set={selected} sets={sets} problems={problems} onChoose={onChoose} />}
-      </Drawer>
+      </DetailPage>
     </div>
   );
 }

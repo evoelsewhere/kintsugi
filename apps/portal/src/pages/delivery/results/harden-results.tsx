@@ -12,7 +12,7 @@ import { useDocumentLinkHandler } from "@/components/results/use-document-links"
 import { Markdown } from "@/components/results/lazy-markdown";
 import { StatusBadge } from "@/components/status-badges";
 import { type Column, DataTable } from "@/components/ui/data-table";
-import { Drawer } from "@/components/ui/drawer";
+import { DetailPage } from "@/components/detail-page";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import type { CarryOverItem, Finding, HardenResults, Severity } from "@/lib/api/documents";
@@ -221,7 +221,7 @@ function FindingsTab({ results, open, setOpen }: { results: HardenResults; open:
         }
         empty="No finding matches this filter."
       />
-      <Drawer
+      <DetailPage
         open={finding !== undefined}
         title={finding?.title ?? ""}
         subtitle={
@@ -264,7 +264,7 @@ function FindingsTab({ results, open, setOpen }: { results: HardenResults; open:
             </Field>
           </div>
         )}
-      </Drawer>
+      </DetailPage>
     </Section>
   );
 }
