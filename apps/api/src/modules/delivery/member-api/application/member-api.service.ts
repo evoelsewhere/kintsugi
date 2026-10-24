@@ -2,10 +2,12 @@
 // Authorization of project-scoped reads is done before this layer (AllowMemberRead); the list is filtered here.
 
 import { createHash } from "node:crypto";
-import { BadRequestException, ForbiddenException, Injectable, PayloadTooLargeException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, PayloadTooLargeException, UnprocessableEntityException } from "@nestjs/common";
 import {
   DEFAULT_LIST_LIMIT,
+  DistributableError,
   MEMBER_SCHEMA_VERSION,
+  assertSafeHooks,
   type ActivityInput,
   type ActivityReceipt,
   type DocumentFile,
@@ -103,6 +105,11 @@ export class MemberApiService {
     const files: PluginBundle["files"] = [];
     for (const path of paths) {
       const { content } = await this.plugins.file(name, path);
+      // A hook a plugin declares may only report to monitoring (ADR-0072); anything else keeps the plugin off members' machines.
+      try { assertSafeHooks(path, content); } catch (error) {
+        if (error instanceof DistributableError) throw new UnprocessableEntityException(`The plugin ${name} cannot be distributed: ${error.message}`);
+        throw error;
+      }
       bytes += Buffer.byteLength(content, "utf8");
       if (bytes > MAX_BUNDLE_BYTES) throw new PayloadTooLargeException("The plugin is larger than 1 MiB");
       files.push({ path, content, sha256: sha256(content) });

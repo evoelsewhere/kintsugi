@@ -142,3 +142,4 @@ export interface HarnessPolicy {
 
 export * from "./member.js";
 export * from "./member-schemas.js";
+export * from "./distributable.js";

@@ -1,7 +1,7 @@
 import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export interface Profile {
   id: string;
@@ -30,6 +30,11 @@ export class CliError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+/** The profile of one project on one installation: `connect`, `init`, `login` and the plugin commands all find it by this name. */
+export function stableProjectProfileId(baseUrl: string, projectId: string): string {
+  return `kintsugi-${createHash("sha256").update(`${baseUrl}\0${projectId}`, "utf8").digest("hex").slice(0, 12)}`;
 }
 
 export function isProfileId(value: string): boolean {

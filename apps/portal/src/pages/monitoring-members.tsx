@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { memberActivityApi } from "@/lib/api/member-plugins";
 import { projectsApi } from "@/lib/api/projects";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { activityLine } from "@/lib/member-activity";
 import { useLoader } from "@/lib/use-loader";
 
 const PAGE_SIZE = 25;
@@ -34,7 +35,7 @@ export function MembersView(): React.JSX.Element {
         <CardHeader className="flex-wrap px-4 pt-3">
           <div>
             <CardTitle>Members</CardTitle>
-            <CardDescription>What each member's connections did in the project over the last 30 days: plugin downloads, document reads and what plugins recorded.</CardDescription>
+            <CardDescription>What each member's connections did in the project over the last 30 days: plugin downloads, document reads, what plugin commands used (tokens, turns, time) and what plugins recorded.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-56">
@@ -97,7 +98,7 @@ export function MembersView(): React.JSX.Element {
                           <td className="px-2 py-2 text-text">{record.username}</td>
                           <td className="px-2 py-2 text-text-secondary">{record.pluginName ?? "—"}{record.harness === undefined ? "" : ` · ${record.harness}`}</td>
                           <td className="px-2 py-2 text-text-secondary">{record.kind}</td>
-                          <td className="max-w-[360px] truncate px-4 py-2 text-text-secondary" title={record.summary}>{record.summary === "" ? "—" : record.summary}</td>
+                          <td className="max-w-[420px] truncate px-4 py-2 text-text-secondary" title={activityLine(record)}>{activityLine(record)}</td>
                         </tr>
                       ))}
                     </tbody>

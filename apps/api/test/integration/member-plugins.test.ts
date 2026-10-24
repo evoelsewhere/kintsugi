@@ -49,52 +49,39 @@ describe.skipIf(!hasDatabase)("member plugins (integration)", () => {
 
     expect((await admin.request("PUT", "/admin/plugin-access/plug-one/reverse_engineering/*", { body: {} })).status).toBe(400);
     expect((await admin.request("PUT", "/admin/plugin-access/plug-one/no-such-plugin/*", { body: {} })).status).toBe(404);
-    expect((await admin.request("PUT", "/admin/plugin-access/plug-one/context/no-such-user", { body: {} })).status).toBe(404);
-    expect((await admin.request("PUT", "/admin/plugin-access/plug-one/context/*", { body: {} })).status).toBe(204);
+    expect((await admin.request("PUT", "/admin/plugin-access/plug-one/modernize/no-such-user", { body: {} })).status).toBe(404);
+    expect((await admin.request("PUT", "/admin/plugin-access/plug-one/modernize/*", { body: {} })).status).toBe(204);
 
     const grants = await admin.get<{ items: Array<{ pluginName: string; userId: string }> }>("/admin/plugin-access/plug-one");
-    expect(grants.body.data?.items).toEqual([expect.objectContaining({ pluginName: "context", userId: "*" })]);
+    expect(grants.body.data?.items).toEqual([expect.objectContaining({ pluginName: "modernize", userId: "*" })]);
     const listed = await new Client(app).request<{ items: Array<{ name: string }> }>("GET", "/member/v1/plugins?projectId=plug-one", bearer(token));
-    expect(listed.body.data?.items.map((item) => item.name)).toEqual(["context"]);
+    expect(listed.body.data?.items.map((item) => item.name)).toEqual(["modernize"]);
     // The grant is per project.
     const other = await new Client(app).request("GET", "/member/v1/plugins?projectId=plug-two", bearer(await issue(app, adminId, ["plug-two"])));
     expect((other.body.data as { items: unknown[] }).items).toEqual([]);
   });
 
-  it("downloads a granted plugin with verifiable hashes and nothing that runs code", async () => {
-    const response = await new Client(app).request<Bundle>("GET", "/member/v1/plugins/context?projectId=plug-one", bearer(token));
+  it("downloads a granted plugin with verifiable hashes, only the member part and nothing that runs code (ADR-0071)", async () => {
+    const response = await new Client(app).request<Bundle>("GET", "/member/v1/plugins/modernize?projectId=plug-one", bearer(token));
     expect(response.status).toBe(200);
     const bundle = response.body.data!;
-    expect(bundle.name).toBe("context");
-    expect(bundle.files.map((file) => file.path)).toContain("skills/kintsugi-context/SKILL.md");
-    expect(bundle.files.every((file) => /^(skills\/|agents\/|commands\/)/.test(file.path))).toBe(true);
+    expect(bundle.name).toBe("modernize");
+    const paths = bundle.files.map((file) => file.path);
+    expect(paths).toEqual(expect.arrayContaining(["commands/build.md", "skills/build-method/SKILL.md", "skills/unit-testing/SKILL.md"]));
+    // Never a runtime command or agent (the review is the runtime's), a design skill, or anything that runs.
+    expect(paths.every((path) => /^(commands\/build\.md|skills\/(build-method|unit-testing)\/.+)$/.test(path))).toBe(true);
     for (const file of bundle.files) expect(createHash("sha256").update(file.content).digest("hex")).toBe(file.sha256);
     const expected = createHash("sha256").update(bundle.files.map((file) => `${file.path}:${file.sha256}`).join(";")).digest("hex");
     expect(bundle.contentHash).toBe(`sha256:${expected}`);
 
     // A runtime plugin is never distributed, and a plugin that is not granted is refused.
-    expect((await new Client(app).request("GET", "/member/v1/plugins/modernize?projectId=plug-one", bearer(token))).status).toBe(403);
-    expect((await new Client(app).request("GET", "/member/v1/plugins/context?projectId=plug-two", bearer(token))).status).toBe(403);
-  });
-
-  it("sends a member only the member part of a plugin of both (ADR-0071)", async () => {
-    expect((await admin.request("PUT", "/admin/plugin-access/plug-one/modernize/*", { body: {} })).status).toBe(204);
-    const listed = await new Client(app).request<{ items: Array<{ name: string }> }>("GET", "/member/v1/plugins?projectId=plug-one", bearer(token));
-    expect(listed.body.data?.items.map((item) => item.name).sort()).toEqual(["context", "modernize"]);
-
-    const response = await new Client(app).request<Bundle>("GET", "/member/v1/plugins/modernize?projectId=plug-one", bearer(token));
-    expect(response.status).toBe(200);
-    const paths = response.body.data!.files.map((file) => file.path);
-    expect(paths).toEqual(expect.arrayContaining(["commands/build.md", "skills/build-method/SKILL.md", "skills/unit-testing/SKILL.md"]));
-    // Never a runtime command or agent (the review is the runtime's), a design skill, or anything that runs.
-    expect(paths.every((path) => /^(commands\/build\.md|skills\/(build-method|unit-testing)\/.+)$/.test(path))).toBe(true);
-
-    expect((await admin.request("DELETE", "/admin/plugin-access/plug-one/modernize/*", { body: {} })).status).toBe(204);
+    expect((await new Client(app).request("GET", "/member/v1/plugins/reverse_engineering?projectId=plug-one", bearer(token))).status).toBe(403);
+    expect((await new Client(app).request("GET", "/member/v1/plugins/modernize?projectId=plug-two", bearer(token))).status).toBe(403);
   });
 
   it("records what a plugin did within bounds and keeps Kintsugi's own kinds to itself", async () => {
     const client = new Client(app);
-    const recorded = await client.request<{ id: string }>("POST", "/member/v1/activity", { ...bearer(token), body: { projectId: "plug-one", kind: "result", pluginName: "context", harness: "claude-code", summary: "Reviewed the standards", detail: { documents: 3, ok: true } } });
+    const recorded = await client.request<{ id: string }>("POST", "/member/v1/activity", { ...bearer(token), body: { projectId: "plug-one", kind: "result", pluginName: "modernize", harness: "claude-code", summary: "Reviewed the standards", detail: { documents: 3, ok: true } } });
     expect(recorded.status).toBe(201);
     expect(recorded.body.data?.id).toBeTruthy();
 
@@ -102,7 +89,7 @@ describe.skipIf(!hasDatabase)("member plugins (integration)", () => {
     expect((await post({ projectId: "plug-one", kind: "plugin.download" })).status).toBe(400);
     expect((await post({ projectId: "plug-one", kind: "Bad Kind" })).status).toBe(400);
     expect((await post({ projectId: "plug-one", kind: "note", summary: "x".repeat(501) })).status).toBe(400);
-    expect((await post({ projectId: "plug-one", kind: "note", pluginName: "modernize" })).status).toBe(403);
+    expect((await post({ projectId: "plug-one", kind: "note", pluginName: "reverse_engineering" })).status).toBe(403);
     // The token covers plug-one only.
     expect((await post({ projectId: "plug-two", kind: "note" })).status).toBe(403);
     // A write needs a token or a session: an anonymous request is refused, with or without the CSRF header.
@@ -118,7 +105,7 @@ describe.skipIf(!hasDatabase)("member plugins (integration)", () => {
     expect(list.status).toBe(200);
     const kinds = list.body.data!.items.map((item) => item.kind);
     expect(kinds).toEqual(expect.arrayContaining(["plugin.download", "result"]));
-    expect(list.body.data!.items.find((item) => item.kind === "result")).toMatchObject({ pluginName: "context", username: "admin", summary: "Reviewed the standards" });
+    expect(list.body.data!.items.find((item) => item.kind === "result")).toMatchObject({ pluginName: "modernize", username: "admin", summary: "Reviewed the standards" });
 
     const filtered = await admin.get<Activity>("/monitoring/member-activity?projectId=plug-one&kind=result");
     expect(filtered.body.data!.items.every((item) => item.kind === "result")).toBe(true);
@@ -126,15 +113,15 @@ describe.skipIf(!hasDatabase)("member plugins (integration)", () => {
     const summary = await admin.get<Usage>("/monitoring/member-activity/summary?projectId=plug-one");
     const me = summary.body.data!.members.find((member) => member.username === "admin")!;
     expect(me.kinds["result"]).toBeGreaterThanOrEqual(1);
-    expect(me.plugins["context"]).toBeGreaterThanOrEqual(2);
+    expect(me.plugins["modernize"]).toBeGreaterThanOrEqual(2);
 
     const bob = await memberClient(app, admin, "plugin-bob", ["user"]);
     expect((await bob.client.get("/monitoring/member-activity?projectId=plug-one")).status).toBe(403);
   });
 
   it("withdraws a grant", async () => {
-    expect((await admin.request("DELETE", "/admin/plugin-access/plug-one/context/*", { body: {} })).status).toBe(204);
-    expect((await new Client(app).request("GET", "/member/v1/plugins/context?projectId=plug-one", bearer(token))).status).toBe(403);
+    expect((await admin.request("DELETE", "/admin/plugin-access/plug-one/modernize/*", { body: {} })).status).toBe(204);
+    expect((await new Client(app).request("GET", "/member/v1/plugins/modernize?projectId=plug-one", bearer(token))).status).toBe(403);
     const after = await admin.get<{ items: unknown[] }>("/admin/plugin-access/plug-one");
     expect(after.body.data?.items).toEqual([]);
   });

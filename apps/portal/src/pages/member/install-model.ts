@@ -1,15 +1,13 @@
-export type InstallHarness = "claude-code" | "codex";
 export type InstallShell = "powershell" | "posix";
-export type PluginInstallMode = "native-cli" | "desktop-ui";
 
-export interface PluginInstallCommandInput {
+export interface SetupCommandsInput {
   baseUrl: string;
   projectId: string;
-  harness: InstallHarness;
-  installMode?: PluginInstallMode;
   shell: InstallShell;
   /** Add --url, for a CLI that was not installed from this installation. */
   withUrl?: boolean;
+  /** The plugin to install into every client that was set up. */
+  plugin?: string;
 }
 
 export interface MemberAuthorizationRequest {
@@ -47,21 +45,22 @@ function quote(value: string, shell: InstallShell): string {
     : `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-/** The short command that connects an AI client to a project: `kintsugi connect claude billing-api`. */
-export function buildPluginInstallCommand(input: PluginInstallCommandInput): string {
+/**
+ * The commands that take a member from an installed CLI to a project ready in their AI clients (ADR-0072): sign in, set up the
+ * clients found on the machine (the CLI asks which, and whether globally or for the workspace), install a plugin into them.
+ */
+export function buildSetupCommands(input: SetupCommandsInput): string[] {
   const baseUrl = canonicalBaseUrl(input.baseUrl);
-  if (input.harness !== "claude-code" && input.harness !== "codex") throw new Error("Choose a supported AI client.");
-  const installMode = input.installMode ?? "native-cli";
-  if (installMode !== "native-cli" && installMode !== "desktop-ui") throw new Error("Choose a supported install mode.");
-  if (installMode === "desktop-ui" && input.harness !== "codex") throw new Error("The desktop UI install is currently available for Codex Desktop.");
   if (input.shell !== "powershell" && input.shell !== "posix") throw new Error("Choose a supported terminal shell.");
   if (input.projectId.trim() !== input.projectId || input.projectId.length < 1 || input.projectId.length > 200 || hasControlCharacters(input.projectId)) {
     throw new Error("Kintsugi project ID is invalid.");
   }
-  const client = input.harness === "claude-code" ? "claude" : installMode === "desktop-ui" ? "codex-desktop" : "codex";
+  const plugin = input.plugin ?? "modernize";
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(plugin)) throw new Error("Kintsugi plugin name is invalid.");
   const project = /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(input.projectId) ? input.projectId : quote(input.projectId, input.shell);
   // A CLI installed from this installation already knows its URL; the flag is for one installed from elsewhere.
-  return ["kintsugi connect", client, project, ...(input.withUrl === true ? ["--url", quote(baseUrl, input.shell)] : [])].join(" ");
+  const url = input.withUrl === true ? ` --url ${quote(baseUrl, input.shell)}` : "";
+  return [`kintsugi login ${project}${url}`, "kintsugi init", `kintsugi install plugin ${plugin} --all`];
 }
 
 export function parseMemberAuthorizationRequest(search: string): MemberAuthorizationRequest | undefined {

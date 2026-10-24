@@ -5,6 +5,7 @@ import type { Command } from "commander";
 import type { ActivityDetail } from "@kintsugi/harness-sdk";
 import type { CliDeps } from "../cli.js";
 import { CliError } from "../profile.js";
+import { registerActivityHookCommand } from "./activity-hook.js";
 import { apiFor, emit, projectId, type CommandOptions } from "./shared.js";
 
 function detailOf(entries: readonly string[]): ActivityDetail | undefined {
@@ -43,4 +44,5 @@ export function registerActivityCommands(program: Command, deps: CliDeps): void 
       });
       emit(deps, this, receipt);
     });
+  registerActivityHookCommand(activity, deps);
 }

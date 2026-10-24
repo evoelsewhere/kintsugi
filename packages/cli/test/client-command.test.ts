@@ -53,6 +53,8 @@ describe("runNativeClientCommand", () => {
     expect(args).toEqual(["-NoLogo", "-NoProfile", "-EncodedCommand", expect.any(String)]);
     const decoded = Buffer.from(args[3]!, "base64").toString("utf16le");
     expect(decoded).toContain("ConvertFrom-Json");
+    // Each argument is its own element: PowerShell 5.1 would otherwise join them into one.
+    expect(decoded).toContain("foreach ($argument in $parsedArgs)");
     expect(decoded).toContain("& $application.Source @nativeArgs");
     expect(decoded).not.toContain(nativeArgs[3]);
     expect((options as { shell: boolean }).shell).toBe(false);

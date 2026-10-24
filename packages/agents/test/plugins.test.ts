@@ -5,10 +5,9 @@ import { describe, expect, it } from "vitest";
 import { loadBuiltinPlugins, PLUGIN_MANIFEST_FILE, readBuiltinPluginFile } from "../src/index.js";
 
 describe("built-in plugins", () => {
-  it("ships the member context plugin beside the runtime plugins", async () => {
+  it("ships the runtime plugins and the plugin of both audiences", async () => {
     const plugins = await loadBuiltinPlugins();
     expect(plugins.map((plugin) => [plugin.name, plugin.audience])).toEqual([
-      ["context", "member"],
       ["reverse_engineering", "runtime"],
       ["modernize", "both"],
     ]);
@@ -26,11 +25,10 @@ describe("built-in plugins", () => {
     expect(modernize.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["architecture-critic", "code-reviewer", "design-reviewer", "designer"]);
   });
 
-  it("sends a member only the member part of a plugin of both, and everything of a member plugin (ADR-0071)", async () => {
+  it("sends a member only the member part of a plugin of both (ADR-0071)", async () => {
     const plugins = await loadBuiltinPlugins();
     const byName = (name: string) => plugins.find((plugin) => plugin.name === name)!;
     expect(byName("reverse_engineering").memberFiles).toEqual([]);
-    expect(byName("context").memberFiles).toEqual(byName("context").files.map((file) => file.path));
 
     const modernize = byName("modernize");
     expect(modernize.memberFiles).toEqual(
@@ -55,7 +53,6 @@ describe("built-in plugins", () => {
   it("keeps the parts two plugins share identical, and a plugin that needs another says so", async () => {
     const plugins = await loadBuiltinPlugins();
     expect(plugins.map((plugin) => [plugin.name, plugin.requires])).toEqual([
-      ["context", []],
       ["reverse_engineering", []],
       ["modernize", ["reverse_engineering"]],
     ]);
