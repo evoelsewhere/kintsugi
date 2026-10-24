@@ -55,13 +55,31 @@ export async function writeManifest(file: string, manifest: Omit<WorkspaceManife
   return complete;
 }
 
+/**
+ * Renames over `file`. Windows refuses it (EPERM, EBUSY, EACCES) while something else has the target or the new
+ * copy open, typically a virus scanner or an indexer that has just seen the file: the refusal passes within moments, so
+ * it is retried briefly before it counts as a failure.
+ */
+async function renameOverFile(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (process.platform !== "win32" || !["EPERM", "EBUSY", "EACCES"].includes(code ?? "") || attempt >= 20) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+    }
+  }
+}
+
 /** A file replaced by renaming a finished copy over it: a reader sees the old content or the new one, never half. */
 export async function writeAtomically(file: string, content: string): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
   try {
     await writeFile(temporary, content, "utf8");
-    await rename(temporary, file);
+    await renameOverFile(temporary, file);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => undefined);
     throw error;
