@@ -11,9 +11,9 @@ The folders are numbered in reading order (ADR-0051):
 
 ```text
 kintsugi.yaml                  project manifest (repositories, unit kinds, pipelines, policy)
-00-project/                    P0-P1: charter, RACI, AI strategy and usage policy, KPI baseline, glossary, portfolio/
+00-project/                    P0-P1: charter, RACI, risks, AI strategy and usage policy, KPI baseline, glossary, portfolio/
 01-standards/                  P2-P3: conventions/, mappings/, review-rules.md, templates/ (the design sets)
-02-architecture/               P2: blueprint, PoC plan, adr/, common/ (the common components)
+02-architecture/               P2: blueprint and the overall design (context, components, technology, data, integration, security, quality, deployment), adr/, common/
 03-transition/                 P2-P4: coexistence, data migration, shared-data/ (master data and shared formats)
 10-applications/<app>/
   README.md                    the application's overview
@@ -39,7 +39,7 @@ migrated; both halves of its application use the same `<module>/<unit>` path:
 
 10-applications/<app>/02-modern/<module>/<unit>/
   README.md                    the unit's card: identity, kind, source → target, wave, state, waived design files
-  <set>/                       the unit's documents of one design set (basic/, detail/, api/, test/, ...)
+  <set>/                       the unit's documents of one design set (screen/, api/, batch-job/, test/, ...)
   task.md                      the task pack a member implements from
 ```
 

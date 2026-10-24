@@ -1,0 +1,31 @@
+---
+id: "ADR-0001"
+title: "Use a modular monolith for the billing application"
+status: "accepted"        # proposed | accepted | superseded | rejected
+date: "2026-10-01"
+deciders: ["architecture lead", "billing product owner"]
+supersedes: []
+---
+# ADR-0001: Use a modular monolith for the billing application
+
+## Context
+
+What forces the decision: the requirement, the constraint, the legacy behaviour, the options that are open. Two or three short paragraphs; cite the documents (`../blueprint.md`, a requirement id) instead of repeating them.
+
+## Decision
+
+What was decided, in one or two sentences a builder can act on: "The billing application is built as one deployable with a module per business area; modules call each other only through their public interface."
+
+## Consequences
+
+| Becomes easier | Becomes harder |
+| --- | --- |
+| One deployment, one database transaction across modules | A module cannot be scaled or released on its own |
+
+Follow-up work, risks and what to verify afterwards.
+
+## Alternatives considered
+
+| Option | Why not |
+| --- | --- |
+| Services per business area | Too many deployables for the team size; no need to scale areas separately |

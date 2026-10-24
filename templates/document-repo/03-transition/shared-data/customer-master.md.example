@@ -1,0 +1,47 @@
+---
+id: "customer-master"
+title: "Customer master"
+kind: "master-data"        # master-data | reference-codes | format
+owner: "customer data team"
+status: "draft"
+version: 1
+---
+# Customer master
+
+The customer record every application reads. One owner writes it; the others read it through the owner's interface.
+
+## Definition
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| customerId | string, 1-12 digits | yes | never reused |
+| name | string, up to 100 | yes | |
+| status | one of active, suspended, closed | yes | see Codes |
+| taxNumber | string | no | class restricted |
+
+## Codes
+
+| Code | Meaning | Since |
+| --- | --- | --- |
+| active | the customer may be invoiced | - |
+| suspended | no new invoices; open ones stay | - |
+| closed | no activity; kept for the retention period | - |
+
+## Ownership and access
+
+| Who | May |
+| --- | --- |
+| customer data team | create and change |
+| billing-web | read |
+
+## Rules
+
+| Id | Rule | Source |
+| --- | --- | --- |
+| SD-01 | A customer is closed only when it has no open invoice | <!-- RULE id in the legacy specification --> |
+
+## Changes
+
+| Date | Change | Decided in |
+| --- | --- | --- |
+| <!-- --> | <!-- --> | <!-- an ADR --> |
