@@ -3,166 +3,46 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inside one stage</title>
+  <title>Inside one Kintsugi stage job</title>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --color-paper:   #24262a;
-      --color-ink:     #eceae6;
-      --color-muted:   #a8b3c4;
-      --color-accent:  #45c9ab;
+      --color-paper:   #F7F2E6;
+      --color-ink:     #1E2A44;
+      --color-muted:   #5B6781;
+      --color-accent:  #B8822A;
       --font-sans:     'Geist', system-ui, sans-serif;
       --font-serif:    'Instrument Serif', serif;
       --font-mono:     'Geist Mono', ui-monospace, monospace;
     }
     body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
-    .frame { max-width: 1200px; width: 100%; }
+    .frame { max-width: 1280px; width: 100%; }
     .diagram-container { width: 100%; overflow-x: auto; }
-    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
     h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
-    svg { width: 100%; min-width: 960px; display: block; }
+    svg { width: 100%; min-width: 1280px; display: block; }
     @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
   </style>
 </head>
 <body>
   <div class="frame">
-    <p class="eyebrow">Process · Kintsugi</p>
-    <h1>Inside one stage — P1 Discover &amp; Assess</h1>
+    <h1>Inside one stage: P1 Discover &amp; Assess</h1>
 
     <div class="diagram-container">
-      <svg viewBox="0 0 952 376" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="inside-a-stage-title inside-a-stage-desc">
+      <svg viewBox="0 0 1280 566" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="inside-a-stage-title inside-a-stage-desc">
         <title id="inside-a-stage-title">Inside one Kintsugi stage job</title>
-        <desc id="inside-a-stage-desc">A stage job alternates between script steps and AI reasoning steps, handing off inventory, topology, catalog and assessment files along the payload chain until a person reviews and merges the pull request.</desc>
+        <desc id="inside-a-stage-desc">A stage job alternates script steps and AI reasoning steps, passing inventory, topology, catalog and assessment files along a chain until a person reviews and merges the pull request.</desc>
         <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a8b3c4"/></marker>
-          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#45c9ab"/></marker>
-          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="0.8" fill="rgba(236,234,230,0.10)"/>
-          </pattern>
+          <linearGradient id="inside-a-stage-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7D98A"/><stop offset=".55" stop-color="#E0B04A"/><stop offset="1" stop-color="#B8822A"/></linearGradient>
+          <marker id="inside-a-stage-m-navy" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><polygon points="0 0, 11 4.5, 0 9" fill="#1E2A44"/></marker>
+          <marker id="inside-a-stage-m-gold" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><polygon points="0 0, 11 4.5, 0 9" fill="#B8822A"/></marker>
+          <marker id="inside-a-stage-m-slate" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><polygon points="0 0, 11 4.5, 0 9" fill="#5B6781"/></marker>
+          <marker id="inside-a-stage-m-teal" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><polygon points="0 0, 11 4.5, 0 9" fill="#2F7F79"/></marker>
+          <pattern id="inside-a-stage-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="#D2C7AB" opacity="0.55"/></pattern>
         </defs>
-
-        <rect width="100%" height="100%" fill="#24262a"/>
-        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
-
-        <!-- Step headers -->
-        <g font-family="'Geist Mono', monospace" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#eceae6" text-anchor="middle">
-          <rect x="188" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="198" y="14.5">1</text><text x="198" y="32">INVENTORY</text>
-          <rect x="300" y="2" width="20" height="18" rx="4" fill="rgba(69,201,171,0.12)"/><text x="310" y="14.5" fill="#45c9ab">2</text><text x="310" y="32" fill="#45c9ab">ANALYSIS</text>
-          <rect x="412" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="422" y="14.5">3</text><text x="422" y="32">TOPOLOGY</text>
-          <rect x="524" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="534" y="14.5">4</text><text x="534" y="32">CATALOG</text>
-          <rect x="636" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="646" y="14.5">5</text><text x="646" y="32">RECONCILE</text>
-          <rect x="748" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="758" y="14.5">6</text><text x="758" y="32">SYNTHESIS</text>
-          <rect x="860" y="2" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/><text x="870" y="14.5">7</text><text x="870" y="32">REVIEW</text>
-        </g>
-
-        <!-- Lanes -->
-        <rect x="0" y="36" width="952" height="160" fill="#2c2f34"/>
-        <line x1="0" y1="36" x2="952" y2="36" stroke="rgba(236,234,230,0.12)" stroke-width="1"/>
-        <line x1="0" y1="116" x2="952" y2="116" stroke="rgba(236,234,230,0.12)" stroke-width="1"/>
-        <line x1="0" y1="196" x2="952" y2="196" stroke="rgba(236,234,230,0.12)" stroke-width="1"/>
-        <line x1="0" y1="276" x2="952" y2="276" stroke="rgba(236,234,230,0.12)" stroke-width="1"/>
-        <g font-family="'Geist Mono', monospace" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#eceae6" text-anchor="middle">
-          <circle cx="18" cy="72" r="3" fill="none" stroke="#d887ac" stroke-width="1"/><text x="76" y="74">AI AGENTS</text>
-          <circle cx="18" cy="152" r="3" fill="none" stroke="#a8b3c4" stroke-width="1"/><text x="76" y="154">SCRIPTS</text>
-          <circle cx="18" cy="232" r="3" fill="none" stroke="#b3a8cf" stroke-width="1"/><text x="76" y="234">PERSON</text>
-        </g>
-
-        <!-- Arrows: zigzag single-bend handoffs -->
-        <g fill="none" stroke="#a8b3c4" stroke-width="1.2" marker-end="url(#arrow)">
-          <path d="M 248,156 H 302 Q 310,156 310,148 V 108"/>
-          <path d="M 360,76 H 414 Q 422,76 422,84 V 124"/>
-          <path d="M 472,156 H 526 Q 534,156 534,148 V 108"/>
-          <path d="M 584,76 H 638 Q 646,76 646,84 V 124"/>
-          <path d="M 696,156 H 750 Q 758,156 758,148 V 108"/>
-        </g>
-        <path d="M 808,76 H 862 Q 870,76 870,84 V 204" fill="none" stroke="#45c9ab" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
-
-        <!-- AGT lane nodes -->
-        <g font-family="'Geist', sans-serif">
-          <g><rect x="260" y="44" width="100" height="64" rx="6" fill="rgba(69,201,171,0.12)" stroke="#45c9ab" stroke-width="1.2"/>
-            <rect x="264" y="48" width="14" height="10" rx="2" fill="#45c9ab"/><text x="271" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">AGT</text>
-            <rect x="326" y="48" width="26" height="10" rx="2" fill="#45c9ab"/><text x="339" y="55.5" font-family="'Geist Mono', monospace" font-size="5.5" fill="#24262a" text-anchor="middle">FOCAL</text>
-            <text x="310" y="76" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Parallel analysis</text>
-            <text x="310" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">structure · debt · security</text>
-            <text x="310" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">2 analyst jobs</text>
-            <rect x="264" y="94" width="22" height="10" rx="5" fill="none" stroke="#a8b3c4" stroke-width="0.8"/><text x="275" y="101.5" font-family="'Geist Mono', monospace" font-size="6" fill="#eceae6" text-anchor="middle">FL</text>
-            <rect x="334" y="94" width="22" height="10" rx="5" fill="#a8b3c4"/><text x="345" y="101.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">FL</text></g>
-          <g><rect x="484" y="44" width="100" height="64" rx="6" fill="rgba(216,135,172,0.12)" stroke="#d887ac" stroke-width="1"/>
-            <rect x="488" y="48" width="14" height="10" rx="2" fill="#d887ac"/><text x="495" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">AGT</text>
-            <text x="534" y="76" font-size="9" font-weight="600" fill="#d887ac" text-anchor="middle">Catalog curation</text>
-            <text x="534" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">topology → catalog/</text>
-            <text x="534" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">legacy-analyst</text>
-            <rect x="488" y="94" width="22" height="10" rx="5" fill="none" stroke="#a8b3c4" stroke-width="0.8"/><text x="499" y="101.5" font-family="'Geist Mono', monospace" font-size="6" fill="#eceae6" text-anchor="middle">FL</text>
-            <rect x="558" y="94" width="22" height="10" rx="5" fill="#a8b3c4"/><text x="569" y="101.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">FL</text></g>
-          <g><rect x="708" y="44" width="100" height="64" rx="6" fill="rgba(216,135,172,0.12)" stroke="#d887ac" stroke-width="1"/>
-            <rect x="712" y="48" width="14" height="10" rx="2" fill="#d887ac"/><text x="719" y="55.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">AGT</text>
-            <text x="758" y="76" font-size="9" font-weight="600" fill="#d887ac" text-anchor="middle">Synthesis</text>
-            <text x="758" y="87" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">catalog → assessment.md</text>
-            <text x="758" y="101" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">legacy-analyst</text>
-            <rect x="712" y="94" width="22" height="10" rx="5" fill="none" stroke="#a8b3c4" stroke-width="0.8"/><text x="723" y="101.5" font-family="'Geist Mono', monospace" font-size="6" fill="#eceae6" text-anchor="middle">DB</text>
-            <rect x="782" y="94" width="22" height="10" rx="5" fill="#a8b3c4"/><text x="793" y="101.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">FL</text></g>
-        </g>
-
-        <!-- SCR lane nodes -->
-        <g font-family="'Geist', sans-serif">
-          <g><rect x="148" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
-            <rect x="152" y="128" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="159" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">SCR</text>
-            <text x="198" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Inventory</text>
-            <text x="198" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">repos → inventory.md</text>
-            <text x="198" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">python</text>
-            <rect x="222" y="174" width="22" height="10" rx="5" fill="#a8b3c4"/><text x="233" y="181.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">FL</text></g>
-          <g><rect x="372" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
-            <rect x="376" y="128" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="383" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">SCR</text>
-            <text x="422" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Topology extract</text>
-            <text x="422" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">inventory → topology.md</text>
-            <text x="422" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">python</text>
-            <rect x="376" y="174" width="22" height="10" rx="5" fill="none" stroke="#a8b3c4" stroke-width="0.8"/><text x="387" y="181.5" font-family="'Geist Mono', monospace" font-size="6" fill="#eceae6" text-anchor="middle">FL</text>
-            <rect x="446" y="174" width="22" height="10" rx="5" fill="#a8b3c4"/><text x="457" y="181.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">FL</text></g>
-          <g><rect x="596" y="124" width="100" height="64" rx="6" fill="#24262a" stroke="#a8b3c4" stroke-width="1"/>
-            <rect x="600" y="128" width="14" height="10" rx="2" fill="#a8b3c4"/><text x="607" y="135.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">SCR</text>
-            <text x="646" y="156" font-size="9" font-weight="600" fill="#eceae6" text-anchor="middle">Reconcile &amp; apply</text>
-            <text x="646" y="167" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">edits → catalog/</text>
-            <text x="646" y="181" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">python</text>
-            <rect x="600" y="174" width="22" height="10" rx="5" fill="none" stroke="#a8b3c4" stroke-width="0.8"/><text x="611" y="181.5" font-family="'Geist Mono', monospace" font-size="6" fill="#eceae6" text-anchor="middle">FL</text>
-            <rect x="670" y="174" width="22" height="10" rx="5" fill="#a8b3c4"/><text x="681" y="181.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">DB</text></g>
-        </g>
-
-        <!-- PRN lane node -->
-        <g font-family="'Geist', sans-serif">
-          <g><rect x="820" y="204" width="100" height="64" rx="6" fill="rgba(179,168,207,0.12)" stroke="#b3a8cf" stroke-width="1"/>
-            <rect x="824" y="208" width="14" height="10" rx="2" fill="#b3a8cf"/><text x="831" y="215.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">PRN</text>
-            <text x="870" y="236" font-size="9" font-weight="600" fill="#b3a8cf" text-anchor="middle">Review &amp; merge</text>
-            <text x="870" y="247" font-family="'Geist Mono', monospace" font-size="6.5" fill="#a8b3c4" text-anchor="middle">PR → main</text>
-            <text x="870" y="261" font-family="'Geist Mono', monospace" font-size="5.5" fill="#b3a8cf" text-anchor="middle">person decides</text>
-            <rect x="824" y="254" width="22" height="10" rx="5" fill="none" stroke="#a8b3c4" stroke-width="0.8"/><text x="835" y="261.5" font-family="'Geist Mono', monospace" font-size="6" fill="#eceae6" text-anchor="middle">FL</text></g>
-        </g>
-
-        <!-- Legend -->
-        <g font-family="'Geist Mono', monospace" font-size="8" font-weight="500" letter-spacing="0.18em" fill="#a8b3c4">
-          <text x="130" y="308" text-anchor="end">STEPS</text>
-          <text x="130" y="330" text-anchor="end">DATA TYPE</text>
-          <text x="130" y="352" text-anchor="end">CONCERN</text>
-        </g>
-        <g>
-          <rect x="144" y="296" width="20" height="18" rx="4" fill="rgba(236,234,230,0.10)"/>
-          <text x="148" y="308.5" font-family="'Geist Mono', monospace" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#eceae6" text-anchor="middle">1</text>
-          <text x="172" y="309" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">step chip + label</text>
-
-          <rect x="144" y="318" width="22" height="10" rx="5" fill="none" stroke="#a8b3c4" stroke-width="0.8"/><text x="155" y="325.5" font-family="'Geist Mono', monospace" font-size="6" fill="#eceae6" text-anchor="middle">FL</text>
-          <text x="176" y="327" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">FL file · document</text>
-          <rect x="352" y="318" width="22" height="10" rx="5" fill="none" stroke="#a8b3c4" stroke-width="0.8"/><text x="363" y="325.5" font-family="'Geist Mono', monospace" font-size="6" fill="#eceae6" text-anchor="middle">DB</text>
-          <text x="384" y="327" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">DB dataset · catalog</text>
-          <rect x="560" y="318" width="22" height="10" rx="5" fill="#a8b3c4"/><text x="571" y="325.5" font-family="'Geist Mono', monospace" font-size="6" fill="#24262a" text-anchor="middle">FL</text>
-          <text x="592" y="327" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">filled = out · outline = in</text>
-
-          <rect x="144" y="340" width="10" height="10" rx="2" fill="rgba(216,135,172,0.12)" stroke="#d887ac" stroke-width="1"/>
-          <text x="176" y="349" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">AI reasoning</text>
-          <rect x="352" y="340" width="10" height="10" rx="2" fill="rgba(179,168,207,0.12)" stroke="#b3a8cf" stroke-width="1"/>
-          <text x="384" y="349" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">person decides</text>
-          <rect x="552" y="340" width="10" height="10" rx="2" fill="rgba(69,201,171,0.12)" stroke="#45c9ab" stroke-width="1.2"/>
-          <text x="584" y="349" font-family="'Geist Mono', monospace" font-size="8" fill="#eceae6">focal step</text>
-        </g>
+        <rect width="100%" height="100%" fill="#F7F2E6"/>
+        <rect width="100%" height="100%" fill="url(#inside-a-stage-grid)"/>
+<rect x="0" y="90" width="1280" height="140" rx="0" fill="rgba(237,228,206,0.6)" stroke="none" stroke-width="1" /><text x="40" y="164" font-family="'Geist Mono', monospace" font-size="10" font-weight="500" fill="#5B6781" text-anchor="start" letter-spacing="1.8">AI AGENTS</text><text x="40" y="304" font-family="'Geist Mono', monospace" font-size="10" font-weight="500" fill="#5B6781" text-anchor="start" letter-spacing="1.8">SCRIPTS</text><rect x="0" y="370" width="1280" height="140" rx="0" fill="rgba(237,228,206,0.6)" stroke="none" stroke-width="1" /><text x="40" y="444" font-family="'Geist Mono', monospace" font-size="10" font-weight="500" fill="#5B6781" text-anchor="start" letter-spacing="1.8">PERSON</text><path d="M 260.0,300 L 342.0,300.0 Q 350,300 350.0,292.0 L 350,192.0" fill="none" stroke="#1E2A44" stroke-width="1.6" stroke-linecap="round" marker-end="url(#inside-a-stage-m-navy)"/><path d="M 420.0,160 L 502.0,160.0 Q 510,160 510.0,168.0 L 510,268.0" fill="none" stroke="#1E2A44" stroke-width="1.6" stroke-linecap="round" marker-end="url(#inside-a-stage-m-navy)"/><path d="M 580.0,300 L 662.0,300.0 Q 670,300 670.0,292.0 L 670,192.0" fill="none" stroke="#1E2A44" stroke-width="1.6" stroke-linecap="round" marker-end="url(#inside-a-stage-m-navy)"/><path d="M 740.0,160 L 822.0,160.0 Q 830,160 830.0,168.0 L 830,268.0" fill="none" stroke="#1E2A44" stroke-width="1.6" stroke-linecap="round" marker-end="url(#inside-a-stage-m-navy)"/><path d="M 900.0,300 L 982.0,300.0 Q 990,300 990.0,292.0 L 990,192.0" fill="none" stroke="#1E2A44" stroke-width="1.6" stroke-linecap="round" marker-end="url(#inside-a-stage-m-navy)"/><path d="M 1060.0,160 L 1142.0,160.0 Q 1150,160 1150.0,168.0 L 1150,408.0" fill="none" stroke="#B8822A" stroke-width="2.4" stroke-linecap="round" marker-end="url(#inside-a-stage-m-gold)"/><rect x="283.0" y="286" width="44" height="28" fill="#F7F2E6"/><path d="M 297.0,288 h11 l6,6 v18 h-17 z" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><path d="M 308.0,288 v6 h6" fill="none" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><text x="305.0" y="331" font-family="'Geist Mono', monospace" font-size="9.5" font-weight="500" fill="#5B6781" text-anchor="middle">inventory.json</text><rect x="443.0" y="146" width="44" height="28" fill="#F7F2E6"/><path d="M 457.0,148 h11 l6,6 v18 h-17 z" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><path d="M 468.0,148 v6 h6" fill="none" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><text x="465.0" y="139" font-family="'Geist Mono', monospace" font-size="9.5" font-weight="500" fill="#5B6781" text-anchor="middle">analysis notes</text><rect x="603.0" y="286" width="44" height="28" fill="#F7F2E6"/><path d="M 617.0,288 h11 l6,6 v18 h-17 z" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><path d="M 628.0,288 v6 h6" fill="none" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><text x="625.0" y="331" font-family="'Geist Mono', monospace" font-size="9.5" font-weight="500" fill="#5B6781" text-anchor="middle">topology.json</text><rect x="763.0" y="146" width="44" height="28" fill="#F7F2E6"/><path d="M 777.0,148 h11 l6,6 v18 h-17 z" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><path d="M 788.0,148 v6 h6" fill="none" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><text x="785.0" y="139" font-family="'Geist Mono', monospace" font-size="9.5" font-weight="500" fill="#5B6781" text-anchor="middle">catalog drafts</text><rect x="923.0" y="286" width="44" height="28" fill="#F7F2E6"/><path d="M 937.0,288 h11 l6,6 v18 h-17 z" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><path d="M 948.0,288 v6 h6" fill="none" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><text x="945.0" y="331" font-family="'Geist Mono', monospace" font-size="9.5" font-weight="500" fill="#5B6781" text-anchor="middle">catalog files</text><rect x="1083.0" y="146" width="44" height="28" fill="#F7F2E6"/><path d="M 1097.0,148 h11 l6,6 v18 h-17 z" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><path d="M 1108.0,148 v6 h6" fill="none" stroke="#1E2A44" stroke-width="1.3" stroke-linejoin="round"/><text x="1105.0" y="139" font-family="'Geist Mono', monospace" font-size="9.5" font-weight="500" fill="#5B6781" text-anchor="middle">assessment.md</text><rect x="120.0" y="268.0" width="140" height="64" rx="3" fill="#EDE4CE" stroke="#1E2A44" stroke-width="1.4" /><text x="132.0" y="297.0" font-family="'Geist Mono', monospace" font-size="14" font-weight="600" fill="#B8822A" text-anchor="start">$</text><text x="148.0" y="297.0" font-family="'Geist', sans-serif" font-size="14" font-weight="600" fill="#1E2A44" text-anchor="start">Inventory</text><text x="132.0" y="316.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="400" fill="#5B6781" text-anchor="start">python</text><circle cx="122.0" cy="270.0" r="9" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.2"/><text x="122.0" y="274.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" fill="#1E2A44" text-anchor="middle">1</text><rect x="280.0" y="128.0" width="140" height="64" rx="32" fill="#1E2A44" stroke="none" stroke-width="1" /><path d="M 304.0,148.0 l3.2,7 7,3.2 -7,3.2 -3.2,7 -3.2,-7 -7,-3.2 7,-3.2 z" fill="#E0B04A"/><text x="324.0" y="157.0" font-family="'Geist', sans-serif" font-size="14" font-weight="600" fill="#F7F2E6" text-anchor="start">Analyze</text><text x="324.0" y="174.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="400" fill="#B9C2D6" text-anchor="start">2 analyst jobs</text><circle cx="282.0" cy="130.0" r="9" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.2"/><text x="282.0" y="134.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" fill="#1E2A44" text-anchor="middle">2</text><rect x="440.0" y="268.0" width="140" height="64" rx="3" fill="#EDE4CE" stroke="#1E2A44" stroke-width="1.4" /><text x="452.0" y="297.0" font-family="'Geist Mono', monospace" font-size="14" font-weight="600" fill="#B8822A" text-anchor="start">$</text><text x="468.0" y="297.0" font-family="'Geist', sans-serif" font-size="14" font-weight="600" fill="#1E2A44" text-anchor="start">Topology</text><text x="452.0" y="316.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="400" fill="#5B6781" text-anchor="start">python</text><circle cx="442.0" cy="270.0" r="9" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.2"/><text x="442.0" y="274.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" fill="#1E2A44" text-anchor="middle">3</text><rect x="600.0" y="128.0" width="140" height="64" rx="32" fill="#1E2A44" stroke="none" stroke-width="1" /><path d="M 624.0,148.0 l3.2,7 7,3.2 -7,3.2 -3.2,7 -3.2,-7 -7,-3.2 7,-3.2 z" fill="#E0B04A"/><text x="644.0" y="157.0" font-family="'Geist', sans-serif" font-size="14" font-weight="600" fill="#F7F2E6" text-anchor="start">Curate</text><text x="644.0" y="174.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="400" fill="#B9C2D6" text-anchor="start">legacy-analyst</text><circle cx="602.0" cy="130.0" r="9" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.2"/><text x="602.0" y="134.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" fill="#1E2A44" text-anchor="middle">4</text><rect x="760.0" y="268.0" width="140" height="64" rx="3" fill="#EDE4CE" stroke="#1E2A44" stroke-width="1.4" /><text x="772.0" y="297.0" font-family="'Geist Mono', monospace" font-size="14" font-weight="600" fill="#B8822A" text-anchor="start">$</text><text x="788.0" y="297.0" font-family="'Geist', sans-serif" font-size="14" font-weight="600" fill="#1E2A44" text-anchor="start">Reconcile</text><text x="772.0" y="316.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="400" fill="#5B6781" text-anchor="start">python</text><circle cx="762.0" cy="270.0" r="9" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.2"/><text x="762.0" y="274.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" fill="#1E2A44" text-anchor="middle">5</text><rect x="920.0" y="128.0" width="140" height="64" rx="32" fill="#1E2A44" stroke="none" stroke-width="1" /><path d="M 944.0,148.0 l3.2,7 7,3.2 -7,3.2 -3.2,7 -3.2,-7 -7,-3.2 7,-3.2 z" fill="#E0B04A"/><text x="964.0" y="157.0" font-family="'Geist', sans-serif" font-size="14" font-weight="600" fill="#F7F2E6" text-anchor="start">Synthesize</text><text x="964.0" y="174.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="400" fill="#B9C2D6" text-anchor="start">legacy-analyst</text><circle cx="922.0" cy="130.0" r="9" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.2"/><text x="922.0" y="134.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" fill="#1E2A44" text-anchor="middle">6</text><rect x="1080.0" y="408.0" width="140" height="64" rx="32" fill="url(#inside-a-stage-gold)" stroke="none" stroke-width="1" /><circle cx="1106.0" cy="436.75" r="4.7250000000000005" fill="none" stroke="#1E2A44" stroke-width="1.6"/><path d="M 1097.6,451.45 Q 1106.0,439.9 1114.4,451.45" fill="none" stroke="#1E2A44" stroke-width="1.6" stroke-linecap="round"/><text x="1126.0" y="437.0" font-family="'Geist', sans-serif" font-size="14" font-weight="600" fill="#1E2A44" text-anchor="start">Review</text><text x="1126.0" y="454.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="400" fill="#1E2A44" text-anchor="start">merge the PR</text><circle cx="1082.0" cy="410.0" r="9" fill="#F7F2E6" stroke="#1E2A44" stroke-width="1.2"/><text x="1082.0" y="414.0" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" fill="#1E2A44" text-anchor="middle">7</text><text x="640" y="46" font-family="'Instrument Serif', serif" font-size="22" font-weight="400" fill="#1E2A44" text-anchor="middle" font-style="italic">Source is read-only. A step writes only to the job's output directory.</text><rect x="40" y="528" width="16" height="16" rx="3" fill="#1E2A44" stroke="none" stroke-width="1" /><text x="66" y="540" font-family="'Geist Mono', monospace" font-size="11" font-weight="400" fill="#1E2A44" text-anchor="start">AI reasoning</text><rect x="180.51999999999998" y="528" width="16" height="16" rx="3" fill="#EDE4CE" stroke="#1E2A44" stroke-width="1.2" /><text x="206.51999999999998" y="540" font-family="'Geist Mono', monospace" font-size="11" font-weight="400" fill="#1E2A44" text-anchor="start">script step</text><rect x="314.33" y="528" width="16" height="16" rx="3" fill="url(#inside-a-stage-gold)" stroke="none" stroke-width="1" /><text x="340.33" y="540" font-family="'Geist Mono', monospace" font-size="11" font-weight="400" fill="#1E2A44" text-anchor="start">person decides</text><line x1="468.27" y1="536" x2="490.27" y2="536" stroke="#1E2A44" stroke-width="1.5" marker-end="url(#inside-a-stage-m-navy)"/><text x="500.27" y="540" font-family="'Geist Mono', monospace" font-size="11" font-weight="400" fill="#1E2A44" text-anchor="start">file handoff</text>
       </svg>
     </div>
   </div>
