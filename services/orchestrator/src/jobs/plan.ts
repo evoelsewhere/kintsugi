@@ -72,7 +72,7 @@ export interface StageContext {
   stdout(stepId: string): string | undefined;
   /** The choice taken at a gate step: the person's, or the documented default. */
   gate(stepId: string): string | undefined;
-  /** Agent jobs this stage may still start (KINTSUGI_STAGE_MAX_AGENTS). */
+  /** Agent jobs this stage may still start; Infinity when it has no limit. */
   agentsLeft(): number;
 }
 

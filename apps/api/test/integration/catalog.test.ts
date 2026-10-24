@@ -229,12 +229,6 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
     expect(blocked.status).toBe(409);
     expect((blocked.body as unknown as Failure).details?.conflicts).toEqual([{ item: "billing/tax", runId: "run-open", state: "in-pr" }]);
 
-    process.env["KINTSUGI_STAGE_MAX_AGENTS"] = "1";
-    try {
-      expect((await admin.request("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["billing/invoice", "customers/report"] } })).status).toBe(422);
-    } finally {
-      delete process.env["KINTSUGI_STAGE_MAX_AGENTS"];
-    }
 
     const started = await admin.request<RunView>("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["customers/report", "billing/invoice"] } });
     expect(started.status, JSON.stringify(started.body)).toBe(202);

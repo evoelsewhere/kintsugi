@@ -79,7 +79,8 @@ export interface ExecutorDeps {
   values: { app: string; sources: string };
   /** The stage's directories: declared documents (in), intermediate outputs (work), published outputs (out). */
   dirs: { root: string; in: string; work: string; out: string };
-  limits: { maxAgents: number; concurrency: number };
+  /** `maxAgents` absent: a stage may start any number of agent jobs. */
+  limits: { maxAgents?: number; concurrency: number };
   gates: GateDecider;
   /** `abort`: stops this leaf when a sibling of its group failed (the stage's own `signal` still applies). */
   runLeaf(spec: LeafRun, placement: LeafPlacement, abort?: AbortSignal): Promise<LeafResult>;
@@ -244,7 +245,7 @@ export class StagePlanExecutor {
       },
       stdout: (id) => this.#stdout.get(id),
       gate: (id) => this.#gates.get(id)?.choice,
-      agentsLeft: () => Math.max(0, this.#deps.limits.maxAgents - this.#agents),
+      agentsLeft: () => this.#agentsLeft(),
     };
   }
 
@@ -347,8 +348,8 @@ export class StagePlanExecutor {
         return { id: "", ok: true, summary: { reused: true }, agents: 0, contribution: contributionOf(key, fingerprint, settled.digest) };
       }
     }
-    if (spec.kind === "agent" && this.#agents >= this.#deps.limits.maxAgents) {
-      throw new JobFailure(`Stage agent cap reached (${this.#deps.limits.maxAgents} agent jobs, KINTSUGI_STAGE_MAX_AGENTS) before step ${step.id}`);
+    if (spec.kind === "agent" && this.#agentsLeft() === 0) {
+      throw new JobFailure(`Stage agent cap reached (${this.#deps.limits.maxAgents} agent jobs) before step ${step.id}`);
     }
     if (spec.kind === "agent") this.#agents += 1;
     const result = await this.#deps.runLeaf(spec, { ...placement, key }, abort);
@@ -406,13 +407,13 @@ export class StagePlanExecutor {
           },
         };
       case "workflow": {
-        const left = Math.max(0, this.#deps.limits.maxAgents - this.#agents);
+        const left = this.#agentsLeft();
         return {
           kind: "workflow",
           name: step.workflow,
           inputs: {
             args: await this.#resolve(step.args),
-            budget: { maxAgents: left },
+            ...(Number.isFinite(left) ? { budget: { maxAgents: left } } : {}),
             ...(step.resultTo === undefined ? {} : { resultTo: partial(step.resultTo) }),
             ...(expects.length === 0 ? {} : { expects }),
           },
@@ -478,10 +479,15 @@ export class StagePlanExecutor {
     }
   }
 
+  /** Agent jobs the stage may still start; Infinity when it has no limit. */
+  #agentsLeft(): number {
+    const max = this.#deps.limits.maxAgents;
+    return max === undefined ? Number.POSITIVE_INFINITY : Math.max(0, max - this.#agents);
+  }
+
   async #forEach(step: ForEachStep): Promise<void> {
     const items = await step.items(this.#context());
-    const left = Math.max(0, this.#deps.limits.maxAgents - this.#agents);
-    const taken = items.slice(0, left);
+    const taken = items.slice(0, this.#agentsLeft());
     if (taken.length < items.length) await this.#deps.log(`step ${step.id}: ${items.length - taken.length} of ${items.length} items left out (stage agent cap)`, { step: step.id });
     await this.#deps.log(`step ${step.id}: ${taken.length} job(s)`, { step: step.id, items: taken.length });
     const member: AgentStep = step.step;

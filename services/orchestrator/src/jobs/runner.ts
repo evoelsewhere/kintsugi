@@ -58,9 +58,9 @@ import { type Placeholders, type StagePlan, type StageScope, fill } from "./plan
 import { STAGES } from "./stages.js";
 import { type AgentCallOptions, type WorkflowBudgets, loadWorkflow, runWorkflow } from "./workflow.js";
 
-/** Budgets of a stage run: agent jobs it may start in total (workflows included), and at a time in a group. */
+/** Budgets of a stage run: agent jobs it may start in total (workflows included; absent = no limit), and at a time in a group. */
 export interface StageBudgets {
-  maxAgents: number;
+  maxAgents?: number;
   concurrency: number;
 }
 
@@ -75,7 +75,7 @@ export const DEFAULT_JOB_LIMITS: JobDefaults = {
   script: { timeoutSec: 600, maxOutputBytes: 50 * 1024 * 1024 },
   agent: { timeoutSec: 0, maxOutputBytes: 50 * 1024 * 1024 },
   workflow: { concurrency: 4, maxTokens: 0 },
-  stage: { maxAgents: 200, concurrency: 4 },
+  stage: { concurrency: 4 },
 };
 
 export interface JobRunnerDeps {

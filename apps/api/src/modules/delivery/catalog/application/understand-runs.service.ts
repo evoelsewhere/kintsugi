@@ -12,19 +12,12 @@ import { CatalogService, UNDERSTAND_STAGE } from "./catalog.service.js";
 
 /** Items per run: the writer's file cap (~6 files per item plus the run's own) and a reviewable pull request. */
 export const MAX_ITEMS_PER_RUN = 60;
-const DEFAULT_STAGE_MAX_AGENTS = 200;
 
 export interface UnderstandSelection {
   items?: string[];
   modules?: string[];
   /** A failed understand run to resume instead (same as POST job-runs/:runId/retry). */
   resumeOf?: string;
-}
-
-/** KINTSUGI_STAGE_MAX_AGENTS, the worker's agent cap per stage run: one specification job per item at least. */
-function stageMaxAgents(): number {
-  const value = Number(process.env["KINTSUGI_STAGE_MAX_AGENTS"]);
-  return Number.isInteger(value) && value > 0 ? value : DEFAULT_STAGE_MAX_AGENTS;
 }
 
 @Injectable()
@@ -62,7 +55,7 @@ export class UnderstandRunsService {
       });
     }
     if (wanted.size === 0) throw new BadRequestException("Select at least one catalog item or module");
-    const cap = Math.min(MAX_ITEMS_PER_RUN, stageMaxAgents());
+    const cap = MAX_ITEMS_PER_RUN;
     if (wanted.size > cap) {
       throw new UnprocessableEntityException({ message: `${wanted.size} items selected: a run takes at most ${cap}; split the selection`, details: { selected: wanted.size, max: cap } });
     }

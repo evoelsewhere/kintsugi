@@ -37,7 +37,6 @@ function jobDefaults(): JobDefaults {
       concurrency: positive("KINTSUGI_WORKFLOW_CONCURRENCY", DEFAULT_JOB_LIMITS.workflow.concurrency),
     },
     stage: {
-      maxAgents: positive("KINTSUGI_STAGE_MAX_AGENTS", DEFAULT_JOB_LIMITS.stage.maxAgents),
       concurrency: positive("KINTSUGI_STAGE_CONCURRENCY", DEFAULT_JOB_LIMITS.stage.concurrency),
     },
   };
