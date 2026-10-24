@@ -83,8 +83,9 @@ describe("cross-process OAuth serialization", () => {
     });
     const [first, second] = await Promise.all([env.worker("refresh"), env.worker("refresh")]);
     first.start(); second.start();
-    expect(await first.wait("done")).toMatchObject({ success: true });
-    expect(await second.wait("done")).toMatchObject({ success: true });
+    // The whole message is compared, so a failure shows its error code.
+    expect(await first.wait("done")).toEqual({ event: "done", success: true });
+    expect(await second.wait("done")).toEqual({ event: "done", success: true });
     expect(replay).toBe(false);
     expect(seen).toEqual(["knt_crt_0", "knt_crt_1"]);
     expect(JSON.parse(await readFile(env.file, "utf8")).refreshToken).toBe("knt_crt_2");
