@@ -1,0 +1,77 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1E2A44;--navy2:#2C3B5E;--gold:#E0B04A;--goldd:#B8822A;--goldl:#F7D98A;--cream:#F7F2E6;--cream2:#EDE4CE;--line:#D2C7AB;--slate:#5B6781;--teal:#2F7F79;--red:#B5483A;--green:#3E7D5A;--paper:#FBF8F0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:transparent;font:14px/1.45 'Geist',system-ui,sans-serif;color:var(--navy);padding:0}
+.mono{font-family:'Geist Mono',monospace}
+.app{width:1440px;height:900px;display:grid;grid-template-columns:236px 1fr;background:var(--cream);border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+.side{background:var(--navy);color:var(--cream);padding:22px 14px;display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:10px;padding:0 8px 18px;font:400 26px 'Instrument Serif',serif;letter-spacing:-.01em}
+.proj{margin:0 6px 14px;padding:10px 12px;border:1px solid rgba(247,242,230,.18);border-radius:10px;background:rgba(247,242,230,.06)}
+.proj b{display:block;font-weight:600;font-size:13px}.proj span{font:11px 'Geist Mono',monospace;color:#B9C2D6}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;color:#C9D1E2;font-size:13.5px}
+.nav a i{width:8px;height:8px;border-radius:2px;background:#56648A;display:inline-block}
+.nav a.on{background:rgba(224,176,74,.16);color:var(--goldl)}.nav a.on i{background:var(--gold)}
+.sub{margin:2px 0 6px 30px;border-left:1px solid rgba(247,242,230,.16)}
+.sub a{padding:5px 12px;font-size:13px;color:#AEB8CE;display:block}.sub a.on{color:var(--goldl);font-weight:600}
+.me{margin-top:auto;display:flex;gap:10px;align-items:center;padding:10px 8px;border-top:1px solid rgba(247,242,230,.14)}
+.av{width:30px;height:30px;border-radius:50%;background:var(--gold);color:var(--navy);display:grid;place-items:center;font-weight:600;font-size:12px}
+.me small{display:block;color:#AEB8CE;font-size:11px}
+.main{display:flex;flex-direction:column;min-width:0;background:var(--cream)}
+.top{display:flex;justify-content:space-between;align-items:center;padding:16px 32px;border-bottom:1px solid var(--line);font:12px 'Geist Mono',monospace;color:var(--slate)}
+.top b{color:var(--navy);font-weight:500}
+.pill{white-space:nowrap;display:inline-block;padding:3px 9px;border-radius:99px;font:500 11px 'Geist Mono',monospace;letter-spacing:.02em;border:1px solid var(--line);color:var(--slate);background:var(--paper)}
+.pill.g{background:rgba(62,125,90,.12);color:var(--green);border-color:rgba(62,125,90,.35)}
+.pill.y{background:rgba(224,176,74,.22);color:#8A5F12;border-color:rgba(184,130,42,.5)}
+.pill.n{background:var(--navy);color:var(--cream);border-color:var(--navy)}
+.pill.t{background:rgba(47,127,121,.12);color:var(--teal);border-color:rgba(47,127,121,.4)}
+.pill.r{background:rgba(181,72,58,.12);color:var(--red);border-color:rgba(181,72,58,.4)}
+.body{padding:22px 32px;flex:1;min-height:0;display:flex;flex-direction:column;gap:18px}
+h1{font:400 38px/1.05 'Instrument Serif',serif;letter-spacing:-.015em}
+.lead{color:var(--slate);font-size:14px;margin-top:4px}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--line)}
+.tabs span{padding:8px 0;font-size:13.5px;color:var(--slate)}.tabs span.on{color:var(--navy);font-weight:600;border-bottom:2px solid var(--gold)}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:12px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi{padding:12px 16px}.kpi small{font:500 10.5px 'Geist Mono',monospace;letter-spacing:.14em;color:var(--slate);text-transform:uppercase}
+.kpi b{display:block;font:400 30px/1.1 'Instrument Serif',serif;margin-top:4px}.kpi em{font-style:normal;font:11.5px 'Geist Mono',monospace;color:var(--slate)}
+table{border-collapse:collapse;width:100%}
+th{font:500 10.5px 'Geist Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--slate);text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--cream2)}
+td{padding:9px 14px;border-bottom:1px solid #E7DFC8;font-size:13.5px;vertical-align:middle}
+td.m,th.m{font-family:'Geist Mono',monospace;font-size:12.5px}
+tr.grp td{background:#F3ECDA;font:600 12px 'Geist Mono',monospace;letter-spacing:.04em;color:var(--navy);padding:7px 14px}
+tr.sel td{background:rgba(224,176,74,.14)}
+.item{padding-left:26px;font-weight:500;white-space:nowrap}
+.cb{display:inline-block;width:15px;height:15px;border:1.5px solid var(--slate);border-radius:4px;vertical-align:-3px;margin-right:10px;background:var(--paper)}
+.cb.on{background:var(--gold);border-color:var(--goldd);position:relative}.cb.on:after{content:'';position:absolute;left:4px;top:0;width:4px;height:9px;border:solid var(--navy);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.btn{display:inline-block;padding:9px 16px;border-radius:9px;font-weight:600;font-size:13px;background:linear-gradient(135deg,#F7D98A,#E0B04A 55%,#C9962F);color:var(--navy);border:1px solid var(--goldd)}
+.btn.o{background:var(--paper);border-color:var(--navy)}
+.eyebrow{font:500 10.5px 'Geist Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--slate)}
+.row{display:flex;gap:18px;min-height:0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+</style></head><body>
+<div class="app"><aside class="side"><div class="brand"><svg width="30" height="30" viewBox="-6 -6 148 148"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7D98A"/><stop offset=".55" stop-color="#E0B04A"/><stop offset="1" stop-color="#B8822A"/></linearGradient><clipPath id="t"><polygon points="-4,-4 124,-4 124,71.6 71.6,124 -4,124"/></clipPath></defs><polygon points="0,0 120,0 120,70 70,120 0,120" fill="#2C3B5E" stroke="#2C3B5E" stroke-width="8" stroke-linejoin="round"/><g clip-path="url(#t)" fill="none" stroke="url(#g)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><polyline points="48,-6 58,42 36,74 50,126"/><polyline points="58,42 126,58"/></g><rect x="98" y="98" width="16" height="16" rx="2.5" fill="url(#g)"/></svg>Kintsugi</div>
+<div class="proj"><b>Billing modernization</b><span>billing-core</span></div>
+<nav class="nav"><a class=""><i></i>Overview</a><a class="on"><i></i>Delivery</a><div class="sub"><a class="">Assess</a><a class="on">Understand</a><a class="">Design</a><a class="">Build</a></div><a class=""><i></i>Monitoring</a><a class=""><i></i>Governance</a><a class=""><i></i>Administration</a></nav>
+<div class="me"><div class="av">AR</div><div>Ana Reyes<small>Architect</small></div></div></aside>
+<section class="main"><div class="top"><span><b>billing-core</b> / Delivery / Understand / Catalog</span><span><span class="pill">Sample data</span></span></div>
+<div class="body">
+<div><h1>Understand</h1><p class="lead">Choose which catalog items to turn into specifications. Several runs can be in flight at once.</p></div>
+<div class="tabs"><span>Overview</span><span class="on">Catalog</span><span>Units</span><span>Runs</span></div>
+<div class="kpis">
+ <div class="card kpi"><small>Catalog items</small><b>148</b><em>from 6 modules</em></div>
+ <div class="card kpi"><small>Understood</small><b>41</b><em>specs in the document repo</em></div>
+ <div class="card kpi"><small>In open pull request</small><b>6</b><em>waiting for review</em></div>
+ <div class="card kpi"><small>Designs merged</small><b>23</b><em>ready to build</em></div></div>
+<div class="row" style="flex:1">
+ <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+  <div style="display:flex;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)"><span class="pill">Any module</span><span class="pill">Any kind</span><span class="pill">Any status</span><span style="margin-left:auto" class="mono"><span style="font-size:12px;color:#5B6781">148 items</span></span></div>
+  <table><thead><tr><th>Item</th><th class="m">Kind</th><th class="m">Entries</th><th class="m">Parts</th><th class="m">Files</th><th>Status</th><th class="m">PR</th></tr></thead><tbody><tr class="grp"><td colspan="8">invoicing/</td></tr><tr class=""><td><span class="item"><span class="cb "></span>late-fee-calculator</span></td><td class="m">batch</td><td class="m">2</td><td class="m">5</td><td class="m">14</td><td><span class="pill g">Design merged</span></td><td class="m">#142</td></tr><tr class=""><td><span class="item"><span class="cb "></span>invoice-renderer</span></td><td class="m">screen</td><td class="m">4</td><td class="m">9</td><td class="m">31</td><td><span class="pill n">Understood</span></td><td class="m">·</td></tr><tr class=""><td><span class="item"><span class="cb "></span>tax-rules-engine</span></td><td class="m">service</td><td class="m">3</td><td class="m">7</td><td class="m">22</td><td><span class="pill y">In pull request</span></td><td class="m">#147</td></tr><tr class="grp"><td colspan="8">payments/</td></tr><tr class="sel"><td><span class="item"><span class="cb on"></span>refund-processor</span></td><td class="m">service</td><td class="m">5</td><td class="m">8</td><td class="m">27</td><td><span class="pill ">Open</span></td><td class="m">·</td></tr><tr class="sel"><td><span class="item"><span class="cb on"></span>ledger-sync</span></td><td class="m">batch</td><td class="m">1</td><td class="m">4</td><td class="m">12</td><td><span class="pill ">Open</span></td><td class="m">·</td></tr><tr class="sel"><td><span class="item"><span class="cb on"></span>card-gateway-adapter</span></td><td class="m">service</td><td class="m">2</td><td class="m">6</td><td class="m">19</td><td><span class="pill ">Open</span></td><td class="m">·</td></tr><tr class="grp"><td colspan="8">customers/</td></tr><tr class="sel"><td><span class="item"><span class="cb on"></span>account-merge</span></td><td class="m">screen</td><td class="m">6</td><td class="m">11</td><td class="m">38</td><td><span class="pill ">Open</span></td><td class="m">·</td></tr></tbody></table>
+  <div style="margin-top:auto;padding:12px 14px;background:var(--navy);color:var(--cream);display:flex;align-items:center;gap:14px;font-size:13px">
+   <b>4 selected</b><span style="color:#B9C2D6">plus 2 items they call, one level deep</span><span style="margin-left:auto" class="btn">Understand 6 items</span></div>
+ </div>
+ <div style="width:372px;display:flex;flex-direction:column;gap:12px">
+  <div class="eyebrow">AI plan · advice, not a gate</div><div class="card" style="padding:14px 16px;border-color:#B8822A;background:#FBF3DC"><div style="display:flex;justify-content:space-between"><b style="font-size:14px">Batch 1 · Leaf calculations</b><span class="pill">8 items</span></div><p style="color:#5B6781;font-size:12.5px;margin:6px 0 10px">Pure calculations that nothing outside invoicing calls. Safe to start, and they unlock the next batch.</p><span class="btn o" style="padding:6px 12px;font-size:12px">Select batch</span></div><div class="card" style="padding:14px 16px;"><div style="display:flex;justify-content:space-between"><b style="font-size:14px">Batch 2 · Payment adapters</b><span class="pill">11 items</span></div><p style="color:#5B6781;font-size:12.5px;margin:6px 0 10px">Gateway and ledger code that shares two data stores. Understand them together so the rules agree.</p><span class="btn o" style="padding:6px 12px;font-size:12px">Select batch</span></div><div class="card" style="padding:14px 16px;"><div style="display:flex;justify-content:space-between"><b style="font-size:14px">Batch 3 · Customer screens</b><span class="pill">14 items</span></div><p style="color:#5B6781;font-size:12.5px;margin:6px 0 10px">Screens that call both earlier batches. Last, because their rules depend on the others.</p><span class="btn o" style="padding:6px 12px;font-size:12px">Select batch</span></div>
+  <div class="card" style="padding:12px 16px;font:12px 'Geist Mono',monospace;color:#5B6781">plan.md committed to<br><span style="color:#1E2A44">10-applications/billing-core/01-legacy/</span></div>
+ </div></div></div></section></div></body></html>
