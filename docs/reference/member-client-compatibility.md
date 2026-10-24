@@ -11,7 +11,8 @@ Status: updated 2026-10-23. Records local package lifecycle probes of the genera
 | Corepack pnpm | 10.18.0 | Exact MCP server and client 2.3.1 packages resolved and installed; native host interoperability remains unverified. |
 | Claude Code | 2.1.278 | In a disposable `CLAUDE_CONFIG_DIR`: strict validation, local marketplace add/list, plugin install/list, uninstall and marketplace removal passed. No live authenticated MCP request was run. |
 | Codex CLI | 0.163.0-alpha.10.2 | In a disposable `CODEX_HOME`: local marketplace add/list, plugin add/list, explicit plugin removal and marketplace removal passed. The rollback removes the installed plugin and its versioned cache before removing the source. No live authenticated MCP request was run. |
-| GitHub Copilot CLI | Not installed | Generated manifest and marketplace shapes pass package tests; setup fails closed while the version is unverified. |
+| Codex CLI (desktop app) | 0.148.0-alpha.9 | In a disposable `CODEX_HOME`: `plugin marketplace add`, `plugin add --json`, `plugin list --json --available` for the connector and for a member plugin with skills and `hooks/hooks.json`; `--no-daemon` is refused. The hook trust step and a live skill run were not exercised. |
+| GitHub Copilot CLI | 1.0.63 | In a disposable `COPILOT_HOME`: marketplace add, plugin install, update, list for the connector and for a member plugin with skills, a generated `hooks/hooks.json` and the command as a skill ("Installed 3 skills"). `marketplace add` of a registered marketplace fails (exit 1), so it is refreshed. Slash commands of an installed plugin could not be listed without a sign-in. |
 
 The probes used generated packages and temporary config directories; the developer's normal client settings were not changed. They prove a bounded package lifecycle only, not tool startup, authentication, document retrieval, update compatibility or operating-system-wide support. Repeat them in clean Windows and Linux release environments.
 
@@ -36,4 +37,4 @@ The workspace names `@kintsugi/cli` and `@kintsugi/kintsugi-client` are reposito
 
 ## Client support claims
 
-Setup generation is enabled only for the exact Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2 that passed the package lifecycle above. This is not a claim of end-to-end MCP support: that needs plugin-launched stdio startup, authentication, refresh, update and clean removal on exact recorded versions and supported operating systems. Copilot stays disabled until its native CLI is installed and tested.
+The package lifecycle above was probed with Claude Code 2.1.278 and Codex CLI 0.163.0-alpha.10.2. Setup goes ahead with another version of either client and says so on stderr ([ADR-0072](../decisions/0072-init-install-and-plugins-as-plugins.md)): it uses only the plain plugin commands, and clients update faster than a release can be probed. A client that was never probed is refused. This is not a claim of end-to-end MCP support: that needs plugin-launched stdio startup, authentication, refresh, update and clean removal on exact recorded versions and supported operating systems.

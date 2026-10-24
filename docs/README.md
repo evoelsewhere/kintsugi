@@ -74,6 +74,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Member CLI and local MCP bridge](reference/member-cli.md): install the CLI, connect a client, sign in, add plugins, read projects and documents
 - **Guideline**: the portal page `/guideline` on every installation (quick start, install, connect, plugins, reference)
 - [Member client compatibility](reference/member-client-compatibility.md): tested client versions and setup probes
+- [Member client capabilities](reference/member-client-capabilities.md): what Claude Code, Codex and GitHub Copilot support for plugins, hooks and transcripts
 - [Implementation and verification record](development/implementation-delivery-record.md): the deployment work, its status and evidence; remaining release work
 
 ## Conventions
