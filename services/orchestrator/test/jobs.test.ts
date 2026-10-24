@@ -6,12 +6,12 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { readdir, rm } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { documentOf, parseItemCatalog } from "@kintsugi/agents/reader";
 import { CheckoutStorage } from "@kintsugi/git";
-import { createChildAgentRuntime, interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { createChildAgentRuntime, interpretersFromEnv, removeTree } from "@kintsugi/runtime/launcher";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
@@ -46,7 +46,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
   afterAll(async () => {
     await legacy?.remove();
     await docs?.remove();
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
   });
 
   function setup(files: AgentFiles, mockOutputs?: boolean): { store: MemoryJobStore; runner: JobRunner; writes: Array<{ repository: string; request: DocumentWriteRequest }>; agents: ReturnType<typeof writingAgentRuntime>; checkouts: LocalCheckouts } {

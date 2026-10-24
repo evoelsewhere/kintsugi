@@ -4,13 +4,12 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { designReviewPath } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
-import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { interpretersFromEnv, removeTree } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { designMessage } from "../src/jobs/plans/design.js";
@@ -81,7 +80,7 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
   });
   afterAll(async () => {
     for (const repo of Object.values(repos)) await repo.remove();
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
   });
 
   async function runDesign(options: { docs?: string; files: AgentFiles; units?: string[]; set?: string }) {

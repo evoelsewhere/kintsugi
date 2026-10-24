@@ -9,7 +9,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CheckoutStorage } from "@kintsugi/git";
-import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { interpretersFromEnv, removeTree } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
@@ -83,7 +83,7 @@ describe("review stage (scripted reviewer, the plugin's scripts, a member's merg
   afterAll(async () => {
     for (const repo of Object.values(repos)) await repo.remove();
     await target.remove();
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
   });
 
   async function runReview(options: { files: AgentFiles; scope?: Record<string, unknown>; noMr?: boolean }) {
