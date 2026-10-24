@@ -5,8 +5,6 @@
 import { APPLICATION_UNIT_KEY } from "@kintsugi/domain";
 import type { DesignOverview, DesignSet, UnitDesignRow, UnitSetActivity, UnitSetSummary } from "@/lib/api/design";
 
-/** Units a run takes at most (the API's cap, MAX_UNITS_PER_RUN). */
-export const MAX_UNITS_PER_RUN = 20;
 
 export type Eligibility = { ok: true } | { ok: false; reason: string };
 
@@ -63,7 +61,6 @@ export function generateBlocker(options: { set: string; count: number; /** Why n
   if (options.disabled !== undefined) return options.disabled;
   if (options.set === "") return "Choose a design set to generate.";
   if (options.count === 0) return "Select the units to generate it for.";
-  if (options.count > MAX_UNITS_PER_RUN) return `A run takes at most ${MAX_UNITS_PER_RUN} units.`;
   return undefined;
 }
 

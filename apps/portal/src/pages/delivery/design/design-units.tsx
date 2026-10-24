@@ -14,7 +14,7 @@ import { Select } from "@/components/ui/select";
 import { ConformanceMark } from "./design-parts";
 import { APPLICATION_UNIT_KEY } from "@kintsugi/domain";
 import type { DesignConflict, DesignOverview, DesignSet, UnitDesignRow, UnitSetActivity } from "@/lib/api/design";
-import { applicationEligibility, eligibility, generateBlocker, MAX_UNITS_PER_RUN, selectable, setFacts, stillSelectable } from "@/lib/design-run";
+import { applicationEligibility, eligibility, generateBlocker, selectable, setFacts, stillSelectable } from "@/lib/design-run";
 import { CountChip } from "../results/results-parts";
 import type { RequestGenerate } from "./design-stage";
 import { matchesFilters, STATE_LABEL, STATE_ORDER, STATE_TONE, stateOf, type UnitFilters } from "./design-state";
@@ -241,7 +241,7 @@ export function DesignUnitsTab({
                   of {ready.length} ready for {chosenSet.title}
                 </span>
               </p>
-              <Button size="small" variant="ghost" className="shadow-border" disabled={ready.length === 0} onClick={() => setPicked(new Set(ready.slice(0, MAX_UNITS_PER_RUN)))} title={`Selects up to ${MAX_UNITS_PER_RUN} units, the ones a run takes`}>
+              <Button size="small" variant="ghost" className="shadow-border" disabled={ready.length === 0} onClick={() => setPicked(new Set(ready))} title="Selects every unit that is ready">
                 Select ready
               </Button>
               {chosen.length === 0 ? null : (

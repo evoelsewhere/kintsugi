@@ -13,7 +13,6 @@ import { Select } from "@/components/ui/select";
 import type { StatusTone } from "@/components/ui/status-dot";
 import type { BuildConflict, BuildOverview, BuildTarget, BuildUnit, MergeRequest, ReviewState } from "@/lib/api/build";
 import { memberLine, reviewableUnits, reviewBlocker, reviewLine, unitBlocker } from "@/lib/build";
-import { MAX_UNITS_PER_RUN } from "@/lib/design-run";
 import { formatRelative } from "@/lib/format";
 
 const REVIEW_TONE: Record<ReviewState, StatusTone> = { none: "muted", running: "orange", "in-pr": "purple-light", reviewed: "green" };
@@ -137,7 +136,7 @@ export function BuildUnitsTab({
           <p className="text-[13px] font-medium text-text">Merge requests members recorded</p>
           <ul className="mt-1.5 flex flex-col">
             {overview.mergeRequests.map((request) => {
-              const units = reviewableUnits(request, overview.units).slice(0, MAX_UNITS_PER_RUN);
+              const units = reviewableUnits(request, overview.units);
               const why = units.length === 0 ? "Every unit of it is being reviewed or has a review in a pull request." : blocker;
               return (
                 <li key={`${request.url}@${request.commit}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] first:shadow-none">

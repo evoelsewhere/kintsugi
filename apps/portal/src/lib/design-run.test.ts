@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DesignSet, UnitDesignRow, UnitSetActivity, UnitSetSummary } from "./api/design";
-import { applicationEligibility, eligibility, generateBlocker, MAX_UNITS_PER_RUN, selectable, setFacts, stillSelectable, unitsLine } from "./design-run";
+import { applicationEligibility, eligibility, generateBlocker, selectable, setFacts, stillSelectable, unitsLine } from "./design-run";
 
 const summary = (set: string, over: Partial<UnitSetSummary> = {}): UnitSetSummary => ({ set, version: 1, state: "missing", files: { total: 2, conformant: 0, problems: 0, missing: 2, stale: 0, waived: 0 }, ready: true, ...over });
 const unit = (key: string, sets: Record<string, UnitSetSummary>, kind = "screen"): UnitDesignRow => ({ key, module: key.split("/")[0]!, unit: key.split("/")[1]!, kind, sets, rules: { total: 0, uncovered: null } });
@@ -57,7 +57,6 @@ describe("generateBlocker", () => {
     expect(generateBlocker({ ...ok, disabled: "Link a legacy code repo to the application to run stages.", set: "" })).toBe("Link a legacy code repo to the application to run stages.");
     expect(generateBlocker({ ...ok, set: "" })).toBe("Choose a design set to generate.");
     expect(generateBlocker({ ...ok, count: 0 })).toBe("Select the units to generate it for.");
-    expect(generateBlocker({ ...ok, count: MAX_UNITS_PER_RUN + 1 })).toBe(`A run takes at most ${MAX_UNITS_PER_RUN} units.`);
   });
 });
 

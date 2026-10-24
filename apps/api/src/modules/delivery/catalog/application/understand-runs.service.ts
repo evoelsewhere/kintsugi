@@ -4,14 +4,12 @@
 // the run reads the same documents. Items that are running or in an open pull request block a new
 // run on them (409 with the conflicts); Abandon on the earlier run releases them.
 
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Actor } from "#common/auth/decorators.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { isBlocked } from "../domain/catalog.js";
 import { CatalogService, UNDERSTAND_STAGE } from "./catalog.service.js";
 
-/** Items per run: the writer's file cap (~6 files per item plus the run's own) and a reviewable pull request. */
-export const MAX_ITEMS_PER_RUN = 60;
 
 export interface UnderstandSelection {
   items?: string[];
@@ -55,10 +53,6 @@ export class UnderstandRunsService {
       });
     }
     if (wanted.size === 0) throw new BadRequestException("Select at least one catalog item or module");
-    const cap = MAX_ITEMS_PER_RUN;
-    if (wanted.size > cap) {
-      throw new UnprocessableEntityException({ message: `${wanted.size} items selected: a run takes at most ${cap}; split the selection`, details: { selected: wanted.size, max: cap } });
-    }
     const view = await this.catalog.withStatus(loaded, applicationId);
     const conflicts = view.items
       .filter((item) => wanted.has(item.id) && isBlocked(item))

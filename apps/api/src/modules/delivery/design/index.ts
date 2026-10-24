@@ -2,7 +2,7 @@
 
 export { DesignModule } from "./design.module.js";
 export { DesignService } from "./application/design.service.js";
-export { DesignRunsService, MAX_UNITS_PER_RUN } from "./application/design-runs.service.js";
+export { DesignRunsService } from "./application/design-runs.service.js";
 export type {
   CommonDesignView,
   DesignActivityView,
