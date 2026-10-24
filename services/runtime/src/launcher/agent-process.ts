@@ -19,7 +19,7 @@ import { PI_ENGINE_ID, RUNTIME_VERSION } from "../version.js";
 import type { StoredProviderConfig } from "./model-runtime.js";
 import { type ProcessResult, runProcess } from "./process.js";
 import type { LoadedProvider } from "./provider-registry.js";
-import { jobEnvironment, lastLine, redactText } from "./script.js";
+import { jobEnvironment, redactText } from "./script.js";
 
 /** What the launcher writes to the child's stdin (one JSON document). */
 export interface AgentChildInput {
@@ -176,7 +176,7 @@ class ChildAgentJob implements JobHandle {
     else if (result?.stopped === "aborted") fail("aborted", this.#abortReason);
     else if (result?.stopped === "timeout") fail("timeout", `timed out after ${timeoutSec}s`);
     else {
-      const detail = lastLine(result?.stderr ?? "");
+      const detail = redactText((result?.stderr ?? "").trim().split(/\r?\n/).slice(-15).join("\n"));
       fail("error", `the agent process exited with code ${result?.exitCode ?? "?"} without a result${detail === "" ? "" : `: ${detail}`}`);
     }
   }
