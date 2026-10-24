@@ -4,6 +4,7 @@ import { getNativeClientVersion } from "../src/client-version.js";
 import { EventEmitter } from "node:events";
 import * as cliModule from "../src/cli.js";
 import type { MemberPort } from "@kintsugi/harness-sdk";
+import { stableProjectProfileId } from "../src/profile.js";
 
 describe("native client version detection", () => {
   it("uses direct execution for Windows client executables", async () => {
@@ -11,6 +12,24 @@ describe("native client version detection", () => {
 
     await expect(getNativeClientVersion("claude", "win32", execute as never)).resolves.toBe("2.1.278");
     expect(execute).toHaveBeenCalledWith("claude", ["--version"], expect.objectContaining({ shell: false }));
+  });
+
+  it("starts a client that is only a .cmd shim through PowerShell on Windows", async () => {
+    const missing = Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" });
+    const execute = vi.fn()
+      .mockRejectedValueOnce(missing)
+      .mockResolvedValueOnce({ stdout: "2.1.260 (Claude Code)\n", stderr: "" });
+    const previous = process.env.SystemRoot;
+    process.env.SystemRoot = "C:\\Windows";
+    try {
+      await expect(getNativeClientVersion("claude", "win32", execute as never)).resolves.toBe("2.1.260");
+    } finally {
+      if (previous === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = previous;
+    }
+    expect(execute.mock.calls[1]![0]).toMatch(/powershell\.exe$/);
+    expect(execute.mock.calls[1]![2]).toMatchObject({ env: { KINTSUGI_NATIVE_EXECUTABLE: "claude", KINTSUGI_NATIVE_ARGS: '["--version"]' } });
+    // A client that is not installed at all still fails, and Unix never retries.
+    await expect(getNativeClientVersion("claude", "linux", vi.fn().mockRejectedValue(missing) as never)).rejects.toBe(missing);
   });
 
   it("keeps direct execution on Unix", async () => {
@@ -100,8 +119,10 @@ describe("kintsugi CLI", () => {
     expect(authorization?.searchParams.get("codeChallengeMethod")).toBe("S256");
     expect(requests[0]?.url).toBe("https://kintsugi.example/api/auth/coding-agent/token");
     expect(new Headers(requests[0]?.init?.headers).get("x-kintsugi-csrf")).toBe("1");
-    expect(JSON.parse(state.credentials.values.get("work")!)).toMatchObject({ version: 1, refreshToken: "knt_crt_test", connectionId: "connection-1", projectIds: ["shop"] });
-    expect(state.credentials.values.get("work")).not.toContain("knt_caw_test");
+    // The profile of a project is the one init and connect use for it.
+    const profile = stableProjectProfileId("https://kintsugi.example", "shop");
+    expect(JSON.parse(state.credentials.values.get(profile)!)).toMatchObject({ version: 1, refreshToken: "knt_crt_test", connectionId: "connection-1", projectIds: ["shop"] });
+    expect(state.credentials.values.get(profile)).not.toContain("knt_caw_test");
     expect(state.output().stdout + state.output().stderr).not.toContain("knt_crt_test");
     expect(closed).toBe(true);
   });

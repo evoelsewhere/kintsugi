@@ -53,9 +53,10 @@ describe("the words for a record and a review", () => {
 });
 
 describe("the commands of a member", () => {
-  it("install, connect, add the plugin, then run the command with the unit and the project", () => {
+  it("install, sign in, set up the clients, install the plugin, then run the command with the unit and the project", () => {
     const steps = cliCommands({ url: "https://kintsugi.example", projectId: "shop", unit: "billing/tax" });
-    expect(steps.map((step) => step.code)).toEqual(["curl -fsSL https://kintsugi.example/api/v1/releases/latest/install.sh | sh", "kintsugi connect claude shop", "kintsugi add modernize", "/kintsugi:build billing/tax shop"]);
-    expect(cliCommands({ url: "https://k", projectId: "shop", unit: "a/b", client: "codex" })[1]?.code).toBe("kintsugi connect codex shop");
+    expect(steps.map((step) => step.code)).toEqual(["curl -fsSL https://kintsugi.example/api/v1/releases/latest/install.sh | sh", "kintsugi login shop", "kintsugi init", "kintsugi install plugin modernize --all", "/modernize:build billing/tax shop"]);
+    expect(cliCommands({ url: "https://k", projectId: "shop", unit: "a/b", client: "codex" }).at(-1)?.code).toBe("$build a/b shop");
+    expect(cliCommands({ url: "https://k", projectId: "shop", unit: "a/b", client: "copilot" }).at(-1)?.code).toBe("/modernize:build a/b shop");
   });
 });

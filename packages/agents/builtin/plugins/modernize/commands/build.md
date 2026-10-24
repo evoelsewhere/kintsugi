@@ -2,6 +2,11 @@
 description: Implement and test one designed unit in your own repository with your own AI client, from its merged design, and tell Kintsugi which unit and which merge request you built
 argument-hint: <module>/<unit> [project]
 arguments: unit project
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: "kintsugi activity hook stop --plugin modernize --command build"
 metadata:
   audience: member
   agents: []

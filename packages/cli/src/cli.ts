@@ -10,6 +10,7 @@ import { getNativeClientVersion } from "./client-version.js";
 import { runNativeClientCommand } from "./client-command.js";
 import type { CredentialStore } from "./credential-store.js";
 import { NativeCredentialStore } from "./credential-store.js";
+import { chooseInTerminal } from "./prompt.js";
 import { registerActivityCommands } from "./commands/activity.js";
 import { registerAuthCommands } from "./commands/auth.js";
 import { registerDocumentCommands } from "./commands/document.js";
@@ -32,6 +33,12 @@ export interface NativeClientCommandResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+}
+
+export interface ChoiceOption {
+  value: string;
+  label: string;
+  hint?: string;
 }
 
 export interface CliDeps {
@@ -57,6 +64,8 @@ export interface CliDeps {
   /** Browser launch and loopback callback are injectable so auth tests never open a real browser or listener. */
   openBrowser?: (url: string) => Promise<void>;
   createOAuthCallback?: (options: { state: string; signal?: AbortSignal }) => Promise<OAuthLoopbackCallback>;
+  /** Interactive choice among options; absent when the CLI cannot ask (tests, pipes). Resolves the values chosen. */
+  choose?: (input: { message: string; options: ChoiceOption[]; multiple: boolean; defaults: string[] }) => Promise<string[]>;
   /** Native harness process execution is injectable and must use argument-safe spawning. */
   runClientCommand?: (executable: string, args: readonly string[]) => Promise<NativeClientCommandResult>;
 }
@@ -104,6 +113,7 @@ export function createDefaultCliDeps(): CliDeps {
       stdout: process.stderr,
       stderr: process.stderr,
     }),
+    choose: chooseInTerminal,
     cwd: process.cwd(),
     homeDir: homedir(),
     env: process.env,

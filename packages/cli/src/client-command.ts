@@ -6,10 +6,16 @@ import { CliError } from "./profile.js";
 const ALLOWED_EXECUTABLES = new Set(["claude", "codex", "copilot"]);
 const WINDOWS_LAUNCHER = [
   "$ErrorActionPreference = 'Stop'",
+  "$ProgressPreference = 'SilentlyContinue'",
   "try {",
-  "  [string[]]$nativeArgs = @(ConvertFrom-Json -InputObject $env:KINTSUGI_NATIVE_ARGS)",
+  // Windows PowerShell 5.1 hands back the whole JSON array as one object, which a cast would join into a single argument.
+  "  $parsedArgs = ConvertFrom-Json -InputObject $env:KINTSUGI_NATIVE_ARGS",
+  "  [string[]]$nativeArgs = foreach ($argument in $parsedArgs) { [string]$argument }",
   "  $nativeExecutable = $env:KINTSUGI_NATIVE_EXECUTABLE",
-  "  $application = Get-Command -Name $nativeExecutable -CommandType Application -ErrorAction Stop",
+  // An npm install leaves `claude` (a shell script) and `claude.cmd` side by side: take one that Windows can start.
+  "  $found = @(Get-Command -Name $nativeExecutable -CommandType Application -ErrorAction Stop)",
+  "  $application = @($found | Where-Object { $_.Extension -ne '' })[0]",
+  "  if ($null -eq $application) { $application = $found[0] }",
   "  & $application.Source @nativeArgs",
   "  if ($null -eq $LASTEXITCODE) { exit 0 }",
   "  exit $LASTEXITCODE",
@@ -42,9 +48,25 @@ export interface NativeClientCommandOptions {
 }
 
 function windowsPowerShellPath(env: NodeJS.ProcessEnv): string {
-  const root = env.SystemRoot ?? env.windir;
+  // Windows environment names are case-insensitive, but a copy of the environment keeps the case it was given (Git Bash: SYSTEMROOT).
+  const named = (name: string): string | undefined => Object.entries(env).filter(([key]) => key.toLowerCase() === name).at(-1)?.[1];
+  const root = named("systemroot") ?? named("windir");
   if (root === undefined || root.trim() === "") throw new CliError("NATIVE_COMMAND_UNAVAILABLE", "Windows PowerShell could not be located through SystemRoot");
   return win32.resolve(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+}
+
+/**
+ * How to start a native client on Windows through PowerShell, which finds `claude.cmd` (an npm install) as well as an
+ * executable. The arguments travel as JSON in the environment, so PowerShell never re-splits them.
+ */
+export function windowsLauncherInvocation(executable: string, args: readonly string[], env: NodeJS.ProcessEnv): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
+  const serializedArgs = JSON.stringify(args);
+  if (serializedArgs.length > 24_000) throw new CliError("NATIVE_ARGUMENT_INVALID", "Native client arguments exceed the Windows command limit");
+  return {
+    command: windowsPowerShellPath(env),
+    args: ["-NoLogo", "-NoProfile", "-EncodedCommand", Buffer.from(WINDOWS_LAUNCHER, "utf16le").toString("base64")],
+    env: { ...env, KINTSUGI_NATIVE_EXECUTABLE: executable, KINTSUGI_NATIVE_ARGS: serializedArgs },
+  };
 }
 
 export async function runNativeClientCommand(
@@ -56,18 +78,16 @@ export async function runNativeClientCommand(
   if (args.some((argument) => argument.includes("\0"))) throw new CliError("NATIVE_ARGUMENT_INVALID", "Native client arguments cannot contain NUL characters");
 
   const platform = options.platform ?? process.platform;
-  const env = { ...process.env, ...options.env };
+  let env = { ...process.env, ...options.env };
   let command = executable;
   let commandArgs = [...args];
   // Codex installs a native Windows executable. Spawning it directly preserves
   // argv; Windows PowerShell 5 otherwise joins the splatted arguments into one.
   if (platform === "win32" && executable !== "codex") {
-    const serializedArgs = JSON.stringify(args);
-    if (serializedArgs.length > 24_000) throw new CliError("NATIVE_ARGUMENT_INVALID", "Native client arguments exceed the Windows command limit");
-    command = windowsPowerShellPath(env);
-    commandArgs = ["-NoLogo", "-NoProfile", "-EncodedCommand", Buffer.from(WINDOWS_LAUNCHER, "utf16le").toString("base64")];
-    env.KINTSUGI_NATIVE_EXECUTABLE = executable;
-    env.KINTSUGI_NATIVE_ARGS = serializedArgs;
+    const launch = windowsLauncherInvocation(executable, args, env);
+    command = launch.command;
+    commandArgs = launch.args;
+    env = launch.env;
   }
 
   const execute = options.spawn ?? (spawn as NativeSpawn);

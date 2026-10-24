@@ -8,16 +8,13 @@ import { memberApi, type MemberTokenMetadata } from "@/lib/api/member";
 import type { CodingAgentConnectionMetadata } from "@/lib/api/coding-agent-security";
 import { errorText, formatDateTime } from "@/lib/format";
 import { Link } from "react-router-dom";
-import { buildPluginInstallCommand, type InstallShell } from "./install-model";
-
-type InstallClientChoice = "claude-code" | "codex-desktop" | "codex-cli";
+import { buildSetupCommands, type InstallShell } from "./install-model";
 
 export function MemberConnectPanel({ projectId, canManage, canRead }: { projectId: string; canManage: boolean; canRead: boolean }): React.JSX.Element {
   const toast = useToast();
   const [tokens, setTokens] = useState<MemberTokenMetadata[]>([]);
   const [connections, setConnections] = useState<CodingAgentConnectionMetadata[]>([]);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
-  const [clientChoice, setClientChoice] = useState<InstallClientChoice>("codex-desktop");
   const [shell, setShell] = useState<InstallShell>("powershell");
   const [withUrl, setWithUrl] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -26,14 +23,7 @@ export function MemberConnectPanel({ projectId, canManage, canRead }: { projectI
   let setup: string | undefined;
   let setupError: string | null = null;
   try {
-    if (baseUrl !== null) setup = buildPluginInstallCommand({
-      baseUrl,
-      projectId,
-      harness: clientChoice === "claude-code" ? "claude-code" : "codex",
-      installMode: clientChoice === "codex-desktop" ? "desktop-ui" : "native-cli",
-      withUrl,
-      shell,
-    });
+    if (baseUrl !== null) setup = buildSetupCommands({ baseUrl, projectId, withUrl, shell }).join("\n");
   } catch (failure) {
     setupError = errorText(failure);
   }
@@ -102,7 +92,7 @@ export function MemberConnectPanel({ projectId, canManage, canRead }: { projectI
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="member-token-heading" className="text-[15px] font-medium text-text">Connect your coding agent</h2>
-          <p className="mt-0.5 max-w-2xl text-[12px] text-text-muted">Install the Kintsugi connector once. The agent signs in through Kintsugi the first time it needs project context.</p>
+          <p className="mt-0.5 max-w-2xl text-[12px] text-text-muted">Sign in, let Kintsugi find the AI clients on your machine and set them up, then install the plugins your project offers into all of them.</p>
         </div>
         {(canRead || canManage) ? <Button size="icon" variant="ghost" aria-label="Refresh member access" onClick={() => { setLoading(true); void load(); }}><RefreshCw className="size-4" /></Button> : null}
       </div>
@@ -110,22 +100,19 @@ export function MemberConnectPanel({ projectId, canManage, canRead }: { projectI
         <div className="rounded-lg bg-surface shadow-border">
           <div className="flex flex-wrap items-center gap-2 px-3.5 py-3 [box-shadow:inset_2px_0_0_0_var(--ds-accent)]">
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium text-text">{clientChoice === "codex-desktop" ? "Prepare for Codex Desktop" : "One-time install"}</p>
-              <p className="mt-0.5 text-[12px] text-text-muted">Install the Kintsugi CLI first (<Link className="text-accent hover:underline" to="/guideline/install-the-cli">guide</Link>). Codex Desktop uses this command to prepare its local marketplace; you finish installation in the app.</p>
+              <p className="text-[13px] font-medium text-text">Three commands</p>
+              <p className="mt-0.5 text-[12px] text-text-muted">Install the Kintsugi CLI first (<Link className="text-accent hover:underline" to="/guideline/install-the-cli">guide</Link>). <code>init</code> lists the clients it finds (Claude Code, Codex) and asks which to set up, and whether for every workspace or only the current one.</p>
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-2 px-3.5 pb-3.5">
-            <Field label="AI client" className="w-44">
-              <Select value={clientChoice} options={[{ value: "codex-desktop", label: "Codex Desktop" }, { value: "codex-cli", label: "Codex CLI" }, { value: "claude-code", label: "Claude Code" }]} onChange={(value) => setClientChoice(value as InstallClientChoice)} />
-            </Field>
             <Field label="Terminal" className="w-44">
               <Select value={shell} options={[{ value: "powershell", label: "PowerShell" }, { value: "posix", label: "macOS / Linux" }]} onChange={(value) => setShell(value as InstallShell)} />
             </Field>
-            <Button size="small" variant="ghost" disabled={setup === undefined} onClick={() => { if (setup !== undefined) void copy(setup, clientChoice === "codex-desktop" ? "Preparation command" : "Install command"); }}><ClipboardCopy className="size-3.5" />Copy command</Button>
+            <Button size="small" variant="ghost" disabled={setup === undefined} onClick={() => { if (setup !== undefined) void copy(setup, "Setup commands"); }}><ClipboardCopy className="size-3.5" />Copy commands</Button>
           </div>
-          <pre aria-label="Generated connector install command" className="overflow-x-auto bg-recessed px-3.5 py-2.5 font-mono text-[11px] leading-5 text-text">{setup ?? (loading ? "Loading the configured Kintsugi URL…" : "Install command is unavailable. Contact your Kintsugi administrator.")}</pre>
-          <p className="px-3.5 pt-2 text-[11px] text-text-muted">Then add a plugin your project offers: <code>kintsugi add context</code>. {withUrl ? "The command names this installation, for a CLI installed from elsewhere." : "A CLI installed from this installation already knows its URL."} <button type="button" className="text-accent hover:underline" onClick={() => setWithUrl(!withUrl)}>{withUrl ? "Hide the URL" : "Add the URL"}</button></p>
-          <p className="px-3.5 py-2.5 text-[11px] text-text-muted">{clientChoice === "codex-desktop" ? "Restart Codex Desktop, then open Plugins → Plugins Directory → Kintsugi marketplace and install the plugin. In a new local chat, first use opens Kintsugi sign-in in your browser." : `After install, start a new ${clientChoice === "claude-code" ? "Claude Code" : "Codex CLI"} session. First use opens Kintsugi sign-in in your browser.`}</p>
+          <pre aria-label="Setup commands" className="overflow-x-auto bg-recessed px-3.5 py-2.5 font-mono text-[11px] leading-5 text-text">{setup ?? (loading ? "Loading the configured Kintsugi URL…" : "The commands are unavailable. Contact your Kintsugi administrator.")}</pre>
+          <p className="px-3.5 pt-2 text-[11px] text-text-muted"><code>kintsugi plugins list</code> shows what your project offers; <code>kintsugi install fetch</code> brings installed plugins up to date. {withUrl ? "The command names this installation, for a CLI installed from elsewhere." : "A CLI installed from this installation already knows its URL."} <button type="button" className="text-accent hover:underline" onClick={() => setWithUrl(!withUrl)}>{withUrl ? "Hide the URL" : "Add the URL"}</button></p>
+          <p className="px-3.5 py-2.5 text-[11px] text-text-muted">After the install, start a new session in your AI client. A plugin command is named after the plugin, for example <code>/modernize:build</code>. Codex Desktop needs one more step in the app: Plugins → Plugins Directory → Kintsugi.</p>
         </div>
         <div className="flex flex-col gap-1">
           <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-text"><Shield className="size-3.5 text-text-muted" />Your connections</h3>

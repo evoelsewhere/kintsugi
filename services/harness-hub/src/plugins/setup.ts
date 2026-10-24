@@ -1,11 +1,31 @@
 import { lstat, mkdir, open, readFile, rename, rm, rmdir } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
-import { assertClientCompatibility } from "./compatibility.js";
-import { KINTSUGI_PLUGIN_NAME, generateConnectorPlugin, PluginSetupError, type ConnectorPluginInput, type HarnessClient } from "./generate.js";
+import { assertClientCompatibility, versionAtLeast } from "./compatibility.js";
+import { KINTSUGI_PLUGIN_NAME, clientPluginName, generateConnectorPlugin, generateMemberPlugin, PluginSetupError, type ConnectorPluginInput, type HarnessClient } from "./generate.js";
+
+/** Where the client installs the plugins: for the user everywhere, or only for the workspace the command runs in. */
+export type InstallScope = "user" | "project" | "local";
+
+/** A member plugin of the package. `files` are given when the plugin is installed or updated now; a plugin already on disk needs none. */
+export interface MemberPluginSetup {
+  /** The plugin's name in Kintsugi. */
+  name: string;
+  version: string;
+  description?: string;
+  files?: Record<string, string>;
+  /** The plugin is installed in the client already: update it instead of installing it. */
+  installed?: boolean;
+}
 
 export interface SetupInput extends ConnectorPluginInput {
   clientVersion: string;
+  /** Installation scope of the client's plugin commands (Claude Code: user, project or local; the other clients ignore it). */
+  scope?: InstallScope;
+  /** The member plugins of the package, each its own client plugin (`/<plugin>:<command>`). */
+  memberPlugins?: MemberPluginSetup[];
+  /** Member plugins to uninstall from the client; their folders are deleted by `removeMemberPluginFolder`. */
+  removePlugins?: string[];
   /** Dedicated per-client root below Kintsugi's local config directory. */
   artifactRoot: string;
   /** The record of installed member plugins (see PLUGIN_STATE_PATH); written with the package when given. */
@@ -20,6 +40,12 @@ export interface SetupChange {
   pluginName: string;
   marketplaceName: string;
   installationMode?: "native-cli" | "desktop-ui";
+  scope?: InstallScope;
+  /** The version the native client reported, which decides the flags of its commands. */
+  clientVersion?: string;
+  /** Client names of the member plugins to install or update, and of those to uninstall. */
+  install?: Array<{ name: string; update: boolean }>;
+  uninstall?: string[];
 }
 
 /** A native client invocation represented as executable plus literal argv. */
@@ -94,7 +120,7 @@ function assertRelativeFile(path: string): void {
   }
 }
 
-export function generateConnectorMarketplace(target: HarnessClient, version: string, profileId = "default"): { path: string; content: string } {
+export function generateConnectorMarketplace(target: HarnessClient, version: string, profileId = "default", members: ReadonlyArray<{ name: string; version: string; description?: string }> = []): { path: string; content: string } {
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     throw new PluginSetupError("PLUGIN_VERSION_INVALID", "Plugin marketplace version must be an exact semantic version");
   }
@@ -108,7 +134,10 @@ export function generateConnectorMarketplace(target: HarnessClient, version: str
         name: marketplaceName,
         description: "Local Kintsugi plugins.",
         owner: { name: "Kintsugi" },
-        plugins: [{ name: pluginName, source: pluginPath, description: "Read-only Kintsugi task context and workflow evidence.", version }],
+        plugins: [
+          { name: pluginName, source: pluginPath, description: "Read-only Kintsugi task context and workflow evidence.", version },
+          ...members.map((member) => ({ name: clientPluginName(member.name), source: `./plugins/${target}/${clientPluginName(member.name)}`, description: member.description ?? `Kintsugi plugin ${member.name}`, version: member.version })),
+        ],
       }, null, 2)}\n`,
     };
   }
@@ -124,7 +153,13 @@ export function generateConnectorMarketplace(target: HarnessClient, version: str
           version,
           policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
           category: "Developer tools",
-        }],
+        }, ...members.map((member) => ({
+          name: clientPluginName(member.name),
+          source: { source: "local", path: `./plugins/${target}/${clientPluginName(member.name)}` },
+          version: member.version,
+          policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+          category: "Developer tools",
+        }))],
       }, null, 2)}\n`,
     };
   }
@@ -134,7 +169,10 @@ export function generateConnectorMarketplace(target: HarnessClient, version: str
       name: marketplaceName,
       owner: { name: "Kintsugi" },
       metadata: { description: "Local Kintsugi plugins.", version },
-      plugins: [{ name: pluginName, source: pluginPath, description: "Read-only Kintsugi task context and workflow evidence.", version }],
+      plugins: [
+        { name: pluginName, source: pluginPath, description: "Read-only Kintsugi task context and workflow evidence.", version },
+        ...members.map((member) => ({ name: clientPluginName(member.name), source: `./plugins/${target}/${clientPluginName(member.name)}`, description: member.description ?? `Kintsugi plugin ${member.name}`, version: member.version })),
+      ],
     }, null, 2)}\n`,
   };
 }
@@ -168,36 +206,51 @@ export function formatNativeCommand(command: NativeClientCommand, platform: Node
   return [command.executable, ...command.args.map((argument) => formatArgument(argument, platform))].join(" ");
 }
 
-function nativeCommands(target: HarnessClient, root: string, pluginName: string, marketplaceName: string): { install: NativeClientCommand[]; rollback: NativeClientCommand[] } {
-  const installByClient: Record<HarnessClient, NativeClientCommand[]> = {
-    claude: [
-      { executable: "claude", args: ["plugin", "marketplace", "add", "--scope", "user", root] },
-      { executable: "claude", args: ["plugin", "install", "--scope", "user", "--yes", `${pluginName}@${marketplaceName}`] },
+/** Codex 0.163 added `--no-daemon`, which keeps `plugin` commands from starting the app-server daemon; an older Codex refuses it. */
+const CODEX_NO_DAEMON_FROM = "0.163.0";
+
+function nativeCommands(target: HarnessClient, root: string, pluginName: string, marketplaceName: string, options: { scope: InstallScope; clientVersion?: string; marketplaceKnown?: boolean; install: ReadonlyArray<{ name: string; update: boolean }>; uninstall: readonly string[] }): { install: NativeClientCommand[]; rollback: NativeClientCommand[] } {
+  const scope = options.scope;
+  const codexFlags = options.clientVersion !== undefined && versionAtLeast(options.clientVersion, CODEX_NO_DAEMON_FROM) ? ["--no-daemon"] : [];
+  const names = [pluginName, ...options.install.map((entry) => entry.name)];
+  const installByClient: Record<HarnessClient, () => NativeClientCommand[]> = {
+    claude: () => [
+      { executable: "claude", args: ["plugin", "marketplace", "add", "--scope", scope, root] },
+      ...(options.install.some((entry) => entry.update) ? [{ executable: "claude", args: ["plugin", "marketplace", "update", marketplaceName] } satisfies NativeClientCommand] : []),
+      ...options.uninstall.map((name): NativeClientCommand => ({ executable: "claude", args: ["plugin", "uninstall", "--scope", scope, `${name}@${marketplaceName}`] })),
+      { executable: "claude", args: ["plugin", "install", "--scope", scope, "--yes", `${pluginName}@${marketplaceName}`] },
+      ...options.install.map((entry): NativeClientCommand => ({ executable: "claude", args: ["plugin", entry.update ? "update" : "install", "--scope", scope, "--yes", `${entry.name}@${marketplaceName}`] })),
     ],
-    codex: [
-      { executable: "codex", args: ["--no-daemon", "plugin", "marketplace", "add", root] },
-      { executable: "codex", args: ["--no-daemon", "plugin", "add", `${pluginName}@${marketplaceName}`] },
+    codex: () => [
+      { executable: "codex", args: [...codexFlags, "plugin", "marketplace", "add", root] },
+      ...options.uninstall.map((name): NativeClientCommand => ({ executable: "codex", args: [...codexFlags, "plugin", "remove", `${name}@${marketplaceName}`] })),
+      ...names.map((name): NativeClientCommand => ({ executable: "codex", args: [...codexFlags, "plugin", "add", `${name}@${marketplaceName}`] })),
     ],
-    copilot: [
-      { executable: "copilot", args: ["plugin", "marketplace", "add", root] },
+    copilot: () => [
+      // Copilot refuses to add a marketplace twice (exit 1), so a package set up before is refreshed instead.
+      options.marketplaceKnown === true
+        ? { executable: "copilot", args: ["plugin", "marketplace", "update", marketplaceName] }
+        : { executable: "copilot", args: ["plugin", "marketplace", "add", root] },
+      ...options.uninstall.map((name): NativeClientCommand => ({ executable: "copilot", args: ["plugin", "uninstall", name] })),
       { executable: "copilot", args: ["plugin", "install", `${pluginName}@${marketplaceName}`] },
+      ...options.install.map((entry): NativeClientCommand => ({ executable: "copilot", args: ["plugin", entry.update ? "update" : "install", `${entry.name}@${marketplaceName}`] })),
     ],
   };
-  const rollbackByClient: Record<HarnessClient, NativeClientCommand[]> = {
-    claude: [
-      { executable: "claude", args: ["plugin", "uninstall", "--scope", "user", `${pluginName}@${marketplaceName}`] },
-      { executable: "claude", args: ["plugin", "marketplace", "remove", "--scope", "user", marketplaceName] },
+  const rollbackByClient: Record<HarnessClient, () => NativeClientCommand[]> = {
+    claude: () => [
+      ...[...names].reverse().map((name): NativeClientCommand => ({ executable: "claude", args: ["plugin", "uninstall", "--scope", scope, `${name}@${marketplaceName}`] })),
+      { executable: "claude", args: ["plugin", "marketplace", "remove", "--scope", scope, marketplaceName] },
     ],
-    codex: [
-      { executable: "codex", args: ["--no-daemon", "plugin", "remove", `${pluginName}@${marketplaceName}`] },
-      { executable: "codex", args: ["--no-daemon", "plugin", "marketplace", "remove", marketplaceName] },
+    codex: () => [
+      ...[...names].reverse().map((name): NativeClientCommand => ({ executable: "codex", args: [...codexFlags, "plugin", "remove", `${name}@${marketplaceName}`] })),
+      { executable: "codex", args: [...codexFlags, "plugin", "marketplace", "remove", marketplaceName] },
     ],
-    copilot: [
-      { executable: "copilot", args: ["plugin", "uninstall", pluginName] },
+    copilot: () => [
+      ...[...names].reverse().map((name): NativeClientCommand => ({ executable: "copilot", args: ["plugin", "uninstall", name] })),
       { executable: "copilot", args: ["plugin", "marketplace", "remove", marketplaceName] },
     ],
   };
-  return { install: installByClient[target], rollback: rollbackByClient[target] };
+  return { install: installByClient[target](), rollback: rollbackByClient[target]() };
 }
 
 /** Validates client compatibility before producing a deterministic list of package files. */
@@ -208,18 +261,27 @@ export function planClientSetup(input: SetupInput): SetupChange[] {
   const root = resolve(input.artifactRoot);
   const generated = generateConnectorPlugin(input);
   const marketplaceName = marketplaceNameForProfile(input.profileId);
-  const marketplace = generateConnectorMarketplace(input.target, input.cliVersion, input.profileId);
+  const members = input.memberPlugins ?? [];
+  const marketplace = generateConnectorMarketplace(input.target, input.cliVersion, input.profileId, members);
+  const memberEntries = members.flatMap((member): Array<[string, string]> => {
+    if (member.files === undefined) return [];
+    const plugin = generateMemberPlugin({ target: input.target, name: member.name, version: member.version, ...(member.description === undefined ? {} : { description: member.description }), files: member.files });
+    return Object.entries(plugin.files).map(([path, content]): [string, string] => [`plugins/${input.target}/${plugin.pluginName}/${path}`, content]);
+  });
   const entries: Array<[string, string]> = [
     [MARKER_PATH, SETUP_MARKER(input.target)],
     ...(input.stateFile === undefined ? [] : [[PLUGIN_STATE_PATH, input.stateFile] as [string, string]]),
     [marketplace.path, marketplace.content],
     ...Object.entries(generated.files).map(([path, content]): [string, string] => [`plugins/${input.target}/${generated.pluginName}/${path}`, content]),
+    ...memberEntries,
   ];
+  const install = members.filter((member) => member.files !== undefined).map((member) => ({ name: clientPluginName(member.name), update: member.installed === true }));
+  const uninstall = (input.removePlugins ?? []).map((name) => clientPluginName(name));
   return entries.map(([relativePath, content]) => {
     assertRelativeFile(relativePath);
     const destination = resolve(root, relativePath);
     if (!within(root, destination)) throw new PluginSetupError("SETUP_PATH_INVALID", "A generated path escaped the Kintsugi artifact root");
-    return { root, relativePath, content, target: input.target, pluginName: generated.pluginName, marketplaceName, installationMode: "native-cli" };
+    return { root, relativePath, content, target: input.target, pluginName: generated.pluginName, marketplaceName, installationMode: "native-cli", scope: input.scope ?? "user", clientVersion: input.clientVersion, install, uninstall };
   });
 }
 
@@ -263,11 +325,11 @@ async function assertNoSymlinkPath(path: string, deps: SetupFileDeps): Promise<v
   }
 }
 
-function validateChanges(changes: readonly SetupChange[]): { root: string; target: HarnessClient; pluginName: string; marketplaceName: string; installationMode: "native-cli" | "desktop-ui" } {
+function validateChanges(changes: readonly SetupChange[]): { root: string; target: HarnessClient; pluginName: string; marketplaceName: string; installationMode: "native-cli" | "desktop-ui"; scope: InstallScope; clientVersion: string | undefined; install: Array<{ name: string; update: boolean }>; uninstall: string[] } {
   if (changes.length === 0) throw new PluginSetupError("SETUP_CHANGES_EMPTY", "No plugin setup files were planned");
   const first = changes[0]!;
   const root = resolve(first.root);
-  const metadata = { root, target: first.target, pluginName: first.pluginName, marketplaceName: first.marketplaceName, installationMode: first.installationMode ?? "native-cli" };
+  const metadata = { root, target: first.target, pluginName: first.pluginName, marketplaceName: first.marketplaceName, installationMode: first.installationMode ?? "native-cli", scope: (first.scope ?? "user") as InstallScope, clientVersion: first.clientVersion, install: first.install ?? [], uninstall: first.uninstall ?? [] };
   const paths = new Set<string>();
   for (const change of changes) {
     assertRelativeFile(change.relativePath);
@@ -340,7 +402,7 @@ export async function applyClientSetup(changes: readonly SetupChange[], deps: Se
 
   const commands = metadata.installationMode === "desktop-ui"
     ? { install: [] as NativeClientCommand[], rollback: [] as NativeClientCommand[] }
-    : nativeCommands(metadata.target, metadata.root, metadata.pluginName, metadata.marketplaceName);
+    : nativeCommands(metadata.target, metadata.root, metadata.pluginName, metadata.marketplaceName, { scope: metadata.scope, ...(metadata.clientVersion === undefined ? {} : { clientVersion: metadata.clientVersion }), marketplaceKnown: alreadyManaged, install: metadata.install, uninstall: metadata.uninstall });
   return {
     target: metadata.target,
     artifactRoot: metadata.root,
@@ -496,8 +558,8 @@ export async function stageCodexDesktopPlugin(input: CodexDesktopSetupInput, dep
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// Member plugins distributed by Kintsugi (ADR-0069). Their files ride inside the connector package; this
-// record says which plugin put which files there, so an update or a removal deletes exactly those.
+// Member plugins distributed by Kintsugi (ADR-0069, ADR-0072). Each is its own client plugin with its own folder next to the
+// connector's; this record says which files each carries, so an update deletes exactly those it no longer has.
 // ---------------------------------------------------------------------------------------------------------
 
 export const PLUGIN_STATE_PATH = ".kintsugi-plugins.json";
@@ -505,7 +567,8 @@ export const PLUGIN_STATE_PATH = ".kintsugi-plugins.json";
 export interface InstalledPlugin {
   version: string;
   contentHash: string;
-  /** Paths relative to the connector plugin folder. */
+  description?: string;
+  /** Paths relative to the plugin's own folder in the package (`plugins/<client>/<plugin>/`). */
   files: string[];
 }
 
@@ -540,7 +603,7 @@ export async function readPluginState(artifactRoot: string, deps: SetupFileDeps 
     throw new PluginSetupError("PLUGIN_STATE_INVALID", "The record of installed Kintsugi plugins has an unsupported shape");
   }
   for (const [name, entry] of Object.entries(parsed.plugins)) {
-    if (typeof entry?.version !== "string" || typeof entry.contentHash !== "string" || !Array.isArray(entry.files) || entry.files.some((file) => typeof file !== "string")) {
+    if (typeof entry?.version !== "string" || typeof entry.contentHash !== "string" || (entry.description !== undefined && typeof entry.description !== "string") || !Array.isArray(entry.files) || entry.files.some((file) => typeof file !== "string")) {
       throw new PluginSetupError("PLUGIN_STATE_INVALID", `The record of installed Kintsugi plugins is malformed at ${name}`);
     }
   }
@@ -549,11 +612,6 @@ export async function readPluginState(artifactRoot: string, deps: SetupFileDeps 
 
 /** The state after installing (or updating) one plugin, and the files of its previous version that are now stale. */
 export function withInstalledPlugin(state: PluginInstallState, name: string, plugin: InstalledPlugin): { state: PluginInstallState; stale: string[] } {
-  for (const [other, entry] of Object.entries(state.plugins)) {
-    if (other === name) continue;
-    const clash = plugin.files.find((file) => entry.files.includes(file));
-    if (clash !== undefined) throw new PluginSetupError("PLUGIN_FILE_CONFLICT", `${clash} is already installed by the plugin ${other}`);
-  }
   const previous = state.plugins[name]?.files ?? [];
   return { state: { schemaVersion: "1", plugins: { ...state.plugins, [name]: plugin } }, stale: previous.filter((file) => !plugin.files.includes(file)) };
 }
@@ -566,15 +624,22 @@ export function withoutPlugin(state: PluginInstallState, name: string): { state:
   return { state: { schemaVersion: "1", plugins: rest }, stale: entry.files };
 }
 
-/** Deletes files a plugin no longer carries from the connector package, and the folders it leaves empty. */
-export async function pruneStalePluginFiles(artifactRoot: string, target: HarnessClient, relativePaths: readonly string[], deps: SetupFileDeps = FILES): Promise<string[]> {
+/** The folder of one member plugin in the package, checked to stay inside it. */
+function memberPluginFolder(artifactRoot: string, target: HarnessClient, name: string): string {
   const root = resolve(artifactRoot);
-  const pluginRoot = join(root, "plugins", target, KINTSUGI_PLUGIN_NAME);
+  const folder = join(root, "plugins", target, clientPluginName(name));
+  if (!within(root, folder) || folder === root) throw new PluginSetupError("SETUP_PATH_INVALID", "A member plugin folder escaped the Kintsugi package");
+  return folder;
+}
+
+/** Deletes files a member plugin no longer carries from its folder in the package, and the folders it leaves empty. */
+export async function pruneStalePluginFiles(artifactRoot: string, target: HarnessClient, pluginName: string, relativePaths: readonly string[], deps: SetupFileDeps = FILES): Promise<string[]> {
+  const pluginRoot = memberPluginFolder(artifactRoot, target, pluginName);
   const removed: string[] = [];
   for (const relativePath of relativePaths) {
     assertRelativeFile(relativePath);
     const destination = resolve(pluginRoot, relativePath);
-    if (!within(pluginRoot, destination) || destination === pluginRoot) throw new PluginSetupError("SETUP_PATH_INVALID", "A stale plugin path escaped the Kintsugi plugin folder");
+    if (!within(pluginRoot, destination) || destination === pluginRoot) throw new PluginSetupError("SETUP_PATH_INVALID", "A stale plugin path escaped the plugin folder");
     await assertNoSymlinkPath(destination, deps);
     await deps.rm(destination, { force: true });
     removed.push(destination);
@@ -583,4 +648,11 @@ export async function pruneStalePluginFiles(artifactRoot: string, target: Harnes
     }
   }
   return removed;
+}
+
+/** Deletes the whole folder of a removed member plugin (after the client uninstalled it). */
+export async function removeMemberPluginFolder(artifactRoot: string, target: HarnessClient, pluginName: string, deps: SetupFileDeps = FILES): Promise<void> {
+  const folder = memberPluginFolder(artifactRoot, target, pluginName);
+  await assertNoSymlinkPath(folder, deps);
+  await rm(folder, { recursive: true, force: true });
 }

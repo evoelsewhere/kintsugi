@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import type { CliDeps } from "../cli.js";
-import { CliError, defaultInstallationUrl, isProfileId, validateInstallationUrl } from "../profile.js";
+import { CliError, defaultInstallationUrl, isProfileId, stableProjectProfileId, validateInstallationUrl } from "../profile.js";
 import { emit, selectedProfile, type CommandOptions } from "./shared.js";
 import { oauthFor, parseOAuthCredential } from "../oauth.js";
 import { withCredentialLock } from "../oauth-lock.js";
@@ -15,12 +15,14 @@ function registerLogin(parent: Command, deps: CliDeps): void {
     .option("--token-stdin", "Read token from stdin instead of the hidden prompt")
     .action(async function(this: Command, projectArgument: string | undefined) {
       const options = this.optsWithGlobals() as CommandOptions & { url?: string; caFile?: string; tokenStdin?: boolean };
-      const id = options.profile ?? "work";
-      if (!isProfileId(id)) throw new CliError("PROFILE_ID_INVALID", "Profile name may contain letters, numbers, dot, underscore, and dash");
       const config = await deps.profiles.load();
       const url = options.url ?? await defaultInstallationUrl(deps.env, deps.launcher?.cliEntrypointPath, config.profiles[config.activeProfile ?? ""]?.baseUrl);
       if (url === undefined) throw new CliError("URL_REQUIRED", "Pass the installation URL with --url <url>; the installer records it for a CLI installed from the installation");
       const baseUrl = validateInstallationUrl(url);
+      // The same profile `init` and `connect` use for this project, so signing in and setting up a client meet in one place.
+      const named = projectArgument ?? options.project;
+      const id = options.profile ?? (named === undefined ? config.activeProfile ?? "work" : stableProjectProfileId(baseUrl, named));
+      if (!isProfileId(id)) throw new CliError("PROFILE_ID_INVALID", "Profile name may contain letters, numbers, dot, underscore, and dash");
       const prior = config.profiles[id];
       if (prior !== undefined && prior.baseUrl !== baseUrl) throw new CliError("PROFILE_INSTALLATION_MISMATCH", "This profile belongs to a different Kintsugi installation; use a new profile name");
       let caFile: string | undefined;

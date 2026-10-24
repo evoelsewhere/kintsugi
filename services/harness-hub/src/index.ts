@@ -11,6 +11,12 @@ export {
   KINTSUGI_PLUGIN_NAME,
   PluginSetupError,
   generateConnectorPlugin,
+  generateMemberPlugin,
+  plannedMemberFiles,
+  activityHooksFile,
+  commandAsSkill,
+  clientPluginName,
+  type MemberPluginInput,
   assertDistributablePath,
   type ConnectorPluginInput,
   type HarnessClient,
@@ -19,6 +25,8 @@ export {
 export {
   CLIENT_COMPATIBILITY,
   assertClientCompatibility,
+  clientVersionStatus,
+  versionAtLeast,
   type ClientCompatibility,
 } from "./plugins/compatibility.js";
 export {
@@ -27,6 +35,7 @@ export {
   codexDesktopPluginName,
   emptyPluginState,
   pruneStalePluginFiles,
+  removeMemberPluginFolder,
   readPluginState,
   serializePluginState,
   withInstalledPlugin,
@@ -36,6 +45,8 @@ export {
   planClientSetup,
   stageCodexDesktopPlugin,
   type CodexDesktopSetupInput,
+  type InstallScope,
+  type MemberPluginSetup,
   type InstalledPlugin,
   type PluginInstallState,
   type SetupChange,

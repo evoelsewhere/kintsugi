@@ -61,15 +61,17 @@ export function reviewLine(unit: BuildUnit): string {
 }
 
 /** The commands a member runs to build a unit with their own AI client (the member command `build`, ADR-0071). */
-export function cliCommands(options: { url: string; projectId: string; unit: string; client?: "claude" | "codex" }): Array<{ title: string; code: string }> {
+export function cliCommands(options: { url: string; projectId: string; unit: string; client?: "claude" | "codex" | "copilot" }): Array<{ title: string; code: string }> {
   const client = options.client ?? "claude";
   return [
     { title: "Install the CLI once", code: `curl -fsSL ${options.url}/api/v1/releases/latest/install.sh | sh` },
-    { title: "Connect your AI client to this project", code: `kintsugi connect ${client} ${options.projectId}` },
-    { title: "Add the Modernize plugin (an administrator grants it to you in Project → Member plugins)", code: "kintsugi add modernize" },
+    { title: "Sign in to this project", code: `kintsugi login ${options.projectId}` },
+    { title: "Set up your AI clients (it lists the ones it finds and asks global or this workspace)", code: "kintsugi init" },
+    { title: "Install the Modernize plugin into them (an administrator grants it to you in Project → Member plugins)", code: "kintsugi install plugin modernize --all" },
     {
-      title: client === "claude" ? "In Claude Code, in the target repository" : "In Codex, in the target repository",
-      code: client === "claude" ? `/kintsugi:build ${options.unit} ${options.projectId}` : `Use the build command of the modernize plugin for unit ${options.unit} of project ${options.projectId}`,
+      title: client === "claude" ? "In Claude Code, in the target repository" : client === "copilot" ? "In GitHub Copilot, in the target repository" : "In Codex, in the target repository",
+      // Claude Code and Copilot run it as /plugin:name; Codex has no slash form for it, so the member names the skill.
+      code: client === "codex" ? `$build ${options.unit} ${options.projectId}` : `/modernize:build ${options.unit} ${options.projectId}`,
     },
   ];
 }
