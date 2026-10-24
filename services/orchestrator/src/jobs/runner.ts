@@ -74,7 +74,7 @@ export interface JobDefaults {
 export const DEFAULT_JOB_LIMITS: JobDefaults = {
   script: { timeoutSec: 600, maxOutputBytes: 50 * 1024 * 1024 },
   agent: { timeoutSec: 0, maxOutputBytes: 50 * 1024 * 1024 },
-  workflow: { maxAgents: 50, concurrency: 4, maxTokens: 0 },
+  workflow: { concurrency: 4, maxTokens: 0 },
   stage: { maxAgents: 200, concurrency: 4 },
 };
 
@@ -978,7 +978,7 @@ export class JobRunner {
     // A stage hands its workflow what is left of the stage's agent budget (inputs.budget.maxAgents).
     const budget = run.inputs["budget"] as { maxAgents?: unknown } | undefined;
     const cap = typeof budget?.maxAgents === "number" && Number.isFinite(budget.maxAgents) ? Math.max(0, Math.floor(budget.maxAgents)) : undefined;
-    const budgets = cap === undefined ? ws.defaults.workflow : { ...ws.defaults.workflow, maxAgents: Math.min(ws.defaults.workflow.maxAgents, cap) };
+    const budgets = cap === undefined ? ws.defaults.workflow : { ...ws.defaults.workflow, maxAgents: cap };
     const outcome = await runWorkflow({
       source,
       args: run.inputs["args"] ?? {},
