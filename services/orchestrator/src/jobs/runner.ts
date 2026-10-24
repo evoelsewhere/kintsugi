@@ -26,6 +26,7 @@ import { findBuiltinFile } from "@kintsugi/agents";
 import { DEFAULT_SANDBOX, legacySources, mcpServersNamedBy, sourceRole, sourceSpec, targetSources, THINKING_LEVELS, type PinnedSource, type Provenance, type SandboxSettings, type SourceRepo, type ThinkingLevel } from "@kintsugi/domain";
 import { type CheckoutStorage, type JobPaths, runGit } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
+import { RESULT_FILE, RESULT_TOOL } from "@kintsugi/runtime/tool-names";
 import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
 import { defaultSandbox, limitsWith, type SandboxProvider } from "../sandbox.js";
@@ -223,7 +224,6 @@ const MAX_RESTRICTED_FILES = 100;
 /** The most of a stage's description that goes into a pull request (ADR-0054). */
 const MAX_DESCRIPTION_CHARS = 60_000;
 const MAX_RESTRICTED_BYTES = 1024 * 1024;
-const RESULT_FILE = "result.json";
 
 /** Appended to an agent's task when the output checks flagged its files: what to fix, never the offending content. */
 const outputFixNote = (findings: readonly string[]): string =>
@@ -244,8 +244,8 @@ const resultFileNote = (problem: string, written: readonly string[], schema?: un
   return (
     `\n\nThe step needs your structured result and ${problem}. ` +
     `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
-    `Write the JSON result with write to the bare path "${RESULT_FILE}" (no folder, the one exception to the full-path rule), matching the schema above, nothing else in that file, then stop.` +
-    (example === undefined ? "" : ` The file is one JSON object with these top-level properties, not wrapped in another key and not a report; replace the placeholder values: ${example}`)
+    `Call the ${RESULT_TOOL} tool with the result as its arguments, then stop.` +
+    (example === undefined ? "" : ` The arguments are one object with these top-level properties, not wrapped in another key and not a report; replace the placeholder values: ${example}`)
   );
 };
 
@@ -747,12 +747,13 @@ export class JobRunner {
     const schema = run.inputs["schema"];
     const schemaNote =
       typeof schema === "object" && schema !== null
-        ? `\n\nReturn your result as JSON matching this schema, written with write to the bare path "${RESULT_FILE}" at the root of the output directory, with no folder (the one exception to the full-path rule; nothing else in that file):\n${JSON.stringify(schema)}`
+        ? `\n\nReport your result by calling the ${RESULT_TOOL} tool, once, when the work is done: its arguments are the result, and the tool refuses one that does not fit (read the reason and call it again). Do not write the result to a file.`
         : "";
     const spec: JobSpec = {
       agent: definition,
       task: fill(task, this.#placeholders(run, ws)) + schemaNote + carriedNote(ws.carried ?? []),
       model: { provider: binding.provider, id: binding.model, ...(thinking === undefined ? {} : { thinking }) },
+      ...(typeof schema === "object" && schema !== null ? { resultSchema: schema as Record<string, unknown> } : {}),
       // Reads are confined to the checkouts, the inputs and the guide, writes to the output folder (kernel path guard).
       // The first entry is where a search without a path looks: the as-is code, else the inputs.
       workspace: {

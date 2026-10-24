@@ -41,7 +41,7 @@ This page has two parts:
 | [0020](0020-docker-api-via-socket-proxy.md) | The worker reaches Docker only through a socket proxy, with an image allowlist | Superseded by 0029 |
 | [0021](0021-sandboxed-child-processes.md) | Sandboxed child processes with pi-sandbox instead of per-job containers | Superseded by 0029 |
 | [0022](0022-agents-as-installation-data.md) | Agents are installation data — built-in and custom, managed in the portal | Superseded by 0023 |
-| [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted (write tool amended by 0037) |
+| [0023](0023-runtime-as-generic-agent-kernel.md) | The runtime is a generic agent kernel; agents are data supplied per job | Accepted (write tool amended by 0037, result tool by 0073) |
 | [0024](0024-access-roles-vs-project-roles.md) | Distinguish access roles from project roles | Accepted |
 | [0025](0025-git-core-and-checkout-storage.md) | Git core package and Kintsugi-managed checkout storage | Accepted |
 | [0026](0026-runtime-agents-and-agent-builder.md) | Built-in and custom runtime agents, packaged and managed in an Agent Builder | Accepted |
@@ -86,6 +86,7 @@ This page has two parts:
 | [0067](0067-remove-access-and-review-plugins.md) | Remove the Coding Agent Workflow, keep the common member base | Accepted (supersedes 0063 and the task part of 0062; amends 0015, 0035, 0061 and 0064) |
 | [0068](0068-design-generation-in-the-modernize-plugin.md) | Generate the design in the modernize plugin | Accepted (amends 0035 and 0049) |
 | [0069](0069-common-member-base-and-plugin-distribution.md) | Common member base and plugin distribution | Accepted (amends 0015, 0035 and 0061) |
+| [0073](0073-structured-results-through-a-kernel-tool.md) | A job reports its structured result through a kernel tool, not a file it writes by hand | Accepted (amends 0023) |
 | [0070](0070-cli-distributed-by-the-installation.md) | The CLI is distributed by the installation | Accepted (amends 0069) |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0061) |
@@ -177,6 +178,7 @@ This page has two parts:
 | D84 | CLI distribution | 🟠 | The installation builds and serves the CLI packages, hash-checked one-line installers and a Guideline page in the portal; short commands (`connect`, `login`, `add`) | M2 | ✅ [0070](0070-cli-distributed-by-the-installation.md) |
 | D85 | Members build, the runtime reviews | 🟠 | The runtime of `modernize` designs and reviews; a member implements and tests a unit on their machine with the member command `build`, and Kintsugi collects which unit was built in which merge request so that the runtime can review it; `verify` later | M2 | ✅ [0071](0071-members-build-runtime-reviews.md) |
 | D86 | One way in — login, init, install — and plugins as plugins of their own | 🟠 | `login`, then `init` (finds the clients, asks which and global or workspace), then `install plugin <name> --all`; one profile per project; other client versions are used with a note; each member plugin is its own client plugin (`/modernize:build`); the only distributed hook is `kintsugi activity hook`, which reports tokens, turns and time; `context` is removed | M2 | ✅ [0072](0072-init-install-and-plugins-as-plugins.md) |
+| D87 | A job reports its structured result through a kernel tool | 🟠 | A job with a result schema gets the tool `submit_result` whose parameters are the schema; pi validates the arguments so a wrong result is corrected in the same turn; the valid result is written as `result.json` and read as before; no schema text in the task | M2 | ✅ [0073](0073-structured-results-through-a-kernel-tool.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |

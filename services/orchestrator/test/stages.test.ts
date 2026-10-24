@@ -175,7 +175,8 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(documentOf(readFileSync(join(out, "topology.md"), "utf8")).data).toMatchObject({ system: "demo", domains: 1 });
     // The curation job saw the proposal and got the edit schema.
     const curate = agents.specs.find((spec) => spec.task.startsWith("Curate the item catalog"));
-    expect(curate?.task).toContain("Return your result as JSON matching this schema");
+    expect(curate?.task).toContain("submit_result");
+    expect(curate?.resultSchema).toBeDefined();
   }, 120_000);
 
   it("runs understand on a selection: per-item documents, rules and findings, one spec job per item, the understanding record and work items in one PR", async () => {
@@ -256,7 +257,8 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     // The planner is told where the graph is and gets the schema; only the plan is published.
     const planner = agents.specs.find(planningTask);
     expect(planner?.task).toContain("scratch/demo/understand/graph.json");
-    expect(planner?.task).toContain("Return your result as JSON matching this schema");
+    expect(planner?.task).toContain("submit_result");
+    expect(planner?.resultSchema).toBeDefined();
     expect(artifacts).toEqual(["10-applications/demo/01-legacy/plan.md"]);
     const plan = readFileSync(join(root, "10-applications", "demo", "01-legacy", "plan.md"), "utf8");
     expect(documentOf(plan).data).toMatchObject({ version: 1, app: "demo", batches: 2, planned: 2 });

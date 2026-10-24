@@ -81,6 +81,11 @@ export interface JobSpec {
     outDir: string;
   };
   limits: JobLimits;
+  /**
+   * The JSON Schema of the structured result this job must report. The agent gets a `submit_result` tool whose
+   * parameters are this schema (validated before it runs) and the result is written as `result.json` in `outDir`.
+   */
+  resultSchema?: Record<string, unknown>;
   /** The MCP servers the agent names in `tools`; absent when it names none. */
   mcp?: { servers: McpServerSpec[] };
   /** Opaque correlation data (e.g. projectId, trigger), echoed on job.started; never shown to the agent. */
