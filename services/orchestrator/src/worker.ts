@@ -18,6 +18,7 @@ import { RepositoryStore } from "./git-sync/repositories.js";
 import { installedAgents } from "./jobs/agents.js";
 import { dropExpiredCheckouts, pruneJobWorkspaces, removeJobWorkspace, removeWorkspaceOnRequest } from "./jobs/cleanup.js";
 import { type SandboxProvider, pgSandbox } from "./sandbox.js";
+import { createSpanExporter, pgExportTarget } from "./telemetry-export.js";
 import { MirrorCheckouts } from "./jobs/checkouts.js";
 import { createPersistedGateDecider } from "./jobs/persisted-gate-decider.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
@@ -179,6 +180,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       interpreters: options.jobs.interpreters ?? interpretersFromEnv(),
       ...(options.jobs.defaults === undefined ? {} : { defaults: options.jobs.defaults }),
       sandbox,
+      spanExporter: createSpanExporter({ target: pgExportTarget(options.pool), log }),
       requestWrite,
       log,
     });

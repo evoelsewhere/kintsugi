@@ -107,6 +107,11 @@ export interface SpanRecord {
   span: JobSpan;
 }
 
+/** Sends stored spans on to an observability backend (ADR-0074). Best effort: it never rejects. */
+export interface SpanExporter {
+  export(spans: readonly SpanRecord[]): Promise<void>;
+}
+
 /** Persistence of job runs and what they need to know about the project. */
 export interface JobStore {
   get(id: string): Promise<JobRun | undefined>;

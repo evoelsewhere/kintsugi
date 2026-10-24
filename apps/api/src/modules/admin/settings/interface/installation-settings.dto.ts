@@ -14,6 +14,17 @@ export const codingAgentConnectionLifetimeSchema = z.object({
 });
 export type CodingAgentConnectionLifetimeInput = z.infer<typeof codingAgentConnectionLifetimeSchema>;
 
+/**
+ * Body of PUT telemetry-export (ADR-0074). `headers` left out keeps the stored ones, `{}` removes them, anything else
+ * replaces them; the use case checks the rules of @kintsugi/domain.
+ */
+export const telemetryExportSchema = z.object({
+  enabled: z.boolean(),
+  endpoint: z.string().max(2000),
+  serviceName: z.string().max(200),
+  headers: z.record(z.string(), z.string()).optional(),
+});
+
 /** Body of PUT sandbox: every field; the use case checks ranges using the worker rules (@kintsugi/domain). */
 export const sandboxSettingsSchema = z.object({
   checkoutHours: z.number(),

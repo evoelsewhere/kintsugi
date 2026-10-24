@@ -36,6 +36,6 @@ pi 1.3.0 ships the `pi-telemetry` contract (`TelemetryContext`, `TelemetrySpan`)
 
 ## Alternatives considered
 
-- **An OpenTelemetry exporter now.** Not built: the adapter is vendor-neutral and an OTel adapter is a second implementation of the same contract when a deployment needs it ([D24](README.md)).
+- **An OpenTelemetry exporter now.** Not built here (added later as an optional worker-side export by [ADR-0074](0074-optional-otlp-export-of-job-spans.md)): the adapter is vendor-neutral and an OTel adapter is a second implementation of the same contract when a deployment needs it ([D24](README.md)).
 - **Summing usage from `session.getSessionStats()` at the end.** Rejected: a killed child never gets there, and the budget check needs the running total.
 - **Moving the workspace note into the first user message** to make the whole system prompt shareable. Rejected for now: pi still appends a per-job `<cwd>` section, so the system prompt cannot be fully shared, and the note belongs with the instructions it explains.
