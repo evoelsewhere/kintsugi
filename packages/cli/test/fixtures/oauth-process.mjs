@@ -10,7 +10,18 @@ if (!profile.id || !profile.baseUrl || !file) throw new Error("Missing synthetic
 const send = (value) => process.send?.(value);
 const credentials = {
   async get() { try { return await readFile(file, "utf8"); } catch (error) { if (error.code === "ENOENT") return undefined; throw error; } },
-  async set(_id, value) { const temporary = `${file}.${process.pid}`; await writeFile(temporary, value); await rename(temporary, file); },
+  // Windows refuses to rename over a file another process has open (the other worker reads it), so the swap is retried briefly.
+  async set(_id, value) {
+    const temporary = `${file}.${process.pid}`;
+    await writeFile(temporary, value);
+    for (let attempt = 0; ; attempt += 1) {
+      try { await rename(temporary, file); return; }
+      catch (error) {
+        if (!["EPERM", "EBUSY", "EACCES"].includes(error.code) || attempt >= 100) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
+  },
   async delete() { await rm(file, { force: true }); },
 };
 const session = new OAuthSession({
