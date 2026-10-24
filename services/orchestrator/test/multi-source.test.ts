@@ -4,12 +4,11 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
-import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { documentOf, parseItemCatalog } from "@kintsugi/agents/reader";
 import { CheckoutStorage } from "@kintsugi/git";
-import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { interpretersFromEnv, removeTree } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
@@ -36,7 +35,7 @@ describe("an application with two legacy repositories", () => {
   });
   afterAll(async () => {
     for (const repo of Object.values(repos)) await repo.remove();
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
   });
 
   function setup(files: Parameters<typeof writingAgentRuntime>[0] = {}) {

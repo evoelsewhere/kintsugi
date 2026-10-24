@@ -3,12 +3,11 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { DEFAULT_SANDBOX, type SandboxSettings } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
-import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { interpretersFromEnv, makeWritable, removeTree } from "@kintsugi/runtime/launcher";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
@@ -74,7 +73,7 @@ describe("a job workspace across attempts", () => {
     await legacy?.remove();
     await target?.remove();
     await docs?.remove();
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
   });
 
   function setup(files: AgentFiles, mockOutputs?: boolean) {
@@ -199,6 +198,7 @@ describe("a job workspace across attempts", () => {
     expect(checkouts.checkouts).toHaveLength(2);
 
     // A folder that is not what was pinned is replaced, not trusted.
+    await makeWritable(join(storage.job(id).asIs, "legacy"));
     const stray = join(storage.job(id).asIs, "legacy", "stray.txt");
     mkdirSync(dirname(stray), { recursive: true });
     writeFileSync(stray, "left behind\n");
@@ -268,7 +268,7 @@ describe("the sandbox settings reach the job", () => {
   });
   afterAll(async () => {
     await legacy?.remove();
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
   });
 
   const runWith = async (settings: Partial<SandboxSettings>, task = "Do it."): Promise<{ spec: JobSpec; mode: number | undefined; id: string; store: MemoryJobStore }> => {

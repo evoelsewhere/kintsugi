@@ -6,12 +6,11 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { documentOf, parseItemCatalog } from "@kintsugi/agents/reader";
 import { CheckoutStorage } from "@kintsugi/git";
-import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { interpretersFromEnv, removeTree } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
@@ -88,7 +87,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
   });
   afterAll(async () => {
     for (const repo of Object.values(repos)) await repo.remove();
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
   });
 
   async function runStage(stage: string, options: { legacy: string; docs?: string; files?: AgentFiles; inputs?: Record<string, unknown> }) {

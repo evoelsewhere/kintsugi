@@ -5,12 +5,12 @@
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CheckoutStorage } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
-import { createChildAgentRuntime } from "@kintsugi/runtime/launcher";
+import { createChildAgentRuntime, removeTree } from "@kintsugi/runtime/launcher";
 import { decryptSecret } from "@kintsugi/secrets";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PgJobStore } from "../src/jobs/store.js";
@@ -43,7 +43,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
   afterAll(async () => {
     await remote?.close();
     await db?.drop();
-    if (dataDir !== undefined) await rm(dataDir, { recursive: true, force: true });
+    if (dataDir !== undefined) await removeTree(dataDir);
   });
 
   it("runs a queued assess stage and hands its output to the document repo writer", async () => {

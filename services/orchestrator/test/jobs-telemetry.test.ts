@@ -4,11 +4,10 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CheckoutStorage } from "@kintsugi/git";
-import { interpretersFromEnv } from "@kintsugi/runtime/launcher";
+import { interpretersFromEnv, removeTree } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { DEFAULT_GATE_DECIDER } from "../src/jobs/model.js";
@@ -31,7 +30,7 @@ describe("telemetry of an agent job", () => {
   afterAll(async () => {
     await legacy?.remove();
     await docs?.remove();
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
   });
 
   it("stores every span of the attempt with its agent, model and attempt, and sums cache tokens into the usage", async () => {
