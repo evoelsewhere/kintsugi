@@ -130,7 +130,7 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
       {toolbar}
       {groups.length === 0 ? <p className="py-6 text-center text-[13px] text-text-muted">No item matches the filter.</p> : null}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-[13px]" aria-label="Item catalog">
+        <table className="w-full min-w-[900px] text-[13px]" aria-label="Item catalog">
           <thead>
             <tr className="text-left text-[10px] tracking-wide text-text-muted uppercase">
               {selection === undefined ? null : <th className="w-8 px-1.5 py-2" />}
@@ -139,7 +139,10 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
               <th className="w-16 px-2 py-2 text-right font-medium">Files</th>
               <th className="w-40 px-2 py-2 text-right font-medium">Code lines</th>
               <th className="w-28 px-2 py-2 font-medium">Complexity</th>
+              <th className="w-16 px-2 py-2 text-right font-medium" title="Leaves of the item that are entry points of the application">Entries</th>
+              <th className="w-16 px-2 py-2 text-right font-medium" title="Functions or sections inside the item">Parts</th>
               <th className="px-2 py-2 font-medium">Status</th>
+              <th className="w-24 px-2 py-2 font-medium">PR</th>
               {selection?.action === undefined ? null : <th className="px-2 py-2" />}
             </tr>
           </thead>
@@ -182,10 +185,26 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                   {kinds.size > 1 ? <td className="px-2 py-2 text-[11.5px] text-text-muted tabular-nums">{plural(group.items.length, "item")}</td> : null}
                   <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums">{formatCount(group.items.reduce((total, item) => total + item.files.length, 0))}</td>
                   <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums">{formatCount(loc)}</td>
-                  <td className="px-2 py-2 text-[11.5px] text-text-muted tabular-nums">{kinds.size > 1 ? null : plural(group.items.length, "item")}</td>
+                  <td className="px-2 py-2 text-[11.5px] text-text-muted tabular-nums">
+                    {kinds.size > 1 ? null : plural(group.items.length, "item")}
+                    <span className="flex items-center gap-2">
+                      {(["high", "medium", "low"] as const).map((band) => {
+                        const count = group.items.filter((item) => item.complexity === band).length;
+                        return count === 0 ? null : (
+                          <span key={band} className="inline-flex items-center gap-1" title={`${count} ${band} complexity`}>
+                            <StatusDot tone={COMPLEXITY_TONE[band]} className="size-2" />
+                            {count}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums">{formatCount(group.items.reduce((total, item) => total + item.entryPoints.length, 0))}</td>
+                  <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums">{formatCount(group.items.reduce((total, item) => total + item.parts.length, 0))}</td>
                   <td className="px-2 py-2 text-[11.5px] text-text-secondary tabular-nums">
                     {understood}/{group.items.filter((item) => item.status !== "retired").length} understood
                   </td>
+                  <td className="px-2 py-2 text-[11.5px] text-text-secondary tabular-nums">{group.items.some((item) => item.pr !== undefined) ? plural(new Set(group.items.flatMap((item) => (item.pr === undefined ? [] : [item.pr.runId]))).size, "PR") : null}</td>
                   {selection?.action === undefined ? null : <td />}
                 </tr>,
                 ...(open
@@ -195,7 +214,7 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                       return (
                         <tr key={item.id} className={cn("align-top [box-shadow:0_-1px_0_var(--color-hover)] focus-within:bg-hover hover:bg-hover", picked && "bg-hover", item.status === "retired" && "text-text-muted")}>
                           {selection === undefined ? null : (
-                            <td className="px-1.5 py-2">
+                            <td className="py-2 pr-1.5 pl-3">
                               <button
                                 type="button"
                                 role="checkbox"
@@ -210,7 +229,7 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                               </button>
                             </td>
                           )}
-                          <td className="max-w-[360px] px-2 py-2 pl-7">
+                          <td className="max-w-[360px] px-2 py-2 pl-12">
                             <p className="truncate text-[13px] font-medium text-text" title={item.name}>
                               {item.name}
                               <span className="ml-1.5 font-mono text-[11px] font-normal text-text-muted">{item.id}</span>
@@ -223,6 +242,12 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                             {item.summary === "" ? null : (
                               <p className="line-clamp-2 text-[12px] text-text-secondary" title={item.summary}>
                                 {item.summary}
+                              </p>
+                            )}
+                            {item.files.length === 0 ? null : (
+                              <p className="truncate font-mono text-[11px] text-text-muted" title={item.files.slice(0, 20).join("\n")}>
+                                {item.files.slice(0, 2).join(", ")}
+                                {item.files.length > 2 ? ` +${item.files.length - 2} more` : ""}
                               </p>
                             )}
                             {item.aliases.length === 0 && item.parts.length === 0 ? null : (
@@ -263,15 +288,27 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                               {item.complexity}
                             </span>
                           </td>
+                          <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums" title={item.entryPoints.join("\n")}>
+                            {item.entryPoints.length === 0 ? "–" : formatCount(item.entryPoints.length)}
+                          </td>
+                          <td className="px-2 py-2 text-right text-[11.5px] text-text-secondary tabular-nums">{item.parts.length === 0 ? "–" : formatCount(item.parts.length)}</td>
                           <td className="px-2 py-2">
                             <span className="flex flex-wrap items-center gap-1.5">
                               <ItemStatusBadge status={item.status} staleReason={item.staleReason} />
-                              {item.pr?.url === undefined ? null : (
-                                <a className={cn("rounded-[4px] text-[12px] text-accent hover:underline", FOCUS)} href={item.pr.url} target="_blank" rel="noreferrer">
-                                  PR
-                                </a>
-                              )}
                             </span>
+                          </td>
+                          <td className="px-2 py-2 text-[12px]">
+                            {item.pr === undefined ? (
+                              <span className="text-text-muted">–</span>
+                            ) : item.pr.url === undefined ? (
+                              <span className="font-mono text-[11px] text-text-secondary" title={item.pr.branch}>
+                                {item.pr.branch}
+                              </span>
+                            ) : (
+                              <a className={cn("rounded-[4px] text-accent hover:underline", FOCUS)} href={item.pr.url} target="_blank" rel="noreferrer" title={item.pr.branch}>
+                                {item.pr.url.match(/\/(\d+)\/?$/)?.[1] === undefined ? "PR" : `PR #${item.pr.url.match(/\/(\d+)\/?$/)?.[1]}`}
+                              </a>
+                            )}
                           </td>
                           {selection?.action === undefined ? null : <td className="px-2 py-2 text-right">{selection.action(item)}</td>}
                         </tr>
