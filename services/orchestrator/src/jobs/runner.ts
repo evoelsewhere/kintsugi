@@ -38,7 +38,7 @@ import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepReuse } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
 import { runJobOutputHook } from "./hook.js";
-import { exampleOf, keysOf, looksLikeSchema, shapeProblem, unwrapResult } from "./result-shape.js";
+import { exampleOf, keysOf, shapeProblem, unwrapResult } from "./result-shape.js";
 import { writeMockOutputs } from "./mock-outputs.js";
 import {
   type ArtifactEntry,
@@ -238,21 +238,11 @@ const missingFilesNote = (missing: readonly string[], written: readonly string[]
   "write and edit take paths relative to the output directory, not to the repository: give the full path above, never a bare file name. " +
   "Write each missing file at exactly that path (reuse what you already wrote), then stop.";
 
-/** After the schema in an agent's task: the file is an instance of it, never the schema (models copy it otherwise). */
-const schemaWarning = (schema: unknown): string => {
-  const example = exampleOf(schema);
-  return (
-    "\nThe file holds a JSON value that FITS this schema, with your findings filled in. Never write the schema itself: the file must not contain the keys \"type\", \"required\" or \"properties\" unless the schema names them as fields." +
-    (example === undefined ? "" : ` The required fields look like this (replace the placeholder values): ${example}`)
-  );
-};
-
 /** Appended to an agent's task when its structured result is missing or not JSON: where it goes, never what was in it. */
-const resultFileNote = (problem: string, written: readonly string[], schema?: unknown, wroteSchema = false): string => {
+const resultFileNote = (problem: string, written: readonly string[], schema?: unknown): string => {
   const example = exampleOf(schema);
   return (
     `\n\nThe step needs your structured result and ${problem}. ` +
-    (wroteSchema ? `What you wrote is the JSON Schema itself (it has "type", "required" and "properties"), not a result. Write an object whose keys are the field names the schema defines and whose values are your findings. ` : "") +
     `What you wrote so far (paths relative to the output directory): ${written.length === 0 ? "nothing" : written.slice(0, 30).join(", ")}.\n` +
     `Write the JSON result with write to the bare path "${RESULT_FILE}" (no folder, the one exception to the full-path rule), matching the schema above, nothing else in that file, then stop.` +
     (example === undefined ? "" : ` The file is one JSON object with these top-level properties, not wrapped in another key and not a report; replace the placeholder values: ${example}`)
@@ -757,7 +747,7 @@ export class JobRunner {
     const schema = run.inputs["schema"];
     const schemaNote =
       typeof schema === "object" && schema !== null
-        ? `\n\nReturn your result as JSON matching this schema, written with write to the bare path "${RESULT_FILE}" at the root of the output directory, with no folder (the one exception to the full-path rule; nothing else in that file):\n${JSON.stringify(schema)}${schemaWarning(schema)}`
+        ? `\n\nReturn your result as JSON matching this schema, written with write to the bare path "${RESULT_FILE}" at the root of the output directory, with no folder (the one exception to the full-path rule; nothing else in that file):\n${JSON.stringify(schema)}`
         : "";
     const spec: JobSpec = {
       agent: definition,
@@ -872,7 +862,7 @@ export class JobRunner {
 
     let result: unknown;
     if (run.inputs["resultFile"] === true) {
-      const take = async (): Promise<{ ok: true; value: unknown } | { ok: false; missing: boolean; problem: string; wroteSchema: boolean }> => {
+      const take = async (): Promise<{ ok: true; value: unknown } | { ok: false; missing: boolean; problem: string }> => {
         // The workspace rule asks for full document-repository paths, so a model may put the result in a folder: the
         // root file comes first, then the shallowest folder. The first one that parses and fits the schema is the result.
         const found = (await listFiles(ws.out))
@@ -880,7 +870,6 @@ export class JobRunner {
           .sort((a, b) => a.path.split("/").length - b.path.split("/").length || a.path.localeCompare(b.path));
         let missing = true;
         let problem = `${RESULT_FILE} is not in the output directory`;
-        let wroteSchema = false;
         let value: unknown;
         let ok = false;
         for (const entry of found) {
@@ -896,21 +885,20 @@ export class JobRunner {
               break;
             }
             problem = `${RESULT_FILE} does not match the schema (${wrong}; the file has: ${keysOf(parsed)})`;
-            wroteSchema = looksLikeSchema(schema, parsed);
           } catch {
             problem = `${RESULT_FILE} is not valid JSON`;
           }
         }
         // Taken or not, no copy stays in the output: it is a result, never a document.
         for (const entry of found) await rm(entry.full, { force: true });
-        return ok ? { ok: true, value } : { ok: false, missing, problem, wroteSchema };
+        return ok ? { ok: true, value } : { ok: false, missing, problem };
       };
       let taken = await take();
       // One repair attempt, like the missing expected files below: a rerun of the whole job costs far more.
       if (!taken.ok && signal?.aborted !== true) {
         await this.#event(ws, stepId, "log", `agent ${run.name}: ${taken.problem}; asking it to write the result once`);
         const written = (await listFiles(ws.out)).map((entry) => entry.path);
-        done = await attempt(`${spec.task}${resultFileNote(taken.problem, written, schema, taken.wroteSchema)}`);
+        done = await attempt(`${spec.task}${resultFileNote(taken.problem, written, schema)}`);
         if (done.type === "job.failed") throw new JobFailure(`Agent ${run.name} failed (${done.reason}): ${redactText(done.error).slice(0, 300)}`);
         await writeMock();
         taken = await take();
