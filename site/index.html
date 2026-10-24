@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kintsugi · The enterprise platform for AI-driven legacy modernization</title>
+<meta name="description" content="Reverse-engineer legacy applications into source-cited specifications, design each unit from your own templates, and build with the AI assistants your teams already use. Self-hosted, Git as the source of truth, people decide at every gate.">
+<meta property="og:title" content="Kintsugi · Modernize the system you have. Keep everything it knows.">
+<meta property="og:description" content="The enterprise platform for AI-driven legacy modernization. Self-hosted, stack-agnostic, with people in control of every decision.">
+<meta property="og:image" content="assets/diagrams/hero.png">
+<link rel="icon" href="assets/brand/kintsugi-mark-light.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #1E2A44; --navy-2: #2C3B5E; --navy-3: #3A4C74;
+    --gold: #E0B04A; --gold-d: #B8822A; --gold-l: #F7D98A;
+    --cream: #F7F2E6; --cream-2: #EDE4CE; --paper: #FBF8F0; --line: #D2C7AB;
+    --slate: #5B6781; --teal: #2F7F79;
+    --serif: 'Instrument Serif', Georgia, serif;
+    --sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    --gold-grad: linear-gradient(135deg, #F7D98A 0%, #E0B04A 55%, #C9962F 100%);
+  }
+  html { scroll-behavior: smooth; }
+  body { font-family: var(--sans); font-size: 17px; line-height: 1.6; color: var(--navy); background: var(--cream); -webkit-font-smoothing: antialiased; }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: inherit; }
+  .wrap { width: min(1200px, 100% - 48px); margin-inline: auto; }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--slate); }
+  .eyebrow b { color: var(--gold-d); font-weight: 600; }
+  h1, h2, h3 { font-family: var(--serif); font-weight: 400; letter-spacing: -.015em; line-height: 1.04; }
+  h2 { font-size: clamp(36px, 4.6vw, 58px); }
+  h3 { font-size: 26px; line-height: 1.15; }
+  p.lead { font-size: clamp(18px, 1.6vw, 21px); color: var(--slate); max-width: 62ch; }
+  .grid-bg { background-image: radial-gradient(circle at 1px 1px, rgba(210,199,171,.7) 1px, transparent 1.2px); background-size: 24px 24px; }
+
+  /* buttons */
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 24px; border-radius: 12px; font: 600 15px/1 var(--sans); text-decoration: none; border: 1px solid var(--gold-d); background: var(--gold-grad); color: var(--navy); transition: transform .15s ease, box-shadow .15s ease; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -12px rgba(184,130,42,.8); }
+  .btn.ghost { background: transparent; border-color: var(--navy); }
+  .btn.ghost:hover { background: var(--navy); color: var(--cream); box-shadow: none; }
+  .btn.light { background: var(--cream); border-color: var(--cream); }
+
+  /* nav */
+  header.nav { position: sticky; top: 0; z-index: 20; background: rgba(247,242,230,.86); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  header.nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 68px; }
+  .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; font: 400 30px/1 var(--serif); letter-spacing: -.01em; }
+  .logo img { width: 34px; height: 34px; }
+  nav.links { display: flex; align-items: center; gap: 30px; font-size: 15px; }
+  nav.links a { text-decoration: none; color: var(--slate); }
+  nav.links a:hover { color: var(--navy); }
+  nav.links .btn { padding: 10px 18px; font-size: 14px; color: var(--navy); }
+
+  /* hero */
+  .hero { position: relative; overflow: hidden; padding: 84px 0 120px; }
+  .hero .crack { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.28fr); gap: 48px; align-items: center; }
+  .hero h1 { font-size: clamp(44px, 5.2vw, 74px); margin: 22px 0 26px; }
+  .hero h1 em { font-style: italic; background: linear-gradient(135deg, #D9A63C 0%, #B8822A 60%, #8F6317 100%); -webkit-background-clip: text; background-clip: text; color: transparent; padding-right: .05em; }
+  .hero .cta { display: flex; flex-wrap: wrap; gap: 14px; margin: 34px 0 30px; }
+  .hero .facts { display: flex; flex-wrap: wrap; gap: 8px 22px; font: 500 12.5px/1.2 var(--mono); color: var(--slate); }
+  .hero .facts span::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--gold); margin-right: 9px; }
+  .stage { position: relative; }
+  .shot { border-radius: 16px; background: var(--paper); box-shadow: 0 40px 70px -34px rgba(30,42,68,.55), 0 0 0 1px var(--line); overflow: hidden; }
+  .stage .shot { transform: perspective(2000px) rotateY(-3deg); transform-origin: left center; }
+  .float { position: absolute; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; box-shadow: 0 24px 40px -24px rgba(30,42,68,.5); }
+  .float.a { left: -26px; bottom: -34px; width: 270px; }
+  .float.b { right: -14px; top: -26px; background: var(--navy); color: var(--cream); border-color: var(--navy); }
+  .float .eyebrow { font-size: 10.5px; }
+  .float b { display: block; font: 400 28px/1.1 var(--serif); margin-top: 6px; }
+  .float small { font: 12.5px/1.4 var(--mono); color: var(--slate); }
+  .float.b small { color: #B9C2D6; }
+  .chip { display: inline-block; font: 500 11px/1 var(--mono); padding: 5px 9px; border-radius: 99px; border: 1px solid; }
+  .chip.g { color: #3E7D5A; background: rgba(62,125,90,.12); border-color: rgba(62,125,90,.35); }
+  .chip.y { color: #8A5F12; background: rgba(224,176,74,.22); border-color: rgba(184,130,42,.5); }
+  .tiles { position: absolute; display: grid; grid-template-columns: repeat(2, 22px); gap: 8px; }
+  .tiles i { width: 22px; height: 22px; border-radius: 4px; background: var(--gold-grad); animation: bob 6s ease-in-out infinite; }
+  .tiles i:nth-child(2) { animation-delay: -2s; opacity: .6; } .tiles i:nth-child(3) { animation-delay: -4s; opacity: .85; } .tiles i:nth-child(4) { background: none; border: 1.5px dashed var(--slate); }
+  @keyframes bob { 50% { transform: translateY(-6px); } }
+
+  /* works with */
+  .with { border-block: 1px solid var(--line); background: var(--paper); }
+  .with .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 34px; padding-block: 26px; }
+  .with ul { display: flex; flex-wrap: wrap; gap: 10px 30px; list-style: none; font: 500 15px/1.2 var(--mono); color: var(--navy); }
+  .with li { display: flex; align-items: center; gap: 9px; }
+  .with li::before { content: ''; width: 7px; height: 7px; border-radius: 2px; background: var(--gold-d); }
+
+  section { padding: 120px 0; }
+  .head { max-width: 760px; margin-bottom: 56px; }
+  .head h2 { margin: 18px 0 20px; }
+
+  /* idea */
+  .idea figure { border-radius: 20px; background: var(--cream); border: 1px solid var(--line); overflow: hidden; box-shadow: 0 30px 60px -40px rgba(30,42,68,.4); }
+
+  /* problems */
+  .problems { background: var(--navy); color: var(--cream); position: relative; overflow: hidden; }
+  .problems .eyebrow { color: var(--gold-l); }
+  .problems .head p { color: #B9C2D6; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .pcard { border: 1px solid rgba(247,242,230,.18); border-radius: 16px; padding: 28px; background: rgba(247,242,230,.04); display: flex; flex-direction: column; gap: 18px; }
+  .pcard h3 { font-size: 28px; }
+  .pcard p { color: #C9D1E2; font-size: 16px; }
+  .pcard .ans { margin-top: auto; padding-top: 18px; border-top: 1px dashed rgba(224,176,74,.5); font: 400 13.5px/1.55 var(--mono); color: var(--gold-l); }
+  .pcard .ans b { display: block; font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+  .pcard.intro { background: var(--gold-grad); color: var(--navy); border-color: var(--gold-d); justify-content: center; }
+  .pcard.intro h3 { font-size: 40px; }
+
+  /* features */
+  .feature { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 64px; align-items: center; padding-block: 56px; }
+  .feature + .feature { border-top: 1px solid var(--line); }
+  .feature.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); }
+  .feature.flip .copy { order: 2; }
+  .feature h3 { font-size: clamp(32px, 3.4vw, 44px); margin: 16px 0 18px; }
+  .feature p { color: var(--slate); }
+  .feature ul { list-style: none; margin-top: 24px; display: grid; gap: 14px; }
+  .feature li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; font-size: 16px; }
+  .feature li::before { content: ''; width: 10px; height: 10px; margin-top: 8px; border-radius: 2px; background: var(--gold-grad); }
+  .sample { margin-top: 10px; font: 500 11.5px/1 var(--mono); color: var(--slate); text-align: right; letter-spacing: .04em; }
+
+  /* model */
+  .model { background: var(--cream-2); }
+  .model .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+  .model .points { display: grid; gap: 22px; margin-top: 34px; }
+  .point { display: grid; grid-template-columns: 54px 1fr; gap: 18px; }
+  .point .n { width: 54px; height: 54px; border-radius: 10px; background: var(--navy); color: var(--gold-l); display: grid; place-items: center; font: 400 28px/1 var(--serif); }
+  .point.t .n { background: var(--teal); color: var(--cream); } .point.g .n { background: var(--gold-grad); color: var(--navy); }
+  .point h4 { font: 600 18px/1.3 var(--sans); margin-bottom: 4px; } .point p { font-size: 15.5px; color: var(--slate); }
+  .card-img { border-radius: 18px; background: var(--cream); border: 1px solid var(--line); overflow: hidden; box-shadow: 0 30px 60px -40px rgba(30,42,68,.4); }
+  .lifecycle { margin-top: 64px; }
+
+  /* pipeline */
+  
+  .pipeline .phases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 28px; }
+  .pipeline .phases div { font: 13.5px/1.5 var(--mono); color: var(--slate); border-top: 3px solid var(--gold); padding-top: 12px; }
+  .pipeline .phases b { display: block; color: var(--navy); font: 600 14px/1.3 var(--sans); margin-bottom: 4px; }
+
+  /* deploy */
+  .deploy { background: var(--paper); border-block: 1px solid var(--line); }
+  .deploy .two { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 56px; align-items: center; }
+  .deploy ul { list-style: none; margin-top: 28px; display: grid; gap: 14px; }
+  .deploy li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; }
+  .deploy li::before { content: ''; width: 10px; height: 10px; margin-top: 8px; border-radius: 2px; background: var(--navy); }
+  .arch { margin-top: 56px; }
+
+  /* security */
+  .tiles-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .sec { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 26px; display: flex; flex-direction: column; gap: 10px; }
+  .sec .sq { width: 34px; height: 34px; border-radius: 8px; background: var(--navy); display: grid; place-items: center; margin-bottom: 8px; }
+  .sec .sq i { width: 12px; height: 12px; border-radius: 3px; background: var(--gold-grad); }
+  .sec h3 { font-size: 26px; }
+  .sec p { font-size: 15.5px; color: var(--slate); }
+
+  /* stats */
+  .stats { background: var(--navy); color: var(--cream); padding: 90px 0; }
+  .stats .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
+  .stat { border-top: 2px solid var(--gold); padding-top: 18px; }
+  .stat b { display: block; font: 400 clamp(52px, 6vw, 84px)/1 var(--serif); background: var(--gold-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stat span { display: block; margin-top: 10px; font: 400 14.5px/1.5 var(--mono); color: #C9D1E2; }
+
+  /* start */
+  .start .box { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+  pre { background: var(--navy); color: #E7ECF7; border-radius: 16px; padding: 28px 30px; font: 500 15px/1.9 var(--mono); overflow-x: auto; box-shadow: 0 30px 60px -36px rgba(30,42,68,.7); }
+  pre .c { color: #7F8DB0; } pre .k { color: var(--gold); }
+  .start .cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
+
+  footer { border-top: 1px solid var(--line); padding: 46px 0 60px; background: var(--paper); }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 28px; align-items: flex-start; }
+  footer .logo { font-size: 26px; } footer .logo img { width: 28px; height: 28px; }
+  footer small { display: block; margin-top: 12px; font: 12.5px/1.6 var(--mono); color: var(--slate); max-width: 52ch; }
+  footer .cols { display: flex; gap: 56px; font-size: 14.5px; }
+  footer .cols div { display: grid; gap: 8px; align-content: start; }
+  footer .cols b { font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--slate); margin-bottom: 4px; }
+  footer .cols a { text-decoration: none; color: var(--navy); } footer .cols a:hover { color: var(--gold-d); }
+
+  /* reveal */
+  .js .rv { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease; }
+  .js .rv.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .js .rv { opacity: 1; transform: none; transition: none; } .tiles i { animation: none; } html { scroll-behavior: auto; } .stage .shot { transform: none; } }
+
+  @media (max-width: 1020px) {
+    .hero .wrap, .feature, .feature.flip, .model .two, .deploy .two, .start .box { grid-template-columns: 1fr; gap: 40px; }
+    .feature.flip .copy { order: 0; }
+    .stage .shot { transform: none; } .float.a { left: 10px; bottom: -28px; } .float.b { right: 10px; }
+    .cards, .tiles-grid { grid-template-columns: 1fr 1fr; }
+    .stats .row { grid-template-columns: 1fr 1fr; }
+    .pipeline .phases { grid-template-columns: 1fr 1fr; }
+    nav.links a:not(.btn) { display: none; }
+    section { padding: 88px 0; }
+  }
+  @media (max-width: 640px) {
+    body { font-size: 16px; }
+    .cards, .tiles-grid, .stats .row, .pipeline .phases { grid-template-columns: 1fr; }
+    .float { display: none; } .hero { padding: 48px 0 80px; } .tiles { display: none; }
+    .card-img, .idea figure { overflow-x: auto; } .card-img img, .idea figure img { min-width: 760px; }
+    footer .cols { gap: 36px; }
+    pre { font-size: 13px; padding: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="logo" href="#top"><img src="assets/brand/kintsugi-mark-light.svg" alt="" width="34" height="34">Kintsugi</a>
+    <nav class="links" aria-label="Primary">
+      <a href="#how">How it works</a>
+      <a href="#model">Working model</a>
+      <a href="#deploy">Architecture</a>
+      <a href="#security">Security</a>
+      <a class="btn" href="https://github.com/evoelsewhere/kintsugi/tree/master/docs">Read the docs</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- HERO -->
+<section class="hero grid-bg" style="padding-block: 84px 120px;">
+  <svg class="crack" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs><linearGradient id="gc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7D98A"/><stop offset=".55" stop-color="#E0B04A"/><stop offset="1" stop-color="#B8822A"/></linearGradient></defs>
+    <g fill="none" stroke="url(#gc)" stroke-linecap="round" stroke-linejoin="round" opacity=".55">
+      <polyline stroke-width="3" points="760,-10 800,160 700,330 820,520 770,910"/>
+      <polyline stroke-width="2" points="800,160 1060,220 1450,190"/>
+      <polyline stroke-width="2" points="700,330 560,380 380,350"/>
+    </g>
+  </svg>
+  <div class="wrap">
+    <div class="rv">
+      <span class="eyebrow">Enterprise platform · <b>legacy modernization</b></span>
+      <h1>Modernize the system you have. <em>Keep everything it knows.</em></h1>
+      <p class="lead">Kintsugi reverse-engineers legacy applications into reviewable specifications, designs each unit from your own templates, and lets your teams build with the AI assistants they already use. People decide at every gate. Everything lives in Git.</p>
+      <div class="cta">
+        <a class="btn" href="https://github.com/evoelsewhere/kintsugi/blob/master/docs/guides/installation.md">Install Kintsugi <span aria-hidden="true">→</span></a>
+        <a class="btn ghost" href="#how">See how it works</a>
+      </div>
+      <div class="facts"><span>Self-hosted</span><span>Bring your own LLMs</span><span>Read-only on your source</span></div>
+    </div>
+    <div class="stage rv">
+      <div class="tiles" style="right:-10px; bottom:-74px" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="shot"><img src="assets/ui/catalog.png" width="1440" height="900" alt="The Kintsugi portal showing a catalog of legacy units with status, entries, parts and files, and an AI plan that proposes batches to understand first"></div>
+      <div class="float b"><span class="eyebrow" style="color:#F7D98A">Understood</span><b>41 of 148</b><small>specs in the document repo</small></div>
+      <div class="float a"><span class="eyebrow">Rule BR-014</span><p style="font-size:14.5px;line-height:1.45;margin:8px 0 10px">Late fee applies only after a 5-day grace period.</p><span class="chip g">Confirmed</span> <span class="chip y" style="margin-left:4px">LateFeeJob.java:118</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- WORKS WITH -->
+<div class="with">
+  <div class="wrap">
+    <span class="eyebrow">Bring your own</span>
+    <ul>
+      <li>Claude Code</li><li>GitHub Copilot</li><li>ChatGPT / Codex</li>
+      <li>Anthropic</li><li>OpenAI</li><li>Azure OpenAI</li><li>Amazon Bedrock</li><li>Google Vertex</li><li>On-premises, OpenAI-compatible</li>
+    </ul>
+  </div>
+</div>
+
+<!-- IDEA -->
+<section class="idea">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">The idea</span>
+      <h2>Repair it with gold, so it comes out more valuable.</h2>
+      <p class="lead">Kintsugi is the Japanese art of mending broken pottery with gold. The old piece is not thrown away. Legacy systems deserve the same: monolith to modular, with the knowledge preserved.</p>
+    </div>
+    <figure class="rv"><img src="assets/diagrams/hero.png" width="1280" height="501" loading="lazy" alt="A legacy monolith with a golden crack becomes a modular system through three steps: understand, design, build and review, with gates decided by people"></figure>
+  </div>
+</section>
+
+<!-- PROBLEMS -->
+<section class="problems">
+  <div class="wrap">
+    <div class="cards">
+      <div class="pcard intro rv"><span class="eyebrow" style="color:#1E2A44">Portfolio scale</span><h3>Five places modernization stalls. Five answers.</h3></div>
+      <div class="pcard rv"><h3>Nobody fully understands the legacy system.</h3><p>Knowledge sits in people's heads, stale documents and the code itself.</p><div class="ans"><b>Kintsugi</b>Agents reverse-engineer each application into source-cited specifications: rules, data, risks and traceability.</div></div>
+      <div class="pcard rv"><h3>Every team improvises its own process.</h3><p>Scorecards in spreadsheets, prompts in private repos, a knowledge base rebuilt per project.</p><div class="ans"><b>Kintsugi</b>One governed pipeline, one document repository per project, one place to see progress.</div></div>
+      <div class="pcard rv"><h3>AI is adopted unevenly and cannot be measured.</h3><p>Each team uses a different assistant under different rules.</p><div class="ans"><b>Kintsugi</b>Members keep their assistant. All of them get the same project context and plugins, and what they do is recorded.</div></div>
+      <div class="pcard rv"><h3>Quality depends on heroics.</h3><p>Design and code reviews happen when someone has time.</p><div class="ans"><b>Kintsugi</b>Every phase ends at a gate a person decides, and an independent reviewer reads each merge request.</div></div>
+      <div class="pcard rv"><h3>Nothing is auditable.</h3><p>Decisions live in chat threads and slide decks.</p><div class="ans"><b>Kintsugi</b>Every output is a file in Git. Decisions, configuration and sensitive reads go to an append-only audit log.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">How it works</span>
+      <h2>From legacy code to a reviewed build, one unit at a time.</h2>
+      <p class="lead">The screens below show a sample project. Every document you see is a plain Markdown file in your Git repository.</p>
+    </div>
+
+    <article class="feature">
+      <div class="copy rv">
+        <span class="eyebrow"><b>01</b> · Understand</span>
+        <h3>Turn a legacy codebase into a catalog you can choose from.</h3>
+        <p>Assessment groups source files into catalog items without language-specific parsers. An AI plan proposes what to understand first. You select, and the runs do the rest.</p>
+        <ul>
+          <li>Catalog derived from the code and curated by an analyst agent</li>
+          <li>Items ordered by calls, shared data and cycles. Advice, never a gate</li>
+          <li>Several selections in flight at once, and a failed run resumes where it stopped</li>
+        </ul>
+      </div>
+      <div class="rv"><div class="shot"><img src="assets/ui/catalog.png" width="1440" height="900" loading="lazy" alt="Catalog of legacy units with filters, status, pull request column and an AI plan with three batches"></div><p class="sample">Sample data</p></div>
+    </article>
+
+    <article class="feature flip">
+      <div class="copy rv">
+        <span class="eyebrow"><b>02</b> · Specify</span>
+        <h3>Specifications that cite their evidence.</h3>
+        <p>For each selected unit, Kintsugi writes what it does, the business rules it enforces, the data it touches and the risks it carries. Every statement points to the file and line it came from.</p>
+        <ul>
+          <li>Rules, data objects, findings and trace per unit, with a human verdict on each rule</li>
+          <li>Security review built in, with the limits of the review recorded</li>
+          <li>Traceability from legacy source to design, code and tests</li>
+        </ul>
+      </div>
+      <div class="rv"><div class="shot"><img src="assets/ui/spec.png" width="1440" height="900" loading="lazy" alt="A unit specification with extracted business rules, each citing a source file and line, and a traceability chain from legacy source to code and tests"></div><p class="sample">Sample data</p></div>
+    </article>
+
+    <article class="feature">
+      <div class="copy rv">
+        <span class="eyebrow"><b>03</b> · Build and review</span>
+        <h3>Builders keep their assistant. Reviewers stay independent.</h3>
+        <p>Once a design is merged, a developer implements and tests the unit on their own machine with Claude Code, Copilot or Codex. The runtime then reads the merge request against the unit's rules, design and your standards.</p>
+        <ul>
+          <li>The build command records which unit, which merge request and which commit</li>
+          <li>Findings return as a document in a pull request. The merge request is never changed</li>
+          <li>Plugins are distributed, permitted and monitored per project and member</li>
+        </ul>
+      </div>
+      <div class="rv"><div class="shot"><img src="assets/ui/review.png" width="1440" height="900" loading="lazy" alt="Build page with a merge request, test results and independent review findings ranked by severity, each tied to a business rule"></div><p class="sample">Sample data</p></div>
+    </article>
+
+    <article class="feature flip">
+      <div class="copy rv">
+        <span class="eyebrow"><b>04</b> · Govern and measure</span>
+        <h3>See what AI is doing, and what it costs.</h3>
+        <p>Spans per job, turn and tool call. Tokens, cache reads and cost by project, agent and model. Gates G0 to G4 record who decided what, on which evidence.</p>
+        <ul>
+          <li>Per-agent model binding, allowlists and budgets</li>
+          <li>Append-only audit log enforced by database triggers</li>
+          <li>Role-based access with project-scoped member tokens</li>
+        </ul>
+      </div>
+      <div class="rv"><div class="shot"><img src="assets/ui/telemetry.png" width="1440" height="900" loading="lazy" alt="Telemetry dashboard with tokens per day, cost by agent, prompt cache hit rate and recent jobs"></div><p class="sample">Sample data</p></div>
+    </article>
+  </div>
+</section>
+
+<!-- WORKING MODEL -->
+<section class="model" id="model">
+  <div class="wrap">
+    <div class="two">
+      <div class="rv">
+        <span class="eyebrow">Working model</span>
+        <h2 style="margin:18px 0 20px">The brain works on the server. The hands stay on your machines.</h2>
+        <p class="lead">Kintsugi separates platform intelligence from implementation, and keeps people in charge of every decision.</p>
+        <div class="points">
+          <div class="point"><div class="n">1</div><div><h4>The runtime reads, never writes your code</h4><p>A generic agent kernel runs one job at a time in its own workspace. Source is read-only; results arrive as pull requests on the document repository.</p></div></div>
+          <div class="point t"><div class="n">2</div><div><h4>Members build with their own assistant</h4><p>Existing licenses, existing habits. The Kintsugi CLI and a local MCP bridge give them project context and the plugins their project permits.</p></div></div>
+          <div class="point g"><div class="n">3</div><div><h4>Git is where both sides meet</h4><p>Specifications, designs, standards and plans are Markdown in one repository per project. People start stages and decide gates.</p></div></div>
+        </div>
+      </div>
+      <div class="card-img rv"><img src="assets/diagrams/two-agent-worlds.png" width="1280" height="713" loading="lazy" alt="The Kintsugi Runtime on the server and member harnesses on member machines exchange work through Git, while a person starts stages and decides gates"></div>
+    </div>
+    <div class="lifecycle card-img rv"><img src="assets/diagrams/unit-lifecycle.png" width="1280" height="513" loading="lazy" alt="One unit travels from legacy code through assess, understand, design, build and review, with a person acting at each step"></div>
+  </div>
+</section>
+
+<!-- PIPELINE -->
+<section class="pipeline">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">Delivery pipeline</span>
+      <h2>One pipeline. Five gates. A person behind each.</h2>
+      <p class="lead">Every phase ends at a gate: a decision backed by evidence in Git. A project can declare its own phases, stages and design sets.</p>
+    </div>
+    <div class="card-img rv"><img src="assets/diagrams/delivery-pipeline.png" width="1280" height="501" loading="lazy" alt="Phases P0 to P4 along a timeline with their outputs, each closed by a gate G0 to G4 that a person decides"></div>
+  </div>
+</section>
+
+<!-- DEPLOY / ARCHITECTURE -->
+<section class="deploy" id="deploy">
+  <div class="wrap">
+    <div class="two">
+      <div class="rv">
+        <span class="eyebrow">Architecture</span>
+        <h2 style="margin:18px 0 20px">Runs on your infrastructure, on one host.</h2>
+        <p class="lead">A self-hosted Docker Compose package. No Kubernetes, no multi-tenancy, and no extra infrastructure to run.</p>
+        <ul>
+          <li>An app container (API, member API, portal) and a worker (orchestrator, git writer, runtime). Only the app is exposed</li>
+          <li>PostgreSQL with pgvector is the only datastore. Git is the source of truth</li>
+          <li>Any LLM provider, including on-premises, configured in the portal and bound per agent</li>
+          <li>Credentials are encrypted at rest and decrypted per job, in memory only</li>
+        </ul>
+      </div>
+      <div class="card-img rv"><img src="assets/diagrams/deployment.png" width="1280" height="653" loading="lazy" alt="One Linux host runs the app, the worker and PostgreSQL under Docker Compose; only the app is exposed, and the worker reaches Git servers and LLM providers outbound"></div>
+    </div>
+    <div class="arch card-img rv"><img src="assets/diagrams/platform-at-a-glance.png" width="1280" height="677" loading="lazy" alt="The portal and member CLI on four pillars, on the core platform of knowledge hub, standards, orchestrator, runtime, git writer and harness hub, on PostgreSQL and Git"></div>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section id="security">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">Security and governance</span>
+      <h2>Built on the assumption that legacy code is hostile.</h2>
+      <p class="lead">Legacy repositories can contain prompt-injection payloads. Kintsugi treats them as untrusted input and states the limits of its own controls plainly.</p>
+    </div>
+    <div class="tiles-grid">
+      <div class="sec rv"><div class="sq"><i></i></div><h3>Isolated job workspaces</h3><p>Source mounted read-only. Writes confined to the job's output and scratch directories. Scripts run with a cleared environment.</p></div>
+      <div class="sec rv"><div class="sq"><i></i></div><h3>Credentials stay encrypted</h3><p>LLM keys and Git tokens are encrypted in Postgres, never returned by the API, and decrypted per job in memory only.</p></div>
+      <div class="sec rv"><div class="sq"><i></i></div><h3>Restricted data, audited</h3><p>Sensitive findings are stored encrypted. Every read is recorded before the content is returned.</p></div>
+      <div class="sec rv"><div class="sq"><i></i></div><h3>Tool allowlists</h3><p>Each agent gets only the kernel tools it needs, path-confined. MCP servers are registered by administrators.</p></div>
+      <div class="sec rv"><div class="sq"><i></i></div><h3>Append-only audit</h3><p>Stage runs, configuration, access changes and gate decisions are recorded. Database triggers refuse updates and deletes.</p></div>
+      <div class="sec rv"><div class="sq"><i></i></div><h3>Cost control</h3><p>Model allowlists, per-agent bindings and per-job limits on turns and cost, with telemetry by project, agent and model.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="wrap row">
+    <div class="stat rv"><b>P0–P4</b><span>five phases, each closed by a gate a person decides</span></div>
+    <div class="stat rv"><b>0</b><span>writes by the runtime to your code repositories</span></div>
+    <div class="stat rv"><b>1</b><span>datastore: PostgreSQL. Git holds the truth</span></div>
+    <div class="stat rv"><b>3</b><span>assistants supported for members: Claude Code, Copilot, Codex</span></div>
+  </div>
+</div>
+
+<!-- START -->
+<section class="start">
+  <div class="wrap box">
+    <div class="rv">
+      <span class="eyebrow">Get started</span>
+      <h2 style="margin:18px 0 20px">Connect a developer in three commands.</h2>
+      <p class="lead">Sign in to a project, set up your AI client, and install the plugins your project permits. Then build from the assistant you already use.</p>
+      <div class="cta">
+        <a class="btn" href="https://github.com/evoelsewhere/kintsugi/blob/master/docs/guides/installation.md">Install guide <span aria-hidden="true">→</span></a>
+        <a class="btn ghost" href="https://github.com/evoelsewhere/kintsugi">View on GitHub</a>
+      </div>
+    </div>
+    <pre class="rv" aria-label="Kintsugi CLI commands"><span class="c"># sign in to a project in your browser</span>
+<span class="k">kintsugi</span> login billing-core
+
+<span class="c"># set up your AI clients with the local MCP bridge</span>
+<span class="k">kintsugi</span> init
+
+<span class="c"># add a plugin your project permits</span>
+<span class="k">kintsugi</span> install plugin modernize
+
+<span class="c"># then, in Claude Code, Copilot or Codex</span>
+/modernize:build</pre>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="logo" href="#top"><img src="assets/brand/kintsugi-mark-light.svg" alt="" width="28" height="28">Kintsugi</a>
+      <small>The enterprise platform for AI-driven legacy modernization. Screens in this page show sample data.</small>
+    </div>
+    <div class="cols">
+      <div><b>Product</b><a href="#how">How it works</a><a href="#model">Working model</a><a href="#deploy">Architecture</a><a href="#security">Security</a></div>
+      <div><b>Docs</b><a href="https://github.com/evoelsewhere/kintsugi/tree/master/docs">Documentation</a><a href="https://github.com/evoelsewhere/kintsugi/blob/master/docs/guides/installation.md">Install</a><a href="https://github.com/evoelsewhere/kintsugi/tree/master/docs/decisions">Decisions</a><a href="https://github.com/evoelsewhere/kintsugi">GitHub</a></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var els = document.querySelectorAll('.rv');
+    if (!('IntersectionObserver' in window)) return;
+    document.documentElement.classList.add('js');
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+</body>
+</html>
