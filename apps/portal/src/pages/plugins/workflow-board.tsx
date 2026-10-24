@@ -16,6 +16,7 @@ const KIND = {
   agent: { label: "Agent · reasoning", color: "#ec4899" },
   data: { label: "Reads · writes", color: "#64748b" },
   gate: { label: "Person decides", color: "#818cf8" },
+  step: { label: "Harness step", color: "#38bdf8" },
 } as const;
 type Kind = keyof typeof KIND;
 
@@ -287,6 +288,13 @@ function WorkRow({ work, onOpenFile }: { work: readonly PluginFlowStep[]; onOpen
   );
 }
 
+/** What a harness step uses, in a few words: the Kintsugi tool it calls or the skill it follows. */
+function stepHint(node: { tool?: string; skill?: string }): string | undefined {
+  if (node.tool !== undefined) return `tool · ${node.tool}`;
+  if (node.skill !== undefined) return `skill · ${node.skill}`;
+  return undefined;
+}
+
 function FlowItem({ node, flow, onOpenFile }: { node: FlowNode; flow: PluginFlow; onOpenFile: (path: string) => void }): React.JSX.Element {
   switch (node.kind) {
     case "script":
@@ -307,6 +315,8 @@ function FlowItem({ node, flow, onOpenFile }: { node: FlowNode; flow: PluginFlow
     }
     case "gate":
       return <Box kind="gate" title={`✋ ${node.label}`} className="min-w-32 max-w-56" />;
+    case "step":
+      return <Box kind="step" title={node.label} subtitle={stepHint(node)} className="min-w-32 max-w-56" />;
     case "parallel":
       return (
         <Lane title="In parallel" kind="workflow" className="p-2">
@@ -356,7 +366,7 @@ export function CommandBoard({ flow, onOpenFile }: { flow: PluginFlow; onOpenFil
             {flow.flow !== undefined ? (
               <FlowRow nodes={flow.flow} flow={flow} onOpenFile={onOpenFile} />
             ) : work.length === 0 ? (
-              <p className="text-[13px] text-text-secondary">The command is carried out by the person or harness that runs it; it starts no script or workflow.</p>
+              <p className="text-[13px] text-text-secondary">The command declares no steps; it is carried out by the person or harness that runs it and starts no script or workflow.</p>
             ) : (
               <WorkRow work={work} onOpenFile={onOpenFile} />
             )}

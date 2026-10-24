@@ -16,6 +16,16 @@
 //       do:
 //         agent: legacy-analyst
 //     - gate: a person reviews the pull request
+//
+// A command a member's harness carries out has steps no script or agent of the plugin runs: what the harness is told to do.
+// They are `step:` entries, optionally with the Kintsugi `tool` it uses and the `skill` it follows (a hint for the picture).
+//
+//   flow:
+//     - step: Read the unit's rules and design
+//       tool: document_get
+//     - gate: you approve the plan before any code is written
+//     - step: Implement the unit
+//       skill: build-method
 
 export type FlowNode =
   | { kind: "script"; name: string; label?: string; generated?: boolean; repair?: string }
@@ -23,7 +33,9 @@ export type FlowNode =
   | { kind: "workflow"; name: string; label?: string }
   | { kind: "parallel"; steps: FlowNode[] }
   | { kind: "each"; label: string; step: FlowNode }
-  | { kind: "gate"; label: string };
+  | { kind: "gate"; label: string }
+  /** A step the member's harness carries out; `tool` is the Kintsugi tool it calls, `skill` the skill it follows. */
+  | { kind: "step"; label: string; tool?: string; skill?: string };
 
 const NAME = /^[a-z][a-z0-9_-]*$/;
 
@@ -43,6 +55,20 @@ function parseNode(value: unknown, where: string, problems: string[]): FlowNode 
     }
     return name;
   };
+  if ("step" in value) {
+    const text = value["step"];
+    if (typeof text !== "string" || text.trim() === "") {
+      problems.push(`${where}: \`step\` must say what the harness does`);
+      return undefined;
+    }
+    const tool = value["tool"];
+    const skill = value["skill"];
+    if ((tool !== undefined && (typeof tool !== "string" || !NAME.test(tool))) || (skill !== undefined && (typeof skill !== "string" || !NAME.test(skill)))) {
+      problems.push(`${where}: \`tool\` and \`skill\` must be names like document_get or build-method`);
+      return undefined;
+    }
+    return { kind: "step", label: text.trim(), ...(tool === undefined ? {} : { tool: tool as string }), ...(skill === undefined ? {} : { skill: skill as string }) };
+  }
   if ("script" in value) {
     const name = named("script");
     if (name === undefined) return undefined;
@@ -81,7 +107,7 @@ function parseNode(value: unknown, where: string, problems: string[]): FlowNode 
     }
     return { kind: "gate", label: value["gate"] };
   }
-  problems.push(`${where}: a flow step is a script, agent, workflow, parallel, each or gate`);
+  problems.push(`${where}: a flow step is a script, agent, workflow, parallel, each, gate or step`);
   return undefined;
 }
 
@@ -110,6 +136,7 @@ export function flowComponents(nodes: readonly FlowNode[]): Array<{ kind: "scrip
       case "each":
         return flowComponents([node.step]);
       case "gate":
+      case "step":
         return [];
     }
   });

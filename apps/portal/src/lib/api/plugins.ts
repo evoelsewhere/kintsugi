@@ -48,7 +48,8 @@ export type FlowNode =
   | { kind: "workflow"; name: string; label?: string }
   | { kind: "parallel"; steps: FlowNode[] }
   | { kind: "each"; label: string; step: FlowNode }
-  | { kind: "gate"; label: string };
+  | { kind: "gate"; label: string }
+  | { kind: "step"; label: string; tool?: string; skill?: string };
 
 /** How one command works: what it reads, what it runs, what it writes and where a person decides. */
 export interface PluginFlow {
