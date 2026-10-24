@@ -6,7 +6,7 @@
 // Restricted records are only counted here; holders of restricted.read open them in Governance
 // (every read is audited).
 
-import { Check, Copy, ExternalLink, FileText, ShieldAlert } from "lucide-react";
+import { Check, ClipboardCopy, Copy, ExternalLink, FileText, ShieldAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
@@ -30,11 +30,13 @@ import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import {
   type StepStats,
+  logLine,
   statsByStep,
   useRunEvents,
   withDescendants,
 } from "./run-events";
 import { RunLog } from "./run-log";
+import { RunOverview } from "./run-overview";
 import { StepList, type StepsContext } from "./run-steps";
 
 export function RunDetail({
@@ -82,6 +84,30 @@ export function RunDetail({
   );
 }
 
+const VIEW_KEY = "kintsugi.run-view";
+
+/** Overview (the plain view) or technical, remembered between runs. */
+function useViewMode(): ["overview" | "technical", (mode: "overview" | "technical") => void] {
+  const [view, setView] = useState<"overview" | "technical">(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "technical" ? "technical" : "overview";
+    } catch {
+      return "overview";
+    }
+  });
+  return [
+    view,
+    (mode) => {
+      setView(mode);
+      try {
+        localStorage.setItem(VIEW_KEY, mode);
+      } catch {
+        // not remembered
+      }
+    },
+  ];
+}
+
 function RunConsole({
   run,
   events,
@@ -105,6 +131,8 @@ function RunConsole({
     );
   }, []);
   const stats = useMemo(() => statsByStep(events), [events]);
+  const [view, setView] = useViewMode();
+  const toast = useToast();
 
   const origin = new Date(run.startedAt ?? run.createdAt).getTime();
   const labels = useMemo(() => {
@@ -153,6 +181,25 @@ function RunConsole({
       lastToolAt: entry.lastAt,
     }));
 
+  // Everything needed to look at a run elsewhere: its state, its steps with why they failed, and the whole log.
+  const copyDiagnostics = async (): Promise<void> => {
+    const head = [
+      `run ${run.id} · ${run.kind} ${run.name} · ${run.status} · attempt ${run.attempt}`,
+      `started ${run.startedAt ?? "-"} · finished ${run.finishedAt ?? "-"} · agent ${run.agent ?? "-"}`,
+      ...(run.failureReason === undefined ? [] : [`failure: ${run.failureReason}`]),
+      "steps:",
+      ...run.steps.map((step) => `  ${stepLabel(step.id)} · ${step.kind} · ${step.status}${step.failureReason === undefined ? "" : ` · ${step.failureReason}`}`),
+      "",
+      `log (${events.length} lines):`,
+    ];
+    try {
+      await navigator.clipboard.writeText([...head, ...events.map((event) => logLine(event, stepLabel(event.stepRunId)))].join("\n"));
+      toast.success("Diagnostics copied", `${events.length} log lines`);
+    } catch (failure) {
+      toast.error("Could not copy the diagnostics", failure);
+    }
+  };
+
   const context: StepsContext = {
     projectId: run.projectId,
     now,
@@ -162,37 +209,67 @@ function RunConsole({
     onChildren,
     version,
   };
+  const technical = view === "technical";
   return (
     <>
-      <RunSummary
-        run={run}
-        stats={stats}
-        events={events.length}
-        now={now}
-        steps={
-          run.steps.length === 0 ? (
-            <p className="text-[12px] text-text-muted">
-              {active ? "Waiting for the first step…" : "No steps recorded."}
-            </p>
-          ) : (
-            <div className="absolute inset-0 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
-              <StepList steps={run.steps} context={context} />
-            </div>
-          )
-        }
-      >
-        <RunLog
-          events={events}
-          live={live}
-          runStart={origin}
-          stepLabel={stepLabel}
-          stepIds={selectedIds}
-          stepName={selected === undefined ? undefined : stepLabel(selected)}
-          onClearStep={() => setSelected(undefined)}
-          working={live ? working : []}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex gap-1" role="group" aria-label="Level of detail">
+          {(["overview", "technical"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={view === mode}
+              onClick={() => setView(mode)}
+              className={cn(
+                "h-7 rounded-[var(--geist-pill-radius)] px-3 text-[12px] capitalize shadow-border focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
+                view === mode ? "bg-hover font-medium text-text" : "text-text-muted hover:bg-hover hover:text-text-secondary",
+              )}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => void copyDiagnostics()}
+          title="Copy the run's state, steps and whole log to paste into a bug report or a chat"
+          className="inline-flex h-7 items-center gap-1.5 rounded-[var(--geist-radius)] px-2 text-[12px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+        >
+          <ClipboardCopy className="size-3.5" />
+          Copy diagnostics
+        </button>
+      </div>
+      {technical ? (
+        <RunSummary
+          run={run}
+          stats={stats}
+          events={events.length}
           now={now}
-        />
-      </RunSummary>
+          steps={
+            run.steps.length === 0 ? (
+              <p className="text-[12px] text-text-muted">{active ? "Waiting for the first step…" : "No steps recorded."}</p>
+            ) : (
+              <div className="absolute inset-0 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+                <StepList steps={run.steps} context={context} />
+              </div>
+            )
+          }
+        >
+          <RunLog
+            events={events}
+            live={live}
+            runStart={origin}
+            stepLabel={stepLabel}
+            stepIds={selectedIds}
+            stepName={selected === undefined ? undefined : stepLabel(selected)}
+            onClearStep={() => setSelected(undefined)}
+            working={live ? working : []}
+            now={now}
+          />
+        </RunSummary>
+      ) : (
+        <RunOverview run={run} events={events} stats={stats} live={live} now={now} version={version} stepLabel={stepLabel} onInspect={() => setView("technical")} />
+      )}
       <RunOutput run={run} />
     </>
   );
