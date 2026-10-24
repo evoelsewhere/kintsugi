@@ -4,14 +4,12 @@
 // A unit the member recorded nothing for, a selection that spans several merge requests, a unit another review is working on or has an
 // open pull request for, blocks the selection with a 409 that names each.
 
-import { BadRequestException, ConflictException, Injectable, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import type { Actor } from "#common/auth/decorators.js";
 import { JobRunsService, type JobRunView, REVIEW } from "#modules/delivery/runtime-jobs/index.js";
 import type { ReviewRunBody } from "../domain/build.js";
 import { BuildService } from "./build.service.js";
 
-/** Units per run: a reviewer job each, and a pull request a person can read. */
-export const MAX_REVIEW_UNITS_PER_RUN = 20;
 
 interface Conflict {
   unit: string;
@@ -43,11 +41,6 @@ export class BuildReviewsService {
           ? { message: `Name the target repository the merge request is on: ${overview.targets.map((entry) => entry.repositoryId).join(", ")}`, details: { targets: overview.targets.map((entry) => entry.repositoryId) } }
           : { message: body.target === undefined ? `Application ${applicationId} has no target repository; link one first` : `Repository ${body.target} is not a target repository of application ${applicationId}` },
       );
-    }
-
-    const cap = MAX_REVIEW_UNITS_PER_RUN;
-    if (wanted.length > cap) {
-      throw new UnprocessableEntityException({ message: `${wanted.length} units selected: a run takes at most ${cap}; split the selection`, details: { selected: wanted.length, max: cap } });
     }
 
     const conflicts = wanted.flatMap((key): Conflict[] => {

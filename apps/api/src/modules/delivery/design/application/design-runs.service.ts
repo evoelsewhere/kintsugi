@@ -6,7 +6,7 @@
 // pull request was closed without merging releases its units. A set of scope `application` (ADR-0050) is generated
 // for the application itself: the selection is the pseudo-unit `@app`, and only that.
 
-import { BadRequestException, ConflictException, Injectable, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { APPLICATION_UNIT_KEY, designSetDir } from "@kintsugi/domain";
 import type { Actor } from "#common/auth/decorators.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
@@ -14,8 +14,6 @@ import { DESIGN, JobRunsService, type JobRunView } from "#modules/delivery/runti
 import type { DesignActivityView, UnitSetActivity } from "../domain/design.js";
 import { DesignService } from "./design.service.js";
 
-/** Units per run: one designer job each, and a pull request a person can review. */
-export const MAX_UNITS_PER_RUN = 20;
 /** How many recent runs of the application are looked at. */
 const RECENT_RUNS = 200;
 
@@ -81,10 +79,6 @@ export class DesignRunsService {
           details: { unknown, notApplicable },
         });
       }
-    }
-    const cap = MAX_UNITS_PER_RUN;
-    if (wanted.length > cap) {
-      throw new UnprocessableEntityException({ message: `${wanted.length} units selected: a run takes at most ${cap}; split the selection`, details: { selected: wanted.length, max: cap } });
     }
 
     const busy = new Map((await this.activity(projectId, applicationId)).items.filter((item) => item.set === set).map((item) => [item.unit, item]));

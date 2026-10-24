@@ -44,7 +44,7 @@ export class CatalogController {
   @ApiOperation({
     summary: "Run understand on a selection of catalog items (items and whole modules), or resume a failed run",
     description:
-      "400 for unknown or retired ids; 409 when the catalog is not merged, or (with details.conflicts) when a selected item is running or in an open pull request; 422 above the items cap of a run.",
+      "400 for unknown or retired ids; 409 when the catalog is not merged, or (with details.conflicts) when a selected item is running or in an open pull request.",
   })
   @ApiAcceptedResponse({ description: "The queued understand run." })
   run(@Param("id") id: string, @Param("appId") appId: string, @Body({ schema: understandRunSchema }) body: UnderstandRunBody, @CurrentActor() actor: Actor): Promise<JobRunView> {

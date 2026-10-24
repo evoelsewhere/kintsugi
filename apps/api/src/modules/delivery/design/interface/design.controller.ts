@@ -54,7 +54,7 @@ export class DesignController {
   @ApiOperation({
     summary: "Generate a design set for a selection of units, or resume a failed run",
     description:
-      "One set and the units to write it for, in one run and one pull request (ADR-0049). 400 for an unknown set, unit or a set that does not apply to a unit's kind; 409 when the set has faults in its definition, or (with details.conflicts) when a unit has the set already, lacks a set it needs, is being generated or is in an open pull request; 422 above the units cap of a run.",
+      "One set and the units to write it for, in one run and one pull request (ADR-0049). 400 for an unknown set, unit or a set that does not apply to a unit's kind; 409 when the set has faults in its definition, or (with details.conflicts) when a unit has the set already, lacks a set it needs, is being generated or is in an open pull request.",
   })
   @ApiAcceptedResponse({ description: "The queued design run." })
   run(@Param("id") id: string, @Param("appId") appId: string, @Body({ schema: designRunSchema }) body: DesignRunBody, @CurrentActor() actor: Actor): Promise<JobRunView> {

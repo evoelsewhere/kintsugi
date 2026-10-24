@@ -38,8 +38,6 @@ const UnderstandResultsTab = lazy(() => import("./results/understand-results-tab
 
 type Tab = "catalog" | "runs" | "results";
 
-/** Items a run takes at most (the API's cap). */
-const MAX_ITEMS = 60;
 const RUN_LIMIT = 50;
 const STATUSES: ItemStatus[] = ["not-analysed", "understood", "stale", "failed", "in-pr", "running", "retired"];
 
@@ -311,8 +309,7 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
     toast.success(`${dependencies.length} item${dependencies.length === 1 ? "" : "s"} added`, "The items the selection calls: a screen with the APIs it uses is one run and one pull request.");
   }
 
-  const over = chosen.length > MAX_ITEMS;
-  const runBlocked = disabledReason ?? (chosen.length === 0 ? "Select items or modules to run understand on." : over ? `A run takes at most ${MAX_ITEMS} items.` : conflicts.length > 0 ? "Some selected items are blocked: see below." : undefined);
+  const runBlocked = disabledReason ?? (chosen.length === 0 ? "Select items or modules to run understand on." : conflicts.length > 0 ? "Some selected items are blocked: see below." : undefined);
 
   return (
     <div className="flex flex-col gap-4">
