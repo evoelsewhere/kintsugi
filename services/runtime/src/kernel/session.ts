@@ -20,6 +20,7 @@ import { CODEMODE_TOOL, createCodemodeExtensions } from "./codemode.js";
 import { compactionBudget, stableSessionId } from "./context.js";
 import { createMcpKernel } from "./mcp.js";
 import { composeSystemPrompt } from "./policy.js";
+import { createWebSearchTools } from "./web-search.js";
 import { createMemoryTools } from "./memory.js";
 import { createResultTool } from "./result.js";
 import { normalizeTools, RESULT_TOOL, withAliases } from "./tool-names.js";
@@ -97,7 +98,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       // The allowlist covers built-in, custom and extension tools alike; [] means no tools.
       tools,
       ...(tools.length === 0 ? { noTools: "all" as const } : {}),
-      customTools: [...createTools(tools.filter((name) => name !== RESULT_TOOL), toolContext), ...createMemoryTools(spec, options.services ?? {}), ...(spec.resultSchema === undefined ? [] : [createResultTool(spec.resultSchema, toolContext.outDir, options.onOutput)])],
+      customTools: [...createTools(tools.filter((name) => name !== RESULT_TOOL), toolContext), ...createMemoryTools(spec, options.services ?? {}), ...createWebSearchTools(spec, options.services ?? {}), ...(spec.resultSchema === undefined ? [] : [createResultTool(spec.resultSchema, toolContext.outDir, options.onOutput)])],
       resourceLoader,
       settingsManager,
       sessionManager: SessionManager.inMemory(cwd, { id: stableSessionId(spec) }),

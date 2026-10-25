@@ -67,8 +67,11 @@ export interface McpServerSpec {
 export type MemoryOperation = "search" | "read" | "write" | "status" | "forget" | "restore" | "scratchpad";
 export const memoryToolName = (operation: MemoryOperation): string => operation === "scratchpad" ? "scratchpad" : `memory_${operation}`;
 /** A caller-authored, safe tool error. Other backend errors must not be exposed to the model. */
-export class MemoryRequestError extends Error {}
+export class JobServiceRequestError extends Error {}
+export class MemoryRequestError extends JobServiceRequestError {}
+export class WebSearchRequestError extends JobServiceRequestError {}
 export interface JobServices {
+  webSearch?: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
   memory?: (operation: MemoryOperation, input: unknown, signal?: AbortSignal) => Promise<unknown>;
 }
 
@@ -97,6 +100,8 @@ export interface JobSpec {
   resultSchema?: Record<string, unknown>;
   /** Enables optional memory tools backed by the caller; carries no memory content or database credentials. */
   memory?: { writeSchema?: Record<string, unknown> };
+  /** Explicit outbound search grant; no provider credentials or search results. */
+  webSearch?: true;
   /** The MCP servers the agent names in `tools`; absent when it names none. */
   mcp?: { servers: McpServerSpec[] };
   /** Opaque correlation data (e.g. projectId, trigger), echoed on job.started; never shown to the agent. */

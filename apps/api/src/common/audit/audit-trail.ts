@@ -17,6 +17,7 @@ export const AUDIT_ACTIONS = {
   sandboxUpdate: "sandbox.update",
   telemetryExportUpdate: "telemetry-export.update",
   manifestPublish: "manifest.publish",
+  webSearchConfigure: "web-search.configure",
   projectMemoryConfigure: "project-memory.configure",
   projectMemoryReset: "project-memory.reset",
   projectMemoryForget: "project-memory.forget",

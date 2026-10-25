@@ -1,3 +1,4 @@
+import { WebSearchModule } from "#modules/admin/web-search/index.js";
 import { ProjectMemoryModule } from "./modules/admin/project-memory/project-memory.module.js";
 import { Module } from "@nestjs/common";
 import { debugMcpEnabled } from "./common/config/env.js";
@@ -67,6 +68,7 @@ import { ReleasesModule } from "./modules/system/releases/index.js";
     // admin
     ProjectsModule,
     ProjectMemoryModule,
+    WebSearchModule,
     DocumentWritesModule,
     UsersModule,
     RolesModule,

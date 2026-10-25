@@ -29,6 +29,7 @@ import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } fr
 import { RESULT_FILE, RESULT_TOOL, MEMORY_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
 import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec, JobServices } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
+import { bindWebSearch, type PgWebSearch } from "../web-search/index.js";
 import { bindProjectMemory, type ProjectMemory, type MemoryContext } from "../project-memory/index.js";
 import { defaultSandbox, limitsWith, type SandboxProvider } from "../sandbox.js";
 import { renderGuide, type GuideSource } from "../workspace/guide.js";
@@ -91,6 +92,7 @@ export interface JobRunnerDeps {
   mcpServers?: (ids: readonly string[]) => Promise<McpServerSpec[]>;
   interpreters: Interpreters;
   projectMemory?: ProjectMemory;
+  webSearch?: PgWebSearch;
   /** The budgets of stages and workflows (and the limits when no sandbox settings are given). */
   defaults?: JobDefaults;
   /** The sandbox settings (limits, read-only marking), read when a run starts; default: the built-in defaults. */
@@ -118,6 +120,8 @@ interface StepWorkspace {
   /** The top-level run whose live record gets this step's events. */
   rootId: string;
   stage?: string;
+  /** Stable logical placement for search budgets across newly allocated child run ids. */
+  searchBudgetKey?: string;
   /** The attempt of that run. */
   attempt: number;
   /** The job workspace: the working directory of every process of the run. */
@@ -760,9 +764,15 @@ export class JobRunner {
     const grantedMemoryTools = memoryContext?.reviewedOnly ? memoryTools.filter((name) => ["memory_search","memory_read","memory_status"].includes(name)) : memoryTools;
     const memoryEnabled = memoryContext !== undefined && grantedMemoryTools.length > 0 && (await this.#deps.projectMemory!.status(memoryContext,false)).enabled;
     const memoryUsage = { searches: 0, reads: 0, writes: 0, status: 0, forgets: 0, restores: 0, scratchpad: 0 };
-    const services: JobServices = !memoryEnabled ? {} : { memory: this.#memoryService(ws, { ...memoryContext!, agent: agentId }) };
+    const webEnabled = definition.tools.length > 0 && (await this.#deps.webSearch?.allowed(run.projectId, run.name)) === true;
+    const webUsage = { calls: 0 };
+    const services: JobServices = {
+      ...(memoryEnabled ? { memory: this.#memoryService(ws, { ...memoryContext!, agent: agentId }) } : {}),
+      ...(webEnabled ? { webSearch: bindWebSearch(this.#deps.webSearch!, { projectId: run.projectId, rootId: ws.rootId, stepId: run.id, stepKey: ws.searchBudgetKey ?? "root", agent: run.name }, (text) => redactText(text, { opaqueTokens: false }) !== text) } : {}),
+    };
     const spec: JobSpec = {
-      agent: !memoryEnabled ? definition : { ...definition, tools: [...definition.tools, ...grantedMemoryTools] },
+      agent: { ...definition, tools: [...new Set([...definition.tools, ...(memoryEnabled ? grantedMemoryTools : []), ...(webEnabled ? ["web_search"] : [])])] },
+      ...(webEnabled ? { webSearch: true } : {}),
       ...(memoryEnabled ? { memory: grantedMemoryTools.includes("memory_write") ? { writeSchema: MEMORY_WRITE_SCHEMA } : {} } : {}),
       task: fill(task, this.#placeholders(run, ws)) + schemaNote + carriedNote(ws.carried ?? []),
       model: { provider: binding.provider, id: binding.model, ...(thinking === undefined ? {} : { thinking }) },
@@ -831,6 +841,7 @@ export class JobRunner {
             });
           } else if (event.type === "tool.call") {
             if (event.decision === "allowed") {
+              if (event.tool === "web_search") webUsage.calls += 1;
               if (event.tool === "memory_search") memoryUsage.searches += 1;
               if (event.tool === "memory_read") memoryUsage.reads += 1;
               if (event.tool === "memory_write") memoryUsage.writes += 1;
@@ -951,7 +962,7 @@ export class JobRunner {
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
     const files = await listFiles(ws.out);
     return {
-      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary, ...(memoryEnabled ? { memoryTools: memoryUsage } : {}) },
+      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary, ...(memoryEnabled ? { memoryTools: memoryUsage } : {}), ...(webEnabled ? { webSearch: webUsage } : {}) },
       agent: agentId,
       provenance: new Map(files.filter((entry) => !entry.path.startsWith("restricted/")).map((entry) => [entry.path, provenance])),
       ...(result === undefined ? {} : { result }),
@@ -1122,11 +1133,13 @@ export class JobRunner {
     const { budget: _budget, ...inputs } = spec.inputs;
     let definition = "script";
     let memoryCapable = false;
+    let webCapable = false;
     try {
       if (spec.kind === "agent") {
         const agent = await this.#deps.agentDefinitions.definition(spec.name);
         definition = digestOf(agent);
         memoryCapable = agent.tools.includes("read");
+        webCapable = agent.tools.length > 0;
       }
       else if (spec.kind === "workflow") {
         definition = digestOf(await loadWorkflow(spec.name, this.#deps.workflowsDir));
@@ -1138,8 +1151,11 @@ export class JobRunner {
     const pins = { sources: (ws.sources ?? []).map((source) => [sourceRole(source), source.repositoryId, source.commit]), documents: ws.documentsCommit ?? null };
     const context = this.#memoryContext({ ...root, kind: spec.kind === "workflow" ? "agent" : spec.kind, name: spec.name }, ws);
     const liveMemory = memoryCapable && context !== undefined && (await this.#deps.projectMemory!.status(context,false)).enabled;
+    const webSettings = spec.kind === "workflow" ? await this.#deps.webSearch?.view(root.projectId) : undefined;
+    const liveWeb = spec.kind === "workflow" ? webSettings?.enabled === true && webSettings.agents.length > 0
+      : webCapable && await this.#deps.webSearch?.allowed(root.projectId, spec.name) === true;
     // Live lookups are mutable inputs: re-execute participating steps on retry instead of pretending they are cached inputs.
-    return digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream, ...(liveMemory ? { liveMemory: ["memory-v2", ws.attempt] } : {}) });
+    return digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream, ...(liveMemory ? { liveMemory: ["memory-v2", ws.attempt] } : {}), ...(liveWeb ? { liveWeb: ["web-search-v1", ws.attempt] } : {}) });
   }
 
   /**
@@ -1181,7 +1197,9 @@ export class JobRunner {
     // A stage step keeps its out/ when it fails, if it is an agent: the next try continues from what is there.
     const keeps = placement.key !== undefined && spec.kind === "agent";
     await this.#event(parentWs, id, "step.started", `${spec.kind} ${spec.name} started`, { kind: spec.kind, name: spec.name });
-    const ws: StepWorkspace = { ...parentWs, dir: folder.root, in: folder.in, out: folder.out, tmp: folder.tmp };
+    const { budget: _searchBudget, ...searchInputs } = spec.inputs ?? {};
+    const searchBudgetKey = digestOf({ parent: parentWs.searchBudgetKey ?? "root", placement: placement.key ?? null, kind: spec.kind, name: spec.name, inputs: searchInputs });
+    const ws: StepWorkspace = { ...parentWs, searchBudgetKey, dir: folder.root, in: folder.in, out: folder.out, tmp: folder.tmp };
     delete ws.carried;
     let failed = true;
     try {

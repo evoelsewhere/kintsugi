@@ -7,9 +7,10 @@
 //
 // Not a command for people: use run-job.ts for development runs.
 
-import type { JobEvent } from "@kintsugi/runtime-sdk";
+import { WebSearchRequestError, type JobEvent } from "@kintsugi/runtime-sdk";
 import { createAgentRuntime } from "../agent-runtime.js";
 import type { AgentChildInput } from "../launcher/agent-process.js";
+import { createJobServiceIpcClient } from "../launcher/job-service-ipc.js";
 import { createMemoryIpcClient } from "../launcher/memory-ipc.js";
 import { buildModelRuntime } from "../launcher/model-runtime.js";
 
@@ -28,13 +29,14 @@ async function main(): Promise<void> {
   const { provider } = input;
   if (input.mode === "pi" && provider === undefined) throw new Error("no provider was passed to the agent job");
   const memory = input.spec.memory === undefined ? undefined : createMemoryIpcClient();
+  const web = input.spec.webSearch !== true ? undefined : createJobServiceIpcClient("web-search", 24_000, (message) => new WebSearchRequestError(message));
   try {
     const runtime =
       input.mode === "mock"
         ? createAgentRuntime({ mode: "mock" })
         : createAgentRuntime({
             mode: "pi",
-            services: memory === undefined ? {} : { memory: memory.memory },
+            services: { ...(memory === undefined ? {} : { memory: memory.memory }), ...(web === undefined ? {} : { webSearch: (input, signal) => web.call("search", input, signal) }) },
             resolveModelRuntime: () =>
               buildModelRuntime(provider!.config, {
                 ...(provider!.apiKey === undefined ? {} : { apiKey: provider!.apiKey }),
@@ -61,7 +63,11 @@ async function main(): Promise<void> {
     clearInterval(alive);
     if (!ended) write(done);
     process.exitCode = done.type === "job.completed" ? 0 : 1;
-  } finally { memory?.dispose(); }
+  } finally {
+    memory?.dispose();
+    web?.dispose();
+    if (process.connected) { try { process.disconnect(); } catch { /* Already disconnected. */ } }
+  }
 }
 
 main().catch((error: unknown) => {
