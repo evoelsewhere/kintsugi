@@ -424,7 +424,7 @@ function accessors(topology: Topology, nodes: Map<string, MapNode>, store: strin
 
 function DiagramsTab({ results }: { results: MapResults }): React.JSX.Element {
   const [active, setActive] = useState<string>(results.diagrams[0]?.id ?? "");
-  if (results.diagrams.length === 0) return <EmptyState title="No diagrams at this ref" description="The map stage's diagrams job writes call-graph.mmd, data-lineage.mmd and critical-path.mmd." />;
+  if (results.diagrams.length === 0) return <EmptyState title="No diagrams at this ref" description="The topology step of assess writes call-graph.mmd, data-lineage.mmd and critical-path.mmd beside topology.md; a run made before it did has none, so run assess again." />;
   const diagram = results.diagrams.find((entry) => entry.id === active) ?? results.diagrams[0]!;
   return (
     <Section
