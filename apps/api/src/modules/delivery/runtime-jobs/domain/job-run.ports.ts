@@ -17,7 +17,7 @@ import type {
 } from "./job-run.js";
 
 export abstract class JobRunStore {
-  /** Records a stage run as `queued`. */
+  /** Records a stage run as `queued`, atomically refusing overlapping understand/design scopes (RunScopeConflict). */
   abstract createStageRun(run: NewStageRun): Promise<JobRunView>;
   /** Top-level runs of a project (optionally one application), newest first, with the total. */
   abstract list(projectId: string, applicationId: string | undefined, limit: number, offset: number): Promise<{ items: JobRunView[]; total: number }>;
@@ -47,7 +47,8 @@ export abstract class JobRunStore {
   /**
    * Puts a failed top-level run back in the queue as its next attempt (ADR-0055): attempt + 1, no failure, no
    * cancel request; `fresh` asks the worker to begin from nothing; `documentsCommit` pins the documents the run
-   * read when its inputs do not say. False when the run is not failed (a race).
+   * read when its inputs do not say. False when the run is not failed (a race). Scope claims are atomic with
+   * this update; RunScopeConflict reports overlap or pins made stale by a competing merge.
    */
   abstract requeue(projectId: string, id: string, options: { fresh: boolean; documentsCommit?: string }): Promise<boolean>;
   /** Marks a run failed before it reached the worker. */

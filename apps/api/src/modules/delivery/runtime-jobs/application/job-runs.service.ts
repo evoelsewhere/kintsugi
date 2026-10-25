@@ -8,7 +8,7 @@ import { toPage } from "#common/application/pagination.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
-import type { SourceRepo } from "@kintsugi/domain";
+import { canAbandonDocumentWrite, type SourceRepo } from "@kintsugi/domain";
 import { ChangeFeed } from "#common/realtime/change-feed.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import {
@@ -37,6 +37,7 @@ const SCOPED_STAGES: readonly string[] = [UNDERSTAND, DESIGN, REVIEW];
  */
 const FOLLOW_SAFETY_MS = 30_000;
 const FOLLOW_BATCH = 200;
+import { RunScopeConflict } from "../domain/run-scope-conflict.js";
 import { JobRunQueue, JobRunStore, StageCatalog } from "../domain/job-run.ports.js";
 
 @Injectable()
@@ -49,6 +50,17 @@ export class JobRunsService {
     private readonly stages: StageCatalog,
     private readonly feed: ChangeFeed,
   ) {}
+
+  async #withScopeConflict<T>(work: () => Promise<T>): Promise<T> {
+    try {
+      return await work();
+    } catch (error) {
+      if (error instanceof RunScopeConflict) {
+        throw new ConflictException({ message: error.message, details: { conflicts: error.conflicts } });
+      }
+      throw error;
+    }
+  }
 
   /**
    * Starts a stage for one application: records the run as `queued` and enqueues it. 409 when
@@ -116,7 +128,7 @@ export class JobRunsService {
       return pin === undefined ? source : { ...source, commit: pin };
     });
 
-    const run = await this.store.createStageRun({
+    const run = await this.#withScopeConflict(() => this.store.createStageRun({
       id: newId(),
       projectId,
       applicationId,
@@ -124,7 +136,7 @@ export class JobRunsService {
       sources,
       actor: actor.username ?? actor.id,
       ...(options.inputs === undefined ? {} : { inputs: options.inputs }),
-    });
+    }));
     try {
       await this.queue.enqueue(run.id);
     } catch (error) {
@@ -150,7 +162,7 @@ export class JobRunsService {
     const fresh = options.fresh === true;
     // The documents the failed attempt read stay the ones the job reads.
     const read = run.outputSummary?.["documentsCommit"];
-    if (!(await this.store.requeue(projectId, id, { fresh, ...(typeof read === "string" ? { documentsCommit: read } : {}) }))) throw new ConflictException(`Job run ${id} is no longer failed`);
+    if (!(await this.#withScopeConflict(() => this.store.requeue(projectId, id, { fresh, ...(typeof read === "string" ? { documentsCommit: read } : {}) })))) throw new ConflictException(`Job run ${id} is no longer failed`);
     try {
       await this.queue.enqueue(id);
     } catch (error) {
@@ -170,7 +182,7 @@ export class JobRunsService {
   async abandon(projectId: string, id: string, actor: Actor): Promise<JobRunView> {
     const run = await this.summary(projectId, id);
     if (run.parentId !== undefined || run.kind !== "stage" || !SCOPED_STAGES.includes(run.name)) throw new BadRequestException(`Job run ${id} is not an understand or design run`);
-    if (run.status !== "succeeded" || run.documentWrite?.status !== "pr-opened") throw new ConflictException(`Job run ${id} has no pull request to abandon`);
+    if (run.status !== "succeeded" || !canAbandonDocumentWrite(run.documentWrite)) throw new ConflictException(`Job run ${id} has no pull request to abandon`);
     if (!(await this.store.abandon(projectId, id, actor.username ?? actor.id))) throw new ConflictException(`Job run ${id} was abandoned already`);
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.jobRunAbandon, { projectId, subject: id, detail: { name: run.name, items: run.scope?.items.length ?? 0 } }));
     return this.summary(projectId, id);
