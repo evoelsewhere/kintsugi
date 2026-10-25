@@ -136,10 +136,10 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
         <div className="flex flex-wrap items-center gap-2">
           <Chips label="Window" options={WINDOWS.map((entry) => ({ id: entry.id, label: entry.label }))} value={windowId} onChange={(id) => update({ window: id === "7" ? undefined : id })} />
           <div className="w-48">
-            <Select value={projectId} options={projectOptions} onChange={(value) => update({ project: value })} />
+            <Select size="small" value={projectId} options={projectOptions} onChange={(value) => update({ project: value })} />
           </div>
           <div className="w-48">
-            <Select value={agent} options={agentOptions} onChange={(value) => update({ agent: value })} />
+            <Select size="small" value={agent} options={agentOptions} onChange={(value) => update({ agent: value })} />
           </div>
           <Button
             size="icon"

@@ -180,14 +180,14 @@ function RulesTab({ results, open, setOpen, projectId, commit }: { results: Rule
           toolbar={
             <div className="flex flex-wrap items-center gap-2">
               {confidences.length < 2 ? null : (
-                <Select
+                <Select size="small"
                   className="h-8 w-40 text-[13px]"
                   value={filters.confidence}
                   onChange={(value) => set({ confidence: value })}
                   options={[{ value: "", label: "Any confidence" }, ...confidences.map((value) => ({ value, label: `${value} confidence` }))]}
                 />
               )}
-              <Select
+              <Select size="small"
                 className="h-8 w-40 text-[13px]"
                 value={filters.status}
                 onChange={(value) => set({ status: value as Filters["status"] })}

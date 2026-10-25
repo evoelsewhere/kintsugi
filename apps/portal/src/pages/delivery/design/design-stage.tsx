@@ -140,7 +140,7 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
         application={application}
         description={stage.description}
         facts={<CompactFacts project={project} application={application} />}
-        actions={refOptions.length > 1 ? <Select value={refParam ?? ""} onChange={(value) => update({ ref: value })} options={refOptions} /> : undefined}
+        actions={refOptions.length > 1 ? <Select size="small" value={refParam ?? ""} onChange={(value) => update({ ref: value })} options={refOptions} /> : undefined}
       />
       {problems.length === 0 ? null : <p className="text-[12px] text-text-secondary">Check the designer agent before generating: {problems.join("; ")}. Design jobs fail until this is fixed (see Runs).</p>}
       <Tabs<DesignTab>

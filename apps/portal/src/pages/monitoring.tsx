@@ -85,7 +85,7 @@ function ProjectFilter({ value, onChange }: { value: string; onChange: (value: s
   const projects = useLoader("projects", projectsApi.list);
   return (
     <div className="w-56">
-      <Select value={value} options={[{ value: "", label: "All projects" }, ...(projects.data ?? []).map((project) => ({ value: project.id, label: project.name, hint: project.id }))]} onChange={onChange} />
+      <Select size="small" value={value} options={[{ value: "", label: "All projects" }, ...(projects.data ?? []).map((project) => ({ value: project.id, label: project.name, hint: project.id }))]} onChange={onChange} />
     </div>
   );
 }

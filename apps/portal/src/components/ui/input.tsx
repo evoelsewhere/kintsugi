@@ -3,13 +3,17 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {
+  /** `small` (32px, 13px text) for the filters of a table or a toolbar. */
+  size?: "default" | "small";
+}
 
-export function Input({ className, ...props }: InputProps): React.JSX.Element {
+export function Input({ className, size = "default", ...props }: InputProps): React.JSX.Element {
   return (
     <input
       className={cn(
-        "shadow-border h-[var(--geist-form-height)] w-full rounded-[var(--geist-radius)] bg-transparent px-3 text-[14px] text-text placeholder:text-text-muted",
+        "shadow-border w-full rounded-[var(--geist-radius)] bg-transparent text-text placeholder:text-text-muted",
+        size === "small" ? "h-[var(--geist-form-small-height)] px-2.5 text-[13px]" : "h-[var(--geist-form-height)] px-3 text-[14px]",
         "focus-visible:outline-1 focus-visible:outline-[var(--ds-input-focus-color)] focus-visible:outline-auto focus-visible:shadow-none",
         "disabled:bg-recessed disabled:text-text-muted",
         className,

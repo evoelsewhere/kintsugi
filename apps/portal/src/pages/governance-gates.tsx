@@ -77,7 +77,7 @@ export function GatesView({ status, onStatus, projectOptions }: { status: string
             }}
           />
           <div className="w-52">
-            <Select
+            <Select size="small"
               value={projectId}
               options={projectOptions}
               onChange={(value) => {
@@ -343,7 +343,7 @@ function RequestGateDialog({ projectOptions, onClose, onRequested }: { projectOp
     >
       <div className="flex flex-col gap-4">
         <Field label="Project">
-          <Select
+          <Select size="small"
             value={projectId}
             options={projectOptions}
             placeholder="Choose a project"
@@ -354,13 +354,13 @@ function RequestGateDialog({ projectOptions, onClose, onRequested }: { projectOp
           />
         </Field>
         <Field label="Application" hint="Leave empty for a project-wide gate.">
-          <Select value={applicationId} options={applicationOptions} onChange={setApplicationId} disabled={projectId === ""} />
+          <Select size="small" value={applicationId} options={applicationOptions} onChange={setApplicationId} disabled={projectId === ""} />
         </Field>
         <Field label="Gate">
-          <Select value={gateKey} options={GATE_IDS.map((id) => ({ value: id, label: id }))} onChange={setGateKey} />
+          <Select size="small" value={gateKey} options={GATE_IDS.map((id) => ({ value: id, label: id }))} onChange={setGateKey} />
         </Field>
         <Field label="Title" hint="What is to be decided, for example “Portfolio decision approved”.">
-          <Input value={title} maxLength={300} onChange={(event) => setTitle(event.target.value)} />
+          <Input size="small" value={title} maxLength={300} onChange={(event) => setTitle(event.target.value)} />
         </Field>
         {error === null ? null : (
           <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">

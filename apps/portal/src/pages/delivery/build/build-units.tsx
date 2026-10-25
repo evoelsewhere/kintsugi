@@ -171,7 +171,7 @@ export function BuildUnitsTab({
         pageSize={50}
         toolbar={
           overview.targets.length > 1 ? (
-            <Select value={target?.repositoryId ?? ""} onChange={onTarget} options={[{ value: "", label: "Target repository" }, ...overview.targets.map((entry) => ({ value: entry.repositoryId, label: entry.component === undefined ? entry.repositoryId : `${entry.component} (${entry.repositoryId})` }))]} />
+            <Select size="small" value={target?.repositoryId ?? ""} onChange={onTarget} options={[{ value: "", label: "Target repository" }, ...overview.targets.map((entry) => ({ value: entry.repositoryId, label: entry.component === undefined ? entry.repositoryId : `${entry.component} (${entry.repositoryId})` }))]} />
           ) : undefined
         }
         empty="No unit matches."

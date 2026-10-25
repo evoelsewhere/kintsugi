@@ -28,6 +28,8 @@ export interface SelectProps {
   disabled?: boolean;
   className?: string;
   id?: string;
+  /** `small` (32px, 13px text) for the filters of a table or a toolbar. */
+  size?: "default" | "small";
 }
 
 /** Viewport-anchored placement for the portaled menu. */
@@ -53,7 +55,7 @@ function placeMenu(trigger: HTMLElement): MenuPlacement {
     : { top: rect.bottom + MENU_MARGIN, left: rect.left, width: rect.width, maxHeight };
 }
 
-export function Select({ value, options, onChange, placeholder = "Select…", disabled, className, id }: SelectProps): React.JSX.Element {
+export function Select({ value, options, onChange, placeholder = "Select…", disabled, className, id, size = "default" }: SelectProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<MenuPlacement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -107,7 +109,8 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          "shadow-border flex h-[var(--geist-form-height)] w-full items-center gap-2 rounded-[var(--geist-radius)] bg-transparent px-3 text-left text-[14px] text-text",
+          "shadow-border flex w-full items-center gap-2 rounded-[var(--geist-radius)] bg-transparent text-left text-text",
+          size === "small" ? "h-[var(--geist-form-small-height)] px-2.5 text-[13px]" : "h-[var(--geist-form-height)] px-3 text-[14px]",
           "hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] disabled:pointer-events-none disabled:text-text-muted",
         )}
       >
@@ -115,7 +118,7 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
           {selected?.icon}
           <span className="min-w-0 truncate">{selected?.label ?? placeholder}</span>
         </span>
-        <ChevronDown className={cn("size-4 shrink-0 text-text-muted", open && "rotate-180")} strokeWidth={1.75} />
+        <ChevronDown className={cn("shrink-0 text-text-muted", size === "small" ? "size-3.5" : "size-4", open && "rotate-180")} strokeWidth={1.75} />
       </button>
 
       {open && placement !== null

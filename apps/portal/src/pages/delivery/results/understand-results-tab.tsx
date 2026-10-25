@@ -99,7 +99,7 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
         <Card className="py-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="w-full sm:w-[340px]">
-              <Select value={item ?? ""} options={scopes} onChange={(value) => update("item", value === "" ? undefined : value)} />
+              <Select size="small" value={item ?? ""} options={scopes} onChange={(value) => update("item", value === "" ? undefined : value)} />
             </div>
             <span className="text-[12px] text-text-muted">
               {item === undefined ? "Rebuilt from every understood item after each merge." : ref === undefined ? "This item's own files on the default branch." : `This item's files in its open pull request (${entry?.pr?.branch ?? ""}).`}
