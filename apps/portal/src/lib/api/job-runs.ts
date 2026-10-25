@@ -157,8 +157,10 @@ export const jobRunsApi = {
    * Follows a run live over Server-Sent Events (the session cookie authenticates the stream).
    * Returns a function that closes the stream; it also closes itself when the run has ended.
    */
-  follow(projectId: string, id: string, handlers: { onEvent(event: JobRunEvent): void; onStatus(run: JobRunView): void; onEnd(run: JobRunView): void }): () => void {
+  follow(projectId: string, id: string, handlers: { onEvent(event: JobRunEvent): void; onStatus(run: JobRunView): void; onEnd(run: JobRunView): void; onConnection?: (state: "connected" | "reconnecting") => void }): () => void {
     const source = new EventSource(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/events`);
+    source.onopen = () => handlers.onConnection?.("connected");
+    source.onerror = () => handlers.onConnection?.("reconnecting");
     source.addEventListener("job-event", (message) => handlers.onEvent(JSON.parse((message as MessageEvent<string>).data) as JobRunEvent));
     source.addEventListener("status", (message) => handlers.onStatus(JSON.parse((message as MessageEvent<string>).data) as JobRunView));
     source.addEventListener("end", (message) => {

@@ -1,23 +1,14 @@
-// The steps of a run as a selectable timeline: a row per step (a workflow or stage step opens to
-// its own child steps, loaded when opened) with its status and how long it took. Steps that share a
-// name are numbered so they can be told apart. Selecting a step filters the log to it; the same row selects again to clear.
-
-import {
-  Bot,
-  ChevronDown,
-  ChevronRight,
-  FileCode2,
-  Workflow,
-} from "lucide-react";
+// The console navigator: selection filters events; disclosure loads nested jobs on demand.
+import { Bot, ChevronDown, ChevronRight, FileCode2, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Loaded } from "@/components/loaded";
 import { StatusDot } from "@/components/ui/status-dot";
 import { jobRunsApi, type JobRunView } from "@/lib/api/job-runs";
-import { formatDuration, formatRelative } from "@/lib/format";
+import { formatDuration } from "@/lib/format";
 import { RUN_STATUS, styleOf } from "@/lib/status";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
-import { describeProgress, type StepStats } from "./run-events";
+import { describeProgress, humanize, type StepStats } from "./run-events";
 
 export interface StepsContext {
   projectId: string;
@@ -25,266 +16,129 @@ export interface StepsContext {
   stats: ReadonlyMap<string, StepStats>;
   selected: string | undefined;
   onSelect: (id: string | undefined) => void;
-  /** Reports the child steps a workflow step has loaded, so a selection covers them. */
-  onChildren: (id: string, children: string[]) => void;
-  /** Changes when the run's status does, so open workflow steps reload. */
+  onChildren: (id: string, children: JobRunView[]) => void;
   version: string;
 }
-
-const KIND_ICON = {
-  agent: Bot,
-  workflow: Workflow,
-  script: FileCode2,
-  stage: Workflow,
-} as const;
-
-/** "#2" for the steps that share a name with a sibling, so repeated agents can be told apart. */
-function instancesOf(steps: readonly JobRunView[]): Map<string, string> {
-  const totals = new Map<string, number>();
-  for (const step of steps)
-    totals.set(step.name, (totals.get(step.name) ?? 0) + 1);
-  const seen = new Map<string, number>();
-  const marks = new Map<string, string>();
-  for (const step of steps) {
-    const n = (seen.get(step.name) ?? 0) + 1;
-    seen.set(step.name, n);
-    if ((totals.get(step.name) ?? 0) > 1) marks.set(step.id, `#${n}`);
-  }
-  return marks;
-}
-
+const icons = { agent: Bot, script: FileCode2, workflow: Workflow, stage: Workflow };
 export function StepList({
   steps,
   context,
   depth = 0,
+  expandAll = false,
 }: {
   steps: readonly JobRunView[];
   context: StepsContext;
   depth?: number;
+  expandAll?: boolean;
 }): React.JSX.Element {
-  const marks = instancesOf(steps);
+  const seen = new Map<string, number>();
   return (
-    <div className="flex flex-col gap-1">
-      <ul className="flex flex-col gap-1">
-        {steps.map((step) => (
-          <StepRow
-            key={step.id}
-            step={step}
-            mark={marks.get(step.id)}
-            context={context}
-            depth={depth}
-          />
-        ))}
-      </ul>
-    </div>
+    <ol className="flex flex-col gap-1" aria-label={depth === 0 ? "Run steps" : "Nested steps"}>
+      {steps.map((step) => {
+        const n = (seen.get(step.name) ?? 0) + 1;
+        seen.set(step.name, n);
+        const name = humanize(step.name) + (steps.filter((s) => s.name === step.name).length > 1 ? ` #${n}` : "");
+        return <StepRow key={step.id} step={step} label={name} context={context} depth={depth} expandAll={expandAll} />;
+      })}
+    </ol>
   );
 }
-
 function StepRow({
   step,
-  mark,
+  label,
   context,
   depth,
+  expandAll,
 }: {
   step: JobRunView;
-  mark: string | undefined;
+  label: string;
   context: StepsContext;
   depth: number;
+  expandAll: boolean;
 }): React.JSX.Element {
   const nested = step.kind === "workflow" || step.kind === "stage";
-  const [open, setOpen] = useState(step.status === "running");
-  const Icon = KIND_ICON[step.kind];
-  const stats = context.stats.get(step.id);
-  const active = step.status === "running" || step.status === "queued";
+  const [open, setOpen] = useState(step.status === "running" || step.status === "failed");
   const selected = context.selected === step.id;
-  const tools = Object.entries(stats?.tools ?? {}).sort((a, b) => b[1] - a[1]);
+  const expanded = open || expandAll || (nested && selected);
+  const stats = context.stats.get(step.id);
+  const Icon = icons[step.kind];
   return (
-    <li
-      className="flex flex-col gap-1"
-      style={{ marginLeft: depth === 0 ? 0 : 12 }}
-    >
-      <div
-        className={cn(
-          "flex items-start gap-1 rounded-[10px] pr-2",
-          selected
-            ? "bg-hover [box-shadow:inset_0_0_0_1px_var(--color-text)]"
-            : "hover:bg-hover",
-        )}
-      >
+    <li className="min-w-0">
+      <div className={cn("flex items-start rounded-lg", selected ? "bg-hover shadow-border" : "hover:bg-hover")}>
         {nested ? (
           <button
             type="button"
-            aria-expanded={open}
-            aria-label={
-              open
-                ? `Hide the steps of ${step.name}`
-                : `Show the steps of ${step.name}`
-            }
+            aria-expanded={expanded}
+            disabled={selected || expandAll}
+            aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
             onClick={() => setOpen(!open)}
-            className="mt-2 ml-1.5 rounded-[var(--geist-radius)] text-text-muted hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+            className="mt-3 rounded p-1 text-text-secondary focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
           >
-            {open ? (
-              <ChevronDown className="size-3.5" />
-            ) : (
-              <ChevronRight className="size-3.5" />
-            )}
+            {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           </button>
         ) : (
-          <span className="ml-1.5 size-3.5 shrink-0" aria-hidden />
+          <span className="w-5 shrink-0" />
         )}
         <button
           type="button"
           aria-pressed={selected}
-          onClick={() => context.onSelect(selected ? undefined : step.id)}
-          className="flex min-w-0 flex-1 flex-col gap-1 py-1.5 text-left focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
-          title="Show only this step in the log"
+          onClick={() => {
+            context.onSelect(selected ? undefined : step.id);
+            if (nested) setOpen(true);
+          }}
+          className="min-w-0 flex-1 rounded-lg p-2 text-left focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
         >
-          <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2">
-            <span className="flex min-w-0 items-center gap-2">
-              <StatusDot
-                tone={styleOf(RUN_STATUS, step.status).tone}
-                busy={
-                  active ? styleOf(RUN_STATUS, step.status).busy : undefined
-                }
-                className="size-2"
-              />
-              <Icon
-                className="size-3.5 shrink-0 text-text-muted"
-                strokeWidth={1.75}
-              />
-              <span
-                className="min-w-0 flex-1 truncate text-[13px] font-medium text-text"
-                title={step.name}
-              >
-                {step.name}
-                {mark === undefined ? null : (
-                  <span className="ml-1 font-mono text-[11px] font-normal text-text-muted">
-                    {mark}
-                  </span>
-                )}
-              </span>
-            </span>
-            <span className="w-16 text-right text-[11.5px] tabular-nums text-text-secondary">
-              {step.startedAt === undefined
-                ? styleOf(RUN_STATUS, step.status).label
-                : formatDuration(step.startedAt, step.finishedAt, context.now)}
-            </span>
+          <span className="flex min-w-0 items-center gap-2">
+            <StatusDot tone={styleOf(RUN_STATUS, step.status).tone} className="size-2 shrink-0" />
+            <span className="min-w-0 flex-1 break-words text-[13px] font-medium leading-5 text-text">{label}</span>
+          </span>
+          <span className="mt-1 flex flex-wrap items-center gap-1.5 pl-4 text-[11px] text-text-secondary">
+            <Icon className="size-3" />
+            {step.kind}
+            <span>·</span>
+            {styleOf(RUN_STATUS, step.status).label}
+            <span className="ml-auto tabular-nums">{formatDuration(step.startedAt, step.finishedAt, context.now)}</span>
           </span>
           {step.failureReason === undefined ? null : (
-            <span
-              className="flex items-start gap-1.5 text-[11.5px] leading-[1.45] text-[var(--ds-status-red)]"
-              title={step.failureReason}
-            >
-              <span
-                className="mt-[5px] size-1.5 shrink-0 rounded-full bg-[var(--ds-status-red)]"
-                aria-hidden
-              />
-              <span className="line-clamp-2 break-words">
-                {step.failureReason}
-              </span>
+            <span className="mt-1 block truncate pl-4 text-[11px] text-text-secondary" title={step.failureReason}>
+              {step.failureReason}
             </span>
           )}
-          {active && stats?.progress !== undefined ? (
-            <span
-              className="flex items-center gap-1.5 text-[11px] text-text-secondary"
-              title={describeProgress(stats.progress)}
-            >
-              <span
-                className="size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--ds-status-blue)]"
-                aria-hidden
-              />
-              <span className="truncate tabular-nums">
-                {describeProgress(stats.progress)}
-              </span>
-            </span>
+          {step.status === "running" && stats?.progress !== undefined ? (
+            <span className="mt-1 block pl-4 text-[11px] text-text-secondary">{describeProgress(stats.progress)}</span>
           ) : null}
-          {active && stats?.last !== undefined ? (
-            <span className="flex items-baseline gap-2 text-[11px]">
-              <span
-                className="min-w-0 flex-1 truncate font-mono text-text-muted"
-                title={stats.last}
-              >
-                {stats.last}
-              </span>
-              {stats.lastAt === undefined ? null : (
-                <span className="shrink-0 tabular-nums text-text-muted">
-                  {formatRelative(stats.lastAt, context.now)}
-                </span>
-              )}
-            </span>
-          ) : null}
-          {tools.length === 0 &&
-          step.agent === undefined &&
-          step.scriptHash === undefined ? null : (
-            <span className="flex flex-wrap items-center gap-1 text-[11px] text-text-muted">
-              {step.agent === undefined ? null : (
-                <span className="rounded-full bg-hover px-1.5 py-0.5">
-                  {step.agent}
-                </span>
-              )}
-              {step.scriptHash === undefined ? null : (
-                <span className="rounded-full bg-hover px-1.5 py-0.5 font-mono">
-                  sha256 {step.scriptHash.slice(0, 10)}
-                </span>
-              )}
-              {tools.map(([tool, count]) => (
-                <span
-                  key={tool}
-                  className="rounded-full bg-hover px-1.5 py-0.5 tabular-nums"
-                >
-                  {tool} <span className="text-text-secondary">{count}</span>
-                </span>
-              ))}
-              {stats === undefined || stats.blocked === 0 ? null : (
-                <span className="text-[var(--ds-status-red)]">
-                  {stats.blocked} blocked
-                </span>
-              )}
-            </span>
-          )}
         </button>
       </div>
-      {open && nested ? (
-        <StepChildren
-          stepId={step.id}
-          context={context}
-          depth={depth + 1}
-          version={`${context.version}/${step.status}`}
-        />
-      ) : null}
+      {nested && expanded ? <StepChildren step={step} context={context} depth={depth + 1} expandAll={expandAll || selected} /> : null}
     </li>
   );
 }
-
 function StepChildren({
-  stepId,
+  step,
   context,
   depth,
-  version,
+  expandAll,
 }: {
-  stepId: string;
+  step: JobRunView;
   context: StepsContext;
   depth: number;
-  version: string;
+  expandAll: boolean;
 }): React.JSX.Element {
-  const { projectId, onChildren } = context;
-  const children = useLoader(`step/${projectId}/${stepId}/${version}`, () =>
-    jobRunsApi.get(projectId, stepId),
+  const detail = useLoader(`console-children/${context.projectId}/${step.id}/${context.version}`, () =>
+    jobRunsApi.get(context.projectId, step.id),
   );
-  const ids = children.data?.steps.map((step) => step.id).join(",");
+  const onChildren = context.onChildren;
   useEffect(() => {
-    if (ids !== undefined) onChildren(stepId, ids === "" ? [] : ids.split(","));
-  }, [ids, stepId, onChildren]);
+    if (detail.data !== undefined) onChildren(step.id, detail.data.steps);
+  }, [detail.data, step.id, onChildren]);
   return (
-    <div className="ml-3 border-l border-black/10 pl-2 dark:border-white/10">
-      <Loaded loader={children} rows={1}>
-        {(detail) =>
-          detail.steps.length === 0 ? (
-            <p className="py-1 text-[12px] text-text-muted">
-              No child steps recorded yet.
-            </p>
+    <div className="ml-3 pl-2 shadow-[inset_1px_0_0_var(--ds-background-300)]">
+      <Loaded loader={detail} rows={1}>
+        {(data) =>
+          data.steps.length === 0 ? (
+            <p className="p-2 text-[12px] text-text-secondary">No nested steps yet.</p>
           ) : (
-            <StepList steps={detail.steps} context={context} depth={depth} />
+            <StepList steps={data.steps} context={context} depth={depth} expandAll={expandAll} />
           )
         }
       </Loaded>

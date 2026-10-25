@@ -10,9 +10,31 @@ export interface TabItem<T extends string> {
   count?: number | undefined;
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange, label, sticky = false }: { tabs: TabItem<T>[]; value: T; onChange: (id: T) => void; label: string; /** Stays at the top of the page while its content scrolls. */ sticky?: boolean }): React.JSX.Element {
+export function Tabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  label,
+  sticky = false,
+  scrollable = false,
+}: {
+  tabs: TabItem<T>[];
+  value: T;
+  onChange: (id: T) => void;
+  label: string;
+  /** Stays at the top of the page while its content scrolls. */ sticky?: boolean;
+  scrollable?: boolean;
+}): React.JSX.Element {
   return (
-    <div role="tablist" aria-label={label} className={cn("flex flex-wrap gap-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)]", sticky && "sticky top-0 z-10 bg-background")}>
+    <div
+      role="tablist"
+      aria-label={label}
+      className={cn(
+        "flex gap-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)]",
+        scrollable ? "flex-nowrap overflow-x-auto" : "flex-wrap",
+        sticky && "sticky top-0 z-10 bg-background",
+      )}
+    >
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -22,11 +44,14 @@ export function Tabs<T extends string>({ tabs, value, onChange, label, sticky = 
           onClick={() => onChange(tab.id)}
           className={cn(
             "-mb-px flex items-center gap-1.5 px-3 py-2 text-[13px] text-text-secondary hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
+            scrollable && "shrink-0 whitespace-nowrap",
             tab.id === value && "font-medium text-text [box-shadow:0_-2px_0_0_var(--color-text)_inset]",
           )}
         >
           {tab.label}
-          {tab.count === undefined ? null : <span className="rounded-[var(--geist-pill-radius)] bg-hover px-1.5 text-[11px] leading-4 text-text-muted">{tab.count}</span>}
+          {tab.count === undefined ? null : (
+            <span className="rounded-[var(--geist-pill-radius)] bg-hover px-1.5 text-[11px] leading-4 text-text-muted">{tab.count}</span>
+          )}
         </button>
       ))}
     </div>
@@ -34,7 +59,17 @@ export function Tabs<T extends string>({ tabs, value, onChange, label, sticky = 
 }
 
 /** Filter chips — a compact single-choice row (status filters). */
-export function Chips<T extends string>({ options, value, onChange, label }: { options: { id: T; label: string }[]; value: T; onChange: (id: T) => void; label: string }): React.JSX.Element {
+export function Chips<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: { id: T; label: string }[];
+  value: T;
+  onChange: (id: T) => void;
+  label: string;
+}): React.JSX.Element {
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
       {options.map((option) => (

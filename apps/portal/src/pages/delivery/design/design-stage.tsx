@@ -19,7 +19,7 @@ import { ApiError } from "@/lib/api";
 import { agentsApi } from "@/lib/api/agents";
 import { designApi, type DesignActivity, type DesignConflict, type DesignOverview, type DesignState } from "@/lib/api/design";
 import { documentsApi } from "@/lib/api/documents";
-import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
+import { jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { unitsLine } from "@/lib/design-run";
@@ -43,7 +43,6 @@ const RUN_LIMIT = 50;
 
 const DESIGN_RUNS: ScopedRunsLabels = {
   title: "Design runs",
-  description: "Each run generates one design set for its units in one pull request, with the files of those units only. Retry a failed run; abandon a pull request that was closed without merging to release its units.",
   emptyTitle: "No design run yet",
   emptyDescription: "Choose a set on the Units tab, select the units and generate its design.",
   noun: "unit",
@@ -175,8 +174,8 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
             canRun={canRun}
             initialRun={params.get("run") ?? undefined}
             labels={DESIGN_RUNS}
+          onChooseScope={() => update({ tab: "units" })}
             onChanged={changed}
-            onStarted={(run: JobRunView) => update({ tab: "runs", run: run.id })}
           />
           <StageAgents stage={stage} agents={agents} />
         </>

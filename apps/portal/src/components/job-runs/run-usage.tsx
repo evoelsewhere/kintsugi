@@ -15,7 +15,7 @@ export function RunUsage({ run }: { run: JobRunDetail }): React.JSX.Element | nu
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
-        <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">Cost and tokens</h5>
+        <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">Usage · attempt {run.attempt}</h5>
         {can("telemetry.view") ? (
           <Link to={telemetryTraceLink({ runId: run.id })} className="text-[12px] text-text-secondary underline-offset-2 hover:text-text hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
             Open the trace in Telemetry

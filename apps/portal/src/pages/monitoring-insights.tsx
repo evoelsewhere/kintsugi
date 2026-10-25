@@ -3,6 +3,8 @@
 // (outcome, kind and project) and the worker (state and queue depth). Each reads what it needs
 // itself, independent of the list filters below it, and refreshes on its own.
 
+import { ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { BarList, Histogram, ShareBar, StackedColumns } from "@/components/results/charts";
 import { CHART_COLOR } from "@/components/results/chart-colors";
 import { RUN_COLOR, SYNC_COLOR, WRITE_COLOR } from "@/components/results/status-colors";
@@ -36,6 +38,7 @@ export function MonitoringInsights({ tab }: { tab: "runs" | "repositories" | "wr
 }
 
 function RunsInsights(): React.JSX.Element | null {
+  const [open, setOpen] = useState(false);
   const runs = useLoader("monitoring-insight-runs", async () => (await jobRunsApi.listAll({ limit: 200 })).items, {
     live: ["job-runs", "document-writes"],
   });
@@ -46,36 +49,56 @@ function RunsInsights(): React.JSX.Element | null {
   const stages = countBy(top, (run) => run.name).slice(0, 8);
   const projects = countBy(top, (run) => run.projectId).slice(0, 8);
   return (
-    <div className="flex flex-col gap-4">
-      <KpiRow>
-        <Kpi label="Runs sampled" value={top.length} hint="the latest stage runs" />
-        <Kpi label="Active" value={active} tone={active > 0 ? "blue" : undefined} hint="queued or running" />
-        <Kpi label="Failed" value={failed} tone={failed > 0 ? "red" : "green"} hint={`of ${top.length} sampled`} higherIsWorse />
-        <Kpi label="Success rate" value={undefined} display={percent(successRate(top))} hint="of the finished runs" />
-        <Kpi label="Average run time" value={undefined} display={formatMs(averageMs(top))} hint="succeeded runs" />
-        <Kpi label="Projects" value={projects.length} hint="with runs in the sample" />
-      </KpiRow>
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <Section title="Recent runs" description="One bar per run, oldest to newest: height is the run time, colour the outcome." className="xl:col-span-3">
-          {top.length === 0 ? <p className="text-[12px] text-text-muted">No stage run yet.</p> : <MiniRunBars runs={top} limit={48} height={96} width={11} />}
-          <div className="mt-3">
-            <ShareBar segments={segmentsOf(countBy(top, (run) => run.status), (key) => RUN_COLOR[key])} format={formatCount} />
+    <section className="overflow-hidden rounded-xl bg-surface shadow-border-medium">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? "run-insights-panel" : undefined}
+        onClick={() => setOpen(!open)}
+        className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left hover:bg-hover/40 focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
+      >
+        <span className="min-w-0">
+          <span className="block text-[13px] font-medium text-text">Run insights</span>
+          <span className="block text-[12px] text-text-muted">{top.length} recent stage runs · {active} active · {failed} failed</span>
+        </span>
+        <span className="flex items-center gap-2 text-[12px] text-text-secondary">
+          {open ? "Hide insights" : "Show insights"}
+          <ChevronDown className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} />
+        </span>
+      </button>
+      {open ? (
+        <div id="run-insights-panel" className="flex flex-col gap-4 border-t border-hover p-3 sm:p-4">
+          <KpiRow>
+            <Kpi label="Runs sampled" value={top.length} hint="the latest stage runs" />
+            <Kpi label="Active" value={active} tone={active > 0 ? "blue" : undefined} hint="queued or running" />
+            <Kpi label="Failed" value={failed} tone={failed > 0 ? "red" : "green"} hint={`of ${top.length} sampled`} higherIsWorse />
+            <Kpi label="Success rate" value={undefined} display={percent(successRate(top))} hint="of the finished runs" />
+            <Kpi label="Average run time" value={undefined} display={formatMs(averageMs(top))} hint="succeeded runs" />
+            <Kpi label="Projects" value={projects.length} hint="with runs in the sample" />
+          </KpiRow>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+            <Section title="Recent runs" description="One bar per run, oldest to newest: height is the run time, colour the outcome." className="xl:col-span-3">
+              {top.length === 0 ? <p className="text-[12px] text-text-muted">No stage run yet.</p> : <MiniRunBars runs={top} limit={48} height={96} width={11} />}
+              <div className="mt-3">
+                <ShareBar segments={segmentsOf(countBy(top, (run) => run.status), (key) => RUN_COLOR[key])} format={formatCount} />
+              </div>
+            </Section>
+            <Section title="By stage" description="Runs per stage; the note is the mean run time of the succeeded ones." className="xl:col-span-2">
+              {stages.length === 0 ? (
+                <p className="text-[12px] text-text-muted">Nothing to count.</p>
+              ) : (
+                <BarList format={formatCount} rows={stages.map((entry) => ({ key: entry.key, label: stageLabel(entry.key), value: entry.count, note: formatMs(averageMs(top.filter((run) => run.name === entry.key))) }))} />
+              )}
+            </Section>
           </div>
-        </Section>
-        <Section title="By stage" description="Runs per stage; the note is the mean run time of the succeeded ones." className="xl:col-span-2">
-          {stages.length === 0 ? (
-            <p className="text-[12px] text-text-muted">Nothing to count.</p>
-          ) : (
-            <BarList format={formatCount} rows={stages.map((entry) => ({ key: entry.key, label: stageLabel(entry.key), value: entry.count, note: formatMs(averageMs(top.filter((run) => run.name === entry.key))) }))} />
+          {projects.length < 2 ? null : (
+            <Section title="By project" description="Runs per project in the sample.">
+              <BarList format={formatCount} color={CHART_COLOR.teal} rows={projects.map((entry) => ({ key: entry.key, label: entry.key, value: entry.count, note: `${top.filter((run) => run.projectId === entry.key && run.status === "failed").length} failed` }))} />
+            </Section>
           )}
-        </Section>
-      </div>
-      {projects.length < 2 ? null : (
-        <Section title="By project" description="Runs per project in the sample.">
-          <BarList format={formatCount} color={CHART_COLOR.teal} rows={projects.map((entry) => ({ key: entry.key, label: entry.key, value: entry.count, note: `${top.filter((run) => run.projectId === entry.key && run.status === "failed").length} failed` }))} />
-        </Section>
-      )}
-    </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

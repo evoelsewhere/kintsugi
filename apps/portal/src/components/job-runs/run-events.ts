@@ -9,35 +9,64 @@ import { type JobRunEvent, type JobRunView, jobRunsApi } from "@/lib/api/job-run
 const MAX_EVENTS = 3000;
 
 /** The events of a run, replayed from the start and then as the worker records them. */
-export function useRunEvents(projectId: string, runId: string, handlers: { onStatus: () => void; onStep?: (() => void) | undefined }): { events: JobRunEvent[]; live: boolean } {
-  const [events, setEvents] = useState<JobRunEvent[]>([]);
-  const [live, setLive] = useState(true);
+export function useRunEvents(
+  projectId: string,
+  runId: string,
+  handlers: { onStatus: () => void; onStep?: (() => void) | undefined; attempt?: number; stepIds?: ReadonlySet<string> },
+): { events: JobRunEvent[]; live: boolean; connection: "connecting" | "connected" | "reconnecting" | "ended"; received: number } {
+  const attempt = handlers.attempt;
+  const stepIds = handlers.stepIds;
+  const stepKey = stepIds === undefined ? "all" : [...stepIds].sort().join(",");
+  const key = `${projectId}/${runId}/${attempt ?? "all"}/${stepKey}`;
+  const [state, setState] = useState<{
+    key: string;
+    events: JobRunEvent[];
+    live: boolean;
+    connection: "connecting" | "connected" | "reconnecting" | "ended";
+    received: number;
+  }>({ key, events: [], live: true, connection: "connecting", received: 0 });
   const latest = useRef(handlers);
   useEffect(() => {
     latest.current = handlers;
   });
-
   useEffect(() => {
     let first = true;
+    let lastId = 0n;
     const close = jobRunsApi.follow(projectId, runId, {
       onEvent: (event) => {
-        setEvents((current) => [...current, event].slice(-MAX_EVENTS));
+        if (attempt !== undefined && event.attempt !== undefined && event.attempt !== attempt) return;
+        if (stepIds !== undefined && !stepIds.has(event.stepRunId ?? "")) return;
+        if (/^\d+$/.test(event.id)) {
+          const id = BigInt(event.id);
+          if (id <= lastId) return;
+          lastId = id;
+        }
+        setState((previous) => {
+          const current = previous.key === key ? previous : { key, events: [], live: true, connection: "connected" as const, received: 0 };
+          return { ...current, events: [...current.events, event].slice(-MAX_EVENTS), received: current.received + 1 };
+        });
         if (event.kind === "step.started" || event.kind === "step.finished") latest.current.onStep?.();
       },
       onStatus: () => {
-        // The first status is the current one; later ones are changes.
         if (!first) latest.current.onStatus();
         first = false;
       },
+      onConnection: (connection) =>
+        setState((current) =>
+          current.key === key ? { ...current, connection } : { key, events: [], live: true, connection, received: 0 },
+        ),
       onEnd: () => {
-        setLive(false);
+        setState((current) =>
+          current.key === key
+            ? { ...current, live: false, connection: "ended" }
+            : { key, events: [], live: false, connection: "ended", received: 0 },
+        );
         if (!first) latest.current.onStatus();
       },
     });
     return close;
-  }, [projectId, runId]);
-
-  return { events, live };
+  }, [projectId, runId, key, attempt, stepIds]);
+  return state.key === key ? state : { events: [], live: true, connection: "connecting", received: 0 };
 }
 
 /**
@@ -71,10 +100,16 @@ export function useRunPulse(projectId: string, runId: string, enabled: boolean):
 
 const SETTLE_MS = 600;
 
-export type LogCategory ="tool" | "model" | "status" | "log";
+export type LogCategory = "tool" | "model" | "status" | "log";
 
 export const categoryOf = (event: JobRunEvent): LogCategory =>
-  event.kind === "tool" ? "tool" : event.kind === "status" || event.kind === "step.started" || event.kind === "step.finished" ? "status" : typeof event.data["turn"] === "number" ? "model" : "log";
+  event.kind === "tool"
+    ? "tool"
+    : event.kind === "status" || event.kind === "step.started" || event.kind === "step.finished"
+      ? "status"
+      : typeof event.data["turn"] === "number"
+        ? "model"
+        : "log";
 
 /** The kernel tool a tool event is about (`read`, `grep`, …). */
 export const toolOf = (event: JobRunEvent): string | undefined => (typeof event.data["tool"] === "string" ? event.data["tool"] : undefined);
@@ -82,7 +117,8 @@ export const toolOf = (event: JobRunEvent): string | undefined => (typeof event.
 /** A blocked tool call, a failed or cancelled run or step, a stalled agent. */
 export const isProblem = (event: JobRunEvent): boolean =>
   (event.kind === "tool" && event.data["decision"] === "blocked") ||
-  ((event.kind === "status" || event.kind === "step.finished") && (event.data["status"] === "failed" || event.data["status"] === "cancelled")) ||
+  ((event.kind === "status" || event.kind === "step.finished") &&
+    (event.data["status"] === "failed" || event.data["status"] === "cancelled")) ||
   (event.kind === "log" && /\b(stalled|failed)\b/i.test(event.message));
 
 /** What the model reported last: the turn and how much it has thought, argued and written so far. */
@@ -113,7 +149,13 @@ export interface StepStats {
 export function progressOf(event: JobRunEvent): Progress | undefined {
   const { turn, thinkingChars, toolArgsChars, textChars } = event.data;
   if (typeof turn !== "number") return undefined;
-  return { turn, thinkingChars: Number(thinkingChars ?? 0), toolArgsChars: Number(toolArgsChars ?? 0), textChars: Number(textChars ?? 0), at: event.at };
+  return {
+    turn,
+    thinkingChars: Number(thinkingChars ?? 0),
+    toolArgsChars: Number(toolArgsChars ?? 0),
+    textChars: Number(textChars ?? 0),
+    at: event.at,
+  };
 }
 
 const kb = (chars: number): string => (chars < 1000 ? String(chars) : `${(chars / 1000).toFixed(1)}k`);
@@ -204,7 +246,12 @@ export function feedGroups(events: readonly JobRunEvent[]): FeedGroup[] {
     const entry = open.get(step)!;
     const first = entry.targets[0] ?? "";
     const folders = new Set(entry.targets.map((target) => (target.includes("/") ? target.slice(0, target.lastIndexOf("/")) : "")));
-    entry.group.target = entry.targets.length === 1 ? first : folders.size === 1 && [...folders][0] !== "" ? `${[...folders][0]}/` : `${first.split(" ")[0] ?? first} and others`;
+    entry.group.target =
+      entry.targets.length === 1
+        ? first
+        : folders.size === 1 && [...folders][0] !== ""
+          ? `${[...folders][0]}/`
+          : `${first.split(" ")[0] ?? first} and others`;
   }
   return groups;
 }
@@ -262,15 +309,23 @@ export interface TimelineRow {
  */
 export function timelineOf(steps: readonly JobRunView[], now: number): { rows: TimelineRow[]; totalMs: number; started: number } {
   const started = steps.filter((step) => step.startedAt !== undefined);
-  if (started.length === 0) return { rows: steps.map((step) => ({ id: step.id, name: step.name, status: step.status })), totalMs: 0, started: 0 };
+  if (started.length === 0)
+    return { rows: steps.map((step) => ({ id: step.id, name: step.name, status: step.status })), totalMs: 0, started: 0 };
   const begin = Math.min(...started.map((step) => Date.parse(step.startedAt!)));
   const endOf = (step: JobRunView): number => (step.finishedAt === undefined ? now : Date.parse(step.finishedAt));
-  const totalMs = Math.max(1, ...started.map(endOf)) - begin;
+  const totalMs = Math.max(1, Math.max(...started.map(endOf)) - begin);
   const rows = steps.map((step): TimelineRow => {
     if (step.startedAt === undefined) return { id: step.id, name: step.name, status: step.status };
     const from = Date.parse(step.startedAt) - begin;
     const durationMs = Math.max(0, endOf(step) - Date.parse(step.startedAt));
-    return { id: step.id, name: step.name, status: step.status, offsetPct: (from / totalMs) * 100, widthPct: Math.max((durationMs / totalMs) * 100, 0.8), durationMs };
+    return {
+      id: step.id,
+      name: step.name,
+      status: step.status,
+      offsetPct: (from / totalMs) * 100,
+      widthPct: Math.max((durationMs / totalMs) * 100, 0.8),
+      durationMs,
+    };
   });
   return { rows, totalMs, started: started.length };
 }

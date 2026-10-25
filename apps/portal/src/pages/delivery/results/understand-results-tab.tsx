@@ -24,7 +24,6 @@ import { GapsResultsView } from "./gaps-results";
 import { HardenResultsView } from "./harden-results";
 import { MapResultsView } from "./map-results";
 import { OutputFiles, Section } from "./results-parts";
-import { LatestRunNotice, MonitoringTab } from "./run-monitoring";
 import { RulesResultsView } from "./rules-results";
 import { UnderstandFirstSteps } from "./understand-first-steps";
 import { UnderstandResultsView } from "./understand-results";
@@ -43,7 +42,7 @@ const VIEWS: Array<{ id: ViewId; label: string }> = [
 
 const isView = (value: string | null): value is ViewId => VIEWS.some((view) => view.id === value);
 
-type ResultsTab = ViewId | "monitoring";
+type ResultsTab = ViewId;
 
 export interface UnderstandResultsTabProps {
   project: ProjectDetail;
@@ -51,7 +50,7 @@ export interface UnderstandResultsTabProps {
   catalog: CatalogView | null;
   /** Changes when a run finishes, so the results are read again. */
   version: string;
-  /** The understand runs of the application, newest first (the Monitoring view reads them). */
+  /** The understand runs of the application, newest first. */
   runs?: JobRunView[] | undefined;
   /** Opens the Catalog tab, where the items to understand are chosen. */
   onOpenCatalog: () => void;
@@ -62,7 +61,6 @@ export interface UnderstandResultsTabProps {
 export default function UnderstandResultsTab({ project, application, catalog, version, runs, onOpenCatalog, onOpenRuns }: UnderstandResultsTabProps): React.JSX.Element {
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
-  const monitoring = requested === "monitoring";
   const view: ViewId = isView(requested) ? requested : "understand";
   const apiView: UnderstandView = view === "data" ? "understand" : view;
   const item = params.get("item") ?? undefined;
@@ -90,13 +88,11 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
   ];
   if (item !== undefined && !scopes.some((scope) => scope.value === item)) scopes.push({ value: item, label: item, hint: "" });
 
-  const tabs: Array<{ id: ResultsTab; label: string; count?: number | undefined }> = [...VIEWS, { id: "monitoring", label: "Monitoring", count: runs?.length }];
+  const tabs = VIEWS;
 
   return (
     <div className="flex flex-col gap-4">
-      <LatestRunNotice runs={runs} />
-      {monitoring ? null : (
-        <Card className="py-3">
+      <Card className="py-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="w-full sm:w-[340px]">
               <Select size="small" value={item ?? ""} options={scopes} onChange={(value) => update("item", value === "" ? undefined : value)} />
@@ -109,14 +105,10 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
             </Button>
           </div>
         </Card>
-      )}
 
-      <Tabs<ResultsTab> label="understand results" value={monitoring ? "monitoring" : view} onChange={(next) => update("view", next)} tabs={tabs} />
+      <Tabs<ResultsTab> label="understand results" value={view} onChange={(next) => update("view", next)} tabs={tabs} />
 
-      {monitoring ? <MonitoringTab projectId={project.id} runs={runs} /> : null}
-
-      {monitoring ? null : (
-        <Loaded loader={results} rows={6}>
+      <Loaded loader={results} rows={6}>
           {(loaded) =>
             loaded.empty && item === undefined ? (
               <UnderstandFirstSteps
@@ -149,7 +141,6 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
             )
           }
         </Loaded>
-      )}
     </div>
   );
 }

@@ -1,304 +1,386 @@
-// The log console of a run: its events with the step each belongs to, a time relative to the
-// start of the run, filters (tool calls, steps and status, the model's progress, problems, one
-// tool), a search, follow-the-newest, and copy or download of what is shown. The events of the
-// model's progress are off by default: the steps panel shows the turn instead.
-
-import { ArrowDownToLine, Copy, Download, Search } from "lucide-react";
+// Bounded console: exclusive event filters, readable complete lines, explicit follow/pause and export.
+import { ArrowDownToLine, Download, Pause, Play, Search, WrapText, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
+import { Input } from "@/components/ui/input";
 import { StatusDot } from "@/components/ui/status-dot";
-import { useToast } from "@/components/ui/toast";
 import type { JobRunEvent } from "@/lib/api/job-runs";
-import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { categoryOf, describeProgress, isProblem, type LogCategory, logLine, type Progress, toolOf } from "./run-events";
-
-type Filter = "tool" | "status" | "model" | "log" | "problems";
-
-const FILTERS: Array<{ id: Filter; label: string }> = [
-  { id: "tool", label: "Tool calls" },
-  { id: "status", label: "Steps & status" },
-  { id: "log", label: "Messages" },
-  { id: "model", label: "Model progress" },
-  { id: "problems", label: "Problems" },
-];
-
-const TOOL_COLOR: Record<string, string> = {
-  read: "var(--ds-status-blue)",
-  ls: "var(--ds-status-cyan)",
-  find: "var(--ds-status-teal-dark)",
-  grep: "var(--ds-status-purple-light)",
-  write: "var(--ds-status-green)",
-  edit: "var(--ds-status-orange)",
-};
+import { categoryOf, describeProgress, isProblem, logLine, type Progress, toolOf } from "./run-events";
+import { CONSOLE_FILTERS, filterRunEvents, type ConsoleFilter } from "./run-model";
 
 const PAGE = 400;
-
-const clock = (ms: number): string => {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return `${h > 0 ? `${h}:${String(m).padStart(2, "0")}` : String(m)}:${String(s).padStart(2, "0")}`;
-};
-
-function Chip({ label, count, active, onClick, tone }: { label: string; count?: number; active: boolean; onClick: () => void; tone?: string }): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-[var(--geist-pill-radius)] px-2 text-[11.5px] shadow-border focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
-        active ? "bg-hover font-medium text-text" : "text-text-muted hover:bg-hover hover:text-text-secondary",
-      )}
-    >
-      {tone === undefined ? null : <span className="size-1.5 rounded-full" style={{ backgroundColor: tone }} />}
-      {label}
-      {count === undefined ? null : <span className="tabular-nums text-text-muted">{count}</span>}
-    </button>
-  );
+function elapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(seconds / 3600)
+    .toString()
+    .padStart(2, "0")}:${Math.floor((seconds % 3600) / 60)
+    .toString()
+    .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 }
-
+interface Props {
+  visible: boolean;
+  events: readonly JobRunEvent[];
+  live: boolean;
+  connection: "connecting" | "connected" | "reconnecting" | "ended";
+  received: number;
+  runStart: number | undefined;
+  stepLabel: (id: string | undefined) => string;
+  stepIds: ReadonlySet<string> | undefined;
+  stepName: string | undefined;
+  onClearStep: () => void;
+  working: ReadonlyArray<{ id: string; label: string; progress: Progress; lastToolAt: string | undefined }>;
+  now: number;
+  filter: ConsoleFilter;
+  onFilter: (filter: ConsoleFilter) => void;
+}
 export function RunLog({
+  visible: isVisible,
   events,
   live,
+  connection,
+  received,
   runStart,
   stepLabel,
   stepIds,
   stepName,
   onClearStep,
   working,
-  now,
-}: {
-  events: readonly JobRunEvent[];
-  live: boolean;
-  /** The run's start (ms since the epoch); times in the log are relative to it. */
-  runStart: number | undefined;
-  /** The label of a step id, for the chip on each line. */
-  stepLabel: (id: string | undefined) => string;
-  /** When set, only the events of these steps are shown (the selected step and what is below it). */
-  stepIds: ReadonlySet<string> | undefined;
-  stepName: string | undefined;
-  onClearStep: () => void;
-  /** The agents that are still working, with what the model reported last (shown under the log). */
-  working: ReadonlyArray<{ id: string; label: string; progress: Progress; lastToolAt: string | undefined }>;
-  now: number;
-}): React.JSX.Element {
-  const toast = useToast();
-  const [shown, setShown] = useState<ReadonlySet<Filter>>(new Set(["tool", "status", "log"]));
-  const [tools, setTools] = useState<ReadonlySet<string>>(new Set());
+  filter,
+  onFilter,
+}: Props): React.JSX.Element {
   const [query, setQuery] = useState("");
+  const [tool, setTool] = useState("");
+  const [wrap, setWrap] = useState(true);
+  const [absolute, setAbsolute] = useState(false);
   const [follow, setFollow] = useState(true);
+  const [snapshot, setSnapshot] = useState<{ events: readonly JobRunEvent[]; received: number } | null>(null);
   const [limit, setLimit] = useState(PAGE);
   const box = useRef<HTMLDivElement | null>(null);
-
-  const inStep = useMemo(() => (stepIds === undefined ? events : events.filter((event) => stepIds.has(event.stepRunId ?? ""))), [events, stepIds]);
-  const counts = useMemo(() => {
-    const byCategory: Record<LogCategory, number> = { tool: 0, status: 0, log: 0, model: 0 };
-    const byTool: Record<string, number> = {};
-    let problems = 0;
-    for (const event of inStep) {
-      byCategory[categoryOf(event)] += 1;
-      const tool = toolOf(event);
-      if (tool !== undefined) byTool[tool] = (byTool[tool] ?? 0) + 1;
-      if (isProblem(event)) problems += 1;
-    }
-    return { byCategory, byTool, problems };
-  }, [inStep]);
-
-  const text = query.trim().toLowerCase();
+  const userScrolling = useRef(false);
+  const source = snapshot?.events ?? events;
+  const inStep = useMemo(
+    () => (stepIds === undefined ? source : source.filter((event) => stepIds.has(event.stepRunId ?? ""))),
+    [source, stepIds],
+  );
+  const counts = useMemo(
+    () =>
+      Object.fromEntries(
+        CONSOLE_FILTERS.map((entry) => [
+          entry.id,
+          inStep.filter(
+            (event) =>
+              entry.id === "all" ||
+              (entry.id === "activity"
+                ? categoryOf(event) !== "model"
+                : entry.id === "problems"
+                  ? isProblem(event)
+                  : categoryOf(event) === entry.id),
+          ).length,
+        ]),
+      ),
+    [inStep],
+  );
+  const tools = useMemo(
+    () =>
+      [
+        ...new Set(
+          inStep.flatMap((event) => {
+            const name = toolOf(event);
+            return name === undefined ? [] : [name];
+          }),
+        ),
+      ].sort(),
+    [inStep],
+  );
   const visible = useMemo(
     () =>
-      inStep.filter((event) => {
-        const category = categoryOf(event);
-        const problem = isProblem(event);
-        // A problem is always worth showing when its chip is on; the other chips pick by kind of line.
-        if (!(shown.has(category) || (problem && shown.has("problems")))) return false;
-        if (shown.has("problems") && shown.size === 1 && !problem) return false;
-        if (category === "tool" && tools.size > 0 && !tools.has(toolOf(event) ?? "")) return false;
-        return text === "" || event.message.toLowerCase().includes(text) || stepLabel(event.stepRunId).toLowerCase().includes(text);
-      }),
-    [inStep, shown, tools, text, stepLabel],
+      filterRunEvents(
+        source,
+        { filter, query, tool: filter === "tool" ? tool : "", ...(stepIds === undefined ? {} : { stepIds }) },
+        stepLabel,
+      ),
+    [source, filter, query, tool, stepIds, stepLabel],
   );
   const rows = visible.slice(-limit);
-
+  const lastId = rows.at(-1)?.id;
   useEffect(() => {
-    // Follow the newest line without scrolling the page.
-    const element = box.current;
-    if (follow && element !== null) element.scrollTop = element.scrollHeight;
-  }, [rows.length, follow]);
-
-  const toggle = <T,>(set: ReadonlySet<T>, value: T): Set<T> => {
-    const next = new Set(set);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    return next;
+    if (isVisible && follow && box.current !== null) box.current.scrollTop = box.current.scrollHeight;
+  }, [lastId, follow, filter, query, stepName, wrap, isVisible]);
+  const pause = (): void => {
+    setFollow(false);
+    if (live) setSnapshot({ events, received });
   };
-  const exportText = (): string => visible.map((event) => logLine(event, stepLabel(event.stepRunId))).join("\n");
-  const copy = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(exportText());
-      toast.success("Log copied", `${visible.length} lines`);
-    } catch (failure) {
-      toast.error("Could not copy the log", failure);
-    }
+  const resume = (): void => {
+    userScrolling.current = false;
+    setSnapshot(null);
+    setFollow(true);
   };
+  const exportText = visible.map((event) => logLine(event, stepLabel(event.stepRunId))).join("\n");
   const download = (): void => {
-    const url = URL.createObjectURL(new Blob([exportText()], { type: "text/plain" }));
+    const url = URL.createObjectURL(new Blob([exportText], { type: "text/plain" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = "run.log";
+    link.download = "run-console.log";
     link.click();
     URL.revokeObjectURL(url);
   };
-
+  const state =
+    connection === "connecting"
+      ? "Loading events…"
+      : connection === "reconnecting"
+        ? "Reconnecting…"
+        : !live
+          ? "Recorded"
+          : snapshot === null
+            ? "Live"
+            : "Paused";
   return (
-    <section className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <h5 className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-text-muted uppercase">
-          {live ? <StatusDot tone="blue" className="size-2 animate-pulse" /> : null}
-          {live ? "Live log" : "Log"}
-        </h5>
-        {stepName === undefined ? null : (
-          <button type="button" onClick={onClearStep} className="inline-flex h-6 max-w-48 items-center gap-1.5 rounded-[var(--geist-pill-radius)] bg-hover px-2 text-[11.5px] text-text hover:bg-[var(--color-recessed)] focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]" title="Show every step again">
-            <span className="truncate">{stepName}</span>
-            <span aria-hidden className="text-text-muted">
-              ×
+    <section className="flex min-w-0 flex-col gap-3 rounded-xl bg-surface p-3 shadow-border sm:p-4" aria-label="Run console">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <StatusDot tone={live ? (connection === "reconnecting" ? "orange" : "blue") : "muted"} className="size-2" />
+          <h2 className="text-[14px] font-medium text-text">Console</h2>
+          <span className="text-[12px] text-text-secondary">{state}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <Button size="small" aria-pressed={wrap} onClick={() => setWrap(!wrap)} title="Toggle line wrapping">
+            <WrapText />
+            Wrap
+          </Button>
+          <Button size="small" aria-pressed={absolute} onClick={() => setAbsolute(!absolute)}>
+            {absolute ? "Clock time" : "Elapsed time"}
+          </Button>
+          <CopyButton value={exportText} label="Copy filtered log" iconOnly />
+          <Button size="icon" aria-label="Download filtered log" title="Download filtered log" onClick={download}>
+            <Download />
+          </Button>
+        </div>
+      </div>
+      {stepName === undefined ? null : (
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-recessed px-3 py-2 text-[13px] text-text">
+          <span className="min-w-0 break-words">
+            Step: <strong className="font-medium">{stepName}</strong>
+          </span>
+          <Button size="icon" aria-label="Clear step filter" onClick={onClearStep}>
+            <X />
+          </Button>
+        </div>
+      )}
+      <select
+        aria-label="Console event type"
+        value={filter}
+        onChange={(event) => {
+          onFilter(event.target.value as ConsoleFilter);
+          setLimit(PAGE);
+        }}
+        className="h-9 rounded-md bg-recessed px-3 text-[13px] text-text shadow-border sm:hidden"
+      >
+        {CONSOLE_FILTERS.map((entry) => (
+          <option key={entry.id} value={entry.id}>
+            {entry.label} · {counts[entry.id] ?? 0}
+          </option>
+        ))}
+      </select>
+      <div className="hidden flex-wrap gap-1 sm:flex" role="group" aria-label="Console event type">
+        {CONSOLE_FILTERS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            aria-pressed={filter === entry.id}
+            onClick={() => {
+              onFilter(entry.id);
+              setLimit(PAGE);
+            }}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-[12px] focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
+              filter === entry.id ? "bg-text text-background" : "text-text-secondary hover:bg-hover",
+            )}
+          >
+            <span>{entry.label}</span>
+            <span className={cn("tabular-nums", filter === entry.id ? "text-background/80" : "text-text-muted")}>
+              {counts[entry.id] ?? 0}
             </span>
           </button>
-        )}
-        <div className="relative ml-auto min-w-40 max-w-64 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-text-muted" strokeWidth={1.75} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search the log"
-            aria-label="Search the log"
-            className="h-7 w-full rounded-[var(--geist-radius)] bg-surface pr-2 pl-7 text-[12px] text-text shadow-border placeholder:text-text-muted focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
-          />
-        </div>
-        <button type="button" onClick={() => void copy()} aria-label="Copy the shown lines" title="Copy the shown lines" className="rounded-[var(--geist-radius)] p-1.5 text-text-muted hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
-          <Copy className="size-3.5" />
-        </button>
-        <button type="button" onClick={download} aria-label="Download the shown lines" title="Download the shown lines" className="rounded-[var(--geist-radius)] p-1.5 text-text-muted hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
-          <Download className="size-3.5" />
-        </button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-1.5">
-        {FILTERS.map((filter) => (
-          <Chip
-            key={filter.id}
-            label={filter.label}
-            count={filter.id === "problems" ? counts.problems : counts.byCategory[filter.id]}
-            active={shown.has(filter.id)}
-            onClick={() => setShown(toggle(shown, filter.id))}
-            {...(filter.id === "problems" && counts.problems > 0 ? { tone: "var(--ds-status-red)" } : {})}
-          />
         ))}
-        {shown.has("tool") && Object.keys(counts.byTool).length > 1 ? <span className="mx-1 h-4 w-px bg-hover" aria-hidden /> : null}
-        {shown.has("tool") && Object.keys(counts.byTool).length > 1
-          ? Object.entries(counts.byTool)
-              .sort((a, b) => b[1] - a[1])
-              .map(([tool, count]) => <Chip key={tool} label={tool} count={count} active={tools.has(tool)} onClick={() => setTools(toggle(tools, tool))} tone={TOOL_COLOR[tool] ?? "var(--ds-text-muted)"} />)
-          : null}
       </div>
-
-      <div className="relative">
+      <div className="flex flex-wrap gap-2">
+        <label className="relative min-w-40 flex-1">
+          <Search className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-text-muted" />
+          <Input
+            size="small"
+            type="search"
+            aria-label="Search console"
+            placeholder="Search event text or step…"
+            className="pl-8"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setLimit(PAGE);
+            }}
+          />
+        </label>
+        {filter === "tool" ? (
+          <select
+            aria-label="Tool filter"
+            className="h-8 max-w-full rounded-md bg-surface px-2 text-[12px] text-text shadow-border"
+            value={tool}
+            onChange={(event) => setTool(event.target.value)}
+          >
+            <option value="">All tools</option>
+            {tools.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+      </div>
+      <div className="relative min-w-0">
         <div
           ref={box}
+          role="log"
+          aria-label="Console events"
+          aria-live="off"
+          tabIndex={0}
+          onWheel={() => {
+            userScrolling.current = true;
+          }}
+          onTouchMove={() => {
+            userScrolling.current = true;
+          }}
+          onKeyDown={(event) => {
+            if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) userScrolling.current = true;
+          }}
           onScroll={(event) => {
             const element = event.currentTarget;
-            setFollow(element.scrollHeight - element.scrollTop - element.clientHeight < 24);
+            if (userScrolling.current && follow && element.scrollHeight - element.scrollTop - element.clientHeight > 40) pause();
+            userScrolling.current = false;
           }}
-          className="max-h-[420px] min-h-32 overflow-y-auto rounded-[var(--geist-radius)] bg-surface py-1 font-mono text-[11.5px] leading-[20px] shadow-border [scrollbar-gutter:stable]"
+          className="h-[min(62vh,660px)] min-h-[360px] overflow-auto rounded-lg bg-recessed/50 p-2 focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] [scrollbar-gutter:stable]"
         >
           {visible.length > rows.length ? (
-            <button type="button" onClick={() => setLimit(limit + PAGE)} className="w-full py-1 text-center font-sans text-[11px] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
-              {visible.length - rows.length} earlier lines — show more
+            <button
+              type="button"
+              onClick={() => {
+                pause();
+                setLimit((current) => current + PAGE);
+              }}
+              className="mb-3 w-full rounded-md bg-surface py-2 text-[12px] text-accent hover:bg-hover"
+            >
+              Show earlier {Math.min(PAGE, visible.length - rows.length)} events · {visible.length - rows.length} hidden
             </button>
           ) : null}
           {rows.length === 0 ? (
-            <p className="px-3 py-4 text-center font-sans text-[12px] text-text-muted">{events.length === 0 ? (live ? "Waiting for events…" : "No events recorded.") : "No line matches the filters."}</p>
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+              <p className="text-[13px] text-text">
+                {source.length === 0
+                  ? connection === "connecting"
+                    ? "Loading recorded events…"
+                    : live
+                      ? "Waiting for events…"
+                      : "No events recorded for this attempt."
+                  : "No events match these filters."}
+              </p>
+              {source.length === 0 ? null : (
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setQuery("");
+                    setTool("");
+                    onFilter("activity");
+                    onClearStep();
+                  }}
+                >
+                  Reset console filters
+                </Button>
+              )}
+            </div>
           ) : (
-            rows.map((event) => <LogRow key={event.id} event={event} runStart={runStart} label={stepLabel(event.stepRunId)} />)
+            rows.map((event) => (
+              <ConsoleRow
+                key={event.id}
+                event={event}
+                label={stepLabel(event.stepRunId)}
+                wrap={wrap}
+                time={
+                  absolute || runStart === undefined
+                    ? new Date(event.at).toLocaleTimeString([], { hour12: false })
+                    : elapsed(Date.parse(event.at) - runStart)
+                }
+              />
+            ))
           )}
         </div>
-        {follow ? null : (
-          <button
-            type="button"
-            onClick={() => setFollow(true)}
-            className="absolute right-4 bottom-3 inline-flex h-7 items-center gap-1.5 rounded-[var(--geist-pill-radius)] bg-text px-2.5 font-sans text-[11.5px] text-background shadow-md focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
-          >
-            <ArrowDownToLine className="size-3.5" />
-            Latest
-          </button>
-        )}
+        {!follow ? (
+          <Button size="small" variant="solid" className="absolute right-4 bottom-3" onClick={resume}>
+            <ArrowDownToLine />
+            {live ? `Resume${snapshot === null ? "" : ` · ${Math.max(0, received - snapshot.received)} new`}` : "Jump to latest"}
+          </Button>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-secondary">
+        <p>
+          {rows.length} shown · {visible.length} matching · {source.length} loaded
+          {received > events.length ? " · earlier events are outside the loaded window" : ""}
+        </p>
+        {live ? (
+          <Button size="small" onClick={follow ? pause : resume}>
+            {follow ? <Pause /> : <Play />}
+            {follow ? "Pause updates" : "Resume updates"}
+          </Button>
+        ) : null}
       </div>
       {working.length === 0 ? null : (
-        <ul className="flex flex-col gap-1 rounded-[var(--geist-radius)] bg-recessed/60 px-2.5 py-1.5" aria-label="Agents working now">
+        <ul aria-label="Agents working" className="flex flex-col gap-2 rounded-lg bg-recessed/50 p-3">
           {working.map((entry) => (
-            <li key={entry.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-text-secondary">
-              <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--ds-status-blue)]" />
+            <li key={entry.id} className="text-[12px] text-text-secondary">
               <span className="font-medium text-text">{entry.label}</span>
-              <span className="tabular-nums">{describeProgress(entry.progress)}</span>
-              <span className="text-text-muted">· updated {formatRelative(entry.progress.at, now)}</span>
-              {entry.lastToolAt === undefined ? null : <span className="text-text-muted">· last tool call {formatRelative(entry.lastToolAt, now)}</span>}
+              <span className="ml-2">{describeProgress(entry.progress)}</span>
             </li>
           ))}
         </ul>
       )}
-      <p className="text-[11px] tabular-nums text-text-muted">
-        {visible.length} of {events.length} lines{live ? " · following the run" : ""}
-      </p>
     </section>
   );
 }
-
-/**
- * What a tool call touched, on one line: a path keeps its file name whole and gives up the
- * folders first (never a break inside a name); a pattern or anything else just truncates.
- */
-function ToolTarget({ text }: { text: string }): React.JSX.Element {
-  const [target = "", ...pattern] = text.split(" ");
-  const slash = target.lastIndexOf("/");
-  const extra = pattern.join(" ");
-  return (
-    <span className="flex min-w-0 flex-1 items-baseline text-text-secondary" title={text}>
-      {slash < 0 ? null : <span className="min-w-0 truncate text-text-muted">{target.slice(0, slash + 1)}</span>}
-      <span className={cn("shrink-0", slash < 0 && "min-w-0 truncate")}>{target.slice(slash + 1)}</span>
-      {extra === "" ? null : <span className="ml-2 min-w-0 truncate text-text-muted">{extra}</span>}
-    </span>
-  );
-}
-
-function LogRow({ event, runStart, label }: { event: JobRunEvent; runStart: number | undefined; label: string }): React.JSX.Element {
-  const category = categoryOf(event);
-  const tool = toolOf(event);
-  const blocked = event.kind === "tool" && event.data["decision"] === "blocked";
+function ConsoleRow({ event, label, wrap, time }: { event: JobRunEvent; label: string; wrap: boolean; time: string }): React.JSX.Element {
   const problem = isProblem(event);
-  // A tool line reads "<tool> <path or pattern>"; the tool name becomes a coloured tag.
-  const rest = tool !== undefined && event.message.startsWith(tool) ? event.message.slice(tool.length).trimStart() : event.message;
+  const category = categoryOf(event);
   return (
-    <p className={cn("flex gap-2 px-2 py-px hover:bg-hover", problem && "bg-[color-mix(in_srgb,var(--ds-status-red)_10%,transparent)]")} title={new Date(event.at).toLocaleString()}>
-      <span className="w-12 shrink-0 text-right text-text-muted tabular-nums">{runStart === undefined ? "" : clock(new Date(event.at).getTime() - runStart)}</span>
-      <span className="w-32 shrink-0 truncate font-sans text-[11px] leading-[18px] text-text-muted" title={label}>
-        {label}
-      </span>
-      <span className="w-[4.5rem] shrink-0 truncate font-medium" style={{ color: blocked ? "var(--ds-status-red)" : tool === undefined ? undefined : (TOOL_COLOR[tool] ?? "var(--ds-text-secondary)") }}>
-        {category === "tool" && tool !== undefined ? tool : null}
-      </span>
-      {category === "tool" && tool === "codemode" && !problem ? (
-        <span className="min-w-0 flex-1 truncate text-text-secondary" title={rest}>
-          {rest === "" ? "script" : rest}
-        </span>
-      ) : category === "tool" && tool !== undefined && !problem ? (
-        <ToolTarget text={rest} />
-      ) : (
-        <span className={cn("line-clamp-3 min-w-0 flex-1 break-words", category === "status" ? "font-medium text-text" : "text-text-muted", problem && "text-[var(--ds-status-red)]")} title={event.message}>
-          {rest}
-        </span>
+    <div
+      className={cn(
+        "grid min-w-0 grid-cols-[68px_minmax(0,1fr)] items-start gap-x-3 rounded px-2 py-2 hover:bg-hover md:grid-cols-[68px_130px_72px_minmax(0,1fr)]",
+        problem && "bg-surface shadow-border",
       )}
-    </p>
+    >
+      <time
+        dateTime={event.at}
+        title={new Date(event.at).toLocaleString()}
+        className="pt-0.5 font-mono text-[11px] tabular-nums text-text-muted"
+      >
+        {time}
+      </time>
+      <span className="hidden min-w-0 break-words text-[11px] leading-5 text-text-secondary md:block">{label}</span>
+      <span className="hidden items-center gap-1.5 pt-0.5 text-[10px] uppercase text-text-secondary md:flex">
+        {problem ? <StatusDot tone="red" className="size-1.5 shrink-0" /> : null}
+        {toolOf(event) ?? category}
+      </span>
+      <div className="min-w-0">
+        <p className="mb-1 text-[10px] text-text-secondary md:hidden">
+          {label} · {toolOf(event) ?? category}
+          {problem ? " · problem" : ""}
+        </p>
+        <p
+          className={cn(
+            "font-mono text-[12px] leading-5 text-text",
+            wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "min-w-max whitespace-pre",
+          )}
+        >
+          {event.message}
+        </p>
+      </div>
+    </div>
   );
 }
