@@ -305,6 +305,25 @@ class RenderTopologyTests(unittest.TestCase):
         self.assertIn('Post invoice', sections['Flows'])
         self.assertIn('```mermaid', sections['Diagram'])
 
+    def test_writes_the_call_graph_the_data_lineage_and_the_critical_path(self):
+        write_json(self.topology, make_topology())
+        self.assertEqual(self.render().returncode, 0)
+        call_graph = docmd.read_text(os.path.join(self.out, 'call-graph.mmd'))
+        self.assertTrue(call_graph.startswith('flowchart LR'))
+        self.assertIn('InvoiceEntry', call_graph)
+        lineage = docmd.read_text(os.path.join(self.out, 'data-lineage.mmd'))
+        self.assertIn('[("Accounts")]', lineage)
+        self.assertIn('AccountService', lineage)
+        path = docmd.read_text(os.path.join(self.out, 'critical-path.mmd'))
+        self.assertLess(path.index('InvoiceEntry'), path.index('AccountService'))
+
+    def test_a_diagram_with_nothing_to_draw_is_not_written(self):
+        topology = make_topology()
+        topology['edges'] = []
+        write_json(self.topology, topology)
+        self.assertEqual(self.render().returncode, 0)
+        self.assertEqual(sorted(os.listdir(self.out)), ['topology.md'])
+
     def test_an_invalid_topology_fails_with_what_is_wrong(self):
         broken = make_topology()
         del broken['flows']

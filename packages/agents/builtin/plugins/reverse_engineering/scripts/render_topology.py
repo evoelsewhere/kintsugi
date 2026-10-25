@@ -8,7 +8,9 @@ the tree system -> domain -> leaf, the edges between leaves, the entry points, t
 observations and the flows. It is checked against the schema first (a failure names what is wrong and
 fails the step). --out is the folder topology.md is written to (10-applications/<app>/01-legacy/): the
 modules and the edges between them, the largest leaves and the edges between those, the entry points,
-the observations and the flows, with a diagram. Per-leaf and per-edge detail beyond the caps below stays
+the observations and the flows, with a diagram. It also writes three Mermaid diagrams beside it, call-graph.mmd,
+data-lineage.mmd and critical-path.mmd (the busiest leaves, the data stores with who touches them, the longest
+chain from an entry point), each only when the topology has something to draw. Per-leaf and per-edge detail beyond the caps below stays
 in the run; the catalog (render_catalog.py) keeps the links between items. Standard library only.
 """
 import argparse
@@ -26,6 +28,10 @@ MAX_DATASTORES_LISTED = 200
 MAX_EDGES_LISTED = 2000
 MAX_DIAGRAM_EDGES = 40
 MAX_LIST = 200
+MAX_GRAPH_NODES = 40
+MAX_GRAPH_EDGES = 90
+MAX_LINEAGE_STORES = 25
+MAX_PATH_DEPTH = 14
 REQUIRED = ('system', 'root', 'edges', 'entryPoints', 'deadEnds', 'observations', 'flows')
 
 
@@ -186,6 +192,106 @@ def render(topology, app):
     return '\n'.join(out).rstrip() + '\n'
 
 
+def node_label(leaf):
+    return docmd.clean_text(leaf['name'] or leaf['id'], 40).replace(chr(34), chr(39))
+
+
+def call_graph(leaves, edges):
+    """The busiest code leaves (most edges) and the edges between them, as a left-to-right flowchart; None when there is none."""
+    code = {leaf['id']: leaf for leaf in leaves if leaf['kind'] != 'datastore'}
+    degree = {}
+    for edge in edges:
+        if edge['source'] in code and edge['target'] in code and edge['source'] != edge['target']:
+            degree[edge['source']] = degree.get(edge['source'], 0) + 1
+            degree[edge['target']] = degree.get(edge['target'], 0) + 1
+    chosen = sorted(degree, key=lambda leaf_id: (-degree[leaf_id], leaf_id))[:MAX_GRAPH_NODES]
+    if not chosen:
+        return None
+    ident = {leaf_id: f'n{index}' for index, leaf_id in enumerate(sorted(chosen))}
+    shown = sorted({(edge['source'], edge['target'], edge['kind']) for edge in edges if edge['source'] in ident and edge['target'] in ident and edge['source'] != edge['target']})[:MAX_GRAPH_EDGES]
+    lines = ['flowchart LR']
+    lines += [f'  {ident[leaf_id]}["{node_label(code[leaf_id])}"]' for leaf_id in sorted(ident)]
+    lines += [f'  {ident[source]} -->|{docmd.clean_text(kind, 20).replace("|", "/")}| {ident[target]}' for source, target, kind in shown]
+    return '\n'.join(lines) + '\n'
+
+
+def data_lineage(leaves, edges):
+    """The data stores touched most and the leaves that touch them; None when no leaf touches a store."""
+    by_id = {leaf['id']: leaf for leaf in leaves}
+    touches = {}
+    for edge in edges:
+        for store_id, other_id in ((edge['target'], edge['source']), (edge['source'], edge['target'])):
+            if by_id[store_id]['kind'] == 'datastore' and by_id[other_id]['kind'] != 'datastore':
+                touches.setdefault(store_id, set()).add((other_id, edge['kind'], store_id == edge['target']))
+    stores = sorted(touches, key=lambda store_id: (-len(touches[store_id]), store_id))[:MAX_LINEAGE_STORES]
+    if not stores:
+        return None
+    ident = {}
+    for store_id in sorted(stores):
+        ident[store_id] = f'd{len(ident)}'
+    lines = ['flowchart LR']
+    for store_id in sorted(stores):
+        lines.append(f'  {ident[store_id]}[("{node_label(by_id[store_id])}")]')
+    edge_lines = []
+    for store_id in sorted(stores):
+        for other_id, kind, writes in sorted(touches[store_id])[:12]:
+            if other_id not in ident:
+                ident[other_id] = f'n{len(ident)}'
+                lines.append(f'  {ident[other_id]}["{node_label(by_id[other_id])}"]')
+            label = docmd.clean_text(kind, 20).replace('|', '/')
+            edge_lines.append(f'  {ident[other_id]} -->|{label}| {ident[store_id]}' if writes else f'  {ident[store_id]} -->|{label}| {ident[other_id]}')
+    return '\n'.join(lines + edge_lines) + '\n'
+
+
+def critical_path(leaves, edges, entry):
+    """The longest chain of calls from an entry point (a back edge ends a chain), as a top-down flowchart; None when no chain has two steps."""
+    by_id = {leaf['id']: leaf for leaf in leaves}
+    successors = {}
+    for edge in edges:
+        if edge['source'] != edge['target'] and by_id[edge['target']]['kind'] != 'datastore':
+            successors.setdefault(edge['source'], []).append(edge['target'])
+    for targets in successors.values():
+        targets.sort()
+    memo = {}
+
+    def longest(leaf_id, path):
+        if leaf_id in memo:
+            return memo[leaf_id]
+        best = [leaf_id]
+        if len(path) < MAX_PATH_DEPTH:
+            for target in successors.get(leaf_id, []):
+                if target in path:
+                    continue
+                candidate = [leaf_id] + longest(target, path | {leaf_id})
+                if len(candidate) > len(best):
+                    best = candidate
+        memo[leaf_id] = best
+        return best
+
+    chains = [longest(leaf_id, frozenset()) for leaf_id in sorted(entry)]
+    chain = max(chains, key=len, default=[])
+    if len(chain) < 2:
+        return None
+    lines = ['flowchart TD']
+    lines += [f'  n{index}["{node_label(by_id[leaf_id])}"]' for index, leaf_id in enumerate(chain)]
+    lines += [f'  n{index} --> n{index + 1}' for index in range(len(chain) - 1)]
+    return '\n'.join(lines) + '\n'
+
+
+def diagrams(topology):
+    """The Mermaid diagrams of the topology by file name; one that has nothing to draw is left out."""
+    leaves = tu.walk_topology(topology)
+    by_id = {leaf['id']: leaf for leaf in leaves}
+    edges = [edge for edge in topology['edges'] if edge['source'] in by_id and edge['target'] in by_id]
+    entry = {value for value in topology['entryPoints'] if value in by_id}
+    found = {
+        'call-graph.mmd': call_graph(leaves, edges),
+        'data-lineage.mmd': data_lineage(leaves, edges),
+        'critical-path.mmd': critical_path(leaves, edges, entry),
+    }
+    return {name: text for name, text in found.items() if text is not None}
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description='Check the extracted topology and render it as Markdown.')
     ap.add_argument('app')
@@ -198,6 +304,8 @@ def main(argv):
         check(topology)
         text = render(topology, args.app)
         docmd.write_text(os.path.join(os.path.abspath(args.out), os.path.basename(paths.assessment_topology_path(args.app))), text)
+        for name, diagram in diagrams(topology).items():
+            docmd.write_text(os.path.join(os.path.abspath(args.out), name), diagram)
     except (docmd.DataError, OSError, RecursionError) as error:
         print(f'render_topology.py: {error}', file=sys.stderr)
         return 1
