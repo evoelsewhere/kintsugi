@@ -107,4 +107,4 @@ Project agents can use seven optional memory tools to remember and recall facts,
 
 ## Public web search
 
-Projects can explicitly grant selected agents the optional `web_search` tool. It is backed by a caller-bound worker service, uses DuckDuckGo, and performs no automatic search or context injection. See [runtime web search](web-search.md) for configuration, shared budgets and security boundaries.
+Projects can explicitly grant selected agents the optional `web_search` tool and, with a separate project opt-in, `web_fetch`. Both use caller-bound worker services and perform no automatic search, page loading or context injection. See [runtime web search](web-search.md) for configuration, shared budgets and security boundaries.

@@ -41,7 +41,8 @@ export function stableSessionId(spec: JobSpec): string {
     spec.model.id,
     spec.model.thinking ?? spec.agent.thinking ?? "off",
     ...(spec.memory === undefined ? [] : [spec.memory.writeSchema ?? null]),
-    ...(spec.webSearch === true ? ["web-search-v1"] : []),
+    ...(spec.webSearch === true ? ["web-search-v2"] : []),
+    ...(spec.webFetch === true ? ["web-fetch-v1"] : []),
   ]);
   const slug = spec.agent.id.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 48);
   return `${slug}-${createHash("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;

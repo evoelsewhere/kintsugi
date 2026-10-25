@@ -51,6 +51,7 @@
     "@kintsugi/runtime-sdk": "workspace:*",
     "@kintsugi/secrets": "workspace:*",
     "cheerio": "1.1.2",
+    "ipaddr.js": "2.2.0",
     "pg": "^8.23.1",
     "pg-boss": "12.37.1"
   },

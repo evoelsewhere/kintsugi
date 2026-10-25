@@ -7,7 +7,8 @@
 //
 // Not a command for people: use run-job.ts for development runs.
 
-import { WebSearchRequestError, type JobEvent } from "@kintsugi/runtime-sdk";
+import { WEB_SERVICE_TIMEOUT_MS } from "@kintsugi/domain";
+import { WebRequestError, type JobEvent } from "@kintsugi/runtime-sdk";
 import { createAgentRuntime } from "../agent-runtime.js";
 import type { AgentChildInput } from "../launcher/agent-process.js";
 import { createJobServiceIpcClient } from "../launcher/job-service-ipc.js";
@@ -29,14 +30,14 @@ async function main(): Promise<void> {
   const { provider } = input;
   if (input.mode === "pi" && provider === undefined) throw new Error("no provider was passed to the agent job");
   const memory = input.spec.memory === undefined ? undefined : createMemoryIpcClient();
-  const web = input.spec.webSearch !== true ? undefined : createJobServiceIpcClient("web-search", 24_000, (message) => new WebSearchRequestError(message));
+  const web = input.spec.webSearch !== true && input.spec.webFetch !== true ? undefined : createJobServiceIpcClient("web-search", WEB_SERVICE_TIMEOUT_MS + 2000, (message) => new WebRequestError(message));
   try {
     const runtime =
       input.mode === "mock"
         ? createAgentRuntime({ mode: "mock" })
         : createAgentRuntime({
             mode: "pi",
-            services: { ...(memory === undefined ? {} : { memory: memory.memory }), ...(web === undefined ? {} : { webSearch: (input, signal) => web.call("search", input, signal) }) },
+            services: { ...(memory === undefined ? {} : { memory: memory.memory }), ...(web === undefined ? {} : { webSearch: (input, signal) => web.call("search", input, signal), webFetch: (input, signal) => web.call("fetch", input, signal) }) },
             resolveModelRuntime: () =>
               buildModelRuntime(provider!.config, {
                 ...(provider!.apiKey === undefined ? {} : { apiKey: provider!.apiKey }),
