@@ -1,9 +1,8 @@
-// Results of assess, in six views over one header of KPIs:
-//   Summary     — code composition, signals, the summary and rebuild outlook, risk and run health
+// Results of assess, in five views over one header of KPIs:
+//   Summary     — code composition, signals, the summary and rebuild outlook, and risk snapshot
 //   Code        — complexity hotspots, directories, size and complexity distributions, languages
 //   Risk & debt — security highlights and technical debt with their distributions, gaps
 //   Inventory   — every measured file, filterable by language
-//   Monitoring  — the stage's runs: health, the latest run's steps, every run
 //   assessment.md — the full document
 
 import { useMemo, useState } from "react";
@@ -15,25 +14,22 @@ import { MermaidDiagram } from "@/components/results/mermaid-diagram";
 import { type Column, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { AssessResults, Finding, Inventory, InventoryFile, InventoryLanguage } from "@/lib/api/documents";
-import type { JobRunView } from "@/lib/api/job-runs";
 import { sourceEntriesLabel } from "@/lib/format";
 import { directoryRollup, inventorySignals, sizeDistribution, tableColumnCounts } from "./assess-analytics";
-import { LatestRunNotice, MonitoringTab, RunSnapshot } from "./run-monitoring";
 import { domainColors, formatCount, PRIORITY_COLOR, percentOf, SEVERITY_COLOR, SEVERITY_RANK } from "./results-format";
 import { CountChip, Kpi, KpiRow, MarkdownTableView, MoreLink, Section, Signal, SignalList, SeverityMark, SubTabs } from "./results-parts";
 
-type Tab = "overview" | "code" | "risk" | "inventory" | "monitoring" | "document";
+type Tab = "overview" | "code" | "risk" | "inventory" | "document";
 
 /** The last two segments of a path, the rest in the tooltip. */
 const shortPath = (path: string): string => path.split("/").slice(-2).join("/");
 
-export function AssessResultsView({ results, compare, projectId, runs }: { results: AssessResults; compare: boolean; projectId: string; runs: JobRunView[] | undefined }): React.JSX.Element {
+export function AssessResultsView({ results, compare }: { results: AssessResults; compare: boolean }): React.JSX.Element {
   const [tab, setTab] = useState<Tab>("overview");
   const { inventory, highlights } = results;
   const previous = compare ? results.previous?.counts : undefined;
   return (
     <div className="flex flex-col gap-4">
-      <LatestRunNotice runs={runs} />
       <KpiRow>
         <Kpi label="Source files" value={inventory?.sourceFileCount} previous={previous?.["files"]} hint={inventory === null ? undefined : `${formatCount(inventory.fileCount)} files in total`} />
         <Kpi label="SLOC" value={inventory?.sloc} previous={previous?.["sloc"]} hint={inventory === null ? undefined : `${formatCount(inventory.totalLines)} lines`} />
@@ -65,16 +61,14 @@ export function AssessResultsView({ results, compare, projectId, runs }: { resul
           { id: "code", label: "Code analysis", hidden: inventory === null },
           { id: "risk", label: "Risk & debt", count: highlights.security.length + (highlights.debt?.rows.length ?? 0) },
           { id: "inventory", label: "Hotspots", count: inventory?.files.length },
-          { id: "monitoring", label: "Monitoring", count: runs?.length },
           { id: "document", label: "assessment.md", hidden: results.document === undefined },
         ]}
       />
 
-      {tab === "overview" ? <Overview results={results} runs={runs} onTab={setTab} /> : null}
+      {tab === "overview" ? <Overview results={results} onTab={setTab} /> : null}
       {tab === "code" && inventory !== null ? <CodeTab inventory={inventory} /> : null}
       {tab === "risk" ? <RiskTab results={results} /> : null}
       {tab === "inventory" ? <InventoryTab results={results} /> : null}
-      {tab === "monitoring" ? <MonitoringTab projectId={projectId} runs={runs} /> : null}
       {tab === "document" && results.document !== undefined ? (
         <Section title="assessment.md" description={results.document.path}>
           <Markdown text={results.document.markdown} path={results.document.path} />
@@ -101,7 +95,7 @@ function severitySegments(findings: Finding[]): Segment[] {
   }));
 }
 
-function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobRunView[] | undefined; onTab: (tab: Tab) => void }): React.JSX.Element {
+function Overview({ results, onTab }: { results: AssessResults; onTab: (tab: Tab) => void }): React.JSX.Element {
   const { highlights, inventory } = results;
   const signals = useMemo(() => (inventory === null ? undefined : inventorySignals(inventory)), [inventory]);
   const priorities = tableColumnCounts(highlights.debt, /priority/i);
@@ -175,28 +169,25 @@ function Overview({ results, runs, onTab }: { results: AssessResults; runs: JobR
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Section title="Risk snapshot" description="Security findings and technical debt, from the assessment." actions={<MoreLink label="Risk & debt" onClick={() => onTab("risk")} />}>
-          <div className="flex flex-col gap-4">
-            <div>
-              <p className="mb-1.5 text-[12px] font-medium text-text">Security findings · {highlights.security.length}</p>
-              {highlights.security.length === 0 ? <p className="text-[12px] text-text-muted">The assessment lists no security findings.</p> : <ShareBar segments={severitySegments(highlights.security)} format={formatCount} />}
-            </div>
-            <div>
-              <p className="mb-1.5 text-[12px] font-medium text-text">Technical debt · {highlights.debt?.rows.length ?? 0}</p>
-              {highlights.debt === null ? (
-                <p className="text-[12px] text-text-muted">The assessment has no debt table.</p>
-              ) : priorities.length === 0 ? (
-                <p className="text-[12px] text-text-muted">{highlights.debt.rows.length} items, ranked by remediation value.</p>
-              ) : (
-                <ShareBar segments={priorities.map((entry) => ({ label: entry.value, value: entry.count, color: PRIORITY_COLOR[entry.value] ?? CHART_COLOR.teal }))} format={formatCount} />
-              )}
-            </div>
-            <p className="text-[12px] text-text-secondary">{highlights.gaps.length} documentation gaps, confidence notes and open questions.</p>
+      <Section title="Risk snapshot" description="Security findings and technical debt, from the assessment." actions={<MoreLink label="Risk & debt" onClick={() => onTab("risk")} />}>
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="mb-1.5 text-[12px] font-medium text-text">Security findings · {highlights.security.length}</p>
+            {highlights.security.length === 0 ? <p className="text-[12px] text-text-muted">The assessment lists no security findings.</p> : <ShareBar segments={severitySegments(highlights.security)} format={formatCount} />}
           </div>
-        </Section>
-        <RunSnapshot runs={runs} onMore={() => onTab("monitoring")} />
-      </div>
+          <div>
+            <p className="mb-1.5 text-[12px] font-medium text-text">Technical debt · {highlights.debt?.rows.length ?? 0}</p>
+            {highlights.debt === null ? (
+              <p className="text-[12px] text-text-muted">The assessment has no debt table.</p>
+            ) : priorities.length === 0 ? (
+              <p className="text-[12px] text-text-muted">{highlights.debt.rows.length} items, ranked by remediation value.</p>
+            ) : (
+              <ShareBar segments={priorities.map((entry) => ({ label: entry.value, value: entry.count, color: PRIORITY_COLOR[entry.value] ?? CHART_COLOR.teal }))} format={formatCount} />
+            )}
+          </div>
+          <p className="text-[12px] text-text-secondary">{highlights.gaps.length} documentation gaps, confidence notes and open questions.</p>
+        </div>
+      </Section>
     </div>
   );
 }

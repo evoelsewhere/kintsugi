@@ -142,7 +142,7 @@ export default function StageResults({ project, application, stage, version, run
           ) : (
             <>
               <DocumentLinksProvider projectId={project.id} commit={loaded.ref.commit}>
-                <StageView results={loaded} compare={compare} projectId={project.id} runs={runs} />
+                <StageView results={loaded} compare={compare} projectId={project.id} />
               </DocumentLinksProvider>
               <details className="group shadow-border rounded-xl bg-surface">
                 <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-2.5 hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] [&::-webkit-details-marker]:hidden">
@@ -186,10 +186,10 @@ function RefFacts({ results }: { results: StageResults }): React.JSX.Element {
   );
 }
 
-function StageView({ results, compare, projectId, runs }: { results: StageResults; compare: boolean; projectId: string; runs: JobRunView[] | undefined }): React.JSX.Element {
+function StageView({ results, compare, projectId }: { results: StageResults; compare: boolean; projectId: string }): React.JSX.Element {
   switch (results.stage) {
     case "assess":
-      return <AssessResultsView results={results} compare={compare} projectId={projectId} runs={runs} />;
+      return <AssessResultsView results={results} compare={compare} />;
     case "map":
       return <MapResultsView results={results} compare={compare} />;
     case "extract-rules":

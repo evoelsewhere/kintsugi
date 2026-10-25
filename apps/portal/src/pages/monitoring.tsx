@@ -10,6 +10,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DocumentWriteList } from "@/components/document-write-list";
 import { JobRunList } from "@/components/job-runs/job-run-list";
+import { RunListControls } from "@/components/job-runs/run-list-controls";
+import { filterJobRuns, RUN_FILTERS } from "@/components/job-runs/run-model";
 import { Loaded } from "@/components/loaded";
 import { PageHeading } from "@/components/page-heading";
 import { SyncStatusBadge, WorkerStateBadge } from "@/components/status-badges";
@@ -20,12 +22,12 @@ import { Select } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Chips, Tabs } from "@/components/ui/tabs";
 import type { Page } from "@/lib/api";
-import { type JobRunStatus, type JobRunView, jobRunsApi } from "@/lib/api/job-runs";
+import { type JobRunView, jobRunsApi } from "@/lib/api/job-runs";
 import { type DocumentWriteStatus, type MonitoredRepository, monitoringApi, type WorkerStatus } from "@/lib/api/monitoring";
 import { projectsApi } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatRelative, shortSha } from "@/lib/format";
-import { deliveryLink, type MonitoringTab } from "@/lib/links";
+import { type MonitoringTab } from "@/lib/links";
 import { OVERVIEW_TOPICS, WORKER_AGES } from "@/lib/live";
 import { useLoader } from "@/lib/use-loader";
 import { workerVerdict } from "@/lib/worker-health";
@@ -64,10 +66,13 @@ export function MonitoringPage(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-5">
       <Breadcrumbs items={["Monitoring"]} />
-      <PageHeading title="Monitoring" description="Live job runs, repository sync, document writes, the worker and the job workspaces across all projects. Lists refresh on their own." />
+      <PageHeading
+        title="Monitoring"
+        description="Live job runs, repository sync, document writes, the worker and the job workspaces across all projects. Lists refresh on their own."
+      />
       <Tabs label="Monitoring views" tabs={tabs} value={tab} onChange={(id) => setQuery({ tab: id, status: null })} />
       <MonitoringInsights tab={tab} />
-      {tab === "runs" ? <RunsView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
+      {tab === "runs" ? <RunsView status={status} /> : null}
       {tab === "repositories" ? <RepositoriesView /> : null}
       {tab === "writes" ? <WritesView status={status} onStatus={(value) => setQuery({ status: value })} /> : null}
       {tab === "members" ? <MembersView /> : null}
@@ -85,12 +90,28 @@ function ProjectFilter({ value, onChange }: { value: string; onChange: (value: s
   const projects = useLoader("projects", projectsApi.list);
   return (
     <div className="w-56">
-      <Select size="small" value={value} options={[{ value: "", label: "All projects" }, ...(projects.data ?? []).map((project) => ({ value: project.id, label: project.name, hint: project.id }))]} onChange={onChange} />
+      <Select
+        size="small"
+        value={value}
+        options={[
+          { value: "", label: "All projects" },
+          ...(projects.data ?? []).map((project) => ({ value: project.id, label: project.name, hint: project.id })),
+        ]}
+        onChange={onChange}
+      />
     </div>
   );
 }
 
-function Pager({ page, offset, onOffset }: { page: Page<unknown>; offset: number; onOffset: (offset: number) => void }): React.JSX.Element | null {
+function Pager({
+  page,
+  offset,
+  onOffset,
+}: {
+  page: Page<unknown>;
+  offset: number;
+  onOffset: (offset: number) => void;
+}): React.JSX.Element | null {
   if (page.total <= page.limit) return null;
   return (
     <div className="mt-3 flex items-center justify-end gap-2 text-[12px] text-text-muted">
@@ -107,80 +128,103 @@ function Pager({ page, offset, onOffset }: { page: Page<unknown>; offset: number
   );
 }
 
-const RUN_FILTERS: { id: string; label: string; statuses: JobRunStatus[] }[] = [
-  { id: "", label: "All", statuses: [] },
-  { id: "queued,running", label: "Active", statuses: ["queued", "running"] },
-  { id: "failed", label: "Failed", statuses: ["failed"] },
-  { id: "succeeded", label: "Succeeded", statuses: ["succeeded"] },
-  { id: "cancelled", label: "Cancelled", statuses: ["cancelled"] },
-];
-
-function RunsView({ status, onStatus }: { status: string; onStatus: (value: string) => void }): React.JSX.Element {
+function RunsView({ status }: { status: string }): React.JSX.Element {
   const { can } = useAuth();
-  const [projectId, setProjectId] = useState("");
-  const [offset, setOffset] = useState(0);
+  const [params, setParams] = useSearchParams();
+  const projectId = params.get("project") ?? "";
+  const offset = Math.max(0, Number(params.get("offset")) || 0);
+  const search = params.get("q") ?? "";
   const filter = RUN_FILTERS.find((entry) => entry.id === status) ?? RUN_FILTERS[0]!;
+  const update = (patch: Record<string, string | undefined>): void =>
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        for (const [key, value] of Object.entries(patch)) {
+          if (value === undefined || value === "") next.delete(key);
+          else next.set(key, value);
+        }
+        return next;
+      },
+      { replace: true },
+    );
   const runs = useLoader<Page<JobRunView>>(
     `runs/${filter.id}/${projectId}/${offset}`,
     () => jobRunsApi.listAll({ status: filter.statuses, ...(projectId === "" ? {} : { projectId }), limit: PAGE_SIZE, offset }),
     { live: ["job-runs", "document-writes"] },
   );
-
+  const visibleRuns = filterJobRuns(runs.data?.items ?? [], filter.id, search);
   return (
-    <Card>
-      <CardHeader className="flex-wrap">
+    <section className="flex min-w-0 flex-col gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <CardTitle>Job runs</CardTitle>
-          <CardDescription>Top-level runs, newest first. Open one for its steps, artifacts and live log.</CardDescription>
+          <h2 className="text-[16px] font-medium text-text">Job runs</h2>
+          <p className="mt-1 text-[13px] text-text-secondary">
+            Compare execution status across projects. Open a run for its console and output.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Chips
-            label="Run status"
-            options={RUN_FILTERS.map((entry) => ({ id: entry.id, label: entry.label }))}
-            value={filter.id}
-            onChange={(value) => {
-              setOffset(0);
-              onStatus(value);
-            }}
-          />
-          <ProjectFilter
-            value={projectId}
-            onChange={(value) => {
-              setOffset(0);
-              setProjectId(value);
-            }}
-          />
-          <Button size="icon" variant="ghost" aria-label="Refresh job runs" onClick={() => void runs.reload()}>
-            <RefreshCw className="size-4" />
+        <div className="flex items-center gap-2">
+          <ProjectFilter value={projectId} onChange={(value) => update({ project: value, offset: undefined })} />
+          <Button size="icon" className="shadow-border" aria-label="Refresh job runs" onClick={() => void runs.reload()}>
+            <RefreshCw />
           </Button>
         </div>
-      </CardHeader>
-      <div className="mt-2">
-        <Loaded loader={runs} rows={5}>
-          {(page) =>
-            page.items.length === 0 ? (
+      </header>
+      <RunListControls
+        filter={filter.id}
+        onFilter={(value) => {
+          update({ status: value, offset: undefined });
+        }}
+        search={search}
+        onSearch={(value) => update({ q: value })}
+        searchLabel="Search job runs on this page"
+        placeholder="Search this page by run, actor or error…"
+      />
+      <Loaded loader={runs} rows={6}>
+        {(page) => (
+          <>
+            {visibleRuns.length === 0 ? (
               <EmptyState
                 icon={Play}
-                title={filter.id === "" ? "No job runs yet" : `No ${filter.label.toLowerCase()} runs`}
-                description={filter.id === "" ? "Runs appear here when a stage is started in Delivery." : "Choose another filter to see other runs."}
+                title={page.total === 0 && filter.id === "" ? "No job runs yet" : "No matching runs"}
+                description={
+                  page.total === 0 && filter.id === ""
+                    ? "Start a stage in Delivery to see its runs here."
+                    : "Choose another status or clear your search."
+                }
                 action={
-                  filter.id === "" ? (
-                    <Link to={deliveryLink({})} className="text-[13px] text-accent hover:underline">
+                  page.total === 0 && filter.id === "" && search === "" ? (
+                    <Link to="/delivery" className="text-[13px] text-accent hover:underline">
                       Open Delivery
                     </Link>
-                  ) : undefined
+                  ) : (
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        update({ q: undefined, offset: undefined, status: undefined });
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  )
                 }
               />
-            ) : (
-              <>
-                <JobRunList runs={page.items} canCancel={can("jobs.run")} canRetry={can("jobs.run")} showProject onChanged={() => void runs.reload()} />
-                <Pager page={page} offset={offset} onOffset={setOffset} />
-              </>
-            )
-          }
-        </Loaded>
-      </div>
-    </Card>
+            ) : null}
+            <JobRunList
+              projectId={projectId || undefined}
+              runs={visibleRuns}
+              canCancel={can("jobs.run")}
+              canRetry={can("jobs.run")}
+              showProject
+              onChanged={() => void runs.reload()}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-text-secondary">
+              <p>{search === "" ? `${page.total} runs` : `${visibleRuns.length} matches on this page`} · newest first</p>
+              <Pager page={page} offset={offset} onOffset={(value) => update({ offset: String(value) })} />
+            </div>
+          </>
+        )}
+      </Loaded>
+    </section>
   );
 }
 
@@ -193,7 +237,9 @@ function RepositoriesView(): React.JSX.Element {
       <CardHeader className="px-4 pt-3">
         <div>
           <CardTitle>Repositories</CardTitle>
-          <CardDescription>Mirrors the worker keeps of every registered repository; repositories that are not ready yet refresh every few seconds.</CardDescription>
+          <CardDescription>
+            Mirrors the worker keeps of every registered repository; repositories that are not ready yet refresh every few seconds.
+          </CardDescription>
         </div>
         <Button size="icon" variant="ghost" aria-label="Refresh repositories" onClick={() => void repositories.reload()}>
           <RefreshCw className="size-4" />
@@ -203,7 +249,11 @@ function RepositoriesView(): React.JSX.Element {
         <Loaded loader={repositories} rows={4}>
           {(list) =>
             list.length === 0 ? (
-              <EmptyState icon={FolderGit2} title="No repositories registered" description="Repositories are registered in Settings → Git by someone with git.manage." />
+              <EmptyState
+                icon={FolderGit2}
+                title="No repositories registered"
+                description="Repositories are registered in Settings → Git by someone with git.manage."
+              />
             ) : (
               <RepositoryTable repositories={list} />
             )
@@ -236,7 +286,9 @@ function RepositoryTable({ repositories }: { repositories: MonitoredRepository[]
                   {repository.serverId} · {repository.url}
                   {repository.defaultBranch === undefined ? "" : ` · ${repository.defaultBranch}`}
                 </p>
-                {repository.lastError === undefined ? null : <p className="mt-0.5 max-w-[420px] break-words text-[12px] text-[var(--ds-status-red)]">{repository.lastError}</p>}
+                {repository.lastError === undefined ? null : (
+                  <p className="mt-0.5 max-w-[420px] break-words text-[12px] text-[var(--ds-status-red)]">{repository.lastError}</p>
+                )}
               </td>
               <td className="px-2 py-2.5">
                 <SyncStatusBadge status={repository.syncStatus} />
@@ -317,7 +369,11 @@ function WritesView({ status, onStatus }: { status: string; onStatus: (value: st
         <Loaded loader={writes} rows={5}>
           {(page) =>
             page.items.length === 0 ? (
-              <EmptyState icon={GitCommitHorizontal} title="No document writes" description="Writes appear when kintsugi.yaml is published or a stage run succeeds." />
+              <EmptyState
+                icon={GitCommitHorizontal}
+                title="No document writes"
+                description="Writes appear when kintsugi.yaml is published or a stage run succeeds."
+              />
             ) : (
               <>
                 <DocumentWriteList writes={page.items} showProject />
@@ -346,7 +402,9 @@ function WorkerView(): React.JSX.Element {
       <CardHeader>
         <div>
           <CardTitle>Worker</CardTitle>
-          <CardDescription>Each worker process sends a heartbeat every 15 seconds; a worker not seen for 45 seconds is reported as not running.</CardDescription>
+          <CardDescription>
+            Each worker process sends a heartbeat every 15 seconds; a worker not seen for 45 seconds is reported as not running.
+          </CardDescription>
         </div>
         <Button
           size="icon"
@@ -392,7 +450,11 @@ function WorkerView(): React.JSX.Element {
                   {(list) => <WorkerTable workers={list} />}
                 </Loaded>
                 {data.worker.queues === null ? (
-                  <EmptyState icon={Activity} title="Queue counts unavailable" description="The API could not read the job queue. Runs and writes are still listed in the other tabs." />
+                  <EmptyState
+                    icon={Activity}
+                    title="Queue counts unavailable"
+                    description="The API could not read the job queue. Runs and writes are still listed in the other tabs."
+                  />
                 ) : (
                   <table className="w-full text-left text-[13px]">
                     <thead className="text-[11px] tracking-wide text-text-muted uppercase">
@@ -429,7 +491,13 @@ function WorkerView(): React.JSX.Element {
 
 function WorkerTable({ workers }: { workers: WorkerStatus[] }): React.JSX.Element {
   if (workers.length === 0) {
-    return <EmptyState icon={Activity} title="No worker has reported yet" description="Start kintsugi-worker; it appears here within 15 seconds." />;
+    return (
+      <EmptyState
+        icon={Activity}
+        title="No worker has reported yet"
+        description="Start kintsugi-worker; it appears here within 15 seconds."
+      />
+    );
   }
   return (
     <div className="overflow-x-auto">
@@ -456,7 +524,10 @@ function WorkerTable({ workers }: { workers: WorkerStatus[] }): React.JSX.Elemen
                 </p>
               </td>
               <td className="px-2 py-2">
-                <WorkerStateBadge state={worker.state} {...(worker.stoppedAt === undefined ? {} : { title: `Stopped ${formatDateTime(worker.stoppedAt)}` })} />
+                <WorkerStateBadge
+                  state={worker.state}
+                  {...(worker.stoppedAt === undefined ? {} : { title: `Stopped ${formatDateTime(worker.stoppedAt)}` })}
+                />
               </td>
               <td className="px-2 py-2 text-[12px] text-text-secondary" title={formatDateTime(worker.lastSeenAt)}>
                 {formatRelative(worker.lastSeenAt)}

@@ -106,3 +106,15 @@ pnpm --filter @kintsugi/portal dev
 pnpm --filter @kintsugi/portal build
 pnpm --filter @kintsugi/portal typecheck
 ```
+
+## Run workspace
+
+Monitoring → Job runs and the stage Runs tabs share `components/job-runs/`. History rows open
+one full detail page; closing it restores the history filters and scroll position. Summary,
+Console, Output and Attempts each have one purpose. The `run`, `runProject`, `runView`,
+`runAttempt` and `runStep` query parameters identify the open workspace.
+
+The console follows the existing event stream and keeps the latest 3,000 events of the selected
+attempt and step scope. Changing either selection replays that scope independently. Counts, search and exports apply
+to the loaded events; the console discloses when earlier events are outside that window. Step
+navigation loads nested jobs on demand and includes descendants when a group is selected.

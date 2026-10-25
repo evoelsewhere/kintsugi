@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api";
 import { agentsApi } from "@/lib/api/agents";
 import { buildApi, type BuildConflict, type MergeRequest } from "@/lib/api/build";
-import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
+import { jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { isActiveStatus } from "@/lib/status";
@@ -29,7 +29,6 @@ const RUN_LIMIT = 100;
 
 const REVIEW_RUNS: ScopedRunsLabels = {
   title: "Review runs",
-  description: "Each run reviews one merge request a member recorded, for its units, and proposes the findings in one pull request on the document repository. Retry a failed run; abandon a pull request that was closed without merging to release its units.",
   emptyTitle: "No review run yet",
   emptyDescription: "Once a member records a merge request for a unit, review it from the Units tab.",
   noun: "unit",
@@ -128,8 +127,8 @@ export function BuildStage({ project, application, stage }: { project: ProjectDe
           canRun={canRun}
           initialRun={params.get("run") ?? undefined}
           labels={REVIEW_RUNS}
+          onChooseScope={() => update({ tab: "units" })}
           onChanged={changed}
-          onStarted={(run: JobRunView) => update({ tab: "runs", run: run.id })}
         />
       ) : (
         <Loaded loader={overview} rows={8}>

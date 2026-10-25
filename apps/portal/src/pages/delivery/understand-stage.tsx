@@ -45,11 +45,9 @@ const STATUSES: ItemStatus[] = ["not-analysed", "understood", "stale", "failed",
 /** A rough count of the agent jobs a selection starts: a specification per item, rule extractors and referees, security finders and judges. */
 const UNDERSTAND_RUNS: ScopedRunsLabels = {
   title: "Understand runs",
-  description: "Each run is one pull request with the files of its own items. Retry a failed run; abandon a pull request that was closed without merging to release its items.",
   emptyTitle: "No understand run yet",
   emptyDescription: "Select items on the Catalog tab and run understand on them.",
   noun: "item",
-  stage: "understand",
 };
 
 const agentEstimate = (items: number): number => (items === 0 ? 0 : items * 4 + 10);
@@ -178,8 +176,8 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
           canRun={can("jobs.run")}
           initialRun={params.get("run") ?? undefined}
           labels={UNDERSTAND_RUNS}
+          onChooseScope={() => setParam({ tab: "catalog" })}
           onChanged={changed}
-          onStarted={(run) => setParam({ tab: "runs", run: run.id })}
         />
       ) : null}
 

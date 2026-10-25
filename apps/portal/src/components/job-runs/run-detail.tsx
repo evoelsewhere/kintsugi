@@ -1,656 +1,322 @@
-// The detail of one job run (ADR-0027, ADR-0029) as a console: a summary of where the run is
-// (steps done, how long, tool calls), its steps as a selectable timeline (a workflow step opens
-// to its agent jobs and script steps), a log console that follows the run over Server-Sent
-// Events and filters to the selected step, and the artifacts it proposed to the document repo
-// (with the branch, commit and pull request of the document write that carries them).
-// Restricted records are only counted here; holders of restricted.read open them in Governance
-// (every read is audited).
-
-import { Check, ClipboardCopy, Copy, ExternalLink, FileText, ShieldAlert } from "lucide-react";
+// One run workspace. The URL keeps the selected tab, attempt and step shareable.
+import { AlertCircle, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Loaded } from "@/components/loaded";
-import { RunStatusBadge, WriteStatusBadge } from "@/components/status-badges";
-import { RUN_COLOR } from "@/components/results/status-colors";
-import { useToast } from "@/components/ui/toast";
-import { type JobRunDetail, jobRunsApi } from "@/lib/api/job-runs";
-import { useAuth } from "@/lib/auth";
-import { formatBytes, formatDuration, shortSha, sourcesLabel } from "@/lib/format";
-import { telemetryTraceLink } from "@/lib/links";
+import { RunStatusBadge } from "@/components/status-badges";
+import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
+import { Tabs } from "@/components/ui/tabs";
+import { jobRunsApi, type JobRunDetail, type JobRunView } from "@/lib/api/job-runs";
+import { formatDuration } from "@/lib/format";
 import { isActiveStatus } from "@/lib/status";
-import {
-  cacheHitRate,
-  formatCost,
-  formatRate,
-  formatTokens,
-  sumUsage,
-} from "@/lib/telemetry";
 import { useLoader } from "@/lib/use-loader";
 import { useNow } from "@/lib/use-now";
-import { cn } from "@/lib/utils";
-import {
-  type StepStats,
-  logLine,
-  statsByStep,
-  useRunEvents,
-  withDescendants,
-} from "./run-events";
+import { RunActions, type RunActionProps } from "./run-actions";
+import { RunAttempts } from "./run-attempts";
+import { humanize, isProblem, logLine, statsByStep, useRunEvents, withDescendants } from "./run-events";
 import { RunLog } from "./run-log";
+import { type ConsoleFilter, eventStepLabels, filterRunEvents, stepsForAttempt } from "./run-model";
+import { RunOutput } from "./run-output";
 import { RunOverview } from "./run-overview";
 import { StepList, type StepsContext } from "./run-steps";
 
-export function RunDetail({
-  projectId,
-  runId,
-  version,
-  onStatusChange,
-}: {
+type RunTab = "summary" | "console" | "output" | "attempts";
+interface Props extends RunActionProps {
   projectId: string;
   runId: string;
   version: string;
-  onStatusChange: () => void;
-}): React.JSX.Element {
-  // `version` changes when the run's status or document write changes, and `steps` each time a step of the
-  // run starts or finishes (from the live log): the detail reloads, so a running run shows its steps.
-  const [steps, setSteps] = useState(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // The recorded events replay in a burst when the log opens: one reload for the burst.
-  const stepsChanged = useCallback((): void => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setSteps((count) => count + 1), 600);
-  }, []);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const detail = useLoader(`${projectId}/${runId}/${version}/${steps}`, () =>
-    jobRunsApi.get(projectId, runId),
-  );
-  // Keep showing the last answer while the next one loads, so a step change does not flash a skeleton.
-  const [shown, setShown] = useState<JobRunDetail | undefined>(undefined);
-  if (detail.data !== undefined && detail.data !== shown) setShown(detail.data);
-  const { events, live } = useRunEvents(projectId, runId, {
-    onStatus: onStatusChange,
-    onStep: stepsChanged,
-  });
+}
 
+export function RunDetail({ projectId, runId, version, ...actions }: Props): React.JSX.Element {
+  const detail = useLoader(`run-workspace/${projectId}/${runId}`, () => jobRunsApi.get(projectId, runId));
+  const reload = detail.reload;
+  useEffect(() => {
+    void reload();
+  }, [version, reload]);
   return (
-    <div className="flex flex-col gap-4 pt-3 pb-1 pl-7">
-      {shown === undefined ? (
-        <Loaded loader={detail} rows={3}>
-          {() => null}
-        </Loaded>
-      ) : (
-        <RunConsole run={shown} events={events} live={live} version={version} />
-      )}
-    </div>
+    <Loaded loader={detail} rows={8}>
+      {(run) => <RunWorkspace key={`${run.id}/${run.attempt}`} run={run} reload={reload} {...actions} />}
+    </Loaded>
   );
 }
 
-const VIEW_KEY = "kintsugi.run-view";
-
-/** Overview (the plain view) or technical, remembered between runs. */
-function useViewMode(): ["overview" | "technical", (mode: "overview" | "technical") => void] {
-  const [view, setView] = useState<"overview" | "technical">(() => {
-    try {
-      return localStorage.getItem(VIEW_KEY) === "technical" ? "technical" : "overview";
-    } catch {
-      return "overview";
-    }
-  });
-  return [
-    view,
-    (mode) => {
-      setView(mode);
-      try {
-        localStorage.setItem(VIEW_KEY, mode);
-      } catch {
-        // not remembered
-      }
-    },
-  ];
-}
-
-function RunConsole({
+function RunWorkspace({
   run,
-  events,
-  live,
-  version,
-}: {
-  run: JobRunDetail;
-  events: ReturnType<typeof useRunEvents>["events"];
-  live: boolean;
-  version: string;
-}): React.JSX.Element {
+  reload,
+  scopeNoun = "item",
+  ...actions
+}: RunActionProps & { run: JobRunDetail; reload: () => Promise<void> }): React.JSX.Element {
+  const [params, setParams] = useSearchParams();
+  const value = params.get("runView");
+  const tab: RunTab = value === "console" || value === "output" || value === "attempts" ? value : "summary";
+  const requestedAttempt = Number(params.get("runAttempt"));
+  const attempt =
+    requestedAttempt > 0 && (requestedAttempt === run.attempt || run.attempts?.some((entry) => entry.n === requestedAttempt))
+      ? requestedAttempt
+      : run.attempt;
+  const selected = params.get("runStep") ?? undefined;
+  const [stepRevision, setStepRevision] = useState(0);
+  const [stepsOpen, setStepsOpen] = useState(false);
+  const [filter, setFilter] = useState<ConsoleFilter>("activity");
+  const [children, setChildren] = useState<Record<string, JobRunView[]>>({});
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const externalChanged = actions.onChanged;
+  const changed = useCallback(() => {
+    void reload();
+    externalChanged();
+  }, [reload, externalChanged]);
+  const stepsChanged = useCallback(() => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      setStepRevision((current) => current + 1);
+      void reload();
+    }, 500);
+  }, [reload]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
   const active = isActiveStatus(run.status);
   const now = useNow(active);
-  const [selected, setSelected] = useState<string | undefined>(undefined);
-  const [childrenOf, setChildrenOf] = useState<Record<string, string[]>>({});
-  const onChildren = useCallback((id: string, children: string[]) => {
-    setChildrenOf((current) =>
-      current[id]?.join(",") === children.join(",")
-        ? current
-        : { ...current, [id]: children },
-    );
-  }, []);
-  const stats = useMemo(() => statsByStep(events), [events]);
-  const [view, setView] = useViewMode();
-  const toast = useToast();
-
-  const origin = new Date(run.startedAt ?? run.createdAt).getTime();
-  const labels = useMemo(() => {
-    const map = new Map<string, string>([["", "run"]]);
-    // Steps of the same name (two jobs of one agent) are told apart by their order.
-    const seen = new Map<string, number>();
-    const total = new Map<string, number>();
-    for (const step of run.steps)
-      total.set(step.name, (total.get(step.name) ?? 0) + 1);
-    for (const step of run.steps) {
-      const index = (seen.get(step.name) ?? 0) + 1;
-      seen.set(step.name, index);
-      map.set(
-        step.id,
-        (total.get(step.name) ?? 1) > 1 ? `${step.name} #${index}` : step.name,
-      );
+  const steps = stepsForAttempt(run, attempt);
+  const onChildren = useCallback(
+    (id: string, entries: JobRunView[]) =>
+      setChildren((previous) => {
+        if (JSON.stringify(previous[id]) === JSON.stringify(entries)) return previous;
+        return { ...previous, [id]: entries };
+      }),
+    [],
+  );
+  const apiLabels = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const siblings of [stepsForAttempt(run, attempt), ...Object.values(children)]) {
+      const seen = new Map<string, number>();
+      for (const step of siblings) {
+        const n = (seen.get(step.name) ?? 0) + 1;
+        seen.set(step.name, n);
+        const suffix = siblings.filter((candidate) => candidate.name === step.name).length > 1 ? ` #${n}` : "";
+        result.set(step.id, humanize(step.name) + suffix);
+      }
     }
-    return map;
-  }, [run.steps]);
+    return result;
+  }, [run, attempt, children]);
+  const childrenIds = useMemo(
+    () => Object.fromEntries(Object.entries(children).map(([id, entries]) => [id, entries.map((entry) => entry.id)])),
+    [children],
+  );
+  const selectedIds = useMemo(() => (selected === undefined ? undefined : withDescendants(selected, childrenIds)), [selected, childrenIds]);
+  const { events, live, connection, received } = useRunEvents(run.projectId, run.id, {
+    onStatus: changed,
+    onStep: stepsChanged,
+    attempt: tab === "console" ? attempt : run.attempt,
+    ...(tab === "console" && selectedIds !== undefined ? { stepIds: selectedIds } : {}),
+  });
+  const labels = useMemo(() => {
+    const result = eventStepLabels(events);
+    for (const [id, label] of apiLabels) result.set(id, label);
+    return result;
+  }, [apiLabels, events]);
   const stepLabel = useCallback(
-    (id: string | undefined): string =>
-      labels.get(id ?? "") ?? (id === undefined ? "run" : id.slice(0, 8)),
+    (id: string | undefined) => (id === undefined ? "Run" : (labels.get(id) ?? `Step ${id.slice(0, 8)}`)),
     [labels],
   );
-  const selectedIds = useMemo(
-    () =>
-      selected === undefined
-        ? undefined
-        : withDescendants(selected, childrenOf),
-    [selected, childrenOf],
+  const attemptEvents = useMemo(
+    () => filterRunEvents(events, { filter: "all", query: "", tool: "", attempt }, stepLabel),
+    [events, attempt, stepLabel],
   );
-
-  // Agents still working, with the model's latest report: a long thinking turn writes no tool call.
-  const working = [...stats.entries()]
-    .filter(
-      ([id, entry]) =>
-        id !== "" &&
-        !entry.finished &&
-        entry.progress !== undefined &&
-        (selectedIds === undefined || selectedIds.has(id)),
-    )
-    .map(([id, entry]) => ({
-      id,
-      label: stepLabel(id),
-      progress: entry.progress!,
-      lastToolAt: entry.lastAt,
-    }));
-
-  // Everything needed to look at a run elsewhere: its state, its steps with why they failed, and the whole log.
-  const copyDiagnostics = async (): Promise<void> => {
-    const head = [
-      `run ${run.id} · ${run.kind} ${run.name} · ${run.status} · attempt ${run.attempt}`,
-      `started ${run.startedAt ?? "-"} · finished ${run.finishedAt ?? "-"} · agent ${run.agent ?? "-"}`,
-      ...(run.failureReason === undefined ? [] : [`failure: ${run.failureReason}`]),
-      "steps:",
-      ...run.steps.map((step) => `  ${stepLabel(step.id)} · ${step.kind} · ${step.status}${step.failureReason === undefined ? "" : ` · ${step.failureReason}`}`),
-      "",
-      `log (${events.length} lines):`,
-    ];
-    try {
-      await navigator.clipboard.writeText([...head, ...events.map((event) => logLine(event, stepLabel(event.stepRunId)))].join("\n"));
-      toast.success("Diagnostics copied", `${events.length} log lines`);
-    } catch (failure) {
-      toast.error("Could not copy the diagnostics", failure);
-    }
+  const currentEvents = useMemo(
+    () => filterRunEvents(events, { filter: "all", query: "", tool: "", attempt: run.attempt }, stepLabel),
+    [events, run.attempt, stepLabel],
+  );
+  const stats = useMemo(() => statsByStep(attemptEvents), [attemptEvents]);
+  const problems = attemptEvents.filter(isProblem).length;
+  const update = (patch: Record<string, string | undefined>): void =>
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        for (const [key, entry] of Object.entries(patch)) {
+          if (entry === undefined) next.delete(key);
+          else next.set(key, entry);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  const inspect = (id?: string): void => {
+    setFilter("activity");
+    update({ runView: "console", runStep: id });
   };
-
   const context: StepsContext = {
     projectId: run.projectId,
     now,
     stats,
     selected,
-    onSelect: setSelected,
+    onSelect: (id) => {
+      update({ runStep: id });
+      setStepsOpen(false);
+    },
     onChildren,
-    version,
+    version: `${run.attempt}/${run.status}/${stepRevision}/${steps.map((step) => step.status).join(",")}`,
   };
-  const technical = view === "technical";
+  const working = [...stats.entries()].flatMap(([id, entry]) =>
+    id !== "" && !entry.finished && entry.progress !== undefined && (selectedIds === undefined || selectedIds.has(id))
+      ? [{ id, label: stepLabel(id), progress: entry.progress, lastToolAt: entry.lastAt }]
+      : [],
+  );
+  const diagnostics = [
+    `Run ${run.id} · ${run.name} · ${run.status} · attempt ${attempt}`,
+    ...(run.failureReason === undefined ? [] : [run.failureReason]),
+    ...attemptEvents.map((event) => logLine(event, stepLabel(event.stepRunId))),
+  ].join("\n");
+  const attempts = [...new Set([run.attempt, ...(run.attempts ?? []).map((entry) => entry.n)])].sort((a, b) => b - a);
   return (
-    <>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex gap-1" role="group" aria-label="Level of detail">
-          {(["overview", "technical"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              aria-pressed={view === mode}
-              onClick={() => setView(mode)}
-              className={cn(
-                "h-7 rounded-[var(--geist-pill-radius)] px-3 text-[12px] capitalize shadow-border focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
-                view === mode ? "bg-hover font-medium text-text" : "text-text-muted hover:bg-hover hover:text-text-secondary",
-              )}
-            >
-              {mode}
-            </button>
-          ))}
+    <div className="flex min-w-0 flex-col gap-5">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-recessed/40 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <RunStatusBadge status={run.status} cancelling={run.cancelRequestedAt !== undefined && active} />
+          <span className="text-[13px] text-text-secondary">
+            Attempt {run.attempt} · {formatDuration(run.startedAt, run.finishedAt, now)}
+          </span>
+          <CopyButton value={run.id} label="Copy run ID" iconOnly />
+          <Button size="icon" title="Refresh run" aria-label="Refresh run" onClick={() => void reload()}>
+            <RefreshCw />
+          </Button>
         </div>
-        <button
-          type="button"
-          onClick={() => void copyDiagnostics()}
-          title="Copy the run's state, steps and whole log to paste into a bug report or a chat"
-          className="inline-flex h-7 items-center gap-1.5 rounded-[var(--geist-radius)] px-2 text-[12px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
-        >
-          <ClipboardCopy className="size-3.5" />
-          Copy diagnostics
-        </button>
-      </div>
-      {technical ? (
-        <RunSummary
+        <RunActions run={run} scopeNoun={scopeNoun} {...actions} onChanged={changed} />
+      </header>
+      {run.failureReason === undefined ? null : (
+        <section role="alert" className="rounded-xl bg-surface p-4 shadow-border">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-text-secondary" />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[14px] font-medium text-text">Run failed</h2>
+              <p className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-6 text-text-secondary">{run.failureReason}</p>
+              <Button
+                size="small"
+                className="mt-2 shadow-border"
+                onClick={() => {
+                  setFilter("problems");
+                  update({ runView: "console", runStep: undefined, runAttempt: undefined });
+                }}
+              >
+                Inspect problems
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
+      <Tabs
+        scrollable
+        label="Run details"
+        value={tab}
+        onChange={(next) => update({ runView: next })}
+        tabs={[
+          { id: "summary", label: "Summary" },
+          { id: "console", label: "Console" },
+          { id: "output", label: "Output", count: run.artifacts.length },
+          { id: "attempts", label: "Attempts", count: run.attempt },
+        ]}
+      />
+      {tab === "summary" ? (
+        <RunOverview
           run={run}
-          stats={stats}
-          events={events.length}
+          events={currentEvents}
           now={now}
-          steps={
-            run.steps.length === 0 ? (
-              <p className="text-[12px] text-text-muted">{active ? "Waiting for the first step…" : "No steps recorded."}</p>
-            ) : (
-              <div className="absolute inset-0 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
-                <StepList steps={run.steps} context={context} />
-              </div>
-            )
-          }
-        >
+          scopeNoun={scopeNoun}
+          onInspectStep={(id) => {
+            update({ runAttempt: undefined, runStep: id, runView: "console" });
+            setFilter("activity");
+          }}
+          onConsole={() => inspect()}
+        />
+      ) : null}
+      <div hidden={tab !== "console"}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-[13px] text-text-secondary">
+              Attempt
+              <select
+                aria-label="Console attempt"
+                className="h-8 rounded-md bg-surface px-3 text-[13px] text-text shadow-border"
+                value={attempt}
+                onChange={(event) => {
+                  setFilter("activity");
+                  update({ runAttempt: event.target.value, runStep: undefined });
+                }}
+              >
+                {attempts.map((n) => (
+                  <option key={n} value={n}>
+                    Attempt {n}
+                    {n === run.attempt ? " · latest" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="text-[12px] text-text-secondary">
+              {attempt === run.attempt && active ? "Live execution" : "Recorded execution"} · {steps.length} steps · {problems} problems in
+              loaded events
+            </span>
+          </div>
+          <CopyButton value={diagnostics} label="Copy diagnostics" />
+        </div>
+        <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[290px_minmax(0,1fr)]">
+          <aside className="min-w-0 rounded-xl bg-recessed/40 p-3">
+            <div className="mb-3 flex items-center justify-between px-2">
+              <h2 className="hidden text-[13px] font-medium text-text xl:block">Steps</h2>
+              <button
+                type="button"
+                aria-expanded={stepsOpen}
+                onClick={() => setStepsOpen(!stepsOpen)}
+                className="flex items-center gap-2 rounded-md text-[13px] font-medium text-text xl:hidden"
+              >
+                {stepsOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}Steps · {steps.length}
+              </button>
+              <button
+                type="button"
+                aria-pressed={selected === undefined}
+                onClick={() => update({ runStep: undefined })}
+                className="rounded-md px-2 py-1 text-[12px] text-accent hover:bg-hover"
+              >
+                All steps
+              </button>
+            </div>
+            <p className="mb-3 hidden px-2 text-[12px] text-text-secondary xl:block">Select a step to filter its events.</p>
+            <div className={`${stepsOpen ? "block" : "hidden"} max-h-64 overflow-y-auto xl:block xl:max-h-[650px]`}>
+              {steps.length === 0 ? (
+                <p className="px-2 py-6 text-[13px] text-text-secondary">No steps recorded for this attempt.</p>
+              ) : (
+                <StepList steps={steps} context={context} />
+              )}
+            </div>
+          </aside>
           <RunLog
-            events={events}
-            live={live}
-            runStart={origin}
+            key={`${run.id}/${attempt}`}
+            visible={tab === "console"}
+            events={attemptEvents}
+            live={active && live && attempt === run.attempt}
+            connection={connection}
+            received={received}
+            runStart={Date.parse(run.attempts?.find((entry) => entry.n === attempt)?.startedAt ?? run.startedAt ?? run.createdAt)}
             stepLabel={stepLabel}
             stepIds={selectedIds}
             stepName={selected === undefined ? undefined : stepLabel(selected)}
-            onClearStep={() => setSelected(undefined)}
-            working={live ? working : []}
+            onClearStep={() => update({ runStep: undefined })}
+            working={active && attempt === run.attempt ? working : []}
             now={now}
+            filter={filter}
+            onFilter={setFilter}
           />
-        </RunSummary>
-      ) : (
-        <RunOverview run={run} events={events} stats={stats} live={live} now={now} version={version} stepLabel={stepLabel} onInspect={() => setView("technical")} />
-      )}
-      <RunOutput run={run} />
-    </>
-  );
-}
-
-/** One card for where the run is: progress and steps on the left, figures and the live log on the right. */
-function RunSummary({
-  run,
-  stats,
-  events,
-  now,
-  steps,
-  children,
-}: {
-  run: JobRunDetail;
-  stats: ReadonlyMap<string, StepStats>;
-  events: number;
-  now: number;
-  steps: React.ReactNode;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const { can } = useAuth();
-  const counts = {
-    succeeded: 0,
-    running: 0,
-    failed: 0,
-    queued: 0,
-    cancelled: 0,
-  } as Record<string, number>;
-  for (const step of run.steps)
-    counts[step.status] = (counts[step.status] ?? 0) + 1;
-  const total = run.steps.length;
-  const tools = [...stats.values()].reduce(
-    (sum, entry) => sum + entry.total,
-    0,
-  );
-  const blocked = [...stats.values()].reduce(
-    (sum, entry) => sum + entry.blocked,
-    0,
-  );
-  const turns = Math.max(
-    0,
-    ...[...stats.values()].map((entry) => entry.turn ?? 0),
-  );
-  const done =
-    (counts["succeeded"] ?? 0) +
-    (counts["failed"] ?? 0) +
-    (counts["cancelled"] ?? 0);
-  const usage = sumUsage(run.steps);
-  return (
-    <div className="grid grid-cols-1 gap-x-5 gap-y-4 rounded-xl bg-recessed/60 p-3 xl:grid-cols-[minmax(280px,4fr)_minmax(0,7fr)]">
-      <section className="flex min-w-0 flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <div className="flex items-center gap-2.5">
-            <RunStatusBadge
-              status={run.status}
-              cancelling={
-                run.cancelRequestedAt !== undefined && run.status === "running"
-              }
-            />
-            <span className="text-[12px] tabular-nums text-text-secondary">
-              {run.startedAt === undefined
-                ? "Waiting for the worker"
-                : `${isActiveStatus(run.status) ? "running for" : "took"} ${formatDuration(run.startedAt, run.finishedAt, now)}`}
-            </span>
-          </div>
-          {total === 0 ? null : (
-            <p className="flex items-center gap-1.5 text-[11.5px] text-text-muted tabular-nums">
-              <span className="text-[13px] font-semibold text-text">
-                {done}/{total}
-              </span>
-              steps finished
-              {(counts["running"] ?? 0) > 0 ? (
-                <span className="rounded-full bg-hover px-1.5 py-0.5">
-                  {counts["running"]} running
-                </span>
-              ) : null}
-              {(counts["failed"] ?? 0) > 0 ? (
-                <span
-                  className="rounded-full px-1.5 py-0.5"
-                  style={{ color: "var(--ds-status-red)" }}
-                >
-                  {counts["failed"]} failed
-                </span>
-              ) : null}
-            </p>
-          )}
         </div>
-        {total === 0 ? null : (
-          <div
-            className="flex h-1.5 w-full gap-0.5"
-            role="img"
-            aria-label={`${done} of ${total} steps finished`}
-          >
-            {run.steps.map((step) => (
-              <span
-                key={step.id}
-                className={cn(
-                  "h-full min-w-1 flex-1 rounded-full",
-                  step.status === "running" && "animate-pulse",
-                )}
-                style={{
-                  backgroundColor:
-                    step.status === "queued"
-                      ? "var(--color-hover)"
-                      : (RUN_COLOR[step.status] ?? "var(--ds-text-muted)"),
-                }}
-                title={`${step.name} · ${step.status}`}
-              />
-            ))}
-          </div>
-        )}
-        <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">
-          Steps
-        </h5>
-        <div className="relative min-h-80 flex-1">{steps}</div>
-      </section>
-      <section className="flex min-w-0 flex-col gap-3">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          <Figure label="Tool calls" value={tools} />
-          <Figure label="Model turns" value={turns} hint="the furthest agent" />
-          <Figure
-            label="Blocked calls"
-            value={blocked}
-            tone={blocked > 0 ? "var(--ds-status-red)" : undefined}
-          />
-          <Figure label="Log lines" value={events} />
-          {usage === undefined ? null : (
-            <>
-              <Figure
-                label="Tokens"
-                value={
-                  usage.inputTokens +
-                  usage.outputTokens +
-                  usage.cacheReadTokens +
-                  usage.cacheWriteTokens
-                }
-                display={formatTokens(
-                  usage.inputTokens +
-                    usage.outputTokens +
-                    usage.cacheReadTokens +
-                    usage.cacheWriteTokens,
-                )}
-                hint={`new in ${formatTokens(usage.inputTokens)} · out ${formatTokens(usage.outputTokens)}`}
-              />
-              <Figure
-                label="Read from cache"
-                value={usage.cacheReadTokens}
-                display={formatRate(cacheHitRate(usage))}
-                hint={`${formatTokens(usage.cacheReadTokens)} tokens`}
-              />
-              <Figure label="Compactions" value={usage.compactions} />
-              <Figure
-                label="Cost"
-                value={usage.costUsd}
-                display={formatCost(usage.costUsd)}
-              />
-            </>
-          )}
-        </dl>
-        {usage !== undefined &&
-          (can("telemetry.view") ? (
-            <Link
-              to={telemetryTraceLink({ runId: run.id })}
-              className="w-fit text-[12px] text-text-secondary underline-offset-2 hover:text-text hover:underline"
-            >
-              View the trace in Governance → Telemetry
-            </Link>
-          ) : null)}
-        {children}
-      </section>
+      </div>
+      {tab === "output" ? <RunOutput run={run} /> : null}
+      {tab === "attempts" ? (
+        <RunAttempts
+          run={run}
+          onConsole={(n) => {
+            setFilter("activity");
+            update({ runView: "console", runAttempt: String(n), runStep: undefined });
+          }}
+        />
+      ) : null}
     </div>
-  );
-}
-
-function Figure({
-  label,
-  value,
-  display,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: number;
-  display?: string;
-  hint?: string;
-  tone?: string | undefined;
-}): React.JSX.Element {
-  return (
-    <div className="min-w-0">
-      <dt className="truncate text-[11px] text-text-muted">{label}</dt>
-      <dd
-        className="text-[18px] leading-6 font-semibold tracking-tight text-text tabular-nums"
-        style={tone === undefined ? undefined : { color: tone }}
-      >
-        {display ?? value.toLocaleString()}
-      </dd>
-      {hint === undefined ? null : (
-        <p className="truncate text-[10.5px] text-text-muted">{hint}</p>
-      )}
-    </div>
-  );
-}
-
-function CopyPath({ path }: { path: string }): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
-  const toast = useToast();
-  return (
-    <button
-      type="button"
-      aria-label={`Copy ${path}`}
-      title="Copy the path"
-      onClick={() => {
-        navigator.clipboard.writeText(path).then(
-          () => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          },
-          (failure: unknown) => toast.error("Could not copy the path", failure),
-        );
-      }}
-      className="shrink-0 rounded-[var(--geist-radius)] p-1 text-text-muted hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
-    >
-      {copied ? (
-        <Check className="size-3.5 text-[var(--ds-status-green)]" />
-      ) : (
-        <Copy className="size-3.5" />
-      )}
-    </button>
-  );
-}
-
-/** The attempts of a job that was retried: how each ended and why (ADR-0055). */
-function RunAttempts({ run }: { run: JobRunDetail }): React.JSX.Element | null {
-  const now = useNow(false);
-  const attempts = run.attempts ?? [];
-  if (attempts.length === 0 && run.attempt <= 1) return null;
-  return (
-    <div className="flex flex-col gap-1">
-      <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">Attempts</h5>
-      <ul className="flex flex-col">
-        {attempts.map((attempt) => (
-          <li key={attempt.n} className="flex flex-wrap items-baseline gap-x-2 text-[11.5px]">
-            <span className="w-14 shrink-0 text-text">attempt {attempt.n}</span>
-            <RunStatusBadge status={attempt.status} />
-            {attempt.startedAt === undefined ? null : <span className="tabular-nums text-text-muted">{formatDuration(attempt.startedAt, attempt.finishedAt, now)}</span>}
-            {attempt.reason === undefined ? null : (
-              <span className="min-w-0 flex-1 truncate text-[var(--ds-status-red)]" title={attempt.reason}>
-                {attempt.reason}
-              </span>
-            )}
-          </li>
-        ))}
-        {isActiveStatus(run.status) ? (
-          <li className="flex items-baseline gap-x-2 text-[11.5px]">
-            <span className="w-14 shrink-0 text-text">attempt {run.attempt}</span>
-            <RunStatusBadge status={run.status} />
-            <span className="text-text-muted">in progress</span>
-          </li>
-        ) : null}
-      </ul>
-    </div>
-  );
-}
-
-/** The artifacts, the document write that carries them, the source commit and the restricted records. */
-function RunOutput({ run }: { run: JobRunDetail }): React.JSX.Element {
-  const { can } = useAuth();
-  const restricted =
-    run.restrictedRecords +
-    run.steps.reduce((total, step) => total + step.restrictedRecords, 0);
-  const write = run.documentWrite;
-  const size = run.artifacts.reduce((sum, artifact) => sum + artifact.size, 0);
-  return (
-    <section className="flex flex-col gap-2 text-[12px] text-text-secondary">
-      <h5 className="text-[11px] font-medium tracking-wide text-text-muted uppercase">
-        Artifacts in the document repo
-        {run.artifacts.length === 0
-          ? ""
-          : ` · ${run.artifacts.length} file${run.artifacts.length === 1 ? "" : "s"} · ${formatBytes(size)}`}
-      </h5>
-      {run.artifacts.length === 0 ? (
-        <p className="text-text-muted">
-          {run.status === "succeeded"
-            ? "The run produced no artifacts."
-            : "Artifacts appear when the run has succeeded."}
-        </p>
-      ) : (
-        <ul className="flex flex-col">
-          {run.artifacts.map((artifact) => (
-            <li
-              key={artifact.path}
-              className="flex items-center gap-2 rounded-[var(--geist-radius)] px-1.5 py-1 hover:bg-hover"
-            >
-              <FileText
-                className="size-3.5 shrink-0 text-text-muted"
-                strokeWidth={1.75}
-              />
-              <span
-                className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-text"
-                title={`${artifact.path}\nsha256 ${artifact.sha256}`}
-              >
-                {artifact.path}
-              </span>
-              <span
-                className="max-w-32 shrink-0 truncate rounded-full bg-hover px-1.5 py-0.5 text-[11px] text-text-muted"
-                title={
-                  artifact.provenance.runtimeAgent ?? artifact.provenance.origin
-                }
-              >
-                {artifact.provenance.runtimeAgent ?? artifact.provenance.origin}
-              </span>
-              <span className="w-16 shrink-0 text-right text-[11.5px] tabular-nums text-text-secondary">
-                {formatBytes(artifact.size)}
-              </span>
-              <CopyPath path={artifact.path} />
-            </li>
-          ))}
-        </ul>
-      )}
-      {write === undefined ? null : (
-        <p className="flex flex-wrap items-center gap-2">
-          <WriteStatusBadge status={write.status} />
-          {write.branch === undefined ? null : (
-            <span
-              className="max-w-full truncate font-mono text-[11px] text-text-muted"
-              title="Branch in the document repo"
-            >
-              {write.branch}
-            </span>
-          )}
-          {write.prUrl === undefined ? null : (
-            <a
-              href={write.prUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded-[var(--geist-radius)] text-accent hover:underline focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
-            >
-              Pull request
-              <ExternalLink className="size-3.5" />
-            </a>
-          )}
-          {write.error === undefined ? null : (
-            <span
-              className="flex w-full items-start gap-1.5 text-[11.5px] leading-[1.45] text-[var(--ds-status-red)]"
-              title={write.error}
-            >
-              <span
-                className="mt-[5px] size-1.5 shrink-0 rounded-full bg-[var(--ds-status-red)]"
-                aria-hidden
-              />
-              <span className="line-clamp-2 break-words">{write.error}</span>
-            </span>
-          )}
-        </p>
-      )}
-      {run.sources === undefined && run.sourceCommit === undefined ? null : (
-        <p className="text-text-muted">
-          {run.sources !== undefined && run.sources.length > 1 ? "Sources" : "Source"}:{" "}
-          <span className="font-mono">{run.sources === undefined ? `${run.sourceRepositoryId ?? "legacy repo"}@${shortSha(run.sourceCommit)}` : sourcesLabel(run.sources)}</span>{" "}
-          (read-only)
-        </p>
-      )}
-      <RunAttempts run={run} />
-      {restricted === 0 ? null : (
-        <p className="flex flex-wrap items-center gap-1.5 text-text-muted">
-          <ShieldAlert className="size-3.5" strokeWidth={1.75} />
-          {restricted} restricted record{restricted === 1 ? "" : "s"}, never
-          committed.
-          {can("restricted.read") ? (
-            <Link
-              to={`/governance?tab=restricted&run=${encodeURIComponent(run.id)}`}
-              className="text-accent hover:underline"
-            >
-              Open in Governance
-            </Link>
-          ) : (
-            <span>Readable with restricted.read.</span>
-          )}
-        </p>
-      )}
-    </section>
   );
 }
