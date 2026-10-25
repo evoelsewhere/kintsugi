@@ -13,12 +13,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
 import { type CatalogView, catalogApi, type UnderstandView } from "@/lib/api/catalog";
-import type { StageResults } from "@/lib/api/documents";
+import type { StageResults, UnderstandResults } from "@/lib/api/documents";
 import type { JobRunView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { shortSha } from "@/lib/format";
 import { isActiveStatus } from "@/lib/status";
 import { useLoader } from "@/lib/use-loader";
+import { DataResultsView } from "./data-results";
 import { GapsResultsView } from "./gaps-results";
 import { HardenResultsView } from "./harden-results";
 import { MapResultsView } from "./map-results";
@@ -28,17 +29,21 @@ import { RulesResultsView } from "./rules-results";
 import { UnderstandFirstSteps } from "./understand-first-steps";
 import { UnderstandResultsView } from "./understand-results";
 
-const VIEWS: Array<{ id: UnderstandView; label: string }> = [
+/** The Data view joins the rules, the topology and the traceability matrix, so it has no results of its own. */
+type ViewId = UnderstandView | "data";
+
+const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: "understand", label: "Units & traceability" },
   { id: "map", label: "Topology" },
   { id: "extract-rules", label: "Rules" },
+  { id: "data", label: "Data" },
   { id: "harden", label: "Security" },
   { id: "gaps", label: "Gaps" },
 ];
 
-const isView = (value: string | null): value is UnderstandView => VIEWS.some((view) => view.id === value);
+const isView = (value: string | null): value is ViewId => VIEWS.some((view) => view.id === value);
 
-type ResultsTab = UnderstandView | "monitoring";
+type ResultsTab = ViewId | "monitoring";
 
 export interface UnderstandResultsTabProps {
   project: ProjectDetail;
@@ -58,12 +63,13 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
   const monitoring = requested === "monitoring";
-  const view: UnderstandView = isView(requested) ? requested : "understand";
+  const view: ViewId = isView(requested) ? requested : "understand";
+  const apiView: UnderstandView = view === "data" ? "understand" : view;
   const item = params.get("item") ?? undefined;
   const entry = item === undefined ? undefined : catalog?.items.find((candidate) => candidate.id === item);
   // An item in an open pull request is read at its run's branch; otherwise at the default branch.
   const ref = entry?.status === "in-pr" && entry.pr !== undefined ? `refs/heads/${entry.pr.branch}` : undefined;
-  const results = useLoader(`understand-results/${project.id}/${application.id}/${view}/${item ?? "app"}/${ref ?? ""}/${version}`, () => catalogApi.results(project.id, application.id, view, item, ref));
+  const results = useLoader(`understand-results/${project.id}/${application.id}/${apiView}/${item ?? "app"}/${ref ?? ""}/${version}`, () => catalogApi.results(project.id, application.id, apiView, item, ref));
 
   const update = (key: string, value: string | undefined): void =>
     setParams(
@@ -135,7 +141,7 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
               </Card>
             ) : (
               <>
-                <ResultsView results={loaded} projectId={project.id} onOpenItem={(id) => update("item", id)} />
+                <ResultsView view={view} results={loaded} project={project} application={application} item={item} gitRef={ref} version={version} onOpenItem={(id) => update("item", id)} />
                 <Section title="Files" description={`At ${loaded.ref.branch ?? shortSha(loaded.ref.commit)} in ${project.documentRepository?.repositoryId ?? "the document repo"}.`}>
                   <OutputFiles files={loaded.files} />
                 </Section>
@@ -148,7 +154,27 @@ export default function UnderstandResultsTab({ project, application, catalog, ve
   );
 }
 
-function ResultsView({ results, projectId, onOpenItem }: { results: StageResults; projectId: string; onOpenItem: (item: string) => void }): React.JSX.Element | null {
+function ResultsView({
+  view,
+  results,
+  project,
+  application,
+  item,
+  gitRef,
+  version,
+  onOpenItem,
+}: {
+  view: ViewId;
+  results: StageResults;
+  project: ProjectDetail;
+  application: ApplicationView;
+  item: string | undefined;
+  gitRef: string | undefined;
+  version: string;
+  onOpenItem: (item: string) => void;
+}): React.JSX.Element | null {
+  const projectId = project.id;
+  if (view === "data") return results.stage === "understand" ? <DataTab results={results} project={project} application={application} item={item} gitRef={gitRef} version={version} onOpenItem={onOpenItem} /> : null;
   switch (results.stage) {
     case "map":
       return <MapResultsView results={results} compare={false} />;
@@ -163,4 +189,38 @@ function ResultsView({ results, projectId, onOpenItem }: { results: StageResults
     default:
       return null;
   }
+}
+
+/** The Data view: the understand results it was opened on, with the rules and the topology read beside them. */
+function DataTab({
+  results,
+  project,
+  application,
+  item,
+  gitRef,
+  version,
+  onOpenItem,
+}: {
+  results: UnderstandResults;
+  project: ProjectDetail;
+  application: ApplicationView;
+  item: string | undefined;
+  gitRef: string | undefined;
+  version: string;
+  onOpenItem: (item: string) => void;
+}): React.JSX.Element {
+  const key = `${project.id}/${application.id}/${item ?? "app"}/${gitRef ?? ""}/${version}`;
+  const rules = useLoader(`understand-results/${key}/extract-rules`, () => catalogApi.results(project.id, application.id, "extract-rules", item, gitRef));
+  const map = useLoader(`understand-results/${key}/map`, () => catalogApi.results(project.id, application.id, "map", item, gitRef));
+  return (
+    <Loaded loader={rules} rows={4}>
+      {(rulesResults) => (
+        <Loaded loader={map} rows={4}>
+          {(mapResults) =>
+            rulesResults.stage === "extract-rules" && mapResults.stage === "map" ? <DataResultsView rules={rulesResults} map={mapResults} understand={results} onOpenItem={onOpenItem} /> : null
+          }
+        </Loaded>
+      )}
+    </Loaded>
+  );
 }

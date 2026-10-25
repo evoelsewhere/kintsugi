@@ -1,6 +1,6 @@
 // The Overview of extract-rules results: how the rules split by category, priority and
 // confidence, the review load (SME questions, suspected defects, duplicates), where the rules
-// come from in the source, and which data objects the most units consume.
+// come from in the source.
 
 import { BarList, Donut, Heatmap, ShareBar } from "@/components/results/charts";
 import { CHART_COLOR } from "@/components/results/chart-colors";
@@ -24,7 +24,6 @@ export function RulesOverview({ results, onCoverage }: { results: RulesResults; 
   const confidences = countBy(active, (rule) => rule.confidence ?? "—");
   const statuses = countBy(results.rules, (rule) => rule.status);
   const sources = countBy(active, fileOf).slice(0, 10);
-  const objects = [...results.dataObjects].sort((a, b) => b.consumedBy.length - a.consumedBy.length || b.fields.length - a.fields.length).slice(0, 10);
   const smeQuestions = active.filter((rule) => rule.smeQuestion !== undefined).length;
   const defects = active.filter((rule) => rule.suspectedDefect !== undefined).length;
   const duplicates = new Set(active.flatMap((rule) => rule.duplicateGroup ?? [])).size;
@@ -45,7 +44,6 @@ export function RulesOverview({ results, onCoverage }: { results: RulesResults; 
             <Signal label="Below High confidence" value={formatCount(lowConfidence)} note={percentOf(lowConfidence, active.length)} />
             <Signal label="Duplicate groups" value={formatCount(duplicates)} note="same lines or names" />
             <Signal label="Refuted by a verifier" value={formatCount(statuses.find((entry) => entry.key === "refuted")?.count ?? 0)} />
-            <Signal label="Data objects" value={formatCount(results.dataObjects.length)} />
           </SignalList>
         </Section>
       </div>
@@ -76,13 +74,6 @@ export function RulesOverview({ results, onCoverage }: { results: RulesResults; 
             <p className="text-[12px] text-text-muted">The rules cite no source file.</p>
           ) : (
             <BarList format={formatCount} rows={sources.map((entry) => ({ key: entry.key, label: entry.key.split("/").slice(-2).join("/"), title: entry.key, value: entry.count, mono: true }))} />
-          )}
-        </Section>
-        <Section title="Data objects by consumers" description="Objects used by the most units or rules; the note is the field count.">
-          {objects.length === 0 ? (
-            <p className="text-[12px] text-text-muted">No data objects at this ref.</p>
-          ) : (
-            <BarList format={formatCount} color={CHART_COLOR.teal} rows={objects.map((object) => ({ key: object.name, label: object.name, value: object.consumedBy.length, note: `${object.fields.length} fields` }))} />
           )}
         </Section>
       </div>
