@@ -64,6 +64,7 @@ Generated Mermaid code should:
 4. Use semantic node naming
 5. Include styling when needed to improve visual appearance
 6. In `classDef`, `style` and `linkStyle` write colours as `#rrggbb` and transparency as `fill-opacity` or `stroke-opacity`; never `rgb()`, `rgba()`, `hsl()` or `hsla()`, whose commas split the style list and break the parse
+7. In `sequenceDiagram` and `stateDiagram-v2` text (messages, notes, block titles, transition labels) never write `;`: Mermaid ends the statement there and the rest of the line fails to parse. Write it as `#59;`, or use a comma or a dash
 
 ## Example Output
 
