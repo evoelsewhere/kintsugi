@@ -109,7 +109,7 @@ describe("kernel tools inside a pi session", () => {
   it("never runs tools outside the allowlist", () => {
     expect(ok("bash")).not.toBe(true);
     const offered = probe.first().flatMap((message) => message.toolsAdded ?? []).map((tool) => tool.name);
-    expect(offered.sort()).toEqual(["edit", "find", "grep", "ls", "read", "write"]);
+    expect(offered.sort()).toEqual(["edit", "find", "glob", "grep", "ls", "read", "write"]);
   });
 });
 

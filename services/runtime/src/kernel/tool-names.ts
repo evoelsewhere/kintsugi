@@ -22,6 +22,14 @@ export function normalizeTools(names: readonly string[]): string[] {
   return [...new Set(names)].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
+/** `find` under the name other harnesses use; it cannot be listed in an allowlist, it comes with `find`. */
+export const GLOB_ALIAS = "glob";
+
+/** The normalized allowlist with the `glob` alias right after `find`. */
+export function withAliases(names: readonly string[]): string[] {
+  return names.flatMap((name) => (name === "find" ? [name, GLOB_ALIAS] : [name]));
+}
+
 export function isKernelToolName(name: string): name is KernelToolName {
   return (KERNEL_TOOL_NAMES as readonly string[]).includes(name);
 }

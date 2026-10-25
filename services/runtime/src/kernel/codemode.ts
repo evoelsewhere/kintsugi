@@ -17,7 +17,7 @@ import type { BlockedCallSink } from "./policy.js";
 export const CODEMODE_TOOL = "codemode";
 
 /** The kernel tools a script may call. */
-export const SCRIPT_TOOLS: ReadonlySet<string> = new Set(["read", "ls", "grep", "find"]);
+export const SCRIPT_TOOLS: ReadonlySet<string> = new Set(["read", "ls", "grep", "find", "glob"]);
 
 /** The longest a script may run, and the most output it may return to the model. */
 export const SCRIPT_TIMEOUT_MS = 120_000;

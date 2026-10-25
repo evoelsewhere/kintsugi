@@ -21,7 +21,7 @@ import { compactionBudget, stableSessionId } from "./context.js";
 import { createMcpKernel } from "./mcp.js";
 import { composeSystemPrompt } from "./policy.js";
 import { createResultTool } from "./result.js";
-import { normalizeTools, RESULT_TOOL } from "./tool-names.js";
+import { normalizeTools, RESULT_TOOL, withAliases } from "./tool-names.js";
 import { createTools, type ToolContext } from "./tools.js";
 
 type ThinkingLevelOption = NonNullable<NonNullable<Parameters<typeof createAgentSession>[0]>["thinkingLevel"]>;
@@ -84,7 +84,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
 
     // The same tools in the same order for every job of the agent: tool definitions open the cached prefix.
     // A job with a result schema also gets submit_result, last: the agent's own tools keep their order.
-    const tools = [...normalizeTools(spec.agent.tools), ...(spec.resultSchema === undefined ? [] : [RESULT_TOOL])];
+    const tools = [...withAliases(normalizeTools(spec.agent.tools)), ...(spec.resultSchema === undefined ? [] : [RESULT_TOOL])];
     const toolContext: ToolContext = { cwd, searchDir: spec.workspace.readOnly[0]!, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput };
     const { session } = await createAgentSession({
       cwd,
