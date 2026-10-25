@@ -1,3 +1,4 @@
+import { ProjectMemoryPanel } from "./project-memory-panel";
 // Project configuration (Administration → Projects, ADR-0028): the project's fields, per
 // application the AS-IS group (legacy code and legacy data repos, read-only for Kintsugi) and
 // the TO-BE group (the project's document repo and the target repos, each implementing an
@@ -40,7 +41,7 @@ type ConfirmTarget =
 
 type LinkTarget = { application: ApplicationView; role: ApplicationRepositoryRole };
 
-type ProjectTab = "project" | "plugins" | "access" | "connect";
+type ProjectTab = "project" | "plugins" | "access" | "connect" | "memory";
 
 export function ProjectDetailPage(): React.JSX.Element {
   const { projectId = "" } = useParams();
@@ -50,6 +51,7 @@ export function ProjectDetailPage(): React.JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabs: Array<{ id: ProjectTab; label: string }> = [
     { id: "project", label: "Project" },
+    ...(can("project.memory.manage") ? [{ id: "memory" as const, label: "Project memory" }] : []),
     ...(can("plugin.access.manage") ? [{ id: "plugins" as const, label: "Member plugins" }] : []),
     ...(can("project.access.manage") ? [{ id: "access" as const, label: "Project access" }] : []),
     ...(can("member.read") ? [{ id: "connect" as const, label: "Connect your AI" }] : []),
@@ -224,6 +226,7 @@ export function ProjectDetailPage(): React.JSX.Element {
         </>
       ) : null}
 
+      {tab === "memory" ? <ProjectMemoryPanel key={projectId} projectId={projectId} /> : null}
       {tab === "plugins" ? <PluginAccessPanel projectId={projectId} canManage={can("plugin.access.manage")} /> : null}
       {tab === "access" ? <ProjectAccessPanel projectId={projectId} canManage={can("project.access.manage")} /> : null}
       {tab === "connect" ? <MemberConnectPanel projectId={projectId} canManage={can("tokens.manage-own")} canRead={can("member.read")} /> : null}

@@ -20,15 +20,16 @@
 // own child gets its provider credentials (launcher/agent-process.ts); scripts never get any.
 
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { findBuiltinFile } from "@kintsugi/agents";
-import { DEFAULT_SANDBOX, legacySources, mcpServersNamedBy, sourceRole, sourceSpec, targetSources, THINKING_LEVELS, type PinnedSource, type Provenance, type SandboxSettings, type SourceRepo, type ThinkingLevel } from "@kintsugi/domain";
+import { DEFAULT_SANDBOX, legacySources, mcpServersNamedBy, sourceRole, sourceSpec, targetSources, THINKING_LEVELS, type PinnedSource, type Provenance, type SandboxSettings, type SourceRepo, type ThinkingLevel, MEMORY_CANDIDATES_FILE, MEMORY_WRITE_SCHEMA, type MemoryEvidence } from "@kintsugi/domain";
 import { type CheckoutStorage, type JobPaths, runGit } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
-import { RESULT_FILE, RESULT_TOOL } from "@kintsugi/runtime/tool-names";
-import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec } from "@kintsugi/runtime-sdk";
+import { RESULT_FILE, RESULT_TOOL, MEMORY_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
+import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec, JobServices } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
+import { bindProjectMemory, type ProjectMemory, type MemoryContext } from "../project-memory/index.js";
 import { defaultSandbox, limitsWith, type SandboxProvider } from "../sandbox.js";
 import { renderGuide, type GuideSource } from "../workspace/guide.js";
 import { digestOf, filesDigest, Ledger, type LedgerOutput } from "../workspace/ledger.js";
@@ -89,6 +90,7 @@ export interface JobRunnerDeps {
   /** The MCP servers (with decrypted headers) an agent names in its tools; absent when the installation has no registry. */
   mcpServers?: (ids: readonly string[]) => Promise<McpServerSpec[]>;
   interpreters: Interpreters;
+  projectMemory?: ProjectMemory;
   /** The budgets of stages and workflows (and the limits when no sandbox settings are given). */
   defaults?: JobDefaults;
   /** The sandbox settings (limits, read-only marking), read when a run starts; default: the built-in defaults. */
@@ -115,6 +117,7 @@ export interface JobRunnerDeps {
 interface StepWorkspace {
   /** The top-level run whose live record gets this step's events. */
   rootId: string;
+  stage?: string;
   /** The attempt of that run. */
   attempt: number;
   /** The job workspace: the working directory of every process of the run. */
@@ -342,7 +345,7 @@ export class JobRunner {
     if (!(await store.start(id))) return store.get(id);
     const paths = storage.job(id);
     const sandbox = await (this.#deps.sandbox ?? defaultSandbox)().catch(() => DEFAULT_SANDBOX);
-    const ws: StepWorkspace = { rootId: id, attempt: run.attempt, root: paths.root, dir: paths.root, in: paths.docs, out: paths.out, tmp: paths.tmp, sandbox, defaults: limitsWith(this.#defaults, sandbox) };
+    const ws: StepWorkspace = { ...(run.kind === "stage" ? { stage: run.name } : {}), rootId: id, attempt: run.attempt, root: paths.root, dir: paths.root, in: paths.docs, out: paths.out, tmp: paths.tmp, sandbox, defaults: limitsWith(this.#defaults, sandbox) };
     await this.#event(ws, undefined, "status", `${run.kind} ${run.name} started${run.attempt > 1 ? ` (attempt ${run.attempt})` : ""}`, { status: "running", attempt: run.attempt });
     let manifest: WorkspaceManifest | undefined;
     let ended: "succeeded" | "failed" | "cancelled" = "failed";
@@ -752,8 +755,15 @@ export class JobRunner {
       typeof schema === "object" && schema !== null
         ? `\n\nReport your result by calling the ${RESULT_TOOL} tool, once, when the work is done: its arguments are the result, and the tool refuses one that does not fit (read the reason and call it again). Do not write the result to a file.`
         : "";
+    const memoryContext = this.#memoryContext(run, ws);
+    const memoryTools = !definition.tools.includes("read") ? [] : MEMORY_TOOL_NAMES.filter((name) => !["memory_write","memory_forget","memory_restore","scratchpad"].includes(name) || definition.tools.includes("write"));
+    const grantedMemoryTools = memoryContext?.reviewedOnly ? memoryTools.filter((name) => ["memory_search","memory_read","memory_status"].includes(name)) : memoryTools;
+    const memoryEnabled = memoryContext !== undefined && grantedMemoryTools.length > 0 && (await this.#deps.projectMemory!.status(memoryContext,false)).enabled;
+    const memoryUsage = { searches: 0, reads: 0, writes: 0, status: 0, forgets: 0, restores: 0, scratchpad: 0 };
+    const services: JobServices = !memoryEnabled ? {} : { memory: this.#memoryService(ws, { ...memoryContext!, agent: agentId }) };
     const spec: JobSpec = {
-      agent: definition,
+      agent: !memoryEnabled ? definition : { ...definition, tools: [...definition.tools, ...grantedMemoryTools] },
+      ...(memoryEnabled ? { memory: grantedMemoryTools.includes("memory_write") ? { writeSchema: MEMORY_WRITE_SCHEMA } : {} } : {}),
       task: fill(task, this.#placeholders(run, ws)) + schemaNote + carriedNote(ws.carried ?? []),
       model: { provider: binding.provider, id: binding.model, ...(thinking === undefined ? {} : { thinking }) },
       ...(typeof schema === "object" && schema !== null ? { resultSchema: schema as Record<string, unknown> } : {}),
@@ -788,7 +798,7 @@ export class JobRunner {
     };
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
       attempts += 1;
-      const handle = await this.#deps.agents.startJob({ ...spec, task });
+      const handle = await this.#deps.agents.startJob({ ...spec, task }, services);
       // Why it is stopped: a person cancelled the run, a sibling of its group failed, or the worker is stopping.
       const stoppedFor = (): string => (isCancelled(signal) ? "cancelled" : signal?.reason instanceof Error && signal.reason.message.startsWith("another step of the group failed") ? "another step of its group failed" : "the worker is stopping");
       const onAbort = (): void => void handle.abort(stoppedFor());
@@ -820,6 +830,15 @@ export class JobRunner {
               textChars: event.textChars,
             });
           } else if (event.type === "tool.call") {
+            if (event.decision === "allowed") {
+              if (event.tool === "memory_search") memoryUsage.searches += 1;
+              if (event.tool === "memory_read") memoryUsage.reads += 1;
+              if (event.tool === "memory_write") memoryUsage.writes += 1;
+              if (event.tool === "memory_status") memoryUsage.status += 1;
+              if (event.tool === "memory_forget") memoryUsage.forgets += 1;
+              if (event.tool === "memory_restore") memoryUsage.restores += 1;
+              if (event.tool === "scratchpad") memoryUsage.scratchpad += 1;
+            }
             const line = summarizeToolCall(event.tool, event.input, roots);
             const reason = event.reason === undefined ? "" : ` (${event.reason})`;
             await this.#event(ws, stepId, "tool", event.decision === "blocked" ? `blocked: ${line}${reason}` : line, { tool: event.tool, decision: event.decision });
@@ -932,7 +951,7 @@ export class JobRunner {
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
     const files = await listFiles(ws.out);
     return {
-      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary },
+      summary: { agent: agentId, model: `${binding.provider}/${binding.model}`, usage, outcome: done.summary, ...(memoryEnabled ? { memoryTools: memoryUsage } : {}) },
       agent: agentId,
       provenance: new Map(files.filter((entry) => !entry.path.startsWith("restricted/")).map((entry) => [entry.path, provenance])),
       ...(result === undefined ? {} : { result }),
@@ -1042,7 +1061,7 @@ export class JobRunner {
       ledger === undefined
         ? undefined
         : {
-            fingerprint: (spec, upstream) => this.#fingerprint(ws, spec, upstream),
+            fingerprint: (spec, upstream) => this.#fingerprint(ws, spec, upstream, run),
             settled: async (key, fingerprint) => {
               const entry = ledger.get(key);
               if (entry === undefined || entry.status !== "succeeded" || entry.fingerprint !== fingerprint) return undefined;
@@ -1099,17 +1118,28 @@ export class JobRunner {
    * What a step would run with (ledger.ts): its definition by content, its task as the stage filled it, the pinned
    * sources and documents, and the chain of what came before it. A script is not reused, so its definition is not read.
    */
-  async #fingerprint(ws: StepWorkspace, spec: LeafRun, upstream: string): Promise<string> {
+  async #fingerprint(ws: StepWorkspace, spec: LeafRun, upstream: string, root: JobRun): Promise<string> {
     const { budget: _budget, ...inputs } = spec.inputs;
     let definition = "script";
+    let memoryCapable = false;
     try {
-      if (spec.kind === "agent") definition = digestOf(await this.#deps.agentDefinitions.definition(spec.name));
-      else if (spec.kind === "workflow") definition = digestOf(await loadWorkflow(spec.name, this.#deps.workflowsDir));
+      if (spec.kind === "agent") {
+        const agent = await this.#deps.agentDefinitions.definition(spec.name);
+        definition = digestOf(agent);
+        memoryCapable = agent.tools.includes("read");
+      }
+      else if (spec.kind === "workflow") {
+        definition = digestOf(await loadWorkflow(spec.name, this.#deps.workflowsDir));
+        memoryCapable = true; // A reused workflow could otherwise skip its live-memory agent children.
+      }
     } catch {
       definition = "unavailable";
     }
     const pins = { sources: (ws.sources ?? []).map((source) => [sourceRole(source), source.repositoryId, source.commit]), documents: ws.documentsCommit ?? null };
-    return digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream });
+    const context = this.#memoryContext({ ...root, kind: spec.kind === "workflow" ? "agent" : spec.kind, name: spec.name }, ws);
+    const liveMemory = memoryCapable && context !== undefined && (await this.#deps.projectMemory!.status(context,false)).enabled;
+    // Live lookups are mutable inputs: re-execute participating steps on retry instead of pretending they are cached inputs.
+    return digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream, ...(liveMemory ? { liveMemory: ["memory-v2", ws.attempt] } : {}) });
   }
 
   /**
@@ -1226,13 +1256,48 @@ export class JobRunner {
    * stores it before the check.
    */
   async #flaggedOutput(ws: StepWorkspace): Promise<string[] | undefined> {
+    await this.#discardMemoryScratch(ws);
     const hook = await this.#hook(ws);
     const items = hook.ok ? [] : hook.items.filter((item) => !item.path.startsWith("restricted/"));
     return items.length === 0 ? undefined : items.map((item) => item.text);
   }
 
+  /** Discard the pre-tool pilot's scratch artifact so a retained output can never publish it. */
+  async #discardMemoryScratch(ws: StepWorkspace): Promise<void> {
+    await rm(join(ws.out, MEMORY_CANDIDATES_FILE), { recursive: true, force: true });
+  }
+
+  #memoryContext(run: Pick<JobRun, "id" | "kind" | "name" | "projectId" | "applicationId">, ws: StepWorkspace): MemoryContext | undefined {
+    if (this.#deps.projectMemory === undefined || run.applicationId === undefined || run.kind !== "agent") return undefined;
+    return { projectId: run.projectId, applicationId: run.applicationId, runId: ws.rootId, stepId: run.id,
+      stage: ws.stage ?? "agent", agent: run.name, reviewedOnly: ws.stage === "review" || /reviewer/.test(run.name), sources: ws.sources ?? [] };
+  }
+
+  #memoryService(ws: StepWorkspace, context: MemoryContext): NonNullable<JobServices["memory"]> {
+    return bindProjectMemory({
+      store: this.#deps.projectMemory!, context,
+      sensitive: (text) => redactText(text, { opaqueTokens: false }) !== text,
+      verifyEvidence: (evidence) => this.#verifyMemoryEvidence(ws, evidence),
+    });
+  }
+
+  async #verifyMemoryEvidence(ws: StepWorkspace, evidence: MemoryEvidence): Promise<(MemoryEvidence & { commit: string }) | undefined> {
+    const source = ws.sources?.find((item) => item.repositoryId === evidence.repositoryId);
+    if (source === undefined || (evidence.quote !== undefined && redactText(evidence.quote, { opaqueTokens: false }) !== evidence.quote)) return undefined;
+    const root = join(ws.root, mountFolder(source));
+    const file = join(root, evidence.path);
+    const actual = await realpath(file).catch(() => undefined);
+    const base = await realpath(root).catch(() => undefined);
+    if (actual === undefined || base === undefined || !isInside(base, actual)) return undefined;
+    const stat = await lstat(file).catch(() => undefined);
+    if (stat?.isFile() !== true || stat.isSymbolicLink()) return undefined;
+    if (evidence.quote !== undefined && (stat.size > 512_000 || !(await readFile(file,"utf8")).includes(evidence.quote))) return undefined;
+    return { ...evidence, commit: source.commit };
+  }
+
   /** restricted/ → encrypted records; the JobOutput hook over out/; the artifact index. */
   async #finish(run: JobRun, ws: StepWorkspace, outcome: StepOutcome): Promise<{ summary: Record<string, unknown>; entries: ArtifactEntry[] }> {
+    await this.#discardMemoryScratch(ws);
     const restricted = await this.#storeRestricted(run, ws);
     const hook = await this.#hook(ws);
     if (!hook.ok) {
@@ -1249,6 +1314,7 @@ export class JobRunner {
     return {
       summary: {
         ...outcome.summary,
+
         files: entries.length,
         bytes: entries.reduce((total, entry) => total + entry.size, 0),
         restrictedFiles: restricted,

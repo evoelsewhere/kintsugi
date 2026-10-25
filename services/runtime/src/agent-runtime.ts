@@ -7,7 +7,7 @@
 //              built against the contract without LLM calls.
 
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { AgentRuntime, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
+import type { AgentRuntime, JobHandle, JobSpec, JobServices } from "@kintsugi/runtime-sdk";
 import { startMockJob } from "./mock-agent.js";
 import { PI_ENGINE_ID, RUNTIME_VERSION } from "./version.js";
 
@@ -17,13 +17,14 @@ export type CreateAgentRuntimeOptions =
       mode: "pi";
       /** Provides the job's models and credentials (launcher/model-runtime.ts). */
       resolveModelRuntime(spec: JobSpec): Promise<ModelRuntime>;
+      services?: JobServices;
     };
 
 export type RuntimeMode = NonNullable<CreateAgentRuntimeOptions["mode"]>;
 
 /** The pi job backend (services/runtime/src/pi-runtime.ts), loaded lazily. */
 export interface PiJobBackend {
-  startJob(spec: JobSpec): Promise<JobHandle>;
+  startJob(spec: JobSpec, services?: JobServices): Promise<JobHandle>;
 }
 
 class MockAgentRuntime implements AgentRuntime {
@@ -38,18 +39,18 @@ class PiAgentRuntime implements AgentRuntime {
   readonly engine = PI_ENGINE_ID;
   readonly #backend: Promise<PiJobBackend>;
 
-  constructor(resolveModelRuntime: (spec: JobSpec) => Promise<ModelRuntime>) {
+  constructor(resolveModelRuntime: (spec: JobSpec) => Promise<ModelRuntime>, services?: JobServices) {
     // Mock-only consumers never load the pi SDK.
-    this.#backend = import("./pi-runtime.js").then((m) => m.createPiJobBackend({ resolveModelRuntime }));
+    this.#backend = import("./pi-runtime.js").then((m) => m.createPiJobBackend({ resolveModelRuntime, services }));
   }
 
-  async startJob(spec: JobSpec): Promise<JobHandle> {
-    return (await this.#backend).startJob(spec);
+  async startJob(spec: JobSpec, services?: JobServices): Promise<JobHandle> {
+    return (await this.#backend).startJob(spec, services);
   }
 }
 
 export function createAgentRuntime(options: CreateAgentRuntimeOptions = {}): AgentRuntime {
-  return options.mode === "pi" ? new PiAgentRuntime(options.resolveModelRuntime) : new MockAgentRuntime();
+  return options.mode === "pi" ? new PiAgentRuntime(options.resolveModelRuntime, options.services) : new MockAgentRuntime();
 }
 
 export { EventStream } from "./event-stream.js";

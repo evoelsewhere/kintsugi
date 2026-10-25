@@ -1,3 +1,4 @@
+import { ProjectMemoryModule } from "./modules/admin/project-memory/project-memory.module.js";
 import { Module } from "@nestjs/common";
 import { debugMcpEnabled } from "./common/config/env.js";
 import { AgentsModule } from "./modules/admin/agents/agents.module.js";
@@ -65,6 +66,7 @@ import { ReleasesModule } from "./modules/system/releases/index.js";
     ...(debugMcpEnabled() ? [DebugModule] : []),
     // admin
     ProjectsModule,
+    ProjectMemoryModule,
     DocumentWritesModule,
     UsersModule,
     RolesModule,

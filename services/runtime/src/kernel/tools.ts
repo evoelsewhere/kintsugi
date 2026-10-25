@@ -19,7 +19,7 @@ import { PathGuard } from "./paths.js";
 import { createKernelShellTool } from "./shell.js";
 import { CODEMODE_TOOL, SCRIPT_TOOLS } from "./codemode.js";
 import { MCP_TOOL_PREFIX } from "./mcp.js";
-import { GLOB_ALIAS, type KernelToolName } from "./tool-names.js";
+import { GLOB_ALIAS, isMemoryToolName, type KernelToolName } from "./tool-names.js";
 
 export interface ToolContext {
   /** Working directory: the job workspace root (ADR-0055); a relative path is resolved against it. */
@@ -195,7 +195,7 @@ export { KERNEL_TOOL_NAMES } from "./tool-names.js";
 export function createTools(names: readonly string[], context: ToolContext): ToolDefinition[] {
   return names
     // codemode and the MCP tools are pi's own, added as extensions (codemode.ts, mcp.ts): no factory here.
-    .filter((name) => name !== CODEMODE_TOOL && !name.startsWith(MCP_TOOL_PREFIX))
+    .filter((name) => name !== CODEMODE_TOOL && !isMemoryToolName(name) && !name.startsWith(MCP_TOOL_PREFIX))
     .map((name) => {
       const factory = (KERNEL_TOOLS as Record<string, ToolFactory | undefined>)[name] ?? (name === GLOB_ALIAS ? globTool : undefined);
       if (factory === undefined) throw new Error(`unknown tool "${name}"`);

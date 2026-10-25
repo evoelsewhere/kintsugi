@@ -3,6 +3,9 @@
 // The registry in tools.ts is typed against this list, so the two cannot drift.
 
 export const KERNEL_TOOL_NAMES = ["read", "ls", "grep", "find", "write", "edit", "shell", "git", "codemode"] as const;
+export const MEMORY_TOOL_NAMES = ["memory_search", "memory_read", "memory_write", "memory_status", "memory_forget", "memory_restore", "scratchpad"] as const;
+export function isMemoryToolName(name: string): boolean { return (MEMORY_TOOL_NAMES as readonly string[]).includes(name); }
+
 export type KernelToolName = (typeof KERNEL_TOOL_NAMES)[number];
 
 /** The tool a job with a result schema gets besides its agent's tools (result.ts), and the file it writes. */

@@ -21,6 +21,10 @@
     "./outbox": {
       "types": "./dist/outbox/index.d.ts",
       "import": "./dist/outbox/index.js"
+    },
+    "./project-memory": {
+      "types": "./dist/project-memory/index.d.ts",
+      "import": "./dist/project-memory/index.js"
     }
   },
   "engines": {
