@@ -64,6 +64,7 @@ export class InstallationSettingsService {
       maxOutputBytes: input.maxOutputBytes,
       maxTurns: input.maxTurns,
       maxCostUsd: input.maxCostUsd,
+      maxJobConcurrency: input.maxJobConcurrency,
       markReadOnly: input.markReadOnly,
     };
     await this.settings.put(SANDBOX_SETTING, settings, actor.username ?? actor.id);

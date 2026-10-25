@@ -20,7 +20,6 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `POSTGRES_PASSWORD` | yes | — | Hexadecimal password of the `kintsugi` database user (minimum 32 characters in the deploy workflow) |
 | `KINTSUGI_DATA_DIR` | yes | `<deployment directory>/data` in the first Compose deployment | Host directory for Git mirrors, document repo clones and per-job checkouts ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)); size it for every registered repository plus running jobs. Without Docker (development) it defaults to `./.kintsugi/data`. The API reads the document repo mirrors here (read-only), so it needs the same value as the worker |
 | `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between full Git re-syncs of every repository (minimum 30); new repositories are cloned within seconds |
-| `KINTSUGI_JOB_MAX_CONCURRENCY` | no | `2` | Parallel job runs per worker |
 | `KINTSUGI_TELEMETRY_RETENTION_DAYS` | no | `30` | Days the spans of agent jobs (`monitoring.telemetry_span`) are kept ([ADR-0048](../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)) |
 | `KINTSUGI_WORKFLOW_CONCURRENCY` | no | `4` | Agent jobs of one workflow running at a time |
 | `KINTSUGI_STAGE_CONCURRENCY` | no | `4` | Steps of one parallel or per-item group of a stage running at a time |
@@ -33,7 +32,7 @@ Runtime jobs run in job workspaces under `KINTSUGI_DATA_DIR/jobs/` without an OS
 
 ## The sandbox environment
 
-The settings of the environment jobs run in are set by an administrator in **Settings → Sandbox** (permission `sandbox.manage`), stored in `admin.installation_setting` under `sandbox`, and read by the worker when a job starts and in each sweep: a change applies to the next job, without a restart ([ADR-0055](../decisions/0055-one-durable-workspace-per-job.md)). They replace the variables `KINTSUGI_JOB_DEFAULT_TIMEOUT`, `KINTSUGI_AGENT_IDLE_TIMEOUT`, `KINTSUGI_SCRIPT_TIMEOUT`, `KINTSUGI_JOB_MAX_OUTPUT_BYTES`, `KINTSUGI_JOB_MAX_TURNS`, `KINTSUGI_JOB_MAX_COST_USD` and `KINTSUGI_JOB_RETENTION_DAYS`, which the worker no longer reads.
+The settings of the environment jobs run in are set by an administrator in **Settings → Sandbox & Agent** (permission `sandbox.manage`), stored in `admin.installation_setting` under `sandbox`, and read by the worker when a job starts and in each sweep: a change applies to the next job, without a restart ([ADR-0055](../decisions/0055-one-durable-workspace-per-job.md)). They replace the variables `KINTSUGI_JOB_DEFAULT_TIMEOUT`, `KINTSUGI_AGENT_IDLE_TIMEOUT`, `KINTSUGI_SCRIPT_TIMEOUT`, `KINTSUGI_JOB_MAX_OUTPUT_BYTES`, `KINTSUGI_JOB_MAX_TURNS`, `KINTSUGI_JOB_MAX_COST_USD`, `KINTSUGI_JOB_MAX_CONCURRENCY` (now "Max job concurrency", followed while the worker runs) and `KINTSUGI_JOB_RETENTION_DAYS`, which the worker no longer reads.
 
 | Setting | Default | Meaning |
 |---|---|---|

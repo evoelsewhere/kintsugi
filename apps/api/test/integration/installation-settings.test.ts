@@ -52,8 +52,8 @@ describe.skipIf(!hasDatabase)("installation settings: commit identity (integrati
   });
 
     describe("sandbox environment (ADR-0055)", () => {
-      interface SandboxView { checkoutHours: number; retentionDays: number; scriptTimeoutSec: number; agentTimeoutSec: number; agentIdleTimeoutSec: number; maxOutputBytes: number; maxTurns: number; maxCostUsd: number; markReadOnly: boolean; isDefault: boolean; updatedBy?: string; }
-      const DEFAULTS = { checkoutHours: 24, retentionDays: 7, scriptTimeoutSec: 600, agentTimeoutSec: 0, agentIdleTimeoutSec: 300, maxOutputBytes: 52428800, maxTurns: 0, maxCostUsd: 0, markReadOnly: true };
+      interface SandboxView { checkoutHours: number; retentionDays: number; scriptTimeoutSec: number; agentTimeoutSec: number; agentIdleTimeoutSec: number; maxOutputBytes: number; maxTurns: number; maxCostUsd: number; maxJobConcurrency: number; markReadOnly: boolean; isDefault: boolean; updatedBy?: string; }
+      const DEFAULTS = { checkoutHours: 24, retentionDays: 7, scriptTimeoutSec: 600, agentTimeoutSec: 0, agentIdleTimeoutSec: 300, maxOutputBytes: 52428800, maxTurns: 0, maxCostUsd: 0, maxJobConcurrency: 2, markReadOnly: true };
       it("starts with the defaults and needs sandbox.manage", async () => {
         expect((await admin.get<SandboxView>("/admin/settings/sandbox")).body.data).toEqual({ ...DEFAULTS, isDefault: true });
         const { client } = await memberClient(app, admin, "sandbox-user", ["user"]);

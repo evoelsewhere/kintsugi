@@ -35,6 +35,7 @@ export const sandboxSettingsSchema = z.object({
   maxOutputBytes: z.number(),
   maxTurns: z.number(),
   maxCostUsd: z.number(),
+  maxJobConcurrency: z.number(),
   markReadOnly: z.boolean(),
 });
 export type SandboxSettingsInput = z.infer<typeof sandboxSettingsSchema>;

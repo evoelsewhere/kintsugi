@@ -1,4 +1,4 @@
-// The form of Settings → Sandbox (ADR-0055): the stored numbers are seconds, bytes and hours, the form shows minutes
+// The form of Settings → Sandbox & Agent (ADR-0055): the stored numbers are seconds, bytes and hours, the form shows minutes
 // and megabytes where people think in them. Pure, so the conversions and the checks are tested without a browser; the
 // checks are the ones the API and the worker apply (@kintsugi/domain).
 
@@ -16,6 +16,7 @@ export interface SandboxForm {
   maxOutputMib: string;
   maxTurns: string;
   maxCostUsd: string;
+  maxJobConcurrency: string;
   markReadOnly: boolean;
 }
 
@@ -32,6 +33,7 @@ export function toForm(settings: SandboxSettings): SandboxForm {
     maxOutputMib: String(Math.round((settings.maxOutputBytes / MIB) * 100) / 100),
     maxTurns: String(settings.maxTurns),
     maxCostUsd: String(settings.maxCostUsd),
+    maxJobConcurrency: String(settings.maxJobConcurrency),
     markReadOnly: settings.markReadOnly,
   };
 }
@@ -49,6 +51,7 @@ export function fromForm(form: SandboxForm): Record<keyof SandboxSettings, unkno
     maxOutputBytes: Math.round(num(form.maxOutputMib) * MIB),
     maxTurns: num(form.maxTurns),
     maxCostUsd: num(form.maxCostUsd),
+    maxJobConcurrency: num(form.maxJobConcurrency),
     markReadOnly: form.markReadOnly,
   };
 }
