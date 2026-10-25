@@ -11,15 +11,14 @@ import { Loaded } from "@/components/loaded";
 import { StatusBadge } from "@/components/status-badges";
 import { type Column, DataTable } from "@/components/ui/data-table";
 import { DetailPage } from "@/components/detail-page";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
-import { type CatalogRule, type DataObject, type RulesResults, documentsApi } from "@/lib/api/documents";
+import { type CatalogRule, type RulesResults, documentsApi } from "@/lib/api/documents";
 import { idOfAnchor } from "@/lib/document-links";
 import { useLoader } from "@/lib/use-loader";
 import { RulesOverview } from "./rules-overview";
 import { ConfidenceMark, CountChip, Field, Kpi, KpiRow, PriorityMark, Section, SubTabs } from "./results-parts";
 
-type Tab = "overview" | "rules" | "data" | "coverage" | "document";
+type Tab = "overview" | "rules" | "coverage" | "document";
 
 const needsReview = (rule: CatalogRule): boolean => rule.smeQuestion !== undefined || rule.suspectedDefect !== undefined || (rule.confidence !== undefined && rule.confidence !== "High");
 
@@ -46,7 +45,6 @@ export function RulesResultsView({ results, compare, projectId }: { results: Rul
         <Kpi label="Need review" value={counts["needsReview"]} previous={previous?.["needsReview"]} hint="SME question, suspected defect or < High confidence" higherIsWorse />
         <Kpi label="Possible duplicates" value={counts["possibleDuplicates"]} previous={previous?.["possibleDuplicates"]} hint="Same source lines or near-identical names" higherIsWorse />
         <Kpi label="Refuted" value={counts["refuted"]} previous={previous?.["refuted"]} hint="Candidates a verifier rejected" />
-        <Kpi label="Data objects" value={counts["dataObjects"]} previous={previous?.["dataObjects"]} />
       </KpiRow>
 
       <SubTabs<Tab>
@@ -55,7 +53,6 @@ export function RulesResultsView({ results, compare, projectId }: { results: Rul
         tabs={[
           { id: "overview", label: "Overview" },
           { id: "rules", label: "Rules", count: results.rules.filter((rule) => rule.status !== "refuted").length },
-          { id: "data", label: "Data objects", count: results.dataObjects.length },
           { id: "coverage", label: "Coverage", count: results.coverageGaps.length },
           { id: "document", label: "BUSINESS_RULES.md", hidden: results.document === undefined },
         ]}
@@ -63,7 +60,6 @@ export function RulesResultsView({ results, compare, projectId }: { results: Rul
 
       {tab === "overview" ? <RulesOverview results={results} onCoverage={() => setTab("coverage")} /> : null}
       {tab === "rules" ? <RulesTab results={results} open={open} setOpen={setOpen} projectId={projectId} commit={commit} /> : null}
-      {tab === "data" ? <DataObjectsTab objects={results.dataObjects} rules={results.rules} /> : null}
       {tab === "coverage" ? <CoverageTab results={results} /> : null}
       {tab === "document" && results.document !== undefined ? (
         <Section title="BUSINESS_RULES.md" description={results.document.path}>
@@ -337,46 +333,6 @@ function Notice({ icon: Icon, tone, title, children }: { icon: typeof AlertTrian
         <p className="font-medium text-text">{title}</p>
         <div>{children}</div>
       </div>
-    </div>
-  );
-}
-
-function DataObjectsTab({ objects, rules }: { objects: DataObject[]; rules: CatalogRule[] }): React.JSX.Element {
-  // "Used by" names rules by name (sometimes cut short with …): show their ids.
-  const idOf = (name: string): string | undefined => rules.find((rule) => rule.name === name || (name.endsWith("…") && rule.name.startsWith(name.slice(0, -1))))?.id;
-  if (objects.length === 0) return <EmptyState title="No data objects at this ref" description="extract-rules lists the core records the rules read and write in DATA_OBJECTS.md." />;
-  return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-      {objects.map((object) => (
-        <Section key={object.name} title={object.name} description={object.source === undefined ? undefined : <InlineText text={object.source} className="font-mono" />}>
-          <div className="flex flex-col gap-3">
-            <DataTable
-              label={`Fields of ${object.name}`}
-              rows={object.fields}
-              rowKey={(row) => row.name}
-              pageSize={0}
-              minWidth={420}
-              columns={[
-                { id: "name", header: "Field", cell: (row) => <span className="font-mono text-[12px] text-text">{row.name}</span>, sort: (row) => row.name },
-                { id: "type", header: "Type", cell: (row) => <span className="font-mono text-[12px] text-text-secondary">{row.type ?? "—"}</span>, sort: (row) => row.type },
-                { id: "note", header: "Note", cell: (row) => <InlineText text={row.note ?? "—"} className="text-[12px] text-text-secondary" /> },
-              ]}
-            />
-            {object.consumedBy.length === 0 ? null : (
-              <div className="flex flex-wrap items-center gap-1 text-[12px] text-text-muted">
-                <span className="mr-1">
-                  Used by {object.consumedBy.length} {object.consumedBy.length === 1 ? "rule" : "rules"}:
-                </span>
-                {object.consumedBy.map((name) => (
-                  <span key={name} title={name} className="rounded-[4px] bg-hover px-1.5 py-px font-mono text-[11px] text-text-secondary">
-                    {idOf(name) ?? name}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </Section>
-      ))}
     </div>
   );
 }
