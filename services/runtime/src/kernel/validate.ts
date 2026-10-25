@@ -22,8 +22,8 @@ export function validateJobSpec(spec: JobSpec): void {
     if (isMcpToolEntry(tool)) {
       const named = mcpServerOfEntry(tool)!;
       if (!servers.has(named)) problems.push(`tool "${tool}" names the MCP server "${named}", which the job was not given`);
-    } else if (tool === "web_search") {
-      if (spec.webSearch !== true) problems.push("web_search requires an explicit web search capability");
+    } else if (tool === "web_search" || tool === "web_fetch") {
+      if (tool === "web_search" ? spec.webSearch !== true : spec.webFetch !== true) problems.push(`${tool} requires an explicit web capability`);
     } else if (isMemoryToolName(tool)) {
       if (spec.memory === undefined) problems.push(`tool "${tool}" requires a live memory capability`);
       if (["memory_write","memory_forget","memory_restore","scratchpad"].includes(tool) && spec.memory?.writeSchema === undefined) problems.push(`${tool} requires a writable memory capability`);

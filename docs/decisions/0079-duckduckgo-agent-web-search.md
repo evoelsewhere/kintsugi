@@ -4,6 +4,8 @@
 - Date: 2026-10-25
 - Decision register: D93
 
+Extended by [ADR-0080](0080-public-web-fetch-and-expanded-research.md): expanded budgets and separately permitted public-page retrieval.
+
 ## Context
 
 Runtime agents sometimes need current public technical references. Search must be agent-directed, optional per project, bounded across parallel jobs and retries, and available without paid provider credentials. DuckDuckGo's Instant Answer API does not provide full web results. Its public HTML search offers links and snippets but can throttle or challenge automated traffic.

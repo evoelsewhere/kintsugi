@@ -29,7 +29,7 @@ import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } fr
 import { RESULT_FILE, RESULT_TOOL, MEMORY_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
 import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec, JobServices } from "@kintsugi/runtime-sdk";
 import type { DocumentWriteRequest } from "../queues.js";
-import { bindWebSearch, type PgWebSearch } from "../web-search/index.js";
+import { bindWebTools, type PgWebSearch } from "../web-search/index.js";
 import { bindProjectMemory, type ProjectMemory, type MemoryContext } from "../project-memory/index.js";
 import { defaultSandbox, limitsWith, type SandboxProvider } from "../sandbox.js";
 import { renderGuide, type GuideSource } from "../workspace/guide.js";
@@ -765,14 +765,16 @@ export class JobRunner {
     const memoryEnabled = memoryContext !== undefined && grantedMemoryTools.length > 0 && (await this.#deps.projectMemory!.status(memoryContext,false)).enabled;
     const memoryUsage = { searches: 0, reads: 0, writes: 0, status: 0, forgets: 0, restores: 0, scratchpad: 0 };
     const webEnabled = definition.tools.length > 0 && (await this.#deps.webSearch?.allowed(run.projectId, run.name)) === true;
-    const webUsage = { calls: 0 };
+    const fetchEnabled = webEnabled && (await this.#deps.webSearch?.allowed(run.projectId,run.name,undefined,"fetch")) === true;
+    const webUsage = { searches: 0, fetches: 0 };
     const services: JobServices = {
       ...(memoryEnabled ? { memory: this.#memoryService(ws, { ...memoryContext!, agent: agentId }) } : {}),
-      ...(webEnabled ? { webSearch: bindWebSearch(this.#deps.webSearch!, { projectId: run.projectId, rootId: ws.rootId, stepId: run.id, stepKey: ws.searchBudgetKey ?? "root", agent: run.name }, (text) => redactText(text, { opaqueTokens: false }) !== text) } : {}),
+      ...(webEnabled ? bindWebTools(this.#deps.webSearch!, { projectId: run.projectId, rootId: ws.rootId, stepId: run.id, stepKey: ws.searchBudgetKey ?? "root", agent: run.name }, (text) => redactText(text, { opaqueTokens: false }) !== text) : {}),
     };
     const spec: JobSpec = {
-      agent: { ...definition, tools: [...new Set([...definition.tools, ...(memoryEnabled ? grantedMemoryTools : []), ...(webEnabled ? ["web_search"] : [])])] },
+      agent: { ...definition, tools: [...new Set([...definition.tools, ...(memoryEnabled ? grantedMemoryTools : []), ...(webEnabled ? ["web_search"] : []), ...(fetchEnabled ? ["web_fetch"] : [])])] },
       ...(webEnabled ? { webSearch: true } : {}),
+      ...(fetchEnabled ? { webFetch: true } : {}),
       ...(memoryEnabled ? { memory: grantedMemoryTools.includes("memory_write") ? { writeSchema: MEMORY_WRITE_SCHEMA } : {} } : {}),
       task: fill(task, this.#placeholders(run, ws)) + schemaNote + carriedNote(ws.carried ?? []),
       model: { provider: binding.provider, id: binding.model, ...(thinking === undefined ? {} : { thinking }) },
@@ -841,7 +843,8 @@ export class JobRunner {
             });
           } else if (event.type === "tool.call") {
             if (event.decision === "allowed") {
-              if (event.tool === "web_search") webUsage.calls += 1;
+              if (event.tool === "web_search") webUsage.searches += 1;
+              if (event.tool === "web_fetch") webUsage.fetches += 1;
               if (event.tool === "memory_search") memoryUsage.searches += 1;
               if (event.tool === "memory_read") memoryUsage.reads += 1;
               if (event.tool === "memory_write") memoryUsage.writes += 1;
@@ -1155,7 +1158,7 @@ export class JobRunner {
     const liveWeb = spec.kind === "workflow" ? webSettings?.enabled === true && webSettings.agents.length > 0
       : webCapable && await this.#deps.webSearch?.allowed(root.projectId, spec.name) === true;
     // Live lookups are mutable inputs: re-execute participating steps on retry instead of pretending they are cached inputs.
-    return digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream, ...(liveMemory ? { liveMemory: ["memory-v2", ws.attempt] } : {}), ...(liveWeb ? { liveWeb: ["web-search-v1", ws.attempt] } : {}) });
+    return digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream, ...(liveMemory ? { liveMemory: ["memory-v2", ws.attempt] } : {}), ...(liveWeb ? { liveWeb: ["web-tools-v2", ws.attempt] } : {}) });
   }
 
   /**

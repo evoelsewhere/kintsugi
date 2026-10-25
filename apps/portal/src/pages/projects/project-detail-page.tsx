@@ -52,7 +52,7 @@ export function ProjectDetailPage(): React.JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabs: Array<{ id: ProjectTab; label: string }> = [
     { id: "project", label: "Project" },
-    ...(can("project.web-search.manage") ? [{ id: "web-search" as const, label: "Web search" }] : []),
+    ...(can("project.web-search.manage") ? [{ id: "web-search" as const, label: "Web search & fetch" }] : []),
     ...(can("project.memory.manage") ? [{ id: "memory" as const, label: "Project memory" }] : []),
     ...(can("plugin.access.manage") ? [{ id: "plugins" as const, label: "Member plugins" }] : []),
     ...(can("project.access.manage") ? [{ id: "access" as const, label: "Project access" }] : []),

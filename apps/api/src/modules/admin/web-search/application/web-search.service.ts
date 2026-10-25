@@ -22,7 +22,7 @@ export class WebSearchService {
         if (definition.tools.length === 0) throw new BadRequestException(`Agent ${name} has no tool access`);
       }
     }
-    await this.repository.configure(projectId, { enabled: settings.enabled, agents });
-    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.webSearchConfigure, { projectId, detail: { enabled: settings.enabled, agents } }));
+    await this.repository.configure(projectId, { enabled: settings.enabled, fetchEnabled: settings.fetchEnabled, agents });
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.webSearchConfigure, { projectId, detail: { enabled: settings.enabled, fetchEnabled: settings.fetchEnabled, agents } }));
   }
 }

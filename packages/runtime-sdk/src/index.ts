@@ -69,8 +69,10 @@ export const memoryToolName = (operation: MemoryOperation): string => operation 
 /** A caller-authored, safe tool error. Other backend errors must not be exposed to the model. */
 export class JobServiceRequestError extends Error {}
 export class MemoryRequestError extends JobServiceRequestError {}
-export class WebSearchRequestError extends JobServiceRequestError {}
+export class WebRequestError extends JobServiceRequestError {}
+export class WebSearchRequestError extends WebRequestError {}
 export interface JobServices {
+  webFetch?: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
   webSearch?: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
   memory?: (operation: MemoryOperation, input: unknown, signal?: AbortSignal) => Promise<unknown>;
 }
@@ -102,6 +104,8 @@ export interface JobSpec {
   memory?: { writeSchema?: Record<string, unknown> };
   /** Explicit outbound search grant; no provider credentials or search results. */
   webSearch?: true;
+  /** Separate caller grant for direct public-page retrieval. */
+  webFetch?: true;
   /** The MCP servers the agent names in `tools`; absent when it names none. */
   mcp?: { servers: McpServerSpec[] };
   /** Opaque correlation data (e.g. projectId, trigger), echoed on job.started; never shown to the agent. */

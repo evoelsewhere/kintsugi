@@ -1,3 +1,4 @@
+import { WEB_FETCH_LIMITS, WEB_SEARCH_LIMITS, WEB_SERVICE_TIMEOUT_MS } from "@kintsugi/domain";
 import { JobServiceRequestError, memoryToolName, type JobServices, type JobSpec, type MemoryOperation } from "@kintsugi/runtime-sdk";
 
 /** Admission and cancellation shared by the private caller-bound tool services. */
@@ -22,16 +23,17 @@ export function createJobServiceHost(spec: JobSpec, services: JobServices, signa
         ["search","read","write","status","forget","restore","scratchpad"].includes(request.operation ?? "") &&
         spec.agent.tools.includes(memoryToolName(request.operation as MemoryOperation)) &&
         (!["write","forget","restore","scratchpad"].includes(request.operation!) || spec.memory.writeSchema !== undefined)
-      : spec.webSearch === true && services.webSearch !== undefined && request.operation === "search" && spec.agent.tools.includes("web_search");
-    if (!allowed || signal.aborted || pending.has(key) || pending.size >= 8 || count > (memory ? 512 : 32)) { refuse(); return; }
+      : request.operation === "search" ? spec.webSearch === true && services.webSearch !== undefined && spec.agent.tools.includes("web_search")
+      : request.operation === "fetch" && spec.webFetch === true && services.webFetch !== undefined && spec.agent.tools.includes("web_fetch");
+    if (!allowed || signal.aborted || pending.has(key) || pending.size >= 8 || count > (memory ? 512 : 256)) { refuse(); return; }
     const controller = new AbortController();
     pending.set(key, controller);
-    const requestSignal = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(memory ? 10_000 : 23_000)]);
+    const requestSignal = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(memory ? 10_000 : WEB_SERVICE_TIMEOUT_MS)]);
     void Promise.resolve().then(() => memory
       ? services.memory!(request.operation as MemoryOperation, request.input, requestSignal)
-      : services.webSearch!(request.input, requestSignal)).then(
+      : request.operation === "fetch" ? services.webFetch!(request.input, requestSignal) : services.webSearch!(request.input, requestSignal)).then(
       (result) => {
-        if (requestSignal.aborted || Buffer.byteLength(JSON.stringify(result ?? null), "utf8") > 12_000) { refuse(); return; }
+        if (requestSignal.aborted || Buffer.byteLength(JSON.stringify(result ?? null), "utf8") > (memory ? 12_000 : request.operation === "fetch" ? WEB_FETCH_LIMITS.responseBytes : WEB_SEARCH_LIMITS.responseBytes)) { refuse(); return; }
         reply({ type: `${channel}.result`, id: request.id, ok: true, value: result });
       },
       (error: unknown) => reply({ type: `${channel}.result`, id: request.id, ok: false,

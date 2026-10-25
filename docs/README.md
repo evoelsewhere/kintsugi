@@ -55,7 +55,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Document formats](reference/document-formats.md): the Markdown shapes of every committed document (front matter, tables, cards)
 - [Document repo contexts](architecture/concepts/document-repo-contexts.md): the context map, the Unit aggregate and the ubiquitous language
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`
-- [Runtime web search](reference/web-search.md): optional DuckDuckGo tool, outbound query permissions, limits and data handling
+- [Runtime web search and fetch](reference/web-search.md): optional public-web tools, outbound permissions, guarded page retrieval and shared budgets
 - [Project memory](reference/project-memory.md): live learned/reviewed notes, daily logs, scratchpads and recovery shared by project agents
 - [Document identifiers](reference/document-identifiers.md): compact stable RULE, SEC and GAP references, scope allocation and ledgers
 - [Item catalog](reference/document-repo-item-catalog.md): catalog items, stable IDs, and the units they become

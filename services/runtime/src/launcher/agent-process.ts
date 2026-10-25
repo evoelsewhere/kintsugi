@@ -201,6 +201,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
     async startJob(spec: JobSpec, services: JobServices = {}): Promise<JobHandle> {
       if (spec.memory !== undefined && services.memory === undefined) throw new Error("job requires a live memory service");
       if (spec.webSearch === true && services.webSearch === undefined) throw new Error("job requires a web search service");
+      if (spec.webFetch === true && services.webFetch === undefined) throw new Error("job requires a web fetch service");
       const jobDir = dirname(spec.workspace.outDir);
       const tmp = join(jobDir, "tmp");
       await mkdir(tmp, { recursive: true });
@@ -248,7 +249,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
         timeoutMs: timeoutSec > 0 ? (timeoutSec + grace) * 1000 : 0,
         input: JSON.stringify(input),
         onLine: (line) => job.onLine(line),
-        ...(spec.memory === undefined && spec.webSearch !== true ? {} : { onMessage: createJobServiceHost(spec, services, job.signal) }),
+        ...(spec.memory === undefined && spec.webSearch !== true && spec.webFetch !== true ? {} : { onMessage: createJobServiceHost(spec, services, job.signal) }),
         signal: job.signal,
       }).then(
         (result) => job.exited(result, timeoutSec),

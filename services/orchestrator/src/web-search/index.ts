@@ -1,30 +1,28 @@
 import { randomUUID } from "node:crypto";
-import { WEB_SEARCH_LIMITS } from "@kintsugi/domain";
-import { WebSearchRequestError, type JobServices } from "@kintsugi/runtime-sdk";
+import type { WebOperation } from "@kintsugi/domain";
+import { WebRequestError, type JobServices } from "@kintsugi/runtime-sdk";
 import { searchDuckDuckGo } from "./duckduckgo.js";
+import { fetchWebPage } from "./fetch.js";
+import { searchInput, fetchInput } from "./input.js";
 import type { PgWebSearch, WebSearchContext } from "./store.js";
 export { PgWebSearch, type WebSearchContext } from "./store.js";
 
-export function bindWebSearch(store: PgWebSearch, context: WebSearchContext, sensitive: (text: string) => boolean): NonNullable<JobServices["webSearch"]> {
-  return async (input, signal) => {
-    if (typeof input !== "object" || input === null || Array.isArray(input)) throw new WebSearchRequestError("Expected a search query.");
-    const value = input as Record<string, unknown>;
-    if (Object.keys(value).some((key) => !["query", "maxResults"].includes(key)) || typeof value["query"] !== "string") throw new WebSearchRequestError("Expected query and optional maxResults only.");
-    const query = value["query"].trim();
-    const maxResults = value["maxResults"] ?? WEB_SEARCH_LIMITS.results;
-    if (query.length < 1 || query.length > 300 || /[\p{Cc}\p{Cf}]/u.test(query) || !Number.isInteger(maxResults) || (maxResults as number) < 1 || (maxResults as number) > WEB_SEARCH_LIMITS.results) throw new WebSearchRequestError("Use a query of 1–300 characters and maxResults of 1–5.");
-    if (sensitive(query)) throw new WebSearchRequestError("The query appears to contain credentials. Use public technical terms only.");
+export function bindWebTools(store: PgWebSearch, context: WebSearchContext, sensitive: (text: string) => boolean): Pick<JobServices,"webSearch"|"webFetch"> {
+  const call = async (operation: WebOperation, input: unknown, signal?: AbortSignal): Promise<unknown> => {
+    // Validate before reserving quota or resolving any caller-controlled hostname.
+    const validated = operation === "search" ? searchInput(input,sensitive) : fetchInput(input,sensitive);
     signal?.throwIfAborted();
     const id = randomUUID();
-    const epoch = await store.reserve(context, id);
+    const reservation = await store.reserve(context,id,operation);
     try {
       signal?.throwIfAborted();
-      const result = await searchDuckDuckGo({ query, maxResults: maxResults as number }, signal);
-      if (!(await store.allowed(context.projectId, context.agent, epoch))) throw new WebSearchRequestError("Web search policy changed while the request was running. Continue without this result.");
-      return result;
+      const result = operation === "search" ? await searchDuckDuckGo(validated as ReturnType<typeof searchInput>,signal) : await fetchWebPage(validated as ReturnType<typeof fetchInput>,signal);
+      if (!(await store.allowed(context.projectId,context.agent,reservation.epoch,operation))) throw new WebRequestError("Web access policy changed while the request was running. Continue without this result.");
+      return { ...result, budget: { remainingForStep: reservation.remainingForStep, remainingForRun: reservation.remainingForRun } };
     } catch (error) {
-      if (error instanceof WebSearchRequestError) throw error;
-      throw new WebSearchRequestError("DuckDuckGo search failed or timed out. Continue without web search; do not repeatedly retry.");
-    } finally { await store.release(context.projectId, id); }
+      if (error instanceof WebRequestError) throw error;
+      throw new WebRequestError(`Web ${operation} failed, timed out or was cancelled. Continue with other sources; do not repeatedly retry.`);
+    } finally { await store.release(context.projectId,id); }
   };
+  return { webSearch: (input,signal) => call("search",input,signal), webFetch: (input,signal) => call("fetch",input,signal) };
 }
