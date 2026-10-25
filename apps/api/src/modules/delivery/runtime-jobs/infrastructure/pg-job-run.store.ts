@@ -6,7 +6,7 @@
 import { Injectable } from "@nestjs/common";
 import type { SourceRepo } from "@kintsugi/domain";
 import { decryptSecret } from "@kintsugi/secrets";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { getPool, withTransaction } from "#common/db/pool.js";
 import type {
   ArtifactView,
@@ -24,6 +24,7 @@ import type {
   RestrictedRecordSummary,
   RestrictedRecordView,
 } from "../domain/job-run.js";
+import { RunScopeConflict } from "../domain/run-scope-conflict.js";
 import { JobRunStore } from "../domain/job-run.ports.js";
 
 interface RunRow {
@@ -140,13 +141,48 @@ export class PgJobRunStore extends JobRunStore {
   }
 
   async createStageRun(run: NewStageRun): Promise<JobRunView> {
-    await this.#pool.query(
-      `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor, source_commit, sources, inputs)
-       values ($1, $2, $3, 'stage', $4, $5, $6, $7, $8, $9)`,
-      [run.id, run.projectId, run.applicationId, run.stage, run.sources[0]!.repositoryId, run.actor ?? null, run.sources[0]!.commit ?? null, JSON.stringify(run.sources), JSON.stringify(run.inputs ?? {})],
+    return withTransaction(async (tx) => {
+      await this.#claimScope(tx, run.projectId, run.applicationId, run.stage, run.inputs ?? {}, run.id);
+      await tx.query(
+        `insert into workflow.job_run (id, project_id, application_id, kind, name, source_repository_id, actor, source_commit, sources, inputs)
+         values ($1, $2, $3, 'stage', $4, $5, $6, $7, $8, $9)`,
+        [run.id, run.projectId, run.applicationId, run.stage, run.sources[0]!.repositoryId, run.actor ?? null, run.sources[0]!.commit ?? null, JSON.stringify(run.sources), JSON.stringify(run.inputs ?? {})],
+      );
+      const result = await tx.query<RunRow>(`${SELECT} where r.id = $1`, [run.id]);
+      return toView(result.rows[0]!);
+    });
+  }
+
+  /** Serialize admission across API processes; different unit scopes can still execute concurrently. */
+  async #claimScope(tx: PoolClient, projectId: string, applicationId: string, stage: string, inputs: Record<string, unknown>, id: string, retryCreatedAt?: Date): Promise<void> {
+    if (stage !== "understand" && stage !== "design") return;
+    await tx.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify(["job-unit-scope", projectId, applicationId, stage])]);
+    const scope = inputs["scope"] as { items?: unknown; set?: unknown } | undefined;
+    const items = Array.isArray(scope?.items) ? [...new Set(scope.items.filter((item): item is string => typeof item === "string" && item.length > 0))] : [];
+    if (items.length === 0 || (stage === "design" && (typeof scope?.set !== "string" || scope.set.length === 0))) {
+      throw new RunScopeConflict("The run has no valid unit scope; start a new run with a selection", []);
+    }
+    const result = await tx.query<{ id: string; state: string; items: string[] }>(
+      `select r.id, case when r.status in ('queued', 'running') then r.status
+                        when w.status = 'merged' or (w.status = 'committed' and w.branch is null) then 'newer-published-output' else 'in-pr' end as state,
+              r.inputs->'scope'->'items' as items
+         from workflow.job_run r
+         left join workflow.document_write w on w.id = r.document_write_id
+        where r.project_id = $1 and r.application_id = $2 and r.name = $3
+          and r.kind = 'stage' and r.parent_id is null and r.id <> $4
+          and (r.inputs->'scope'->'items') ?| $5::text[]
+          and ($3 <> 'design' or r.inputs->'scope'->>'set' = $6)
+          and (r.status in ('queued', 'running')
+            or (r.status = 'succeeded' and r.abandoned_at is null and (w.status in ('queued', 'pr-opened', 'closed', 'failed') or (w.status = 'committed' and w.branch is not null)))
+            or ($7::timestamptz is not null and (w.status = 'merged' or (w.status = 'committed' and w.branch is null)) and w.updated_at >= $7))
+        order by r.created_at, r.id`,
+      [projectId, applicationId, stage, id, items, typeof scope?.set === "string" ? scope.set : "", retryCreatedAt ?? null],
     );
-    const result = await this.#pool.query<RunRow>(`${SELECT} where r.id = $1`, [run.id]);
-    return toView(result.rows[0]!);
+    if (result.rows.length > 0) {
+      const conflicts = result.rows.map((row) => ({ runId: row.id, state: row.state, items: row.items.filter((item) => items.includes(item)) }));
+      const stale = conflicts.some((entry) => entry.state === "newer-published-output");
+      throw new RunScopeConflict(stale ? "The run's pinned documents predate published output for its units; start a new run" : "Selected units are already running or awaiting pull request resolution", conflicts);
+    }
   }
 
   async abandon(projectId: string, id: string, actor: string): Promise<boolean> {
@@ -203,17 +239,27 @@ export class PgJobRunStore extends JobRunStore {
   }
 
   async requeue(projectId: string, id: string, options: { fresh: boolean; documentsCommit?: string }): Promise<boolean> {
-    // The same run goes back in the queue as its next attempt; its inputs (scope, pinned documents) stay, `fresh` is replaced.
-    const result = await this.#pool.query(
-      `update workflow.job_run
-          set status = 'queued', attempt = attempt + 1, failure_reason = null, finished_at = null, started_at = null,
-              cancel_requested_at = null, cancel_requested_by = null,
-              inputs = inputs || jsonb_build_object('fresh', $3::boolean)
-                      || case when inputs ? 'documentsCommit' or $4::text is null then '{}'::jsonb else jsonb_build_object('documentsCommit', $4::text) end
-        where project_id = $1 and id = $2 and parent_id is null and status = 'failed'`,
-      [projectId, id, options.fresh, options.documentsCommit ?? null],
-    );
-    return (result.rowCount ?? 0) > 0;
+    return withTransaction(async (tx) => {
+      // Scope and creation time are immutable. Recheck status after obtaining the admission lock:
+      // concurrent retries must not both increment the attempt or enqueue the same run.
+      const previous = await tx.query<{ application_id: string; name: string; inputs: Record<string, unknown>; created_at: Date }>(
+        "select application_id, name, inputs, created_at from workflow.job_run where project_id = $1 and id = $2 and parent_id is null and status = 'failed'",
+        [projectId, id],
+      );
+      const run = previous.rows[0];
+      if (run === undefined) return false;
+      await this.#claimScope(tx, projectId, run.application_id, run.name, run.inputs, id, run.created_at);
+      const result = await tx.query(
+        `update workflow.job_run
+            set status = 'queued', attempt = attempt + 1, failure_reason = null, finished_at = null, started_at = null,
+                cancel_requested_at = null, cancel_requested_by = null,
+                inputs = inputs || jsonb_build_object('fresh', $3::boolean)
+                        || case when inputs ? 'documentsCommit' or $4::text is null then '{}'::jsonb else jsonb_build_object('documentsCommit', $4::text) end
+          where project_id = $1 and id = $2 and parent_id is null and status = 'failed'`,
+        [projectId, id, options.fresh, options.documentsCommit ?? null],
+      );
+      return (result.rowCount ?? 0) > 0;
+    });
   }
 
   async restricted(projectId: string, id: string): Promise<RestrictedRecordView[]> {

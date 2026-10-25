@@ -246,6 +246,7 @@ describe.skipIf(!hasDatabase)("item catalog (integration)", () => {
 
   it("abandons a closed pull request (its items are released) and retries a failed run on the same commits", async () => {
     expect((await admin.request("POST", "/projects/shop/applications/web/understand/runs", { body: { items: ["billing/tax"] } })).status).toBe(409);
+    await app.db.query("update workflow.document_write set status = 'closed' where id = 'w-open'");
     const abandoned = await admin.request<RunView>("POST", "/projects/shop/job-runs/run-open/abandon");
     expect(abandoned.status).toBe(200);
     expect(abandoned.body.data?.abandonedAt).toBeDefined();
