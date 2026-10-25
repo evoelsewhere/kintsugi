@@ -67,7 +67,7 @@ export interface StatTileProps {
 
 export function StatTile({ label, value, change, direction = "neutral", spark, sparkColor, hint, tone }: StatTileProps): React.JSX.Element {
   return (
-    <div className="shadow-border-medium flex min-w-0 flex-col gap-1 rounded-xl bg-surface px-4 py-3">
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-recessed/45 px-4 py-3">
       <p className="flex items-center gap-1.5 text-[10px] tracking-wide text-text-muted uppercase" title={label}>
         {tone === undefined ? null : <StatusDot tone={tone} className="size-2 shrink-0" />}
         <span className="min-w-0 truncate">{label}</span>
@@ -107,7 +107,7 @@ export function UsageChart({ days, metric }: { days: readonly TelemetryDay[]; me
       <svg viewBox={`0 0 ${CHART.width} ${CHART.height}`} className="h-auto w-full" role="img" aria-label={`${USAGE_METRICS.find((entry) => entry.id === metric)?.label ?? metric} per day over ${days.length} days, up to ${show(top)}`}>
         {[0, 0.5, 1].map((fraction) => (
           <g key={fraction}>
-            <line x1={CHART.left} x2={CHART.width - CHART.right} y1={y(top * fraction)} y2={y(top * fraction)} stroke="var(--ds-gray-alpha-400)" strokeWidth={1} />
+            <line x1={CHART.left} x2={CHART.width - CHART.right} y1={y(top * fraction)} y2={y(top * fraction)} stroke="var(--ds-background-300)" strokeWidth={1} />
             <text x={CHART.left - 6} y={y(top * fraction) + 3} textAnchor="end" fontSize={10} fill="var(--ds-text-muted)">
               {show(top * fraction)}
             </text>
