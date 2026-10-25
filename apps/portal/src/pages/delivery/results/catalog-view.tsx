@@ -69,7 +69,7 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
     const names = new Map(view.catalog.modules.map((module) => [module.id, module]));
     const needle = query.trim().toLowerCase();
     const matches = (item: CatalogItem): boolean =>
-      (status === "all" || item.status === status) && (needle === "" || `${item.name} ${item.id} ${item.summary}`.toLowerCase().includes(needle) || item.files.some((file) => file.toLowerCase().includes(needle)));
+      (status === "all" || item.status === status) && (needle === "" || `${item.name} ${item.id} ${item.referenceCode ?? ""} ${item.summary}`.toLowerCase().includes(needle) || item.files.some((file) => file.toLowerCase().includes(needle)));
     const byModule = new Map<string, CatalogItem[]>();
     for (const item of view.items) if (matches(item)) byModule.set(item.module, [...(byModule.get(item.module) ?? []), item]);
     return [...byModule.entries()].map(([id, items]) => ({
@@ -230,9 +230,9 @@ export function CatalogTree({ view, selection }: { view: CatalogView; selection?
                             </td>
                           )}
                           <td className="max-w-[360px] px-2 py-2 pl-12">
-                            <p className="truncate text-[13px] font-medium text-text" title={item.name}>
+                            <p className="truncate text-[13px] font-medium text-text" title={`${item.name} · ${item.id}`}>
                               {item.name}
-                              <span className="ml-1.5 font-mono text-[11px] font-normal text-text-muted">{item.id}</span>
+                              <span className="ml-1.5 font-mono text-[11px] font-normal text-text-muted">{item.referenceCode ?? item.id}</span>
                               {assetClassOf(item) === "code" ? null : (
                                 <span className="ml-1.5 rounded-full bg-hover px-1.5 py-0.5 text-[10.5px] font-normal text-text-secondary" title={`${ASSET_CLASS_LABEL[assetClassOf(item)]} code: counted in the size, not the first to understand`}>
                                   {assetClassOf(item)}

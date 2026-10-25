@@ -9,8 +9,8 @@ unit: "billing-web/invoices/close-period"
 | ID | Action | Reads | Writes | Rules | Commit unit |
 | --- | --- | --- | --- | --- | --- |
 | STEP-01 | Lock the period so no invoice can be added to it | period | period.status = LOCKED | - | once |
-| STEP-02 | Total each customer's open invoices into the statement table | invoice (status = OPEN, period) | statement | RULE-001 | every 1,000 customers |
-| STEP-03 | Mark the invoices of a customer CLOSED | invoice | invoice.status = CLOSED | RULE-001 | with STEP-02 |
+| STEP-02 | Total each customer's open invoices into the statement table | invoice (status = OPEN, period) | statement | RULE-BILL01-0001 | every 1,000 customers |
+| STEP-03 | Mark the invoices of a customer CLOSED | invoice | invoice.status = CLOSED | RULE-BILL01-0001 | with STEP-02 |
 
 ## Restart and error handling
 

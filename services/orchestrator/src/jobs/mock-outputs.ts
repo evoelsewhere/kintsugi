@@ -86,7 +86,7 @@ function mockFile(path: string, agent: string, app: string): string {
   const name = path.split("/").at(-1) ?? path;
   if (name === "extract_topology.py") return EXTRACT_TOPOLOGY(app);
   if (UNIT_SPEC.test(path)) {
-    const sections = SPEC_SECTIONS.map((section) => `## ${section}\n\nMock output of ${agent} for ${app} (the mock agent backend calls no LLM).\n`);
+    const sections = SPEC_SECTIONS.map((section) => section === "Gaps and questions" ? `## ${section}\n\nNone.\n` : `## ${section}\n\nMock output of ${agent} for ${app} (the mock agent backend calls no LLM).\n`);
     return `# ${path.split("/").slice(-3, -1).join("/")}\n\n${sections.join("\n")}`;
   }
   // A diagram that passes scripts/mermaid_lint.py: quoted labels on sanitized ids.

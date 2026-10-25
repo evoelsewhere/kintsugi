@@ -253,6 +253,7 @@ export * from "./manifest.js";
 export * from "./document-layout.js";
 export * from "./document-write.js";
 export * from "./catalog.js";
+export * from "./document-identifiers.js";
 export * from "./debug-log.js";
 export * from "./sandbox.js";
 export * from "./telemetry-export.js";

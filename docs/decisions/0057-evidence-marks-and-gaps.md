@@ -4,6 +4,8 @@
 - Date: 2026-10-22
 - Decision register: D73
 
+Reference ID policy amended by [ADR-0075](0075-compact-stable-document-reference-ids.md). Historical formats below remain readable.
+
 ## Context
 
 Reverse engineering works on incomplete evidence. Copybooks, called programs, job and deployment descriptors, table

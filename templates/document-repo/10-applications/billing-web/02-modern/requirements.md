@@ -9,4 +9,4 @@
 
 The invoice search returns amounts including tax.
 
-**derivedFrom:** RULE-invoice-amount-001
+**derivedFrom:** RULE-BILL01-0001

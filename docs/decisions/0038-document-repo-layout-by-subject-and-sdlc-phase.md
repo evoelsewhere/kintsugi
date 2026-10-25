@@ -4,6 +4,8 @@
 - Date: 2026-10-15
 - Decision register: D55
 
+Reference ID policy amended by [ADR-0075](0075-compact-stable-document-reference-ids.md). Historical formats below remain readable.
+
 ## Context
 
 Each project has one document repo for everything except code. Its current layout grew around stages and tools rather than the subjects that live through the migration. Application inputs, assessment outputs, human documents, scripts and aggregates are mixed under `assessment/<app>/`; the same unit is spread across the catalog, per-item assessment files, the AS-IS knowledge tree and the unit-state tree. Other artifacts use inconsistent application dimensions or do not say whether a unit identifier is a full id or only its final segment.

@@ -55,6 +55,7 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Document formats](reference/document-formats.md): the Markdown shapes of every committed document (front matter, tables, cards)
 - [Document repo contexts](architecture/concepts/document-repo-contexts.md): the context map, the Unit aggregate and the ubiquitous language
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`
+- [Document identifiers](reference/document-identifiers.md): compact stable RULE, SEC and GAP references, scope allocation and ledgers
 - [Item catalog](reference/document-repo-item-catalog.md): catalog items, stable IDs, and the units they become
 - [Document write path](reference/document-repo-write-path.md): job outputs, branches and pull requests
 - [Document reads and stage results](reference/document-repo-read-path.md): file APIs and result views

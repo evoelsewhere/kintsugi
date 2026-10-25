@@ -10,7 +10,7 @@ DATA_OBJECTS.md to --out (the step's
 output folder; a member may give the application's _generated/ folder itself). BUSINESS_RULES.md is
 the index: a table of the rules with their version and a link to each rule's own file
 (rules/RULE-NNN.md, see rule_docs.py), then the lists that belong to the whole run (SME questions,
-instruction-shaped content, folded rules, coverage gaps). Rules are numbered RULE-001, RULE-002, ...
+instruction-shaped content, folded rules, coverage gaps). Rules use RULE-APP00-0001, RULE-APP00-0002, ... with a persistent Markdown ledger.
 in the order they appear (by category, then priority). Every value comes from analysis of
 untrusted code, so it is written as plain text on one line where it is a heading or a table cell.
 Standard library only.
@@ -168,7 +168,8 @@ def render_unit_data_objects(app, item_id, objects):
 
 def unit_rule_rows(text):
     """The rows of the rules table of a unit's rules.md as dicts keyed by the lower-cased header."""
-    return docmd.records_in(docmd.split_front_matter(text)[1])
+    body = docmd.split_front_matter(text)[1]
+    return docmd.records_in(body.split('## Retired rules', 1)[0])
 
 
 def write_text(root, name, text):
@@ -190,6 +191,7 @@ def main(argv):
     ap.add_argument('app', help='the application id from kintsugi.yaml (used in the headings)')
     ap.add_argument('--assessment', required=True, help='the 10-applications/<app>/01-legacy/understand/ folder of the document repository (rules_result.json is read from it)')
     ap.add_argument('--out', required=True, help='the folder BUSINESS_RULES.md, rules/ and DATA_OBJECTS.md are written to')
+    ap.add_argument('--docs', default='', help='read-only prior output folder, including identifiers/rules-ids.md')
     ap.add_argument('--date', default='', help='the date written in the version history (default: today, UTC)')
     ap.add_argument('--sources', default='', help='the legacy repositories and their commits (`id@commit,id@commit`), written in the version history')
     args = ap.parse_args(argv[1:])
@@ -226,7 +228,7 @@ def main(argv):
         print(f'render_rules.py: {error}', file=sys.stderr)
         return 1
 
-    # Numbered in the order they appear in the document (by category, then priority), so RULE-001.. read in sequence.
+    # Presentation order is independent of persistent reference numbers.
     rules = sorted(result.get('confirmedRules') or [],
                    key=lambda r: (CATEGORIES.index(r['category']) if r.get('category') in CATEGORIES else 9,
                                   PRIORITY.get(r.get('priority'), 1),
@@ -234,16 +236,46 @@ def main(argv):
     import datetime
     import rule_docs  # noqa: E402 - imports this module, so it is loaded here
     date = args.date or datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
-    numbered = [(i + 1, {**r, 'id': f'RULE-{i + 1:03d}'}) for i, r in enumerate(rules)]
+    import catalog_common as cc
+    previous_root = os.path.abspath(args.docs) if args.docs else base
+    registry_file = paths.identifier_registry_file('rules')
+    try:
+        prior_index = docmd.read_optional_text(os.path.join(previous_root, 'BUSINESS_RULES.md'))
+        prior_ledger = docmd.read_optional_text(os.path.join(previous_root, registry_file))
+        if prior_ledger is None and os.path.isfile(os.path.join(previous_root, 'BUSINESS_RULES.md')):
+            raise cc.DataError('missing allocation ledger for existing rules; restore identifiers/rules-ids.md from Git')
+        identified, ledger = cc.assign_rule_ids('APP00', rules, prior_ledger)
+    except (cc.DataError, OSError) as error:
+        print(f'render_rules.py: {error}', file=sys.stderr)
+        return 1
+    rules = identified
+    numbered = list(enumerate(rules, start=1))
+    prior_version, retired_rows = rule_docs.unit_index_state(prior_index)
+    changed = False
     stats = result.get('stats') or {}
     rule_files = {}
     rows = []
     for _, r in numbered:
-        history = [[1, date, 'Rule extracted', revision]]
-        rule_files[f"rules/{rule_docs.file_name(r['id'])}"] = rule_docs.render_rule_file(system, None, r, 1, history, commit=revision)
-        rows.append(rule_docs.index_row(r['id'], r.get('name'), r.get('category'), r.get('priority'), r.get('confidence'), 1, rule_docs.status_of(r), split_citation(r.get('source'))[0], f"rules/{rule_docs.file_name(r['id'])}"))
+        prior = rule_docs.read_rule_file(docmd.read_optional_text(os.path.join(previous_root, 'rules', rule_docs.file_name(r['id']))) or '')
+        version, history, differs = rule_docs.next_version(prior, r, date, revision)
+        changed = changed or differs
+        rule_files[f"rules/{rule_docs.file_name(r['id'])}"] = rule_docs.render_rule_file(system, None, r, version, history, commit=revision)
+        rows.append(rule_docs.index_row(r['id'], r.get('name'), r.get('category'), r.get('priority'), r.get('confidence'), version, rule_docs.status_of(r), split_citation(r.get('source'))[0], f"rules/{rule_docs.file_name(r['id'])}"))
 
-    doc = [docmd.front_matter({'app': system, 'generatedBy': 'render_rules.py', 'catalogVersion': 1, 'rules': len(rules), 'p0': sum(1 for r in rules if r.get('priority') == 'P0')}),
+    current = {rule['id'] for rule in rules}
+    retired_rows = [row for row in retired_rows if row[0] not in current]
+    for old in unit_rule_rows(prior_index or ''):
+        rule_id = old.get('id', '')
+        if not rule_id or rule_id in current:
+            continue
+        prior = rule_docs.read_rule_file(docmd.read_optional_text(os.path.join(previous_root, 'rules', rule_docs.file_name(rule_id))) or '')
+        if prior is None or prior['status'] == 'retired':
+            continue
+        changed = True
+        rule_files[f'rules/{rule_docs.file_name(rule_id)}'] = rule_docs.retire(prior, date, revision)
+        retired_rows.append([rule_id, prior['name'], prior['version'] + 1, date])
+    catalog_version = prior_version + 1 if changed or prior_version == 0 else prior_version
+    doc = [docmd.front_matter({'app': system, 'generatedBy': 'render_rules.py', 'catalogVersion': catalog_version, 'rules': len(rules), 'p0': sum(1 for r in rules if r.get('priority') == 'P0')}),
            f'# Business Rules — {one_line(system, 80)}', '',
            f"At extraction: {len(rules)} confirmed rules ({sum(1 for r in rules if r.get('priority') == 'P0')} P0); "
            f"later steps may add or correct rules in their files. "
@@ -254,11 +286,13 @@ def main(argv):
     if not numbered:
         # An empty catalog is a real outcome (a tiny or rule-free estate); say so in a line the JobOutput hook accepts.
         doc += [NO_RULES_MARKER, '']
+    if retired_rows:
+        doc += ['## Retired rules', '', docmd.table(rule_docs.RETIRED_HEADERS, [[rid, one_line(name, 80), version, date, f'[{rid}](rules/{rule_docs.file_name(rid)})'] for rid, name, version, date in sorted(retired_rows)]), '']
     sme = [(n, r) for n, r in numbered if r.get('confidence') != 'High']
     doc += ['## Rules requiring SME confirmation', '']
     if sme:
         for n, r in sme:
-            doc.append(f"- **RULE-{n:03d}** ({one_line(r.get('confidence'), 10)}): "
+            doc.append(f"- **{r['id']}** ({one_line(r.get('confidence'), 10)}): "
                        f"{one_line(r.get('smeQuestion') or 'Confirm this rule with someone who knows the system.', 400)}")
     else:
         doc.append('None: every confirmed rule has High confidence.')
@@ -314,6 +348,7 @@ def main(argv):
     try:
         for relative, text in rule_files.items():
             write_text(os.path.join(base, 'rules'), relative.split('/', 1)[1], text)
+        write_text(os.path.join(base, os.path.dirname(registry_file)), os.path.basename(registry_file), ledger)
         write_text(base, 'BUSINESS_RULES.md', business_rules)
         write_text(base, 'DATA_OBJECTS.md', '\n'.join(dto).rstrip() + '\n')
     except (DataError, OSError) as error:

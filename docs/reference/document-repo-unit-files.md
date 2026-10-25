@@ -12,6 +12,7 @@ In `01-legacy/<module>/<unit>/`:
 | `understanding.md` | the provenance record: digest, source commit, run (`status: understood`) | the `understand` job |
 | `rules.md` | the index of the unit's rules: id, name, category, priority, confidence, version, status, source and a link to each rule's file | the extract-rules step of `understand` |
 | `rules/<rule id>.md` | one rule: specification, evidence, edge cases, open questions, acceptance scenarios, version history | the extract-rules step of `understand` |
+| `identifiers/{rules,findings,gaps}-ids.md` | allocation history, including retired references; [identifier contract](document-identifiers.md) | split / finish scripts of `understand` |
 | `data-objects.md` | the data objects of the unit | the extract-rules step of `understand` |
 | `rules-review.md` | the P1 human rule verdicts (a table) | the unit's reviewer, through a pull request |
 | `findings.md` | security findings: scorecard, table, a card per finding | the security step of `understand` |
@@ -56,7 +57,7 @@ Gate results are not in the card: gate decisions are recorded in the portal (Gov
 
 ## `rules.md`, `rules/<rule id>.md` and `rules-review.md`
 
-`rules.md` is the **index** of the unit's rules and `rules/<rule id>.md` holds each rule ([ADR-0046](../decisions/0046-one-file-per-business-rule.md)); both are machine output and the extraction source of truth. The index is a table (`ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file`) plus a table of retired rules; the rule file has front matter and the sections of the rule (summary, Given/When/Then, and, where the analysis has evidence, decision table, parameters, inputs and outputs, evidence, edge cases, open questions, acceptance scenarios) and its version history. Rule ids are deterministic and citation-derived — each rule carries the source citation it was derived from — so they stay stable across re-extractions. A rule keeps its version while its content (`digest`) is unchanged, gets the next version when it changes, and becomes a `retired` file when a later extraction no longer finds it. Human rule verdicts live separately in `rules-review.md`, a table keyed by rule id:
+`rules.md` is the **index** of the unit's rules and `rules/<rule id>.md` holds each rule ([ADR-0046](../decisions/0046-one-file-per-business-rule.md)); both are machine output and the extraction source of truth. The index is a table (`ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file`) plus a table of retired rules; the rule file has front matter and the sections of the rule (summary, Given/When/Then, and, where the analysis has evidence, decision table, parameters, inputs and outputs, evidence, edge cases, open questions, acceptance scenarios) and its version history. Rule IDs use the catalog scope and a persistent allocation ledger ([identifier contract](document-identifiers.md)), e.g. `RULE-CARD01-0001`. A rule keeps its version while its content (`digest`) is unchanged, gets the next version when it changes, and becomes a `retired` file when a later extraction no longer finds it. Human rule verdicts live separately in `rules-review.md`, a table keyed by rule id:
 
 ```markdown
 | Rule | Verdict | Approver | Date |

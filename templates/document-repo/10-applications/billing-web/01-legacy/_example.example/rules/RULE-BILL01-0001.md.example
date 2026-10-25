@@ -1,5 +1,5 @@
 ---
-id: "RULE-invoices.invoice-search-1a2b3c4d"
+id: "RULE-BILL01-0001"
 name: "Invoice amount includes tax"
 app: "billing-web"
 item: "invoices/invoice-search"
@@ -20,7 +20,7 @@ tags:
 generatedBy: "split_rules.py"
 ---
 
-# RULE-invoices.invoice-search-1a2b3c4d: Invoice amount includes tax
+# RULE-BILL01-0001: Invoice amount includes tax
 
 ## Summary
 

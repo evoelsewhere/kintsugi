@@ -17,7 +17,7 @@ import { resolveDots } from './paths.js'
 
 export type ItemCatalogPart = { name: string; kind?: string; file?: string }
 
-export type ItemCatalogModule = { id: string; name: string; summary: string }
+export type ItemCatalogModule = { id: string; name: string; summary: string; code?: string }
 
 /** The calls from one item into another, counted over the leaves' edges. */
 export type ItemCatalogDependency = { item: string; kinds: string[]; edges: number }
@@ -25,6 +25,7 @@ export type ItemCatalogDependency = { item: string; kinds: string[]; edges: numb
 export type ItemCatalogItem = {
   /** `<module>/<item>`. */
   id: string
+  referenceCode?: string
   module: string
   kind: string
   name: string
@@ -58,6 +59,9 @@ export type ItemCatalog = {
 /** `<module>/<item>`, two kebab-case segments. */
 export const ITEM_ID = /^[a-z0-9][a-z0-9-]{0,62}\/[a-z0-9][a-z0-9-]{0,62}$/
 
+const REFERENCE_CODE = /^[A-Z][A-Z0-9]{1,15}$/
+const MODULE_CODE = /^[A-Z][A-Z0-9]{0,7}$/
+
 const SEGMENT = /^[a-z0-9][a-z0-9-]{0,62}$/
 const MAX_ITEMS = 5_000
 const MAX_FILES = 25_000
@@ -82,6 +86,7 @@ function itemsOfModule(module: string, text: string): ItemCatalogItem[] {
   return cardsOf(body, 2).flatMap(card => {
     if (!ITEM_ID.test(card.id)) return []
 
+    const referenceCode = fieldText(card, 'referenceCode', 17)
     const complexity = fieldText(card, 'complexity')
     const leaves = recordsOf(tablesIn(sectionText(card, 'Leaves'))[0])
     const parts = recordsOf(tablesIn(sectionText(card, 'Parts'))[0])
@@ -89,6 +94,7 @@ function itemsOfModule(module: string, text: string): ItemCatalogItem[] {
     return [
       {
         id: card.id,
+        ...(referenceCode !== undefined && REFERENCE_CODE.test(referenceCode) ? { referenceCode } : {}),
         module,
         kind: fieldText(card, 'kind', 60) ?? 'module',
         name: textOf(card.title, 200) ?? card.id,
@@ -133,7 +139,7 @@ export function parseItemCatalog(indexText: string, moduleTexts: Readonly<Record
   for (const row of moduleRows.slice(0, MAX_LIST)) {
     const id = row.module ?? ''
     if (!SEGMENT.test(id) || modules.has(id)) continue
-    modules.set(id, { id, name: textOf(row.name, 200) ?? id, summary: textOf(row.summary, 2000) ?? '' })
+    modules.set(id, { id, name: textOf(row.name, 200) ?? id, summary: textOf(row.summary, 2000) ?? '', ...(row.code !== undefined && MODULE_CODE.test(row.code) ? { code: row.code } : {}) })
   }
 
   const seen = new Set<string>()

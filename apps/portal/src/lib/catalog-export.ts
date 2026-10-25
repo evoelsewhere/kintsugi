@@ -11,6 +11,7 @@ export const CATALOG_COLUMNS = [
   { header: "Module name", width: 28 },
   { header: "Item", width: 36 },
   { header: "Name", width: 36 },
+  { header: "Reference code", width: 18 },
   { header: "Kind", width: 14 },
   { header: "Class", width: 12 },
   { header: "Status", width: 16 },
@@ -36,6 +37,7 @@ export function catalogRows(view: CatalogView): CatalogRow[] {
     modules.get(item.module) ?? item.module,
     item.id,
     item.name,
+    item.referenceCode ?? "",
     item.kind,
     ASSET_CLASS_LABEL[assetClassOf(item)],
     styleOf(ITEM_STATUS, item.status).label,
@@ -62,7 +64,7 @@ export async function catalogWorkbook(view: CatalogView): Promise<ArrayBuffer> {
   sheet.addRows(catalogRows(view));
   sheet.getRow(1).font = { bold: true };
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: CATALOG_COLUMNS.length } };
-  for (const column of [17, 18]) sheet.getColumn(column).alignment = { wrapText: true, vertical: "top" };
+  for (const column of [18, 19]) sheet.getColumn(column).alignment = { wrapText: true, vertical: "top" };
   return workbook.xlsx.writeBuffer();
 }
 

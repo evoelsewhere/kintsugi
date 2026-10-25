@@ -6,8 +6,8 @@
 //
 //   scope_items.py      per item: topology.md (published), brief and rule shard (scratch)
 //   parallel            extract-rules workflow over the items' shards ∥ harden-scan over their files
-//   split_rules.py      per unit rules.md (the index) and a rules/<id>.md file per rule, stable citation-derived ids RULE-<module>.<unit>-<hash>
-//   split_findings.py   per item findings.md, ids SEC-<module>.<item>-NN
+//   split_rules.py      per unit rules.md (the index) and a rules/<id>.md file per rule, stable compact ids RULE-<scope>-0001
+//   split_findings.py   per item findings.md, ids SEC-<scope>-0001
 //   forEach item        a legacy-analyst job writes the AS-IS specification and returns its trace (scratch)
 //   finish_items.py     per item: checked trace.md, understanding.md (understood) and the work item
 //
@@ -48,8 +48,8 @@ const TRACE_SCHEMA = {
   required: ["entryPoints", "rulesApplied", "findings", "dependencies", "dataObjects", "externalSystems", "files", "openQuestions"],
   properties: {
     entryPoints: { type: "array", items: { type: "string", description: "An entry point of the item as file:line (route, transaction, main, job step)" } },
-    rulesApplied: { type: "array", items: { type: "string", description: "A stable RULE-<module>.<unit>-<hash> id of the unit's rules.md the code applies" } },
-    findings: { type: "array", items: { type: "string", description: "A SEC-<module>.<item>-NN id of the item's findings.md" } },
+    rulesApplied: { type: "array", items: { type: "string", description: "A stable RULE-<scope>-0001 id of the unit's rules.md the code applies" } },
+    findings: { type: "array", items: { type: "string", description: "A SEC-<scope>-0001 id of the item's findings.md" } },
     dependencies: {
       type: "array",
       items: {
@@ -76,8 +76,8 @@ ${WORKSPACE}
 Your brief is {in}/{item} (read-only): the item's id, name, kind and summary from the catalog, its source files, its
 size, its topology leaves and entry points, the items it depends on and that use it, the data stores it reads and
 writes. Also under {in}: the item's topology ${unitKeyLegacyPath(APP_TOKEN, "{key}", "topology.md")}, its business rules
-${unitKeyLegacyPath(APP_TOKEN, "{key}", "rules.md")} (the index of its rules, ids RULE-<module>.<unit>-<hash>, derived from the canonical citation and stable across reruns, each citation checked by a second agent; one file per rule in ${unitKeyLegacyPath(APP_TOKEN, "{key}", "rules")}/), its security
-findings ${unitKeyLegacyPath(APP_TOKEN, "{key}", "findings.md")} (ids SEC-<module>.<item>-NN), ${assessmentCatalogPath(APP_TOKEN)} and the module documents next to it (every item of the
+${unitKeyLegacyPath(APP_TOKEN, "{key}", "rules.md")} (the index of its rules, ids RULE-<scope>-0001, allocated from the unit ledger and stable across reruns, each citation checked by a second agent; one file per rule in ${unitKeyLegacyPath(APP_TOKEN, "{key}", "rules")}/), its security
+findings ${unitKeyLegacyPath(APP_TOKEN, "{key}", "findings.md")} (ids SEC-<scope>-0001), ${assessmentCatalogPath(APP_TOKEN)} and the module documents next to it (every item of the
 application) and ${assessmentSynthesisPath(APP_TOKEN)}. Read the item's source files and follow its calls only as far as needed to
 describe it; the other items have their own specifications.
 
@@ -99,7 +99,8 @@ Write ${unitKeyAsIsPath(APP_TOKEN, "{key}")} with write, with exactly these sect
 9. Error handling — how failures are detected, reported, retried or swallowed.
 10. Source references — every file:line the specification relies on.
 11. Gaps and questions — what the code does not tell, for a subject-matter expert: a table with the columns ID, Kind,
-   Question, Where and Impact, one row per gap, as the evidence-marks skill says (ids GAP-<module>.<unit>-NN; kinds
+   Question, Where and Impact, one row per gap, as the evidence-marks skill says (draft ids GAP-<referenceCode>-0001,
+   using referenceCode from the brief; finish assigns the persistent numbers and rewrites inline references; kinds
    missing-source, unresolved, ambiguous, unverified; impact blocking, risk or note). The source is often incomplete:
    a copybook, a called program, a job descriptor or a table definition the code names may not be in the
    repositories, so search for it, then record it as a gap instead of guessing. A rule of the item below High
@@ -191,7 +192,7 @@ export const UNDERSTAND: StagePlan = {
       id: "split-findings",
       kind: "script",
       script: "split_findings.py",
-      args: (ctx) => ["{app}", "--scan", "{in}/" + understandRunFilePath(APP_TOKEN, "scan.json"), "--catalog", "{in}/" + assessmentCatalogDir(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}"],
+      args: (ctx) => ["{app}", "--scan", "{in}/" + understandRunFilePath(APP_TOKEN, "scan.json"), "--catalog", "{in}/" + assessmentCatalogDir(APP_TOKEN), "--items", itemsArg(ctx), "--out", "{out}", "--docs", "{in}"],
     },
     {
       id: "specifications",
@@ -226,6 +227,8 @@ export const UNDERSTAND: StagePlan = {
         "{sources}",
         "--run",
         "{run}",
+        "--docs",
+        "{in}",
         "--existing",
         "{in}/" + modernDir(APP_TOKEN),
         "--out",

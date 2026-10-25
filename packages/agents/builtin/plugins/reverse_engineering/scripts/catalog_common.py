@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import docmd  # noqa: E402
 import paths  # noqa: E402
 import topology_units as tu  # noqa: E402
+import reference_ids as refs  # noqa: E402
 
 SEGMENT = r'[a-z0-9][a-z0-9-]{0,62}'
 SEGMENT_RE = re.compile(rf'^{SEGMENT}$')
@@ -265,6 +266,7 @@ def item_graph(items, topology):
 
 def render_catalog(app, catalog, graph=None):
     """{repository-relative path: text} of the catalog documents. `graph` is item_graph()'s result."""
+    refs.assign_catalog_codes(catalog)
     graph = graph or {}
     sources = sources_of(catalog.get('sources'))
     modules = {module['id']: module for module in catalog['modules']}
@@ -294,13 +296,13 @@ def render_catalog(app, catalog, graph=None):
         '',
         '## Modules',
         '',
-        docmd.table(['Module', 'Name', 'Items', 'Summary'], [
-            [module_id, module['name'], len(by_module.get(module_id, [])), clean_text(module.get('summary'), 200)] for module_id, module in sorted(modules.items())
+        docmd.table(['Module', 'Code', 'Name', 'Items', 'Summary'], [
+            [module_id, module['code'], module['name'], len(by_module.get(module_id, [])), clean_text(module.get('summary'), 200)] for module_id, module in sorted(modules.items())
         ]),
         '## Items',
         '',
-        docmd.table(['Item', 'Name', 'Kind', 'Status', 'LOC', 'Complexity', 'Files'], [
-            [item['id'], item['name'], item['kind'], item['status'], item['loc'], item['complexity'], len(item['files'])]
+        docmd.table(['Item', 'Code', 'Name', 'Kind', 'Status', 'LOC', 'Complexity', 'Files'], [
+            [item['id'], item['referenceCode'], item['name'], item['kind'], item['status'], item['loc'], item['complexity'], len(item['files'])]
             for item in sorted(catalog['items'], key=lambda entry: entry['id'])
         ]),
     ]
@@ -313,7 +315,7 @@ def render_catalog(app, catalog, graph=None):
     out[paths.assessment_catalog_path(app)] = '\n'.join(index).rstrip() + '\n'
 
     for module_id, module in sorted(modules.items()):
-        lines = [docmd.front_matter({'module': module_id, 'name': module['name'], 'items': len(by_module.get(module_id, []))}), f'# {module["name"]}', '']
+        lines = [docmd.front_matter({'module': module_id, 'code': module['code'], 'name': module['name'], 'items': len(by_module.get(module_id, []))}), f'# {module["name"]}', '']
         if clean_text(module.get('summary'), MAX_SUMMARY):
             lines += [clean_text(module.get('summary'), MAX_SUMMARY), '']
         for item in sorted(by_module.get(module_id, []), key=lambda entry: entry['id']):
@@ -323,6 +325,7 @@ def render_catalog(app, catalog, graph=None):
                 lines += [clean_text(item.get('summary'), MAX_SUMMARY), '']
             lines.append(docmd.field_lines({
                 'kind': item['kind'],
+                'referenceCode': item['referenceCode'],
                 'status': item['status'],
                 'loc': item['loc'],
                 'complexity': item['complexity'],
@@ -367,7 +370,7 @@ def load_catalog_dir(directory):
     modules = []
     for row in docmd.records_in(dict(docmd.sections(body, 2)).get('Modules', '')):
         if SEGMENT_RE.match(row.get('module', '')):
-            modules.append({'id': row['module'], 'name': clean_text(row.get('name'), MAX_NAME) or row['module'], 'summary': clean_text(row.get('summary'), MAX_SUMMARY)})
+            modules.append({'id': row['module'], 'name': clean_text(row.get('name'), MAX_NAME) or row['module'], 'summary': clean_text(row.get('summary'), MAX_SUMMARY), **({'code': row['code']} if row.get('code') else {})})
     sections = dict(docmd.sections(body, 2))
     ambiguities = docmd.bullets_in(sections.get('Ambiguities', ''))
     unassigned = [rel for rel in (norm_path(value) for value in docmd.bullets_in(sections.get('Unassigned files', ''))) if rel]
@@ -387,6 +390,7 @@ def load_catalog_dir(directory):
             items[item_id] = {
                 'id': item_id,
                 'module': module['id'],
+                **({'referenceCode': fields['referenceCode']} if fields.get('referenceCode') else {}),
                 'kind': clean_text(fields.get('kind'), 40) or 'module',
                 'name': clean_text(name, MAX_NAME) or item_id,
                 'summary': clean_text(prose, MAX_SUMMARY),
@@ -422,6 +426,7 @@ def load_catalog_dir(directory):
         'unassigned': unassigned,
         'ambiguities': ambiguities,
     }
+    refs.validate_catalog_codes(catalog)
     return items, catalog
 
 
@@ -433,6 +438,7 @@ def load_catalog(path):
     data = read_json(path, 'catalog.json')
     if not isinstance(data, dict) or not isinstance(data.get('items'), list):
         raise DataError('catalog.json must be an object with an items list')
+    refs.assign_catalog_codes(data)
     items = {}
     for item in data['items']:
         if isinstance(item, dict) and ITEM_ID_RE.match(str(item.get('id', ''))):
@@ -493,11 +499,6 @@ def owner_of(items):
     return owner
 
 
-def namespaced(prefix, item_id, number):
-    """An item-namespaced id: SEC-invoicing.invoice-entry-03 (ADR-0033 §5)."""
-    return f'{prefix}-{item_id.replace("/", ".")}-{number:02d}'
-
-
 CITATION_RE = re.compile(r'^(?P<path>.*):(?P<start>\d+)(?:-(?P<end>\d+))?$')
 HASH_HEX = 8
 DISC_MAX = 31
@@ -526,50 +527,14 @@ def canonical_citation(source):
     return f'{path}:{start}-{end}'
 
 
-def rule_body(rule):
-    """The rule without its id, canonically serialized (for duplicate and discriminator checks)."""
-    return json.dumps({key: value for key, value in rule.items() if key != 'id'}, sort_keys=True, ensure_ascii=False)
-
-
-def stable_rule_id(item_id, rule, discriminator=''):
-    """A citation-derived rule id (ADR-0038): RULE-invoicing.invoice-entry-1a2b3c4d. The suffix
-    hashes the unit key and the canonical citation of the rule's source, so a rerun with the same
-    unit and citation keeps the id. `discriminator` (the normalized rule name) only separates two
-    distinct rules sharing one exact citation; array order never takes part in an id."""
-    suffix = hashlib.sha256(f'{item_id}\n{canonical_citation(rule.get("source"))}'.encode('utf-8')).hexdigest()[:HASH_HEX]
-    if discriminator:
-        suffix = f'{suffix}-{discriminator}'
-    return f'RULE-{item_id.replace("/", ".")}-{suffix}'
-
-
-def assign_rule_ids(item_id, rules):
-    """`rules` in their given order, each with a stable `id`; an exact duplicate rule collapses to
-    one entry. Two distinct rules on one exact citation are told apart by a discriminator from the
-    normalized rule name; if the name also collides, the discriminator gets a short hash of the
-    rule body instead of relying on order."""
-    bodies_per_citation = {}
+def assign_rule_ids(scope, rules, previous=None):
+    """Allocate stable compact IDs independently of presentation order (ADR-0075)."""
+    records = []
     for rule in rules:
-        bodies_per_citation.setdefault(canonical_citation(rule.get('source')), set()).add(rule_body(rule))
-    disc_counts = {}
-    for rule in rules:
-        citation = canonical_citation(rule.get('source'))
-        if len(bodies_per_citation[citation]) > 1:
-            disc = slug(clean_text(rule.get('name'), MAX_NAME), 'rule')[:DISC_MAX].strip('-') or 'rule'
-            disc_counts.setdefault((citation, disc), set()).add(rule_body(rule))
-    out, seen = [], set()
-    for rule in rules:
-        body = rule_body(rule)
-        if body in seen:
-            continue
-        seen.add(body)
-        citation = canonical_citation(rule.get('source'))
-        disc = ''
-        if len(bodies_per_citation[citation]) > 1:
-            disc = slug(clean_text(rule.get('name'), MAX_NAME), 'rule')[:DISC_MAX].strip('-') or 'rule'
-            if len(disc_counts[(citation, disc)]) > 1:
-                disc = f'{disc[:DISC_MAX - 5].strip("-")}-{hashlib.sha256(body.encode("utf-8")).hexdigest()[:4]}'
-        out.append({**rule, 'id': stable_rule_id(item_id, rule, disc)})
-    return out
+        payload = {key: value for key, value in rule.items() if key != 'id'}
+        source = canonical_citation(rule.get('source'))
+        records.append((payload, refs.fingerprint(source, refs.normalized(rule.get('name'))), refs.fingerprint(source)))
+    return refs.allocate('RULE', scope, records, previous)
 
 
 RULE_REVIEW_VERDICTS = ('confirmed', 'refuted', 'clarify')
@@ -602,6 +567,6 @@ def orphan_review_ids(reviews, rule_ids):
 # Item-namespaced rule ids: legacy sequential suffixes and the citation-derived ones (ADR-0038),
 # plus the `RULE-NNN` estate-wide ids and the `RULE-<segment>-NNN` legacy namespaced form.
 ITEM_RULE_ID = re.compile(
-    rf'^RULE-(?:[0-9]{{2,}}|{SEGMENT}(?:\.{SEGMENT})?-(?:[0-9]{{2,}}|[0-9a-f]{{{HASH_HEX}}}(?:-[a-z0-9][a-z0-9-]{{0,{DISC_MAX}}})?))$'
+    rf'^RULE-(?:[A-Z][A-Z0-9]{{1,15}}-[0-9]{{4,}}|[0-9]{{2,}}|{SEGMENT}(?:\.{SEGMENT})?-(?:[0-9]{{2,}}|[0-9a-f]{{{HASH_HEX}}}(?:-[a-z0-9][a-z0-9-]{{0,{DISC_MAX}}})?))$'
 )
-ITEM_FINDING_ID = re.compile(rf'^SEC-{SEGMENT}\.{SEGMENT}-\d{{2,}}$')
+ITEM_FINDING_ID = re.compile(rf'^SEC-(?:[A-Z][A-Z0-9]{{1,15}}-\d{{4,}}|{SEGMENT}\.{SEGMENT}-\d{{2,}})$')

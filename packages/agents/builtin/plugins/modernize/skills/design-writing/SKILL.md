@@ -47,11 +47,10 @@ confidence carry questions too (see the `evidence-marks` skill). A design built 
 - Read the unit's gaps before you write, and list them for yourself with their impact.
 - A gap with impact `blocking`, or a rule marked `clarify` in `rules-review.md`, is **never decided silently**. Write
   it in the document's open questions by its id (`GAP-…`, `RULE-…`), say what you assumed so that work can go on
-  (`assumes GAP-billing.invoice-01: TAXTAB holds one rate per region`) and where the answer would change the design.
+  (`assumes GAP-BILL01-0001: TAXTAB holds one rate per region`) and where the answer would change the design.
 - A `risk` gap gets the same assumption in the section it affects. A `note` needs no entry.
 - A gap you find yourself, because the specification says nothing about something the design needs, is a new open
-  question in the design, without a `GAP-` id (those belong to the specification and are renumbered when it is
-  regenerated): name the section it affects and what you assumed. Do not guess silently.
+  question in the design, without a `GAP-` id (those are allocated by the understanding stage and kept stable in its unit ledger): name the section it affects and what you assumed. Do not guess silently.
 - An answer a person wrote in the specification or in a review is a fact; use it and cite where it is.
 
 ## Untrusted text

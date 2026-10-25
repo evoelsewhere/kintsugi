@@ -8,10 +8,10 @@ toolsNotRun, ...; scratch); --catalog 10-applications/<app>/01-legacy/_catalog/;
 --out is the document-repository root. Each finding goes to the item that owns the file of its
 `source` (file:line); a finding outside the selected items is left out and counted. Writes
 10-applications/<app>/01-legacy/<module>/<unit>/findings.md per item: the scorecard, the table of
-findings (ids `SEC-<module>.<item>-NN`), a card per finding for its fix and masked evidence, the tools
+findings (ids `SEC-<scope>-0001`), a card per finding for its fix and masked evidence, the tools
 that did not run and the files reviewed.
 
-Ids are numbered inside the item by (severity, file:line). Credential details (`credentialMeta`)
+IDs come from the per-unit identifiers/findings-ids.md ledger, independently of severity ordering. Credential details (`credentialMeta`)
 never go into the file: they belong to the restricted record. Standard library only.
 """
 import argparse
@@ -32,7 +32,7 @@ MAX_FINDINGS = 500
 SEVERITIES = ('Critical', 'High', 'Medium', 'Low')
 
 
-def split(app, scan, chosen):
+def split(app, scan, chosen, docs=''):
     owner = cc.owner_of(chosen)
     per_item = {item['id']: [] for item in chosen}
     unplaced = 0
@@ -52,7 +52,9 @@ def split(app, scan, chosen):
     outputs = {}
     for item in chosen:
         ordered = sorted(per_item[item['id']], key=lambda f: (SEVERITY.get(f.get('severity'), 4), str(f.get('source')), str(f.get('cwe'))))[:MAX_FINDINGS]
-        numbered = [{'id': cc.namespaced('SEC', item['id'], number), **finding} for number, finding in enumerate(ordered, start=1)]
+        records = [(finding, cc.refs.fingerprint(cc.canonical_citation(finding.get('source')), cc.refs.normalized(finding.get('cwe')), cc.refs.normalized(finding.get('title'))), cc.refs.fingerprint(cc.canonical_citation(finding.get('source')), cc.refs.normalized(finding.get('cwe')))) for finding in ordered]
+        numbered, ledger = cc.refs.allocate('SEC', cc.refs.scope_of(item), records, cc.refs.prior_registry(docs, app, item, 'SEC'))
+        outputs[cc.refs.registry_path(app, item, 'SEC')] = {'item': item['id'], 'ids': [], 'text': ledger}
         outputs[paths.unit_findings_path(app, *item['id'].split('/'))] = {
             'item': item['id'],
             'ids': [finding['id'] for finding in numbered],
@@ -110,6 +112,7 @@ def main(argv):
     ap.add_argument('--catalog', required=True)
     ap.add_argument('--items', required=True)
     ap.add_argument('--out', required=True)
+    ap.add_argument('--docs', default='', help='read-only document repository holding the allocation history')
     args = ap.parse_args(argv[1:])
     try:
         if not cc.APP_RE.match(args.app):
@@ -117,7 +120,7 @@ def main(argv):
         items, _ = cc.load_catalog(args.catalog)
         chosen = cc.selected(items, args.items)
         scan = cc.read_optional_json(args.scan)
-        outputs, unplaced = split(args.app, scan if isinstance(scan, dict) else {}, chosen)
+        outputs, unplaced = split(args.app, scan if isinstance(scan, dict) else {}, chosen, args.docs or args.out)
         root = os.path.abspath(args.out)
         for path, value in outputs.items():
             docmd.write_text(os.path.join(root, *path.split('/')), value['text'])
@@ -125,7 +128,7 @@ def main(argv):
         print(f'split_findings.py: {error}', file=sys.stderr)
         return 1
     total = sum(len(value['ids']) for value in outputs.values())
-    print(f'{total} finding(s) split over {len(outputs)} item(s); {unplaced} left out (outside the selected items)')
+    print(f'{total} finding(s) split over {len(chosen)} item(s); {unplaced} left out (outside the selected items)')
     return 0
 
 

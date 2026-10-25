@@ -8,9 +8,9 @@ unit: "billing-api/invoices/invoice-api"
 
 | ID | Method | Path | Summary | Rules | Auth |
 | --- | --- | --- | --- | --- | --- |
-| API-001 | GET | /invoices | Search invoices by customer and period, 20 per page | RULE-001 | billing role |
+| API-001 | GET | /invoices | Search invoices by customer and period, 20 per page | RULE-BILL01-0001 | billing role |
 | API-002 | GET | /invoices/{id} | Read one invoice with its lines | - | billing role |
-| API-003 | POST | /invoices/{id}/close | Close an open invoice | RULE-002 | billing admin |
+| API-003 | POST | /invoices/{id}/close | Close an open invoice | RULE-BILL01-0002 | billing admin |
 
 ## Requests
 
