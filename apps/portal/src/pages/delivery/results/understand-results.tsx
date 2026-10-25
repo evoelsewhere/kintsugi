@@ -220,7 +220,7 @@ function UnitsTab({ units, modules, onOpen }: { units: UnderstandUnit[]; modules
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
             <div className="w-[200px]">
-              <Select value={module} options={[{ value: "", label: "All modules" }, ...modules.map((entry) => ({ value: entry, label: entry, hint: String(units.filter((unit) => unit.module === entry).length) }))]} onChange={setModule} />
+              <Select size="small" value={module} options={[{ value: "", label: "All modules" }, ...modules.map((entry) => ({ value: entry, label: entry, hint: String(units.filter((unit) => unit.module === entry).length) }))]} onChange={setModule} />
             </div>
             <CountChip label="Entry points" count={units.filter((unit) => unit.entryPoint).length} active={only === "entry"} onClick={() => setOnly(only === "entry" ? "" : "entry")} />
             <CountChip label="Not written" count={units.filter((unit) => unit.spec === null).length} active={only === "unwritten"} onClick={() => setOnly(only === "unwritten" ? "" : "unwritten")} tone="orange" />
@@ -297,7 +297,7 @@ function MatrixTab({ results, modules, onOpen }: { results: UnderstandResults; m
             <CountChip label="Findings" count={matrix.findingsMapped.length} active={kind === "findings"} onClick={() => setKind("findings")} />
             <CountChip label="Files" count={files.length} active={kind === "files"} onClick={() => setKind("files")} />
             <div className="w-[180px]">
-              <Select value={module} options={[{ value: "", label: "All modules" }, ...modules.map((entry) => ({ value: entry, label: entry }))]} onChange={setModule} />
+              <Select size="small" value={module} options={[{ value: "", label: "All modules" }, ...modules.map((entry) => ({ value: entry, label: entry }))]} onChange={setModule} />
             </div>
           </div>
         }
@@ -388,7 +388,7 @@ function GraphTab({ units, modules, colors, onOpen }: { units: UnderstandUnit[];
           <CountChip label="Units" count={units.length} active={level === "units"} onClick={() => setLevel("units")} />
           {level === "units" ? (
             <div className="w-[200px]">
-              <Select value={module} options={[{ value: "", label: "All modules" }, ...modules.map((entry) => ({ value: entry, label: entry }))]} onChange={setModule} />
+              <Select size="small" value={module} options={[{ value: "", label: "All modules" }, ...modules.map((entry) => ({ value: entry, label: entry }))]} onChange={setModule} />
             </div>
           ) : null}
         </div>

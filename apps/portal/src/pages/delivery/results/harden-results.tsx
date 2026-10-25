@@ -211,7 +211,7 @@ function FindingsTab({ results, open, setOpen }: { results: HardenResults; open:
         minWidth={780}
         toolbar={
           confidences.length < 2 ? undefined : (
-            <Select
+            <Select size="small"
               className="h-8 w-40 text-[13px]"
               value={confidence}
               onChange={setConfidence}

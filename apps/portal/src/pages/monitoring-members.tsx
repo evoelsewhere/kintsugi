@@ -39,7 +39,7 @@ export function MembersView(): React.JSX.Element {
           </div>
           <div className="flex items-center gap-2">
             <div className="w-56">
-              <Select value={projectId} options={(projects.data ?? []).map((project) => ({ value: project.id, label: project.name, hint: project.id }))} onChange={(value) => { setChosen(value); setUserId(""); setOffset(0); }} />
+              <Select size="small" value={projectId} options={(projects.data ?? []).map((project) => ({ value: project.id, label: project.name, hint: project.id }))} onChange={(value) => { setChosen(value); setUserId(""); setOffset(0); }} />
             </div>
             <Button size="icon" variant="ghost" aria-label="Refresh members" onClick={() => { void summary.reload(); void activity.reload(); }}><RefreshCw className="size-4" /></Button>
           </div>

@@ -99,7 +99,7 @@ export default function StageResults({ project, application, stage, version, run
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[10px] tracking-wide text-text-muted uppercase">Showing</span>
           <div className="w-full sm:w-[280px] [&>div>button]:h-[var(--geist-form-small-height)] [&>div>button]:text-[13px]">
-            <Select value={effectiveRef ?? ""} options={options} onChange={(value) => update("ref", value === "" ? undefined : value)} />
+            <Select size="small" value={effectiveRef ?? ""} options={options} onChange={(value) => update("ref", value === "" ? undefined : value)} />
           </div>
           <div className="ml-auto flex items-center gap-1.5">
             <Button size="small" variant={compare ? "solid" : "ghost"} aria-pressed={compare} onClick={() => update("compare", compare ? undefined : "1")} className={compare ? undefined : "shadow-border"}>

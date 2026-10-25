@@ -118,14 +118,14 @@ function GraphTab({ topology }: { topology: Topology }): React.JSX.Element {
       >
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <Select
+            <Select size="small"
               value={domain}
               disabled={focus !== ""}
               options={[{ value: "", label: "All domains" }, ...topology.domains.map((entry) => ({ value: entry, label: entry, hint: String(topology.nodes.filter((node) => node.domain === entry).length) }))]}
               onChange={setDomain}
             />
-            <Select value={focus} options={nodeOptions} onChange={setFocus} />
-            <Select value={depth} disabled={focus === ""} options={DEPTHS} onChange={setDepth} />
+            <Select size="small" value={focus} options={nodeOptions} onChange={setFocus} />
+            <Select size="small" value={depth} disabled={focus === ""} options={DEPTHS} onChange={setDepth} />
           </div>
           <NodeFinder
             nodes={topology.nodes}

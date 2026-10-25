@@ -156,12 +156,12 @@ function AuditView(): React.JSX.Element {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-48">
-            <Select value={action} options={actionOptions} onChange={(value) => reset(() => setAction(value))} />
+            <Select size="small" value={action} options={actionOptions} onChange={(value) => reset(() => setAction(value))} />
           </div>
           <div className="w-52">
-            <Select value={projectId} options={projectOptions} onChange={(value) => reset(() => setProjectId(value))} />
+            <Select size="small" value={projectId} options={projectOptions} onChange={(value) => reset(() => setProjectId(value))} />
           </div>
-          <Input className="w-52" placeholder="Subject (e.g. a job run id)" aria-label="Subject" value={subject} onChange={(event) => reset(() => setSubject(event.target.value))} />
+          <Input size="small" className="w-52" placeholder="Subject (e.g. a job run id)" aria-label="Subject" value={subject} onChange={(event) => reset(() => setSubject(event.target.value))} />
           <Button size="icon" variant="ghost" aria-label="Refresh the audit log" onClick={() => void audit.reload()}>
             <RefreshCw className="size-4" />
           </Button>
@@ -317,7 +317,7 @@ function RestrictedView({ runFilter }: { runFilter: string | undefined }): React
             </Button>
           )}
           <div className="w-52">
-            <Select
+            <Select size="small"
               value={projectId}
               options={projectOptions}
               onChange={(value) => {

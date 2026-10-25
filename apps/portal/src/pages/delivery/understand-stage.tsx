@@ -342,20 +342,20 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
       />
       <CatalogResults view={filtered} selection={selection}>
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div className="w-full sm:w-64">
-            <Input placeholder="Search items, ids and files" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search the catalog" />
-          </div>
-          <div className="w-44">
-            <Select value={status} onChange={setStatus} options={[{ value: "", label: "Any status" }, ...STATUSES.map((value) => ({ value, label: styleOf(ITEM_STATUS, value).label }))]} />
-          </div>
-          <div className="w-40">
-            <Select value={kind} onChange={setKind} options={[{ value: "", label: "Any kind" }, ...kinds.map((value) => ({ value, label: `${value} (${view.items.filter((item) => item.kind === value).length})` }))]} />
-          </div>
-          <div className="w-44">
-            <Select value={module} onChange={setModule} options={[{ value: "", label: "Any module" }, ...view.catalog.modules.map((entry) => ({ value: entry.id, label: entry.name }))]} />
+          <div className="w-full sm:w-56">
+            <Input size="small" placeholder="Search items, ids and files" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search the catalog" />
           </div>
           <div className="w-36">
-            <Select value={assetClass} onChange={setAssetClass} options={[{ value: "", label: "Any class" }, ...(["code", "test", "generated"] as const).map((value) => ({ value, label: ASSET_CLASS_LABEL[value] }))]} />
+            <Select size="small" value={status} onChange={setStatus} options={[{ value: "", label: "Any status" }, ...STATUSES.map((value) => ({ value, label: styleOf(ITEM_STATUS, value).label }))]} />
+          </div>
+          <div className="w-32">
+            <Select size="small" value={kind} onChange={setKind} options={[{ value: "", label: "Any kind" }, ...kinds.map((value) => ({ value, label: `${value} (${view.items.filter((item) => item.kind === value).length})` }))]} />
+          </div>
+          <div className="w-36">
+            <Select size="small" value={module} onChange={setModule} options={[{ value: "", label: "Any module" }, ...view.catalog.modules.map((entry) => ({ value: entry.id, label: entry.name }))]} />
+          </div>
+          <div className="w-32">
+            <Select size="small" value={assetClass} onChange={setAssetClass} options={[{ value: "", label: "Any class" }, ...(["code", "test", "generated"] as const).map((value) => ({ value, label: ASSET_CLASS_LABEL[value] }))]} />
           </div>
           <Button size="small" variant="ghost" className="shadow-border" disabled={shownSelectable.length === 0 || shownSelectable.every((id) => selected.has(id))} onClick={selectShown} title="Adds every selectable item the filters show">
             Select shown ({shownSelectable.length})

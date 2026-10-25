@@ -181,7 +181,7 @@ export function DesignUnitsTab({
     return (
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={filters.set} onChange={(set) => onFilters({ set })} options={setOptions} />
+          <Select size="small" value={filters.set} onChange={(set) => onFilters({ set })} options={setOptions} />
           <button type="button" className="text-[12px] text-accent hover:underline" onClick={() => onFilters({ set: "", state: "", module: "", kind: "" })}>
             Clear filters
           </button>
@@ -214,9 +214,9 @@ export function DesignUnitsTab({
         pageSize={50}
         toolbar={
           <>
-            <Select value={filters.set} onChange={(set) => onFilters({ set })} options={setOptions} />
-            <Select value={filters.module} onChange={(module) => onFilters({ module })} options={[{ value: "", label: "Any module" }, ...modules.map((value) => ({ value, label: value }))]} />
-            <Select value={filters.kind} onChange={(kind) => onFilters({ kind })} options={[{ value: "", label: "Any kind" }, ...kinds.map((value) => ({ value, label: value }))]} />
+            <Select size="small" value={filters.set} onChange={(set) => onFilters({ set })} options={setOptions} />
+            <Select size="small" value={filters.module} onChange={(module) => onFilters({ module })} options={[{ value: "", label: "Any module" }, ...modules.map((value) => ({ value, label: value }))]} />
+            <Select size="small" value={filters.kind} onChange={(kind) => onFilters({ kind })} options={[{ value: "", label: "Any kind" }, ...kinds.map((value) => ({ value, label: value }))]} />
             {filters.set === "" && filters.state === "" && filters.module === "" && filters.kind === "" ? null : (
               <button type="button" className="text-[12px] text-accent hover:underline" onClick={() => onFilters({ set: "", state: "", module: "", kind: "" })}>
                 Clear filters
