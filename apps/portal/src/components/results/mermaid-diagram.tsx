@@ -13,6 +13,7 @@
 import { ChevronDown, ChevronUp, Code2, Maximize2, Minimize2, Minus, Plus, Scan, Search } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { drawableMermaid } from "@/lib/mermaid-source";
 import { cn } from "@/lib/utils";
 
 type MermaidApi = (typeof import("mermaid"))["default"];
@@ -288,7 +289,7 @@ export function MermaidDiagram({ source, title, className, height = 560, onNodeC
 
   useEffect(() => {
     let cancelled = false;
-    render(id, source)
+    render(id, drawableMermaid(source))
       .then((result) => {
         if (!cancelled) {
           setSvg(result);
