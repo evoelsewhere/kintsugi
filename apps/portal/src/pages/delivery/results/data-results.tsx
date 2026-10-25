@@ -24,7 +24,7 @@ export function DataResultsView({ rules, map, understand, onOpenItem }: { rules:
   const [tab, setTab] = useState<Tab>("overview");
   const [open, setOpen] = useState<string | undefined>(undefined);
   const uses = useMemo(() => objectUses(rules.dataObjects, rules.rules, understand.units), [rules, understand.units]);
-  const stores = useMemo(() => storeUses(map.topology?.nodes ?? [], understand.units), [map.topology, understand.units]);
+  const stores = useMemo(() => storeUses(map.topology?.nodes ?? [], understand.units, map.topology?.edges ?? []), [map.topology, understand.units]);
   const model = useMemo(() => modelDiagram(uses), [uses]);
   const lineage = useMemo(() => lineageDiagram(stores), [stores]);
   const document = understand.documents.find((entry) => entry.id === "data-model");
@@ -153,9 +153,14 @@ function ObjectsTab({ uses, onOpen }: { uses: ObjectUse[]; onOpen: (name: string
 
 function StoresTab({ stores, onOpenItem }: { stores: StoreUse[]; onOpenItem?: ((item: string) => void) | undefined }): React.JSX.Element {
   if (stores.length === 0) return <EmptyState title="No data stores at this ref" description="The topology lists the tables, files and datasets; understand records which units touch them." />;
-  const units = (list: UnderstandUnit[]): React.ReactNode =>
-    list.length === 0 ? (
+  const units = (list: UnderstandUnit[], programs: string[]): React.ReactNode =>
+    list.length === 0 && programs.length === 0 ? (
       <span className="text-text-muted">—</span>
+    ) : list.length === 0 ? (
+      <span className="text-[12px] text-text-secondary" title="Programs of the topology; no unit that touches it is understood yet">
+        {programs.slice(0, 4).join(", ")}
+        {programs.length > 4 ? ` +${programs.length - 4}` : ""}
+      </span>
     ) : (
       <span className="flex flex-wrap gap-1">
         {list.slice(0, 4).map((unit) => (
@@ -177,11 +182,11 @@ function StoresTab({ stores, onOpenItem }: { stores: StoreUse[]; onOpenItem?: ((
     );
   const columns: Column<StoreUse>[] = [
     { id: "name", header: "Store", cell: (row) => <span className="font-mono text-[12px] text-text">{row.name}</span>, sort: (row) => row.name },
-    { id: "writers", header: "Written by", cell: (row) => units(row.writers), sort: (row) => row.writers.length, search: (row) => row.writers.map((unit) => unit.title).join(" ") },
-    { id: "readers", header: "Read by", cell: (row) => units(row.readers), sort: (row) => row.readers.length, search: (row) => row.readers.map((unit) => unit.title).join(" ") },
+    { id: "writers", header: "Written by", cell: (row) => units(row.writers, row.programs.writers), sort: (row) => row.writers.length + row.programs.writers.length, search: (row) => [...row.writers.map((unit) => unit.title), ...row.programs.writers].join(" ") },
+    { id: "readers", header: "Read by", cell: (row) => units(row.readers, row.programs.readers), sort: (row) => row.readers.length + row.programs.readers.length, search: (row) => [...row.readers.map((unit) => unit.title), ...row.programs.readers].join(" ") },
   ];
   return (
-    <Section title="Data stores" description="Tables, files and datasets, with the units that write and read them.">
+    <Section title="Data stores" description="Tables, files and datasets, with who writes and reads them: the units understood so far, else the programs of the topology.">
       <DataTable label="Data stores" rows={stores} rowKey={(row) => row.id} columns={columns} searchPlaceholder="Filter stores" pageSize={25} empty="No store matches." />
     </Section>
   );

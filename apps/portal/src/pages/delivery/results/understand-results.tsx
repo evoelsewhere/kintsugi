@@ -110,9 +110,8 @@ export function UnderstandResultsView({ results, compare, projectId }: { results
           { id: "units", label: "Units", count: results.units.length },
           { id: "matrix", label: "Traceability", count: counts["leftOut"] === undefined || counts["leftOut"] === 0 ? undefined : counts["leftOut"] },
           { id: "graph", label: "Dependencies" },
-          { id: "readme", label: "Overview", hidden: documentOf("readme") === undefined },
+          { id: "readme", label: "README", hidden: documentOf("readme") === undefined },
           { id: "architecture", label: "Architecture" },
-          { id: "data-model", label: "Data model" },
           { id: "integrations", label: "Integrations" },
         ]}
       />
@@ -124,7 +123,7 @@ export function UnderstandResultsView({ results, compare, projectId }: { results
       {tab === "units" && results.matrix !== null ? <UnitsTab units={results.units} modules={modules} onOpen={setDetail} /> : null}
       {tab === "matrix" && results.matrix !== null ? <MatrixTab results={results} modules={modules} onOpen={setDetail} /> : null}
       {tab === "graph" && results.matrix !== null ? <GraphTab units={results.units} modules={modules} colors={colors} onOpen={setDetail} /> : null}
-      {tab === "readme" || tab === "architecture" || tab === "data-model" || tab === "integrations" ? <DocumentTab id={tab} document={documentOf(tab)} /> : null}
+      {tab === "readme" || tab === "architecture" || tab === "integrations" ? <DocumentTab id={tab} document={documentOf(tab)} /> : null}
 
       <DetailPage open={opened !== undefined} title={opened?.title ?? ""} subtitle={opened?.id} onClose={() => setDetail(undefined)}>
         {opened === undefined ? null : <UnitDetail unit={opened} byId={byId} projectId={projectId} commit={results.ref.commit} onOpen={setDetail} />}

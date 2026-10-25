@@ -1,7 +1,7 @@
 // Results of map: the dependency graph of topology.md as a Mermaid flowchart (filter by
-// domain, focus a node with a depth) with a node panel, the nodes table, entry points and data
-// stores, the persona flows and observations, and the three diagrams (call graph, data lineage,
-// critical path).
+// domain, focus a node with a depth) with a node panel, the nodes table and entry points, the
+// persona flows and observations, and the call graph and critical path diagrams. The data stores
+// and the data lineage are in the Data view (data-results.tsx).
 
 import { Database, DoorOpen, Lightbulb, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -49,7 +49,7 @@ export function MapResultsView({ results, compare }: { results: MapResults; comp
           { id: "overview", label: "Overview" },
           { id: "graph", label: "Dependency graph" },
           { id: "nodes", label: "Nodes", count: topology?.nodes.length },
-          { id: "diagrams", label: "Diagrams", count: results.diagrams.length },
+          { id: "diagrams", label: "Diagrams", count: topologyDiagrams(results).length },
           { id: "flows", label: "Flows & observations", count: topology === null ? undefined : topology.flows.length + topology.observations.length },
         ]}
       />
@@ -316,11 +316,9 @@ function NodeDetail({ topology, id, onOpen }: { topology: Topology; id: string; 
 }
 
 function NodesTab({ topology, onOpen }: { topology: Topology; onOpen: (id: string) => void }): React.JSX.Element {
-  const nodes = byId(topology);
   const [kind, setKind] = useState<string>("");
   const kinds = [...new Set(topology.nodes.map((node) => node.kind))];
   const entries = topology.nodes.filter((node) => node.entryPoint);
-  const stores = topology.nodes.filter((node) => node.kind === "datastore");
   const columns: Column<MapNode>[] = [
     {
       id: "name",
@@ -354,7 +352,7 @@ function NodesTab({ topology, onOpen }: { topology: Topology; onOpen: (id: strin
   ];
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div>
         <Section title="Entry points" description="Where control enters the application from outside the repository.">
           {entries.length === 0 ? (
             <p className="text-[12px] text-text-muted">The map found no entry point.</p>
@@ -367,25 +365,6 @@ function NodesTab({ topology, onOpen }: { topology: Topology; onOpen: (id: strin
                 </li>
               ))}
             </ul>
-          )}
-        </Section>
-        <Section title="Data stores" description="Tables, files and datasets, with who reads and writes them.">
-          {stores.length === 0 ? (
-            <p className="text-[12px] text-text-muted">The map recorded no data store nodes.</p>
-          ) : (
-            <DataTable
-              label="Data stores"
-              rows={stores}
-              rowKey={(row) => row.id}
-              onRowClick={(row) => onOpen(row.id)}
-              pageSize={0}
-              minWidth={420}
-              columns={[
-                { id: "name", header: "Store", cell: (row) => <span className="text-text">{row.name}</span>, sort: (row) => row.name },
-                { id: "readers", header: "Read by", cell: (row) => accessors(topology, nodes, row.id, "read"), search: (row) => accessors(topology, nodes, row.id, "read") },
-                { id: "writers", header: "Written by", cell: (row) => accessors(topology, nodes, row.id, "write"), search: (row) => accessors(topology, nodes, row.id, "write") },
-              ]}
-            />
           )}
         </Section>
       </div>
@@ -414,24 +393,20 @@ function NodesTab({ topology, onOpen }: { topology: Topology; onOpen: (id: strin
   );
 }
 
-/** The nodes that reach a store by an edge of the kind (`read`, `write`); calls count as reads. */
-function accessors(topology: Topology, nodes: Map<string, MapNode>, store: string, kind: "read" | "write"): string {
-  const names = topology.edges
-    .filter((edge) => edge.target === store && (edge.kind === kind || (kind === "read" && edge.kind !== "write")))
-    .map((edge) => nodes.get(edge.source)?.name ?? edge.source);
-  return names.length === 0 ? "—" : [...new Set(names)].join(", ");
-}
+/** The diagrams of the topology; the data lineage is drawn in the Data view. */
+const topologyDiagrams = (results: MapResults): MapResults["diagrams"] => results.diagrams.filter((entry) => entry.id !== "data-lineage");
 
 function DiagramsTab({ results }: { results: MapResults }): React.JSX.Element {
-  const [active, setActive] = useState<string>(results.diagrams[0]?.id ?? "");
-  if (results.diagrams.length === 0) return <EmptyState title="No diagrams at this ref" description="The topology step of assess writes call-graph.mmd, data-lineage.mmd and critical-path.mmd beside topology.md; a run made before it did has none, so run assess again." />;
-  const diagram = results.diagrams.find((entry) => entry.id === active) ?? results.diagrams[0]!;
+  const diagrams = topologyDiagrams(results);
+  const [active, setActive] = useState<string>(diagrams[0]?.id ?? "");
+  if (diagrams.length === 0) return <EmptyState title="No diagrams at this ref" description="The topology step of assess writes call-graph.mmd and critical-path.mmd beside topology.md; a run made before it did has none, so run assess again." />;
+  const diagram = diagrams.find((entry) => entry.id === active) ?? diagrams[0]!;
   return (
     <Section
       title={diagram.title}
       description={diagram.path}
       actions={
-        <SubTabs value={diagram.id} onChange={setActive} tabs={results.diagrams.map((entry) => ({ id: entry.id, label: entry.title }))} />
+        <SubTabs value={diagram.id} onChange={setActive} tabs={diagrams.map((entry) => ({ id: entry.id, label: entry.title }))} />
       }
     >
       <MermaidDiagram key={diagram.id} source={diagram.source} title={diagram.title} height={560} />
