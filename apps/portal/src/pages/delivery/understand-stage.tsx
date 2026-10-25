@@ -5,7 +5,7 @@
 // understand runs with their scope, status and pull request, Retry and Abandon, and their live logs).
 // URL: …&tab=catalog|runs|results (&run=<id> opens Runs on that run; &view, &item on Results).
 
-import { ListTree, Play, RefreshCw, Sparkles, Undo2, X } from "lucide-react";
+import { Download, ListTree, Play, RefreshCw, Sparkles, Undo2, X } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ScopedRunsPanel, type ScopedRunsLabels } from "@/components/job-runs/scoped-runs-panel";
@@ -24,6 +24,7 @@ import { type CatalogItem, type CatalogView, catalogApi, type ItemStatus, type S
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
+import { downloadCatalog } from "@/lib/catalog-export";
 import { ASSET_CLASS_LABEL, assetClassOf, BATCH_MAX_LOC, dependenciesOf, estimateRun, formatEstimate, recommendBatch } from "@/lib/catalog-batch";
 import { isActiveStatus, ITEM_STATUS, styleOf } from "@/lib/status";
 import { runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
@@ -239,6 +240,18 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
     };
   }, [view, search, status, kind, module, assetClass]);
 
+  const [exporting, setExporting] = useState(false);
+  async function exportExcel(): Promise<void> {
+    setExporting(true);
+    try {
+      await downloadCatalog(filtered, `${application.name}-item-catalog`.replace(/[^\w.-]+/g, "-"));
+    } catch (failure) {
+      toast.error("Could not export the catalog", failure);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const blockedReason = (item: CatalogItem): string | undefined =>
     item.status === "retired" ? "Retired: no longer in the source" : item.status === "running" ? "A run on this item is active" : item.status === "in-pr" ? "In an open pull request: merge it, or abandon it to release the item" : undefined;
   // Items selected before a refresh that are blocked now drop out of the selection.
@@ -353,6 +366,10 @@ function CatalogTab({ project, application, view, runs, planRuns, canRun, blocke
               Clear filters
             </Button>
           )}
+          <Button size="small" variant="ghost" className="shadow-border" disabled={exporting || filtered.items.length === 0} onClick={() => void exportExcel()} title="Downloads the items the filters show as an Excel workbook">
+            <Download className="size-3.5" />
+            {exporting ? "Exporting…" : "Export Excel"}
+          </Button>
           <span className="ml-auto text-[12px] text-text-muted">
             {filtered.items.length} of {view.items.length} items
           </span>
