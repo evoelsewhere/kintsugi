@@ -392,7 +392,7 @@ function understandSummaryCounts(summary: TraceSummary | null): Pick<Built, "cou
 }
 
 const AS_IS_DOCUMENTS: Array<Omit<AsIsDocument, "path" | "markdown"> & { file: string }> = [
-  { id: "readme", title: "Overview", file: "README.md" },
+  { id: "readme", title: "README", file: "README.md" },
   { id: "architecture", title: "Architecture", file: "architecture.md" },
   { id: "data-model", title: "Data model", file: "data-model.md" },
   { id: "integrations", title: "Integrations", file: "integrations.md" },

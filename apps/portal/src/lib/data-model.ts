@@ -4,7 +4,7 @@
 // the joins and the diagrams are tested without a browser. Relations are inferred, never read: nothing the
 // understand stage writes states a key, so a field named after another object (CUSTOMER_ID → CUSTOMER) is the only hint.
 
-import type { CatalogRule, DataObject, MapNode, UnderstandUnit } from "./api/documents";
+import type { CatalogRule, DataObject, MapNode, TopoEdge, UnderstandUnit } from "./api/documents";
 
 const WRITE = /write|update|insert|delete|create|put|save|store/i;
 
@@ -21,6 +21,8 @@ export interface StoreUse {
   kind: string;
   readers: UnderstandUnit[];
   writers: UnderstandUnit[];
+  /** The topology nodes (programs) with an edge to the store, by name: what is known before any unit is understood. */
+  programs: { readers: string[]; writers: string[] };
 }
 
 const key = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -36,15 +38,23 @@ export function objectUses(objects: readonly DataObject[], rules: readonly Catal
   });
 }
 
-export function storeUses(nodes: readonly MapNode[], units: readonly UnderstandUnit[]): StoreUse[] {
+export function storeUses(nodes: readonly MapNode[], units: readonly UnderstandUnit[], edges: readonly TopoEdge[] = []): StoreUse[] {
   const stores = new Map<string, StoreUse>();
-  for (const node of nodes) if (node.kind === "datastore") stores.set(key(node.id), { id: node.id, name: node.name, kind: node.kind, readers: [], writers: [] });
+  for (const node of nodes) if (node.kind === "datastore") stores.set(key(node.id), { id: node.id, name: node.name, kind: node.kind, readers: [], writers: [], programs: { readers: [], writers: [] } });
   const byName = new Map([...stores.values()].map((store) => [key(store.name), store]));
+  const names = new Map(nodes.map((node) => [node.id, node.name]));
+  for (const edge of edges) {
+    const store = stores.get(key(edge.target));
+    if (store === undefined) continue;
+    const name = names.get(edge.source) ?? edge.source;
+    const list = edge.kind === "write" ? store.programs.writers : store.programs.readers;
+    if (!list.includes(name)) list.push(name);
+  }
   for (const unit of units) {
     for (const access of unit.dataStores) {
       let store = stores.get(key(access.id)) ?? byName.get(key(access.id));
       if (store === undefined) {
-        store = { id: access.id, name: access.id, kind: "datastore", readers: [], writers: [] };
+        store = { id: access.id, name: access.id, kind: "datastore", readers: [], writers: [], programs: { readers: [], writers: [] } };
         stores.set(key(access.id), store);
       }
       const writes = access.access.some((kind) => WRITE.test(kind));
