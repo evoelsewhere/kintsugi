@@ -19,7 +19,7 @@ import { PathGuard } from "./paths.js";
 import { createKernelShellTool } from "./shell.js";
 import { CODEMODE_TOOL, SCRIPT_TOOLS } from "./codemode.js";
 import { MCP_TOOL_PREFIX } from "./mcp.js";
-import type { KernelToolName } from "./tool-names.js";
+import { GLOB_ALIAS, type KernelToolName } from "./tool-names.js";
 
 export interface ToolContext {
   /** Working directory: the job workspace root (ADR-0055); a relative path is resolved against it. */
@@ -96,6 +96,13 @@ const findTool: ToolFactory = (context) => {
       },
     }),
   ), context.searchDir);
+};
+
+// Models trained on other harnesses call `glob` (also as `tools.glob` in a codemode script) and failed every
+// time: find is the same search, so it answers to that name too (tool-names.ts adds it wherever find is allowed).
+const globTool: ToolFactory = (context) => {
+  const tool = findTool(context);
+  return { ...tool, name: GLOB_ALIAS, label: GLOB_ALIAS };
 };
 
 // write and edit are pi's own tools, working in the job's output directory: a relative path is
@@ -190,7 +197,7 @@ export function createTools(names: readonly string[], context: ToolContext): Too
     // codemode and the MCP tools are pi's own, added as extensions (codemode.ts, mcp.ts): no factory here.
     .filter((name) => name !== CODEMODE_TOOL && !name.startsWith(MCP_TOOL_PREFIX))
     .map((name) => {
-      const factory = (KERNEL_TOOLS as Record<string, ToolFactory | undefined>)[name];
+      const factory = (KERNEL_TOOLS as Record<string, ToolFactory | undefined>)[name] ?? (name === GLOB_ALIAS ? globTool : undefined);
       if (factory === undefined) throw new Error(`unknown tool "${name}"`);
       const tool = factory(context);
       // A codemode script reaches only the read tools: the others are declared to the model, never to a script.
