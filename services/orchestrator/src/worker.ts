@@ -1,3 +1,4 @@
+import { PgProjectMemory } from "./project-memory/index.js";
 // The kintsugi-worker process core (ADR-0003, ADR-0019, ADR-0025, ADR-0029): pg-boss queues
 // for Git sync, document writes and runtime job runs, plus the scheduler that feeds Git sync. New repositories are
 // picked up within seconds; every repository is re-synced each poll interval; removed ones
@@ -172,6 +173,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     const agentDefinitions = installedAgents({ pool: options.pool });
     runner = new JobRunner({
       store: jobStore,
+      projectMemory: new PgProjectMemory(options.pool),
       storage: options.storage,
       checkouts,
       gates: createPersistedGateDecider({ db: options.pool }),

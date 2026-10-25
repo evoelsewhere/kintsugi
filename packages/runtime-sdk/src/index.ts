@@ -63,6 +63,15 @@ export interface McpServerSpec {
   allowedTools: string[];
 }
 
+/** A live, caller-bound memory service. Scope and credentials stay in the host process. */
+export type MemoryOperation = "search" | "read" | "write" | "status" | "forget" | "restore" | "scratchpad";
+export const memoryToolName = (operation: MemoryOperation): string => operation === "scratchpad" ? "scratchpad" : `memory_${operation}`;
+/** A caller-authored, safe tool error. Other backend errors must not be exposed to the model. */
+export class MemoryRequestError extends Error {}
+export interface JobServices {
+  memory?: (operation: MemoryOperation, input: unknown, signal?: AbortSignal) => Promise<unknown>;
+}
+
 export interface JobSpec {
   agent: AgentDefinition;
   /** The user prompt for this job. */
@@ -86,6 +95,8 @@ export interface JobSpec {
    * parameters are this schema (validated before it runs) and the result is written as `result.json` in `outDir`.
    */
   resultSchema?: Record<string, unknown>;
+  /** Enables optional memory tools backed by the caller; carries no memory content or database credentials. */
+  memory?: { writeSchema?: Record<string, unknown> };
   /** The MCP servers the agent names in `tools`; absent when it names none. */
   mcp?: { servers: McpServerSpec[] };
   /** Opaque correlation data (e.g. projectId, trigger), echoed on job.started; never shown to the agent. */
@@ -152,7 +163,7 @@ export interface JobHandle {
 export interface AgentRuntime {
   /** Identifies the underlying engine, e.g. "pi@1.3.0". */
   readonly engine: string;
-  startJob(spec: JobSpec): Promise<JobHandle>;
+  startJob(spec: JobSpec, services?: JobServices): Promise<JobHandle>;
 }
 
 // ---------------------------------------------------------------------------

@@ -89,6 +89,9 @@ This page has two parts:
 | [0073](0073-structured-results-through-a-kernel-tool.md) | A job reports its structured result through a kernel tool, not a file it writes by hand | Accepted (amends 0023) |
 | [0074](0074-optional-otlp-export-of-job-spans.md) | Job spans can be exported over OTLP by the worker, off by default | Accepted (builds on 0048) |
 | [0075](0075-compact-stable-document-reference-ids.md) | Compact stable RULE, SEC and GAP IDs with catalog scopes and Markdown ledgers | Accepted (amends 0038, 0057) |
+| [0076](0076-project-memory-for-understand.md) | Project memory supplies reviewed source navigation hints to Understand | Accepted (amended by 0077, 0078) |
+| [0077](0077-agent-directed-live-memory.md) | Agents access current project memory through tools | Accepted (learning lifecycle amended by 0078) |
+| [0078](0078-agent-memory-learning-lifecycle.md) | Give project agents an immediate memory learning lifecycle | Accepted |
 | [0070](0070-cli-distributed-by-the-installation.md) | The CLI is distributed by the installation | Accepted (amends 0069) |
 | [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0061) |
@@ -183,6 +186,9 @@ This page has two parts:
 | D87 | A job reports its structured result through a kernel tool | 🟠 | A job with a result schema gets the tool `submit_result` whose parameters are the schema; pi validates the arguments so a wrong result is corrected in the same turn; the valid result is written as `result.json` and read as before; no schema text in the task | M2 | ✅ [0073](0073-structured-results-through-a-kernel-tool.md) |
 | D88 | Optional OTLP export of job spans | 🟠 | The spans of ADR-0048 are exported as they are over OTLP/HTTP JSON by the worker (not the job process), after they are stored; off by default; endpoint, service name and encrypted headers set in Settings → Telemetry export (`telemetry.manage`); one trace per run; no prompt or output content; no SDK dependency; a failing backend never fails a job | M2 | ✅ [0074](0074-optional-otlp-export-of-job-spans.md) |
 | D89 | Compact stable document reference IDs | 🟠 | Assess persists module/unit scopes; per-unit Markdown ledgers allocate RULE/SEC/GAP sequences without reusing retired numbers; canonical and database keys keep their meaning | M2 | ✅ [0075](0075-compact-stable-document-reference-ids.md) |
+| D90 | Project memory for runtime jobs | 🟠 | Opt-in Understand navigation hints, verified source evidence, human review and epoch invalidation; live access since ADR-0077 | M2 | ✅ [0076](0076-project-memory-for-understand.md) |
+| D91 | Agent-directed live memory | 🟠 | Explicit memory tools query current scoped data through worker-bound IPC; no snapshots or context injection; validated proposals retain human review | M2 | ✅ [0077](0077-agent-directed-live-memory.md) |
+| D92 | Agent memory learning lifecycle | 🟠 | Immediate learned notes, long-term/daily memory, run scratchpads and reversible deletion across project jobs; reviewed trust is separate | M2 | ✅ [0078](0078-agent-memory-learning-lifecycle.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |

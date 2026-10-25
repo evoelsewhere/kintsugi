@@ -100,3 +100,7 @@ Administration → Agents in the portal (`/agents`, an agent at `/agents/<name>`
 ## Planned agents
 
 The product intends runtime agents for platform work — knowledge ingestion, KB assistant, assessment, wave and task planning, to-be analysis, gate review and insight reporting. None exists yet. When introduced, each is an `AgentDefinition` supplied per job, using kernel tools only.
+
+## Project memory
+
+Project agents can use seven optional memory tools to remember and recall facts, lessons, decisions and navigation, read daily logs, maintain a run scratchpad and recover forgotten notes. Writes are saved immediately as learned; review is a separate trust transition. Independent reviewers read only reviewed notes outside their current run. No memory is injected into the task or retained as a snapshot. The generic runtime calls a worker-bound service, never the database. See [project memory](project-memory.md) for scope, tools, trust, retention and reset behavior.

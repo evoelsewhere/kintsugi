@@ -87,12 +87,13 @@ const SECRETISH = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)/g,
   /\b(password|passwd|pwd|secret|token|api[_-]?key|credential)s?\b\s*[:=]\s*\S+/gi,
   /\b[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s]+@/gi,
-  /[A-Za-z0-9+_=-]{32,}/g,
 ];
+const OPAQUE_SECRETISH = /[A-Za-z0-9+_=-]{32,}/g;
 
 /** Masks credential-shaped text: failure reasons may quote a script's stderr. */
-export function redactText(text: string): string {
-  return SECRETISH.reduce((result, pattern) => result.replace(pattern, "[redacted]"), text);
+export function redactText(text: string, options: { opaqueTokens?: boolean } = {}): string {
+  const patterns = options.opaqueTokens === false ? SECRETISH : [...SECRETISH, OPAQUE_SECRETISH];
+  return patterns.reduce((result, pattern) => result.replace(pattern, "[redacted]"), text);
 }
 
 /** The last non-empty line of a process stream, redacted and bounded. */

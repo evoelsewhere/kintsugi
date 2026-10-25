@@ -2,7 +2,7 @@
 // explicit command and arguments (no shell), a cleared environment, a wall-clock timeout, an
 // output-size cap, and is killed with its whole process tree on timeout, size breach or abort.
 
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import { treeSize } from "./workspace.js";
 
@@ -22,6 +22,8 @@ export interface RunProcessOptions {
   input?: string;
   /** Receives stdout line by line instead of capturing it (agent jobs stream JSON lines). */
   onLine?: (line: string) => void;
+  /** Optional private IPC channel for caller-bound services; scripts do not receive one. */
+  onMessage?: (message: unknown, reply: (message: object) => void) => void;
 }
 
 export type ProcessStop = "timeout" | "output-limit" | "aborted";
@@ -94,13 +96,18 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       cwd: options.cwd,
       env: options.env,
       // stdin is always a pipe: it carries `input`, or is closed at once.
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: options.onMessage === undefined ? ["pipe", "pipe", "pipe"] : ["pipe", "pipe", "pipe", "ipc"],
       shell: false,
       windowsHide: true,
       // Own process group on POSIX, so the whole tree can be killed.
       detached: process.platform !== "win32",
-    });
+    }) as ChildProcessWithoutNullStreams; // The three standard streams are always pipes, including with IPC.
     const stdout = new Capture(max);
+    if (options.onMessage !== undefined) {
+      child.on("message", (message) => options.onMessage!(message, (response) => {
+        if (child.connected) child.send(response, () => undefined);
+      }));
+    }
     const stderr = new Capture(max);
     if (options.onLine === undefined) {
       child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));

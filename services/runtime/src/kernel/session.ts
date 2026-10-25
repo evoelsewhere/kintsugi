@@ -15,11 +15,12 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { JobSpec } from "@kintsugi/runtime-sdk";
+import type { JobSpec, JobServices } from "@kintsugi/runtime-sdk";
 import { CODEMODE_TOOL, createCodemodeExtensions } from "./codemode.js";
 import { compactionBudget, stableSessionId } from "./context.js";
 import { createMcpKernel } from "./mcp.js";
 import { composeSystemPrompt } from "./policy.js";
+import { createMemoryTools } from "./memory.js";
 import { createResultTool } from "./result.js";
 import { normalizeTools, RESULT_TOOL, withAliases } from "./tool-names.js";
 import { createTools, type ToolContext } from "./tools.js";
@@ -35,6 +36,7 @@ export interface JobSession {
 export interface CreateJobSessionOptions {
   spec: JobSpec;
   modelRuntime: ModelRuntime;
+  services?: JobServices;
   extensions: ExtensionFactory[];
   /** Reports a call a policy refused (a script calling a tool it may not). */
   onBlocked?: (tool: string, reason: string, input: unknown) => void;
@@ -95,7 +97,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
       // The allowlist covers built-in, custom and extension tools alike; [] means no tools.
       tools,
       ...(tools.length === 0 ? { noTools: "all" as const } : {}),
-      customTools: [...createTools(tools.filter((name) => name !== RESULT_TOOL), toolContext), ...(spec.resultSchema === undefined ? [] : [createResultTool(spec.resultSchema, toolContext.outDir, options.onOutput)])],
+      customTools: [...createTools(tools.filter((name) => name !== RESULT_TOOL), toolContext), ...createMemoryTools(spec, options.services ?? {}), ...(spec.resultSchema === undefined ? [] : [createResultTool(spec.resultSchema, toolContext.outDir, options.onOutput)])],
       resourceLoader,
       settingsManager,
       sessionManager: SessionManager.inMemory(cwd, { id: stableSessionId(spec) }),

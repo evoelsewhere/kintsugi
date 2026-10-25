@@ -4,7 +4,7 @@
 import { statSync } from "node:fs";
 import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { isMcpToolEntry, mcpHeaderValueProblem, mcpServerOfEntry, MCP_SERVER_ID_PATTERN } from "@kintsugi/domain";
-import { isKernelToolName, KERNEL_TOOL_NAMES } from "./tool-names.js";
+import { isKernelToolName, isMemoryToolName, KERNEL_TOOL_NAMES } from "./tool-names.js";
 
 const SKILL_NAME = /^[a-z][a-z0-9-]*$/;
 
@@ -22,6 +22,9 @@ export function validateJobSpec(spec: JobSpec): void {
     if (isMcpToolEntry(tool)) {
       const named = mcpServerOfEntry(tool)!;
       if (!servers.has(named)) problems.push(`tool "${tool}" names the MCP server "${named}", which the job was not given`);
+    } else if (isMemoryToolName(tool)) {
+      if (spec.memory === undefined) problems.push(`tool "${tool}" requires a live memory capability`);
+      if (["memory_write","memory_forget","memory_restore","scratchpad"].includes(tool) && spec.memory?.writeSchema === undefined) problems.push(`${tool} requires a writable memory capability`);
     } else if (!isKernelToolName(tool)) problems.push(`unknown tool "${tool}" (available: ${KERNEL_TOOL_NAMES.join(", ")}, or an MCP tool such as mcp__<server>__*)`);
   }
   for (const server of servers.values()) {

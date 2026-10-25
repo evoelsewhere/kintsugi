@@ -13,7 +13,8 @@ import { mkdir, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentRuntime, JobEvent, JobFailureReason, JobHandle, JobSpec } from "@kintsugi/runtime-sdk";
+import type { AgentRuntime, JobEvent, JobFailureReason, JobHandle, JobSpec, JobServices, MemoryOperation } from "@kintsugi/runtime-sdk";
+import { MemoryRequestError, memoryToolName } from "@kintsugi/runtime-sdk";
 import { EventStream } from "../event-stream.js";
 import { PI_ENGINE_ID, RUNTIME_VERSION } from "../version.js";
 import type { StoredProviderConfig } from "./model-runtime.js";
@@ -197,7 +198,8 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
   const idleTimeoutSec = options.idleTimeoutSec ?? 300;
   return {
     engine: options.mode === "mock" ? `mock@${RUNTIME_VERSION}` : PI_ENGINE_ID,
-    async startJob(spec: JobSpec): Promise<JobHandle> {
+    async startJob(spec: JobSpec, services: JobServices = {}): Promise<JobHandle> {
+      if (spec.memory !== undefined && services.memory === undefined) throw new Error("job requires a live memory service");
       const jobDir = dirname(spec.workspace.outDir);
       const tmp = join(jobDir, "tmp");
       await mkdir(tmp, { recursive: true });
@@ -235,6 +237,8 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
             ];
       const job = new ChildAgentJob(randomUUID(), spec.limits.idleTimeoutSec ?? idleTimeoutSec);
       const timeoutSec = spec.limits.timeoutSec;
+      let memoryCalls = 0;
+      let memoryPending = 0;
       void runProcess({
         command: options.node ?? process.execPath,
         args: [...permission, entry],
@@ -245,6 +249,26 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
         timeoutMs: timeoutSec > 0 ? (timeoutSec + grace) * 1000 : 0,
         input: JSON.stringify(input),
         onLine: (line) => job.onLine(line),
+        ...(spec.memory === undefined ? {} : { onMessage: (value: unknown, reply: (message: object) => void): void => {
+          if (typeof value !== "object" || value === null || Buffer.byteLength(JSON.stringify(value), "utf8") > 16_000) return;
+          const request = value as { type?: string; id?: number; operation?: MemoryOperation; input?: unknown };
+          if (request.type !== "memory.call" || !Number.isSafeInteger(request.id) || request.id! < 1) return;
+          const refuse = (): void => reply({ type: "memory.result", id: request.id, ok: false });
+          memoryCalls += 1;
+          if (job.signal.aborted || memoryPending >= 8 || memoryCalls > 512 ||
+            !["search", "read", "write", "status", "forget", "restore", "scratchpad"].includes(request.operation ?? "") ||
+            !spec.agent.tools.includes(memoryToolName(request.operation!)) ||
+            (["write","forget","restore","scratchpad"].includes(request.operation!) && spec.memory?.writeSchema === undefined)) { refuse(); return; }
+          memoryPending += 1;
+          void Promise.resolve().then(() => services.memory!(request.operation!, request.input, job.signal)).then(
+            (result) => {
+              if (Buffer.byteLength(JSON.stringify(result ?? null), "utf8") > 12_000) { refuse(); return; }
+              reply({ type: "memory.result", id: request.id, ok: true, value: result });
+            }, (error: unknown) => reply({ type: "memory.result", id: request.id, ok: false,
+              ...(error instanceof MemoryRequestError ? { error: error.message.slice(0, 300) } : {}),
+            }),
+          ).catch(refuse).finally(() => { memoryPending -= 1; });
+        } }),
         signal: job.signal,
       }).then(
         (result) => job.exited(result, timeoutSec),

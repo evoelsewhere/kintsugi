@@ -10,6 +10,7 @@
 import type { JobEvent } from "@kintsugi/runtime-sdk";
 import { createAgentRuntime } from "../agent-runtime.js";
 import type { AgentChildInput } from "../launcher/agent-process.js";
+import { createMemoryIpcClient } from "../launcher/memory-ipc.js";
 import { buildModelRuntime } from "../launcher/model-runtime.js";
 
 const write = (event: JobEvent): void => {
@@ -26,37 +27,41 @@ async function main(): Promise<void> {
   const input = JSON.parse(await readStdin()) as AgentChildInput;
   const { provider } = input;
   if (input.mode === "pi" && provider === undefined) throw new Error("no provider was passed to the agent job");
-  const runtime =
-    input.mode === "mock"
-      ? createAgentRuntime({ mode: "mock" })
-      : createAgentRuntime({
-          mode: "pi",
-          resolveModelRuntime: () =>
-            buildModelRuntime(provider!.config, {
-              ...(provider!.apiKey === undefined ? {} : { apiKey: provider!.apiKey }),
-              ...(provider!.secrets === undefined ? {} : { secrets: provider!.secrets }),
-            }),
-        });
-  const job = await runtime.startJob(input.spec);
-  // Thinking and long tool-call arguments stream without JobEvents: report liveness so the
-  // launcher's idle watchdog only stops a job whose provider really went silent.
-  let reported = 0;
-  const alive = setInterval(() => {
-    const at = (job as { lastActivityAt?: number }).lastActivityAt;
-    if (at === undefined || at <= reported) return;
-    reported = at;
-    process.stdout.write(`${JSON.stringify({ type: "activity", at: new Date(at).toISOString() })}\n`);
-  }, 10_000);
-  alive.unref();
-  let ended = false;
-  for await (const event of job.events) {
-    if (event.type === "job.completed" || event.type === "job.failed") ended = true;
-    write(event);
-  }
-  const done = await job.done;
-  clearInterval(alive);
-  if (!ended) write(done);
-  process.exitCode = done.type === "job.completed" ? 0 : 1;
+  const memory = input.spec.memory === undefined ? undefined : createMemoryIpcClient();
+  try {
+    const runtime =
+      input.mode === "mock"
+        ? createAgentRuntime({ mode: "mock" })
+        : createAgentRuntime({
+            mode: "pi",
+            services: memory === undefined ? {} : { memory: memory.memory },
+            resolveModelRuntime: () =>
+              buildModelRuntime(provider!.config, {
+                ...(provider!.apiKey === undefined ? {} : { apiKey: provider!.apiKey }),
+                ...(provider!.secrets === undefined ? {} : { secrets: provider!.secrets }),
+              }),
+          });
+    const job = await runtime.startJob(input.spec);
+    // Thinking and long tool-call arguments stream without JobEvents: report liveness so the
+    // launcher's idle watchdog only stops a job whose provider really went silent.
+    let reported = 0;
+    const alive = setInterval(() => {
+      const at = (job as { lastActivityAt?: number }).lastActivityAt;
+      if (at === undefined || at <= reported) return;
+      reported = at;
+      process.stdout.write(`${JSON.stringify({ type: "activity", at: new Date(at).toISOString() })}\n`);
+    }, 10_000);
+    alive.unref();
+    let ended = false;
+    for await (const event of job.events) {
+      if (event.type === "job.completed" || event.type === "job.failed") ended = true;
+      write(event);
+    }
+    const done = await job.done;
+    clearInterval(alive);
+    if (!ended) write(done);
+    process.exitCode = done.type === "job.completed" ? 0 : 1;
+  } finally { memory?.dispose(); }
 }
 
 main().catch((error: unknown) => {
