@@ -1,5 +1,5 @@
 // The sandbox settings the worker runs with (ADR-0055): stored in admin.installation_setting under `sandbox`, set in the
-// portal (Settings → Sandbox), read when a job starts and in each sweep, so a change applies to the next job without
+// portal (Settings → Sandbox & Agent), read when a job starts and in each sweep, so a change applies to the next job without
 // a restart. A value that is missing, unreadable or out of range is the default, field by field.
 
 import { DEFAULT_SANDBOX, SANDBOX_SETTING, type SandboxSettings, resolveSandbox } from "@kintsugi/domain";

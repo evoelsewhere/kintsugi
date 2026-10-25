@@ -51,7 +51,7 @@ export class TelemetryExportController {
   }
 }
 
-/** Settings → Sandbox (ADR-0055): the environment jobs run in. Gated by sandbox.manage. */
+/** Settings → Sandbox & Agent (ADR-0055): the environment jobs run in. Gated by sandbox.manage. */
 @ApiTags("admin · settings")
 @Controller("admin/settings")
 @RequirePermission("sandbox.manage")

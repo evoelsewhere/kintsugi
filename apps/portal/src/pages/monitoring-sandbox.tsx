@@ -70,7 +70,7 @@ export function SandboxView(): React.JSX.Element {
           <div>
             <CardTitle>Job workspaces</CardTitle>
             <CardDescription>
-              One per job, kept across its attempts. The sweep removes them after {list.data?.retentionDays ?? 7} days (Settings → Sandbox), or at once when the write of their output has landed.
+              One per job, kept across its attempts. The sweep removes them after {list.data?.retentionDays ?? 7} days (Settings → Sandbox & Agent), or at once when the write of their output has landed.
               {canRemove ? " Remove one earlier to free its disk." : ""}
             </CardDescription>
           </div>

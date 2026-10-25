@@ -24,7 +24,7 @@ export const DOCUMENT_WRITE_QUEUE = "document-write";
 export const JOB_RUN_QUEUE = "job-run";
 
 /**
- * An admin's request to remove one job workspace (Settings -> Sandbox, ADR-0058). The API cannot write the data
+ * An admin's request to remove one job workspace (Settings -> Sandbox & Agent, ADR-0058). The API cannot write the data
  * volume, so it asks the worker, which checks again that the run is not active before it deletes anything.
  */
 export const WORKSPACE_CLEANUP_QUEUE = "workspace-cleanup";

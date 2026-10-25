@@ -9,7 +9,7 @@ import { JOB_ID, WorkspaceDisk, WorkspaceRemovals, WorkspaceRuns, type Workspace
 
 export interface SandboxWorkspaces {
   workspaces: WorkspaceView[];
-  /** The retention the removal times are computed with (Settings -> Sandbox). */
+  /** The retention the removal times are computed with (Settings -> Sandbox & Agent). */
   retentionDays: number;
 }
 

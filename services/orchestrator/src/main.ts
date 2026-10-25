@@ -1,7 +1,7 @@
 // kintsugi-worker entry point (ADR-0003, ADR-0025, ADR-0029). Configuration is deployment
 // environment only: DATABASE_URL, KINTSUGI_SECRET_KEY (decrypts Git and LLM credentials),
 // KINTSUGI_DATA_DIR, KINTSUGI_GIT_POLL_INTERVAL and the job settings
-// (KINTSUGI_RUNTIME_MODE, KINTSUGI_JOB_MAX_CONCURRENCY, KINTSUGI_WORKFLOW_*, KINTSUGI_STAGE_*, KINTSUGI_PYTHON,
+// (KINTSUGI_RUNTIME_MODE, KINTSUGI_WORKFLOW_*, KINTSUGI_STAGE_*, KINTSUGI_PYTHON,
 // KINTSUGI_NODE). Git servers, repositories, LLM providers, the commit identity and the sandbox environment
 // (how long a workspace keeps what it holds, the limits of its processes: ADR-0055) are configured in the portal.
 
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
     storage,
     pollIntervalSeconds,
     telemetryRetentionDays: positive("KINTSUGI_TELEMETRY_RETENTION_DAYS", 30),
-    jobs: { agents, interpreters, defaults: jobDefaults(), concurrency: positive("KINTSUGI_JOB_MAX_CONCURRENCY", 2) },
+    jobs: { agents, interpreters, defaults: jobDefaults() },
   });
   console.log(`[worker] git ${gitVersion}, data ${storage.root}, polling every ${pollIntervalSeconds}s; commit identity from the portal (Settings → Git)`);
   console.log(`[worker] runtime ${agents.engine}, python ${interpreters.python}, node ${interpreters.node}; jobs run in job workspaces without an OS sandbox, agent jobs as child processes (ADR-0029)`);

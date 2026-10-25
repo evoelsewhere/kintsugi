@@ -1,6 +1,6 @@
 // The settings of the sandbox environment a job runs in (ADR-0029, ADR-0055): how long a job workspace keeps what it
 // can make again and what it cannot, and the limits of the processes in it. An administrator sets them in the portal
-// (Settings → Sandbox); they are stored in admin.installation_setting under `sandbox`, and the worker reads them when
+// (Settings → Sandbox & Agent); they are stored in admin.installation_setting under `sandbox`, and the worker reads them when
 // a job starts and in each sweep, so a change applies to the next job without a restart. Pure: the API validates with
 // the same rules the worker applies.
 
@@ -23,6 +23,8 @@ export interface SandboxSettings {
   maxTurns: number;
   /** Cost limit per agent job in USD; 0 = no limit. */
   maxCostUsd: number;
+  /** Job runs a worker runs at the same time; the rest wait in the queue. */
+  maxJobConcurrency: number;
   /** Mark the checkouts and the inputs of a job read-only on disk. The kernel confines the agents either way. */
   markReadOnly: boolean;
 }
@@ -36,6 +38,7 @@ export const DEFAULT_SANDBOX: SandboxSettings = {
   maxOutputBytes: 50 * 1024 * 1024,
   maxTurns: 0,
   maxCostUsd: 0,
+  maxJobConcurrency: 2,
   markReadOnly: true,
 };
 
@@ -57,6 +60,7 @@ const RULES: Record<Exclude<keyof SandboxSettings, "markReadOnly">, Rule> = {
   maxOutputBytes: { label: "Output limit", min: 1024 * 1024, max: 10 * 1024 * 1024 * 1024, integer: true, zero: false },
   maxTurns: { label: "Turn limit", min: 1, max: 10_000, integer: true, zero: true },
   maxCostUsd: { label: "Cost limit", min: 0.01, max: 10_000, integer: false, zero: true },
+  maxJobConcurrency: { label: "Job concurrency", min: 1, max: 32, integer: true, zero: false },
 };
 
 export const SANDBOX_FIELDS: readonly (keyof typeof RULES)[] = Object.keys(RULES) as Array<keyof typeof RULES>;

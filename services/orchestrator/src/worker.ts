@@ -58,7 +58,7 @@ export interface WorkerOptions {
   /** For tests: the HTTP client of the pull-request adapters. */
   fetch?: typeof fetch;
   log?: (message: string) => void;
-  /** The sandbox settings (Settings → Sandbox, ADR-0055); default: read from the database. */
+  /** The sandbox settings (Settings → Sandbox & Agent, ADR-0055); default: read from the database. */
   sandbox?: SandboxProvider;
   /** Days the spans of agent jobs are kept (KINTSUGI_TELEMETRY_RETENTION_DAYS, default 30). */
   telemetryRetentionDays?: number;
@@ -78,7 +78,7 @@ export interface WorkerOptions {
     agents: AgentRuntime;
     interpreters?: Interpreters;
     defaults?: JobDefaults;
-    /** Parallel job runs in this process (KINTSUGI_JOB_MAX_CONCURRENCY). */
+    /** Parallel job runs in this process; omitted = the sandbox setting "max job concurrency", followed while the worker runs. */
     concurrency?: number;
   };
 }
@@ -166,6 +166,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   const stopping = new AbortController();
   const active = new Map<string, AbortController>();
   let runner: JobRunner | undefined;
+  let syncJobConcurrency: () => Promise<void> = async () => undefined;
   await ensureJobRunQueue(boss);
   if (options.jobs !== undefined) {
     const agentDefinitions = installedAgents({ pool: options.pool });
@@ -184,7 +185,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       requestWrite,
       log,
     });
-    await boss.work<JobRunRequest>(JOB_RUN_QUEUE, { localConcurrency: options.jobs.concurrency ?? 2 }, counted(async ([job]) => {
+    const runJob = counted(async ([job]: Array<{ data: JobRunRequest }>) => {
       if (job === undefined) return;
       // One controller per run: a cancel request aborts this run only (its processes are killed).
       const cancel = new AbortController();
@@ -195,9 +196,24 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       } finally {
         active.delete(job.data.jobRunId);
       }
-    }));
+    });
+    // The parallel runs follow Settings → Sandbox & Agent: when the setting changes, the queue is served again with
+    // the new number; runs already started keep going.
+    let serving: { id: string; concurrency: number } | undefined;
+    syncJobConcurrency = async (): Promise<void> => {
+      const wanted = options.jobs?.concurrency ?? (await sandbox()).maxJobConcurrency;
+      if (serving?.concurrency === wanted) return;
+      const previous = serving;
+      const id = await boss.work<JobRunRequest>(JOB_RUN_QUEUE, { localConcurrency: wanted }, runJob);
+      serving = { id, concurrency: wanted };
+      if (previous !== undefined) {
+        await boss.offWork(JOB_RUN_QUEUE, { id: previous.id, wait: false });
+        log(`job concurrency ${previous.concurrency} → ${wanted}`);
+      }
+    };
+    await syncJobConcurrency();
   }
-  // An admin removes a job workspace from Settings -> Sandbox (ADR-0058): the API asks, this process owns the disk.
+  // An admin removes a job workspace from Settings -> Sandbox & Agent (ADR-0058): the API asks, this process owns the disk.
   await ensureWorkspaceCleanupQueue(boss);
   await boss.work<WorkspaceCleanupRequest>(WORKSPACE_CLEANUP_QUEUE, { localConcurrency: 1 }, counted(async ([job]) => {
     if (job === undefined) return;
@@ -253,6 +269,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     if (outcome.merged.length + outcome.closed.length > 0) log(`review watch: ${outcome.merged.length} merged, ${outcome.closed.length} closed`);
   });
   const checkCancels = tick("cancel check", watchCancels);
+  const followJobConcurrency = tick("job concurrency", () => syncJobConcurrency());
   const outboxStore = new PostgresOutboxStore(options.pool);
   const outboxWorkerId = randomUUID();
   const dispatchWorkflowOutbox = tick("workflow outbox", async () => {
@@ -291,6 +308,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void watchReviews(), (options.reviewWatchSeconds ?? 60) * 1000),
     setInterval(() => void pruneJobs(), (options.cleanupIntervalSeconds ?? 60 * 60) * 1000),
     setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
+    setInterval(() => void followJobConcurrency(), 10 * 1000),
     setInterval(() => void dispatchWorkflowOutbox(), (options.outboxScanSeconds ?? 1) * 1000),
   ];
   void pollAll();

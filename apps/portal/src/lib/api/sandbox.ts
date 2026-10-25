@@ -1,4 +1,4 @@
-// Typed access to the sandbox environment settings (Settings → Sandbox, ADR-0055).
+// Typed access to the sandbox environment settings (Settings → Sandbox & Agent, ADR-0055).
 // Mirrors apps/api → modules/admin/settings (sandbox.manage).
 
 import type { SandboxSettings } from "@kintsugi/domain";

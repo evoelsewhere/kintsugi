@@ -26,6 +26,9 @@ describe("sandbox settings (ADR-0055)", () => {
   it("allows 0 where it means no limit or off, and a fractional cost", () => {
     expect(sandboxProblems({ ...DEFAULT_SANDBOX, agentTimeoutSec: 0, agentIdleTimeoutSec: 0, maxTurns: 0, maxCostUsd: 0.5 })).toEqual([]);
     expect(sandboxProblems({ ...DEFAULT_SANDBOX, checkoutHours: 0 })).not.toEqual([]);
+    expect(sandboxProblems({ ...DEFAULT_SANDBOX, maxJobConcurrency: 0 })).not.toEqual([]);
+    expect(sandboxProblems({ ...DEFAULT_SANDBOX, maxJobConcurrency: 33 })).not.toEqual([]);
+    expect(sandboxProblems({ ...DEFAULT_SANDBOX, maxJobConcurrency: 8 })).toEqual([]);
   });
 
   it("resolves a stored value field by field: valid fields are taken, the others are the defaults", () => {
