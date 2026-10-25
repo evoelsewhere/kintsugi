@@ -1,3 +1,4 @@
+import { WebSearchPanel } from "./web-search-panel";
 import { ProjectMemoryPanel } from "./project-memory-panel";
 // Project configuration (Administration → Projects, ADR-0028): the project's fields, per
 // application the AS-IS group (legacy code and legacy data repos, read-only for Kintsugi) and
@@ -41,7 +42,7 @@ type ConfirmTarget =
 
 type LinkTarget = { application: ApplicationView; role: ApplicationRepositoryRole };
 
-type ProjectTab = "project" | "plugins" | "access" | "connect" | "memory";
+type ProjectTab = "project" | "plugins" | "access" | "connect" | "memory" | "web-search";
 
 export function ProjectDetailPage(): React.JSX.Element {
   const { projectId = "" } = useParams();
@@ -51,6 +52,7 @@ export function ProjectDetailPage(): React.JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabs: Array<{ id: ProjectTab; label: string }> = [
     { id: "project", label: "Project" },
+    ...(can("project.web-search.manage") ? [{ id: "web-search" as const, label: "Web search" }] : []),
     ...(can("project.memory.manage") ? [{ id: "memory" as const, label: "Project memory" }] : []),
     ...(can("plugin.access.manage") ? [{ id: "plugins" as const, label: "Member plugins" }] : []),
     ...(can("project.access.manage") ? [{ id: "access" as const, label: "Project access" }] : []),
@@ -226,6 +228,7 @@ export function ProjectDetailPage(): React.JSX.Element {
         </>
       ) : null}
 
+      {tab === "web-search" ? <WebSearchPanel key={projectId} projectId={projectId} /> : null}
       {tab === "memory" ? <ProjectMemoryPanel key={projectId} projectId={projectId} /> : null}
       {tab === "plugins" ? <PluginAccessPanel projectId={projectId} canManage={can("plugin.access.manage")} /> : null}
       {tab === "access" ? <ProjectAccessPanel projectId={projectId} canManage={can("project.access.manage")} /> : null}

@@ -104,3 +104,7 @@ The product intends runtime agents for platform work — knowledge ingestion, KB
 ## Project memory
 
 Project agents can use seven optional memory tools to remember and recall facts, lessons, decisions and navigation, read daily logs, maintain a run scratchpad and recover forgotten notes. Writes are saved immediately as learned; review is a separate trust transition. Independent reviewers read only reviewed notes outside their current run. No memory is injected into the task or retained as a snapshot. The generic runtime calls a worker-bound service, never the database. See [project memory](project-memory.md) for scope, tools, trust, retention and reset behavior.
+
+## Public web search
+
+Projects can explicitly grant selected agents the optional `web_search` tool. It is backed by a caller-bound worker service, uses DuckDuckGo, and performs no automatic search or context injection. See [runtime web search](web-search.md) for configuration, shared budgets and security boundaries.

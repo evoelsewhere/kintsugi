@@ -262,3 +262,4 @@ export * from "./design-template.js";
 export * from "./traceability.js";
 export * from "./mcp.js";
 export * from "./project-memory.js";
+export * from "./web-search.js";

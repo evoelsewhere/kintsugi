@@ -25,6 +25,10 @@
     "./project-memory": {
       "types": "./dist/project-memory/index.d.ts",
       "import": "./dist/project-memory/index.js"
+    },
+    "./web-search": {
+      "types": "./dist/web-search/index.d.ts",
+      "import": "./dist/web-search/index.js"
     }
   },
   "engines": {
@@ -46,6 +50,7 @@
     "@kintsugi/runtime": "workspace:*",
     "@kintsugi/runtime-sdk": "workspace:*",
     "@kintsugi/secrets": "workspace:*",
+    "cheerio": "1.1.2",
     "pg": "^8.23.1",
     "pg-boss": "12.37.1"
   },
