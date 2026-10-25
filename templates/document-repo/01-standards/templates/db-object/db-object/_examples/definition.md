@@ -25,4 +25,4 @@ unit: "billing-db/schema/statement"
 | Object | Name | Kind | Columns | Rule |
 | --- | --- | --- | --- | --- |
 | statement | pk_statement | primary | customer_id, period | - |
-| statement | ck_statement_total | check | total | RULE-001 |
+| statement | ck_statement_total | check | total | RULE-BILL01-0001 |

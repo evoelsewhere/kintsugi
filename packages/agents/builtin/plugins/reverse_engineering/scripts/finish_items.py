@@ -13,7 +13,7 @@ same folder, and the fragments the specification jobs returned (scratch/<app>/un
 overwritten). Writes under --out:
 
 - 01-legacy/<module>/<unit>/trace.md - the fragment (its `openQuestions` is the number of rows of the specification's
-  `Gaps and questions` table, ADR-0057; a table that does not read is reported on stdout) with only the rule and finding ids of that item and dependencies
+  `Gaps and questions` table, ADR-0057; a malformed table fails the step) with only the rule and finding ids of that item and dependencies
   that name a catalog item, a data store or a system, with the sections the later phases fill in
   (requirements, pull requests, tests);
 - 01-legacy/<module>/<unit>/understanding.md - digest, sources, run, counts and the specification profile of the item's
@@ -115,8 +115,8 @@ def render_trace(app, item_id, checked):
     return '\n'.join(out).rstrip() + '\n'
 
 
-def finish(app, items, chosen, inputs, sources, run, existing, notes=None):
-    """`notes`, when given, collects what a person should look at (a specification whose gaps table does not read)."""
+def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=''):
+    """`notes`, when given, collects missing specification-profile sections for review."""
     revision = paths.sources_spec(sources)
     texts, done, missing, new_units = {}, [], [], 0
     owners = cc.owner_of(items.values())
@@ -128,9 +128,10 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None):
             missing.append(item_id)
             continue
         spec_text = docmd.read_text(spec_path)
-        gaps, gap_problems = gaps_common.spec_gaps(spec_text)
-        if notes is not None:
-            notes.extend(f'{item_id}: {problem}' for problem in gap_problems)
+        spec_text, ledger = gaps_common.assign_gap_ids(spec_text, cc.refs.scope_of(item), cc.refs.prior_registry(docs, app, item, 'GAP'))
+        texts[spec] = spec_text
+        texts[cc.refs.registry_path(app, item, 'GAP')] = ledger
+        gaps, _ = gaps_common.spec_gaps(spec_text)
         # The profile of the item's kind (ADR-0060) the brief carried, and the sections of it the specification lacks.
         brief = cc.read_optional_json(os.path.join(inputs, *paths.assessment_brief_path(app, item_id).split('/')))
         profile = brief.get('profile') if isinstance(brief, dict) and isinstance(brief.get('profile'), dict) else None
@@ -221,6 +222,7 @@ def main(argv):
     ap.add_argument('--sources', required=True, help='the legacy repositories and their commits, `id@commit,id@commit`')
     ap.add_argument('--run', default='')
     ap.add_argument('--existing')
+    ap.add_argument('--docs', default='', help='read-only document repository holding the allocation history')
     args = ap.parse_args(argv[1:])
     try:
         if not cc.APP_RE.match(args.app):
@@ -234,7 +236,7 @@ def main(argv):
         items, _ = cc.load_catalog(args.catalog)
         chosen = cc.selected(items, args.items)
         notes = []
-        texts, done, missing, new_units = finish(args.app, items, chosen, os.path.realpath(args.inputs), sources, args.run, args.existing, notes)
+        texts, done, missing, new_units = finish(args.app, items, chosen, os.path.realpath(args.inputs), sources, args.run, args.existing, notes, args.docs or args.out)
         root = os.path.abspath(args.out)
         for path, text in texts.items():
             docmd.write_text(os.path.join(root, *path.split('/')), text)

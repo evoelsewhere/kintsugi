@@ -488,6 +488,16 @@ export function unitRulesReviewPath(app: string, module: string, unit: string): 
   return unitLegacyFilePath(app, module, unit, "rules-review.md");
 }
 
+/** Relative to the reference owner's document folder. */
+export function identifierRegistryFile(kind: "rules" | "findings" | "gaps"): string {
+  return `identifiers/${kind}-ids.md`;
+}
+
+/** Independent allocation history per unit and reference type (ADR-0075). */
+export function unitIdentifierRegistryPath(app: string, module: string, unit: string, kind: "rules" | "findings" | "gaps"): string {
+  return unitLegacyFilePath(app, module, unit, identifierRegistryFile(kind));
+}
+
 export function unitFindingsPath(app: string, module: string, unit: string): string {
   return unitLegacyFilePath(app, module, unit, "findings.md");
 }

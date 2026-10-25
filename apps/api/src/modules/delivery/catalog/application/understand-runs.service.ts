@@ -5,6 +5,7 @@
 // run on them (409 with the conflicts); Abandon on the earlier run releases them.
 
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { DOCUMENT_REFERENCE_SCOPE_PATTERN } from "@kintsugi/domain";
 import type { Actor } from "#common/auth/decorators.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { isBlocked } from "../domain/catalog.js";
@@ -53,6 +54,10 @@ export class UnderstandRunsService {
       });
     }
     if (wanted.size === 0) throw new BadRequestException("Select at least one catalog item or module");
+    const codes = loaded.catalog.items.flatMap((item) => item.referenceCode === undefined ? [] : [item.referenceCode]);
+    if (new Set(codes).size !== codes.length || [...wanted].some((id) => !DOCUMENT_REFERENCE_SCOPE_PATTERN.test(byId.get(id)?.referenceCode ?? ""))) {
+      throw new ConflictException("Run assess and merge its catalog before understand: the selected items need valid, unique reference codes");
+    }
     const view = await this.catalog.withStatus(loaded, applicationId);
     const conflicts = view.items
       .filter((item) => wanted.has(item.id) && isBlocked(item))

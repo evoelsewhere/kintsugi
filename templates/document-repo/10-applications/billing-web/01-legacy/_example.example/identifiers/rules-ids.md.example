@@ -1,0 +1,14 @@
+---
+type: "RULE"
+scope: "BILL01"
+version: 1
+allocated: 2
+---
+# RULE identifier ledger
+
+Generated allocation history. Keep retired rows; restore this file from Git if lost.
+
+| ID | Fingerprints | Anchor | Status |
+| --- | --- | --- | --- |
+| RULE-BILL01-0001 | 87d2e14acf4f7b9b4d213cf982105a4d5b1f167fa8682fba65da86b7541bf64a | 34202fdd285e0d00e61b32fc1f356ee112741c2d9c81f0bb65aedfe27218f493 | active |
+| RULE-BILL01-0002 | 7e3a11b72339965c3eeeb18e44a5d457b241ddc008c75ced4fbef94ad4e3b1de | a50063bdf1fe847ffc6016554dc0a812cf66ee148ff566fa8fcfd17aa72818e7 | active |

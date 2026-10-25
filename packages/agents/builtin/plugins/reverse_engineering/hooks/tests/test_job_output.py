@@ -289,3 +289,18 @@ def test_an_index_with_no_rules_needs_the_explicit_line(tmp_path: Path) -> None:
 
     index.write_text("# Business rules\n\n_No business rules were confirmed in this run._\n", encoding="utf-8")
     assert run_hook(tmp_path).returncode == 0
+
+
+@pytest.mark.parametrize("prose,second", [
+    ("See GAP-CARD01-0002.", ""),
+    ("", "| GAP-CARD01-0002 | unresolved | Which mode? | legacy/a.cbl:10 | blocking |\n"),
+])
+def test_gap_problems_are_rejected_before_the_specification_is_reused(tmp_path: Path, prose: str, second: str) -> None:
+    spec = tmp_path / "10-applications/demo/01-legacy/card/main/spec.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# Unit\n\n" + prose + "\n\n## Gaps and questions\n\n"
+                    "| ID | Kind | Question | Where | Impact |\n| --- | --- | --- | --- | --- |\n"
+                    "| GAP-CARD01-0001 | unresolved | Which mode? | legacy/a.cbl:10 | risk |\n" + second)
+    result = run_hook(tmp_path)
+    assert result.returncode == 3
+    assert any(f["rule"] == "invalid_specification_gaps" for f in report(result)["findings"])

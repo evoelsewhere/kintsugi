@@ -16,7 +16,7 @@ what you do not.
 | --- | --- | --- |
 | confirmed | The executable code (or config the code reads) does this, and you read it | A citation `<repository id>/<path>:line`, nothing else |
 | inferred | Deduced from names, structure, data or a pattern; the code does not say it | `(inferred)` after the statement, with the evidence it rests on |
-| gap | The code, as provided, cannot settle it | `(gap: GAP-<module>.<unit>-NN)`, and a row in the gaps table |
+| gap | The code, as provided, cannot settle it | `(gap: GAP-<scope>-0001)`, and a row in the gaps table |
 
 - A statement with no citation and no mark is a defect: it reads as confirmed and cannot be checked.
 - A comment, a name or a string is never confirmed behavior. Behavior supported only by them is `inferred`, and a
@@ -33,11 +33,13 @@ you looked and found none.
 ```markdown
 | ID | Kind | Question | Where | Impact |
 | --- | --- | --- | --- | --- |
-| GAP-billing.invoice-01 | missing-source | What does copybook TAXTAB hold? It is COPYed but not in any repository. | `legacy-app/src/INVOICE.cbl:41` | blocking |
+| GAP-BILL01-0001 | missing-source | What does copybook TAXTAB hold? It is COPYed but not in any repository. | `legacy-app/src/INVOICE.cbl:41` | blocking |
 ```
 
-- **ID**: `GAP-<module>.<unit>-NN`, numbered inside the unit from 01, never reused; an id already used by a document
-  you read keeps its meaning.
+- **ID**: `GAP-<scope>-0001`, use `referenceCode` from the item brief as the scope. In an understanding job, use unique draft
+  numbers from 0001 and reuse each draft consistently in prose and its table row. `finish_items.py` assigns
+  persistent numbers from the unit ledger and rewrites every reference in the specification. Never edit ledgers.
+  Outside that job, an existing published ID keeps its meaning; never invent a published ID.
 - **Kind** (exactly one of):
   - `missing-source`: the code names something that is not in the repositories provided: a copybook, a called
     program, a library, a job or deployment descriptor, a table definition, a configuration file.

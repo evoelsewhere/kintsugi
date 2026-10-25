@@ -175,13 +175,13 @@ class UnderstandToolsTests(unittest.TestCase):
         tax = self.rules_of('tax/calc')
         self.assertEqual(len(tax), 2)
         for rule_id, card in tax:
-            self.assertRegex(rule_id, r'^RULE-tax\.calc-[0-9a-f]{8}$')
+            self.assertRegex(rule_id, r'^RULE-TAX01-[0-9]{4}$')
             self.assertIn(f'\n# {rule_id}: ', card)
             self.assertEqual(docmd.split_front_matter(card)[0]['version'], 1)
         self.assertNotEqual(tax[0][0], tax[1][0])
         self.assertEqual([row['name'] for row in rr.unit_rule_rows(docmd.read_text(unit_file(self.out, 'tax/calc', 'rules.md')))], ['Tax rounding', 'Amount positive'])
         entry = self.rules_of('invoicing/entry')
-        self.assertRegex(entry[0][0], r'^RULE-invoicing\.entry-[0-9a-f]{8}$')
+        self.assertRegex(entry[0][0], r'^RULE-INVO01-[0-9]{4}$')
         objects = docmd.read_text(unit_file(self.out, 'invoicing/entry', 'data-objects.md'))
         self.assertIn('## INVOICE-REC', objects)
         self.assertIn('| AMOUNT | decimal |', objects)
@@ -212,9 +212,9 @@ class UnderstandToolsTests(unittest.TestCase):
         ], 'dataObjects': []})
         self.assertEqual(self.split_rules(rules, 'tax/calc').returncode, 0)
         ids = names(self.rules_of('tax/calc'))
-        self.assertRegex(ids['Tax rounding'], r'^RULE-tax\.calc-[0-9a-f]{8}-tax-rounding$')
-        self.assertRegex(ids['Tax floor'], r'^RULE-tax\.calc-[0-9a-f]{8}-tax-floor$')
-        self.assertEqual(ids['Tax rounding'][:21], ids['Tax floor'][:21])
+        self.assertRegex(ids['Tax rounding'], r'^RULE-TAX01-[0-9]{4}$')
+        self.assertRegex(ids['Tax floor'], r'^RULE-TAX01-[0-9]{4}$')
+        self.assertEqual(ids['Tax rounding'].rsplit('-', 1)[0], ids['Tax floor'].rsplit('-', 1)[0])
 
         scan = os.path.join(self.root, 'scan.json')
         write(scan, {'findings': [
@@ -226,7 +226,7 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         text = docmd.read_text(unit_file(self.out, 'tax/calc', 'findings.md'))
         import split_findings as sf
-        self.assertEqual([(row['id'], row['cwe'], row['severity']) for row in sf.finding_rows(text)], [('SEC-tax.calc-01', 'CWE-798', 'Critical'), ('SEC-tax.calc-02', 'CWE-89', 'Medium')])
+        self.assertEqual([(row['id'], row['cwe'], row['severity']) for row in sf.finding_rows(text)], [('SEC-TAX01-0001', 'CWE-798', 'Critical'), ('SEC-TAX01-0002', 'CWE-89', 'Medium')])
         self.assertNotIn('credentialMeta', text)
         self.assertNotIn('ab**', text)
         self.assertIn('Bind the parameter.', text)
@@ -294,7 +294,7 @@ class UnderstandToolsTests(unittest.TestCase):
 
     def finish_inputs(self):
         inputs = os.path.join(self.root, 'in')
-        write(unit_file(inputs, 'tax/calc', 'spec.md'), '# Tax\n')
+        write(unit_file(inputs, 'tax/calc', 'spec.md'), '# Tax\n\n## Gaps and questions\n\n| ID | Kind | Question | Where | Impact |\n| --- | --- | --- | --- | --- |\n| GAP-TAX01-0001 | ambiguous | Which rounding mode? | RULE-tax.calc-01 | risk |\n| GAP-TAX01-0002 | missing-source | Where is TAXTAB? | legacy/src/TAX.cbl:4 | blocking |\n')
         write(os.path.join(inputs, 'scratch', 'billing', 'understand', 'trace', 'tax', 'calc.json'), {
             'entryPoints': ['src/TAX.cbl:1'], 'rulesApplied': ['RULE-tax.calc-01', 'RULE-001', 'RULE-other.x-01'], 'findings': ['SEC-tax.calc-01'],
             'dependencies': [{'target': 'invoicing/entry', 'kind': 'call', 'direction': 'outbound'}, {'target': '../x', 'kind': 'call', 'direction': 'outbound'}],
@@ -345,10 +345,9 @@ class UnderstandToolsTests(unittest.TestCase):
                 '| NOTE-1 | note | Not a gap id | - | note |\n')
         write(unit_file(inputs, 'tax/calc', 'spec.md'), gaps)
         result = run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', self.out, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'trace.md')))[0]['openQuestions'], 3)
+        self.assertNotEqual(result.returncode, 0)
         for note in ('GAP-tax.calc-02 is listed twice', 'GAP-tax.calc-03 has kind "guess"', 'GAP-tax.calc-03 has impact "huge"', 'NOTE-1 is not a gap id'):
-            self.assertIn(note, result.stdout)
+            self.assertIn(note, result.stderr)
         # "None." under the heading is zero gaps, whatever the agent counted.
         write(unit_file(inputs, 'tax/calc', 'spec.md'), '# Tax\n\n## Gaps and questions\n\nNone.\n')
         result = run('finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', self.out, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1')

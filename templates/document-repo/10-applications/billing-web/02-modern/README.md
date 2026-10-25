@@ -32,7 +32,7 @@ Each requirement is a Markdown section; the source rules are named on its `deriv
 
 The invoice search returns amounts including tax.
 
-**derivedFrom:** RULE-invoice-amount-001, RULE-invoice-tax-002
+**derivedFrom:** RULE-BILL01-0001, RULE-BILL01-0002
 ```
 
 A unit's `trace.md` (in `01-legacy/`) links the requirement ids it implements under `Requirements`.

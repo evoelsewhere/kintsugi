@@ -20,6 +20,11 @@ import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
+# Writer contracts shared with the split/finish scripts; the shipped plugin owns this path.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import gaps_common  # noqa: E402
+
 EXIT_CLEAN = 0
 EXIT_MALFORMED = 3
 EXIT_INPUT_ERROR = 5
@@ -39,11 +44,11 @@ MERMAID_LINT = Path(__file__).resolve().parent.parent / "scripts" / "mermaid_lin
 
 # RULE-NNN estate ids, legacy item-namespaced RULE-<module>.<item>-NN (ADR-0033) and the
 # citation-derived RULE-<module>.<unit>-<hash> ids (ADR-0038).
-RULE_HEADING = re.compile(r"^### RULE-(?:\d{2,}|[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})?-(?:\d{2,}|[0-9a-f]{8}(?:-[a-z0-9][a-z0-9-]{0,31})?)): \S.*$")
+RULE_HEADING = re.compile(r"^### RULE-(?:[A-Z][A-Z0-9]{1,15}-[0-9]{4,}|\d{2,}|[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})?-(?:\d{2,}|[0-9a-f]{8}(?:-[a-z0-9][a-z0-9-]{0,31})?)): \S.*$")
 # scripts/render_rules.py writes this line when no rule was confirmed: an empty catalog, not a malformed one.
 NO_RULES_MARKER = "_No business rules were confirmed in this run._"
 RULE_CANDIDATE = re.compile(r"^#{1,6}\s+RULE-", re.IGNORECASE)
-RULE_ID = re.compile(r"^RULE-(?:\d{2,}|[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})?-(?:\d{2,}|[0-9a-f]{8}(?:-[a-z0-9][a-z0-9-]{0,31})?))$")
+RULE_ID = re.compile(r"^RULE-(?:[A-Z][A-Z0-9]{1,15}-[0-9]{4,}|\d{2,}|[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})?-(?:\d{2,}|[0-9a-f]{8}(?:-[a-z0-9][a-z0-9-]{0,31})?))$")
 # A rule's own file: rules/<rule id>.md next to its index.
 RULE_FILE = re.compile(r"(?:^|/)rules/RULE-[^/]+\.md$")
 
@@ -268,6 +273,11 @@ def _validate_artifact(relative: str, content: bytes, root: Path | None = None) 
     if name == "topology.md":
         if not _valid_topology_document(text):
             findings.append(("invalid_topology_document", 1))
+    elif name == "spec.md" and re.fullmatch(r"10-applications/[^/]+/01-legacy/[^/]+/[^/]+/spec\.md", relative):
+        try:
+            gaps_common.checked_gaps(text)
+        except gaps_common.refs.DataError:
+            findings.append(("invalid_specification_gaps", 1))
     elif name in ("BUSINESS_RULES.md", "rules.md"):
         findings.extend(_validate_rule_index(relative, text, root))
     elif RULE_FILE.search(relative):

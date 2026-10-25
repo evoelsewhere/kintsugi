@@ -11,11 +11,15 @@ export type ItemStatus = "running" | "in-pr" | "failed" | "stale" | "understood"
 
 export interface CatalogModule {
   id: string;
+  /** Immutable abbreviation allocated by assess (ADR-0075). */
+  code?: string;
   name: string;
   summary: string;
 }
 
 export interface CatalogItem {
+  /** Published RULE/SEC/GAP scope, e.g. CARD01; independent of the canonical unit path. */
+  referenceCode?: string;
   /** `<module>/<item>`. */
   id: string;
   module: string;

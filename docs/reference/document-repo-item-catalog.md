@@ -67,7 +67,7 @@ Before the catalog is written, `reconcile_catalog.py` reads the previous catalog
 
 The extract-rules workflow runs over the selected items' shards. `split_rules.py` writes, in each unit's folder `10-applications/<app>/01-legacy/<module>/<unit>/`, `rules.md` (the index), a file per rule under `rules/` and `data-objects.md`; `split_findings.py` writes `findings.md`. The application-level views (`BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `traceability.md`, `README.md`) are not written by the run: `rebuild_aggregates.py` rebuilds them under `10-applications/<app>/_generated/` after a merge.
 
-**Identity.** Rule ids are deterministic and citation-derived, so they are stable across re-extractions and human verdicts keep matching. Verdicts (`confirmed`, `refuted`, `clarify`, approver, date) live in the unit's `rules-review.md`; a verdict whose rule id is absent from the current extraction is reported as orphaned, not silently applied (see [unit files](document-repo-unit-files.md#rulesmd-and-rules-reviewmd)).
+**Identity.** Assess persists a module `code` and immutable unit `referenceCode`, such as `CARD` and `CARD01`. The module table and item cards expose these codes; the canonical item IDs remain unchanged. Reconciliation keeps codes across renames, moves and retirement. RULE, SEC and GAP references use these scopes with per-unit Markdown allocation ledgers ([identifier contract](document-identifiers.md)). Verdicts (`confirmed`, `refuted`, `clarify`, approver, date) live in the unit's `rules-review.md`; a verdict whose rule id is absent from the current extraction is reported as orphaned, not silently applied (see [unit files](document-repo-unit-files.md#rulesmd-and-rules-reviewmd)).
 
 ## Changes
 

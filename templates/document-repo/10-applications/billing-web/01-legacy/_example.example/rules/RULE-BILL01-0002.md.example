@@ -1,5 +1,5 @@
 ---
-id: "RULE-invoices.invoice-search-5e6f7a8b"
+id: "RULE-BILL01-0002"
 name: "Invoice search matches customer, date range and status"
 app: "billing-web"
 item: "invoices/invoice-search"
@@ -18,7 +18,7 @@ tags: []
 generatedBy: "split_rules.py"
 ---
 
-# RULE-invoices.invoice-search-5e6f7a8b: Invoice search matches customer, date range and status
+# RULE-BILL01-0002: Invoice search matches customer, date range and status
 
 ## Summary
 

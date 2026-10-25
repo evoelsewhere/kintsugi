@@ -8,6 +8,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
+sys.path.insert(0, SCRIPTS)
 
 
 def run(script, *args):
@@ -43,17 +44,17 @@ class RenderTests(unittest.TestCase):
             text = open(os.path.join(ws, 'out/BUSINESS_RULES.md'), encoding='utf-8').read()
             # The index lists the rules and links their files; it holds no rule cards.
             self.assertEqual([line for line in text.splitlines() if line.startswith('### ')], [])
-            rows = [line for line in text.splitlines() if re.match(r'^\| RULE-\d+ \|', line)]
+            rows = [line for line in text.splitlines() if re.match(r'^\| RULE-APP00-\d+ \|', line)]
             self.assertEqual(len(rows), 2, rows)
-            self.assertIn('| RULE-001 | Late fee | Calculation | P0 | High | 1 | confirmed | `a.cbl:10-20` | [RULE-001](rules/RULE-001.md) |', text)
-            ids = [int(n) for n in re.findall(r'^\| RULE-(\d+) \|', text, re.M)]
+            self.assertIn('| RULE-APP00-0001 | Late fee | Calculation | P0 | High | 1 | confirmed | `a.cbl:10-20` | [RULE-APP00-0001](rules/RULE-APP00-0001.md) |', text)
+            ids = [int(n) for n in re.findall(r'^\| RULE-APP00-(\d+) \|', text, re.M)]
             self.assertEqual(ids, list(range(1, len(ids) + 1)), 'rule numbers read in sequence down the index')
-            first = open(os.path.join(ws, 'out/rules/RULE-001.md'), encoding='utf-8').read()
-            self.assertIn('# RULE-001: Late fee', first)
+            first = open(os.path.join(ws, 'out/rules/RULE-APP00-0001.md'), encoding='utf-8').read()
+            self.assertIn('# RULE-APP00-0001: Late fee', first)
             self.assertIn('Then  fee 5%', first)
             self.assertIn('## Version history', first)
-            hostile = open(os.path.join(ws, 'out/rules/RULE-002.md'), encoding='utf-8').read()
-            self.assertEqual([line for line in hostile.splitlines() if line.startswith('# ')], ["# RULE-002: Bad 'name' / pipe # Heading"])
+            hostile = open(os.path.join(ws, 'out/rules/RULE-APP00-0002.md'), encoding='utf-8').read()
+            self.assertEqual([line for line in hostile.splitlines() if line.startswith('# ')], ["# RULE-APP00-0002: Bad 'name' / pipe # Heading"])
             self.assertNotIn('\n# injected heading', hostile)
             self.assertIn('status: "needs-sme"', hostile)
             self.assertIn('Is it 5 or 6?', hostile)
@@ -93,7 +94,7 @@ class RenderTests(unittest.TestCase):
             write(ws, 'assessment/rules_result.json', json.dumps(result))
             self.assertEqual(run('render_rules.py', 's', '--assessment', os.path.join(ws, 'assessment'), '--out', os.path.join(ws, 'out')).returncode, 0)
             text = open(os.path.join(ws, 'out/BUSINESS_RULES.md'), encoding='utf-8').read()
-            cites = re.findall(r'^\| RULE-\d+ \|.*\| `([^`]*)` \| \[RULE', text, re.M)
+            cites = re.findall(r'^\| RULE-APP00-\d+ \|.*\| `([^`]*)` \| \[RULE', text, re.M)
             self.assertEqual(sorted(cites), sorted(['wwwroot/a.pl:100-120', 'lib/x.pm:966', 'no citation here', 'c.cbl:7']))
             files = [open(os.path.join(ws, 'out/rules', name), encoding='utf-8').read() for name in sorted(os.listdir(os.path.join(ws, 'out/rules')))]
             self.assertEqual(len(files), 4)
@@ -110,8 +111,37 @@ class RenderTests(unittest.TestCase):
             text = open(os.path.join(ws, 'out/BUSINESS_RULES.md'), encoding='utf-8').read()
             self.assertIn('## Rules folded into another', text)
             self.assertIn('- Twiddle factors (b.c:3-4) into Twiddle table', text)
-            self.assertIn('| `b.c:3-4` | Also cited |', open(os.path.join(ws, 'out/rules/RULE-001.md'), encoding='utf-8').read())
+            self.assertIn('| `b.c:3-4` | Also cited |', open(os.path.join(ws, 'out/rules/RULE-APP00-0001.md'), encoding='utf-8').read())
             self.assertNotIn('\n# fake heading', text)
+
+    def test_retirement_and_reactivation_keep_ledger_file_and_catalog_history_consistent(self):
+        from pathlib import Path
+        import docmd
+        rule = {'name': 'Round', 'category': 'Calculation', 'priority': 'P1', 'source': 'a.cbl:10', 'confidence': 'High'}
+        with tempfile.TemporaryDirectory() as ws:
+            root = Path(ws)
+            args = ('s', '--assessment', str(root / 'assessment'), '--out', str(root / 'out'))
+            def render(rules):
+                write(ws, 'assessment/rules_result.json', json.dumps({'confirmedRules': rules}))
+                result = run('render_rules.py', *args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            def front(path):
+                return docmd.split_front_matter((root / 'out' / path).read_text())[0]
+            render([rule])
+            render([])
+            self.assertEqual(front('rules/RULE-APP00-0001.md')['status'], 'retired')
+            self.assertEqual(front('rules/RULE-APP00-0001.md')['version'], 2)
+            self.assertEqual(front('BUSINESS_RULES.md')['catalogVersion'], 2)
+            retired = (root / 'out/rules/RULE-APP00-0001.md').read_text()
+            render([])
+            self.assertEqual((root / 'out/rules/RULE-APP00-0001.md').read_text(), retired)
+            self.assertEqual(front('BUSINESS_RULES.md')['catalogVersion'], 2)
+            render([rule])
+            self.assertEqual(front('rules/RULE-APP00-0001.md')['status'], 'confirmed')
+            self.assertEqual(front('rules/RULE-APP00-0001.md')['version'], 3)
+            self.assertEqual(front('BUSINESS_RULES.md')['catalogVersion'], 3)
+            _, body = docmd.split_front_matter((root / 'out/identifiers/rules-ids.md').read_text())
+            self.assertEqual([(r['id'], r['status']) for r in docmd.records_in(body)], [('RULE-APP00-0001', 'active')])
 
     def test_unreadable_result_is_an_error(self):
         with tempfile.TemporaryDirectory() as ws:

@@ -431,6 +431,18 @@ def unit_rules_review_path(app, module, unit):
     return unit_legacy_file_path(app, module, unit, 'rules-review.md')
 
 
+def identifier_registry_file(kind):
+    """Relative to the reference owner's document folder."""
+    if kind not in ('rules', 'findings', 'gaps'):
+        raise ValueError('invalid identifier registry kind')
+    return f'identifiers/{kind}-ids.md'
+
+
+def unit_identifier_registry_path(app, module, unit, kind):
+    """Independent allocation history per unit and reference type (ADR-0075)."""
+    return unit_legacy_file_path(app, module, unit, identifier_registry_file(kind))
+
+
 def unit_findings_path(app, module, unit):
     return unit_legacy_file_path(app, module, unit, 'findings.md')
 

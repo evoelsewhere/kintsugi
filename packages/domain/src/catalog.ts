@@ -37,11 +37,15 @@ export interface CatalogItemPart {
 
 export interface CatalogModule {
   id: string;
+  /** Immutable abbreviation allocated by assess (ADR-0075). */
+  code?: string;
   name: string;
   summary: string;
 }
 
 export interface CatalogItem {
+  /** Published RULE/SEC/GAP scope, e.g. CARD01; independent of the canonical unit path. */
+  referenceCode?: string;
   /** `<module>/<item>`; stable across re-assessments. */
   id: string;
   /** The item's current module (the id keeps the module it was created in). */

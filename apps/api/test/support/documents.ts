@@ -31,6 +31,8 @@ export function catalogDocuments(
 ): Record<string, string> {
   const base = `10-applications/${app}/01-legacy/_catalog`;
   const documents: Record<string, string> = {};
+  const moduleCodes = new Map(modules.map((module, index) => [module.id, `M${index + 1}`]));
+  const referenceCodes = new Map(items.map((item, index) => [item.id, `${moduleCodes.get(item.id.split("/")[0] ?? "")}${String(index + 1).padStart(2, "0")}`]));
   const active = items.filter((item) => item.status !== "retired");
 
   documents[`${base}/index.md`] = [
@@ -47,7 +49,7 @@ export function catalogDocuments(
     "",
     "## Modules",
     "",
-    table(["Module", "Name", "Items", "Summary"], modules.map((module) => [module.id, module.name, String(items.filter((item) => item.id.startsWith(`${module.id}/`)).length), ""])),
+    table(["Module", "Code", "Name", "Items", "Summary"], modules.map((module) => [module.id, moduleCodes.get(module.id) ?? "", module.name, String(items.filter((item) => item.id.startsWith(`${module.id}/`)).length), ""])),
     "",
     ...(ambiguities.length === 0 ? [] : ["## Ambiguities", "", ...ambiguities.map((line) => `- ${line}`), ""]),
     ...(unassigned.length === 0 ? [] : ["## Unassigned files", "", ...unassigned.map((file) => `- \`${file}\``), ""]),
@@ -62,6 +64,7 @@ export function catalogDocuments(
         `## ${item.id}: ${name}`,
         "",
         `- **kind:** ${item.kind ?? "module"}`,
+        `- **referenceCode:** ${referenceCodes.get(item.id)}`,
         `- **status:** ${item.status ?? "active"}`,
         `- **loc:** ${item.loc ?? 10}`,
         "- **complexity:** low",

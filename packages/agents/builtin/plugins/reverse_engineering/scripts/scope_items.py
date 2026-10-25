@@ -92,6 +92,7 @@ def build(app, chosen, standards_dir=None, notes=None):
             'app': app,
             'id': f'{app}/{item["id"]}',
             'key': item['id'],
+            'referenceCode': cc.refs.scope_of(item),
             'name': cc.clean_text(item.get('name'), cc.MAX_NAME) or item['id'],
             'kind': kind,
             'summary': cc.clean_text(item.get('summary'), cc.MAX_SUMMARY),

@@ -53,7 +53,7 @@ def old_from_catalog(previous):
         entry = cc.new_item(item['id'], item.get('module') if cc.SEGMENT_RE.match(str(item.get('module', ''))) else item['id'].split('/')[0],
                             cc.clean_text(item.get('kind'), 40) or 'module', cc.clean_text(item.get('name'), cc.MAX_NAME) or item['id'],
                             [rel for rel in (cc.norm_path(value) for value in item.get('files', []) if isinstance(item.get('files'), list)) if rel])
-        for key in ('summary', 'digest', 'complexity'):
+        for key in ('summary', 'digest', 'complexity', 'referenceCode'):
             if isinstance(item.get(key), str):
                 entry[key] = item[key]
         for key in ('leaves', 'entryPoints', 'aliases'):
@@ -249,11 +249,16 @@ def reconcile(catalog, old_items, old_modules):
         item['module'] = renames.get(item['module'], item['module'])
         if old is not None:
             item['id'] = old['id']
+            if old.get('referenceCode'):
+                item['referenceCode'] = old['referenceCode']
+            else:
+                item.pop('referenceCode', None)
             aliases = [*old.get('aliases', []), *item.get('aliases', [])]
             if old['name'] != item['name']:
                 aliases.append(old['name'])
             item['aliases'] = sorted({alias for alias in aliases if alias and alias != item['name']})
         else:
+            item.pop('referenceCode', None)
             base = item['id'].split('/', 1)[1]
             candidate = f'{item["module"]}/{base}'
             item['id'] = cc.unique_id(item['module'], base, taken | reserved) if candidate in taken | reserved else candidate
@@ -269,14 +274,18 @@ def reconcile(catalog, old_items, old_modules):
     modules = {module['id']: module for module in catalog['modules']}
     known = {module['id']: module for module in old_modules}
     for module in modules.values():
+        module.pop('code', None)
+        if known.get(module['id'], {}).get('code'):
+            module['code'] = known[module['id']]['code']
         if not module.get('summary') and module['id'] in known:
             module['summary'] = cc.clean_text(known[module['id']].get('summary'), cc.MAX_SUMMARY)
     for old in retired:
         if old['module'] not in modules:
             previous = known.get(old['module'])
-            modules[old['module']] = {'id': old['module'], 'name': cc.clean_text(previous.get('name'), cc.MAX_NAME) if previous else old['module'], 'summary': cc.clean_text(previous.get('summary'), cc.MAX_SUMMARY) if previous else ''}
+            modules[old['module']] = {**({'code': previous['code']} if previous and previous.get('code') else {}), 'id': old['module'], 'name': cc.clean_text(previous.get('name'), cc.MAX_NAME) if previous else old['module'], 'summary': cc.clean_text(previous.get('summary'), cc.MAX_SUMMARY) if previous else ''}
     catalog['items'] = result + retired
     catalog['modules'] = list(modules.values())
+    cc.refs.assign_catalog_codes(catalog)
     return {'kept': len(kept), 'new': len(result) - len(kept), 'retired': len(retired), 'renamed': sum(1 for item in result if item['id'] in kept and old_by_id[item['id']]['name'] != item['name'])}
 
 

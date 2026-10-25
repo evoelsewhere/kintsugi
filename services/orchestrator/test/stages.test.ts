@@ -203,7 +203,7 @@ describe("stage plans (mock agent, fixture repositories)", () => {
     expect(main?.task).toContain("10-applications/demo/01-legacy/billing/main/spec.md with write");
 
     // Only per-unit Markdown is published; briefs, shards, traces and workflow results stay out.
-    const files = ["data-objects.md", "findings.md", "rules.md", "spec.md", "topology.md", "trace.md", "understanding.md"];
+    const files = ["data-objects.md", "findings.md", "identifiers/findings-ids.md", "identifiers/gaps-ids.md", "identifiers/rules-ids.md", "rules.md", "spec.md", "topology.md", "trace.md", "understanding.md"];
     // Each rule is a file of its own under the unit's rules/ folder; rules.md indexes them.
     const ruleFiles = artifacts.filter((path) => /\/01-legacy\/[^/]+\/[^/]+\/rules\/RULE-[^/]+\.md$/.test(path));
     expect(ruleFiles.length).toBeGreaterThan(0);
@@ -213,6 +213,17 @@ describe("stage plans (mock agent, fixture repositories)", () => {
       "10-applications/demo/02-modern/rates/rates/README.md",
     ]);
     const unit = (path: string): string => readFileSync(join(root, "10-applications", "demo", "01-legacy", ...path.split("/")), "utf8");
+    for (const key of ["billing/main", "rates/rates"]) {
+      const ledgers = ["rules", "findings", "gaps"].map((kind) => documentOf(unit(`${key}/identifiers/${kind}-ids.md`)).data);
+      expect(ledgers.map((ledger) => ledger["type"])).toEqual(["RULE", "SEC", "GAP"]);
+      expect(new Set(ledgers.map((ledger) => ledger["scope"])).size).toBe(1);
+      expect(ledgers[0]?.["scope"]).toMatch(/^[A-Z][A-Z0-9]{1,15}$/);
+    }
+    expect(documentOf(unit("billing/main/identifiers/rules-ids.md")).data["scope"])
+      .not.toBe(documentOf(unit("rates/rates/identifiers/rules-ids.md")).data["scope"]);
+    for (const path of ruleFiles) {
+      expect(documentOf(readFileSync(join(root, ...path.split("/")), "utf8")).data["id"]).toMatch(/^RULE-[A-Z][A-Z0-9]{1,15}-[0-9]{4,}$/);
+    }
     const card = (key: string): string => join(root, "10-applications", "demo", "02-modern", ...key.split("/"), "README.md");
     // The topology document of an item: its leaves, the items it depends on, the data stores it touches.
     const topology = unit("billing/main/topology.md");

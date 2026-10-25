@@ -11,7 +11,7 @@ counted. Writes per item, under 10-applications/<app>/01-legacy/<module>/<unit>/
 
     rules.md            the index: a table of the rules (id, name, category, priority, confidence,
                         version, status, source, link) and the retired ones
-    rules/<id>.md       one file per rule, `RULE-<module>.<unit>-<hash>`: specification, evidence, edge
+    rules/<id>.md       one file per rule, `RULE-<scope>-0001`: specification, evidence, edge
                         cases, open questions and the rule's version history (rule_docs.py)
     data-objects.md     the data objects whose source file the item owns
 
@@ -19,11 +19,11 @@ counted. Writes per item, under 10-applications/<app>/01-legacy/<module>/<unit>/
 keeps its version while its content is unchanged and gets the next one when it changed; a rule that
 is no longer extracted is rewritten as a `retired` file and listed in the index's retired table.
 
-Rule ids are citation-derived and stable (ADR-0038): the suffix hashes the item key and the
-canonical `path:start-end` of the rule's source, so a rerun keeps every unchanged rule's id and a
-changed or missing citation yields a new id. The item's human rule verdicts live in the sibling
-rules-review.md, which is human-owned and never touched here; verdicts whose rule id is no longer
-in the extraction are reported as orphaned. A data object goes to the item owning its `source`
+Rule ids use the catalog's immutable referenceCode and the per-unit identifiers/rules-ids.md ledger
+(ADR-0075). Exact citation/name matches keep IDs; a unique active citation can preserve an ID across
+name edits. Removed IDs stay retired, and new identities append without reusing their numbers.
+The human rules-review.md is never rewritten; unmatched verdicts are reported as orphaned.
+A data object goes to the item owning its `source`
 file, when it has one. Standard library only.
 """
 import argparse
@@ -92,9 +92,12 @@ def split(app, result, chosen, docs='', date='', commit=''):
         if item_id is not None:
             per_item[item_id]['dataObjects'].append(obj)
     outputs = {}
+    by_id = {item['id']: item for item in chosen}
     for item_id, found in per_item.items():
         rules = sorted(found['rules'], key=lambda r: (rr.CATEGORIES.index(r['category']) if r.get('category') in rr.CATEGORIES else 9, str(r.get('name')), str(r.get('source'))))
-        identified = cc.assign_rule_ids(item_id, rules)
+        item = by_id[item_id]
+        identified, ledger = cc.assign_rule_ids(cc.refs.scope_of(item), rules, cc.refs.prior_registry(docs, app, item, 'RULE'))
+        outputs[cc.refs.registry_path(app, item, 'RULE')] = {'item': item_id, 'ids': [], 'text': ledger}
         for path, text in item_documents(app, item_id, identified, docs, date, commit).items():
             outputs[path] = {'item': item_id, 'ids': [rule['id'] for rule in identified] if path == paths.unit_rules_path(app, *item_id.split('/')) else [], 'text': text}
         outputs[paths.unit_data_objects_path(app, *item_id.split('/'))] = {'item': item_id, 'ids': [], 'text': rr.render_unit_data_objects(app, item_id, found['dataObjects'])}
@@ -124,7 +127,7 @@ def main(argv):
             revision = paths.sources_spec(paths.parse_sources(args.sources)) if args.sources else ''
         except ValueError as error:
             raise cc.DataError(f'--sources: {error}') from error
-        outputs, unplaced = split(args.app, result, chosen, os.path.realpath(args.docs) if args.docs else '', date, revision)
+        outputs, unplaced = split(args.app, result, chosen, os.path.realpath(args.docs or args.out), date, revision)
         root = os.path.abspath(args.out)
         for path, value in outputs.items():
             docmd.write_text(os.path.join(root, *path.split('/')), value['text'])

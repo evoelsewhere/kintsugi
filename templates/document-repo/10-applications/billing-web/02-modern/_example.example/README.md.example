@@ -21,7 +21,7 @@ links:
   taskPack: 10-applications/billing-web/02-modern/invoices/invoice-search/task.md
   asIs: 10-applications/billing-web/01-legacy/invoices/invoice-search/spec.md
   mappings: [01-standards/mappings/invoice-grid.md, 01-standards/mappings/search-list-screen.md]
-  businessRules: [RULE-invoice-amount-001]
+  businessRules: [RULE-BILL01-0001]
   pullRequests: []
 # Design files this unit does not need, one entry per file, written by a person:
 waived:

@@ -49,4 +49,4 @@ A test case names the data it needs, the exact input and the exact expected resu
 
 ## How a finding cites a rule
 
-A finding names the rule id, the file and line, and what to change: `RR-003 src/invoice/Search.java:48 rule RULE-invoice-amount-001 is not implemented`.
+A finding names the rule id, the file and line, and what to change: `RR-003 src/invoice/Search.java:48 rule RULE-BILL01-0001 is not implemented`.

@@ -17,7 +17,7 @@ export type GapKind = (typeof GAP_KINDS)[number]
 export type GapImpact = (typeof GAP_IMPACTS)[number]
 
 export type Gap = {
-  /** `GAP-<module>.<unit>-NN`. */
+  /** `GAP-<scope>-0001` (legacy IDs also read). */
   id: string
   kind: GapKind
   impact: GapImpact
