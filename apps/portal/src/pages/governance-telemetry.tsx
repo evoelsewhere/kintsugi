@@ -60,7 +60,7 @@ import {
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { formatCount } from "./delivery/results/results-format";
-import { Section } from "./delivery/results/results-parts";
+import { KpiRow, Section } from "./delivery/results/results-parts";
 
 const RUN_SAMPLE = 200;
 
