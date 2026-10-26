@@ -96,9 +96,7 @@ GitHub Actions uses its built-in `GITHUB_TOKEN` to publish and pull the GHCR ima
 
 ## 3. Run the deployment
 
-After the feature branch is merged into `master`, open **Actions → Build and deploy Kintsugi → Run workflow**, select `master`, and start the workflow. On first run it initializes `.env` from the configured Actions variables/secrets and deploys the stack. If it fails on host preparation, follow the exact `sudo chown` instruction in the Actions log, then rerun the workflow. Secret values are not printed in the workflow log.
-
-On subsequent pushes to `master`, the workflow builds both images, tags them with the commit SHA, publishes them to GHCR, copies the Compose bundle, updates workflow-managed values in the host `.env`, then pulls and restarts the stack. A failed image build prevents the SSH deployment job from running.
+The workflow runs only when started manually. After the feature branch is merged into `master`, open **Actions → Build and deploy Kintsugi → Run workflow**, select `master`, and start it. Each run builds both images, tags them with the commit SHA, publishes them to GHCR, copies the Compose bundle, updates workflow-managed values in the host `.env`, then pulls and restarts the stack. A failed image build prevents the SSH deployment job from running. On first run it initializes `.env` from the configured Actions variables/secrets. If host preparation fails, follow the exact `sudo chown` instruction in the Actions log, then rerun the workflow. Secret values are not printed in the workflow log.
 
 After the first successful deployment, point the reverse proxy at `KINTSUGI_HTTP_PORT`, open `KINTSUGI_PUBLIC_URL`, sign in with the bootstrap admin credentials from `.env`, and change the bootstrap password.
 
