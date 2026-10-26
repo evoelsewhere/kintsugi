@@ -107,6 +107,44 @@ export async function fetchMirror(mirrorPath: string, options: RemoteOptions = {
   await runGit(["--git-dir", mirrorPath, "fetch", "--prune", "origin", "+refs/*:refs/*", "^refs/kintsugi/*"], options);
 }
 
+/** The files a reader of the document mirror serves: Markdown, Mermaid and YAML. */
+const DOCUMENT_FILE = /\.(md|mmd|ya?ml)$/i;
+
+/**
+ * Brings the document blobs of `commit` into a partial mirror. The mirror is cloned without blobs
+ * (`--filter=blob:none`), and whoever reads it without a credential, as the API does, fails on a blob
+ * that was never fetched because git then fetches it lazily from the remote. The sync, which has the
+ * credential, calls this after each fetch so that what a reader asks for is already there.
+ * Only Markdown, Mermaid and YAML files are fetched, so a large code repository stays partial.
+ * Returns the number of blobs fetched.
+ */
+export async function prefetchDocumentBlobs(mirrorPath: string, commit: string, options: RemoteOptions = {}): Promise<number> {
+  const gitDir = ["--git-dir", mirrorPath];
+  // `--missing=print` lists the objects the mirror lacks, as `?<id>`, without fetching them.
+  const reachable = await runGit([...gitDir, "rev-list", "--objects", "--missing=print", "--no-walk", commit]);
+  const missing = new Set(
+    reachable.stdout
+      .split("\n")
+      .filter((line) => line.startsWith("?"))
+      .map((line) => line.slice(1).trim()),
+  );
+  if (missing.size === 0) return 0;
+  const tree = await runGit([...gitDir, "ls-tree", "-r", "-z", commit]);
+  const wanted: string[] = [];
+  for (const record of tree.stdout.split("\0")) {
+    const match = /^\d+ blob ([0-9a-f]+)\t(.+)$/s.exec(record);
+    if (match !== null && missing.has(match[1]!) && DOCUMENT_FILE.test(match[2]!)) wanted.push(match[1]!);
+  }
+  const ids = [...new Set(wanted)];
+  if (ids.length === 0) return 0;
+  // The same call git makes for a lazy fetch, with the credential of this one.
+  await runGit([...gitDir, "fetch", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--filter=blob:none", "--stdin", "origin"], {
+    ...options,
+    input: `${ids.join("\n")}\n`,
+  });
+  return ids.length;
+}
+
 /** Resolves a ref (branch, tag, sha) in a mirror to a full commit id. */
 export async function resolveCommit(mirrorPath: string, ref: string): Promise<string> {
   const { stdout } = await runGit(["--git-dir", mirrorPath, "rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`]);
