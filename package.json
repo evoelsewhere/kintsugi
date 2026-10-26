@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "site:build": "node scripts/build-site.mjs",
     "build": "turbo run build",
     "dev": "node scripts/dev.mjs",
     "lint": "turbo run lint",
@@ -22,6 +23,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
+    "marked": "18.0.11",
+    "mermaid": "11.17.2",
     "turbo": "^2.5.0",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.71.1"

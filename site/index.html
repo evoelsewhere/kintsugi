@@ -3,11 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kintsugi · The enterprise platform for AI-driven legacy modernization</title>
-<meta name="description" content="Reverse-engineer legacy applications into source-cited specifications, design each unit from your own templates, and build with the AI assistants your teams already use. Self-hosted, Git as the source of truth, people decide at every gate.">
+<title>Kintsugi — Open-source AI legacy modernization platform</title>
+<meta name="description" content="Self-hosted AI legacy modernization: turn source code into cited specifications, design from your templates, and build with Claude Code, Codex or Copilot. Deploy with Docker.">
+<link rel="canonical" href="https://kintsugi.evoelsewhere.asia/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="theme-color" content="#1E2A44">
 <meta property="og:title" content="Kintsugi · Modernize the system you have. Keep everything it knows.">
-<meta property="og:description" content="The enterprise platform for AI-driven legacy modernization. Self-hosted, stack-agnostic, with people in control of every decision.">
-<meta property="og:image" content="assets/diagrams/hero.png">
+<meta property="og:description" content="Open-source AI legacy modernization. Self-hosted with Docker, stack-agnostic, with people in control of every decision.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Kintsugi">
+<meta property="og:url" content="https://kintsugi.evoelsewhere.asia/">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://kintsugi.evoelsewhere.asia/assets/social-card.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Kintsugi: Modernize the system you have. Keep everything it knows.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Kintsugi — Open-source AI legacy modernization">
+<meta name="twitter:description" content="Source-cited specifications, project-defined designs, and builds in your own AI assistant. Self-hosted with Docker.">
+<meta name="twitter:image" content="https://kintsugi.evoelsewhere.asia/assets/social-card.jpg">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://kintsugi.evoelsewhere.asia/#website","url":"https://kintsugi.evoelsewhere.asia/","name":"Kintsugi","inLanguage":"en","description":"Open-source, self-hosted AI legacy modernization platform"},{"@type":"SoftwareSourceCode","name":"Kintsugi","codeRepository":"https://github.com/evoelsewhere/kintsugi","url":"https://kintsugi.evoelsewhere.asia/","license":"https://www.apache.org/licenses/LICENSE-2.0","programmingLanguage":"TypeScript","description":"Reverse-engineer legacy applications into source-cited specifications, design units from project templates, and build with member AI clients."}]}
+</script>
 <link rel="icon" href="assets/brand/kintsugi-mark-light.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -219,9 +236,24 @@
     .built { padding: 20px; }
     pre { font-size: 13px; padding: 22px; }
   }
+
+  .skip { position: fixed; top: -100px; left: 20px; z-index: 100; background: var(--navy); color: white; padding: 12px; } .skip:focus { top: 12px; }
+  a:focus-visible, summary:focus-visible { outline: 3px solid var(--gold-d); outline-offset: 5px; }
+  .star-nav { white-space: nowrap; color: var(--navy) !important; font-weight: 600; }
+  nav.links { gap: 22px; }
+  .screenshot-link { display: block; text-decoration: none; transition: box-shadow .2s ease; } .screenshot-link:hover { box-shadow: 0 24px 50px -20px rgba(30,42,68,.6), 0 0 0 2px var(--gold-d); }
+  .float.b b { font-size: 22px; }.float.a b { font-size: 24px; }
+  .capture-note { font-size: 13px; color: var(--slate); margin: 22px 0; line-height: 1.7; }.capture-note a { text-underline-offset: 3px; }
+  .image-install { display: grid; grid-template-columns: .85fr 1.15fr; align-items: center; gap: 56px; margin-top: 64px; }.image-install h3 { font-size: 36px; margin: 18px 0; }.image-install p { color: var(--slate); font-size: 16px; margin-bottom: 24px; }.image-install pre { font-size: 12px; }
+  .documentation { background: var(--cream-2); }.doc-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; }.doc-card { padding: 28px 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; text-decoration: none; display: flex; flex-direction: column; transition: border-color .2s, transform .2s; }.doc-card:hover { border-color: var(--gold-d); transform: translateY(-4px); }.doc-card .eyebrow { font-size: 10px; line-height: 1.6; letter-spacing: .08em; }.doc-card h3 { font-size: 30px; margin: 20px 0 16px; }.doc-card p { font-size: 15px; color: var(--slate); }.doc-card>span:last-child { margin-top: auto; padding-top: 26px; font-size: 13px; font-weight: 600; }.doc-links { display: flex; gap: 16px 28px; flex-wrap: wrap; margin-top: 32px; font-size: 14px; }
+  .community { background: var(--navy); color: var(--cream); }.community-grid { display: grid; grid-template-columns: .8fr 1.2fr; align-items: center; gap: 56px; }.community .eyebrow { color: var(--gold-l); }.community h2 { margin: 22px 0; }.community p.lead { color: #c9d1e2; font-size: 18px; margin-bottom: 28px; }.community .capture-note { color: #c9d1e2; }.community video { display: block; width: 100%; height: auto; border: 1px solid #52617a; border-radius: 16px; }.community figcaption { font-size: 12px; color: #c9d1e2; margin-top: 12px; }
+  .faq .wrap { max-width: 900px; }.faq details { border-top: 1px solid var(--line); padding: 22px 0; }.faq summary { cursor: pointer; font-weight: 600; font-size: 18px; }.faq details p { color: var(--slate); margin-top: 16px; }.faq code { overflow-wrap: anywhere; font-size: .85em; }
+  @media (max-width: 1100px) { .doc-grid { grid-template-columns: 1fr 1fr; } .community-grid, .image-install { grid-template-columns: 1fr; gap: 32px; } }
+  @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links .star-nav { display: block !important; font-size: 13px; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .hero .wrap { gap: 28px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
 </style>
 </head>
 <body>
+<a class="skip" href="#top">Skip to content</a>
 
 <header class="nav">
   <div class="wrap">
@@ -230,8 +262,9 @@
       <a href="#how">How it works</a>
       <a href="#model">Working model</a>
       <a href="#deploy">Architecture</a>
-      <a href="#security">Security</a>
-      <a class="btn" href="https://github.com/evoelsewhere/kintsugi/tree/master/docs">Read the docs</a>
+      <a href="docs/guides/member-quickstart.html">Guideline</a>
+      <a class="btn" href="docs/index.html">Read the docs</a>
+      <a class="star-nav" href="https://github.com/evoelsewhere/kintsugi" aria-label="Star Kintsugi on GitHub">☆ Star</a>
     </nav>
   </div>
 </header>
@@ -250,20 +283,20 @@
   </svg>
   <div class="wrap">
     <div class="rv">
-      <span class="eyebrow">Enterprise platform · <b>legacy modernization</b></span>
+      <span class="eyebrow">Open source · <b>legacy modernization</b></span>
       <h1>Modernize the system you have. <em>Keep everything it knows.</em></h1>
       <p class="lead">Kintsugi reverse-engineers legacy applications into reviewable specifications, designs each unit from your own templates, and lets your teams build with the AI assistants they already use. People decide at every gate. Everything lives in Git.</p>
       <div class="cta">
-        <a class="btn" href="https://github.com/evoelsewhere/kintsugi/blob/master/docs/guides/installation.md">Install Kintsugi <span aria-hidden="true">→</span></a>
+        <a class="btn" href="docs/guides/docker-images.html">Install Kintsugi <span aria-hidden="true">→</span></a>
         <a class="btn ghost" href="#how">See how it works</a>
       </div>
       <div class="facts"><span>Self-hosted</span><span>Bring your own LLMs</span><span>Read-only on your source</span></div>
     </div>
     <div class="stage rv">
       <div class="tiles" style="right:-10px; bottom:-74px" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      <div class="shot"><img src="assets/ui/catalog.png" width="1440" height="900" alt="The Kintsugi portal showing a catalog of legacy units with status, entries, parts and files, and an AI plan that proposes batches to understand first"></div>
-      <div class="float b"><span class="eyebrow" style="color:#F7D98A">Understood</span><b>41 of 148</b><small>specs in the document repo</small></div>
-      <div class="float a"><span class="eyebrow">Rule BR-014</span><p style="font-size:14.5px;line-height:1.45;margin:8px 0 10px">Late fee applies only after a 5-day grace period.</p><span class="chip g">Confirmed</span> <span class="chip y" style="margin-left:4px">LateFeeJob.java:118</span></div>
+      <a class="shot screenshot-link" href="assets/screenshots/overview.jpg" aria-label="Open full-size screenshot of the Kintsugi portfolio"><img src="assets/screenshots/overview.jpg" width="1280" height="720" fetchpriority="high" alt="Real Kintsugi development portal showing Card Demo portfolio progress, understood units, risks and operations"></a>
+      <div class="float b"><span class="eyebrow" style="color:#F7D98A">From the running product</span><b>Real portal. Real workflow.</b><small>Card Demo · development environment</small></div>
+      <div class="float a"><span class="eyebrow">Your knowledge, kept</span><b>Source → spec → design</b><small>Markdown in Git. Review by people.</small></div>
     </div>
   </div>
 </section>
@@ -311,7 +344,8 @@
     <div class="head rv">
       <span class="eyebrow">How it works</span>
       <h2>From legacy code to a reviewed build, one unit at a time.</h2>
-      <p class="lead">The screens below show a sample project. Every document you see is a plain Markdown file in your Git repository.</p>
+      <p class="lead">These are real screenshots from our running development portal, using the public AWS CardDemo application. Documents are Markdown in Git; the portal makes them explorable.</p>
+      <p class="capture-note">Captured 26 October 2026 · Development data, not customer results · <a href="docs/guides/first-project.html">Follow the workflow →</a></p>
     </div>
 
     <article class="feature">
@@ -325,7 +359,7 @@
           <li>Several selections in flight at once, and a failed run resumes where it stopped</li>
         </ul>
       </div>
-      <div class="rv"><div class="shot"><img src="assets/ui/catalog.png" width="1440" height="900" loading="lazy" alt="Catalog of legacy units with filters, status, pull request column and an AI plan with three batches"></div><p class="sample">Sample data</p></div>
+      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/catalog.jpg" aria-label="Open full-size catalog screenshot"><img src="assets/screenshots/catalog.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Catalog of Card Demo legacy units, grouped by module with source size, complexity and understanding status"></a><p class="sample">Actual development portal · Card Demo · <a href="assets/screenshots/catalog.jpg">View full size ↗</a></p></div>
     </article>
 
     <article class="feature flip">
@@ -339,21 +373,22 @@
           <li>Traceability from legacy source to design, code and tests</li>
         </ul>
       </div>
-      <div class="rv"><div class="shot"><img src="assets/ui/spec.png" width="1440" height="900" loading="lazy" alt="A unit specification with extracted business rules, each citing a source file and line, and a traceability chain from legacy source to code and tests"></div><p class="sample">Sample data</p></div>
+      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/understand.jpg" aria-label="Open full-size understand screenshot"><img src="assets/screenshots/understand.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="AS-IS understanding results for Card Demo, including unit specifications, business-rule coverage and source traceability"></a><p class="sample">Actual development portal · Card Demo · <a href="assets/screenshots/understand.jpg">View full size ↗</a></p></div>
     </article>
 
     <article class="feature">
       <div class="copy rv">
-        <span class="eyebrow"><b>03</b> · Build and review</span>
-        <h3>Builders keep their assistant. Reviewers stay independent.</h3>
-        <p>Once a design is merged, a developer implements and tests the unit on their own machine with Claude Code, Copilot or Codex. The runtime then reads the merge request against the unit's rules, design and your standards.</p>
+        <span class="eyebrow"><b>03</b> · Design</span>
+        <h3>Your design format. Your standards. Every unit.</h3>
+        <p>The runtime generates selected design sets from your project's own templates. People review the documents in Git before members build locally with their chosen AI client.</p>
         <ul>
-          <li>The build command records which unit, which merge request and which commit</li>
-          <li>Findings return as a document in a pull request. The merge request is never changed</li>
-          <li>Plugins are distributed, permitted and monitored per project and member</li>
+          <li>Project-defined sets, required sections and conformance checks</li>
+          <li>Shared architecture and earlier designs provide the context</li>
+          <li>After the member builds, the runtime independently reviews the recorded merge request</li>
         </ul>
+        <p class="capture-note"><a href="docs/guides/define-design-templates.html">Define design templates →</a></p>
       </div>
-      <div class="rv"><div class="shot"><img src="assets/ui/review.png" width="1440" height="900" loading="lazy" alt="Build page with a merge request, test results and independent review findings ranked by severity, each tied to a business rule"></div><p class="sample">Sample data</p></div>
+      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/design.jpg" aria-label="Open full-size design screenshot"><img src="assets/screenshots/design.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Unit Design in the development portal showing project-defined design sets, their coverage and prerequisites"></a><p class="sample">Actual development portal · Card Demo · <a href="assets/screenshots/design.jpg">View full size ↗</a></p></div>
     </article>
 
     <article class="feature flip">
@@ -367,7 +402,7 @@
           <li>Role-based access with project-scoped member tokens</li>
         </ul>
       </div>
-      <div class="rv"><div class="shot"><img src="assets/ui/telemetry.png" width="1440" height="900" loading="lazy" alt="Telemetry dashboard with tokens per day, cost by agent, prompt cache hit rate and recent jobs"></div><p class="sample">Sample data</p></div>
+      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/telemetry.jpg" aria-label="Open full-size telemetry screenshot"><img src="assets/screenshots/telemetry.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Runtime telemetry in the development portal showing token usage, cache hit rate, latency and attempts"></a><p class="sample">Actual development portal · Card Demo · <a href="assets/screenshots/telemetry.jpg">View full size ↗</a></p></div>
     </article>
   </div>
 </section>
@@ -381,7 +416,7 @@
         <h2 style="margin:18px 0 20px">The brain works on the server. The hands stay on your machines.</h2>
         <p class="lead">Kintsugi separates platform intelligence from implementation, and keeps people in charge of every decision.</p>
         <div class="points">
-          <div class="point"><div class="n">1</div><div><h4>The runtime reads, never writes your code</h4><p>A generic agent kernel runs one job at a time in its own workspace. Source is read-only; results arrive as pull requests on the document repository.</p></div></div>
+          <div class="point"><div class="n">1</div><div><h4>The runtime reads, never writes your code</h4><p>A generic agent kernel runs each job in its own workspace. Source is read-only; results arrive as pull requests on the document repository.</p></div></div>
           <div class="point t"><div class="n">2</div><div><h4>Members build with their own assistant</h4><p>Existing licenses, existing habits. The Kintsugi CLI and a local MCP bridge give them project context and the plugins their project permits.</p></div></div>
           <div class="point g"><div class="n">3</div><div><h4>Git is where both sides meet</h4><p>Specifications, designs, standards and plans are Markdown in one repository per project. People start stages and decide gates.</p></div></div>
         </div>
@@ -400,6 +435,7 @@
       <h2>One pipeline. Five gates. A person behind each.</h2>
       <p class="lead">Every phase ends at a gate: a decision backed by evidence in Git. A project can declare its own phases, stages and design sets.</p>
     </div>
+    <p class="capture-note">P0–P4 is the delivery method. The current runtime covers assess, understand, plan-understand, design and merge-request review; teams carry out the wider program activities. <a href="docs/methodology/delivery-pipeline.html">Read the methodology →</a></p>
     <div class="card-img rv"><img src="assets/diagrams/delivery-pipeline.png" width="1280" height="501" loading="lazy" alt="Phases P0 to P4 along a timeline with their outputs, each closed by a gate G0 to G4 that a person decides"></div>
   </div>
 </section>
@@ -421,6 +457,16 @@
       </div>
       <div class="card-img rv"><img src="assets/diagrams/deployment.png" width="1280" height="653" loading="lazy" alt="One Linux host runs the app, the worker and PostgreSQL under Docker Compose; only the app is exposed, and the worker reaches Git servers and LLM providers outbound"></div>
     </div>
+    <div class="image-install rv">
+      <div><span class="eyebrow">Use the images we publish</span><h3>Pull. Configure. Start.</h3><p>Use the same <code>sha-&lt;commit&gt;</code> tag for both images. The Compose bundle also starts PostgreSQL. Configure your LLM providers and Git connections in the portal.</p><a class="btn" href="docs/guides/docker-images.html">Deploy with Docker →</a><p class="capture-note">Current bundle: <a href="downloads/docker-compose.yml" download>Compose</a> · <a href="downloads/env.example" download>Environment template</a>. Use the bundle from your chosen image revision; the guide explains how.</p></div>
+      <pre aria-label="Published Kintsugi Docker images"><span class="c"># published by this repository</span>
+ghcr.io/evoelsewhere/kintsugi-app
+ghcr.io/evoelsewhere/kintsugi-worker
+
+<span class="c"># after configuring your private .env</span>
+<span class="k">docker compose</span> pull
+<span class="k">docker compose</span> up -d --wait</pre>
+    </div>
     <div class="arch card-img rv"><img src="assets/diagrams/platform-at-a-glance.png" width="1280" height="677" loading="lazy" alt="The portal and member CLI on four pillars, on the core platform of knowledge hub, standards, orchestrator, runtime, git writer and harness hub, on PostgreSQL and Git"></div>
   </div>
 </section>
@@ -434,7 +480,7 @@
       <p class="lead">Legacy repositories can contain prompt-injection payloads. Kintsugi treats them as untrusted input and states the limits of its own controls plainly.</p>
     </div>
     <div class="tiles-grid">
-      <div class="sec rv"><div class="sq"><i></i></div><h3>Isolated job workspaces</h3><p>Source mounted read-only. Writes confined to the job's output and scratch directories. Scripts run with a cleared environment.</p></div>
+      <div class="sec rv"><div class="sq"><i></i></div><h3>Dedicated job workspaces</h3><p>Source is read-only and writes are confined to output and scratch directories. Jobs share the worker; workspaces are not an OS or network sandbox.</p></div>
       <div class="sec rv"><div class="sq"><i></i></div><h3>Credentials stay encrypted</h3><p>LLM keys and Git tokens are encrypted in Postgres, never returned by the API, and decrypted per job in memory only.</p></div>
       <div class="sec rv"><div class="sq"><i></i></div><h3>Restricted data, audited</h3><p>Sensitive findings are stored encrypted. Every read is recorded before the content is returned.</p></div>
       <div class="sec rv"><div class="sq"><i></i></div><h3>Tool allowlists</h3><p>Each agent gets only the kernel tools it needs, path-confined. MCP servers are registered by administrators.</p></div>
@@ -454,6 +500,38 @@
   </div>
 </div>
 
+<!-- DOCUMENTATION -->
+<section class="documentation" id="docs">
+  <div class="wrap">
+    <div class="head rv"><span class="eyebrow">Read it. Run it. Make it yours.</span><h2>The method and the manual.<br>In the same place.</h2><p class="lead">From your first Docker deployment to the decisions behind the architecture. These pages are built directly from the project's Markdown documentation.</p></div>
+    <div class="doc-grid">
+      <a class="doc-card rv" href="docs/guides/first-project.html"><span class="eyebrow">01 / Walkthrough</span><h3>Your first project</h3><p>Register repositories, assess a pilot, understand units, generate designs, build and request a review.</p><span>Start the walkthrough →</span></a>
+      <a class="doc-card rv" href="docs/guides/member-quickstart.html"><span class="eyebrow">02 / Member guideline</span><h3>Bring your AI client</h3><p>Install the CLI, sign in, connect Claude Code, Codex or Copilot, and use permitted plugins.</p><span>Connect your client →</span></a>
+      <a class="doc-card rv" href="docs/methodology/delivery-pipeline.html"><span class="eyebrow">03 / Methodology</span><h3>Modernization by evidence</h3><p>Understand P0–P4, human gates, project standards, pilots, waves and the design-to-code review loop.</p><span>Explore the method →</span></a>
+      <a class="doc-card rv" href="docs/guides/docker-images.html"><span class="eyebrow">04 / Deployment</span><h3>Your host. Our images.</h3><p>Deploy the published app and worker with Compose. Configure, verify, back up and upgrade.</p><span>Deploy Docker images →</span></a>
+    </div>
+    <div class="doc-links"><a href="docs/index.html">Browse all documentation →</a><a href="docs/reference/member-cli.html">CLI &amp; MCP reference</a><a href="docs/architecture/index.html">Architecture</a><a href="docs/decisions/index.html">Decision records</a><a href="docs/methodology/ai-metrics.html">AI metrics</a></div>
+  </div>
+</section>
+
+<!-- COMMUNITY -->
+<section class="community" id="support">
+  <div class="wrap community-grid">
+    <div><span class="eyebrow">Built in the open</span><h2>Good tools grow<br>with good company.</h2><p class="lead">If this is the kind of modernization you want to see, give Kintsugi a star. It helps other teams discover the project and keeps it on your radar.</p><a class="btn" href="https://github.com/evoelsewhere/kintsugi">☆ Star Kintsugi on GitHub <span aria-hidden="true">↗</span></a><p class="capture-note">Apache-2.0 · Explore the source, open an issue, or contribute.</p></div>
+    <figure><video controls muted playsinline preload="none" width="1280" height="720" poster="assets/video/github-star-poster.jpg" aria-label="Eight-second illustration: open the Kintsugi repository, move the cursor to Star and click; the button changes to Starred"><source src="assets/video/github-star.mp4" type="video/mp4"><track kind="captions" src="assets/video/github-star.vtt" srclang="en" label="English" default><p><a href="assets/video/github-star.mp4">Download the Star tutorial video</a></p></video><figcaption>Illustrative GitHub UI · Open the repository, sign in, then click Star. The video performs no account action.</figcaption></figure>
+  </div>
+</section>
+
+<section class="faq" id="faq">
+  <div class="wrap"><div class="head"><span class="eyebrow">Before you start</span><h2>A few practical answers.</h2></div>
+    <details><summary>What does Kintsugi do today?</summary><p>The current development flow covers legacy assessment, selective understanding, project-template design generation, member build reporting and independent merge-request review. P0–P4 describes the wider delivery method; consult the <a href="docs/product/roadmap.html">roadmap</a> and <a href="docs/development/implementation-delivery-record.html">implementation record</a> for release status.</p></details>
+    <details><summary>How do I deploy Kintsugi?</summary><p>Use the published <code>ghcr.io/evoelsewhere/kintsugi-app</code> and <code>kintsugi-worker</code> images with the shipped Docker Compose package and PostgreSQL. Pin both images to the same commit tag. The <a href="docs/guides/docker-images.html">Docker guide</a> includes setup, TLS, backup and upgrades.</p></details>
+    <details><summary>Can I keep my existing AI assistant and model provider?</summary><p>Members connect Claude Code, Codex or GitHub Copilot through the CLI and local MCP bridge. Runtime models are configured separately in the portal and may use supported providers or an OpenAI-compatible endpoint. See <a href="docs/reference/member-client-compatibility.html">tested client versions and limits</a>.</p></details>
+    <details><summary>Does the runtime change or execute my application code?</summary><p>Runtime jobs read source at a fixed revision. They write output in their workspace; the worker proposes document changes in Git. Members build and test on their machines. Runtime merge-request review reads the code and tests without executing them.</p></details>
+    <details><summary>Is Kintsugi specific to a programming language or cloud?</summary><p>The engine ships no stack-specific migration rules or language parsers. Project-specific conventions, mappings and design templates live in the document repository. Your team supplies the target architecture and validates results with a pilot.</p></details>
+  </div>
+</section>
+
 <!-- START -->
 <section class="start">
   <div class="wrap box">
@@ -462,7 +540,7 @@
       <h2 style="margin:18px 0 20px">Connect a developer in three commands.</h2>
       <p class="lead">Sign in to a project, set up your AI client, and install the plugins your project permits. Then build from the assistant you already use.</p>
       <div class="cta">
-        <a class="btn" href="https://github.com/evoelsewhere/kintsugi/blob/master/docs/guides/installation.md">Install guide <span aria-hidden="true">→</span></a>
+        <a class="btn" href="docs/guides/member-quickstart.html">Member guideline <span aria-hidden="true">→</span></a>
         <a class="btn ghost" href="https://github.com/evoelsewhere/kintsugi">View on GitHub</a>
       </div>
     </div>
@@ -475,8 +553,8 @@
 <span class="c"># add a plugin your project permits</span>
 <span class="k">kintsugi</span> install plugin modernize
 
-<span class="c"># then, in Claude Code, Copilot or Codex</span>
-/modernize:build</pre>
+<span class="c"># then in Claude Code (Codex uses a skill)</span>
+/modernize:build billing/invoice billing-core</pre>
   </div>
 </section>
 
@@ -508,11 +586,11 @@
   <div class="wrap">
     <div>
       <a class="logo" href="#top"><img src="assets/brand/kintsugi-mark-light.svg" alt="" width="28" height="28">Kintsugi</a>
-      <small>The enterprise platform for AI-driven legacy modernization. Screens in this page show sample data.</small>
+      <small>Open-source AI legacy modernization. Screens captured from the development portal with Card Demo data. Apache-2.0.</small>
     </div>
     <div class="cols">
       <div><b>Product</b><a href="#how">How it works</a><a href="#model">Working model</a><a href="#deploy">Architecture</a><a href="#security">Security</a></div>
-      <div><b>Docs</b><a href="https://github.com/evoelsewhere/kintsugi/tree/master/docs">Documentation</a><a href="https://github.com/evoelsewhere/kintsugi/blob/master/docs/guides/installation.md">Install</a><a href="https://github.com/evoelsewhere/kintsugi/tree/master/docs/decisions">Decisions</a><a href="https://github.com/evoelsewhere/kintsugi">GitHub</a></div>
+      <div><b>Docs</b><a href="docs/index.html">Documentation</a><a href="docs/guides/member-quickstart.html">Member guideline</a><a href="docs/methodology/delivery-pipeline.html">Methodology</a><a href="docs/guides/docker-images.html">Install</a><a href="docs/decisions/index.html">Decisions</a><a href="https://github.com/evoelsewhere/kintsugi">GitHub</a></div>
     </div>
   </div>
 </footer>

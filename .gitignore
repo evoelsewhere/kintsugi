@@ -19,3 +19,6 @@ __pycache__/
 
 # CLI packages built by `pnpm release:cli`
 /releases/
+
+# Generated public landing page and documentation
+/.site-dist/

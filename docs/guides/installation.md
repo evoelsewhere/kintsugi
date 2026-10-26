@@ -1,5 +1,7 @@
 # Install Kintsugi
 
+To use the images already published by this project, start with [Deploy with the published Docker images](docker-images.md). This page covers building and deploying your own images through GitHub Actions.
+
 Kintsugi runs as a Docker Compose installation with one app container, one worker container, and PostgreSQL. The repository's GitHub Actions workflow builds and publishes the app and worker images to GHCR and deploys commits from `master` over SSH.
 
 ## Before you start

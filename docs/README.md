@@ -12,7 +12,7 @@ The documentation is organized by **what the reader needs**, following [Diátaxi
 | [guides/](guides/) | How-to | accomplish a task: install, configure, work on a migration task |
 | [development/](development/) | Delivery record | review implementation status, plans, open work, and verification evidence |
 
-Tutorials (learning-oriented walkthroughs) will be added once a first release exists.
+Start with [Your first modernization project](guides/first-project.md) for a walkthrough of the implemented development flow. Release and client-compatibility limits are stated in the linked references.
 
 ## Map
 
@@ -68,6 +68,9 @@ Tutorials (learning-oriented walkthroughs) will be added once a first release ex
 - [Configuration](reference/configuration.md): installation environment variables
 
 **Guides**
+- [Deploy with the published Docker images](guides/docker-images.md)
+- [Your first modernization project](guides/first-project.md)
+- [Member guideline: connect your AI client](guides/member-quickstart.md)
 - [Install Kintsugi](guides/installation.md)
 - [Build a project (register repos, write standards)](guides/build-project.md)
 - [Define a project's design templates](guides/define-design-templates.md)

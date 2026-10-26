@@ -2,6 +2,16 @@ name: Deploy static landing page
 
 on:
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - 'scripts/build-site.mjs'
+      - 'deploy/compose/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-site.yml'
 
 permissions:
   contents: read
@@ -25,10 +35,25 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install build dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter kintsugi
+
+      - name: Build landing page and documentation
+        run: pnpm site:build
+
       - name: Upload landing page
         uses: actions/upload-pages-artifact@v4
         with:
-          path: site
+          path: .site-dist
 
       - name: Deploy to GitHub Pages
         id: deployment

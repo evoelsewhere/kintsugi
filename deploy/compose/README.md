@@ -11,5 +11,6 @@ The app and worker images are defined by [`Dockerfile.app`](../../Dockerfile.app
 
 Runtime jobs run inside `worker`, each in its own job workspace under the data directory ([ADR-0029](../../docs/decisions/0029-job-workspaces-instead-of-os-sandboxes.md)): no Docker socket, no per-job container and no OS-level sandbox. The worker image therefore carries the standard script environment (git 2.40+, Python 3.12 and Node 22 with their standard libraries only) and runs as a non-root user. Jobs are not network-isolated: to restrict egress, attach the worker to a network that reaches only Postgres, the Git servers and the LLM providers.
 
-- How to install, configure GitHub Actions and upgrade: [installation guide](../../docs/guides/installation.md)
+- Install using the published app and worker images: [Docker image guide](../../docs/guides/docker-images.md)
+- Build and deploy your own images through GitHub Actions: [installation guide](../../docs/guides/installation.md)
 - How it fits together: [deployment view](../../docs/architecture/07-deployment-view.md)
