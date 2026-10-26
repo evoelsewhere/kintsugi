@@ -239,7 +239,9 @@
 
   .skip { position: fixed; top: -100px; left: 20px; z-index: 100; background: var(--navy); color: white; padding: 12px; } .skip:focus { top: 12px; }
   a:focus-visible, summary:focus-visible { outline: 3px solid var(--gold-d); outline-offset: 5px; }
-  .star-nav { white-space: nowrap; color: var(--navy) !important; font-weight: 600; }
+  nav.links a.github-nav { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px; color: var(--navy); transition: background .15s ease; }
+  nav.links a.github-nav:hover { background: var(--cream-2); }
+  .github-nav svg { display: block; width: 20px; height: 20px; fill: currentColor; }
   nav.links { gap: 22px; }
   .screenshot-link { display: block; text-decoration: none; transition: box-shadow .2s ease; } .screenshot-link:hover { box-shadow: 0 24px 50px -20px rgba(30,42,68,.6), 0 0 0 2px var(--gold-d); }
   .float.b b { font-size: 22px; }.float.a b { font-size: 24px; }
@@ -249,7 +251,7 @@
   .community { background: var(--navy); color: var(--cream); }.community-grid { display: grid; grid-template-columns: .8fr 1.2fr; align-items: center; gap: 56px; }.community .eyebrow { color: var(--gold-l); }.community h2 { margin: 22px 0; }.community p.lead { color: #c9d1e2; font-size: 18px; margin-bottom: 28px; }.community .capture-note { color: #c9d1e2; }.community video { display: block; width: 100%; height: auto; border: 1px solid #52617a; border-radius: 16px; }.community figcaption { font-size: 12px; color: #c9d1e2; margin-top: 12px; }
   .faq .wrap { max-width: 900px; }.faq details { border-top: 1px solid var(--line); padding: 22px 0; }.faq summary { cursor: pointer; font-weight: 600; font-size: 18px; }.faq details p { color: var(--slate); margin-top: 16px; }.faq code { overflow-wrap: anywhere; font-size: .85em; }
   @media (max-width: 1100px) { .doc-grid { grid-template-columns: 1fr 1fr; } .community-grid, .image-install { grid-template-columns: 1fr; gap: 32px; } }
-  @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links .star-nav { display: block !important; font-size: 13px; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .hero .wrap { gap: 28px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
+  @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links a.github-nav { display: inline-flex; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .hero .wrap { gap: 28px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
 
   .hero-tour { min-width: 0; scroll-margin-top: 110px; }
   .tour-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
@@ -281,7 +283,9 @@
       <a href="#deploy">Architecture</a>
       <a href="docs/guides/member-quickstart.html">Guideline</a>
       <a class="btn" href="docs/index.html">Read the docs</a>
-      <a class="star-nav" href="https://github.com/evoelsewhere/kintsugi" aria-label="Star Kintsugi on GitHub">☆ Star</a>
+      <a class="github-nav" href="https://github.com/evoelsewhere/kintsugi" aria-label="View Kintsugi repository on GitHub" title="GitHub repository">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+      </a>
     </nav>
   </div>
 </header>
