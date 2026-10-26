@@ -1,0 +1,51 @@
+{
+  "source": "https://kintsugi.fhmq9.cloud",
+  "theme": "light",
+  "application": "AWS CardDemo development data",
+  "captureMethod": "Continuous browser viewport recordings of real navigation, typing, tabs and scrolling",
+  "edit": "Fixed full viewport; small cursor and subtle click pulses at recorded targets, captions and crossfades; no zoom, pan or crop",
+  "durationSeconds": 17.567,
+  "outputFps": 30,
+  "scenes": [
+    {
+      "scene": "01-discover",
+      "title": "Understand the system you have.",
+      "durationSeconds": 3.7333333333333334,
+      "recordedFrames": 35,
+      "clicks": 1,
+      "at": 0.0
+    },
+    {
+      "scene": "02-understand",
+      "title": "Make business rules visible.",
+      "durationSeconds": 4.1,
+      "recordedFrames": 41,
+      "clicks": 1,
+      "at": 3.433
+    },
+    {
+      "scene": "03-design",
+      "title": "Design from your own standards.",
+      "durationSeconds": 3.3333333333333335,
+      "recordedFrames": 35,
+      "clicks": 2,
+      "at": 7.233
+    },
+    {
+      "scene": "04-design-detail",
+      "title": "Keep design and tests connected.",
+      "durationSeconds": 3.966666666666667,
+      "recordedFrames": 40,
+      "clicks": 2,
+      "at": 10.267
+    },
+    {
+      "scene": "05-measure",
+      "title": "See every run. Track every token.",
+      "durationSeconds": 3.6333333333333333,
+      "recordedFrames": 36,
+      "clicks": 1,
+      "at": 13.933
+    }
+  ]
+}

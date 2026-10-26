@@ -103,10 +103,25 @@
 
   /* works with */
   .with { border-block: 1px solid var(--line); background: var(--paper); }
-  .with .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 34px; padding-block: 26px; }
-  .with ul { display: flex; flex-wrap: wrap; gap: 10px 30px; list-style: none; font: 500 15px/1.2 var(--mono); color: var(--navy); }
-  .with li { display: flex; align-items: center; gap: 9px; }
-  .with li::before { content: ''; width: 7px; height: 7px; border-radius: 2px; background: var(--gold-d); }
+  .with .wrap { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 24px; padding-block: 24px; }
+  .platform-marquee { min-width: 0; }
+  .platform-list { display: flex; flex-wrap: wrap; gap: 18px 34px; list-style: none; font: 500 14px/1.2 var(--sans); color: var(--navy); }
+  .platform-list li { display: flex; align-items: center; flex-shrink: 0; gap: 11px; white-space: nowrap; }
+  .platform-list img { flex-shrink: 0; width: 25px; height: 25px; object-fit: contain; }
+  .platform-list[aria-hidden="true"] { display: none; }
+  .platform-marquee.is-animated { overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
+  .is-animated .platform-track { display: flex; width: max-content; animation: platform-drift 40s linear infinite; }
+  .is-animated .platform-list { flex-wrap: nowrap; align-items: center; gap: 40px; padding-right: 40px; }
+  .is-animated .platform-list[aria-hidden="true"] { display: flex; }
+  .platform-marquee:hover .platform-track, .platform-marquee:focus-within .platform-track, .platform-marquee[data-paused="true"] .platform-track { animation-play-state: paused; }
+  .platform-toggle { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 50%; background: var(--paper); color: var(--slate); cursor: pointer; }
+  .platform-toggle[hidden] { display: none; }.platform-toggle:hover { color: var(--navy); border-color: var(--gold-d); }
+  .platform-toggle svg { width: 14px; height: 14px; fill: currentColor; }
+  .platform-toggle .play-icon, .platform-toggle[aria-pressed="true"] .pause-icon { display: none; }.platform-toggle[aria-pressed="true"] .play-icon { display: block; }
+  .platform-toggle:focus-visible, .platform-marquee:focus-visible { outline: 3px solid var(--gold-d); outline-offset: 5px; }
+  @keyframes platform-drift { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+  @media (prefers-reduced-motion: reduce) { .is-animated .platform-track { animation: none; } }
+  @media (max-width: 640px) { .with .wrap { grid-template-columns: minmax(0, 1fr) auto; gap: 18px 12px; }.with .eyebrow { grid-column: 1 / -1; }.platform-list { gap: 18px 24px; }.is-animated .platform-list { gap: 30px; padding-right: 30px; } }
 
   section { padding: 120px 0; }
   .head { max-width: 760px; margin-bottom: 56px; }
@@ -255,24 +270,12 @@
   @media (max-width: 1100px) { .doc-grid { grid-template-columns: 1fr 1fr; } .community-grid, .image-install { grid-template-columns: 1fr; gap: 32px; } }
   @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links a.github-nav { display: inline-flex; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
 
-  .hero-tour { min-width: 0; max-width: 1080px; margin: 48px auto 0; padding: 8px 8px 0; border: 1px solid var(--line); border-radius: 24px; background: var(--paper); box-shadow: 0 34px 70px -40px rgba(30,42,68,.4); scroll-margin-top: 96px; }
+  .hero-tour { min-width: 0; max-width: 1080px; margin: 48px auto 0; padding: 8px; border: 1px solid var(--line); border-radius: 24px; background: var(--paper); box-shadow: 0 34px 70px -40px rgba(30,42,68,.4); scroll-margin-top: 96px; }
   .hero-tour .shot { border: 1px solid var(--line); border-radius: 16px; box-shadow: none; }
-  .hero-tour img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #fafafa; }
-  .tour-footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 18px 20px; }
-  .tour-controls { display: flex; align-items: center; flex-wrap: wrap; flex-shrink: 0; gap: 14px 20px; }
-  .tour-controls .btn { padding: 10px 16px; font-size: 13px; cursor: pointer; }
-  .tour-controls .btn[hidden] { display: none; }
-  .tour-controls a { font-size: 12px; text-underline-offset: 3px; color: var(--slate); }
-  .hero-tour figcaption, .tour-chapters, #tour-status { font-size: 12px; line-height: 1.7; color: var(--slate); }
-  .tour-note { max-width: 43ch; text-align: right; }
-  .tour-chapters { margin: 0 20px; border-top: 1px solid var(--line); padding-block: 12px; }.tour-chapters summary { width: fit-content; cursor: pointer; }
-  .tour-stops { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; list-style: none; padding: 20px 0 8px; }
-  .tour-stops b { display: block; font-size: 13px; font-weight: 600; color: var(--navy); margin-bottom: 6px; }
-  #tour-status:not(:empty) { margin: 0 20px 16px; }
-  #tour-status:empty { display: none; }
-  #tour-toggle:focus-visible { outline: 3px solid var(--gold-d); outline-offset: 4px; }
-  @media (max-width: 800px) { .tour-footer { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px 12px; }.tour-note { max-width: none; text-align: left; }.tour-stops { grid-template-columns: 1fr 1fr; }.tour-chapters { margin-inline: 12px; } }
-  @media (max-width: 640px) { .hero h1 { font-size: clamp(40px, 9vw, 54px); }.hero .cta { margin-top: 24px; }.hero .facts { gap: 8px 16px; font-size: 10px; }.hero-tour { margin-top: 32px; padding: 4px 4px 0; border-radius: 16px; }.hero-tour .shot { border-radius: 12px; }.tour-controls { gap: 12px; flex-shrink: 1; }.tour-controls a { font-size: 11px; }.tour-stops { gap: 16px; } }
+  .hero-tour video { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; object-fit: contain; background: var(--cream); }
+  .hero-tour video:focus-visible { outline: 3px solid var(--gold-d); outline-offset: -3px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  @media (max-width: 640px) { .hero h1 { font-size: clamp(40px, 9vw, 54px); }.hero .cta { margin-top: 24px; }.hero .facts { gap: 8px 16px; font-size: 10px; }.hero-tour { margin-top: 32px; padding: 4px; border-radius: 16px; }.hero-tour .shot { border-radius: 12px; } }
 </style>
 </head>
 <body>
@@ -313,32 +316,36 @@
       <p class="lead">Kintsugi reverse-engineers legacy applications into reviewable specifications, designs each unit from your own templates, and lets your teams build with the AI assistants they already use. People decide at every gate. Everything lives in Git.</p>
       <div class="cta">
         <a class="btn" href="docs/guides/docker-images.html">Install Kintsugi <span aria-hidden="true">→</span></a>
-        <a class="btn ghost" href="#product-tour">Watch the 30-second tour</a>
       </div>
       <div class="facts"><span>Self-hosted</span><span>Bring your own LLMs</span><span>Read-only on your source</span></div>
     </div>
     <figure class="hero-tour rv" id="product-tour">
-      <div class="shot"><img id="portal-tour" src="assets/tour/portal-tour-light-poster.jpg" data-animation="assets/tour/portal-tour-light.gif" width="1280" height="720" fetchpriority="high" alt="Light-theme tour of the real Kintsugi portal: portfolio, assessment, understanding, design, build, monitoring, governance, plugins, settings and member guidelines"></div>
-      <figcaption>
-      <div class="tour-footer">
-        <div class="tour-controls"><button id="tour-toggle" class="btn ghost" type="button" aria-controls="portal-tour" aria-pressed="false" hidden>Play tour</button><a href="assets/tour/portal-tour-light.gif" download>Download GIF ↗</a><a href="assets/screenshots/overview.jpg">View screenshot ↗</a></div>
-        <p class="tour-note">A quick walk through Kintsugi.<br>CardDemo development data · waiting time omitted.</p>
-      </div>
-      <details class="tour-chapters"><summary>What's in the tour</summary><ol class="tour-stops"><li><b>01 · Understand</b>Portfolio, assessment, catalog, specifications and business rules.</li><li><b>02 · Design &amp; build</b>Design sets, shared architecture and member builds.</li><li><b>03 · Operate &amp; govern</b>Job runs, repository sync, gates, audit and telemetry.</li><li><b>04 · Set up &amp; connect</b>Projects, plugins, roles, guidelines and installation settings.</li></ol></details>
-      <p id="tour-status" role="status"></p>
-      </figcaption>
+      <div class="shot"><video id="portal-motion" controls muted loop playsinline preload="metadata" width="1280" height="800" poster="assets/motion/portal-motion-poster.jpg?v=fixed-frame" aria-label="Kintsugi in action: a recording of real product interactions" aria-describedby="product-motion-description"><source src="assets/motion/portal-motion.mp4?v=fixed-frame" type="video/mp4"><track kind="captions" src="assets/motion/portal-motion.vtt" srclang="en" label="English"><a href="assets/motion/portal-motion.mp4">Watch Kintsugi in action</a></video></div>
+      <figcaption id="product-motion-description" class="sr-only">Browse legacy units, inspect business rules, explore unit designs and test cases, and monitor model usage. Recorded in light theme with CardDemo development data.</figcaption>
     </figure>
   </div>
 </section>
 
 <!-- WORKS WITH -->
-<div class="with">
+<div class="with" aria-label="Supported AI clients and model platforms">
   <div class="wrap">
     <span class="eyebrow">Bring your own</span>
-    <ul>
-      <li>Claude Code</li><li>GitHub Copilot</li><li>ChatGPT / Codex</li>
-      <li>Anthropic</li><li>OpenAI</li><li>Azure OpenAI</li><li>Amazon Bedrock</li><li>Google Vertex</li><li>On-premises, OpenAI-compatible</li>
-    </ul>
+    <div class="platform-marquee" id="platform-marquee" tabindex="0" role="region" aria-label="Platforms; focus to pause scrolling">
+      <div class="platform-track">
+        <ul class="platform-list">
+          <li><img src="assets/platforms/claude-code.svg" width="25" height="25" alt="">Claude Code</li>
+          <li><img src="assets/platforms/github-copilot.svg" width="25" height="25" alt="">GitHub Copilot</li>
+          <li><img src="assets/platforms/openai.svg" width="25" height="25" alt="">ChatGPT / Codex</li>
+          <li><img src="assets/platforms/anthropic.svg" width="25" height="25" alt="">Anthropic</li>
+          <li><img src="assets/platforms/openai.svg" width="25" height="25" alt="">OpenAI</li>
+          <li><img src="assets/platforms/azure.svg" width="25" height="25" alt="">Azure OpenAI</li>
+          <li><img src="assets/platforms/aws.svg" width="25" height="25" alt="">Amazon Bedrock</li>
+          <li><img src="assets/platforms/google-cloud.svg" width="25" height="25" alt="">Google Vertex</li>
+          <li><img src="assets/platforms/server.svg" width="25" height="25" alt="">On-premises, OpenAI-compatible</li>
+        </ul>
+      </div>
+    </div>
+    <button class="platform-toggle" id="platform-toggle" type="button" aria-label="Pause platform animation" aria-controls="platform-marquee" aria-pressed="false" hidden><svg class="pause-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg><svg class="play-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 8 5-8 5z"/></svg></button>
   </div>
 </div>
 
@@ -625,7 +632,8 @@ ghcr.io/evoelsewhere/kintsugi-worker
   </div>
 </footer>
 
-<script src="assets/tour.js" defer></script>
+<script src="assets/product-motion.js" defer></script>
+<script src="assets/platforms.js" defer></script>
 <script>
   (function () {
     var els = document.querySelectorAll('.rv');

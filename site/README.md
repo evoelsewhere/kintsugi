@@ -20,17 +20,21 @@ Edit documentation in `docs/`, never in the generated output. Every rendered pag
 
 These are development examples, not customer evidence or release certification. Capture the normal rendered UI, wait for loading to finish and inspect screenshots before replacing them. Never capture passwords, tokens or credential configuration forms. The earlier illustrative screens remain under `assets/ui/` and `mock/` for reference; mocks are excluded from the published bundle.
 
-## Light-theme portal tour
+## Product motion clip
 
-The hero embeds `assets/tour/portal-tour-light.gif`: a 30-second timelapse of 39 actual UI views, captured while navigating the development installation in Light mode. It covers portfolio and Delivery, assessment and the catalog, understanding and rules, design sets, build, every Monitoring tab, gates/audit/telemetry/permissions, projects and member plugins, shared memory, client setup, the plugin library, role management, Guideline and installation settings. Loading time is omitted. It does not start jobs, change project configuration or manufacture successful results.
+The centered introduction leads into a wide product recording, `assets/motion/portal-motion.mp4`. Five continuously recorded scenes show actual scrolling, typing into filters, changing tabs, opening a unit's design and tests, and inspecting runtime telemetry in the Light development portal. The full viewport stays fixed, with no zoom, pan or crop. The edit adds a small cursor and subtle click pulses at recorded targets, short captions and crossfades. It replaces the earlier slideshow GIF. Recording does not start jobs, change project configuration or manufacture successful results.
 
-`assets/tour/chapters.json` records the source, theme and scene timings. Raw captures and an intermediate MP4 stay outside the published bundle. `scripts/encode-portal-tour.py <capture-directory>` rebuilds the GIF and poster from a directory containing `manifest.json` and `frames/NNN.jpg`; it needs Pillow and imageio-ffmpeg. Use the browser tools to capture new views, then review every scene before encoding.
+`assets/motion/provenance.json` records the source, edit and scene timings. `scripts/render-portal-motion.py <recordings-directory>` rebuilds the MP4, poster and English captions from each scene's `capture.json`, timestamped browser frames and recorded click positions; it needs Pillow and imageio-ffmpeg. Raw recordings and intermediate encodes stay outside the published bundle. Use browser tools to record real UI actions, then inspect the footage before editing.
 
-The lightweight poster paints first. The GIF starts after page load, with a Play/Pause button that switches between the GIF and poster. Reduced-motion and data-saving preferences keep the poster until the visitor chooses Play. Without JavaScript the poster, direct GIF download, screenshot link and chapter description remain available.
+The clip loops silently while visible. Native controls support pausing, seeking and fullscreen without a separate toolbar below the clip. Reduced-motion and data-saving preferences require explicit playback, and leaving the viewport or hiding the tab pauses it. A hidden description and English caption track describe the footage. Without JavaScript the poster and native video controls remain available.
 
 ## Star video and social card
 
 `scripts/generate-site-media.py` creates the 8-second H.264 MP4, its poster and the 1200×630 social card. It requires Pillow and imageio-ffmpeg. The video is explicitly labeled as an illustrative GitHub interaction and changes no account state. English captions and native video controls are included; playback starts only when the visitor requests it.
+
+## Platform strip
+
+The “Bring your own” strip pairs each platform name with its SVG mark (`assets/platforms/`; sources and license are included there). `assets/platforms.js` adds an inaccessible duplicate of the list for a seamless, left-to-right loop. Hovering, focusing the list, or using its pause button stops the movement. Reduced-motion preferences and browsers without JavaScript show the complete static list instead.
 
 ## Verify and publish
 
