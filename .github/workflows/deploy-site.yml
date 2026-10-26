@@ -1,11 +1,6 @@
 name: Deploy static landing page
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - "site/**"
-      - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 
 permissions:
