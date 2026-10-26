@@ -4,7 +4,7 @@
 
 import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { CheckoutStorage, cloneMirror, fetchMirror, isLoopbackUrl, type RemoteOptions, resolveCommit } from "@kintsugi/git";
+import { CheckoutStorage, cloneMirror, fetchMirror, isLoopbackUrl, prefetchDocumentBlobs, type RemoteOptions, resolveCommit } from "@kintsugi/git";
 import type { RepositoryStore, SyncTarget } from "./repositories.js";
 
 export interface SyncDeps {
@@ -111,6 +111,9 @@ async function syncUnlocked({ store, storage }: SyncDeps, repositoryId: string):
     const previous = cloned ? undefined : await resolveCommit(mirror, ref).catch(() => undefined);
     if (!cloned) await fetchMirror(mirror, options);
     const commit = await resolveCommit(mirror, ref);
+    // The API reads the mirror without a credential, so the documents of the tip must already be local.
+    // Best effort: a server that refuses the fetch leaves the sync as it was, and a job checkout still fetches blobs.
+    await prefetchDocumentBlobs(mirror, commit, options).catch(() => undefined);
     await store.markReady(target.id, commit);
     if (previous !== undefined && previous !== commit) {
       for (const listener of tipListeners) {

@@ -11,6 +11,7 @@ export {
   fetchMirror,
   lsRemote,
   parseGitVersion,
+  prefetchDocumentBlobs,
   pruneWorktrees,
   removeWorktree,
   worktreeIsAt,

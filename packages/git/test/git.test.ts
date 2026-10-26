@@ -18,6 +18,7 @@ import {
   fetchMirror,
   lsRemote,
   parseGitVersion,
+  prefetchDocumentBlobs,
   removeWorktree,
   isAncestor,
   resolveCommit,
@@ -133,6 +134,43 @@ describe("mirror and job worktrees", () => {
     await writeFile(join(job.asIs, "stray.txt"), "x\n");
     expect(await worktreeIsAt(job.asIs, commit)).toBe(false);
     await removeWorktree(mirror, job.asIs);
+  });
+
+  it("prefetches the document blobs a credential-less reader needs, and no code", async () => {
+    const source = join(root, "partial-origin");
+    await mkdir(source);
+    fixtureGit(source, "init", "-q", "-b", "main");
+    fixtureGit(source, "config", "uploadpack.allowFilter", "true");
+    fixtureGit(source, "config", "uploadpack.allowAnySHA1InWant", "true");
+    const write = async (name: string, content: string): Promise<void> => {
+      await mkdir(join(source, name, ".."), { recursive: true });
+      await writeFile(join(source, name), content);
+    };
+    await write("docs/a.md", "a\n");
+    await write("src/old.cbl", "old\n");
+    fixtureGit(source, "add", ".");
+    fixtureGit(source, "commit", "-q", "-m", "first");
+
+    const storage = new CheckoutStorage(join(root, "data"));
+    const mirror = storage.mirror("local", "partial");
+    const sourceUrl = pathToFileURL(source).href;
+    await cloneMirror(sourceUrl, mirror, { ...local, partial: true });
+    await write("docs/b.md", "b\n");
+    await write("src/new.cbl", "new\n");
+    fixtureGit(source, "add", ".");
+    fixtureGit(source, "commit", "-q", "-m", "second");
+    await fetchMirror(mirror, local);
+    const tip = await resolveCommit(mirror, "main");
+
+    // A reader has no credential and may not reach the remote: a blob the mirror lacks is an error.
+    const read = (path: string) => runGit(["--git-dir", mirror, "cat-file", "blob", `${tip}:${path}`]);
+    await expect(read("docs/b.md")).rejects.toThrow(GitError);
+
+    expect(await prefetchDocumentBlobs(mirror, tip, local)).toBe(2);
+    expect((await read("docs/b.md")).stdout).toBe("b\n");
+    expect((await read("docs/a.md")).stdout).toBe("a\n");
+    await expect(read("src/new.cbl")).rejects.toThrow(GitError);
+    expect(await prefetchDocumentBlobs(mirror, tip, local)).toBe(0);
   });
 
   it("only checks out full commit ids", async () => {
