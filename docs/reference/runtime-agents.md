@@ -30,7 +30,7 @@ Higher layers (orchestrator) translate their concepts (projects, units, standard
 | Field | Description |
 |---|---|
 | `id`, `version` | Identify the agent; model bindings name agents by `id` |
-| `instructions` | The system prompt, used verbatim |
+| `instructions` | The system prompt, used verbatim. When the job grants memory or web tools, the kernel adds a short `<research-tools>` block after the skills saying when to use exactly those tools (search memory first, save durable lessons at the end, search the public web only for references, never send project content out); it is part of the agent's shared prompt prefix |
 | `skills` | Optional inline skills `{ name, content }` (`name` matches `[a-z][a-z0-9-]*`), appended to the system prompt |
 | `tools` | Optional tool allowlist by name (kernel tools below). Absent = every kernel tool, `codemode` included and MCP never (the built-in agents list none); `[]` = no tools; `mcp__<server>__*` (or one tool) names an MCP server the agent may use |
 | `denyCommandPatterns` | Optional regular expressions; a tool call whose `command` input matches is blocked before it runs |

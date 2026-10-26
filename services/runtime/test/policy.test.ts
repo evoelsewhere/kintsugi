@@ -47,6 +47,22 @@ describe("composeSystemPrompt", () => {
     expect(prompt).not.toContain("steps/design/out");
   });
 
+  it("guides only the memory and web tools the agent was granted, before the job-specific workspace", () => {
+    const base = { id: "a", version: "1", instructions: "Be brief." };
+    const workspace = { root: "/job", readOnly: ["/job/as-is"], outDir: "/job/out" };
+    expect(composeSystemPrompt({ ...base, tools: ["read", "write"] })).not.toContain("<research-tools>");
+    const reader = composeSystemPrompt({ ...base, tools: ["read", "memory_search", "memory_read", "memory_status"] }, workspace);
+    expect(reader).toContain("call memory_search");
+    expect(reader).not.toContain("memory_write");
+    expect(reader).not.toContain("web_search");
+    const full = composeSystemPrompt({ ...base, tools: ["read", "memory_search", "memory_write", "web_search", "web_fetch"] }, workspace);
+    expect(full).toContain("save with memory_write");
+    expect(full).toContain("Use web_search");
+    expect(full).toContain("Use web_fetch");
+    expect(full.indexOf("<research-tools>")).toBeLessThan(full.indexOf("<workspace>"));
+    expect(composeSystemPrompt({ ...base, tools: ["web_search"] })).not.toContain("web_fetch");
+  });
+
   it("leaves out the write rules for an agent that cannot write", () => {
     const note = describeWorkspace({ root: "/job", readOnly: ["/job/as-is"], outDir: "/job/out" }, ["read", "grep"]);
     expect(note).toContain("looks in as-is");
