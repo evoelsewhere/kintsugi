@@ -250,6 +250,23 @@
   .faq .wrap { max-width: 900px; }.faq details { border-top: 1px solid var(--line); padding: 22px 0; }.faq summary { cursor: pointer; font-weight: 600; font-size: 18px; }.faq details p { color: var(--slate); margin-top: 16px; }.faq code { overflow-wrap: anywhere; font-size: .85em; }
   @media (max-width: 1100px) { .doc-grid { grid-template-columns: 1fr 1fr; } .community-grid, .image-install { grid-template-columns: 1fr; gap: 32px; } }
   @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links .star-nav { display: block !important; font-size: 13px; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .hero .wrap { gap: 28px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
+
+  .hero-tour { min-width: 0; scroll-margin-top: 110px; }
+  .tour-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+  .tour-heading .eyebrow { font-size: 11px; letter-spacing: .09em; line-height: 1.5; }
+  .tour-live { font: 11px/1.4 var(--mono); color: var(--teal); white-space: nowrap; }
+  .tour-live::before { content: ''; display: inline-block; width: 6px; height: 6px; background: var(--teal); border-radius: 50%; margin-right: 7px; }
+  .hero-tour .shot { border: 1px solid var(--line); box-shadow: 0 28px 60px -28px rgba(30,42,68,.4); }
+  .hero-tour img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #fafafa; }
+  .tour-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px; margin: 20px 0 12px; }
+  .tour-controls .btn { padding: 10px 16px; font-size: 13px; cursor: pointer; }
+  .tour-controls .btn[hidden] { display: none; }
+  .tour-controls a { font-size: 12px; text-underline-offset: 3px; color: var(--slate); }
+  .hero-tour figcaption, .tour-chapters, #tour-status { font-size: 12px; line-height: 1.7; color: var(--slate); }
+  .tour-chapters { margin-top: 12px; }.tour-chapters summary { cursor: pointer; }.tour-chapters p { margin-top: 8px; }
+  #tour-status:empty { display: none; }
+  #tour-toggle:focus-visible { outline: 3px solid var(--gold-d); outline-offset: 4px; }
+  @media (max-width: 640px) { .tour-heading { gap: 10px; }.tour-heading .eyebrow { font-size: 10px; }.tour-live { font-size: 10px; }.tour-controls { gap: 12px; }.tour-controls a { font-size: 11px; } }
 </style>
 </head>
 <body>
@@ -288,16 +305,18 @@
       <p class="lead">Kintsugi reverse-engineers legacy applications into reviewable specifications, designs each unit from your own templates, and lets your teams build with the AI assistants they already use. People decide at every gate. Everything lives in Git.</p>
       <div class="cta">
         <a class="btn" href="docs/guides/docker-images.html">Install Kintsugi <span aria-hidden="true">→</span></a>
-        <a class="btn ghost" href="#how">See how it works</a>
+        <a class="btn ghost" href="#product-tour">Watch the 30-second tour</a>
       </div>
       <div class="facts"><span>Self-hosted</span><span>Bring your own LLMs</span><span>Read-only on your source</span></div>
     </div>
-    <div class="stage rv">
-      <div class="tiles" style="right:-10px; bottom:-74px" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      <a class="shot screenshot-link" href="assets/screenshots/overview.jpg" aria-label="Open full-size screenshot of the Kintsugi portfolio"><img src="assets/screenshots/overview.jpg" width="1280" height="720" fetchpriority="high" alt="Real Kintsugi development portal showing Card Demo portfolio progress, understood units, risks and operations"></a>
-      <div class="float b"><span class="eyebrow" style="color:#F7D98A">From the running product</span><b>Real portal. Real workflow.</b><small>Card Demo · development environment</small></div>
-      <div class="float a"><span class="eyebrow">Your knowledge, kept</span><b>Source → spec → design</b><small>Markdown in Git. Review by people.</small></div>
-    </div>
+    <figure class="hero-tour rv" id="product-tour">
+      <div class="tour-heading"><span class="eyebrow"><b>30 seconds</b> · Light theme</span><span class="tour-live">Actual dev portal</span></div>
+      <div class="shot"><img id="portal-tour" src="assets/tour/portal-tour-light-poster.jpg" data-animation="assets/tour/portal-tour-light.gif" width="1280" height="720" fetchpriority="high" alt="Light-theme tour of the real Kintsugi portal: portfolio, assessment, understanding, design, build, monitoring, governance, plugins, settings and member guidelines"></div>
+      <div class="tour-controls"><button id="tour-toggle" class="btn ghost" type="button" aria-controls="portal-tour" aria-pressed="false" hidden>Play tour</button><a href="assets/tour/portal-tour-light.gif" download>Download GIF ↗</a><a href="assets/screenshots/overview.jpg">View screenshot ↗</a></div>
+      <figcaption>Walk through the running product, in a 30-second timelapse. Captured with AWS CardDemo development data; waiting time omitted.</figcaption>
+      <details class="tour-chapters"><summary>What's in the tour</summary><p>Portfolio → Delivery → Assessment &amp; catalog → Understanding &amp; business rules → Design sets &amp; shared architecture → Member builds → Monitoring → Governance &amp; telemetry → Projects &amp; plugins → Roles → Guideline → Settings.</p></details>
+      <p id="tour-status" role="status"></p>
+    </figure>
   </div>
 </section>
 
@@ -344,7 +363,7 @@
     <div class="head rv">
       <span class="eyebrow">How it works</span>
       <h2>From legacy code to a reviewed build, one unit at a time.</h2>
-      <p class="lead">These are real screenshots from our running development portal, using the public AWS CardDemo application. Documents are Markdown in Git; the portal makes them explorable.</p>
+      <p class="lead">These are real screenshots in light theme from our running development portal, using the public AWS CardDemo application. Documents are Markdown in Git; the portal makes them explorable.</p>
       <p class="capture-note">Captured 26 October 2026 · Development data, not customer results · <a href="docs/guides/first-project.html">Follow the workflow →</a></p>
     </div>
 
@@ -586,7 +605,7 @@ ghcr.io/evoelsewhere/kintsugi-worker
   <div class="wrap">
     <div>
       <a class="logo" href="#top"><img src="assets/brand/kintsugi-mark-light.svg" alt="" width="28" height="28">Kintsugi</a>
-      <small>Open-source AI legacy modernization. Screens captured from the development portal with Card Demo data. Apache-2.0.</small>
+      <small>Open-source AI legacy modernization. Light-theme screenshots and tour captured from the development portal with Card Demo data. Apache-2.0.</small>
     </div>
     <div class="cols">
       <div><b>Product</b><a href="#how">How it works</a><a href="#model">Working model</a><a href="#deploy">Architecture</a><a href="#security">Security</a></div>
@@ -595,6 +614,7 @@ ghcr.io/evoelsewhere/kintsugi-worker
   </div>
 </footer>
 
+<script src="assets/tour.js" defer></script>
 <script>
   (function () {
     var els = document.querySelectorAll('.rv');
