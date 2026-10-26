@@ -73,13 +73,15 @@
   nav.links .btn { padding: 10px 18px; font-size: 14px; color: var(--navy); border-radius: 12px; }
 
   /* hero */
-  .hero { position: relative; overflow: hidden; padding: 158px 0 120px; }
-  .hero .crack { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  .hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.28fr); gap: 48px; align-items: center; }
-  .hero h1 { font-size: clamp(44px, 5.2vw, 74px); margin: 22px 0 26px; }
-  .hero h1 em { font-style: italic; background: linear-gradient(135deg, #D9A63C 0%, #B8822A 60%, #8F6317 100%); -webkit-background-clip: text; background-clip: text; color: transparent; padding-right: .05em; }
-  .hero .cta { display: flex; flex-wrap: wrap; gap: 14px; margin: 34px 0 30px; }
-  .hero .facts { display: flex; flex-wrap: wrap; gap: 8px 22px; font: 500 12.5px/1.2 var(--mono); color: var(--slate); }
+  .hero { position: relative; overflow: hidden; padding: 138px 0 76px; }
+  .hero .crack { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: .22; }
+  .hero .wrap { position: relative; }
+  .hero-intro { max-width: 1020px; margin-inline: auto; text-align: center; }
+  .hero h1 { font-size: clamp(44px, 5.1vw, 76px); margin: 22px 0; line-height: 1.06; }
+  .hero h1 em { display: block; font-style: italic; background: linear-gradient(135deg, #D9A63C 0%, #B8822A 60%, #8F6317 100%); -webkit-background-clip: text; background-clip: text; color: transparent; padding-right: .05em; }
+  .hero .lead { max-width: 800px; margin-inline: auto; font-size: clamp(17px, 1.5vw, 20px); }
+  .hero .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin: 26px 0 22px; }
+  .hero .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 24px; font: 500 11px/1.4 var(--mono); color: var(--slate); }
   .hero .facts span::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--gold); margin-right: 9px; }
   .stage { position: relative; }
   .shot { border-radius: 16px; background: var(--paper); box-shadow: 0 40px 70px -34px rgba(30,42,68,.55), 0 0 0 1px var(--line); overflow: hidden; }
@@ -218,7 +220,7 @@
 
   @media (max-width: 1020px) {
     .built { grid-template-columns: 1fr; gap: 36px; } .built .pair { justify-content: flex-start; }
-    .hero .wrap, .feature, .feature.flip, .model .two, .deploy .two, .start .box { grid-template-columns: 1fr; gap: 40px; }
+    .feature, .feature.flip, .model .two, .deploy .two, .start .box { grid-template-columns: 1fr; gap: 40px; }
     .feature.flip .copy { order: 0; }
     .stage .shot { transform: none; } .float.a { left: 10px; bottom: -28px; } .float.b { right: 10px; }
     .cards, .tiles-grid { grid-template-columns: 1fr 1fr; }
@@ -230,7 +232,7 @@
   @media (max-width: 640px) {
     body { font-size: 16px; }
     .cards, .tiles-grid, .stats .row, .pipeline .phases { grid-template-columns: 1fr; }
-    .float { display: none; } .hero { padding: 122px 0 80px; } .tiles { display: none; }
+    .float { display: none; } .hero { padding: 118px 0 44px; } .tiles { display: none; }
     .card-img, .idea figure { overflow-x: auto; } .card-img img, .idea figure img { min-width: 760px; }
     footer .cols { gap: 36px; }
     .built { padding: 20px; }
@@ -251,20 +253,26 @@
   .community { background: var(--navy); color: var(--cream); }.community-grid { display: grid; grid-template-columns: .8fr 1.2fr; align-items: center; gap: 56px; }.community .eyebrow { color: var(--gold-l); }.community h2 { margin: 22px 0; }.community p.lead { color: #c9d1e2; font-size: 18px; margin-bottom: 28px; }.community .capture-note { color: #c9d1e2; }.community video { display: block; width: 100%; height: auto; border: 1px solid #52617a; border-radius: 16px; }.community figcaption { font-size: 12px; color: #c9d1e2; margin-top: 12px; }
   .faq .wrap { max-width: 900px; }.faq details { border-top: 1px solid var(--line); padding: 22px 0; }.faq summary { cursor: pointer; font-weight: 600; font-size: 18px; }.faq details p { color: var(--slate); margin-top: 16px; }.faq code { overflow-wrap: anywhere; font-size: .85em; }
   @media (max-width: 1100px) { .doc-grid { grid-template-columns: 1fr 1fr; } .community-grid, .image-install { grid-template-columns: 1fr; gap: 32px; } }
-  @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links a.github-nav { display: inline-flex; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .hero .wrap { gap: 28px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
+  @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links a.github-nav { display: inline-flex; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
 
-  .hero-tour { min-width: 0; scroll-margin-top: 110px; }
-  .hero-tour .shot { border: 1px solid var(--line); box-shadow: 0 28px 60px -28px rgba(30,42,68,.4); }
+  .hero-tour { min-width: 0; max-width: 1080px; margin: 48px auto 0; padding: 8px 8px 0; border: 1px solid var(--line); border-radius: 24px; background: var(--paper); box-shadow: 0 34px 70px -40px rgba(30,42,68,.4); scroll-margin-top: 96px; }
+  .hero-tour .shot { border: 1px solid var(--line); border-radius: 16px; box-shadow: none; }
   .hero-tour img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #fafafa; }
-  .tour-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px; margin: 20px 0 12px; }
+  .tour-footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 18px 20px; }
+  .tour-controls { display: flex; align-items: center; flex-wrap: wrap; flex-shrink: 0; gap: 14px 20px; }
   .tour-controls .btn { padding: 10px 16px; font-size: 13px; cursor: pointer; }
   .tour-controls .btn[hidden] { display: none; }
   .tour-controls a { font-size: 12px; text-underline-offset: 3px; color: var(--slate); }
   .hero-tour figcaption, .tour-chapters, #tour-status { font-size: 12px; line-height: 1.7; color: var(--slate); }
-  .tour-chapters { margin-top: 12px; }.tour-chapters summary { cursor: pointer; }.tour-chapters p { margin-top: 8px; }
+  .tour-note { max-width: 43ch; text-align: right; }
+  .tour-chapters { margin: 0 20px; border-top: 1px solid var(--line); padding-block: 12px; }.tour-chapters summary { width: fit-content; cursor: pointer; }
+  .tour-stops { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; list-style: none; padding: 20px 0 8px; }
+  .tour-stops b { display: block; font-size: 13px; font-weight: 600; color: var(--navy); margin-bottom: 6px; }
+  #tour-status:not(:empty) { margin: 0 20px 16px; }
   #tour-status:empty { display: none; }
   #tour-toggle:focus-visible { outline: 3px solid var(--gold-d); outline-offset: 4px; }
-  @media (max-width: 640px) { .tour-controls { gap: 12px; }.tour-controls a { font-size: 11px; } }
+  @media (max-width: 800px) { .tour-footer { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px 12px; }.tour-note { max-width: none; text-align: left; }.tour-stops { grid-template-columns: 1fr 1fr; }.tour-chapters { margin-inline: 12px; } }
+  @media (max-width: 640px) { .hero h1 { font-size: clamp(40px, 9vw, 54px); }.hero .cta { margin-top: 24px; }.hero .facts { gap: 8px 16px; font-size: 10px; }.hero-tour { margin-top: 32px; padding: 4px 4px 0; border-radius: 16px; }.hero-tour .shot { border-radius: 12px; }.tour-controls { gap: 12px; flex-shrink: 1; }.tour-controls a { font-size: 11px; }.tour-stops { gap: 16px; } }
 </style>
 </head>
 <body>
@@ -299,7 +307,7 @@
     </g>
   </svg>
   <div class="wrap">
-    <div class="rv">
+    <div class="hero-intro rv">
       <span class="eyebrow">Open source · <b>legacy modernization</b></span>
       <h1>Modernize the system you have. <em>Keep everything it knows.</em></h1>
       <p class="lead">Kintsugi reverse-engineers legacy applications into reviewable specifications, designs each unit from your own templates, and lets your teams build with the AI assistants they already use. People decide at every gate. Everything lives in Git.</p>
@@ -311,10 +319,14 @@
     </div>
     <figure class="hero-tour rv" id="product-tour">
       <div class="shot"><img id="portal-tour" src="assets/tour/portal-tour-light-poster.jpg" data-animation="assets/tour/portal-tour-light.gif" width="1280" height="720" fetchpriority="high" alt="Light-theme tour of the real Kintsugi portal: portfolio, assessment, understanding, design, build, monitoring, governance, plugins, settings and member guidelines"></div>
-      <div class="tour-controls"><button id="tour-toggle" class="btn ghost" type="button" aria-controls="portal-tour" aria-pressed="false" hidden>Play tour</button><a href="assets/tour/portal-tour-light.gif" download>Download GIF ↗</a><a href="assets/screenshots/overview.jpg">View screenshot ↗</a></div>
-      <figcaption>Walk through the running product, in a 30-second timelapse. Captured with AWS CardDemo development data; waiting time omitted.</figcaption>
-      <details class="tour-chapters"><summary>What's in the tour</summary><p>Portfolio → Delivery → Assessment &amp; catalog → Understanding &amp; business rules → Design sets &amp; shared architecture → Member builds → Monitoring → Governance &amp; telemetry → Projects &amp; plugins → Roles → Guideline → Settings.</p></details>
+      <figcaption>
+      <div class="tour-footer">
+        <div class="tour-controls"><button id="tour-toggle" class="btn ghost" type="button" aria-controls="portal-tour" aria-pressed="false" hidden>Play tour</button><a href="assets/tour/portal-tour-light.gif" download>Download GIF ↗</a><a href="assets/screenshots/overview.jpg">View screenshot ↗</a></div>
+        <p class="tour-note">A quick walk through Kintsugi.<br>CardDemo development data · waiting time omitted.</p>
+      </div>
+      <details class="tour-chapters"><summary>What's in the tour</summary><ol class="tour-stops"><li><b>01 · Understand</b>Portfolio, assessment, catalog, specifications and business rules.</li><li><b>02 · Design &amp; build</b>Design sets, shared architecture and member builds.</li><li><b>03 · Operate &amp; govern</b>Job runs, repository sync, gates, audit and telemetry.</li><li><b>04 · Set up &amp; connect</b>Projects, plugins, roles, guidelines and installation settings.</li></ol></details>
       <p id="tour-status" role="status"></p>
+      </figcaption>
     </figure>
   </div>
 </section>
