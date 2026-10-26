@@ -8,10 +8,20 @@ import type { DesignOverview, DesignSet, UnitDesignRow, UnitSetActivity, UnitSet
 
 export type Eligibility = { ok: true } | { ok: false; reason: string };
 
+/** What a person does with the units picked in the table: write a set for those without it, or write it again over an existing design (ADR-0081). */
+export type SelectMode = "generate" | "regenerate";
+
+/** Why a run on the unit blocks a new one, or undefined when none does. */
+function busyReason(busy: UnitSetActivity | undefined): string | undefined {
+  if (busy?.state === "running") return `Being generated (run ${busy.runId.slice(0, 8)})`;
+  if (busy?.state === "in-pr") return "In an open pull request: merge it, or abandon it to release the unit";
+  return undefined;
+}
+
 /** Why a unit (or the application) with `summary` for `set` can or cannot get it generated now. */
 function judge(summary: UnitSetSummary, set: DesignOverview["sets"][number], busy: UnitSetActivity | undefined): Eligibility {
-  if (busy?.state === "running") return { ok: false, reason: `Being generated (run ${busy.runId.slice(0, 8)})` };
-  if (busy?.state === "in-pr") return { ok: false, reason: "In an open pull request: merge it, or abandon it to release the unit" };
+  const blocked = busyReason(busy);
+  if (blocked !== undefined) return { ok: false, reason: blocked };
   if (summary.ready) return { ok: true };
   if (summary.state === "missing") return { ok: false, reason: `Needs ${set.needs.join(", ")} first` };
   return { ok: false, reason: "Already written: a design is never overwritten" };
@@ -22,6 +32,29 @@ export function eligibility(unit: UnitDesignRow, set: DesignOverview["sets"][num
   const summary = unit.sets[set.id];
   if (summary === undefined) return { ok: false, reason: `The set does not apply to a ${unit.kind}` };
   return judge(summary, set, activity.find((entry) => entry.unit === unit.key && entry.set === set.id));
+}
+
+/** Why a design of `set` can or cannot be written again now: there must be one to replace, and no run or pull request on it. */
+function judgeRegenerate(summary: UnitSetSummary, busy: UnitSetActivity | undefined): Eligibility {
+  const blocked = busyReason(busy);
+  if (blocked !== undefined) return { ok: false, reason: blocked };
+  if (summary.files.conformant + summary.files.problems > 0) return { ok: true };
+  return { ok: false, reason: "No design of this set to regenerate: generate it first" };
+}
+
+/** Why `unit` can or cannot get the design of `set` written again now (ADR-0081). */
+export function regenerability(unit: UnitDesignRow, set: DesignOverview["sets"][number], activity: readonly UnitSetActivity[]): Eligibility {
+  const summary = unit.sets[set.id];
+  if (summary === undefined) return { ok: false, reason: `The set does not apply to a ${unit.kind}` };
+  return judgeRegenerate(summary, activity.find((entry) => entry.unit === unit.key && entry.set === set.id));
+}
+
+/** Why the application's own design of a set can or cannot be written again now (ADR-0081). */
+export function applicationRegenerability(overview: Pick<DesignOverview, "application">, set: DesignOverview["sets"][number], activity: readonly UnitSetActivity[]): Eligibility {
+  if (set.scope !== "application") return { ok: false, reason: "This set is generated for each unit, not for the application" };
+  const summary = overview.application.sets[set.id];
+  if (summary === undefined) return { ok: false, reason: "The set has no document to write for the application" };
+  return judgeRegenerate(summary, activity.find((entry) => entry.unit === APPLICATION_UNIT_KEY && entry.set === set.id));
 }
 
 /** Why the application can or cannot get a set of scope `application` generated now (ADR-0050). */
@@ -44,23 +77,30 @@ export function setFacts(set: DesignSet): Array<{ label: string; value: string }
   ];
 }
 
-/** The units of `rows` the set can be generated for, in table order. */
-export function selectable(rows: readonly UnitDesignRow[], set: DesignOverview["sets"][number] | undefined, activity: readonly UnitSetActivity[]): string[] {
+/** The units of `rows` the set can be generated for (or, in `regenerate` mode, written again for), in table order. */
+export function selectable(rows: readonly UnitDesignRow[], set: DesignOverview["sets"][number] | undefined, activity: readonly UnitSetActivity[], mode: SelectMode = "generate"): string[] {
   if (set === undefined) return [];
-  return rows.filter((row) => eligibility(row, set, activity).ok).map((row) => row.key);
+  const judge = mode === "regenerate" ? regenerability : eligibility;
+  return rows.filter((row) => judge(row, set, activity).ok).map((row) => row.key);
 }
 
 /** The picked units that can still be generated (a refresh may have blocked some), sorted. */
-export function stillSelectable(picked: Iterable<string>, rows: readonly UnitDesignRow[], set: DesignOverview["sets"][number] | undefined, activity: readonly UnitSetActivity[]): string[] {
-  const allowed = new Set(selectable(rows, set, activity));
+export function stillSelectable(picked: Iterable<string>, rows: readonly UnitDesignRow[], set: DesignOverview["sets"][number] | undefined, activity: readonly UnitSetActivity[], mode: SelectMode = "generate"): string[] {
+  const allowed = new Set(selectable(rows, set, activity, mode));
   return [...picked].filter((key) => allowed.has(key)).sort();
 }
 
+/** The units whose design of `set` was written against an older version of its template: what a regeneration brings up to date. */
+export function staleUnits(rows: readonly UnitDesignRow[], set: DesignOverview["sets"][number] | undefined): string[] {
+  if (set === undefined) return [];
+  return rows.filter((row) => (row.sets[set.id]?.files.stale ?? 0) > 0).map((row) => row.key);
+}
+
 /** Why the Generate button is off; undefined when it can be pressed. */
-export function generateBlocker(options: { set: string; count: number; /** Why no run can start at all (permission, repositories). */ disabled: string | undefined }): string | undefined {
+export function generateBlocker(options: { set: string; count: number; /** Why no run can start at all (permission, repositories). */ disabled: string | undefined; regenerate?: boolean }): string | undefined {
   if (options.disabled !== undefined) return options.disabled;
-  if (options.set === "") return "Choose a design set to generate.";
-  if (options.count === 0) return "Select the units to generate it for.";
+  if (options.set === "") return `Choose a design set to ${options.regenerate === true ? "regenerate" : "generate"}.`;
+  if (options.count === 0) return `Select the units to ${options.regenerate === true ? "regenerate it for" : "generate it for"}.`;
   return undefined;
 }
 

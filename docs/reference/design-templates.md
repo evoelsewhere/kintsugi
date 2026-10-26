@@ -155,7 +155,7 @@ A unit's document has one of these states:
 |---|---|
 | `conformant` | present, no fault |
 | `problems` | present, with faults |
-| `stale` | written against an older version of its template (`template: <set>@<n>` with `n` below the set's `version`, or `<set>/<kind>@<n>` below the profile's); derived when read, never stored. A stale design is also conformant or has problems |
+| `stale` | written against an older version of its template (`template: <set>@<n>` with `n` below the set's `version`, or `<set>/<kind>@<n>` below the profile's); derived when read, never stored. A stale design is also conformant or has problems; a design run with `regenerate` writes the set again for such units ([ADR-0081](../decisions/0081-regenerate-an-existing-design.md)) |
 | `missing` | a required file not written yet |
 | `waived` | the unit's `waived` list names it with a reason |
 | `not-applicable` | the set does not apply to the unit's kind |

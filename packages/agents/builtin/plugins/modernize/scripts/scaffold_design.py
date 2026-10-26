@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Create the first draft of a unit's design documents from the project's template (ADR-0045).
 
-    python3 scaffold_design.py <app> <module/unit | @app>[,...] <set> [--file PATH | --all] [--root DIR] [--out DIR] [--manifest FILE]
+    python3 scaffold_design.py <app> <module/unit | @app>[,...] <set> [--file PATH | --all] [--regenerate] [--root DIR] [--out DIR] [--manifest FILE]
 
 Run from the root of the document repository checkout (or name it with --root). For each document the set lists for the
 unit's kind (the required ones, all of them with --all, or the one named by --file), this writes
 `10-applications/<app>/02-modern/<module>/<unit>/<set>/<path>` from the document's template (the one in the unit kind's profile folder when it has one of that name, else the set's): the front matter names the
 template and its version, the variables ({{unit.id}}, {{unit.title}}, {{app.id}}, {{kind}}, {{set.id}}, {{set.version}})
 are filled in (`{{set.version}}` is the version of the template in use), a section that lists the unit's rules is seeded from its `rules.md` (in `01-legacy/<module>/<unit>/`), and every section the
-author must write holds a TODO until they do. A file that already exists is never overwritten.
+author must write holds a TODO until they do. A file that already exists is never overwritten, unless --regenerate says the
+design is to be written again (ADR-0081): then a document that exists under --root is replaced by a fresh skeleton in --out (or in
+place when --out is --root), the optional documents the unit already has are written again with the required ones, and a file already
+under --out, written by this run, is still left alone so that a retried run keeps what it finished.
 
 Several units can be named at once (comma-separated): a unit that cannot be used is reported and skipped, the others are written.
 A design set of scope `application` (ADR-0050) is written for the application itself, named `@app` where a unit goes, under
@@ -44,11 +47,11 @@ def _manifest_entry(set_id, relative, file):
             'ref': dl.ref_text(file['ref']), 'example': paths.design_template_path(set_id, file['example']) if file['example'] else None}
 
 
-def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False, out=None, info=None):
+def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False, out=None, info=None, regenerate=False):
     """([created paths], [notes]) for one unit and one set; raises DataError on unusable input.
 
     `out` is where the files are written (default: `root`); `info`, when given, is filled with the unit's kind and title and
-    the documents of the set (for the manifest).
+    the documents of the set (for the manifest). `regenerate` writes the skeletons again over a design the unit already has.
     """
     out = root if out is None else out
     for_application = unit_key == dl.APPLICATION_KEY
@@ -74,7 +77,8 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
         if not files:
             raise docmd.DataError(f'the design set "{set_id}" has no file "{only_file}" for {subject}')
     elif not include_optional:
-        files = [file for file in files if file['required']]
+        # A regeneration also writes again the optional documents the unit already has.
+        files = [file for file in files if file['required'] or (regenerate and os.path.lexists(os.path.join(root, *dl.design_file_path(app, unit_key, loaded, file['path']).split('/'))))]
     rules = [] if for_application else dl.rules_of(root, app, unit_key)
     created, notes = [], []
     if info is not None:
@@ -92,7 +96,10 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
         relative = dl.design_file_path(app, unit_key, loaded, file['path'])
         path = os.path.join(out, *relative.split('/'))
         existing = os.path.join(root, *relative.split('/'))
-        if os.path.lexists(path) or os.path.lexists(existing):
+        in_place = os.path.realpath(out) == os.path.realpath(root)
+        # Regenerating replaces what is under --root; what this run already wrote under --out is kept.
+        keep = os.path.lexists(path) if regenerate and not in_place else (os.path.lexists(path) or os.path.lexists(existing)) and not regenerate
+        if keep:
             notes.append(f'{relative} exists and was left as it is')
             if info is not None:
                 info['files'].append({**_manifest_entry(set_id, relative, file), 'written': False})
@@ -102,6 +109,8 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
                                 template['sections'], set_id, file['ref'], None if for_application else f'{app}/{unit_key}', unit['title'], app, unit['kind'], rules)
         docmd.write_text(path, text)
         created.append(relative)
+        if regenerate and os.path.lexists(existing) and not in_place:
+            notes.append(f'{relative} is written again over the existing design')
         if info is not None:
             info['files'].append({**_manifest_entry(set_id, relative, file), 'written': True})
     return created, notes
@@ -114,6 +123,7 @@ def main(argv=None):
     parser.add_argument('set', help='the design set to write')
     parser.add_argument('--file', dest='only_file', metavar='PATH', help='write one document of the set only (an optional one included)')
     parser.add_argument('--all', dest='include_optional', action='store_true', help='write the optional documents of the set too')
+    parser.add_argument('--regenerate', action='store_true', help='write the skeletons again over a design the unit already has (ADR-0081)')
     parser.add_argument('--root', default='.', metavar='DIR', help='the document repository checkout (default: the working directory)')
     parser.add_argument('--out', metavar='DIR', help='write the documents here instead of under --root (which is then only read)')
     parser.add_argument('--manifest', metavar='FILE', help='write a JSON summary of what was done')
@@ -135,7 +145,7 @@ def main(argv=None):
     for key in keys:
         info = {}
         try:
-            created, notes = scaffold(root, args.app, key, args.set, args.only_file, args.include_optional, out, info)
+            created, notes = scaffold(root, args.app, key, args.set, args.only_file, args.include_optional, out, info, args.regenerate)
         except (docmd.DataError, OSError) as error:
             print(f'scaffold_design.py: {key}: {error}', file=sys.stderr)
             manifest['units'][key] = {'error': str(error)}

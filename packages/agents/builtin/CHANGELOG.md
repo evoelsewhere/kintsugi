@@ -4,6 +4,8 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
+- Regenerate an existing design ([ADR-0081](../../../docs/decisions/0081-regenerate-an-existing-design.md)). `modernize` 3.3.0: `scaffold_design.py --regenerate` writes a fresh skeleton for each required document, and each optional one the unit already has, over a design that exists in the pinned documents (a file this run already wrote is kept, so a retry loses nothing); the `design` stage passes it when the run's scope says `regenerate` and tells the designer that the existing documents are the previous version, replaced and not a source. The portal's Design page offers Regenerate for the units whose design exists, with a selection of the stale ones.
+
 - Codex and GitHub Copilot ([ADR-0072](../../../docs/decisions/0072-init-install-and-plugins-as-plugins.md)). The command `build` of `modernize` is delivered as a skill to the clients that have no commands to run by name (Codex, Copilot) and as the command to Claude Code; the hook it declares is generated as a plugin-wide hook for them and reads their transcripts.
 
 - Login, init, install ([ADR-0072](../../../docs/decisions/0072-init-install-and-plugins-as-plugins.md)). The member plugin `context` is removed: the built-in plugins are `reverse_engineering` (runtime) and `modernize` (both). `modernize` 3.1.0: the command `build` declares the one hook a distributed plugin may carry, `kintsugi activity hook stop --plugin modernize --command build`, which reports who ran it, the tokens, turns and time to the project's monitoring; each member plugin is installed as a plugin of its own, so the command is `/modernize:build`.

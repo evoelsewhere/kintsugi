@@ -103,13 +103,26 @@ legacy code only to establish behavior you cite as path:line. What the code or t
 document, never a guess. Diagrams are Mermaid, per the mermaid-diagrams skill. Write only the documents of this set for the application: no
 other file.`;
 
-const generateTask = (set: string, scope: "unit" | "application"): string =>
+/**
+ * Added to the task of a regeneration (ADR-0081): the documents of the set already exist in the document repository and are being
+ * replaced, so what is under docs/ at their paths is the previous design, never a source; the skeleton in this run's output is the start.
+ */
+const REGENERATING = `This is a regeneration. A design of this set already exists at the final paths below, in the documents you can read under {in}: it is the
+previous version, written against an older template or to be written again, and it is being replaced. Do not copy it or treat it as a source
+of facts; write each document anew from its skeleton (the one with a TODO in each section), the template, the unit's understanding and the
+documents of the sets it needs, as for a first design. A person's decision that the previous design recorded as an answered open question is not
+in the specification: raise it again as an open question with the assumption you make.`;
+
+const generateTask = (set: string, scope: "unit" | "application", regenerate = false): string =>
   scope === "application"
     ? `Write the design documents of the set "${set}" for application {app} as a whole.
 
 ${WORKSPACE}
 
 ${APPLICATION_READING.replaceAll("<set>", set)}
+${regenerate ? `
+${REGENERATING}
+` : ""}
 
 Write every document the manifest lists for {key} (the required ones, and an optional one only when the application needs it) with write, at the
 full path of its skeleton, replacing every TODO and keeping the front matter. ${APPLICATION_RULES}
@@ -121,6 +134,9 @@ ${UNTRUSTED}`
 ${WORKSPACE}
 
 ${READING.replaceAll("<set>", set)}
+${regenerate ? `
+${REGENERATING}
+` : ""}
 
 Write every document the manifest lists for {key} (the required ones, and an optional one only when the unit needs it) with write, at the
 full path of its skeleton, replacing every TODO and keeping the front matter. ${RULES}
@@ -233,11 +249,12 @@ const checkArgs = (ctx: StageContext): string[] => ["{app}", unitsOf(ctx).join("
 export function designMessage(app: string, scope?: StageScope): string {
   const items = scope?.items ?? [];
   const set = scope?.set ?? "design";
-  if (items.length === 1 && items[0] === "@app") return `Design ${app}: ${set} of the application`;
+  const verb = scope?.regenerate === true ? "Regenerate design" : "Design";
+  if (items.length === 1 && items[0] === "@app") return `${verb} ${app}: ${set} of the application`;
   const modules = [...new Set(items.map((id) => id.split("/")[0]))];
-  if (items.length > 0 && modules.length === 1) return `Design ${app}: ${set} of ${modules[0]} (${items.length} unit${items.length === 1 ? "" : "s"})`;
+  if (items.length > 0 && modules.length === 1) return `${verb} ${app}: ${set} of ${modules[0]} (${items.length} unit${items.length === 1 ? "" : "s"})`;
   const names = items.map((id) => id.split("/")[1] ?? id);
-  return `Design ${app}: ${set} of ${names.slice(0, 2).join(", ")}${names.length > 2 ? ` +${names.length - 2}` : ""}`;
+  return `${verb} ${app}: ${set} of ${names.slice(0, 2).join(", ")}${names.length > 2 ? ` +${names.length - 2}` : ""}`;
 }
 
 export const DESIGN: StagePlan = {
@@ -260,7 +277,7 @@ export const DESIGN: StagePlan = {
       id: "scaffold",
       kind: "script",
       script: "scaffold_design.py",
-      args: (ctx) => ["{app}", unitsOf(ctx).join(","), setOf(ctx), "--root", "{in}", "--out", "{out}", "--manifest", `{out}/${MANIFEST}`],
+      args: (ctx) => ["{app}", unitsOf(ctx).join(","), setOf(ctx), ...(ctx.scope?.regenerate === true ? ["--regenerate"] : []), "--root", "{in}", "--out", "{out}", "--manifest", `{out}/${MANIFEST}`],
       intermediate: true,
       expects: [MANIFEST],
     },
@@ -278,7 +295,7 @@ export const DESIGN: StagePlan = {
         id: "design-unit",
         kind: "agent",
         agent: DESIGNER,
-        task: async (ctx) => generateTask(setOf(ctx), (await setFacts(ctx)).scope),
+        task: async (ctx) => generateTask(setOf(ctx), (await setFacts(ctx)).scope, ctx.scope?.regenerate === true),
         documents: async (ctx) => (await setFacts(ctx)).reads,
       },
     },

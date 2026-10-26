@@ -182,6 +182,50 @@ class Scaffold(Repo):
         self.assertFalse(os.path.exists(os.path.join(out, self.design('basic', 'overview.md'))))
         self.assertTrue(os.path.exists(os.path.join(out, self.design('basic', 'functions.md'))))
 
+    def test_regenerate_writes_a_fresh_skeleton_over_a_design_that_is_in_the_repository_without_touching_it(self):
+        self.put(self.design('basic', 'overview.md'), 'mine' + chr(10))
+        out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
+        code, stdout, _ = self.scaffold('--out', out, '--regenerate')
+        self.assertEqual(code, 0)
+        self.assertIn('overview.md is written again over the existing design', stdout)
+        with open(os.path.join(out, self.design('basic', 'overview.md')), encoding='utf-8') as handle:
+            self.assertIn('## Purpose\n\nTODO\n', handle.read())
+        self.assertEqual(self.read(self.design('basic', 'overview.md')), 'mine' + chr(10))
+
+    def test_regenerate_keeps_what_the_run_already_wrote_so_a_retry_does_not_lose_it(self):
+        self.put(self.design('basic', 'overview.md'), 'old' + chr(10))
+        out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
+        self.assertEqual(self.scaffold('--out', out, '--regenerate')[0], 0)
+        finished = os.path.join(out, self.design('basic', 'overview.md'))
+        with open(finished, 'w', encoding='utf-8', newline='\n') as handle:
+            handle.write('finished' + chr(10))
+        manifest = os.path.join(out, 'manifest.json')
+        code, stdout, _ = self.scaffold('--out', out, '--regenerate', '--manifest', manifest)
+        self.assertEqual(code, 0)
+        self.assertIn('overview.md exists and was left as it is', stdout)
+        with open(finished, encoding='utf-8') as handle:
+            self.assertEqual(handle.read(), 'finished' + chr(10))
+
+    def test_regenerate_in_place_replaces_the_files_and_writes_the_optional_ones_the_unit_has(self):
+        self.put(os.path.join(self.unit, 'README.md'), UNIT_MD.replace('"screen"', '"api"'))
+        self.put(self.design('detail', 'logic.md'), 'old' + chr(10))
+        self.put(self.design('detail', 'sql.md'), 'old sql' + chr(10))
+        code, stdout, _ = run(sd.main, ['billing', 'payroll/run-period', 'detail', '--regenerate', '--root', self.root])
+        self.assertEqual(code, 0)
+        for name in ('logic.md', 'sql.md'):
+            self.assertIn('created 10-applications/billing/02-modern/payroll/run-period/detail/' + name, stdout)
+            self.assertIn('TODO', self.read(self.design('detail', name)))
+
+    def test_without_regenerate_an_optional_document_the_unit_has_is_not_written_again(self):
+        self.put(os.path.join(self.unit, 'README.md'), UNIT_MD.replace('"screen"', '"api"'))
+        self.put(self.design('detail', 'sql.md'), 'mine' + chr(10))
+        code, stdout, _ = run(sd.main, ['billing', 'payroll/run-period', 'detail', '--root', self.root])
+        self.assertEqual(code, 0)
+        self.assertNotIn('sql.md', stdout)
+        self.assertEqual(self.read(self.design('detail', 'sql.md')), 'mine' + chr(10))
+
     def test_when_every_unit_of_a_list_fails_it_exits_two(self):
         self.assertEqual(run(sd.main, ['billing', 'payroll/none,payroll/nope', 'basic', '--root', self.root])[0], 2)
 

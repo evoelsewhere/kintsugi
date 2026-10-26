@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DesignSet, UnitDesignRow, UnitSetActivity, UnitSetSummary } from "./api/design";
-import { applicationEligibility, eligibility, generateBlocker, selectable, setFacts, stillSelectable, unitsLine } from "./design-run";
+import { applicationEligibility, applicationRegenerability, eligibility, generateBlocker, regenerability, selectable, setFacts, staleUnits, stillSelectable, unitsLine } from "./design-run";
 
 const summary = (set: string, over: Partial<UnitSetSummary> = {}): UnitSetSummary => ({ set, version: 1, state: "missing", files: { total: 2, conformant: 0, problems: 0, missing: 2, stale: 0, waived: 0 }, ready: true, ...over });
 const unit = (key: string, sets: Record<string, UnitSetSummary>, kind = "screen"): UnitDesignRow => ({ key, module: key.split("/")[0]!, unit: key.split("/")[1]!, kind, sets, rules: { total: 0, uncovered: null } });
@@ -111,5 +111,54 @@ describe("setFacts", () => {
       ["Documents", "2 (1 required): a.md, b.md"],
       ["Also reads", "10-applications/{app}/00-inputs/, 02-architecture/"],
     ]);
+  });
+});
+
+describe("regenerating a design that exists (ADR-0081)", () => {
+  const written = (over: Partial<UnitSetSummary> = {}) => summary("basic", { state: "conformant", ready: false, files: { total: 2, conformant: 2, problems: 0, missing: 0, stale: 0, waived: 0 }, ...over });
+  const reasonOf = (row: UnitDesignRow, activity: UnitSetActivity[] = []): string | undefined => {
+    const result = regenerability(row, BASIC, activity);
+    return result.ok ? undefined : result.reason;
+  };
+
+  it("accepts a unit that has a design, conformant or with problems, stale or not", () => {
+    expect(regenerability(unit("a/x", { basic: written() }), BASIC, [])).toEqual({ ok: true });
+    expect(regenerability(unit("a/x", { basic: written({ state: "problems", files: { total: 2, conformant: 0, problems: 2, missing: 0, stale: 0, waived: 0 } }) }), BASIC, [])).toEqual({ ok: true });
+    expect(regenerability(unit("a/x", { basic: written({ state: "stale", files: { total: 2, conformant: 2, problems: 0, missing: 0, stale: 2, waived: 0 } }) }), BASIC, [])).toEqual({ ok: true });
+  });
+
+  it("says why a unit cannot: no design to replace, a run or a pull request on it, a set that does not apply", () => {
+    expect(reasonOf(unit("a/x", { basic: summary("basic") }))).toBe("No design of this set to regenerate: generate it first");
+    expect(reasonOf(unit("a/x", {}, "api"))).toBe("The set does not apply to a api");
+    expect(reasonOf(unit("a/x", { basic: written() }), [{ unit: "a/x", set: "basic", state: "running", runId: "abcdef0123456789" }])).toBe("Being generated (run abcdef01)");
+    expect(reasonOf(unit("a/x", { basic: written() }), [{ unit: "a/x", set: "basic", state: "in-pr", runId: "r1" }])).toContain("open pull request");
+  });
+
+  it("selects the units that have a design, and the stale ones among them", () => {
+    const rows = [
+      unit("a/one", { basic: summary("basic") }),
+      unit("a/two", { basic: written() }),
+      unit("b/three", { basic: written({ files: { total: 2, conformant: 1, problems: 0, missing: 0, stale: 1, waived: 0 } }) }),
+    ];
+    expect(selectable(rows, BASIC, [], "regenerate")).toEqual(["a/two", "b/three"]);
+    expect(selectable(rows, BASIC, [])).toEqual(["a/one"]);
+    expect(stillSelectable(new Set(["a/one", "a/two", "b/three"]), rows, BASIC, [], "regenerate")).toEqual(["a/two", "b/three"]);
+    expect(staleUnits(rows, BASIC)).toEqual(["b/three"]);
+    expect(staleUnits(rows, undefined)).toEqual([]);
+  });
+
+  it("applies to the application's own design too", () => {
+    const overview = (over: Partial<UnitSetSummary> = {}) => ({ application: { sets: { arch: summary("arch", over) } } });
+    expect(applicationRegenerability(overview({ state: "conformant", ready: false, files: { total: 1, conformant: 1, problems: 0, missing: 0, stale: 0, waived: 0 } }), ARCH, [])).toEqual({ ok: true });
+    const none = applicationRegenerability(overview(), ARCH, []);
+    expect(none.ok ? undefined : none.reason).toBe("No design of this set to regenerate: generate it first");
+    const unit_ = applicationRegenerability(overview(), BASIC, []);
+    expect(unit_.ok ? undefined : unit_.reason).toBe("This set is generated for each unit, not for the application");
+  });
+
+  it("words the blocker for a regeneration", () => {
+    expect(generateBlocker({ set: "", count: 0, disabled: undefined, regenerate: true })).toBe("Choose a design set to regenerate.");
+    expect(generateBlocker({ set: "basic", count: 0, disabled: undefined, regenerate: true })).toBe("Select the units to regenerate it for.");
+    expect(generateBlocker({ set: "basic", count: 1, disabled: undefined, regenerate: true })).toBeUndefined();
   });
 });

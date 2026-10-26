@@ -191,7 +191,7 @@ export interface DesignActivity {
 /** A conflict of a refused selection (409): a unit that has the set, lacks one it needs, or is running or in a pull request. */
 export interface DesignConflict {
   unit: string;
-  state: "running" | "in-pr" | "written" | "needs";
+  state: "running" | "in-pr" | "written" | "unwritten" | "needs";
   runId?: string;
   needs?: string[];
 }
@@ -211,7 +211,7 @@ export const designApi = {
   application: (projectId: string, applicationId: string, ref?: string) => apiGet<UnitDesign>(`${application(projectId, applicationId)}/application${refQuery(ref)}`),
   /** The units a run is generating or a pull request carries (what a new selection cannot take). */
   activity: (projectId: string, applicationId: string) => apiGet<DesignActivity>(`${application(projectId, applicationId)}/activity`),
-  /** Generates one design set for units (202); 409 with details.conflicts when some cannot be designed now. */
-  generate: (projectId: string, applicationId: string, selection: { set: string; units: string[] }) => apiSend<JobRunView>(`${application(projectId, applicationId)}/runs`, "POST", selection),
+  /** Generates one design set for units (202), or with `regenerate` writes it again over the units' design (ADR-0081); 409 with details.conflicts when some cannot be designed now. */
+  generate: (projectId: string, applicationId: string, selection: { set: string; units: string[]; regenerate?: boolean }) => apiSend<JobRunView>(`${application(projectId, applicationId)}/runs`, "POST", selection),
   common: (projectId: string, applicationId: string, ref?: string) => apiGet<CommonDesign>(`${application(projectId, applicationId)}/common${refQuery(ref)}`),
 };

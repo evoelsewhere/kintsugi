@@ -83,7 +83,7 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     await removeTree(dataDir);
   });
 
-  async function runDesign(options: { docs?: string; files: AgentFiles; units?: string[]; set?: string }) {
+  async function runDesign(options: { docs?: string; files: AgentFiles; units?: string[]; set?: string; regenerate?: boolean }) {
     const store = new MemoryJobStore();
     store.document = options.docs ?? "docs";
     const writes: DocumentWriteRequest[] = [];
@@ -111,7 +111,7 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
       name: "design",
       sourceRepositoryId: "legacy",
       actor: "alice",
-      inputs: { scope: { items: options.units ?? UNITS, files: [], set: options.set ?? "basic" } },
+      inputs: { scope: { items: options.units ?? UNITS, files: [], set: options.set ?? "basic", ...(options.regenerate === true ? { regenerate: true } : {}) } },
     });
     const run = await runner.run(id);
     const summary = run?.outputSummary as { steps: Array<{ id: string; status: string; key?: string }> } | undefined;
@@ -125,7 +125,30 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     expect(stageInfo("demo").find((stage) => stage.id === "design")).toEqual({ id: "design", requires: [{ stage: "assess", path: "10-applications/demo/01-legacy/_catalog/index.md" }] });
     expect(designMessage("demo", { items: UNITS, files: [], set: "basic" })).toBe("Design demo: basic of payroll (2 units)");
     expect(designMessage("demo", { items: ["a/x", "b/y", "b/z"], files: [], set: "detail" })).toBe("Design demo: detail of x, y +1");
+    expect(designMessage("demo", { items: UNITS, files: [], set: "basic", regenerate: true })).toBe("Regenerate design demo: basic of payroll (2 units)");
   });
+
+  it("regenerates a set the units already have: the designers run again and the new documents replace the old ones in the pull request", async () => {
+    const REGENERATED = `${OVERVIEW_OK}\n`;
+    const { run, agents, steps, published, writes } = await runDesign({
+      docs: "full-docs",
+      regenerate: true,
+      files: { designer: (spec) => ({ ...written(unitOf(spec.task)), [designPath(unitOf(spec.task), "overview.md")]: REGENERATED }) },
+    });
+    expect(run?.failureReason).toBeUndefined();
+    expect(run?.status).toBe("succeeded");
+    expect(steps.filter((step) => step[0] === "design-unit").map((step) => step[2]).sort()).toEqual(UNITS.slice().sort());
+    const task = agents.specs.find((spec) => unitOf(spec.task) === "payroll/run-period")!.task;
+    expect(task).toContain("This is a regeneration");
+    expect(published(designPath("payroll/close-period", "overview.md"))).toBe(REGENERATED);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.message).toBe("Regenerate design demo: basic of payroll (2 units)");
+  }, 120_000);
+
+  it("does not mention a regeneration in the task of a first design", async () => {
+    const { agents } = await runDesign({ files: { designer: (spec) => written(unitOf(spec.task)) } });
+    expect(agents.specs.every((spec) => !spec.task.includes("This is a regeneration"))).toBe(true);
+  }, 120_000);
 
   it("generates the set for each unit: one designer job per unit, the documents published, the skeletons and reports kept as scratch", async () => {
     const { run, agents, steps, artifacts, published, writes } = await runDesign({ files: { designer: (spec) => written(unitOf(spec.task)) } });

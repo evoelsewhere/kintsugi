@@ -3,7 +3,7 @@
 // state, module and kind. A row opens the unit's drawer. With a set chosen in the filter, units the set
 // can be generated for get a checkbox and a bar at the bottom starts the run (ADR-0049).
 
-import { Play } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Select } from "@/components/ui/select";
 import { ConformanceMark } from "./design-parts";
 import { APPLICATION_UNIT_KEY } from "@kintsugi/domain";
 import type { DesignConflict, DesignOverview, DesignSet, UnitDesignRow, UnitSetActivity } from "@/lib/api/design";
-import { applicationEligibility, eligibility, generateBlocker, selectable, setFacts, stillSelectable } from "@/lib/design-run";
+import { applicationEligibility, applicationRegenerability, eligibility, generateBlocker, regenerability, type SelectMode, selectable, setFacts, staleUnits, stillSelectable } from "@/lib/design-run";
 import { CountChip } from "../results/results-parts";
 import type { RequestGenerate } from "./design-stage";
 import { matchesFilters, STATE_LABEL, STATE_ORDER, STATE_TONE, stateOf, type UnitFilters } from "./design-state";
@@ -23,6 +23,7 @@ const CONFLICT_LABEL: Record<DesignConflict["state"], string> = {
   running: "is being generated",
   "in-pr": "is in an open pull request",
   written: "has this set already",
+  unwritten: "has no design of this set to regenerate",
   needs: "lacks a set it needs",
 };
 
@@ -72,6 +73,7 @@ export function DesignUnitsTab({
 }): React.JSX.Element {
   const { units, sets } = overview;
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const [mode, setMode] = useState<SelectMode>("generate");
   if (sets.length === 0) {
     return (
       <Card>
@@ -99,9 +101,15 @@ export function DesignUnitsTab({
   const rows = units.filter((unit) => matchesFilters(unit, filters));
   const chosenSet = sets.find((set) => set.id === filters.set);
   // Units picked before a refresh that cannot be generated now drop out of the selection.
-  const chosen = stillSelectable(picked, units, chosenSet, activity);
-  const ready = selectable(rows, chosenSet, activity);
-  const blocker = generateBlocker({ set: filters.set, count: chosen.length, disabled: runDisabled });
+  const regenerating = mode === "regenerate";
+  const chosen = stillSelectable(picked, units, chosenSet, activity, mode);
+  const ready = selectable(rows, chosenSet, activity, mode);
+  const stale = staleUnits(rows, chosenSet).filter((key) => ready.includes(key));
+  const blocker = generateBlocker({ set: filters.set, count: chosen.length, disabled: runDisabled, regenerate: regenerating });
+  const changeMode = (next: SelectMode): void => {
+    setMode(next);
+    setPicked(new Set());
+  };
   const toggle = (key: string, on: boolean): void =>
     setPicked((previous) => {
       const next = new Set(previous);
@@ -118,7 +126,7 @@ export function DesignUnitsTab({
             header: "",
             className: "w-8",
             cell: (row: UnitDesignRow) => {
-              const result = eligibility(row, chosenSet, activity);
+              const result = (regenerating ? regenerability : eligibility)(row, chosenSet, activity);
               return (
                 <input
                   type="checkbox"
@@ -227,23 +235,35 @@ export function DesignUnitsTab({
         empty="No unit matches these filters."
       />
       {chosenSet === undefined ? (
-        <p className="text-[12px] text-text-muted">Choose a design set in the filter above to select the units to generate it for. A design that exists is never overwritten.</p>
+        <p className="text-[12px] text-text-muted">Choose a design set in the filter above to select the units to generate it for, or to regenerate it for. A design that exists is only replaced by Regenerate, in a pull request people review.</p>
       ) : (
         <div className="sticky bottom-3 z-10">
           <Card className="py-3 shadow-[var(--ds-shadow-menu,0_4px_16px_rgba(0,0,0,0.12))]">
             <div className="flex flex-wrap items-center gap-3">
+              <div role="group" aria-label="What to do with the selected units" className="inline-flex items-center gap-1">
+                {(["generate", "regenerate"] as const).map((option) => (
+                  <Button key={option} size="small" variant={mode === option ? "solid" : "ghost"} className={mode === option ? undefined : "shadow-border"} aria-pressed={mode === option} onClick={() => changeMode(option)}>
+                    {option === "generate" ? "Generate" : "Regenerate"}
+                  </Button>
+                ))}
+              </div>
               <p className="text-[13px] text-text tabular-nums">
                 <span className="font-medium">
                   {chosen.length} unit{chosen.length === 1 ? "" : "s"}
                 </span>
                 <span className="text-text-muted">
                   {" "}
-                  of {ready.length} ready for {chosenSet.title}
+                  of {ready.length} {regenerating ? `with a ${chosenSet.title} design to regenerate` : `ready for ${chosenSet.title}`}
                 </span>
               </p>
-              <Button size="small" variant="ghost" className="shadow-border" disabled={ready.length === 0} onClick={() => setPicked(new Set(ready))} title="Selects every unit that is ready">
-                Select ready
+              <Button size="small" variant="ghost" className="shadow-border" disabled={ready.length === 0} onClick={() => setPicked(new Set(ready))} title={regenerating ? "Selects every unit that has a design" : "Selects every unit that is ready"}>
+                {regenerating ? "Select all" : "Select ready"}
               </Button>
+              {regenerating && stale.length > 0 ? (
+                <Button size="small" variant="ghost" className="shadow-border" onClick={() => setPicked(new Set(stale))} title="Selects the units whose design was written against an older version of the template">
+                  Select stale ({stale.length})
+                </Button>
+              ) : null}
               {chosen.length === 0 ? null : (
                 <Button size="small" variant="ghost" onClick={() => setPicked(new Set())}>
                   Clear selection
@@ -251,9 +271,9 @@ export function DesignUnitsTab({
               )}
               <div className="ml-auto flex items-center gap-2">
                 {blocker === undefined ? null : <span className="max-w-sm text-right text-[11px] text-text-muted">{blocker}</span>}
-                <Button size="small" variant="solid" disabled={blocker !== undefined} onClick={() => onGenerate(chosenSet.id, chosen)}>
-                  <Play className="size-3.5" />
-                  Generate {chosenSet.title.toLowerCase()}
+                <Button size="small" variant="solid" disabled={blocker !== undefined} onClick={() => onGenerate(chosenSet.id, chosen, regenerating ? { regenerate: true } : undefined)}>
+                  {regenerating ? <RefreshCw className="size-3.5" /> : <Play className="size-3.5" />}
+                  {regenerating ? "Regenerate" : "Generate"} {chosenSet.title.toLowerCase()}
                 </Button>
               </div>
             </div>
@@ -316,6 +336,7 @@ function ApplicationDesignCard({
   const summary = overview.application.sets[set.id];
   const result = applicationEligibility(overview, set, activity);
   const blocker = result.ok ? runDisabled : result.reason;
+  const again = applicationRegenerability(overview, set, activity);
   return (
     <Card className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -334,6 +355,12 @@ function ApplicationDesignCard({
             <Play className="size-3.5" />
             Generate {set.title.toLowerCase()}
           </Button>
+          {again.ok ? (
+            <Button size="small" variant="ghost" className="shadow-border" disabled={runDisabled !== undefined} title={runDisabled} onClick={() => onGenerate(set.id, [APPLICATION_UNIT_KEY], { regenerate: true })}>
+              <RefreshCw className="size-3.5" />
+              Regenerate
+            </Button>
+          ) : null}
         </div>
       </div>
       {conflicts.length === 0 ? null : (

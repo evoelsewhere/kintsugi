@@ -1,7 +1,7 @@
 // Design → a unit: its design documents set by set, each file with its state, its problems and the
 // document itself, and what the rules and the references of the designs come to. A set that is not
 // written yet and can be generated has a Generate button (ADR-0049); a written design is corrected in
-// its pull request or on its branch, like any document.
+// its pull request or on its branch, like any document, or written again with Regenerate (ADR-0081).
 
 import { useMemo, useRef, useState } from "react";
 import { Loaded } from "@/components/loaded";
@@ -10,10 +10,10 @@ import { Markdown } from "@/components/results/lazy-markdown";
 import { type Column, DataTable } from "@/components/ui/data-table";
 import { DetailPage } from "@/components/detail-page";
 import { StatusDot } from "@/components/ui/status-dot";
-import { Play } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { designApi, type DesignFile, type DesignOverview, type DesignState, type UnitDesign, type UnitSetActivity, type UnitSetDetail } from "@/lib/api/design";
-import { applicationEligibility, eligibility } from "@/lib/design-run";
+import { applicationEligibility, applicationRegenerability, eligibility, regenerability } from "@/lib/design-run";
 import { APPLICATION_UNIT_KEY, applicationDesignFilePath, unitKeyDesignSetDir } from "@kintsugi/domain";
 import { documentsApi } from "@/lib/api/documents";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
@@ -83,7 +83,7 @@ export function UnitDesignPage({
 }
 
 /** What the unit's drawer offers for a set: the button that generates it, or why it cannot be generated now. */
-type GenerateOf = (set: string) => { action?: () => void; disabled?: string; note?: string } | undefined;
+type GenerateOf = (set: string) => { action?: () => void; disabled?: string; note?: string; regenerate?: { action?: () => void; disabled?: string } } | undefined;
 
 function generateOf(overview: DesignOverview | undefined, unitKey: string, activity: readonly UnitSetActivity[], runDisabled: string | undefined, onGenerate: RequestGenerate): GenerateOf {
   const row = overview?.units.find((unit) => unit.key === unitKey);
@@ -92,8 +92,11 @@ function generateOf(overview: DesignOverview | undefined, unitKey: string, activ
     if (overview === undefined || set === undefined || (row === undefined && unitKey !== APPLICATION_UNIT_KEY)) return undefined;
     const result = unitKey === APPLICATION_UNIT_KEY ? applicationEligibility(overview, set, activity) : eligibility(row!, set, activity);
     if (result.ok) return runDisabled === undefined ? { action: () => onGenerate(setId, [unitKey]) } : { disabled: runDisabled };
-    // A design that is written is not generated again; say why only for the reasons that are about a run.
-    return /^(Being generated|In an open pull request|Needs)/.test(result.reason) ? { note: result.reason } : undefined;
+    // Say why only for the reasons that are about a run; a written design offers Regenerate instead.
+    if (/^(Being generated|In an open pull request|Needs)/.test(result.reason)) return { note: result.reason };
+    const again = unitKey === APPLICATION_UNIT_KEY ? applicationRegenerability(overview, set, activity) : regenerability(row!, set, activity);
+    if (!again.ok) return undefined;
+    return { regenerate: runDisabled === undefined ? { action: () => onGenerate(setId, [unitKey], { regenerate: true }) } : { disabled: runDisabled } };
   };
 }
 
@@ -164,6 +167,14 @@ function SetView({ project, application, unit, set, generate }: { project: Proje
 function GenerateAction({ generate, set }: { generate: ReturnType<GenerateOf>; set: string }): React.JSX.Element | null {
   if (generate === undefined) return null;
   if (generate.note !== undefined) return <span className="text-[12px] text-text-muted">{generate.note}</span>;
+  if (generate.regenerate !== undefined) {
+    return (
+      <Button size="small" variant="ghost" className="shadow-border" disabled={generate.regenerate.action === undefined} title={generate.regenerate.disabled ?? "Write this design again from the current template, in a new pull request"} onClick={generate.regenerate.action}>
+        <RefreshCw className="size-3.5" />
+        Regenerate {set}
+      </Button>
+    );
+  }
   return (
     <Button size="small" variant="ghost" className="shadow-border" disabled={generate.action === undefined} title={generate.disabled} onClick={generate.action}>
       <Play className="size-3.5" />
@@ -179,7 +190,7 @@ function FileView({ project, application, unit, set, file }: { project: ProjectD
       {file.stale ? (
         <p className="rounded-[var(--geist-radius)] bg-hover px-3 py-2 text-[12.5px] text-text-secondary">
           <StatusDot tone="orange" className="mr-1.5 size-2" />
-          Written against <TemplateRef value={file.template} expected={file.expected} />. Bring it up to date with the changes of the template, or leave it: its version moved after this design was written.
+          Written against <TemplateRef value={file.template} expected={file.expected} />. Bring it up to date with the changes of the template (Regenerate, above, writes the set again in a new pull request), or leave it: its version moved after this design was written.
         </p>
       ) : null}
       {file.state === "waived" ? (

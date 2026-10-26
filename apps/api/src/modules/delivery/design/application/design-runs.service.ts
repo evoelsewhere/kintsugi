@@ -22,9 +22,11 @@ export interface DesignSelection {
   units?: string[];
   /** A failed design run to resume instead (same as POST job-runs/:runId/retry). */
   resumeOf?: string;
+  /** Write the set again for units that already have it, over their design (ADR-0081). */
+  regenerate?: boolean;
 }
 
-type Conflict = { unit: string; state: "running" | "in-pr"; runId: string } | { unit: string; state: "written" } | { unit: string; state: "needs"; needs: string[] };
+type Conflict = { unit: string; state: "running" | "in-pr"; runId: string } | { unit: string; state: "written" } | { unit: string; state: "unwritten" } | { unit: string; state: "needs"; needs: string[] };
 
 const reasonOf = (conflict: Conflict): string => {
   switch (conflict.state) {
@@ -34,6 +36,8 @@ const reasonOf = (conflict: Conflict): string => {
       return "is in an open pull request";
     case "written":
       return "has this set already";
+    case "unwritten":
+      return "has no design of this set to regenerate";
     case "needs":
       return `needs ${conflict.needs.join(", ")} first`;
   }
@@ -81,18 +85,22 @@ export class DesignRunsService {
       }
     }
 
+    const regenerate = selection.regenerate === true;
     const busy = new Map((await this.activity(projectId, applicationId)).items.filter((item) => item.set === set).map((item) => [item.unit, item]));
     const needs = overview.sets.find((entry) => entry.id === set)?.needs ?? [];
     const conflicts = wanted.flatMap((key): Conflict[] => {
       const active = busy.get(key);
       if (active !== undefined) return [{ unit: key, state: active.state, runId: active.runId }];
       const summary = forApplication ? overview.application.sets[set] : byKey.get(key)!.sets[set];
-      if (summary === undefined || summary.ready) return [];
+      if (summary === undefined) return [];
+      // A regeneration needs a design to replace; a first design needs the sets it builds on and no design yet.
+      if (regenerate) return summary.files.conformant + summary.files.problems > 0 ? [] : [{ unit: key, state: "unwritten" }];
+      if (summary.ready) return [];
       return [summary.state === "missing" ? { unit: key, state: "needs", needs } : { unit: key, state: "written" }];
     });
     if (conflicts.length > 0) {
       throw new ConflictException({
-        message: `${conflicts.length} selected unit(s) cannot be designed now: ${conflicts
+        message: `${conflicts.length} selected unit(s) cannot be ${regenerate ? "regenerated" : "designed"} now: ${conflicts
           .slice(0, 10)
           .map((conflict) => `${conflict.unit} ${reasonOf(conflict)}`)
           .join("; ")} (abandon a closed pull request to release its units)`,
@@ -100,7 +108,7 @@ export class DesignRunsService {
       });
     }
     // Pinned: the default branch tip the overview was read at.
-    return this.runs.startRun(projectId, applicationId, DESIGN, actor, { inputs: { scope: { items: wanted, files: [], set }, documentsCommit: overview.ref.commit } });
+    return this.runs.startRun(projectId, applicationId, DESIGN, actor, { inputs: { scope: { items: wanted, files: [], set, ...(regenerate ? { regenerate: true } : {}) }, documentsCommit: overview.ref.commit } });
   }
 
   /** The units a run is generating or a pull request carries, per design set: what a new selection cannot take. */

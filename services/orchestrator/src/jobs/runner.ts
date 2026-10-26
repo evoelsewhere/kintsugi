@@ -182,6 +182,7 @@ export function scopeOf(inputs: Record<string, unknown>): StageScope | undefined
     items: strings(scope["items"]),
     files: strings(scope["files"]),
     ...(typeof scope["set"] === "string" ? { set: scope["set"] } : {}),
+    ...(scope["regenerate"] === true ? { regenerate: true } : {}),
     ...(typeof scope["target"] === "string" ? { target: scope["target"] } : {}),
     ...(request === undefined ? {} : { mr: request }),
   };

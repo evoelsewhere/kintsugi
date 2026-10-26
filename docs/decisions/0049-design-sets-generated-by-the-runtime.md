@@ -40,7 +40,7 @@ The rule that stays is the one that matters: **a runtime job never writes to a p
 - The pipeline's runtime stages are now `assess`, `understand`, `plan-understand`, `design`; the portal shows the design stage's runs and cost like theirs. Members run `design-architecture`, `scaffold` and `implement`.
 - The quality of a generated design depends on the template (its guidance and checks) and on the understanding it reads; the pilot of P3 still tunes the template, now by looking at what the generator produced. The deterministic check plus one fix pass bounds the cost and keeps the faults visible instead of hidden.
 - New code: the `design` plugin, the stage plan (`plans/design.ts`), `StageScope.set`, `POST …/design/runs` and `GET …/design/activity` in the design module, the Design page's selection and Runs tab, and the scripts' multi-unit and `--out` options. The scripts remain shared with the member side, so the checker stays equal to the reader the API runs (shared fixtures).
-- Limits accepted for now: one set per run (no chained basic and detail), no regeneration of an existing design, no judgement of the content beyond the template's checks. A set can also be written for the application as a whole and carry its own instructions: [ADR-0050](0050-design-sets-scope-and-instructions.md).
+- Limits accepted for now: one set per run (no chained basic and detail), no regeneration of an existing design (added by [ADR-0081](0081-regenerate-an-existing-design.md)), no judgement of the content beyond the template's checks. A set can also be written for the application as a whole and carry its own instructions: [ADR-0050](0050-design-sets-scope-and-instructions.md).
 
 ## Alternatives considered
 

@@ -275,7 +275,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     expect(view.unresolved).toEqual([{ id: "COM-MAIL-01", referencedBy: ["customers/lookup"] }]);
   });
 
-  type RunView = { id: string; name: string; status: string; attempt: number; scope?: { items: string[]; set?: string }; abandonedAt?: string };
+  type RunView = { id: string; name: string; status: string; attempt: number; scope?: { items: string[]; set?: string; regenerate?: boolean }; abandonedAt?: string };
   type Failure = { message: string; details?: { conflicts?: Array<{ unit: string; state: string; runId?: string; needs?: string[] }>; unknown?: string[]; notApplicable?: string[] } };
   type Activity = { items: Array<{ unit: string; set: string; state: string; runId: string; pr?: { branch: string; url?: string } }> };
   const RUNS = "/projects/shop/applications/web/design/runs";
@@ -306,6 +306,30 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     const needs = await admin.request<Failure>("POST", RUNS, { body: { set: "detail", units: ["customers/lookup"] } });
     expect(needs.status).toBe(409);
 
+  });
+
+  it("regenerates a set the units already have: refuses a unit with no design to replace or in a pull request, and starts a run that carries the flag", async () => {
+    // lookup has no basic design to replace; tax's detail design is in an open pull request.
+    const nothing = await admin.request<Failure>("POST", RUNS, { body: { set: "basic", units: ["customers/lookup", "billing/invoice"], regenerate: true } });
+    expect(nothing.status).toBe(409);
+    expect((nothing.body as unknown as Failure).message).toContain("cannot be regenerated now");
+    expect((nothing.body as unknown as Failure).details?.conflicts).toEqual([{ unit: "customers/lookup", state: "unwritten" }]);
+    const open = await admin.request<Failure>("POST", RUNS, { body: { set: "detail", units: ["billing/tax"], regenerate: true } });
+    expect(open.status).toBe(409);
+    expect((open.body as unknown as Failure).details?.conflicts).toEqual([{ unit: "billing/tax", state: "in-pr", runId: "run-dopen" }]);
+    expect((await admin.request("POST", RUNS, { body: { set: "basic", units: ["billing/invoice"], regenerate: "yes" } })).status).toBe(400);
+
+    // invoice has a conformant design and report a draft with problems: both can be written again.
+    const started = await admin.request<RunView>("POST", RUNS, { body: { set: "basic", units: ["billing/invoice", "customers/report"], regenerate: true } });
+    expect(started.status, JSON.stringify(started.body)).toBe(202);
+    expect(started.body.data).toMatchObject({ name: "design", status: "queued", scope: { items: ["billing/invoice", "customers/report"], set: "basic", regenerate: true } });
+    const stored = await app.db.query<{ inputs: { scope: { items: string[]; files: string[]; set: string; regenerate?: boolean } } }>("select inputs from workflow.job_run where id = $1", [started.body.data!.id]);
+    expect(stored.rows[0]?.inputs.scope).toEqual({ items: ["billing/invoice", "customers/report"], files: [], set: "basic", regenerate: true });
+    // A regeneration is a run like another: the same units cannot be taken twice, and cancelling it releases them.
+    const again = await admin.request<Failure>("POST", RUNS, { body: { set: "basic", units: ["billing/invoice"], regenerate: true } });
+    expect(again.status).toBe(409);
+    expect((again.body as unknown as Failure).details?.conflicts?.[0]).toMatchObject({ unit: "billing/invoice", state: "running", runId: started.body.data!.id });
+    await app.db.query("update workflow.job_run set status = 'cancelled' where id = $1", [started.body.data!.id]);
   });
 
   it("starts a design run on a set and units pinned to the default branch, shows what it holds as activity, and refuses the same units again", async () => {
