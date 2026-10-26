@@ -6,8 +6,7 @@
 import { Bot, Copy, Download, FileText, Plus, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
@@ -93,8 +92,8 @@ export function AgentsPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", { label: "Plugins", to: "/plugins" }, "Agent Builder"]} />
-      <PageHeading
+      <PageHeader
+        crumbs={["Administration", { label: "Plugins", to: "/plugins" }, "Agent Builder"]}
         title="Agents"
         description="Runtime agents run Kintsugi's understanding jobs; member agents are handed to members' harnesses. Built-in agents are read-only: copy one to change it."
       />

@@ -8,9 +8,8 @@
 import { Check, Eye, FileLock2, RefreshCw, ScrollText, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,8 +52,7 @@ export function GovernancePage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Governance"]} />
-      <PageHeading title="Governance" description="Gates waiting for a decision, who did what, the restricted records runs produced, and the permissions that guard them." />
+      <PageHeader crumbs={["Governance"]} title="Governance" description="Gates waiting for a decision, who did what, the restricted records runs produced, and the permissions that guard them." />
       <Tabs
         label="Governance views"
         tabs={tabs}

@@ -1,7 +1,7 @@
 // Members & Permissions — members table with always-visible filters; the roles &
 // permission matrix opens in a modal from the toolbar action.
 
-import { Breadcrumbs } from "../components/breadcrumbs";
+import { PageHeader } from "../components/page-header";
 import { useState } from "react";
 import { Modal } from "../components/ui/modal";
 import { useAuth } from "../lib/auth";
@@ -14,7 +14,7 @@ export function MembersPermissionsPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Members & Permissions"]} />
+      <PageHeader crumbs={["Administration", "Members & Permissions"]} />
 
       {can("members.manage") ? (
         <MembersTable onManageRoles={() => setRolesOpen(true)} />

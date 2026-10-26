@@ -6,10 +6,9 @@
 import { ArrowLeft, FilePlus2, Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { FileBrowser } from "@/components/file-browser";
 import { Loaded } from "@/components/loaded";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,7 @@ export function SkillPage(): React.JSX.Element {
   const skill = useLoader(`skill:${name}`, () => agentsApi.getSkill(name));
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", { label: "Plugins", to: "/plugins" }, { label: "Agent Builder", to: "/plugins/builder" }, name]} />
+      {skill.data === undefined ? <PageHeader crumbs={["Administration", { label: "Plugins", to: "/plugins" }, { label: "Agent Builder", to: "/plugins/builder" }, name]} /> : null}
       <Loaded loader={skill}>{(data) => <SkillFiles key={`${data.name}:${data.updatedAt ?? ""}`} skill={data} onSaved={() => skill.reload()} />}</Loaded>
     </div>
   );
@@ -96,7 +95,8 @@ function SkillFiles({ skill, onSaved }: { skill: SharedSkillView; onSaved: () =>
 
   return (
     <>
-      <PageHeading
+      <PageHeader
+        crumbs={["Administration", { label: "Plugins", to: "/plugins" }, { label: "Agent Builder", to: "/plugins/builder" }, skill.name]}
         title={skill.name}
         description={editing ? undefined : skill.description}
         actions={

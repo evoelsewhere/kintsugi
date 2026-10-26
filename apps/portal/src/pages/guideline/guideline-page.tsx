@@ -5,8 +5,7 @@
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { releasesApi } from "@/lib/api/releases";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
@@ -75,10 +74,9 @@ export function GuidelinePage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Guideline", page.title]} />
-      <PageHeading title="Guideline" description="Install the Kintsugi CLI, connect your AI client and use the plugins your project offers." />
+      <PageHeader crumbs={["Guideline", page.title]} title="Guideline" description="Install the Kintsugi CLI, connect your AI client and use the plugins your project offers." />
       <div className="flex flex-col gap-6 md:flex-row">
-        <aside className="shrink-0 md:sticky md:top-4 md:w-56 md:self-start">
+        <aside className="shrink-0 md:sticky md:top-[calc(var(--page-header-height,0px)+1rem)] md:w-56 md:self-start">
           <Sidebar current={page.slug} />
         </aside>
         <article className="flex min-w-0 max-w-3xl flex-1 flex-col gap-3">

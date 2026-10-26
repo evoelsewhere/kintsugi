@@ -22,7 +22,7 @@ export function Tabs<T extends string>({
   value: T;
   onChange: (id: T) => void;
   label: string;
-  /** Stays at the top of the page while its content scrolls. */ sticky?: boolean;
+  /** Stays at the top of the page, right under the page header, while its content scrolls. */ sticky?: boolean;
   scrollable?: boolean;
 }): React.JSX.Element {
   return (
@@ -32,7 +32,7 @@ export function Tabs<T extends string>({
       className={cn(
         "flex gap-1 [box-shadow:0_1px_0_0_rgba(0,0,0,0.08)]",
         scrollable ? "flex-nowrap overflow-x-auto" : "flex-wrap",
-        sticky && "sticky top-0 z-10 bg-background",
+        sticky && "sticky top-[var(--page-header-height,0px)] z-10 bg-background",
       )}
     >
       {tabs.map((tab) => (

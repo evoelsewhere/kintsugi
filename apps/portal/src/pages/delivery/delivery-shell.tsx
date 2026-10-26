@@ -9,6 +9,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
 import { ProjectSelector } from "@/components/project-selector";
 import { SyncStatusBadge } from "@/components/status-badges";
+import { StickyHeader } from "@/components/sticky-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
@@ -35,7 +36,7 @@ export function DeliveryShell({ crumbs = [], title, description, actions, childr
   return (
     <div className="flex flex-col gap-4">
       {/* One row: where you are on the left, the project on the right; the page's own title is in its header card. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <StickyHeader className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <Breadcrumbs items={current === undefined ? [{ label: "Delivery", to: deliveryLink({ projectId }) }, ...crumbs] : [{ label: "Delivery", to: deliveryLink({ projectId }) }, { label: current.name, to: deliveryLink({ projectId }) }, ...crumbs]} />
         {projects.data === undefined || projects.data.length === 0 ? (
           actions
@@ -56,7 +57,7 @@ export function DeliveryShell({ crumbs = [], title, description, actions, childr
             )}
           </div>
         )}
-      </div>
+      </StickyHeader>
       <h1 className="sr-only">{title}</h1>
       <p className="sr-only">{description}</p>
       <Loaded loader={projects} rows={4}>

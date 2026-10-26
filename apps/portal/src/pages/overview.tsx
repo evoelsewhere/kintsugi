@@ -6,9 +6,8 @@
 
 import { AlertTriangle, CircleCheck, Clock, FolderKanban, FolderGit2, GitPullRequestArrow, Play, PowerOff, RefreshCw, ShieldQuestion } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { RunStatusBadge, WriteStatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,8 +32,8 @@ export function OverviewPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Overview"]} />
-      <PageHeading
+      <PageHeader
+        crumbs={["Overview"]}
         title="Overview"
         description="The modernization portfolio: what was found, how much is understood and how far each application is."
         actions={

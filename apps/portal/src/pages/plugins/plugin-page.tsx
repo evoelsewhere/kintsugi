@@ -4,10 +4,9 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { FileBrowser } from "@/components/file-browser";
 import { Loaded } from "@/components/loaded";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import { COMPONENT_KINDS, type PluginDetail, pluginsApi } from "@/lib/api/plugins";
@@ -23,7 +22,7 @@ export function PluginPage(): React.JSX.Element {
   const plugin = useLoader(`plugin:${name}`, () => pluginsApi.get(name));
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", { label: "Plugins", to: "/plugins" }, plugin.data?.title ?? name]} />
+      {plugin.data === undefined ? <PageHeader crumbs={["Administration", { label: "Plugins", to: "/plugins" }, name]} /> : null}
       <Loaded loader={plugin}>{(data) => <PluginView key={data.name} plugin={data} />}</Loaded>
     </div>
   );
@@ -40,7 +39,8 @@ function PluginView({ plugin }: { plugin: PluginDetail }): React.JSX.Element {
   };
   return (
     <>
-      <PageHeading
+      <PageHeader
+        crumbs={["Administration", { label: "Plugins", to: "/plugins" }, plugin.title]}
         title={plugin.title}
         description={plugin.description}
         actions={

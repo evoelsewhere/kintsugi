@@ -11,7 +11,7 @@ import type { ApplicationRepositoryRole } from "@kintsugi/domain";
 import { FolderGit2, GitPullRequestArrow, Package, Pencil, Plus, Trash2, Unlink } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,7 +99,7 @@ export function ProjectDetailPage(): React.JSX.Element {
   if (project === null) {
     return (
       <div className="flex flex-col gap-5">
-        <Breadcrumbs items={["Administration", { label: "Projects", to: "/projects" }, projectId]} />
+        <PageHeader crumbs={["Administration", { label: "Projects", to: "/projects" }, projectId]} />
         {error === null ? <SkeletonRows rows={4} /> : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
       </div>
     );
@@ -125,7 +125,7 @@ export function ProjectDetailPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", { label: "Projects", to: "/projects" }, project.name]} />
+      <PageHeader crumbs={["Administration", { label: "Projects", to: "/projects" }, project.name]} />
       {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
 
       <Card>

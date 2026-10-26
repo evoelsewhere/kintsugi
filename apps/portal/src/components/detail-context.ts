@@ -10,7 +10,9 @@ export interface DetailEntry {
 }
 
 export interface DetailContextValue {
+  /** Where a detail's body goes, and where its heading goes (inside the sticky header). */
   slot: HTMLElement | null;
+  headerSlot: HTMLElement | null;
   stack: readonly DetailEntry[];
   register: (entry: DetailEntry) => () => void;
   setBase: (items: Crumb[]) => void;

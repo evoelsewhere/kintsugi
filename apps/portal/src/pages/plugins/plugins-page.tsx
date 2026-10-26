@@ -4,9 +4,8 @@
 
 import { Blocks, Bot } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { COMPONENT_KINDS, pluginsApi, type PluginSummary } from "@/lib/api/plugins";
@@ -19,8 +18,8 @@ export function PluginsPage(): React.JSX.Element {
   const plugins = useLoader("plugins", () => pluginsApi.list());
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Plugins"]} />
-      <PageHeading
+      <PageHeader
+        crumbs={["Administration", "Plugins"]}
         title="Plugins"
         description="The marketplace of Kintsugi: each plugin is a whole capability — the commands a person starts, the workflows, agents, scripts and hooks that run behind them — in the Claude plugin format."
       />

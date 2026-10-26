@@ -8,8 +8,7 @@ import { isMcpToolEntry, THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/d
 import { ArrowLeft, Copy, Download, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -213,12 +212,8 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", { label: "Plugins", to: "/plugins" }, { label: "Agent Builder", to: "/plugins/builder" }, title]} />
-      <Link to="/plugins/builder" className="inline-flex w-fit items-center gap-1.5 text-[12px] text-text-secondary hover:text-text">
-        <ArrowLeft className="size-3.5" />
-        All agents
-      </Link>
-      <PageHeading
+      <PageHeader
+        crumbs={["Administration", { label: "Plugins", to: "/plugins" }, { label: "Agent Builder", to: "/plugins/builder" }, title]}
         title={title}
         description={description}
         actions={
@@ -243,6 +238,10 @@ function AgentEditor({ target, manage }: { target: EditorTarget; manage: boolean
           </>
         }
       />
+      <Link to="/plugins/builder" className="inline-flex w-fit items-center gap-1.5 text-[12px] text-text-secondary hover:text-text">
+        <ArrowLeft className="size-3.5" />
+        All agents
+      </Link>
       <div className="flex flex-col gap-4">
         {error === null ? null : <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
         <ProblemList problems={problems} />

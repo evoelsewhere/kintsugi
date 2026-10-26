@@ -7,13 +7,12 @@
 import { Activity, FolderGit2, GitCommitHorizontal, Play, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DocumentWriteList } from "@/components/document-write-list";
 import { JobRunList } from "@/components/job-runs/job-run-list";
 import { RunListControls } from "@/components/job-runs/run-list-controls";
 import { filterJobRuns, RUN_FILTERS } from "@/components/job-runs/run-model";
 import { Loaded } from "@/components/loaded";
-import { PageHeading } from "@/components/page-heading";
+import { PageHeader } from "@/components/page-header";
 import { SyncStatusBadge, WorkerStateBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,8 +64,8 @@ export function MonitoringPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Monitoring"]} />
-      <PageHeading
+      <PageHeader
+        crumbs={["Monitoring"]}
         title="Monitoring"
         description="Live job runs, repository sync, document writes, the worker and the job workspaces across all projects. Lists refresh on their own."
       />

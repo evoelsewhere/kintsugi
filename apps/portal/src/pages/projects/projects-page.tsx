@@ -4,7 +4,7 @@
 import { ChevronRight, FolderKanban, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Breadcrumbs } from "@/components/breadcrumbs";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { gitApi, type GitRepositoryView } from "@/lib/api/git";
@@ -45,7 +45,7 @@ export function ProjectsPage(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={["Administration", "Projects"]} />
+      <PageHeader crumbs={["Administration", "Projects"]} />
       {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
 
       <ProjectsInsights projects={projects} />
