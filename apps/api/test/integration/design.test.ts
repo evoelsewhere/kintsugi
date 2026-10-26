@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { catalogDocuments } from "../support/documents.js";
 import { hasDatabase } from "../support/database.js";
 import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
 
@@ -69,6 +70,14 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     await remote.createRepository("docs");
     const put = (path: string, text: string): Promise<unknown> => remote.commit("docs", path, text);
     await put("kintsugi.yaml", MANIFEST);
+    const units = [{ id: "billing/invoice", kind: "screen" }, { id: "billing/tax", kind: "screen" }, { id: "customers/report", kind: "screen" }, { id: "customers/lookup", kind: "api" }];
+    for (const [path, text] of Object.entries(catalogDocuments("web", [{ id: "billing", name: "Billing" }, { id: "customers", name: "Customers" }], units.map((unit) => ({ ...unit, files: ["legacy/main.c"] }))))) await put(path, text);
+    for (const item of units) {
+      const [module, unit] = item.id.split("/") as [string, string];
+      await put(legacyPath(module, unit, "understanding.md"), `---\nstatus: understood\ndigest: sha256:${unit}\n---\n`);
+      await put(legacyPath(module, unit, "spec.md"), "# Specification\n\n## Gaps and questions\n\nNone.\n");
+    }
+
     for (const set of ["basic", "detail"]) for (const name of filesUnder(`sets/${set}`)) await put(`01-standards/templates/${set}/${name}`, fixture("sets", set, ...name.split("/")));
     await put("02-architecture/common/COM-LOG-01.md", '---\nid: "COM-LOG-01"\ntitle: "Audit log"\nstatus: "approved"\n---\n# COM-LOG-01\n');
     await put("02-architecture/common/COM-AUTH-01.md", "# COM-AUTH-01\n");

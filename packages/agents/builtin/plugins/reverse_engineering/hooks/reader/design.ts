@@ -114,6 +114,7 @@ export type DesignProblemCode =
   | 'missing-table'
   | 'table-columns'
   | 'placeholder'
+  | 'draft'
   | 'uncovered-rules'
   | 'unresolved-reference'
   | 'id-pattern'
@@ -805,6 +806,7 @@ export function designIsStale(text: string, ref: DesignTemplateRef): boolean {
 export function checkDesignDocument(template: DesignTemplate, expected: DesignTemplateRef, text: string, context: DesignContext): DesignProblem[] {
   const problems: DesignProblem[] = []
   const ref = designTemplateRefOf(text)
+  if (frontmatterOf(text)?.data['draft'] !== undefined && frontmatterOf(text)?.data['draft'] !== false) problems.push({ code: 'draft', message: 'Draft design: resolve its inputs and generate a final design before using it downstream.' })
 
   if (ref === null) {
     problems.push({ code: 'missing-template-ref', message: 'front matter has no template reference (template: <set>@<version>)' })

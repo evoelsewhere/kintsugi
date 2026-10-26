@@ -319,6 +319,11 @@ export function designManifestPath(app: string): string {
   return designRunFilePath(app, "manifest.json");
 }
 
+/** Read-only previous design retained before new skeletons overlay the inputs; never published. */
+export function designPreviousPath(app: string, unitKey: string, set: string, file: string): string {
+  return designRunFilePath(app, `previous/${unitKey === "@app" ? "_application" : unitKey}/${set}/${file}`);
+}
+
 /** The conformance of each unit of the run after a check (intermediate). */
 export function designReportPath(app: string): string {
   return designRunFilePath(app, "report.json");

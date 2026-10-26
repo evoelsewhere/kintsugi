@@ -110,6 +110,10 @@ export interface UnitSetSummary {
   files: { total: number; conformant: number; problems: number; missing: number; stale: number; waived: number };
   /** The sets this one needs are written, and this one is not started: what to design next. */
   ready: boolean;
+  /** Input evidence missing for a final design; an explicit draft may proceed. */
+  blockers?: string[];
+  /** A draft still needs an active unit in the merged catalog. */
+  draftAllowed?: boolean;
 }
 
 export interface UnitDesignRow {

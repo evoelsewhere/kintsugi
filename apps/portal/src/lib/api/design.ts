@@ -91,6 +91,10 @@ export interface UnitSetSummary {
   state: DesignState;
   files: { total: number; conformant: number; problems: number; missing: number; stale: number; waived: number };
   ready: boolean;
+  /** Input evidence missing for a final design; an explicit draft may proceed. */
+  blockers?: string[];
+  /** A draft still needs an active unit in the merged catalog. */
+  draftAllowed?: boolean;
 }
 
 export interface UnitDesignRow {
@@ -191,9 +195,10 @@ export interface DesignActivity {
 /** A conflict of a refused selection (409): a unit that has the set, lacks one it needs, or is running or in a pull request. */
 export interface DesignConflict {
   unit: string;
-  state: "running" | "in-pr" | "written" | "unwritten" | "needs";
+  state: "running" | "in-pr" | "written" | "unwritten" | "needs" | "not-ready";
   runId?: string;
   needs?: string[];
+  reasons?: string[];
 }
 
 export const designApi = {
@@ -212,6 +217,6 @@ export const designApi = {
   /** The units a run is generating or a pull request carries (what a new selection cannot take). */
   activity: (projectId: string, applicationId: string) => apiGet<DesignActivity>(`${application(projectId, applicationId)}/activity`),
   /** Generates one design set for units (202), or with `regenerate` writes it again over the units' design (ADR-0081); 409 with details.conflicts when some cannot be designed now. */
-  generate: (projectId: string, applicationId: string, selection: { set: string; units: string[]; regenerate?: boolean }) => apiSend<JobRunView>(`${application(projectId, applicationId)}/runs`, "POST", selection),
+  generate: (projectId: string, applicationId: string, selection: { set: string; units: string[]; regenerate?: boolean; draft?: boolean }) => apiSend<JobRunView>(`${application(projectId, applicationId)}/runs`, "POST", selection),
   common: (projectId: string, applicationId: string, ref?: string) => apiGet<CommonDesign>(`${application(projectId, applicationId)}/common${refQuery(ref)}`),
 };

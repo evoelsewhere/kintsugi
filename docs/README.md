@@ -73,6 +73,7 @@ Start with [Your first modernization project](guides/first-project.md) for a wal
 - [Member guideline: connect your AI client](guides/member-quickstart.md)
 - [Install Kintsugi](guides/installation.md)
 - [Build a project (register repos, write standards)](guides/build-project.md)
+- [Resolve questions and generate a design](guides/resolve-gaps-and-generate-designs.md): final readiness, deliberate drafts and answers in the original documents
 - [Define a project's design templates](guides/define-design-templates.md)
 - [Configure LLM providers for the runtime](guides/configure-llm-providers.md)
 
@@ -81,6 +82,7 @@ Start with [Your first modernization project](guides/first-project.md) for a wal
 - **Guideline**: the portal page `/guideline` on every installation (quick start, install, connect, plugins, reference)
 - [Member client compatibility](reference/member-client-compatibility.md): tested client versions and setup probes
 - [Member client capabilities](reference/member-client-capabilities.md): what Claude Code, Codex and GitHub Copilot support for plugins, hooks and transcripts
+- [Plugin workflow audit](development/plugin-workflow-audit.md): readiness, drafts, in-place question resolution and verification limits
 - [Implementation and verification record](development/implementation-delivery-record.md): the deployment work, its status and evidence; remaining release work
 
 ## Conventions

@@ -49,9 +49,9 @@ const DESIGN_RUNS: ScopedRunsLabels = {
 };
 
 /** What the page hands down to start a run: the set and units chosen somewhere (the table, the overview, a unit's drawer); `regenerate` writes the set again over a design the units have (ADR-0081). */
-export type RequestGenerate = (set: string, units: string[], options?: { regenerate?: boolean }) => void;
+export type RequestGenerate = (set: string, units: string[], options?: { regenerate?: boolean; draft?: boolean }) => void;
 
-type PendingRun = { set: string; units: string[]; regenerate?: boolean };
+type PendingRun = { set: string; units: string[]; regenerate?: boolean; draft?: boolean };
 
 export function DesignStage({ project, application, stage }: { project: ProjectDetail; application: ApplicationView; stage: StageView }): React.JSX.Element {
   const [params, setParams] = useSearchParams();
@@ -95,14 +95,14 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
   const runDisabled = !canRun ? "Starting a run needs the jobs.run permission." : blocked;
   const requestGenerate: RequestGenerate = (set, units, options) => {
     setConflicts([]);
-    setPending({ set, units, ...(options?.regenerate === true ? { regenerate: true } : {}) });
+    setPending({ set, units, ...(options?.regenerate === true ? { regenerate: true } : {}), ...(options?.draft === true ? { draft: true } : {}) });
   };
 
   async function start(): Promise<void> {
     if (pending === undefined) return;
     try {
       const run = await designApi.generate(project.id, application.id, pending);
-      toast.success(pending.regenerate === true ? "Regeneration queued" : "Design queued", `${pending.set} of ${pending.units.length} unit${pending.units.length === 1 ? "" : "s"} of ${application.name}: the worker starts shortly.`);
+      toast.success(pending.draft === true ? "Draft design queued" : pending.regenerate === true ? "Regeneration queued" : "Design queued", `${pending.set} of ${pending.units.length} unit${pending.units.length === 1 ? "" : "s"} of ${application.name}: the worker starts shortly.`);
       setConflicts([]);
       update({ tab: "runs", run: run.id });
       await Promise.all([runs.reload(), activity.reload()]);
@@ -255,25 +255,27 @@ function GenerateDialog({
   const forApplication = pending?.units.length === 1 && pending.units[0] === APPLICATION_UNIT_KEY;
   const needs = overview?.sets.find((entry) => entry.id === pending?.set)?.needs ?? [];
   const regenerate = pending?.regenerate === true;
+  const draft = pending?.draft === true;
   return (
     <ConfirmDialog
       open={pending !== undefined}
-      title={`${regenerate ? "Regenerate" : "Generate"} ${title ?? `the ${pending?.set ?? ""} design`} for ${forApplication ? `${application.name} as a whole` : `${count} unit${count === 1 ? "" : "s"} of ${application.name}`}?`}
-      confirmLabel={regenerate ? "Regenerate design" : "Generate design"}
+      title={`${regenerate ? "Regenerate" : "Generate"}${draft ? " draft" : ""} ${title ?? `the ${pending?.set ?? ""} design`} for ${forApplication ? `${application.name} as a whole` : `${count} unit${count === 1 ? "" : "s"} of ${application.name}`}?`}
+      confirmLabel={draft ? "Generate draft design" : regenerate ? "Regenerate design" : "Generate design"}
       busyLabel="Queuing…"
       confirmVariant="solid"
       onConfirm={onConfirm}
       onClose={onClose}
     >
+      {draft ? <p className="mb-3 font-medium text-[var(--ds-status-orange)]">This is a draft: input evidence or dependencies may be missing. Every generated document is marked as draft, unresolved questions remain explicit, and this design cannot satisfy a later stage's prerequisite. Resolve and merge the inputs, then regenerate a final design.</p> : null}
       <p>
         The worker writes the documents of the set <span className="font-mono text-[12px]">{pending?.set}</span> from the project&apos;s template (01-standards/templates/{pending?.set}/), one designer job per unit, checks them against the template and gives
         the units with problems one more pass. It reads {forApplication ? "the assessment, the rebuilt views and the common design" : "the understanding of the units"} and {application.asIs.legacy[0]?.repositoryId ?? "the legacy repo"} read-only, and proposes the result in one pull request to{" "}
-        {project.documentRepository?.repositoryId ?? "the document repo"} for people to review. About {count + Math.ceil(count / 4)} agent jobs.{" "}
+        {project.documentRepository?.repositoryId ?? "the document repo"} for people to review. Up to {count * 3} agent jobs, including independent review and one fix round.{" "}
         {regenerate
-          ? "The documents are written again from the current template and replace the design the units have now: nothing changes on the default branch until the pull request is merged, the previous version stays in Git, and what a person corrected in it is not carried over, so compare the changes before merging."
+          ? "The documents are written again from the current template and replace the design the units have now: nothing changes on the default branch until the pull request is merged, the previous version stays in Git, and the designer reads the previous design to preserve supported answers and decisions in their original sections. Compare the changes before merging."
           : "A design that exists is never overwritten."}
       </p>
-      {needs.length === 0 ? null : <p className="mt-2 text-text-secondary">It builds on the {needs.join(", ")} design {forApplication ? "of the application" : "of each unit"}, which is already on the default branch.</p>}
+      {needs.length === 0 || draft ? null : <p className="mt-2 text-text-secondary">It builds on the {needs.join(", ")} design {forApplication ? "of the application" : "of each unit"}, which is already on the default branch.</p>}
       {forApplication ? null : <p className="mt-2 font-mono text-[12px] text-text-secondary">{unitsLine(pending?.units ?? [])}</p>}
     </ConfirmDialog>
   );

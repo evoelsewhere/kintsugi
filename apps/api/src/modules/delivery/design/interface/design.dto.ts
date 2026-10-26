@@ -26,6 +26,7 @@ export const designRunSchema = z
     resumeOf: z.string().min(1).max(128).optional(),
     /** Write the set again for units that already have it (ADR-0081). */
     regenerate: z.boolean().optional(),
+    draft: z.boolean().optional(),
   })
   .refine((body) => body.resumeOf !== undefined || (body.set !== undefined && (body.units?.length ?? 0) > 0), "name the design set and at least one unit, or a run to resume");
 export type DesignRunBody = z.infer<typeof designRunSchema>;

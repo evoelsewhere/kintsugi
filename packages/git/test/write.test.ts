@@ -156,3 +156,23 @@ describe("writeFiles", () => {
     await expect(commitFiles(worktree, { files: [{ path: "units/x.md", content: "x" }], message: "x", identity }, remoteOptions)).rejects.toThrow(/symbolic link/);
   });
 });
+
+it("checks document hashes before writing and allows an idempotent correction retry", async () => {
+  const { createHash } = await import("node:crypto");
+  const { readFile } = await import("node:fs/promises");
+  const { url, mirror } = await mirrorOf("docs-correction");
+  const worktree = join(root, "correction-worktree");
+  const old = server.git("docs-correction", "show", "main:README.md");
+  const hash = createHash("sha256").update(old).digest("hex");
+  await addWorktree(mirror, worktree, await resolveCommit(mirror, "refs/heads/main"), remoteOptions);
+  await expect(commitFiles(worktree, { identity, message: "Resolve gap", files: [
+    { path: "untouched.md", content: "must not be written" },
+    { path: "README.md", content: "Answer\n", expectedHash: "0".repeat(64) },
+  ] }, remoteOptions)).rejects.toThrow(/changed since it was read/);
+  expect(existsSync(join(worktree, "untouched.md"))).toBe(false);
+  const input = { identity, message: "Resolve gap", files: [{ path: "README.md", content: "Answer\n", expectedHash: hash }] };
+  expect(await commitFiles(worktree, input, remoteOptions)).toMatch(/^[0-9a-f]{40}$/);
+  expect(await commitFiles(worktree, input, remoteOptions)).toBeUndefined();
+  expect(await readFile(join(worktree, "README.md"), "utf8")).toBe("Answer\n");
+  void url;
+});

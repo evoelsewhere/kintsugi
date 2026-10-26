@@ -48,7 +48,7 @@ export function validateOutputs(files: readonly FileWrite[], limits = OUTPUT_LIM
 
 /** Inline files of a request, decoded. */
 export function decodeFiles(files: readonly DocumentWriteFile[]): FileWrite[] {
-  return files.map((file) => ({ path: file.path, content: file.encoding === "base64" ? Buffer.from(file.content, "base64") : file.content }));
+  return files.map((file) => ({ path: file.path, content: file.encoding === "base64" ? Buffer.from(file.content, "base64") : file.content, ...(file.expectedHash === undefined ? {} : { expectedHash: file.expectedHash }) }));
 }
 
 /** Every regular file under a job's output directory; symbolic links and other entries are refused. */

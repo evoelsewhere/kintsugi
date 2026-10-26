@@ -20,11 +20,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import build_lib as bl  # noqa: E402
 import docmd  # noqa: E402
+import design_preflight
 
 dl = bl.dl
 
 
-def prepare_unit(root, app, key):
+def prepare_unit(root, app, key, require_ready=False):
     entry = {'unit': key, 'error': None, 'kind': None, 'title': key, 'rules': [], 'design': []}
     try:
         info = dl.read_unit(root, app, key)
@@ -39,6 +40,14 @@ def prepare_unit(root, app, key):
     entry['design'] = bl.design_files(root, app, key)
     if not entry['design']:
         entry['error'] = 'the unit has no merged design: generate and merge its design first'
+    if require_ready and entry['error'] is None:
+        blockers = design_preflight.unit_blockers(root, app, key)
+        for path in entry['design']:
+            data = docmd.split_front_matter(docmd.read_text(os.path.join(root, *path.split('/'))))[0]
+            if 'draft' in data and data['draft'] is not False:
+                blockers.append('the merged design is a draft; resolve its inputs and generate a final design before review')
+        if blockers:
+            entry['error'] = '; '.join(blockers)
     return entry
 
 
@@ -50,6 +59,7 @@ def main(argv=None):
     parser.add_argument('--mr-url', required=True, metavar='URL', help='the merge request, as the member recorded it')
     parser.add_argument('--mr-commit', required=True, metavar='SHA', help='the head commit of the merge request the reviewer reads')
     parser.add_argument('--mr-branch', default='', metavar='NAME')
+    parser.add_argument('--require-ready', action='store_true', help='require current understanding and a final design before any reviewer is started')
     parser.add_argument('--root', default='.', metavar='DIR', help='the stage inputs (default: the working directory)')
     parser.add_argument('--manifest', required=True, metavar='FILE', help='the manifest to write')
     args = parser.parse_args(argv)
@@ -67,7 +77,7 @@ def main(argv=None):
     if not keys or any(not bl.UNIT_KEY.match(key) for key in keys):
         print('prepare_review.py: name units as <module>/<unit>', file=sys.stderr)
         return 2
-    units = {key: prepare_unit(root, args.app, key) for key in keys}
+    units = {key: prepare_unit(root, args.app, key, args.require_ready) for key in keys}
     manifest = {
         'app': args.app,
         'target': args.target,
@@ -77,6 +87,10 @@ def main(argv=None):
     docmd.write_text(os.path.abspath(args.manifest), json.dumps(manifest, indent=1, ensure_ascii=False))
     for key, entry in units.items():
         print(f'{args.app}/{key}: ' + (f'cannot be reviewed: {entry["error"]}' if entry['error'] else f'{len(entry["rules"])} rule(s), {len(entry["design"])} design document(s)'))
+    if args.require_ready and any(entry['error'] for entry in units.values()):
+        reason = 'nothing to review' if all(entry['error'] for entry in units.values()) else 'selected units are not ready for review'
+        print('prepare_review.py: ' + reason + ': ' + '; '.join(f'{key}: {entry["error"]}' for key, entry in list(units.items())[:10] if entry['error']), file=sys.stderr)
+        return 2
     return 0
 
 

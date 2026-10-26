@@ -24,9 +24,11 @@ export interface DesignSelection {
   resumeOf?: string;
   /** Write the set again for units that already have it, over their design (ADR-0081). */
   regenerate?: boolean;
+  /** Explicitly produce a non-final design when the evidence is incomplete. */
+  draft?: boolean;
 }
 
-type Conflict = { unit: string; state: "running" | "in-pr"; runId: string } | { unit: string; state: "written" } | { unit: string; state: "unwritten" } | { unit: string; state: "needs"; needs: string[] };
+type Conflict = { unit: string; state: "not-ready"; reasons: string[] } | { unit: string; state: "running" | "in-pr"; runId: string } | { unit: string; state: "written" } | { unit: string; state: "unwritten" } | { unit: string; state: "needs"; needs: string[] };
 
 const reasonOf = (conflict: Conflict): string => {
   switch (conflict.state) {
@@ -38,6 +40,8 @@ const reasonOf = (conflict: Conflict): string => {
       return "has this set already";
     case "unwritten":
       return "has no design of this set to regenerate";
+    case "not-ready":
+      return conflict.reasons.join("; ");
     case "needs":
       return `needs ${conflict.needs.join(", ")} first`;
   }
@@ -61,7 +65,8 @@ export class DesignRunsService {
     const wanted = [...new Set(selection.units ?? [])].sort();
     if (set === "" || wanted.length === 0) throw new BadRequestException("Name the design set and at least one unit");
 
-    const [sets, overview] = await Promise.all([this.design.sets(projectId, undefined, applicationId), this.design.overview(projectId, applicationId, undefined)]);
+    const overview = await this.design.overview(projectId, applicationId, undefined);
+    const sets = await this.design.sets(projectId, overview.ref.commit, applicationId);
     if (!sets.sets.some((entry) => entry.id === set)) throw new BadRequestException({ message: `The project defines no design set "${set}" (${designSetDir(set)}/)`, details: { set } });
     const faults = sets.problems.filter((problem) => problem.path.startsWith(`${designSetDir(set)}/`));
     if (faults.length > 0) {
@@ -86,6 +91,7 @@ export class DesignRunsService {
     }
 
     const regenerate = selection.regenerate === true;
+    const draft = selection.draft === true;
     const busy = new Map((await this.activity(projectId, applicationId)).items.filter((item) => item.set === set).map((item) => [item.unit, item]));
     const needs = overview.sets.find((entry) => entry.id === set)?.needs ?? [];
     const conflicts = wanted.flatMap((key): Conflict[] => {
@@ -93,9 +99,11 @@ export class DesignRunsService {
       if (active !== undefined) return [{ unit: key, state: active.state, runId: active.runId }];
       const summary = forApplication ? overview.application.sets[set] : byKey.get(key)!.sets[set];
       if (summary === undefined) return [];
+      if (summary.draftAllowed === false) return [{ unit: key, state: "not-ready", reasons: ["The unit is not active in the merged catalog; assess and merge its scope first."] }];
+      if (!draft && (summary.blockers?.length ?? 0) > 0) return [{ unit: key, state: "not-ready", reasons: summary.blockers! }];
       // A regeneration needs a design to replace; a first design needs the sets it builds on and no design yet.
       if (regenerate) return summary.files.conformant + summary.files.problems > 0 ? [] : [{ unit: key, state: "unwritten" }];
-      if (summary.ready) return [];
+      if (summary.ready || (draft && summary.files.conformant + summary.files.problems === 0)) return [];
       return [summary.state === "missing" ? { unit: key, state: "needs", needs } : { unit: key, state: "written" }];
     });
     if (conflicts.length > 0) {
@@ -108,7 +116,7 @@ export class DesignRunsService {
       });
     }
     // Pinned: the default branch tip the overview was read at.
-    return this.runs.startRun(projectId, applicationId, DESIGN, actor, { inputs: { scope: { items: wanted, files: [], set, ...(regenerate ? { regenerate: true } : {}) }, documentsCommit: overview.ref.commit } });
+    return this.runs.startRun(projectId, applicationId, DESIGN, actor, { inputs: { scope: { items: wanted, files: [], set, ...(regenerate ? { regenerate: true } : {}), ...(draft ? { draft: true } : {}) }, documentsCommit: overview.ref.commit } });
   }
 
   /** The units a run is generating or a pull request carries, per design set: what a new selection cannot take. */

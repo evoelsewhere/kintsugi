@@ -66,3 +66,15 @@ describe("workflow executor", () => {
     expect(outcome).toMatchObject({ result: { r: null }, failedAgents: 1 });
   });
 });
+
+it("checks the shared token budget again before starting a queued agent", async () => {
+  let calls = 0;
+  const outcome = await runWorkflow({
+    source: 'return await parallel([() => agent("first"), () => agent("second"), () => agent("third")]);',
+    args: {}, budgets: { concurrency: 1, maxTokens: 10 }, log: () => undefined,
+    runAgent: async () => { calls += 1; return { result: "done", tokens: 10 }; },
+  });
+  expect(calls).toBe(1);
+  expect(outcome.agents).toBe(1);
+  expect(outcome.result).toEqual(["done", null, null]);
+});

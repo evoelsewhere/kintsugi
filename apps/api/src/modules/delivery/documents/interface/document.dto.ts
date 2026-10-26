@@ -2,6 +2,7 @@
 // refs against the mirror and paths against the repository-path rules; these bound the input.
 
 import { z } from "zod";
+import { GAP_STATUSES } from "@kintsugi/domain";
 
 /** A commit id or `refs/heads/<branch>`. */
 const refSchema = z
@@ -35,3 +36,15 @@ export const understandResultsQuerySchema = z.object({
   ref: refSchema,
 });
 export type UnderstandResultsQuery = z.infer<typeof understandResultsQuerySchema>;
+
+/** Answers stay on the gap's row in the original specification; arbitrary paths/content cannot be supplied. */
+// eslint-disable-next-line no-control-regex -- answers must not contain line breaks or control characters
+const answerText = z.string().trim().min(1).max(2000).regex(/^[^\r\n\u0000-\u001f\u007f]+$/, "must be one line");
+export const gapAnswerSchema = z.object({
+  item: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}\/[a-z0-9][a-z0-9-]{0,62}$/),
+  gap: z.string().max(160).regex(/^GAP-[A-Za-z0-9][A-Za-z0-9._-]*-\d{2,}$/),
+  commit: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
+  answer: answerText,
+  evidence: answerText,
+  status: z.enum(GAP_STATUSES),
+}).strict();

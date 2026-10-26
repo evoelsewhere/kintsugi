@@ -109,6 +109,7 @@ export function BuildStage({ project, application, stage }: { project: ProjectDe
         facts={<CompactFacts project={project} application={application} />}
       />
       {problems.length === 0 ? null : <p className="text-[12px] text-text-secondary">Check the code-reviewer agent before reviewing: {[...new Set(problems)].join("; ")}. Review jobs fail until this is fixed (see Runs).</p>}
+      {project.applications.length > 1 ? <p className="text-[12px] text-text-secondary">Confirm this application when recording a build with the current Modernize plugin. Older records that do not name an application must be recorded again before their merge request can be reviewed here.</p> : null}
       <Tabs<BuildTab>
         sticky
         label="Build sections"

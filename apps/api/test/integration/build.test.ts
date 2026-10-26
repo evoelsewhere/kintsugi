@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { catalogDocuments } from "../support/documents.js";
 import { hasDatabase } from "../support/database.js";
 import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
 
@@ -49,10 +50,14 @@ describe.skipIf(!hasDatabase)("units members build and the review of their merge
     await remote.createRepository("docs");
     const put = (path: string, text: string): Promise<unknown> => remote.commit("docs", path, text);
     await put("kintsugi.yaml", MANIFEST);
+    for (const [path, text] of Object.entries(catalogDocuments("web", [{ id: "billing", name: "Billing" }], ["invoice", "tax", "ledger", "report"].map((unit) => ({ id: `billing/${unit}`, kind: "screen", files: ["legacy/main.c"] }))))) await put(path, text);
+
     for (const name of filesUnder("sets/basic")) await put(`01-standards/templates/basic/${name}`, fixture("sets", "basic", ...name.split("/")));
     const designed = async (module: string, unit: string): Promise<void> => {
       await put(modernPath(module, unit, "README.md"), unitFile(module, unit));
       await put(legacyPath(module, unit, "rules.md"), RULES);
+      await put(legacyPath(module, unit, "understanding.md"), `---\nstatus: understood\ndigest: sha256:${unit}\n---\n`);
+      await put(legacyPath(module, unit, "spec.md"), "# Specification\n\n## Gaps and questions\n\nNone.\n");
       await put(modernPath(module, unit, "basic/overview.md"), fixture("designs", "basic-overview-ok.md"));
       await put(modernPath(module, unit, "basic/functions.md"), FUNCTIONS_OK);
     };

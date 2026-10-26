@@ -103,15 +103,14 @@ legacy code only to establish behavior you cite as path:line. What the code or t
 document, never a guess. Diagrams are Mermaid, per the mermaid-diagrams skill. Write only the documents of this set for the application: no
 other file.`;
 
-/**
- * Added to the task of a regeneration (ADR-0081): the documents of the set already exist in the document repository and are being
- * replaced, so what is under docs/ at their paths is the previous design, never a source; the skeleton in this run's output is the start.
- */
-const REGENERATING = `This is a regeneration. A design of this set already exists at the final paths below, in the documents you can read under {in}: it is the
-previous version, written against an older template or to be written again, and it is being replaced. Do not copy it or treat it as a source
-of facts; write each document anew from its skeleton (the one with a TODO in each section), the template, the unit's understanding and the
-documents of the sets it needs, as for a first design. A person's decision that the previous design recorded as an answered open question is not
-in the specification: raise it again as an open question with the assumption you make.`;
+/** A regeneration starts with the new template and preserves reviewed decisions in their original sections (ADR-0082). */
+const REGENERATING = `This is a regeneration. The manifest lists each existing document's previous field: its read-only snapshot under {in},
+kept in job scratch before the new skeleton overlaid its final path. Read that previous snapshot, not the skeleton, for the prior version.
+The new skeleton and template are the structure to write now. Read the previous design for reviewed answers, decisions and corrections. Preserve those that remain consistent
+with the current specification and evidence, in the same section or its corresponding section of the new template, citing their evidence.
+Do not silently erase an answer or turn it back into a question. If current evidence contradicts a previous answer, state the conflict and what
+must be reviewed in the affected section. A previous draft or an unsupported assumption is not confirmed evidence. Reapply the current template
+contract and write each complete document; never create a separate answers file.`;
 
 const generateTask = (set: string, scope: "unit" | "application", regenerate = false): string =>
   scope === "application"
@@ -249,7 +248,7 @@ const checkArgs = (ctx: StageContext): string[] => ["{app}", unitsOf(ctx).join("
 export function designMessage(app: string, scope?: StageScope): string {
   const items = scope?.items ?? [];
   const set = scope?.set ?? "design";
-  const verb = scope?.regenerate === true ? "Regenerate design" : "Design";
+  const verb = scope?.draft === true ? (scope.regenerate === true ? "Regenerate draft design" : "Draft design") : scope?.regenerate === true ? "Regenerate design" : "Design";
   if (items.length === 1 && items[0] === "@app") return `${verb} ${app}: ${set} of the application`;
   const modules = [...new Set(items.map((id) => id.split("/")[0]))];
   if (items.length > 0 && modules.length === 1) return `${verb} ${app}: ${set} of ${modules[0]} (${items.length} unit${items.length === 1 ? "" : "s"})`;
@@ -272,12 +271,18 @@ export const DESIGN: StagePlan = {
   ],
   requires: [{ path: assessmentCatalogPath(APP_TOKEN), stage: "assess" }],
   reviewAll: true,
+  validateOutputs: (app, scope, paths) => {
+    if (scope?.set === undefined || scope.items.length === 0) throw new Error("Design output needs a set and selected units");
+    const prefixes = scope.items.map((key) => `${key === "@app" ? applicationDesignSetDir(app, scope.set!) : unitKeyDesignSetDir(app, key, scope.set!)}/`);
+    const outside = paths.filter((path) => !path.endsWith(".md") || !prefixes.some((prefix) => path.startsWith(prefix)));
+    if (outside.length > 0) throw new Error(`Design output is outside the selected set: ${outside.slice(0, 10).join(", ")}; review the violation and restart with a fresh attempt`);
+  },
   steps: [
     {
       id: "scaffold",
       kind: "script",
       script: "scaffold_design.py",
-      args: (ctx) => ["{app}", unitsOf(ctx).join(","), setOf(ctx), ...(ctx.scope?.regenerate === true ? ["--regenerate"] : []), "--root", "{in}", "--out", "{out}", "--manifest", `{out}/${MANIFEST}`],
+      args: (ctx) => ["{app}", unitsOf(ctx).join(","), setOf(ctx), "--require-ready", ...(ctx.scope?.draft === true ? ["--draft"] : []), ...(ctx.scope?.regenerate === true ? ["--regenerate"] : []), "--root", "{in}", "--out", "{out}", "--manifest", `{out}/${MANIFEST}`],
       intermediate: true,
       expects: [MANIFEST],
     },
@@ -289,13 +294,14 @@ export const DESIGN: StagePlan = {
       items: async (ctx) => {
         const keys = await scaffolded(ctx);
         if (keys.length === 0) throw new Error("nothing to generate: every selected unit already has this set, or could not be prepared (see the scaffold step)");
+        if (ctx.agentsLeft() < keys.length * 2) throw new Error(`The design needs at least ${keys.length * 2} agent jobs for generation and independent review; select fewer units or raise the stage budget before running it.`);
         return keys.map((key) => ({ key, item: key }));
       },
       step: {
         id: "design-unit",
         kind: "agent",
         agent: DESIGNER,
-        task: async (ctx) => generateTask(setOf(ctx), (await setFacts(ctx)).scope, ctx.scope?.regenerate === true),
+        task: async (ctx) => `${ctx.scope?.draft === true ? "This is an explicitly requested DRAFT. State missing evidence, unresolved gaps and assumptions by ID; never present them as confirmed facts.\n" : ""}${generateTask(setOf(ctx), (await setFacts(ctx)).scope, ctx.scope?.regenerate === true)}`,
         documents: async (ctx) => (await setFacts(ctx)).reads,
       },
     },
@@ -352,6 +358,13 @@ export const DESIGN: StagePlan = {
       args: checkArgs,
       intermediate: true,
       expects: [REPORT],
+    },
+    {
+      id: "mark-draft",
+      kind: "script",
+      when: (ctx) => ctx.scope?.draft === true,
+      script: "mark_design_draft.py",
+      args: (ctx) => ["--app", "{app}", "--set", setOf(ctx), "--units", unitsOf(ctx).join(","), "--root", "{in}", "--out", "{out}", "--manifest", `{in}/${MANIFEST}`],
     },
     {
       id: "summary",

@@ -32,7 +32,7 @@ export interface JobRunView {
   /** Set while the worker is stopping a run a person cancelled. */
   cancelRequestedAt?: string;
   /** The catalog items of an understand run (ADR-0033). */
-  scope?: { items: string[]; set?: string };
+  scope?: { items: string[]; set?: string; regenerate?: boolean; draft?: boolean };
   /** Set when a person abandoned the run's pull request (its items are released). */
   abandonedAt?: string;
   startedAt?: string;

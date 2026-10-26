@@ -35,13 +35,13 @@ One more shape is read only by the design-set tools: a **directive comment** und
 | `…/rules-review.md` | people, in a pull request | Table `Rule \| Verdict \| Approver \| Date` (and an optional `Note`); verdicts `confirmed`, `refuted`, `clarify` |
 | `…/findings.md` | `split_findings.py` | Scorecard table; table `Findings by severity`; a `### SEC-…` card per finding for the fix and the masked evidence; `Tools not run`, `Files reviewed` |
 | `…/topology.md` | `scope_items.py` | The topology document of one item: its leaves, `Depends on`, `Used by`, `Data stores` |
-| `…/trace.md` | `finish_items.py` | Front matter (`openQuestions`, the rows of the specification's gaps table); sections `Entry points`, `Rules applied`, `Findings`, `Dependencies` (table), `Data objects`, `External systems`, `Files`, `Requirements`, `Pull requests`, `Tests` |
+| `…/trace.md` | `finish_items.py` | Front matter (`openQuestions`, the unresolved rows of the specification's gaps table at generation; result views and rebuilds derive the current count from the specification); sections `Entry points`, `Rules applied`, `Findings`, `Dependencies` (table), `Data objects`, `External systems`, `Files`, `Requirements`, `Pull requests`, `Tests` |
 | `01-standards/templates/<set>/set.md`, `<template>.md` | people | A design set: front matter (`id`, `title`, `version`, `needs`, `stage`) and a files table; templates with directive comments ([design templates](design-templates.md)) |
 | `01-standards/templates/<set>/<kind>/profile.md`, `<template>.md`, `_examples/` | people | The profile of a set for a unit kind: front matter (`kind`, `version`, `removes`), a files table, templates that replace the set's and finished examples ([ADR-0053](../decisions/0053-design-template-profiles-by-unit-kind.md)) |
 | `02-modern/<module>/<unit>/README.md` | `finish_items.py`, then the Kintsugi API and people | The unit's card: front matter (identity, kind, state, `source`, `target`, `links`, `waived`) and a short body ([unit files](document-repo-unit-files.md)) |
 | `02-modern/<module>/<unit>/<set>/<file>` | `scaffold_design.py`, then the `design` stage's designer | A design document: front matter `template: "<set>@<version>"` (or `"<set>/<kind>@<version>"`) and `unit`, then the sections and tables the template names |
 | `_generated/traceability.md` | `rebuild_aggregates.py` | Front matter with the totals the headlines read; one row per understood unit |
-| `_generated/GAPS.md` | `rebuild_aggregates.py` | The units' `Gaps and questions` rows joined (`Item \| ID \| Kind \| Impact \| Question \| Where`), blocking first; front matter counts by impact and kind ([ADR-0057](../decisions/0057-evidence-marks-and-gaps.md)) |
+| `_generated/GAPS.md` | `rebuild_aggregates.py` | The units' `Gaps and questions` rows joined (`Item \| ID \| Kind \| Impact \| Question \| Where \| Status \| Answer \| Evidence`), blocking first; front matter counts by impact and kind ([ADR-0057](../decisions/0057-evidence-marks-and-gaps.md)) |
 | `_generated/DATA_ACCESS.md` | `rebuild_aggregates.py` | The read/write matrix of data stores and items from the catalog's links (`Data store \| Written by \| Read by`, then `Item \| Kind \| Reads \| Writes`); front matter counts ([ADR-0060](../decisions/0060-item-kinds-and-kind-aware-understanding.md)) |
 | `_generated/BUSINESS_RULES.md`, `DATA_OBJECTS.md`, `SECURITY_FINDINGS.md`, `README.md` | `rebuild_aggregates.py` | The index of the units' rules (one row per rule with its version and a link to the rule's file), the units' objects and findings joined; the index of the specifications |
 
@@ -52,3 +52,17 @@ The data a run passes between its steps is JSON under `scratch/<app>/` in the jo
 ## Limits
 
 The job-output hook refuses a file over 1 MiB, and the API serves a file up to 2 MiB; the documents above stay under both by summarising (the inventory and the topology cap their tables, the catalog index lists at most 200 unassigned files). A module whose catalog document outgrows the API limit is not shown.
+
+## Gap resolutions and draft designs
+
+The original specification's `Gaps and questions` table can add `Status`, `Answer`, `Evidence` columns to its five
+required columns. `Status` is `open` or `resolved`; an absent/blank status is open. Only a resolved row with meaningful
+non-placeholder answer and evidence clears a blocker. Preserve its ID, question, kind, location and impact. Reopen it
+in the same row when the answer is withdrawn or its supporting unit evidence changes. The generated gaps view retains
+all rows and includes `open` and `resolved` totals; current open-question counts exclude valid resolved rows. No answer
+file or database register is used ([ADR-0082](../decisions/0082-design-readiness-drafts-and-in-place-gap-answers.md)).
+
+A deliberately generated draft design has `draft: true` in each document's front matter. Both conformance checkers
+report that marker as a `draft` problem. A merged draft cannot fulfil a prerequisite or authorize build/review; after
+the inputs are resolved, a final regeneration writes the current template without that marker. Unsupported/ambiguous
+values of `draft` are treated conservatively as draft; only an absent marker or boolean `false` is final.

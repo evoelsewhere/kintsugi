@@ -130,7 +130,7 @@ export const REVIEW: StagePlan = {
       script: "prepare_review.py",
       args: (ctx) => {
         const mr = mergeRequestOf(ctx);
-        return ["{app}", unitsOf(ctx).join(","), "--target", mr.target, "--mr-url", mr.url, "--mr-commit", mr.commit, "--mr-branch", mr.branch, "--root", "{in}", "--manifest", `{out}/${MANIFEST}`];
+        return ["--require-ready", "{app}", unitsOf(ctx).join(","), "--target", mr.target, "--mr-url", mr.url, "--mr-commit", mr.commit, "--mr-branch", mr.branch, "--root", "{in}", "--manifest", `{out}/${MANIFEST}`];
       },
       intermediate: true,
       expects: [MANIFEST],

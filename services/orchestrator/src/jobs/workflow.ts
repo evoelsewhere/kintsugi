@@ -109,10 +109,11 @@ export async function runWorkflow(run: WorkflowRun): Promise<WorkflowOutcome> {
 
   const agent = async (prompt: unknown, options: AgentCallOptions = {}): Promise<unknown> => {
     if (typeof prompt !== "string" || prompt.trim() === "") throw new Error("agent(prompt) needs a non-empty prompt");
-    if (started >= maxAgents) throw new Error(`workflow agent cap reached (${maxAgents})`);
-    if (totalTokens > 0 && tokens >= totalTokens) throw new Error("workflow token budget exhausted");
-    started += 1;
     return agentSlots.run(async () => {
+      // Queued calls must recheck after taking a slot: preceding jobs may have exhausted the budget.
+      if (started >= maxAgents) throw new Error(`workflow agent cap reached (${maxAgents})`);
+      if (totalTokens > 0 && tokens >= totalTokens) throw new Error("workflow token budget exhausted");
+      started += 1;
       const outcome = await run.runAgent(prompt, options);
       tokens += outcome.tokens;
       if (outcome.result === undefined) {

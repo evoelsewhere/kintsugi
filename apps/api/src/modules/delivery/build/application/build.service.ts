@@ -101,12 +101,14 @@ export class BuildService {
   }
 
   /** The newest `build.*` record of a member for each unit (the summary of a record is the unit key), the merge request one first. */
-  async memberBuilds(projectId: string, withUser: boolean): Promise<Map<string, MemberBuild>> {
+  async memberBuilds(projectId: string, withUser: boolean, scope: { applicationId: string; allowLegacy: boolean }): Promise<Map<string, MemberBuild>> {
     const page = await this.activity.list({ projectId, pluginName: MEMBER_PLUGIN, limit: RECENT_ACTIVITY, offset: 0 });
     const latest = new Map<string, MemberBuild>();
     const tests = new Map<string, MemberBuild>();
     for (const record of page.items) {
       if (!record.kind.startsWith("build.")) continue;
+      const application = record.detail["application"];
+      if (application === undefined ? !scope.allowLegacy : application !== scope.applicationId) continue;
       const build = memberBuildOf(record, withUser);
       if (record.kind === "build.mr" && build.mr !== undefined && build.commit !== undefined && !latest.has(record.summary)) latest.set(record.summary, build);
       else if (record.kind === "build.test" && !tests.has(record.summary)) tests.set(record.summary, build);
@@ -123,14 +125,17 @@ export class BuildService {
   async overview(projectId: string, applicationId: string, options: { memberUsers: boolean }): Promise<BuildOverviewView> {
     const [design, context] = await Promise.all([this.design.overview(projectId, applicationId, undefined), this.documents.context(projectId)]);
     const commit = design.ref.commit;
-    const [targets, active, member] = await Promise.all([this.targets(projectId, applicationId), this.activeReviews(projectId, applicationId, context), this.memberBuilds(projectId, options.memberUsers)]);
+    const [targets, active, member] = await Promise.all([this.targets(projectId, applicationId), this.activeReviews(projectId, applicationId, context), this.memberBuilds(projectId, options.memberUsers, { applicationId, allowLegacy: context.project.applications.length === 1 })]);
 
     const rows: UnitBuildRow[] = [];
     for (const group of chunk(design.units, READ_AT_ONCE)) {
       rows.push(
         ...(await Promise.all(
           group.map(async (unit): Promise<UnitBuildRow> => {
-            const designed = Object.values(unit.sets).some((set) => set.files.total - set.files.missing > 0);
+            const summaries = Object.values(unit.sets);
+            // A draft or a failed conformance check is not the design a member is authorized to build.
+            const designed = summaries.some((set) => set.files.conformant > 0 && set.files.missing === 0 && set.files.problems === 0 && (set.blockers?.length ?? 0) === 0)
+              && summaries.every((set) => set.files.problems === 0);
             const recorded = member.get(unit.key);
             const busy = active.get(unit.key);
             const published = frontMatter(await this.documents.readText(context, commit, unitCodeReviewPath(applicationId, unit.key)));

@@ -9,6 +9,7 @@ import re
 
 import docmd
 import reference_ids as refs
+import gap_resolution
 
 GAP_ID = re.compile(r'^GAP-[A-Za-z0-9][A-Za-z0-9._-]*-\d{2,}$')
 GAP_KINDS = ('missing-source', 'unresolved', 'ambiguous', 'unverified')
@@ -47,6 +48,7 @@ def spec_gaps(text):
 def checked_gaps(text):
     """Strict writer validation, shared by the specification output hook and finish."""
     rows, problems = spec_gaps(text)
+    problems.extend(gap_resolution.inspect(text)[1])
     if problems:
         raise refs.DataError('invalid specification gaps: ' + '; '.join(problems[:5]))
     sections = [body for title, body in docmd.sections(text, 2) if title.strip().lower() == GAPS_SECTION]
@@ -121,3 +123,47 @@ def assign_gap_ids(text, scope, previous=None):
     # One pass also handles swaps between draft numbers and persisted numbers.
     text = GAP_REFERENCE.sub(lambda match: replacements.get(match.group(0), match.group(0)), text)
     return text, ledger
+
+
+def carry_resolutions(text, previous_text, unchanged):
+    """Only merged human answers can resolve a re-understood gap. Changed evidence reopens it.
+
+    Keep answered rows even if the new analysis omitted them: a model cannot erase a human decision.
+    Unrelated sections of the newly written specification are untouched.
+    """
+    current, _ = spec_gaps(text)
+    previous, problems = gap_resolution.inspect(previous_text or '')
+    if problems and any(row.get('answer') or row.get('evidence') for row in spec_gaps(previous_text or '')[0] or []):
+        raise refs.DataError('previous specification has invalid gap answers; repair them before re-understanding')
+    previous = [] if problems else previous
+    answered = {gap_identity(row): row for row in previous if row.get('answer') or row.get('evidence')}
+    if not answered and not any('status' in row or 'answer' in row or 'evidence' in row for row in current or []):
+        return text
+    rows, seen = [], set()
+    for row in current or []:
+        key = gap_identity(row)
+        before = answered.get(key)
+        # The newly generated text is not an approval, even if it writes status=resolved.
+        status = 'resolved' if before and unchanged and gap_resolution.resolved(before) else 'open'
+        rows.append({**row, 'status': status, 'answer': before.get('answer', '') if before else '', 'evidence': before.get('evidence', '') if before else ''})
+        seen.add(key)
+    for key, row in answered.items():
+        if key not in seen:
+            rows.append({**row, 'status': 'resolved' if unchanged and gap_resolution.resolved(row) else 'open'})
+    columns = ['ID', 'Kind', 'Question', 'Where', 'Impact', 'Status', 'Answer', 'Evidence']
+    table = docmd.table(columns, [[row.get(column.lower(), '') for column in columns] for row in rows])
+    lines = text.splitlines(keepends=True)
+    start, end, fenced = None, len(lines), False
+    for index, line in enumerate(lines):
+        if re.match(r'^\s*(```|~~~)', line):
+            fenced = not fenced
+        heading = None if fenced else re.match(r'^(#{1,2})\s+(.+?)\s*#*\s*$', line)
+        if heading:
+            if start is not None:
+                end = index
+                break
+            if len(heading[1]) == 2 and heading[2].strip().lower() == GAPS_SECTION:
+                start = index + 1
+    if start is None:
+        return text
+    return ''.join(lines[:start]) + '\n' + table.rstrip() + '\n\n' + ''.join(lines[end:])

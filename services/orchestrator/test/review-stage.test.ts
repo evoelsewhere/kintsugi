@@ -34,7 +34,8 @@ const BASE: Record<string, string> = {
   ...catalogDocuments("demo", [{ id: "pay", name: "Pay" }], [{ id: KEY, files: ["src/main.c"] }]),
   [`10-applications/demo/02-modern/${KEY}/README.md`]: `---\nid: "demo/${KEY}"\nkind: "api"\ntitle: "run"\n---\n`,
   [`10-applications/demo/01-legacy/${KEY}/rules.md`]: RULES,
-  [`10-applications/demo/01-legacy/${KEY}/understanding.md`]: `---\napp: "demo"\nitem: "${KEY}"\nstatus: "understood"\n---\n# ${KEY}\n`,
+  [`10-applications/demo/01-legacy/${KEY}/spec.md`]: "# Run\n\n## Gaps and questions\n\nNone.\n",
+  [`10-applications/demo/01-legacy/${KEY}/understanding.md`]: `---\napp: "demo"\nitem: "${KEY}"\nstatus: "understood"\ndigest: "sha256:run"\n---\n# ${KEY}\n`,
   [`10-applications/demo/02-modern/${KEY}/detail/logic.md`]: "# Logic\n\nThe total is price times quantity, rounded to cents.\n",
 };
 

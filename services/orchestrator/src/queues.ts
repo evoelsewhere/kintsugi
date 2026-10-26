@@ -68,6 +68,8 @@ export interface DocumentWriteFile {
   encoding?: "utf8" | "base64";
   /** Written only when the default branch does not have the file yet (starter structure never overwrites people's work). */
   createOnly?: boolean;
+  /** SHA-256 of the document the person edited, checked by the writer before committing. */
+  expectedHash?: string;
 }
 
 /**

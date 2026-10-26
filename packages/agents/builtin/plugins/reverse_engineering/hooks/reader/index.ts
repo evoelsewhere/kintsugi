@@ -89,3 +89,6 @@ export {
   type LoadedDesignSet,
   type ResolvedDesignFile,
 } from './design.js'
+
+export { gapIsResolved, inspectSpecGaps, answerSpecGap } from './gaps.js'
+export { designInputBlockers, type DesignInputs } from './design-readiness.js'

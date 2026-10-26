@@ -39,6 +39,10 @@ Responsibilities beyond the feature modules below:
   items, the traceability matrix, the AS-IS synthesis documents) with the parsers of
   `@kintsugi/agents/reader` (default ref: the stage's latest successful run, else the default
   branch); `GET …/applications/:appId/results/headlines` gives the overview's headline numbers.
+- Delivery → gap answers: `POST …/applications/:appId/understand/gaps/answer` (`documents.resolve`) proposes
+  a correction to the named gap's row in its original specification. It checks the document the user read and the
+  writer checks its old hash again; the correction is always reviewed in a PR. A merged answer with evidence can
+  clear a blocking gap; draft designs remain non-final. See [ADR-0082](../../docs/decisions/0082-design-readiness-drafts-and-in-place-gap-answers.md).
 - Cross-project reads (session only): `GET /api/document-writes`
   (`?status=queued,failed&projectId`); `GET /api/monitoring/overview` (counts, what needs
   attention, recent activity, the worker's pg-boss queue counts — `null` when unreadable) and

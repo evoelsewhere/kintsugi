@@ -37,6 +37,7 @@ import check_design  # noqa: E402
 import design_lib as dl  # noqa: E402
 import docmd  # noqa: E402
 import paths  # noqa: E402
+import design_preflight as preflight
 
 APP = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
 
@@ -47,7 +48,7 @@ def _manifest_entry(set_id, relative, file):
             'ref': dl.ref_text(file['ref']), 'example': paths.design_template_path(set_id, file['example']) if file['example'] else None}
 
 
-def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False, out=None, info=None, regenerate=False):
+def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False, out=None, info=None, regenerate=False, require_ready=False, draft=False):
     """([created paths], [notes]) for one unit and one set; raises DataError on unusable input.
 
     `out` is where the files are written (default: `root`); `info`, when given, is filled with the unit's kind and title and
@@ -56,6 +57,9 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
     out = root if out is None else out
     for_application = unit_key == dl.APPLICATION_KEY
     unit = dl.read_application(root, app) if for_application else dl.read_unit(root, app, unit_key)
+    blockers = [] if for_application else preflight.unit_blockers(root, app, unit_key)
+    if require_ready and not for_application and preflight.catalog_item(root, app, unit_key) is None:
+        raise docmd.DataError('the unit is not active in the merged catalog; assess and merge its scope first')
     sets, problems = check_design.load(root)
     loaded = next((candidate for candidate in sets if candidate['set']['id'] == set_id), None)
     if loaded is None:
@@ -79,12 +83,15 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
     elif not include_optional:
         # A regeneration also writes again the optional documents the unit already has.
         files = [file for file in files if file['required'] or (regenerate and os.path.lexists(os.path.join(root, *dl.design_file_path(app, unit_key, loaded, file['path']).split('/'))))]
+    blockers.extend(preflight.dependency_blockers(root, app, unit_key, loaded, sets, unit))
+    if require_ready and blockers and not draft:
+        raise docmd.DataError('not ready for a final design: ' + '; '.join(blockers) + '; resolve and merge these inputs, or explicitly generate a draft')
     rules = [] if for_application else dl.rules_of(root, app, unit_key)
     created, notes = [], []
     if info is not None:
         profile = unit['kind'] in loaded['profiles'] if unit['kind'] is not None else False
         info.update({'kind': unit['kind'], 'title': unit['title'], 'scope': set_['scope'], 'reads': set_['reads'],
-                     'profile': paths.design_profile_path(set_id, unit['kind']) if profile else None, 'files': []})
+                     'draft': draft, 'blockers': blockers, 'profile': paths.design_profile_path(set_id, unit['kind']) if profile else None, 'files': []})
     for need in set_['needs']:
         needed = next((candidate for candidate in sets if candidate['set']['id'] == need), None)
         needed_kind = None if needed is not None and needed['set']['scope'] == 'application' else unit['kind']
@@ -96,13 +103,20 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
         relative = dl.design_file_path(app, unit_key, loaded, file['path'])
         path = os.path.join(out, *relative.split('/'))
         existing = os.path.join(root, *relative.split('/'))
+        previous = None
+        if regenerate and os.path.isfile(existing) and not os.path.islink(existing):
+            previous = paths.design_previous_path(app, unit_key, set_id, file['path'])
+            saved = os.path.join(out, *previous.split('/'))
+            if not os.path.exists(saved):
+                docmd.write_text(saved, docmd.read_text(existing))
+        previous_info = {'previous': previous} if previous else {}
         in_place = os.path.realpath(out) == os.path.realpath(root)
         # Regenerating replaces what is under --root; what this run already wrote under --out is kept.
         keep = os.path.lexists(path) if regenerate and not in_place else (os.path.lexists(path) or os.path.lexists(existing)) and not regenerate
         if keep:
             notes.append(f'{relative} exists and was left as it is')
             if info is not None:
-                info['files'].append({**_manifest_entry(set_id, relative, file), 'written': False})
+                info['files'].append({**_manifest_entry(set_id, relative, file), **previous_info, 'written': False})
             continue
         template = dl.template_of(loaded, file)
         text = dl.scaffold_text(docmd.read_text(os.path.join(root, *paths.design_template_path(set_id, file['templateFile']).split('/'))),
@@ -112,7 +126,7 @@ def scaffold(root, app, unit_key, set_id, only_file=None, include_optional=False
         if regenerate and os.path.lexists(existing) and not in_place:
             notes.append(f'{relative} is written again over the existing design')
         if info is not None:
-            info['files'].append({**_manifest_entry(set_id, relative, file), 'written': True})
+            info['files'].append({**_manifest_entry(set_id, relative, file), **previous_info, 'written': True})
     return created, notes
 
 
@@ -123,6 +137,8 @@ def main(argv=None):
     parser.add_argument('set', help='the design set to write')
     parser.add_argument('--file', dest='only_file', metavar='PATH', help='write one document of the set only (an optional one included)')
     parser.add_argument('--all', dest='include_optional', action='store_true', help='write the optional documents of the set too')
+    parser.add_argument('--require-ready', action='store_true', help='check merged input evidence and dependencies before generating a final design')
+    parser.add_argument('--draft', action='store_true', help='explicitly allow incomplete input evidence for a non-final design')
     parser.add_argument('--regenerate', action='store_true', help='write the skeletons again over a design the unit already has (ADR-0081)')
     parser.add_argument('--root', default='.', metavar='DIR', help='the document repository checkout (default: the working directory)')
     parser.add_argument('--out', metavar='DIR', help='write the documents here instead of under --root (which is then only read)')
@@ -145,7 +161,7 @@ def main(argv=None):
     for key in keys:
         info = {}
         try:
-            created, notes = scaffold(root, args.app, key, args.set, args.only_file, args.include_optional, out, info, args.regenerate)
+            created, notes = scaffold(root, args.app, key, args.set, args.only_file, args.include_optional, out, info, args.regenerate, args.require_ready, args.draft)
         except (docmd.DataError, OSError) as error:
             print(f'scaffold_design.py: {key}: {error}', file=sys.stderr)
             manifest['units'][key] = {'error': str(error)}
@@ -158,7 +174,7 @@ def main(argv=None):
             print(f'note: {note}')
     if args.manifest is not None:
         docmd.write_text(os.path.abspath(args.manifest), json.dumps(manifest, indent=1, ensure_ascii=False))
-    return 2 if failures == len(keys) else 0
+    return 2 if failures == len(keys) or (args.require_ready and failures > 0) else 0
 
 
 if __name__ == '__main__':

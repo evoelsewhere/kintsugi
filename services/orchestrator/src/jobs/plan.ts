@@ -51,6 +51,8 @@ export interface StageScope {
   readonly set?: string;
   /** A design run writes the set again over a design the units already have (ADR-0081). */
   readonly regenerate?: boolean;
+  /** A non-final design; incomplete evidence is explicitly allowed. */
+  readonly draft?: boolean;
   /** The target repository a review run reads (ADR-0071). */
   readonly target?: string;
   /** The merge request a review run reads: the member recorded it for the units; the reviewer reads the repository at `commit`. */
@@ -205,5 +207,7 @@ export interface StagePlan {
    * proposals a person reviews as a whole before they become state (default: the writer splits).
    */
   reviewAll?: boolean;
+  /** Optional deterministic scope check before a stage indexes or publishes its outputs. */
+  validateOutputs?(app: string, scope: StageScope | undefined, paths: readonly string[]): void;
   steps: readonly StageStep[];
 }

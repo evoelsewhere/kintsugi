@@ -650,6 +650,8 @@ def check_document(template, expected, text, context):
 
     `context` carries ruleIds, requirementIds, componentIds and `items`: the id of a set to the design items of the unit in it."""
     problems = []
+    if 'draft' in docmd.split_front_matter(text)[0] and docmd.split_front_matter(text)[0]['draft'] is not False:
+        problems.append({'code': 'draft', 'message': 'Draft design: resolve its inputs and generate a final design before using it downstream.'})
     ref = template_ref_of(text)
     if ref is None:
         problems.append({'code': 'missing-template-ref', 'message': 'front matter has no template reference (template: <set>@<version>)'})
@@ -797,6 +799,10 @@ def read_unit(root, app, unit_key):
     relative = paths.unit_state_path(app, module, unit)
     path = os.path.join(root, *relative.split('/'))
     if not _real_file(path):
+        import design_preflight
+        item = design_preflight.catalog_item(root, app, unit_key)
+        if item is not None:
+            return {'kind': item['kind'], 'title': item['name'], 'waived': {}}
         raise docmd.DataError(f'{relative} does not exist: understand the unit first')
     data, _ = docmd.split_front_matter(docmd.read_text(path))
     kind = data.get('kind') if isinstance(data.get('kind'), str) else ''

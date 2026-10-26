@@ -6,6 +6,8 @@
 
 Reference ID policy amended by [ADR-0075](0075-compact-stable-document-reference-ids.md). Historical formats below remain readable.
 
+Readiness, draft and answer-preservation policy is amended by [ADR-0082](0082-design-readiness-drafts-and-in-place-gap-answers.md).
+
 ## Context
 
 Reverse engineering works on incomplete evidence. Copybooks, called programs, job and deployment descriptors, table

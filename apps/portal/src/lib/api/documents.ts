@@ -1,7 +1,7 @@
 // Typed access to the document repo as Kintsugi's mirror holds it, and to the results of a stage
 // built from it. Mirrors apps/api → modules/delivery/documents (read-only; never restricted/).
 
-import { apiGet } from "../api";
+import { apiGet, apiSend } from "../api";
 
 export type RefStatus = "default" | "merged" | "open" | "commit";
 
@@ -293,6 +293,9 @@ export interface HardenResults extends ResultsBase {
 
 /** A gap of the legacy understanding: a row of a specification's `Gaps and questions` table. */
 export interface Gap {
+  status?: "open" | "resolved";
+  answer?: string;
+  evidence?: string;
   id: string;
   kind: GapKind;
   impact: GapImpact;
@@ -305,9 +308,11 @@ export interface Gap {
 export interface GapsResults extends ResultsBase {
   stage: "gaps";
   gaps: Gap[];
-  gapCounts: { total: number; units: number; byKind: Record<GapKind, number>; byImpact: Record<GapImpact, number> };
+  gapCounts: { total: number; open?: number; resolved?: number; units: number; byKind: Record<GapKind, number>; byImpact: Record<GapImpact, number> };
   /** One unit's view: its specification predates the `Gaps and questions` table. */
   noSection?: boolean;
+  /** A malformed register never proves the absence of questions. */
+  problems?: string[];
 }
 
 /** A unit of the understand stage: its row of the traceability matrix and its work item at the ref. */
@@ -395,5 +400,7 @@ export const documentsApi = {
     const suffix = query.size === 0 ? "" : `?${query.toString()}`;
     return apiGet(`${project(projectId)}/applications/${encodeURIComponent(applicationId)}/stages/${encodeURIComponent(stage)}/results${suffix}`);
   },
+  answerGap: (projectId: string, applicationId: string, answer: { item: string; gap: string; commit: string; answer: string; evidence: string; status: "open" | "resolved" }) =>
+    apiSend<import("./projects").DocumentWriteView>(`${project(projectId)}/applications/${encodeURIComponent(applicationId)}/understand/gaps/answer`, "POST", answer),
   headlines: (projectId: string, applicationId: string): Promise<StageHeadline[]> => apiGet(`${project(projectId)}/applications/${encodeURIComponent(applicationId)}/results/headlines`),
 };

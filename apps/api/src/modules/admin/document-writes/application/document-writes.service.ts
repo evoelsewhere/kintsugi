@@ -9,7 +9,7 @@ import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trai
 import type { Actor } from "#common/auth/decorators.js";
 import { newId } from "#common/domain/ids.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
-import type { DocumentWriteFilter, DocumentWriteRecord, NewDocumentWrite } from "../domain/document-write.js";
+import type { DocumentWriteFile, DocumentWriteFilter, DocumentWriteRecord, NewDocumentWrite } from "../domain/document-write.js";
 import { DocumentRepoSkeleton, DocumentWriteQueue, DocumentWriteStore } from "../domain/document-write.ports.js";
 
 @Injectable()
@@ -51,6 +51,16 @@ export class DocumentWritesService {
         detail: { path: manifest.fileName, scaffold, structureFiles: structure.length, documentRepositoryId: project.documentRepository.repositoryId },
       }),
     );
+    return write;
+  }
+
+  /** A bounded caller supplies corrected documents; the writer proposes them for review and checks their old hashes. */
+  async proposeCorrection(projectId: string, message: string, files: DocumentWriteFile[], actor: Actor): Promise<DocumentWriteRecord> {
+    const project = await this.projects.getProject(projectId);
+    if (project.documentRepository === null) throw new ConflictException(`Project ${projectId} has no document repository`);
+    if (files.length === 0 || files.some((file) => !file.path.endsWith(".md") || !/^[0-9a-f]{64}$/.test(file.expectedHash ?? ""))) throw new ConflictException("A correction needs Markdown documents and their previous hashes");
+    const write = await this.#enqueue({ id: newId(), projectId, documentRepositoryId: project.documentRepository.repositoryId, kind: "state-change", message, files, reviewAll: true, actor: actor.username ?? actor.id });
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.documentCorrection, { projectId, subject: write.id, detail: { paths: files.map((file) => file.path) } }));
     return write;
   }
 

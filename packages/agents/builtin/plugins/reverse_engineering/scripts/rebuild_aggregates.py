@@ -30,6 +30,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
 import docmd  # noqa: E402
+import gap_resolution
 import gaps_common as gc  # noqa: E402
 import paths  # noqa: E402
 import render_rules as rr  # noqa: E402
@@ -87,7 +88,7 @@ def rebuild(app, docs):
             'item': item_id, 'title': cc.clean_text(item.get('name'), cc.MAX_NAME) or item_id, 'kind': item.get('kind') or 'module',
             'spec': paths.unit_key_as_is_path(app, item_id), 'files': trace['Files'] or item['files'], 'dependsOn': outbound, 'dataStores': stores,
             'rules': trace['Rules applied'], 'findings': trace['Findings'], 'entryPoint': bool(item.get('entryPoints')),
-            'requirements': trace['Requirements'], 'openQuestions': trace['openQuestions'], 'stale': record.get('digest') != item.get('digest'),
+            'requirements': trace['Requirements'], 'openQuestions': sum(1 for row in spec_rows if not gap_resolution.resolved(row)) if spec_rows is not None else trace['openQuestions'], 'stale': record.get('digest') != item.get('digest'),
         })
     return active, rule_rows, objects, finding_rows, rows, gap_rows
 
@@ -140,14 +141,14 @@ def gaps_md(app, gap_rows):
     ordered = sorted(gap_rows, key=lambda row: (gc.GAP_IMPACTS.index(row['impact']) if row['impact'] in gc.GAP_IMPACTS else len(gc.GAP_IMPACTS), row['item'], row['id']))
     by_kind = {kind: sum(1 for row in ordered if row['kind'] == kind) for kind in gc.GAP_KINDS}
     by_impact = {impact: sum(1 for row in ordered if row['impact'] == impact) for impact in gc.GAP_IMPACTS}
-    front = docmd.front_matter({'app': app, 'generatedBy': 'rebuild_aggregates.py', 'gaps': len(ordered), 'units': len({row['item'] for row in ordered}),
+    front = docmd.front_matter({'app': app, 'generatedBy': 'rebuild_aggregates.py', 'gaps': len(ordered), 'open': sum(1 for row in ordered if not gap_resolution.resolved(row)), 'resolved': sum(1 for row in ordered if gap_resolution.resolved(row)), 'units': len({row['item'] for row in ordered}),
                                 **{impact: count for impact, count in by_impact.items()}, 'missingSource': by_kind['missing-source'], 'unresolved': by_kind['unresolved'],
                                 'ambiguous': by_kind['ambiguous'], 'unverified': by_kind['unverified']})
     doc = [front, f'# Gaps and questions - {rr.one_line(app, 80)}', '',
            f'Generated from the `Gaps and questions` tables of the understood units ({paths.legacy_dir(app)}/*/*/spec.md); do not edit by hand. '
            "An answer is written in the unit's specification, in the pull request that carries it.", '']
     if ordered:
-        table = docmd.table(['Item', 'ID', 'Kind', 'Impact', 'Question', 'Where'], [[row['item'], row['id'], row['kind'], row['impact'], row.get('question', ''), row.get('where', '')] for row in ordered])
+        table = docmd.table(['Item', 'ID', 'Kind', 'Impact', 'Question', 'Where', 'Status', 'Answer', 'Evidence'], [[row['item'], row['id'], row['kind'], row['impact'], row.get('question', ''), row.get('where', ''), row.get('status', 'open'), row.get('answer', ''), row.get('evidence', '')] for row in ordered])
         doc.append(table.rstrip('\n'))
     else:
         doc.append('No gaps were recorded in the understood items.')

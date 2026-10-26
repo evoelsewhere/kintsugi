@@ -206,6 +206,8 @@ export interface GapsResults extends StageResultsBase {
   gapCounts: GapCounts;
   /** One unit's view: its specification has no `Gaps and questions` section (written before ADR-0057). */
   noSection?: boolean;
+  /** A malformed register never proves the absence of questions. */
+  problems?: string[];
 }
 
 /** A unit of the understand stage: its row of the traceability matrix and its work item, when one is at the ref. */

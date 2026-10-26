@@ -33,6 +33,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
 import docmd  # noqa: E402
+import gap_resolution
 import gaps_common  # noqa: E402
 import paths  # noqa: E402
 import spec_profiles  # noqa: E402
@@ -129,6 +130,11 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
             continue
         spec_text = docmd.read_text(spec_path)
         spec_text, ledger = gaps_common.assign_gap_ids(spec_text, cc.refs.scope_of(item), cc.refs.prior_registry(docs, app, item, 'GAP'))
+        previous_spec = docmd.read_optional_text(os.path.join(docs, *spec.split('/'))) if docs else None
+        previous_record = docmd.read_optional_text(os.path.join(docs, *paths.unit_understanding_path(app, *item_id.split('/')).split('/'))) if docs else None
+        unchanged = bool(previous_record) and docmd.split_front_matter(previous_record)[0].get('digest') == item.get('digest')
+        spec_text = gaps_common.carry_resolutions(spec_text, previous_spec, unchanged)
+        spec_text, ledger = gaps_common.assign_gap_ids(spec_text, cc.refs.scope_of(item), cc.refs.prior_registry(docs, app, item, 'GAP'))
         texts[spec] = spec_text
         texts[cc.refs.registry_path(app, item, 'GAP')] = ledger
         gaps, _ = gaps_common.spec_gaps(spec_text)
@@ -168,7 +174,7 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
             # Files as the agent cited them, put right when they name a catalog file (`as-is/` or the repository left out).
             'files': sorted({owners.path_of(rel) or rel for rel in (cc.norm_path(value) for value in strings(trace.get('files'))) if rel}),
             # The gaps the specification lists; the agent's own count only stands in when it has no such section.
-            'openQuestions': len(gaps) if gaps is not None else trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) and not isinstance(trace.get('openQuestions'), bool) else 0,
+            'openQuestions': sum(1 for gap in gaps if not gap_resolution.resolved(gap)) if gaps is not None else trace.get('openQuestions') if isinstance(trace.get('openQuestions'), int) and not isinstance(trace.get('openQuestions'), bool) else 0,
         }
         texts[paths.unit_trace_path(app, *item_id.split('/'))] = render_trace(app, item_id, checked)
         record = {

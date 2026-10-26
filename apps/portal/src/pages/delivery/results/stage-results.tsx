@@ -199,6 +199,6 @@ function StageView({ results, compare, projectId }: { results: StageResults; com
     case "understand":
       return <UnderstandResultsView results={results} compare={compare} projectId={projectId} />;
     case "gaps":
-      return <GapsResultsView results={results} />;
+      return <GapsResultsView projectId={projectId} results={results} />;
   }
 }

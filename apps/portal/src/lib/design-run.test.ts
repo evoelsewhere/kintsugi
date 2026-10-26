@@ -162,3 +162,16 @@ describe("regenerating a design that exists (ADR-0081)", () => {
     expect(generateBlocker({ set: "basic", count: 1, disabled: undefined, regenerate: true })).toBeUndefined();
   });
 });
+
+it("requires explicit draft mode for incomplete input evidence in both generation and regeneration", () => {
+  const incomplete = unit("a/x", { basic: summary("basic", { ready: false, blockers: ["Resolve GAP-M101-0001 first"] }) });
+  expect(eligibility(incomplete, BASIC, [])).toEqual({ ok: false, reason: "Resolve GAP-M101-0001 first" });
+  expect(eligibility(incomplete, BASIC, [], true)).toEqual({ ok: true });
+  expect(selectable([incomplete], BASIC, [], "generate", true)).toEqual(["a/x"]);
+  const written = unit("a/x", { basic: summary("basic", { ready: false, state: "problems", files: { total: 1, conformant: 0, problems: 1, missing: 0, stale: 0, waived: 0 }, blockers: ["Needs current understanding"] }) });
+  expect(regenerability(written, BASIC, []).ok).toBe(false);
+  expect(regenerability(written, BASIC, [], true).ok).toBe(true);
+  expect(eligibility(incomplete, BASIC, [{ unit: "a/x", set: "basic", state: "running", runId: "r" }], true).ok).toBe(false);
+  incomplete.sets["basic"]!.draftAllowed = false;
+  expect(eligibility(incomplete, BASIC, [], true).ok).toBe(false);
+});

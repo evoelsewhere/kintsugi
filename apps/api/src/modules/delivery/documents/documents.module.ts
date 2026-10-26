@@ -1,10 +1,12 @@
 // Wiring of the documents module: read-only document repo access over the mirror (git CLI)
-// and the stage results built from it. Projects, runs and writes come from their modules.
+// and the stage results built from it. Bounded gap answers propose reviewed corrections through the writer.
+// Projects, runs and writes come from their modules.
 
 import { Module } from "@nestjs/common";
 import { DocumentWritesModule } from "#modules/admin/document-writes/index.js";
 import { ProjectsModule } from "#modules/admin/projects/index.js";
 import { RuntimeJobsModule } from "#modules/delivery/runtime-jobs/index.js";
+import { GapAnswersService } from "./application/gap-answers.service.js";
 import { DocumentsService } from "./application/documents.service.js";
 import { StageResultsService } from "./application/stage-results.service.js";
 import { DocumentRepoReader } from "./domain/document.ports.js";
@@ -15,7 +17,7 @@ import { DocumentsController } from "./interface/documents.controller.js";
 @Module({
   imports: [ProjectsModule, RuntimeJobsModule, DocumentWritesModule],
   controllers: [DocumentsController],
-  providers: [DocumentsService, StageResultsService, { provide: DocumentRepoReader, useClass: GitMirrorDocumentReader }],
+  providers: [GapAnswersService, DocumentsService, StageResultsService, { provide: DocumentRepoReader, useClass: GitMirrorDocumentReader }],
   exports: [DocumentsService, StageResultsService],
 })
 export class DocumentsModule {}

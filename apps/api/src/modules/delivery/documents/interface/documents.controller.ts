@@ -1,9 +1,15 @@
 // Interface layer: read-only document repo content from Kintsugi's mirror (ADR-0025, ADR-0028)
 // and the results of a stage built from it. A session is enough (no permission): the documents
 // are what the project shares; restricted records are never committed and never served here.
+// The bounded answer route needs documents.resolve and proposes its correction through the writer.
 
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
+import type { DocumentWriteRecord } from "#modules/admin/document-writes/index.js";
+import { GapAnswersService } from "../application/gap-answers.service.js";
+import type { GapAnswer } from "../domain/gap-answer.js";
+import { gapAnswerSchema } from "./document.dto.js";
 import { DocumentsService } from "../application/documents.service.js";
 import { StageResultsService } from "../application/stage-results.service.js";
 import type { DocumentFile, DocumentRefs, DocumentTree, StageHeadline, StageResults } from "../domain/document.js";
@@ -15,7 +21,16 @@ export class DocumentsController {
   constructor(
     private readonly documents: DocumentsService,
     private readonly results: StageResultsService,
+    private readonly gaps: GapAnswersService,
   ) {}
+
+  @Post("applications/:appId/understand/gaps/answer")
+  @RequirePermission("documents.resolve")
+  @HttpCode(202)
+  @ApiOperation({ summary: "Propose an answer in the original specification row; effective after its PR is merged" })
+  answer(@Param("id") id: string, @Param("appId") appId: string, @Body({ schema: gapAnswerSchema }) body: GapAnswer, @CurrentActor() actor: Actor): Promise<DocumentWriteRecord> {
+    return this.gaps.propose(id, appId, body, actor);
+  }
 
   @Get("documents/refs")
   @ApiOperation({ summary: "Refs of the document repo: the default branch tip and the outputs of recent successful runs and writes (merged or open)" })

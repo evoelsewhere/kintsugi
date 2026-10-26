@@ -18,6 +18,8 @@ import {
   type DesignSetSource,
   type ResolvedDesignFile,
   checkDesignDocument,
+  designInputBlockers,
+  type ItemCatalogItem,
   designBaseFiles,
   designCoverage,
   designFilesFor,
@@ -54,10 +56,14 @@ import {
   parseRequirementsMarkdown,
   unitDesignFilePath,
   unitRulesPath,
+  unitAsIsPath,
+  unitUnderstandingPath,
+  unitRulesReviewPath,
   unitStatePath,
 } from "@kintsugi/domain";
 import { parseKintsugiYaml } from "@kintsugi/manifest";
 import { chunk } from "#common/util/async.js";
+import { CatalogService } from "#modules/delivery/catalog/index.js";
 import { type DocumentContext, DocumentsService } from "#modules/delivery/documents/index.js";
 import type {
   CommonComponentView,
@@ -209,7 +215,7 @@ export class DesignService {
   private readonly projectSets = new Map<string, Promise<ProjectSets>>();
   private readonly scans = new Map<string, Promise<AppScan>>();
 
-  constructor(private readonly documents: DocumentsService) {}
+  constructor(private readonly documents: DocumentsService, private readonly catalog: CatalogService) {}
 
   /** The design sets of the project at a ref, with the faults of their definitions; with an application, how its units stand with each. */
   async sets(projectId: string, ref: string | undefined, applicationId: string | undefined): Promise<DesignSetsView> {
@@ -485,12 +491,24 @@ export class DesignService {
           if (keys.length < MAX_UNITS) keys.push({ module, unit });
         }
       }
+      const catalog = await this.catalog.load(context.project.id, applicationId, commit).catch((error: unknown) => {
+        if (error instanceof NotFoundException) return undefined;
+        throw error;
+      });
+      const active = new Map((catalog?.catalog.items ?? []).filter((item) => item.status === "active").map((item) => [item.id, item]));
+      const knownKeys = new Set(keys.map((key) => `${key.module}/${key.unit}`));
+      for (const item of active.values()) {
+        if (!knownKeys.has(item.id) && keys.length < MAX_UNITS) {
+          const [module, unit] = item.id.split("/") as [string, string];
+          keys.push({ module, unit });
+        }
+      }
       const shared: Omit<DesignContext, "items"> = { ruleIds: [], requirementIds, componentIds: components.map((component) => component.id) };
       // The application's own design first: a unit's design may point to the items of the sets of the application it needs.
       const application = await this.scanApplication(context, commit, applicationId, project, shared);
       const units: UnitScan[] = [];
       for (const group of chunk(keys, READS)) {
-        const scanned = await Promise.all(group.map((key) => this.scanUnit(context, commit, applicationId, key.module, key.unit, project, shared, application)));
+        const scanned = await Promise.all(group.map((key) => this.scanUnit(context, commit, applicationId, key.module, key.unit, project, shared, application, active.get(`${key.module}/${key.unit}`))));
         units.push(...scanned.filter((unit): unit is UnitScan => unit !== undefined));
       }
       return { project, application, units, components };
@@ -541,18 +559,18 @@ export class DesignService {
     }
     for (const detail of details) {
       const summary = summaries[detail.set] as UnitSetSummary;
-      const needsMet = detail.needs.every((need) => summaries[need] === undefined || finished((summaries[need] as UnitSetSummary).state));
-      summary.ready = needsMet && summary.state === "missing" && summary.files.conformant + summary.files.problems === 0;
+      summary.blockers = detail.needs.filter((need) => summaries[need] === undefined || !finished(summaries[need]!.state)).map((need) => `Needs the merged, conformant ${need} design first.`);
+      summary.ready = summary.blockers.length === 0 && summary.state === "missing" && summary.files.conformant + summary.files.problems === 0;
     }
     return { summaries, details, unresolved, componentRefs, anyStale, items };
   }
 
   /** One unit: its state file, its rules, its design documents, and what the checks say. Undefined without a unit file. */
-  private async scanUnit(context: DocumentContext, commit: string, app: string, module: string, unit: string, project: ProjectSets, shared: Omit<DesignContext, "items">, application: ApplicationScan): Promise<UnitScan | undefined> {
+  private async scanUnit(context: DocumentContext, commit: string, app: string, module: string, unit: string, project: ProjectSets, shared: Omit<DesignContext, "items">, application: ApplicationScan, catalogItem?: ItemCatalogItem): Promise<UnitScan | undefined> {
     const stateText = await this.documents.readText(context, commit, unitStatePath(app, module, unit), MAX_DESIGN_BYTES);
-    const summary = stateText === undefined ? null : parseWorkItem(stateText);
-    if (stateText === undefined || summary === null || summary.kind === undefined) return undefined;
-    const data = documentOf(stateText).data;
+    const summary = stateText === undefined ? (catalogItem === undefined ? null : { kind: catalogItem.kind, title: catalogItem.name, assignee: undefined }) : parseWorkItem(stateText);
+    if (summary === null || summary.kind === undefined) return undefined;
+    const data = documentOf(stateText ?? "").data;
     const waived = new Map<string, string>();
     for (const entry of Array.isArray(data["waived"]) ? data["waived"] : []) {
       const waiver = typeof entry === "string" ? parseDesignWaiver(entry) : undefined;
@@ -560,6 +578,12 @@ export class DesignService {
     }
     const rulesText = await this.documents.readText(context, commit, unitRulesPath(app, module, unit), MAX_RULES_BYTES);
     const rules = rulesText === undefined ? [] : ruleCardsOf(rulesText);
+    const [specification, understanding, review] = await Promise.all([
+      this.documents.readText(context, commit, unitAsIsPath(app, module, unit), MAX_DESIGN_BYTES),
+      this.documents.readText(context, commit, unitUnderstandingPath(app, module, unit), MAX_DESIGN_BYTES),
+      this.documents.readText(context, commit, unitRulesReviewPath(app, module, unit), MAX_RULES_BYTES),
+    ]);
+    const evidenceBlockers = designInputBlockers({ specification, understanding, rules: rulesText, review, catalogDigest: catalogItem?.digest });
     const kind = summary.kind;
     const applicable = project.sets.filter((loaded) => designFilesFor(loaded, kind).length > 0);
 
@@ -621,11 +645,15 @@ export class DesignService {
     }
     for (const detail of details) {
       const summary = sets[detail.set] as UnitSetSummary;
-      const needsMet = detail.needs.every((need) => {
+      summary.draftAllowed = catalogItem !== undefined;
+      summary.blockers = [...evidenceBlockers, ...detail.needs.filter((need) => {
         const target = sets[need] ?? application.summaries[need];
-        return target === undefined || finished(target.state);
-      });
-      summary.ready = needsMet && summary.state === "missing" && summary.files.conformant + summary.files.problems === 0;
+        // A unit dependency deliberately inapplicable to this kind has nothing to generate.
+        const definition = project.sets.find((loaded) => loaded.set.id === need);
+        const inapplicable = definition !== undefined && definition.set.scope !== "application" && designFilesFor(definition, kind).length === 0;
+        return !inapplicable && (target === undefined || !finished(target.state));
+      }).map((need) => `Needs the merged, conformant ${need} design first.`)];
+      summary.ready = summary.blockers.length === 0 && summary.state === "missing" && summary.files.conformant + summary.files.problems === 0;
     }
     const coverage: UnitCoverageRow[] = rules
       .map((rule) => ({ rule: rule.id, title: rule.title, coveredBy: coveredBy.get(rule.id) ?? [] }))

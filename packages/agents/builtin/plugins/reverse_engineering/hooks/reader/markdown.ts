@@ -93,11 +93,19 @@ const isDelimiter = (line: string): boolean => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{
 
 /** Every GFM table in `text`, in order: a header row, a delimiter row, then the body rows. */
 export function tablesIn(text: string): Table[] {
+  return tableRangesIn(text).map(range => range.table)
+}
+
+/** Source ranges let bounded table edits leave all surrounding Markdown untouched. */
+export function tableRangesIn(text: string): Array<{ table: Table; line: number; end: number }> {
   const lines = linesOf(text)
-  const tables: Table[] = []
+  const tables: Array<{ table: Table; line: number; end: number }> = []
+  let fenced = false
 
   for (let i = 0; i + 1 < lines.length; i++) {
     const head = lines[i] ?? ''
+    if (/^\s*(```|~~~)/.test(head)) { fenced = !fenced; continue }
+    if (fenced) continue
 
     if (!head.trim().startsWith('|') || !isDelimiter(lines[i + 1] ?? '')) {
       continue
@@ -112,7 +120,7 @@ export function tablesIn(text: string): Table[] {
       j++
     }
 
-    tables.push({ header, rows })
+    tables.push({ table: { header, rows }, line: i, end: j })
     i = j - 1
   }
 

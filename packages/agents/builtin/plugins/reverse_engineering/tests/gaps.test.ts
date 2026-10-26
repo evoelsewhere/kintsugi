@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, test } from 'vitest'
 
-import { countGaps, parseGaps, parseSpecGaps } from '../hooks/reader/gaps.js'
+import { answerSpecGap, gapIsResolved, inspectSpecGaps, countGaps, parseGaps, parseSpecGaps } from '../hooks/reader/gaps.js'
 
 // The specification scripts/gaps_common.py reads in its tests (scripts/tests/fixtures/gaps/spec.md): one parser per language, one fixture.
 const SPEC = readFileSync(fileURLToPath(new URL('../scripts/tests/fixtures/gaps/spec.md', import.meta.url)), 'utf8')
@@ -53,3 +53,37 @@ describe('gaps', () => {
     expect(parseGaps('not a table')).toEqual({ gaps: [], counts: countGaps([]) })
   })
 })
+
+describe('answers in the original specification', () => {
+  const spec = '# Tax\n\n## Logic\n\nThe rate is unknown (gap: GAP-M101-0001).\n\n## Gaps and questions\n\n| ID | Kind | Question | Where | Impact |\n| --- | --- | --- | --- | --- |\n| GAP-M101-0001 | ambiguous | Which rate? | legacy/tax.cbl:4 | blocking |\n| GAP-M101-0002 | unverified | Which tests? | legacy/tax.cbl:5 | note |\n\n## Sources\n\nLeave this paragraph unchanged.\n'
+
+  test('adds answer columns in place, preserving ID, question, evidence location and surrounding sections', () => {
+    const updated = answerSpecGap(spec, 'GAP-M101-0001', 'Use 8% | round down.', 'REQ-1 reviewed by finance.', 'resolved')
+    expect(updated.split('## Gaps and questions')[0]).toBe(spec.split('## Gaps and questions')[0])
+    expect(updated.split('## Sources')[1]).toBe(spec.split('## Sources')[1])
+    expect(inspectSpecGaps(updated).problems).toEqual([])
+    const gaps = parseSpecGaps(updated)!
+    expect(gaps[0]).toMatchObject({ id: 'GAP-M101-0001', question: 'Which rate?', where: 'legacy/tax.cbl:4', answer: 'Use 8% | round down.', status: 'resolved' })
+    expect(countGaps(gaps)).toMatchObject({ total: 2, open: 1, resolved: 1 })
+    expect(gapIsResolved(parseSpecGaps(answerSpecGap(updated, 'GAP-M101-0001', 'Decision withdrawn.', 'REQ-2', 'open'))![0]!)).toBe(false)
+  })
+
+  test('refuses wrong IDs, malformed tables, placeholder answers and multiline injection', () => {
+    expect(() => answerSpecGap(spec, 'GAP-M101-0099', 'Use 8%.', 'REQ-1', 'resolved')).toThrow(/not in this specification/)
+    expect(() => answerSpecGap(spec, 'GAP-M101-0001', 'TODO', 'REQ-1', 'resolved')).toThrow(/meaningful/)
+    expect(() => answerSpecGap(spec, 'GAP-M101-0001', 'answer\n## Other', 'REQ-1', 'resolved')).toThrow(/single-line/)
+    expect(inspectSpecGaps(SPEC).problems.length).toBeGreaterThan(0)
+    expect(gapIsResolved({ status: 'resolved' })).toBe(false)
+  })
+})
+
+ test('edits the actual table even when preceding prose or fenced examples start with a pipe', () => {
+   const prelude = '| A quoted line, not a table\n\n```markdown\n| ID | Kind | Question | Where | Impact |\n| --- | --- | --- | --- | --- |\n| GAP-EXAMPLE-0001 | ambiguous | Example? | example | note |\n```\n\n'
+   const original = '# Spec\n\n## Gaps and questions\n\n' + prelude + '| ID | Kind | Question | Where | Impact |\n| --- | --- | --- | --- | --- |\n| GAP-M101-0001 | ambiguous | Rate? | legacy/tax.cbl:4 | blocking |\n'
+   // An example uses an ID that belongs to no real row; strict readiness reports it rather than discarding it.
+   expect(inspectSpecGaps(original).problems.length).toBeGreaterThan(0)
+   const withoutExampleId = original.replace('GAP-EXAMPLE-0001', 'example')
+   const changed = answerSpecGap(withoutExampleId, 'GAP-M101-0001', 'Use 8%.', 'REQ-1', 'resolved')
+   expect(changed).toContain(prelude.replace('GAP-EXAMPLE-0001', 'example'))
+   expect(parseSpecGaps(changed)![0]?.answer).toBe('Use 8%.')
+ })

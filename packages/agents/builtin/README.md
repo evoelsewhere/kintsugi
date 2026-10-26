@@ -39,7 +39,7 @@ The content is a set of **plugins** (ADR-0035), one folder each under `plugins/`
 | Plugin | Audience | What it carries |
 | --- | --- | --- |
 | `reverse_engineering` | runtime | Commands `assess` and `understand`; the agents `legacy-analyst`, `business-rules-extractor` and `security-auditor`; the workflows `extract-rules`, `harden-scan` and `portfolio-assess`; the item-catalog, rules, findings and work-item scripts; the JobOutput hook and the artifact readers. |
-| `modernize` | runtime | The command `design` and the agents `designer`, `design-reviewer` and `architecture-critic`: one design set for a selection of units, checked by the design-set scripts (`scaffold_design.py`, `check_design.py`, `check_review.py`, `validate_design_templates.py`) with their shared fixtures and the skills `design-template-contract` and `design-writing`. The later stages (implement, test, ...) are added here ([ADR-0068](../../../docs/decisions/0068-design-generation-in-the-modernize-plugin.md)). Requires `reverse_engineering`. |
+| `modernize` | both | The command `design` and the agents `designer`, `design-reviewer` and `architecture-critic`: one design set for a selection of units, checked by the design-set scripts (`scaffold_design.py`, `check_design.py`, `check_review.py`, `validate_design_templates.py`) with their shared fixtures and the skills `design-template-contract` and `design-writing`. The member command `build` implements/tests a final designed unit on the member machine; runtime `review` reads its recorded merge request ([ADR-0068](../../../docs/decisions/0068-design-generation-in-the-modernize-plugin.md)). Requires `reverse_engineering`. |
 
 Inside a plugin folder:
 
@@ -52,7 +52,7 @@ Inside a plugin folder:
 - `hooks/` (in `understand`): `job_output.py` is the server-side lifecycle check for required artifact shape (see [hooks/JOB-OUTPUT.md](plugins/reverse_engineering/hooks/JOB-OUTPUT.md)); `hooks/reader/` holds the pure TypeScript artifact parsers (exported as `@kintsugi/agents/reader`, used by the API for the portal's stage results). No plugin registration, host API, pane rendering, telemetry, or writes remain.
 - `tests/` and `*/tests/`: Vitest tests for the retained readers (`plugins/reverse_engineering/tests/`) and Python tests next to the scripts and the hook. A plugin stands alone, so a skill or script two plugins need (`mermaid-diagrams`, `mermaid_lint.py`) is copied into both and a test keeps the copies identical.
 
-Run the TypeScript tests with `pnpm --filter @kintsugi/agents test` and `pnpm --filter @kintsugi/agents typecheck`; run the Python tests with `python -m pytest -q packages/agents/builtin/plugins` from the repository root.
+Run the TypeScript tests with `pnpm --filter @kintsugi/agents test` and `pnpm --filter @kintsugi/agents typecheck`; run the Python tests in separate processes with `python -m pytest -q packages/agents/builtin/plugins/modernize` and `python -m pytest -q packages/agents/builtin/plugins/reverse_engineering` (their test module names overlap) from the repository root.
 
 ## Portal note
 
@@ -65,3 +65,11 @@ Upstream plugin preferences that remain meaningful belong to the portal, not thi
 This content is adapted from Anthropic's `code-modernization` plugin in [`anthropics/claude-plugins-official`](https://github.com/anthropics/claude-plugins-official), pinned at commit `c8874f5ad883e26428f483ffa4d537cc81489e64`. The upstream method and safety properties are preserved where they fit Kintsugi's execution model; host-specific presentation, registration, and telemetry are not. See [`NOTICE`](NOTICE), [`CHANGELOG.md`](CHANGELOG.md), and [`LICENSE`](LICENSE) for provenance, adaptation changes, and license terms.
 
 `skills/mermaid-diagrams` is the [`WH-2099/mermaid-skill`](https://github.com/WH-2099/mermaid-skill) skill (`.claude/skills/mermaid`), commit `982d903`, under the MIT License, with only its frontmatter name changed; see `skills/mermaid-diagrams/LICENSE` and `NOTICE`.
+
+## Readiness and answers
+
+Final Generate/Regenerate check current merged unit evidence, unsettled blocking gaps/rule clarifications and applicable
+prerequisite designs. An explicitly requested draft is stamped in the generated documents and does not unlock later
+work. Answers update the original specification/rule/design location through reviewed document changes; no answers
+register is added. See the [resolution guide](../../../docs/guides/resolve-gaps-and-generate-designs.md) and
+[ADR-0082](../../../docs/decisions/0082-design-readiness-drafts-and-in-place-gap-answers.md).

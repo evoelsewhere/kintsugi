@@ -506,3 +506,8 @@ def unit_key_build_dir(app, unit_key):
 
 def unit_code_review_path(app, unit_key):
     return f'{unit_key_build_dir(app, unit_key)}/review.md'
+
+
+def design_previous_path(app, unit_key, set_id, file):
+    subject = '_application' if unit_key == '@app' else unit_key
+    return f'{design_run_dir(app)}/previous/{subject}/{set_id}/{file}'

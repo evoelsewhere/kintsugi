@@ -43,6 +43,8 @@ export interface DocumentWriteFile {
   content: string;
   /** Written only when the default branch does not have the file yet. */
   createOnly?: boolean;
+  /** SHA-256 of the document the person edited, checked by the writer before committing. */
+  expectedHash?: string;
 }
 
 /** A write to enqueue: the files plus the provenance that becomes commit trailers. */

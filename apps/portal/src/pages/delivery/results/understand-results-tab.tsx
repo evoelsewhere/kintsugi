@@ -176,7 +176,7 @@ function ResultsView({
     case "understand":
       return <UnderstandResultsView results={results} compare={false} projectId={projectId} />;
     case "gaps":
-      return <GapsResultsView results={results} onOpenItem={onOpenItem} />;
+      return <GapsResultsView projectId={projectId} results={results} onOpenItem={onOpenItem} />;
     default:
       return null;
   }

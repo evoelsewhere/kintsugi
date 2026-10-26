@@ -25,6 +25,7 @@ const CONFLICT_LABEL: Record<DesignConflict["state"], string> = {
   written: "has this set already",
   unwritten: "has no design of this set to regenerate",
   needs: "lacks a set it needs",
+  "not-ready": "is not ready for a final design",
 };
 
 function SetCell({ row, set }: { row: UnitDesignRow; set: string }): React.JSX.Element {
@@ -36,6 +37,7 @@ function SetCell({ row, set }: { row: UnitDesignRow; set: string }): React.JSX.E
     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <ConformanceMark state={summary.state} detail={detail} label={summary.state === "problems" ? `${files.problems} with problems` : undefined} />
       {summary.state !== "stale" && files.stale > 0 ? <span className="text-[11px] text-[var(--ds-status-orange)]">stale</span> : null}
+      {(summary.blockers?.length ?? 0) > 0 ? <span title={summary.blockers!.join(" ")} className="text-[11px] text-[var(--ds-status-orange)]">Input needed</span> : null}
       {summary.ready ? <span className="rounded-[var(--geist-pill-radius)] bg-hover px-1.5 text-[11px] text-text-secondary">next</span> : null}
     </span>
   );
@@ -74,6 +76,7 @@ export function DesignUnitsTab({
   const { units, sets } = overview;
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [mode, setMode] = useState<SelectMode>("generate");
+  const [draft, setDraft] = useState(false);
   if (sets.length === 0) {
     return (
       <Card>
@@ -102,8 +105,8 @@ export function DesignUnitsTab({
   const chosenSet = sets.find((set) => set.id === filters.set);
   // Units picked before a refresh that cannot be generated now drop out of the selection.
   const regenerating = mode === "regenerate";
-  const chosen = stillSelectable(picked, units, chosenSet, activity, mode);
-  const ready = selectable(rows, chosenSet, activity, mode);
+  const chosen = stillSelectable(picked, units, chosenSet, activity, mode, draft);
+  const ready = selectable(rows, chosenSet, activity, mode, draft);
   const stale = staleUnits(rows, chosenSet).filter((key) => ready.includes(key));
   const blocker = generateBlocker({ set: filters.set, count: chosen.length, disabled: runDisabled, regenerate: regenerating });
   const changeMode = (next: SelectMode): void => {
@@ -126,7 +129,7 @@ export function DesignUnitsTab({
             header: "",
             className: "w-8",
             cell: (row: UnitDesignRow) => {
-              const result = (regenerating ? regenerability : eligibility)(row, chosenSet, activity);
+              const result = (regenerating ? regenerability : eligibility)(row, chosenSet, activity, draft);
               return (
                 <input
                   type="checkbox"
@@ -247,6 +250,7 @@ export function DesignUnitsTab({
                   </Button>
                 ))}
               </div>
+              <label className="flex items-center gap-2 text-[12px] text-text-secondary"><input type="checkbox" checked={draft} onChange={(event) => { setDraft(event.target.checked); setPicked(new Set()); }} />Generate as draft (allow incomplete evidence)</label>
               <p className="text-[13px] text-text tabular-nums">
                 <span className="font-medium">
                   {chosen.length} unit{chosen.length === 1 ? "" : "s"}
@@ -271,9 +275,9 @@ export function DesignUnitsTab({
               )}
               <div className="ml-auto flex items-center gap-2">
                 {blocker === undefined ? null : <span className="max-w-sm text-right text-[11px] text-text-muted">{blocker}</span>}
-                <Button size="small" variant="solid" disabled={blocker !== undefined} onClick={() => onGenerate(chosenSet.id, chosen, regenerating ? { regenerate: true } : undefined)}>
+                <Button size="small" variant="solid" disabled={blocker !== undefined} onClick={() => onGenerate(chosenSet.id, chosen, { ...(regenerating ? { regenerate: true } : {}), ...(draft ? { draft: true } : {}) })}>
                   {regenerating ? <RefreshCw className="size-3.5" /> : <Play className="size-3.5" />}
-                  {regenerating ? "Regenerate" : "Generate"} {chosenSet.title.toLowerCase()}
+                  {regenerating ? "Regenerate" : "Generate"}{draft ? " draft" : ""} {chosenSet.title.toLowerCase()}
                 </Button>
               </div>
             </div>
@@ -284,6 +288,7 @@ export function DesignUnitsTab({
                     <span className="font-mono">{conflict.unit}</span> {CONFLICT_LABEL[conflict.state]}
                     {conflict.runId === undefined ? "" : ` (run ${conflict.runId.slice(0, 8)})`}
                     {conflict.needs === undefined || conflict.needs.length === 0 ? "" : `: ${conflict.needs.join(", ")}`}
+                    {conflict.reasons?.join("; ")}
                   </li>
                 ))}
               </ul>
@@ -333,15 +338,17 @@ function ApplicationDesignCard({
   onGenerate: RequestGenerate;
   onOpen: (key: string) => void;
 }): React.JSX.Element {
+  const [draft, setDraft] = useState(false);
   const summary = overview.application.sets[set.id];
-  const result = applicationEligibility(overview, set, activity);
+  const result = applicationEligibility(overview, set, activity, draft);
   const blocker = result.ok ? runDisabled : result.reason;
-  const again = applicationRegenerability(overview, set, activity);
+  const again = applicationRegenerability(overview, set, activity, draft);
   return (
     <Card className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-text">Application design</p>
+          <label className="flex items-center gap-2 text-[12px] text-text-secondary"><input type="checkbox" checked={draft} onChange={(event) => setDraft(event.target.checked)} />Generate as draft</label>
           <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[12.5px] text-text-secondary">
             {summary === undefined ? null : <ConformanceMark state={summary.state} detail={summary.files.total > 1 ? `${summary.files.conformant + summary.files.waived}/${summary.files.total}` : undefined} />}
             <button type="button" className="text-accent hover:underline" onClick={() => onOpen(APPLICATION_UNIT_KEY)}>
@@ -351,12 +358,12 @@ function ApplicationDesignCard({
         </div>
         <div className="flex items-center gap-2">
           {blocker === undefined ? null : <span className="max-w-sm text-right text-[11px] text-text-muted">{blocker}</span>}
-          <Button size="small" variant="solid" disabled={blocker !== undefined} onClick={() => onGenerate(set.id, [APPLICATION_UNIT_KEY])}>
+          <Button size="small" variant="solid" disabled={blocker !== undefined} onClick={() => onGenerate(set.id, [APPLICATION_UNIT_KEY], draft ? { draft: true } : undefined)}>
             <Play className="size-3.5" />
-            Generate {set.title.toLowerCase()}
+            Generate{draft ? " draft" : ""} {set.title.toLowerCase()}
           </Button>
           {again.ok ? (
-            <Button size="small" variant="ghost" className="shadow-border" disabled={runDisabled !== undefined} title={runDisabled} onClick={() => onGenerate(set.id, [APPLICATION_UNIT_KEY], { regenerate: true })}>
+            <Button size="small" variant="ghost" className="shadow-border" disabled={runDisabled !== undefined} title={runDisabled} onClick={() => onGenerate(set.id, [APPLICATION_UNIT_KEY], { regenerate: true, ...(draft ? { draft: true } : {}) })}>
               <RefreshCw className="size-3.5" />
               Regenerate
             </Button>
@@ -369,6 +376,7 @@ function ApplicationDesignCard({
             <li key={conflict.unit}>
               the application {CONFLICT_LABEL[conflict.state]}
               {conflict.needs === undefined || conflict.needs.length === 0 ? "" : `: ${conflict.needs.join(", ")}`}
+                    {conflict.reasons?.join("; ")}
             </li>
           ))}
         </ul>

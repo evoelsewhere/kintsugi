@@ -72,15 +72,25 @@ def problems_of(check):
 def render(app, keys, set_id, root):
     checks = read_report(root, paths.design_report_path(app))
     reviews = read_report(root, paths.design_review_report_path(app))
-    rows, sections, totals = [], [], {'ready': 0, 'ready-with-findings': 0, 'incomplete': 0}
+    manifest = {}
+    try:
+        manifest = docmd.read_json(os.path.join(root, *paths.design_manifest_path(app).split('/')))
+    except (docmd.DataError, OSError):
+        pass
+    entries = manifest.get('units', {}) if isinstance(manifest, dict) else {}
+    rows, sections, totals = [], [], {'ready': 0, 'ready-with-findings': 0, 'incomplete': 0, 'draft': 0}
     for key in keys:
         name = f'{app}/{key}'
         check, review = checks.get(name), reviews.get(name)
-        state = state_of(check, review)
+        draft = entries.get(key, {}).get('draft') is True
+        state = 'draft' if draft else state_of(check, review)
         totals[state] += 1
         counts = (review['blockers'], review['majors'], review['minors']) if review and review.get('reviewed') else ('-', '-', '-')
         rows.append([key, (check or {}).get('kind', '-'), state, *counts])
         lines = []
+        if draft:
+            lines.append('**Draft only.** Resolve and merge the input evidence, then regenerate a final design. This design does not satisfy downstream prerequisites.')
+            lines.extend('- ' + cell(reason) for reason in entries.get(key, {}).get('blockers', []))
         if review is None or not review.get('reviewed'):
             lines.append(f'Not reviewed: {cell((review or {}).get("error") or "no review note")}.')
         findings = sorted((review or {}).get('findings', []), key=lambda f: RANK.get(f['severity'], 3))

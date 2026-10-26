@@ -2,8 +2,9 @@
 // mirror as kintsugi-bot with provenance trailers, and push them to one allowed branch with
 // fetch → rebase → retry on non-fast-forward. Never force-pushes, never runs hooks.
 
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { lstat, mkdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { GitError, runGit } from "./cli.js";
 import { type RemoteOptions, addWorktree, assertSafeRemoteUrl, fetchMirror, resolveCommit } from "./repository.js";
@@ -47,6 +48,8 @@ export function commitIdentityProblems(identity: CommitIdentity): string[] {
 export interface FileWrite {
   path: string;
   content: string | Uint8Array;
+  /** Compare-and-set for edits of an existing document (SHA-256 of its UTF-8 bytes). */
+  expectedHash?: string;
 }
 
 /** A provenance trailer, e.g. `Kintsugi-Job: <id>` (docs/reference/document-repo.md). */
@@ -140,6 +143,18 @@ export async function commitFiles(worktree: string, input: CommitInput, options:
   const paths = input.files.map((file) => assertSafeRepoPath(file.path));
   if (new Set(paths).size !== paths.length) throw new GitError("A file appears twice in one commit", null, "");
 
+  // Check every precondition before mutating any file. Idempotent queue retries may already hold the new bytes.
+  for (const file of input.files) {
+    assertSafeRepoPath(file.path);
+    await assertNoSymlink(worktree, file.path);
+    if (file.expectedHash === undefined) continue;
+    if (!/^[0-9a-f]{64}$/.test(file.expectedHash)) throw new GitError("Invalid expected document hash", null, "");
+    const current = await readFile(join(worktree, ...file.path.split("/"))).catch(() => undefined);
+    const desired = Buffer.from(file.content);
+    if (current === undefined || (createHash("sha256").update(current).digest("hex") !== file.expectedHash && !current.equals(desired))) {
+      throw new GitError(`Document ${file.path} changed since it was read; reload and propose the change again`, null, "");
+    }
+  }
   for (const file of input.files) {
     await assertNoSymlink(worktree, file.path);
     const target = join(worktree, ...file.path.split("/"));

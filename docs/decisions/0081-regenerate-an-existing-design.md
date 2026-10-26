@@ -4,6 +4,8 @@
 - Date: 2026-10-26
 - Decision register: D95
 
+Readiness, draft and answer-preservation policy is amended by [ADR-0082](0082-design-readiness-drafts-and-in-place-gap-answers.md).
+
 ## Context
 
 [ADR-0049](0049-design-sets-generated-by-the-runtime.md) generates a design set once per unit and never overwrites it: the scaffold leaves a file that exists as it is, and the API refuses a unit that has the set already. It deferred regeneration "until staleness ([ADR-0045](0045-design-templates-are-project-data.md)) needs it".

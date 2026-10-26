@@ -8,6 +8,7 @@ import {
   buildTraceability,
   bulletsIn,
   countGaps,
+  gapIsResolved,
   findingsOfTable,
   leftOutTotal,
   paragraphsIn,
@@ -16,6 +17,7 @@ import {
   parseItemCatalog,
   parseSecurityFindings,
   parseSpecGaps,
+  inspectSpecGaps,
   parseTopology,
   parseTraceSummary,
   parseUnitTrace,
@@ -309,10 +311,11 @@ export async function hardenHeadline(source: StageSource): Promise<Pick<Built, "
 
 function gapsCounts(gaps: GapsResults["gaps"]): Pick<Built, "counts" | "headline"> & { gapCounts: GapsResults["gapCounts"] } {
   const gapCounts = countGaps(gaps);
+  const open = countGaps(gaps.filter((gap) => !gapIsResolved(gap)));
   return {
     gapCounts,
-    counts: { gaps: gapCounts.total, units: gapCounts.units, blocking: gapCounts.byImpact.blocking, risk: gapCounts.byImpact.risk, note: gapCounts.byImpact.note },
-    headline: gapCounts.total === 0 ? [] : [plural(gapCounts.total, "gap"), ...(gapCounts.byImpact.blocking > 0 ? [`${gapCounts.byImpact.blocking} blocking`] : [])],
+    counts: { gaps: gapCounts.total, open: gapCounts.open, resolved: gapCounts.resolved, units: gapCounts.units, blocking: open.byImpact.blocking, risk: open.byImpact.risk, note: open.byImpact.note },
+    headline: gapCounts.total === 0 ? [] : [plural(gapCounts.open, "open gap"), ...(open.byImpact.blocking > 0 ? [`${open.byImpact.blocking} blocking`] : []), ...(gapCounts.resolved > 0 ? [`${gapCounts.resolved} resolved`] : [])],
   };
 }
 
@@ -326,6 +329,7 @@ export async function gapsResults(source: StageSource, appDir: string, item?: st
   const gaps = markdown === null ? [] : item === undefined ? parseGaps(markdown).gaps : (own ?? []);
   return {
     gaps,
+    ...(item === undefined || markdown === null ? {} : { problems: inspectSpecGaps(markdown).problems }),
     ...(item !== undefined && markdown !== null && own === null ? { noSection: true } : {}),
     ...gapsCounts(gaps),
     ...(markdown === null || item !== undefined ? {} : { document: { path: `${appDir}/GAPS.md`, markdown } }),
@@ -422,6 +426,7 @@ async function catalogOf(source: StageSource, applicationId: string): Promise<It
 
 /** What a unit's legacy folder holds that the results views read. */
 interface UnitDocuments {
+  specification: string | null;
   trace: string | null;
   rules: string | null;
   review: string | null;
@@ -436,12 +441,13 @@ async function understoodUnits(source: StageSource, applicationId: string, items
         const [module = "", unit = ""] = item.id.split("/");
         if (!UNIT_SEGMENT.test(module) || module === "restricted" || !UNIT_SEGMENT.test(unit)) return;
         if ((await source.readPath(unitUnderstandingPath(applicationId, module, unit))) === null) return;
-        const [trace, rules, review] = await Promise.all([
+        const [trace, rules, review, specification] = await Promise.all([
           source.readPath(unitTracePath(applicationId, module, unit)),
           source.readPath(unitRulesPath(applicationId, module, unit)),
           source.readPath(unitRulesReviewPath(applicationId, module, unit)),
+          source.readPath(unitAsIsPath(applicationId, module, unit)),
         ]);
-        found.set(item.id, { trace, rules, review });
+        found.set(item.id, { trace, rules, review, specification });
       }),
     );
   }
@@ -520,7 +526,10 @@ export async function understandResults(
     const unit = documents.get(item.id);
     if (unit === undefined) return [];
     const [module = "", name = ""] = item.id.split("/");
-    return [{ item, trace: unit.trace === null ? null : parseUnitTrace(unit.trace), spec: unitAsIsPath(applicationId, module, name) }];
+    const trace = unit.trace === null ? null : parseUnitTrace(unit.trace);
+    const gaps = unit.specification === null ? null : parseSpecGaps(unit.specification);
+    if (trace !== null && gaps !== null) trace.openQuestions = countGaps(gaps).open;
+    return [{ item, trace, spec: unitAsIsPath(applicationId, module, name) }];
   });
   const matrix = catalog === null || (facts.length === 0 && summary === null) ? null : buildTraceability(applicationId, facts, summary?.inputs ?? { businessRules: facts.length > 0, securityFindings: facts.length > 0 }, new Set(catalog.items.filter((item) => item.status !== "retired").map((item) => item.id)));
   const workItems = matrix === null ? new Map<string, WorkItemRef>() : await currentWorkItems(source, statusSource, applicationId, matrix.units);

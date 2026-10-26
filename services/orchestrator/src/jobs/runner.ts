@@ -183,6 +183,7 @@ export function scopeOf(inputs: Record<string, unknown>): StageScope | undefined
     files: strings(scope["files"]),
     ...(typeof scope["set"] === "string" ? { set: scope["set"] } : {}),
     ...(scope["regenerate"] === true ? { regenerate: true } : {}),
+    ...(scope["draft"] === true ? { draft: true } : {}),
     ...(typeof scope["target"] === "string" ? { target: scope["target"] } : {}),
     ...(request === undefined ? {} : { mr: request }),
   };
@@ -1328,6 +1329,7 @@ export class JobRunner {
       throw new JobFailure(hook.reason ?? "JobOutput hook blocked the output");
     }
     const files = await listFiles(ws.out);
+    if (run.kind === "stage" && run.applicationId !== undefined) STAGES[run.name]?.validateOutputs?.(run.applicationId, scopeOf(run.inputs), files.map((file) => file.path));
     const entries: ArtifactEntry[] = [];
     for (const file of files) {
       entries.push({ path: file.path, sha256: sha256(await readFile(file.full)), size: file.size, provenance: outcome.provenance.get(file.path) ?? { origin: "tool" } });

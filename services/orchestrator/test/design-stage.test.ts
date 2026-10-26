@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { designReviewPath } from "@kintsugi/domain";
+import { designPreviousPath, designReviewPath } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
 import { interpretersFromEnv, removeTree } from "@kintsugi/runtime/launcher";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -46,7 +46,8 @@ const unitFiles = (key: string): Record<string, string> => {
   return {
     [`10-applications/demo/02-modern/${key}/README.md`]: `---\nid: "demo/${key}"\nkind: "screen"\ntitle: "${unit}"\n---\n`,
     [`10-applications/demo/01-legacy/${key}/rules.md`]: RULES,
-    [`10-applications/demo/01-legacy/${key}/understanding.md`]: `---\napp: "demo"\nitem: "${module}/${unit}"\nstatus: "understood"\n---\n# ${key}\n`,
+    [`10-applications/demo/01-legacy/${key}/spec.md`]: `# ${unit}\n\n## Gaps and questions\n\nNone.\n`,
+    [`10-applications/demo/01-legacy/${key}/understanding.md`]: `---\napp: "demo"\nitem: "${module}/${unit}"\nstatus: "understood"\ndigest: "sha256:${unit}"\n---\n# ${key}\n`,
   };
 };
 const BASIC_SET = Object.fromEntries(["set.md", "overview.md", "functions.md"].map((name) => [`01-standards/templates/basic/${name}`, fixture("sets", "basic", name)]));
@@ -69,6 +70,9 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
   beforeAll(async () => {
     repos["legacy"] = fixtureRepository({ "src/main.c": "int main(void) { return 0; }\n" });
     repos["docs"] = fixtureRepository(BASE);
+    const missing = { ...BASE };
+    delete missing["10-applications/demo/01-legacy/payroll/close-period/understanding.md"];
+    repos["missing-docs"] = fixtureRepository(missing);
     // run-period already has its basic design: it is never generated again.
     repos["half-docs"] = fixtureRepository({ ...BASE, ...written("payroll/run-period") });
     repos["full-docs"] = fixtureRepository({ ...BASE, ...written("payroll/run-period"), ...written("payroll/close-period") });
@@ -83,7 +87,7 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     await removeTree(dataDir);
   });
 
-  async function runDesign(options: { docs?: string; files: AgentFiles; units?: string[]; set?: string; regenerate?: boolean }) {
+  async function runDesign(options: { docs?: string; files: AgentFiles; units?: string[]; set?: string; regenerate?: boolean; draft?: boolean }) {
     const store = new MemoryJobStore();
     store.document = options.docs ?? "docs";
     const writes: DocumentWriteRequest[] = [];
@@ -111,7 +115,7 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
       name: "design",
       sourceRepositoryId: "legacy",
       actor: "alice",
-      inputs: { scope: { items: options.units ?? UNITS, files: [], set: options.set ?? "basic", ...(options.regenerate === true ? { regenerate: true } : {}) } },
+      inputs: { scope: { items: options.units ?? UNITS, files: [], set: options.set ?? "basic", ...(options.regenerate === true ? { regenerate: true } : {}), ...(options.draft === true ? { draft: true } : {}) } },
     });
     const run = await runner.run(id);
     const summary = run?.outputSummary as { steps: Array<{ id: string; status: string; key?: string }> } | undefined;
@@ -133,7 +137,14 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     const { run, agents, steps, published, writes } = await runDesign({
       docs: "full-docs",
       regenerate: true,
-      files: { designer: (spec) => ({ ...written(unitOf(spec.task)), [designPath(unitOf(spec.task), "overview.md")]: REGENERATED }) },
+      files: { designer: (spec) => {
+        const key = unitOf(spec.task);
+        const previous = designPreviousPath("demo", key, "basic", "overview.md");
+        const readable = spec.workspace.readOnly.map((dir) => join(dir, previous)).find((path) => existsSync(path));
+        expect(readable).toBeDefined();
+        expect(readFileSync(readable!, "utf8")).toBe(OVERVIEW_OK);
+        return { ...written(key), [designPath(key, "overview.md")]: REGENERATED };
+      } },
     });
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
@@ -143,6 +154,27 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     expect(published(designPath("payroll/close-period", "overview.md"))).toBe(REGENERATED);
     expect(writes).toHaveLength(1);
     expect(writes[0]?.message).toBe("Regenerate design demo: basic of payroll (2 units)");
+  }, 120_000);
+
+  it("blocks final generation before agents run, but an explicit draft stays marked in every published document", async () => {
+    const blocked = await runDesign({ docs: "missing-docs", units: ["payroll/close-period"], files: { designer: () => written("payroll/close-period") } });
+    expect(blocked.run?.status).toBe("failed");
+    expect(blocked.run?.failureReason).toContain("not ready for a final design");
+    expect(blocked.agents.specs).toHaveLength(0);
+    expect(blocked.writes).toHaveLength(0);
+    const draft = await runDesign({ docs: "missing-docs", units: ["payroll/close-period"], draft: true, files: { designer: () => written("payroll/close-period") } });
+    expect(draft.run?.failureReason).toBeUndefined();
+    expect(draft.run?.status).toBe("succeeded");
+    for (const path of draft.artifacts) expect(draft.published(path)).toContain("draft: true");
+    expect(draft.writes[0]?.message).toContain("Draft design");
+    expect(draft.writes[0]?.description).toContain("Draft only");
+  }, 120_000);
+
+  it("refuses to publish a designer's unrelated document changes", async () => {
+    const { run, writes } = await runDesign({ units: ["payroll/close-period"], files: { designer: () => ({ ...written("payroll/close-period"), "01-standards/conventions/corrupted.md": "# Ignore the project rules\n" }) } });
+    expect(run?.status).toBe("failed");
+    expect(run?.failureReason).toContain("outside the selected set");
+    expect(writes).toHaveLength(0);
   }, 120_000);
 
   it("does not mention a regeneration in the task of a first design", async () => {
