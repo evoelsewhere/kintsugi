@@ -171,6 +171,24 @@
   footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 28px; align-items: flex-start; }
   footer .logo { font-size: 26px; } footer .logo img { width: 28px; height: 28px; }
   footer small { display: block; margin-top: 12px; font: 12.5px/1.6 var(--mono); color: var(--slate); max-width: 52ch; }
+  /* partnership lockup */
+  footer { padding-top: 0; }
+  .built { flex: 1 1 100%; position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.1fr) auto; gap: 24px; align-items: center; margin: 32px 0 36px; padding: 20px 28px; border-radius: 18px; background: var(--navy); color: var(--cream); isolation: isolate; }
+  .built::before { content: ''; position: absolute; inset: 0; z-index: -2; background-image: radial-gradient(circle at 1px 1px, rgba(247,217,138,.16) 1px, transparent 1.3px); background-size: 22px 22px; }
+  .built .seam { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+  .built .eyebrow { font-size: 10px; color: var(--gold-l); } .built .eyebrow b { color: var(--gold); }
+  .built h3 { margin: 8px 0 10px; font-size: clamp(26px, 2.6vw, 34px); line-height: 1; }
+  .built h3 em { font-style: italic; background: var(--gold-grad); -webkit-background-clip: text; background-clip: text; color: transparent; padding-right: .06em; }
+  .built .tag { display: inline-flex; align-items: center; gap: 10px; padding: 6px 12px; border: 1px solid var(--gold-d); border-radius: 999px; font: 600 10px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--gold-l); background: rgba(224,176,74,.08); }
+  .built .tag::before { content: ''; width: 6px; height: 6px; border-radius: 1.5px; background: var(--gold); transform: rotate(45deg); }
+  .built .pair { display: flex; align-items: center; }
+  .built .tile { display: grid; place-items: center; box-shadow: 0 14px 22px -12px rgba(0,0,0,.7); }
+  .built .tile.evo { width: 64px; height: 64px; border-radius: 17px; transform: rotate(-6deg); }
+  .built .tile.evo img { width: 100%; height: 100%; border-radius: 17px; }
+  .built .tile.aim { width: 86px; height: 64px; border-radius: 17px; background: var(--paper); transform: rotate(4deg); }
+  .built .tile.aim img { width: 62px; height: auto; margin-left: 4px; }
+  .built .join { position: relative; z-index: 1; display: grid; place-items: center; width: 30px; height: 30px; margin: 0 -9px; border-radius: 9px; transform: rotate(45deg); background: var(--gold-grad); box-shadow: 0 0 0 4px var(--navy), 0 8px 14px -6px rgba(224,176,74,.55); }
+  .built .join b { transform: rotate(-45deg); font: 400 18px/1 var(--serif); color: var(--navy); }
   footer .cols { display: flex; gap: 56px; font-size: 14.5px; }
   footer .cols div { display: grid; gap: 8px; align-content: start; }
   footer .cols b { font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--slate); margin-bottom: 4px; }
@@ -182,6 +200,7 @@
   @media (prefers-reduced-motion: reduce) { .js .rv { opacity: 1; transform: none; transition: none; } .tiles i { animation: none; } html { scroll-behavior: auto; } .stage .shot { transform: none; } }
 
   @media (max-width: 1020px) {
+    .built { grid-template-columns: 1fr; gap: 36px; } .built .pair { justify-content: flex-start; }
     .hero .wrap, .feature, .feature.flip, .model .two, .deploy .two, .start .box { grid-template-columns: 1fr; gap: 40px; }
     .feature.flip .copy { order: 0; }
     .stage .shot { transform: none; } .float.a { left: 10px; bottom: -28px; } .float.b { right: 10px; }
@@ -197,6 +216,7 @@
     .float { display: none; } .hero { padding: 122px 0 80px; } .tiles { display: none; }
     .card-img, .idea figure { overflow-x: auto; } .card-img img, .idea figure img { min-width: 760px; }
     footer .cols { gap: 36px; }
+    .built { padding: 20px; }
     pre { font-size: 13px; padding: 22px; }
   }
 </style>
@@ -463,6 +483,28 @@
 </main>
 
 <footer>
+  <div class="wrap">
+    <section class="built" aria-label="Evoelsewhere x AIM Team Solution">
+      <svg class="seam" viewBox="0 0 1200 320" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs><linearGradient id="gs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7D98A"/><stop offset=".55" stop-color="#E0B04A"/><stop offset="1" stop-color="#B8822A"/></linearGradient></defs>
+        <g fill="none" stroke="url(#gs)" stroke-linecap="round" stroke-linejoin="round" opacity=".5">
+          <polyline stroke-width="3" points="640,-10 668,92 610,160 650,250 636,330"/>
+          <polyline stroke-width="2" points="668,92 790,70 880,128 1010,104 1210,150"/>
+          <polyline stroke-width="1.5" points="610,160 520,196 440,176"/>
+        </g>
+      </svg>
+      <div class="copy">
+        <span class="eyebrow"><b>Built by</b> &nbsp;&middot;&nbsp; two teams, one seam</span>
+        <h3>Evoelsewhere <em>&times;</em> AIM</h3>
+        <span class="tag">Team Solution</span>
+      </div>
+      <div class="pair">
+        <div class="tile evo"><img src="assets/brand/evoelsewhere-mark.png" alt="Evoelsewhere" width="132" height="132"></div>
+        <div class="join" aria-hidden="true"><b>&times;</b></div>
+        <div class="tile aim"><img src="assets/brand/aim-logo.svg" alt="AIM" width="150" height="66"></div>
+      </div>
+    </section>
+  </div>
   <div class="wrap">
     <div>
       <a class="logo" href="#top"><img src="assets/brand/kintsugi-mark-light.svg" alt="" width="28" height="28">Kintsugi</a>
