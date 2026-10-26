@@ -232,3 +232,7 @@ make dev      # API on :3000 + worker, portal on :5173
 ```
 
 Contributors and coding agents: read [AGENTS.md](AGENTS.md) first. Architecture changes need an ADR (copy [`docs/decisions/template.md`](docs/decisions/template.md)). Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
+
+## License
+
+Kintsugi is licensed under the [Apache License 2.0](LICENSE).

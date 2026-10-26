@@ -1,6 +1,7 @@
 {
   "name": "kintsugi",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Kintsugi — AI-driven application migration & modernization portal",
   "packageManager": "pnpm@10.18.0",
   "engines": {
