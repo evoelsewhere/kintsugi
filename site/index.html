@@ -254,10 +254,6 @@
   @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links a.github-nav { display: inline-flex; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .hero .wrap { gap: 28px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
 
   .hero-tour { min-width: 0; scroll-margin-top: 110px; }
-  .tour-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-  .tour-heading .eyebrow { font-size: 11px; letter-spacing: .09em; line-height: 1.5; }
-  .tour-live { font: 11px/1.4 var(--mono); color: var(--teal); white-space: nowrap; }
-  .tour-live::before { content: ''; display: inline-block; width: 6px; height: 6px; background: var(--teal); border-radius: 50%; margin-right: 7px; }
   .hero-tour .shot { border: 1px solid var(--line); box-shadow: 0 28px 60px -28px rgba(30,42,68,.4); }
   .hero-tour img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #fafafa; }
   .tour-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px; margin: 20px 0 12px; }
@@ -268,7 +264,7 @@
   .tour-chapters { margin-top: 12px; }.tour-chapters summary { cursor: pointer; }.tour-chapters p { margin-top: 8px; }
   #tour-status:empty { display: none; }
   #tour-toggle:focus-visible { outline: 3px solid var(--gold-d); outline-offset: 4px; }
-  @media (max-width: 640px) { .tour-heading { gap: 10px; }.tour-heading .eyebrow { font-size: 10px; }.tour-live { font-size: 10px; }.tour-controls { gap: 12px; }.tour-controls a { font-size: 11px; } }
+  @media (max-width: 640px) { .tour-controls { gap: 12px; }.tour-controls a { font-size: 11px; } }
 </style>
 </head>
 <body>
@@ -314,7 +310,6 @@
       <div class="facts"><span>Self-hosted</span><span>Bring your own LLMs</span><span>Read-only on your source</span></div>
     </div>
     <figure class="hero-tour rv" id="product-tour">
-      <div class="tour-heading"><span class="eyebrow"><b>30 seconds</b> · Light theme</span><span class="tour-live">Actual dev portal</span></div>
       <div class="shot"><img id="portal-tour" src="assets/tour/portal-tour-light-poster.jpg" data-animation="assets/tour/portal-tour-light.gif" width="1280" height="720" fetchpriority="high" alt="Light-theme tour of the real Kintsugi portal: portfolio, assessment, understanding, design, build, monitoring, governance, plugins, settings and member guidelines"></div>
       <div class="tour-controls"><button id="tour-toggle" class="btn ghost" type="button" aria-controls="portal-tour" aria-pressed="false" hidden>Play tour</button><a href="assets/tour/portal-tour-light.gif" download>Download GIF ↗</a><a href="assets/screenshots/overview.jpg">View screenshot ↗</a></div>
       <figcaption>Walk through the running product, in a 30-second timelapse. Captured with AWS CardDemo development data; waiting time omitted.</figcaption>
