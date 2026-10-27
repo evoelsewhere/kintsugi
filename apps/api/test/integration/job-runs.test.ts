@@ -94,6 +94,13 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     expect(JSON.stringify(detail)).not.toContain("hu**");
     expect((await admin.get("/projects/billing/job-runs/missing")).status).toBe(404);
 
+    // A stage report in the summary (ADR-0083) belongs to the run's detail; the lists of runs leave it out.
+    await app.db.query("update workflow.job_run set output_summary = $2 where id = $1", [runId, JSON.stringify({ stage: "design", steps: [], report: { version: 1, stop: "clean", round: 2 } })]);
+    const reported = (await admin.get<RunView & { outputSummary?: Record<string, unknown> }>(`/projects/billing/job-runs/${runId}`)).body.data!;
+    expect(reported.outputSummary).toMatchObject({ stage: "design", report: { stop: "clean", round: 2 } });
+    const relisted = (await admin.get<{ items: Array<RunView & { outputSummary?: Record<string, unknown> }> }>("/projects/billing/job-runs?applicationId=web")).body.data!;
+    expect(relisted.items[0]?.outputSummary).toEqual({ stage: "design", steps: [] });
+
     // understand runs on a selection of catalog items (ADR-0033), never through the stage route; the former map, extract-rules and harden stages are parts of it.
     const understand = await admin.request("POST", "/projects/billing/applications/web/stages/understand/run");
     expect(understand.status).toBe(400);

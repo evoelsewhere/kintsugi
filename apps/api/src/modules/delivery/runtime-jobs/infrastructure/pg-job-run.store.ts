@@ -96,7 +96,14 @@ function attemptsOf(value: unknown): JobAttemptView[] {
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
-function toView(row: RunRow): JobRunView {
+/** The summary without the stage report (ADR-0083): a run's detail carries it, the lists of runs do not. */
+const summaryOf = (summary: Record<string, unknown> | null, withReport: boolean): Record<string, unknown> | null => {
+  if (summary === null || withReport || !("report" in summary)) return summary;
+  const { report: _report, ...rest } = summary;
+  return rest;
+};
+
+function toView(row: RunRow, withReport = false): JobRunView {
   return {
     id: row.id,
     projectId: row.project_id,
@@ -114,7 +121,7 @@ function toView(row: RunRow): JobRunView {
     ...optional("scriptHash", row.script_hash),
     ...optional("agent", row.agent),
     ...optional("actor", row.actor),
-    ...optional("outputSummary", row.output_summary),
+    ...optional("outputSummary", summaryOf(row.output_summary, withReport)),
     ...(row.write_id === null
       ? {}
       : {
@@ -211,7 +218,7 @@ export class PgJobRunStore extends JobRunStore {
       this.#pool.query<RunRow>(`${SELECT} where ${filter} order by r.created_at desc, r.id limit $3 offset $4`, [projectId, applicationId ?? null, limit, offset]),
       this.#pool.query<{ total: number }>(`select count(*)::int as total from workflow.job_run r where ${filter}`, [projectId, applicationId ?? null]),
     ]);
-    return { items: rows.rows.map(toView), total: count.rows[0]?.total ?? 0 };
+    return { items: rows.rows.map((row) => toView(row)), total: count.rows[0]?.total ?? 0 };
   }
 
   async listAll(filter: JobRunFilter, limit: number, offset: number): Promise<{ items: JobRunView[]; total: number }> {
@@ -222,7 +229,7 @@ export class PgJobRunStore extends JobRunStore {
       this.#pool.query<RunRow>(`${SELECT} where ${where} order by r.created_at desc, r.id limit $4 offset $5`, [...params, limit, offset]),
       this.#pool.query<{ total: number }>(`select count(*)::int as total from workflow.job_run r where ${where}`, params),
     ]);
-    return { items: rows.rows.map(toView), total: count.rows[0]?.total ?? 0 };
+    return { items: rows.rows.map((row) => toView(row)), total: count.rows[0]?.total ?? 0 };
   }
 
   async get(projectId: string, id: string): Promise<JobRunDetail | undefined> {
@@ -234,8 +241,8 @@ export class PgJobRunStore extends JobRunStore {
       this.#pool.query<ArtifactView & { size: string }>("select path, sha256, size, provenance from workflow.artifact where job_run_id = $1 order by path", [id]),
     ]);
     return {
-      ...toView(row),
-      steps: steps.rows.map(toView),
+      ...toView(row, true),
+      steps: steps.rows.map((step) => toView(step)),
       artifacts: artifacts.rows.map((artifact) => ({ path: artifact.path, sha256: artifact.sha256, size: Number(artifact.size), provenance: artifact.provenance })),
     };
   }
