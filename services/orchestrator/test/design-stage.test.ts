@@ -76,6 +76,11 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     // run-period already has its basic design: it is never generated again.
     repos["half-docs"] = fixtureRepository({ ...BASE, ...written("payroll/run-period") });
     repos["full-docs"] = fixtureRepository({ ...BASE, ...written("payroll/run-period"), ...written("payroll/close-period") });
+    // run-period calls close-period: close-period is designed first, and the two share a cluster for the contract review.
+    repos["linked-docs"] = fixtureRepository({
+      ...BASE,
+      ...catalogDocuments("demo", [{ id: "payroll", name: "Payroll" }], [{ id: UNITS[0]!, files: ["src/main.c"], dependsOn: [UNITS[1]!] }, { id: UNITS[1]!, files: ["src/main.c"] }]),
+    });
     repos["app-docs"] = fixtureRepository({ ...BASE, ...ARCH_SET, ...APP_EXTRAS });
     repos["app-done-docs"] = fixtureRepository({ ...BASE, ...ARCH_SET, ...APP_EXTRAS, [ARCH_PATH]: ARCH_OK });
     dataDir = mkdtempSync(join(tmpdir(), "kintsugi-design-data-"));
@@ -187,7 +192,7 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
     expect(steps.filter((step) => step[0] === "design-unit").map((step) => step[2]).sort()).toEqual(UNITS.slice().sort());
-    expect(steps.map((step) => step[0])).toEqual(expect.arrayContaining(["scaffold", "check", "review-unit", "check-review", "fixes", "check-final", "summary"]));
+    expect(steps.map((step) => step[0])).toEqual(expect.arrayContaining(["scaffold", "map", "check", "review-unit", "check-review", "fixes", "check-again", "coverage", "summary"]));
     expect(steps.find((step) => step[0] === "fixes")?.[1]).toBe("skipped");
     expect(agents.specs.filter((spec) => spec.agent.id === "designer")).toHaveLength(2);
 
@@ -245,9 +250,10 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
         },
       });
       expect(run?.status).toBe("succeeded");
-      expect(steps.filter((step) => step[0] === "review-unit").map((step) => step[2]).sort()).toEqual(UNITS.slice().sort());
+      // Round 1 reads both units; the blocker stays, so close-period is reviewed again in round 2, finds the same, and the loop stalls there.
+      expect(steps.filter((step) => step[0] === "review-unit").map((step) => step[2]).sort()).toEqual(["payroll/close-period", "payroll/close-period", "payroll/run-period"]);
       expect(steps.find((step) => step[0] === "check-review")?.[1]).toBe("succeeded");
-      // The check passes for both units; only the blocker of the review sends close-period to the fix round.
+      // The check passes for both units; only the blocker of the review sends close-period to the fix round, once: the second round is stalled.
       expect(steps.filter((step) => step[0] === "fix-unit")).toEqual([["fix-unit", "succeeded", "payroll/close-period"]]);
       const review = agents.specs.find((spec) => spec.agent.id === "design-reviewer" && unitOf(spec.task) === "payroll/close-period")!;
       expect(review.task).toContain("You did not write them");
@@ -264,6 +270,43 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
       expect(description).toContain("| payroll/run-period | screen | ready | 0 | 0 | 0 |");
       expect(description).toContain("| payroll/close-period | screen | ready-with-findings | 1 | 0 | 1 |");
       expect(description).toContain("RULE-004 is in the specification but no row applies it.");
+      expect(description).toContain("without improvement");
+    }, 180_000);
+
+    it("reviews a fixed unit again, and says the design was verified once a round finds nothing", async () => {
+      let fixed = false;
+      const { run, steps, writes, agents } = await runDesign({
+        files: {
+          designer: (spec) => {
+            if (spec.task.startsWith("Fix the design documents")) fixed = true;
+            return written(unitOf(spec.task));
+          },
+          "design-reviewer": (spec) => {
+            const key = unitOf(spec.task);
+            return key === "payroll/close-period" && !fixed ? note(key, ["| blocker | overview.md | Rule coverage | fidelity | RULE-004 is in the specification but no row applies it. | Add a row. |"]) : note(key);
+          },
+        },
+      });
+      expect(run?.status).toBe("succeeded");
+      // Round 2 reviews only the unit that was fixed.
+      expect(steps.filter((step) => step[0] === "review-unit").map((step) => step[2]).sort()).toEqual(["payroll/close-period", "payroll/close-period", "payroll/run-period"]);
+      expect(steps.filter((step) => step[0] === "fix-unit")).toEqual([["fix-unit", "succeeded", "payroll/close-period"]]);
+      expect(agents.specs.filter((spec) => spec.agent.id === "design-reviewer")).toHaveLength(3);
+      const description = writes[0]?.description ?? "";
+      expect(description).toContain("2 unit(s): 2 ready, 0 ready with findings, 0 incomplete.");
+      expect(description).toContain("verified after its fixes");
+      expect(description).toContain("1 finding(s) were fixed and checked again");
+    }, 180_000);
+
+    it("asks a reviewer whose note cannot be read again, and stops when it never produces one", async () => {
+      const { run, agents, writes } = await runDesign({
+        files: { designer: (spec) => written(unitOf(spec.task)), "design-reviewer": (spec) => ({ [designReviewPath("demo", unitOf(spec.task))]: "I looked and it is fine.\n" }) },
+      });
+      expect(run?.status).toBe("succeeded");
+      // Two rounds of two reviews, then the loop is stalled; nothing was fixed.
+      expect(agents.specs.filter((spec) => spec.agent.id === "design-reviewer")).toHaveLength(4);
+      expect(agents.specs.filter((spec) => spec.task.startsWith("Fix the design documents"))).toHaveLength(0);
+      expect(writes[0]?.description).toContain("Not reviewed");
     }, 180_000);
 
     it("counts a unit whose note does not parse as not reviewed, and does not fix it for that", async () => {
@@ -279,6 +322,46 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
       expect(description).toContain("0 ready, 0 ready with findings, 2 incomplete.");
       expect(description).toContain("Not reviewed: no findings table");
     }, 180_000);
+  });
+
+  describe("units that call each other (ADR-0083)", () => {
+    const head = "| Severity | Document | Section | Category | Finding | Suggestion |\n| --- | --- | --- | --- | --- | --- |\n";
+    const clean = (key: string): Record<string, string> => ({ [designReviewPath("demo", key)]: `---\nunit: "${key}"\n---\n# Review\n\n${head}` });
+
+    it("designs the callee first, reads the units together, fixes a contract finding and reviews the pair again", async () => {
+      let fixed = false;
+      const { run, agents, steps, writes } = await runDesign({
+        docs: "linked-docs",
+        files: {
+          designer: (spec) => {
+            if (spec.task.startsWith("Fix the design documents")) fixed = true;
+            return written(unitOf(spec.task));
+          },
+          "design-reviewer": (spec) => clean(unitOf(spec.task)),
+          "contract-reviewer": () => ({
+            "scratch/demo/design/contract/c1.md": `---\ncluster: "c1"\n---\n# Contract review of c1\n\n${head}${fixed ? "" : `| major | ${designPath("payroll/run-period", "functions.md")} | Functions | contract | run-period calls close-period.price(date) but close-period defines price(period). | Pass the period. |\n`}`,
+          }),
+        },
+      });
+      expect(run?.failureReason).toBeUndefined();
+      expect(run?.status).toBe("succeeded");
+      // Waves: the callee is written in round 1, the caller in round 2, so the caller's designer can read its design.
+      const writers = agents.specs.filter((spec) => spec.agent.id === "designer" && !spec.task.startsWith("Fix")).map((spec) => unitOf(spec.task));
+      expect(writers).toEqual(["payroll/close-period", "payroll/run-period"]);
+      expect(agents.specs.find((spec) => unitOf(spec.task) === "payroll/run-period")!.task).toContain("The units are designed in the order of what they call");
+      // The contract finding belongs to run-period's document: only that unit is fixed and, with its cluster, reviewed again.
+      expect(steps.filter((step) => step[0] === "fix-unit")).toEqual([["fix-unit", "succeeded", "payroll/run-period"]]);
+      expect(steps.filter((step) => step[0] === "contract-unit").map((step) => step[2])).toEqual(["c1", "c1"]);
+      expect(steps.filter((step) => step[0] === "review-unit").map((step) => step[2]).sort()).toEqual(["payroll/close-period", "payroll/run-period", "payroll/run-period"]);
+      const contract = agents.specs.find((spec) => spec.agent.id === "contract-reviewer")!;
+      expect(contract.task).toContain("Your cluster is c1");
+      expect(contract.task).toContain("scratch/demo/design/contract/c1.md");
+      const fix = agents.specs.find((spec) => spec.task.startsWith("Fix the design documents"))!;
+      expect(fix.task).toContain('source "contract"');
+      const description = writes[0]?.description ?? "";
+      expect(description).toContain("2 unit(s): 2 ready, 0 ready with findings, 0 incomplete.");
+      expect(description).toContain("verified after its fixes");
+    }, 240_000);
   });
 
   it("carries a unit that is still wrong after the fix round in the pull request instead of failing the run", async () => {

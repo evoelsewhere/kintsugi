@@ -1,20 +1,23 @@
-// The `design` stage (commands/modernize-design.md, ADR-0049): generates one design set (the project's own,
+// The `design` stage (commands/modernize-design.md, ADR-0049, ADR-0083): generates one design set (the project's own,
 // ADR-0045) for a selection of understood units, or, for a set of scope `application` (ADR-0050), for the application
 // itself (the one pseudo-unit `@app`). A run is one set × many units (inputs.scope: the unit keys and the set) and one
-// pull request that touches only the `<set>/` folders of its units on the modern side (or `_design/<set>/` of the application). The flow is the one of
-// `understand`: a script prepares, an agent job per unit does the work, a script checks it, and a second round fixes
-// what the check found; an independent reviewer reads each unit in between (ADR-0054):
+// pull request that touches only the `<set>/` folders of its units on the modern side (or `_design/<set>/` of the application).
+// A script prepares, designers write, scripts check, independent reviewers judge, and the designers fix what they found,
+// again and again until a round finds nothing (ADR-0083):
 //
 //   scaffold_design.py   per unit the skeleton of each document of the set from its template (scratch) and a manifest
-//   forEach unit         a designer job writes every document of the set at its document-repository path
+//   map_design.py        the units in the order they are designed (a callee before its caller) and the clusters of units that share interfaces
+//   repeat per wave      a designer job per unit of the wave writes every document of the set at its document-repository path
 //   check_design.py      the template's checks for every unit; the report is scratch
-//   forEach unit         a design-reviewer job reads the documents against the unit's AS-IS specification and writes its findings (scratch)
-//   check_review.py      the findings of the notes, per unit (scratch)
-//   forEach flagged unit a designer job fixes what the check named and the blockers and majors of the review (skipped when nothing was flagged)
-//   check_design.py      the result; a unit that still has problems is carried by the pull request, never a failure
+//   repeat until clean   a design-reviewer job per unit to review, a contract-reviewer job per cluster, check_review.py (the findings,
+//                        what is open, whether the loop is stalled), a designer job per unit with a blocker, a major or a failing
+//                        check, check_design.py. A round reviews again only the units the last one fixed. The loop ends when a round
+//                        finds nothing open, or when it stalls (two rounds without fewer open findings, or the same ones back), or when
+//                        the stage's agent cap is reached; a unit that is still wrong is carried by the pull request, never a failure
+//   check_coverage.py    which requirements no design of the set refers to (information)
 //   render_design_review.py  the review of the run: the description of the pull request (scratch)
 //
-// The documents are the published output; the skeletons, the manifest and the reports are intermediate. What a
+// The documents are the published output; the skeletons, the manifest, the map and the reports are intermediate. What a
 // document must contain is the project's template (01-standards/templates/<set>/), read by the agent, the scaffold and the
 // checks alike.
 
@@ -28,7 +31,11 @@ import {
   assessmentCatalogPath,
   assessmentDir,
   commonComponentsDir,
+  designContractPath,
+  designCoveragePath,
   designManifestPath,
+  designMapPath,
+  designProgressPath,
   designReportPath,
   designReviewPath,
   designReviewReportPath,
@@ -50,11 +57,17 @@ const MANIFEST = designManifestPath(APP_TOKEN);
 const REPORT = designReportPath(APP_TOKEN);
 const REVIEW_REPORT = designReviewReportPath(APP_TOKEN);
 const SUMMARY = designSummaryPath(APP_TOKEN);
+const MAP = designMapPath(APP_TOKEN);
+const PROGRESS = designProgressPath(APP_TOKEN);
+const COVERAGE = designCoveragePath(APP_TOKEN);
+const REVIEW_DIR = `${REPORT.slice(0, REPORT.lastIndexOf("/"))}/review`;
 const SET_ID = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 /** The designer agent of the `design` plugin. */
 const DESIGNER = "designer";
 /** The independent reviewer of the `design` plugin (ADR-0054). */
 const REVIEWER = "design-reviewer";
+/** The reviewer of what units owe each other: one job per cluster of units that share interfaces (ADR-0083). */
+const CONTRACT_REVIEWER = "contract-reviewer";
 /** The project's common design and standards, as every designer job reads them. */
 const COMMON = `${architectureDir()}/blueprint.md and ${commonComponentsDir()}/ (components COM-...), the requirements ${applicationRequirementsPath(APP_TOKEN)}, the application's design
   ${applicationDesignPath(APP_TOKEN)}, the project's ${standardsDir()}/ (conventions, mappings), and ${transitionDir()}/ (coexistence,
@@ -112,6 +125,12 @@ Do not silently erase an answer or turn it back into a question. If current evid
 must be reviewed in the affected section. A previous draft or an unsupported assumption is not confirmed evidence. Reapply the current template
 contract and write each complete document; never create a separate answers file.`;
 
+/** What a unit's designer is told about the units it calls: they are designed first, and their designs are the interface to meet (ADR-0083). */
+const NEIGHBOURS = `The units are designed in the order of what they call: the map ${MAP} lists, for your unit {key}, dependsOn (units of this run, designed in an
+earlier wave: their documents are under {in} at their final paths), calls and usedBy. A unit outside the run that already has a design of the set is
+merged and read-only at the same kind of path. Read the design of every unit yours calls and design each call to match the interface it offers: names,
+types, lengths, results, error codes and messages. Where it offers nothing you need, write the open question and your assumption; never invent the other side.`;
+
 const generateTask = (set: string, scope: "unit" | "application", regenerate = false): string =>
   scope === "application"
     ? `Write the design documents of the set "${set}" for application {app} as a whole.
@@ -133,6 +152,8 @@ ${UNTRUSTED}`
 ${WORKSPACE}
 
 ${READING.replaceAll("<set>", set)}
+
+${NEIGHBOURS}
 ${regenerate ? `
 ${REGENERATING}
 ` : ""}
@@ -153,7 +174,39 @@ ${(scope === "application" ? APPLICATION_READING : READING).replaceAll("<set>", 
 
 The documents under review are at the final paths above (the designer has replaced the skeletons). The check report is {in}/${REPORT}: it lists what the scripts
 already found, so do not repeat it. Report what a script cannot: behavior of the specification the design drops, a rule named but not designed, ids and
-names that disagree, anything a builder would have to guess. Write your review note with write at ${designReviewPath(APP_TOKEN, scope === "application" ? "@app" : "{key}")}, in the form your instructions give; write no other file.
+names that disagree, anything a builder would have to guess. ${scope === "application" ? "The set is for the application as a whole: add the architecture lens your instructions describe. " : ""}Write your review note with write at ${designReviewPath(APP_TOKEN, scope === "application" ? "@app" : "{key}")}, in the form your instructions give; write no other file.
+If this is not the first round, the designer has fixed earlier findings: judge the documents as they stand, in full, and report a problem that is still there in the same words.
+
+${CREDENTIALS}
+${UNTRUSTED}`;
+};
+
+interface Cluster {
+  id: string;
+  units: string[];
+  peers?: Array<{ unit: string; documents?: string[] }>;
+}
+
+/** The brief of the contract reviewer: the clusters of the run (its own is {key}) and the merged designs of the neighbours outside the run (ADR-0083). */
+const contractTask = (set: string, clusters: readonly Cluster[]): string => {
+  const describe = (cluster: Cluster): string => {
+    const units = cluster.units.map((unit) => `  - ${unit}: ${unitKeyDesignSetDir(APP_TOKEN, unit, set)}/ (written by this run; a finding names a document of one of these)`).join("\n");
+    const peers = (cluster.peers ?? []).map((peer) => `  - ${peer.unit}: ${unitKeyDesignSetDir(APP_TOKEN, peer.unit, set)}/ (already merged, read-only; ${(peer.documents ?? []).length} document(s))`).join("\n");
+    return `Cluster ${cluster.id}:\n${units}${peers === "" ? "" : `\n  Peers outside this run, already designed:\n${peers}`}`;
+  };
+  return `Review the contracts between the designs of the set "${set}" in cluster {key} of application {app}: what these units owe each other. You did not write the designs, and the reviewers of each unit have already judged each one alone.
+
+${WORKSPACE}
+
+Your cluster is {key}. The clusters of this run are:
+${clusters.map(describe).join("\n")}
+
+Under {in} (read-only), at their document-repository paths: the designs above; what each unit does and calls today in ${legacyDir(APP_TOKEN)}/<module>/<unit>/ (spec.md, topology.md, trace.md, rules.md) and the catalog
+${assessmentCatalogPath(APP_TOKEN)} with the links between the units; the common design ${COMMON}; the set's definition and templates ${designSetsDir()}/${set}/; the map ${MAP}, which lists the
+clusters and the order of the units. The check report is {in}/${REPORT} and each unit's review note is under {in}/${REVIEW_DIR}/ (a note per unit): they hold what a single unit's review found, so do not repeat it.
+Report where two designs disagree about the same interface, message, identifier or shared data, and what neither takes responsibility for. Write your contract note with write at ${designContractPath(APP_TOKEN, "{key}")},
+in the form your instructions give; each finding names the full document-repository path of the document of a unit of your cluster that has to change. Write no other file.
+If this is not the first round, designers have fixed earlier findings: judge the designs as they stand now, and report a problem that is still there in the same words.
 
 ${CREDENTIALS}
 ${UNTRUSTED}`;
@@ -161,7 +214,7 @@ ${UNTRUSTED}`;
 
 const fixTask = (set: string, scope: "unit" | "application"): string => {
   const subject = scope === "application" ? `application {app}` : `unit {key} of application {app}`;
-  return `Fix the design documents of the set "${set}" of ${subject}: a check of the documents against the project's template found problems, or an independent reviewer found blockers or majors.
+  return `Fix the design documents of the set "${set}" of ${subject}: a check of the documents against the project's template found problems, or an independent reviewer found blockers or majors (round {round} of the verify loop: the documents are reviewed again after your fix, and you may be asked again if a problem remains or a fix opens another; do not undo an earlier correction).
 
 ${WORKSPACE}
 
@@ -169,7 +222,9 @@ ${(scope === "application" ? APPLICATION_READING : READING).replaceAll("<set>", 
 
 The documents you wrote are under {in} at their final paths. The check report is {in}/${REPORT}: find the entry of {app}/{key}; per file it lists the state
 and the problems (section and message, never content). The reviewer's findings are in {in}/${REVIEW_REPORT}: find the entry of {app}/{key}; each finding names a
-document, a section, what is wrong and a suggestion. Fix the check problems and the findings of severity blocker and major, and leave the minors to the person.
+document, a section, what is wrong and a suggestion; a finding of source "contract" comes from the reviewer who read your unit together with the units it calls or
+uses, and means your document and theirs disagree: read the other unit's design under {in} and make yours meet it (the finding says which side states what). Fix the check
+problems and the findings of severity blocker and major, and leave the minors to the person.
 Change only what they name, in the documents they name, and write each of those documents again in full with write, at the same path (a file that is missing
 is written from its skeleton). ${scope === "application" ? APPLICATION_RULES : RULES}
 
@@ -211,35 +266,79 @@ async function scaffolded(ctx: StageContext): Promise<string[]> {
     .map(([key]) => key);
 }
 
-interface Report {
-  units?: Array<{ unit?: unknown; ok?: unknown; error?: unknown }>;
+/** The last review round, as `check_review.py` reports it (ADR-0083). */
+interface ReviewRound {
+  stalled?: unknown;
+  fix?: unknown;
+  rereview?: unknown;
+  unreviewedClusters?: unknown;
 }
 
-/** The units whose documents the check found faults in: those the fix round works on. */
-async function flagged(ctx: StageContext): Promise<string[]> {
-  const report = (await ctx.readJson(designReportPath(ctx.app))) as Report | undefined;
-  const prefix = `${ctx.app}/`;
-  return (report?.units ?? [])
-    .filter((entry) => entry.ok === false && entry.error === undefined && typeof entry.unit === "string" && entry.unit.startsWith(prefix))
-    .map((entry) => (entry.unit as string).slice(prefix.length));
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
+
+async function lastRound(ctx: StageContext): Promise<ReviewRound | undefined> {
+  return (await ctx.readJson(REVIEW_REPORT)) as ReviewRound | undefined;
 }
 
-interface ReviewReport {
-  units?: Array<{ unit?: unknown; reviewed?: unknown; blockers?: unknown; majors?: unknown }>;
+interface MapFile {
+  waves?: unknown;
+  clusters?: unknown;
 }
 
-/** The units the reviewer found a blocker or a major in: the fix round works on them too. */
-async function reviewFlagged(ctx: StageContext): Promise<string[]> {
-  const report = (await ctx.readJson(designReviewReportPath(ctx.app))) as ReviewReport | undefined;
-  const prefix = `${ctx.app}/`;
-  return (report?.units ?? [])
-    .filter((entry) => entry.reviewed === true && typeof entry.unit === "string" && entry.unit.startsWith(prefix) && (Number(entry.blockers) > 0 || Number(entry.majors) > 0))
-    .map((entry) => (entry.unit as string).slice(prefix.length));
+async function mapFile(ctx: StageContext): Promise<MapFile> {
+  return ((await ctx.readJson(MAP)) as MapFile | undefined) ?? {};
 }
 
-/** The units the fix round works on: the check found faults, or the review found a blocker or a major. */
+/** The clusters of units that share interfaces, from the map. */
+async function clustersOf(ctx: StageContext): Promise<Cluster[]> {
+  const listed = (await mapFile(ctx)).clusters;
+  if (!Array.isArray(listed)) return [];
+  return listed.flatMap((entry): Cluster[] => {
+    const cluster = entry as { id?: unknown; units?: unknown; peers?: unknown };
+    if (typeof cluster.id !== "string") return [];
+    const peers = (Array.isArray(cluster.peers) ? cluster.peers : []).flatMap((peer): NonNullable<Cluster["peers"]> => {
+      const found = peer as { unit?: unknown; documents?: unknown };
+      return typeof found.unit === "string" ? [{ unit: found.unit, documents: strings(found.documents) }] : [];
+    });
+    return [{ id: cluster.id, units: strings(cluster.units), peers }];
+  });
+}
+
+/** The units to write, wave by wave: a unit comes after the units it calls. A unit the map does not place is written last. */
+async function wavesOf(ctx: StageContext): Promise<string[][]> {
+  const keys = await scaffolded(ctx);
+  const known = new Set(keys);
+  const waves = (await mapFile(ctx)).waves;
+  const listed = (Array.isArray(waves) ? waves : []).map((wave) => strings(wave).filter((key) => known.has(key))).filter((wave) => wave.length > 0);
+  const placed = new Set(listed.flat());
+  const rest = keys.filter((key) => !placed.has(key));
+  return rest.length > 0 ? [...listed, rest] : listed;
+}
+
+/** The units the first review round reads, or, later, the ones the last round fixed or could not read. */
+async function toReview(ctx: StageContext): Promise<string[]> {
+  const keys = await scaffolded(ctx);
+  if (ctx.round <= 1) return keys;
+  const again = new Set(strings((await lastRound(ctx))?.rereview));
+  return keys.filter((key) => again.has(key));
+}
+
+/** The clusters to read again: one of their units was reviewed again, or their last note could not be read. */
+async function toContract(ctx: StageContext): Promise<Cluster[]> {
+  const clusters = await clustersOf(ctx);
+  if (ctx.round <= 1) return clusters;
+  const round = await lastRound(ctx);
+  const touched = new Set(strings(round?.rereview));
+  const unread = new Set(strings(round?.unreviewedClusters));
+  return clusters.filter((cluster) => unread.has(cluster.id) || cluster.units.some((unit) => touched.has(unit)));
+}
+
+/** The units the fix round works on: a blocker, a major or a failing check, unless the loop is stalled (another fix would not be reviewed). */
 async function toFix(ctx: StageContext): Promise<string[]> {
-  return [...new Set([...(await flagged(ctx)), ...(await reviewFlagged(ctx))])];
+  const round = await lastRound(ctx);
+  if (round === undefined || round.stalled === true) return [];
+  const known = new Set(await scaffolded(ctx));
+  return strings(round.fix).filter((key) => known.has(key));
 }
 
 const checkArgs = (ctx: StageContext): string[] => ["{app}", unitsOf(ctx).join(","), "--set", setOf(ctx), "--root", "{in}", "--tolerate", "--report", `{out}/${REPORT}`];
@@ -287,23 +386,44 @@ export const DESIGN: StagePlan = {
       expects: [MANIFEST],
     },
     {
-      id: "documents",
-      kind: "forEach",
-      concurrency: 4,
-      tolerateFailures: true,
-      items: async (ctx) => {
-        const keys = await scaffolded(ctx);
-        if (keys.length === 0) throw new Error("nothing to generate: every selected unit already has this set, or could not be prepared (see the scaffold step)");
-        if (ctx.agentsLeft() < keys.length * 2) throw new Error(`The design needs at least ${keys.length * 2} agent jobs for generation and independent review; select fewer units or raise the stage budget before running it.`);
-        return keys.map((key) => ({ key, item: key }));
-      },
-      step: {
-        id: "design-unit",
-        kind: "agent",
-        agent: DESIGNER,
-        task: async (ctx) => `${ctx.scope?.draft === true ? "This is an explicitly requested DRAFT. State missing evidence, unresolved gaps and assumptions by ID; never present them as confirmed facts.\n" : ""}${generateTask(setOf(ctx), (await setFacts(ctx)).scope, ctx.scope?.regenerate === true)}`,
-        documents: async (ctx) => (await setFacts(ctx)).reads,
-      },
+      id: "map",
+      kind: "script",
+      script: "map_design.py",
+      args: (ctx) => ["{app}", unitsOf(ctx).join(","), "--set", setOf(ctx), "--root", "{in}", "--out", `{out}/${MAP}`],
+      intermediate: true,
+      expects: [MAP],
+    },
+    {
+      // One round per wave: a unit is designed after the units it calls, so its designer can read their designs.
+      id: "write",
+      kind: "repeat",
+      steps: [
+        {
+          id: "documents",
+          kind: "forEach",
+          concurrency: 4,
+          tolerateFailures: true,
+          items: async (ctx) => {
+            const waves = await wavesOf(ctx);
+            if (ctx.round <= 1) {
+              const keys = waves.flat();
+              if (keys.length === 0) throw new Error("nothing to generate: every selected unit already has this set, or could not be prepared (see the scaffold step)");
+              // A writer and a reviewer per unit and a contract reviewer per cluster, at least; the verify loop spends what is left.
+              const needed = keys.length * 2 + (await clustersOf(ctx)).length;
+              if (ctx.agentsLeft() < needed) throw new Error(`The design needs at least ${needed} agent jobs for generation and independent review; select fewer units or raise the stage budget before running it.`);
+            }
+            return (waves[ctx.round - 1] ?? []).map((key) => ({ key, item: key }));
+          },
+          step: {
+            id: "design-unit",
+            kind: "agent",
+            agent: DESIGNER,
+            task: async (ctx) => `${ctx.scope?.draft === true ? "This is an explicitly requested DRAFT. State missing evidence, unresolved gaps and assumptions by ID; never present them as confirmed facts.\n" : ""}${generateTask(setOf(ctx), (await setFacts(ctx)).scope, ctx.scope?.regenerate === true)}`,
+            documents: async (ctx) => (await setFacts(ctx)).reads,
+          },
+        },
+      ],
+      until: async (ctx) => ctx.round >= (await wavesOf(ctx)).length,
     },
     {
       id: "check",
@@ -314,50 +434,78 @@ export const DESIGN: StagePlan = {
       expects: [REPORT],
     },
     {
-      id: "review",
-      kind: "forEach",
-      concurrency: 4,
-      tolerateFailures: true,
-      items: async (ctx) => (await scaffolded(ctx)).map((key) => ({ key, item: key })),
-      step: {
-        id: "review-unit",
-        kind: "agent",
-        agent: REVIEWER,
-        task: async (ctx) => reviewTask(setOf(ctx), (await setFacts(ctx)).scope),
-        documents: async (ctx) => (await setFacts(ctx)).reads,
-        intermediate: true,
+      // Until a round finds nothing open (ADR-0083). No round limit: the loop also ends when it stalls or the stage's agent cap is reached.
+      // A round reviews again only the units the last one fixed, and the clusters they belong to.
+      id: "verify",
+      kind: "repeat",
+      steps: [
+        {
+          id: "review",
+          kind: "forEach",
+          concurrency: 4,
+          tolerateFailures: true,
+          items: async (ctx) => (await toReview(ctx)).map((key) => ({ key, item: key })),
+          step: {
+            id: "review-unit",
+            kind: "agent",
+            agent: REVIEWER,
+            task: async (ctx) => reviewTask(setOf(ctx), (await setFacts(ctx)).scope),
+            documents: async (ctx) => (await setFacts(ctx)).reads,
+            intermediate: true,
+          },
+        },
+        {
+          id: "contract",
+          kind: "forEach",
+          concurrency: 4,
+          tolerateFailures: true,
+          items: async (ctx) => (await toContract(ctx)).map((cluster) => ({ key: cluster.id, item: cluster.id })),
+          step: {
+            id: "contract-unit",
+            kind: "agent",
+            agent: CONTRACT_REVIEWER,
+            task: async (ctx) => contractTask(setOf(ctx), await clustersOf(ctx)),
+            documents: async (ctx) => (await setFacts(ctx)).reads,
+            intermediate: true,
+          },
+        },
+        {
+          id: "check-review",
+          kind: "script",
+          script: "check_review.py",
+          args: async (ctx) => ["{app}", (await scaffolded(ctx)).join(","), "--root", "{in}", "--report", `{out}/${REVIEW_REPORT}`, "--design-report", REPORT, "--history-out", `{out}/${PROGRESS}`, ...(ctx.round > 1 ? ["--history", PROGRESS] : [])],
+          intermediate: true,
+          expects: [REVIEW_REPORT],
+        },
+        {
+          id: "fixes",
+          kind: "forEach",
+          concurrency: 4,
+          tolerateFailures: true,
+          when: async (ctx) => (await toFix(ctx)).length > 0,
+          items: async (ctx) => (await toFix(ctx)).map((key) => ({ key, item: key })),
+          step: {
+            id: "fix-unit",
+            kind: "agent",
+            agent: DESIGNER,
+            task: async (ctx) => fixTask(setOf(ctx), (await setFacts(ctx)).scope),
+            documents: async (ctx) => (await setFacts(ctx)).reads,
+          },
+        },
+        {
+          id: "check-again",
+          kind: "script",
+          script: "check_design.py",
+          args: checkArgs,
+          intermediate: true,
+          expects: [REPORT],
+        },
+      ],
+      // Clean (nothing open in this round's review, so nothing was fixed after it) or stalled (another fix would not be reviewed).
+      until: async (ctx) => {
+        const round = (await lastRound(ctx)) as { open?: unknown; stalled?: unknown } | undefined;
+        return round === undefined || round.open === 0 || round.stalled === true;
       },
-    },
-    {
-      id: "check-review",
-      kind: "script",
-      script: "check_review.py",
-      args: (ctx) => ["{app}", unitsOf(ctx).join(","), "--root", "{in}", "--report", `{out}/${REVIEW_REPORT}`],
-      intermediate: true,
-      expects: [REVIEW_REPORT],
-    },
-    {
-      id: "fixes",
-      kind: "forEach",
-      concurrency: 4,
-      tolerateFailures: true,
-      when: async (ctx) => (await toFix(ctx)).length > 0,
-      items: async (ctx) => (await toFix(ctx)).map((key) => ({ key, item: key })),
-      step: {
-        id: "fix-unit",
-        kind: "agent",
-        agent: DESIGNER,
-        task: async (ctx) => fixTask(setOf(ctx), (await setFacts(ctx)).scope),
-        documents: async (ctx) => (await setFacts(ctx)).reads,
-      },
-    },
-    {
-      id: "check-final",
-      kind: "script",
-      script: "check_design.py",
-      args: checkArgs,
-      intermediate: true,
-      expects: [REPORT],
     },
     {
       id: "mark-draft",
@@ -365,6 +513,14 @@ export const DESIGN: StagePlan = {
       when: (ctx) => ctx.scope?.draft === true,
       script: "mark_design_draft.py",
       args: (ctx) => ["--app", "{app}", "--set", setOf(ctx), "--units", unitsOf(ctx).join(","), "--root", "{in}", "--out", "{out}", "--manifest", `{in}/${MANIFEST}`],
+    },
+    {
+      id: "coverage",
+      kind: "script",
+      script: "check_coverage.py",
+      args: (ctx) => ["{app}", "--set", setOf(ctx), "--root", "{in}", "--report", `{out}/${COVERAGE}`],
+      intermediate: true,
+      expects: [COVERAGE],
     },
     {
       id: "summary",
