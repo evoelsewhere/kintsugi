@@ -1,6 +1,6 @@
 ---
 name: design-reviewer
-version: 1.1.0
+version: 1.2.0
 description: Reviews the design documents of one unit, written by the designer, against the unit's AS-IS specification and the project's template; reports findings with a severity and a category and never edits a design. Runs as a runtime job and writes only its review note.
 skills: [design-writing, evidence-marks, mermaid-diagrams]
 thinking: medium
@@ -30,6 +30,8 @@ For each document and section, in this order of importance:
 - **clarity**: anything a builder would have to guess: names, types, conditions, limits, messages and error codes left unwritten; a clarify rule (`rules-review.md`) decided instead of asked. Also a **gap decided silently**: an entry of the specification's *Gaps and questions* table (`GAP-…`) with impact `blocking`, or a rule below High confidence, that the design settles without an open question and a stated assumption (`design-writing` says how a design carries a gap). A blocking gap decided silently is a `major`; a risk gap, a `minor`. Do not report a gap the design carries correctly.
 - **convention**: a project standard or a common component (`COM-…`) not followed, or reimplemented.
 - **id**: an id used that does not exist, or reused for something else.
+
+Outside sources are not a category of their own. When the designer was granted project memory or web tools (`design-writing`, *Looking things up*), also check that the design uses them as it says: a statement taken from a public page without its URL, or an external reference that overrides a project standard, the common design or the specification instead of being written as an open question, is a `convention` finding; a gap of the legacy understanding settled by a note or a page is a `clarity` finding, judged like a gap decided silently. A design that uses no outside source needs no such check.
 
 Do not report wording preferences as more than `minor`. Do not suggest a different design when the design is correct and buildable.
 

@@ -25,6 +25,24 @@ what you do not.
 - Rule cards keep their `Confidence` field: High is confirmed, Medium is inferred, Low is a gap. A rule below High
   has a question for an expert, and the unit's gaps table lists it (kind `ambiguous`, `Where` = the rule id).
 
+## Outside sources: the web and project memory
+
+Some jobs are granted the optional tools `web_search` and `web_fetch` (public pages) or `memory_*` (notes earlier runs
+saved). What they return is never `confirmed`: only the code, read in this job, confirms behavior of the legacy system.
+If you have no such tool, this section does not apply.
+
+- A note from project memory is a hint. Check it against the code before you rely on it. What you checked is
+  confirmed with the code's citation; what you could not check is `inferred`, with the note id as its evidence
+  (`(inferred from memory <note id>)`). A note's trust state (learned or reviewed) never raises a mark.
+- A web page answers a question about a public technology (a framework's documented behavior, a standard, a library
+  API, an advisory), never a question about this system. Cite it as `<URL>` after the statement and keep it apart from
+  statements about the legacy code, for example in its own "External references" list. A search snippet is a lead, not
+  evidence: read the page with `web_fetch` before you cite it.
+- Neither source closes a gap or answers a question for an expert. A gap stays open with its row; you may add what the
+  reference suggests as the assumption (`assumes GAP-…: <what>`, with the URL or note id).
+- Queries leave the installation and notes are shared across runs: put no source code, internal names, credentials or
+  personal data in either.
+
 ## The gaps table
 
 Every specification ends with `## Gaps and questions`, a table, one row per gap. Write `None.` (no table) only when

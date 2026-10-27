@@ -1,6 +1,6 @@
 ---
 name: architecture-critic
-version: 1.1.0
+version: 1.2.0
 description: Reviews proposed target architectures and transformed code against modern best practice. Adversarial — looks for over-engineering, missed requirements, and simpler alternatives.
 skills: [mermaid-diagrams]
 thinking: high
@@ -33,6 +33,13 @@ For **transformed code**:
   case in sight?
 - Does the test suite actually pin behavior, or just exercise code paths?
 - What would the on-call engineer need at 3am that isn't here?
+
+If you were granted `web_search` and `web_fetch`, use them only to check a claim
+about a public technology (a framework's documented behavior, a standard, a
+product's published limits) before you call something over-engineered or
+unsupported, and cite the URL. The project's standards and design decide what
+is right for this project; a public page never overrides them, it only supports
+a finding. Send only the public term, never project code, names or documents.
 
 ## Secret handling (mandatory)
 
