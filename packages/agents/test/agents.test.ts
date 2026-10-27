@@ -161,10 +161,10 @@ describe("validation and the job definition", () => {
 });
 
 describe("built-in catalog", () => {
-  it("ships eight runtime agents and no member agent", async () => {
+  it("ships nine runtime agents and no member agent", async () => {
     const catalog = await loadBuiltinCatalog();
     const byAudience = (audience: string) => catalog.agents.filter((agent) => agent.manifest.audience === audience).map((agent) => agent.manifest.name);
-    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "code-reviewer", "design-reviewer", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
+    expect(byAudience("runtime")).toEqual(["architecture-critic", "business-rules-extractor", "code-reviewer", "contract-reviewer", "design-reviewer", "designer", "legacy-analyst", "security-auditor", "understand-planner"]);
     expect(byAudience("member")).toEqual([]);
 
     const sharedSkills = new Map(catalog.skills.map((skill) => [skill.name, skill]));
@@ -187,9 +187,9 @@ describe("built-in catalog", () => {
     const catalog = await loadBuiltinCatalog();
     const users = (skill: string): string[] => catalog.agents.filter((agent) => agent.manifest.skills.includes(skill)).map((agent) => agent.manifest.name);
     expect(catalog.skills.find((entry) => entry.name === "evidence-marks")?.content).toContain("## The gaps table");
-    expect(users("evidence-marks")).toEqual(["business-rules-extractor", "code-reviewer", "design-reviewer", "designer", "legacy-analyst"]);
+    expect(users("evidence-marks")).toEqual(["business-rules-extractor", "code-reviewer", "contract-reviewer", "design-reviewer", "designer", "legacy-analyst"]);
     expect(users("design-template-contract")).toEqual(["designer"]);
-    expect(users("design-writing")).toEqual(["design-reviewer", "designer"]);
+    expect(users("design-writing")).toEqual(["contract-reviewer", "design-reviewer", "designer"]);
     // The kinds and impacts the skill names are the ones finish_items.py checks.
     const content = catalog.skills.find((entry) => entry.name === "evidence-marks")?.content ?? "";
     for (const word of ["missing-source", "unresolved", "ambiguous", "unverified", "blocking", "risk", "note"]) expect(content).toContain(`\`${word}\``);

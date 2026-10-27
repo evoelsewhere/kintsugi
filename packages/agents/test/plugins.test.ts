@@ -22,7 +22,7 @@ describe("built-in plugins", () => {
     );
     const modernize = plugins.find((plugin) => plugin.name === "modernize")!;
     expect(modernize.components.filter((component) => component.kind === "command").map((component) => component.name)).toEqual(["design", "build", "review"]);
-    expect(modernize.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["architecture-critic", "code-reviewer", "design-reviewer", "designer"]);
+    expect(modernize.components.filter((component) => component.kind === "agent").map((component) => component.name)).toEqual(["architecture-critic", "code-reviewer", "contract-reviewer", "design-reviewer", "designer"]);
   });
 
   it("sends a member only the member part of a plugin of both (ADR-0071)", async () => {
@@ -43,7 +43,7 @@ describe("built-in plugins", () => {
 
   it("covers every agent, command and workflow exactly once", async () => {
     const plugins = await loadBuiltinPlugins();
-    for (const [kind, count] of [["agent", 8], ["command", 6], ["workflow", 3]] as const) {
+    for (const [kind, count] of [["agent", 9], ["command", 6], ["workflow", 3]] as const) {
       const all = plugins.flatMap((plugin) => plugin.components.filter((component) => component.kind === kind).map((component) => component.path));
       expect(all.length, kind).toBe(count);
       expect(new Set(all).size, kind).toBe(count);
@@ -98,7 +98,7 @@ describe("plugin flows", () => {
     expect(modernize!.flows.map((entry) => entry.command)).toEqual(["design", "build", "review"]);
     // The design command runs the design-set scripts, in the order its text names them.
     const design = flow(modernize, "design");
-    expect(design.steps.filter((step) => step.kind === "script").map((step) => step.name)).toEqual(["validate_design_templates", "scaffold_design", "check_design"]);
-    expect(design.steps.filter((step) => step.kind === "agent").map((step) => step.name)).toEqual(["designer", "design-reviewer"]);
+    expect(design.steps.filter((step) => step.kind === "script").map((step) => step.name)).toEqual(["validate_design_templates", "scaffold_design", "map_design", "check_design", "check_review", "check_coverage", "render_design_review"]);
+    expect(design.steps.filter((step) => step.kind === "agent").map((step) => step.name)).toEqual(["designer", "design-reviewer", "contract-reviewer"]);
   });
 });
