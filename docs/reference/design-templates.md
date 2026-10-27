@@ -164,7 +164,7 @@ A waiver is an entry `<set>/<file>: <reason>` in the `waived` list in the front 
 
 ## The review of a design run
 
-A design run (ADR-0049) is `scaffold_design.py`, a `designer` job per unit, `check_design.py`, a `design-reviewer` job per unit, `check_review.py`, a fix round, `check_design.py` again, and `render_design_review.py` ([ADR-0054](../decisions/0054-design-run-reviewer-and-pull-request-description.md)). The reviewer is an independent agent: it reads the documents against the unit's AS-IS specification and the template, never edits a design, and writes a note per unit in the run's scratch, a table `Severity | Document | Section | Category | Finding | Suggestion`.
+A design run (ADR-0049) is `scaffold_design.py`, `map_design.py` (the order of the units by what they call, and the clusters that share interfaces), a `designer` job per unit wave by wave, `check_design.py`, then a verify loop of `design-reviewer` jobs per unit, `contract-reviewer` jobs per cluster, `check_review.py`, a `designer` fix job per unit with something open and `check_design.py`, repeated until a round finds nothing open; then `check_coverage.py` and `render_design_review.py` ([ADR-0054](../decisions/0054-design-run-reviewer-and-pull-request-description.md), [ADR-0083](../decisions/0083-design-verify-loop-and-contracts.md)). The reviewer is an independent agent: it reads the documents against the unit's AS-IS specification and the template, never edits a design, and writes a note per unit in the run's scratch, a table `Severity | Document | Section | Category | Finding | Suggestion`.
 
 | Severity | Meaning |
 |---|---|
@@ -172,9 +172,11 @@ A design run (ADR-0049) is `scaffold_design.py`, a `designer` job per unit, `che
 | `major` | something a builder would have to guess |
 | `minor` | wording, order, detail for the person |
 
-Categories: `fidelity`, `coverage`, `consistency`, `clarity`, `convention`, `id`. A note that does not parse counts as *not reviewed*, never as clean. The fix round takes the units the check flagged and those with a blocker or a major; minors are left to the person.
+Categories: `fidelity`, `coverage`, `consistency`, `clarity`, `convention`, `id`, `contract` (units that call each other disagree), `architecture` (the skeptical lens, for sets of the application). A note that does not parse counts as *not reviewed*, never as clean: it stays open and is asked for again. A fix round takes the units the check flagged and those with a blocker or a major; minors are left to the person.
 
-The review is the description of the pull request: each unit is `ready` (the final check passes, the review found nothing), `ready-with-findings` (the check passes, the review reported findings; blockers and majors were fixed but not reviewed again) or `incomplete` (the final check fails, or not reviewed), followed by the open findings. A run takes at most `maxAgents/3` units.
+The **contract reviewer** writes one note per cluster, `scratch/<app>/design/contract/<cluster>.md`, with the same table; its `Document` cell is the full document-repository path of the document of a unit of the cluster that has to change. The loop has **no maximum number of rounds**. A round reviews again only the units the last one fixed, and the clusters they belong to. It ends when a round finds nothing open (*clean*), when `open` (blockers + majors + failing units + unreadable notes) did not fall below its lowest earlier value for two rounds in a row, or the same findings came back (*stalled*; no fix runs after a stall), or when the stage's agent cap is reached.
+
+The review is the description of the pull request. It says how the loop ended, how many findings were fixed and checked again, and gives each unit a state: `ready` (the final check passes, the last review round found nothing), `ready-with-findings` (the check passes, the last review round still reported findings: minors for the person, or blockers and majors a stalled or interrupted loop could not clear) or `incomplete` (the final check fails, or not reviewed), followed by the open findings and the requirements no design of the set refers to (`check_coverage.py`, information only). A run needs at least `2 × units + clusters` agent jobs; the loop spends the rest of the stage's agent cap.
 
 ## Checking the sets themselves
 

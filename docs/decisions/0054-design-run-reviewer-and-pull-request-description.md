@@ -1,6 +1,6 @@
 # ADR-0054: A design run is reviewed by an independent reviewer and arrives with a review as its description
 
-- Status: Accepted (amends [0049](0049-design-sets-generated-by-the-runtime.md); the first step of the design pipeline, the other roles are listed as follow-up)
+- Status: Accepted (amends [0049](0049-design-sets-generated-by-the-runtime.md); the first step of the design pipeline, the other roles are listed as follow-up). Decisions 1, 4, 5 and 6 and the alternative "A second review after the fix" are amended by [ADR-0083](0083-design-verify-loop-and-contracts.md): the fixed units are reviewed again, round after round, and a contract reviewer reads units that share interfaces.
 - Date: 2026-10-22
 - Decision register: D70
 

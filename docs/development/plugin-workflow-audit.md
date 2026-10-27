@@ -9,7 +9,7 @@ work continues on the main checkout. The findings led to [ADR-0082](../decisions
 | Path | Evidence and ownership |
 | --- | --- |
 | Assess → plan-understand → understand | The merged catalog scopes selected items; understand fans out rules, security and specification jobs; deterministic finish normalizes references and publishes specifications/traces/records through the writer. Rebuilds derive application views after the default branch moves. |
-| Design / regenerate | The API resolves a set and selected units, checks ownership and evidence, pins documents; scaffold prepares templates, designers write, checks and independent reviewers report, one fix round runs, and a reviewed document PR carries results. |
+| Design / regenerate | The API resolves a set and selected units, checks ownership and evidence, pins documents; scaffold prepares templates, a map orders the units by what they call, designers write wave by wave, checks, independent reviewers and a contract reviewer report, fix rounds repeat until a round finds nothing open or the loop stalls, and a reviewed document PR carries results (ADR-0083). |
 | Member build → runtime review | The member implements/tests in a target checkout and records application, unit and MR/commit. The API checks the selection; the worker reads the target commit without executing it, and publishes review documents. |
 | Human corrections | Answers edit their original specification rows; rule decisions use the original rule/card and existing ledger; design-origin questions are corrected in the affected design section. Portal corrections are bounded, permission-gated PR proposals. |
 
