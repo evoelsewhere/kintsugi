@@ -307,7 +307,7 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     const stages = response.body.data!;
     expect(stages).toHaveLength(6);
     expect(stages.map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design", "build", "review"]);
-    expect(stages.find((stage) => stage.id === "design")).toMatchObject({ command: "modernize-design", audience: "runtime", runnable: true, agents: ["designer", "design-reviewer"] });
+    expect(stages.find((stage) => stage.id === "design")).toMatchObject({ command: "modernize-design", audience: "runtime", runnable: true, agents: ["designer", "design-reviewer", "contract-reviewer"] });
     expect(stages.filter((stage) => stage.audience === "runtime").map((stage) => stage.id)).toEqual(["assess", "understand", "plan-understand", "design", "review"]);
     // The member stage is the command a member runs in their own harness: the runtime has no plan for it (ADR-0071).
     expect(stages.find((stage) => stage.id === "build")).toMatchObject({ command: "build", audience: "member", runnable: false, agents: [] });

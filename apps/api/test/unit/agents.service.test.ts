@@ -233,8 +233,8 @@ describe("agents service", () => {
     expect(sharedSkills.map((skill) => [skill.name, skill.source, skill.usedBy])).toEqual([
       ["code-review", "builtin", ["code-reviewer"]],
       ["design-template-contract", "builtin", ["designer"]],
-      ["design-writing", "builtin", ["design-reviewer", "designer"]],
-      ["evidence-marks", "builtin", ["business-rules-extractor", "code-reviewer", "design-reviewer", "designer", "legacy-analyst"]],
+      ["design-writing", "builtin", ["contract-reviewer", "design-reviewer", "designer"]],
+      ["evidence-marks", "builtin", ["business-rules-extractor", "code-reviewer", "contract-reviewer", "design-reviewer", "designer", "legacy-analyst"]],
       ["mermaid-diagrams", "builtin", ["architecture-critic", "business-rules-extractor", "design-reviewer", "designer", "legacy-analyst"]],
       ["understand-planning", "builtin", ["understand-planner"]],
     ]);
