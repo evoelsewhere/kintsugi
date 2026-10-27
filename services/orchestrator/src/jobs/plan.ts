@@ -151,11 +151,15 @@ export interface ForEachStep extends StepBase {
   tolerateFailures?: boolean;
 }
 
-/** Runs its steps in rounds until `until` holds after a round, at most `max` rounds. */
+/**
+ * Runs its steps in rounds until `until` holds after a round. `max` bounds the rounds; without it the loop ends when
+ * `until` holds, when the stage's agent cap leaves no job for another round, or when a round starts no agent job (a loop
+ * that does no work cannot make progress). A forEach member fans out per round: its jobs are keyed `<id>#<key>@<round>`.
+ */
 export interface RepeatStep extends StepBase {
   kind: "repeat";
-  max: number;
-  steps: ReadonlyArray<LeafStep | GateStep>;
+  max?: number;
+  steps: ReadonlyArray<LeafStep | ForEachStep | GateStep>;
   until: (ctx: StageContext) => boolean | Promise<boolean>;
 }
 

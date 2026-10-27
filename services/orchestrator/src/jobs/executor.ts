@@ -501,17 +501,28 @@ export class StagePlanExecutor {
 
   async #repeat(step: RepeatStep): Promise<void> {
     const outer = this.#round;
+    const extra: Placeholders = step.max === undefined ? {} : { maxRounds: String(step.max) };
     try {
-      for (let round = 1; round <= step.max; round++) {
+      for (let round = 1; step.max === undefined || round <= step.max; round++) {
+        if (round > 1 && this.#agentsLeft() === 0) {
+          await this.#deps.log(`step ${step.id}: stopped after ${round - 1} round(s), the stage agent cap is reached`, { step: step.id, rounds: round - 1, stopped: "agent-cap" });
+          return;
+        }
         this.#round = round;
+        const started = this.#agents;
         for (const member of step.steps) {
           this.#checkAborted();
           if (!(await this.#enabled(member))) continue;
           if (member.kind === "gate") await this.#gate(member);
-          else this.#fold((await this.#leafOrFail(member, this.#placement(member, { maxRounds: String(step.max) }), { maxRounds: String(step.max) })).contribution);
+          else if (member.kind === "forEach") await this.#forEach(member);
+          else this.#fold((await this.#leafOrFail(member, this.#placement(member, extra), extra)).contribution);
         }
         if (await step.until(this.#context())) {
           await this.#deps.log(`step ${step.id}: done after round ${round}`, { step: step.id, rounds: round });
+          return;
+        }
+        if (this.#agents === started) {
+          await this.#deps.log(`step ${step.id}: stopped after round ${round}, it started no agent job`, { step: step.id, rounds: round, stopped: "idle" });
           return;
         }
       }
