@@ -13,6 +13,12 @@
   Self-hosted · Git as the source of truth · Bring your own LLMs and coding assistants · Stack-agnostic
 </p>
 
+[![Kintsugi product walkthrough: browse legacy units, inspect business rules, explore designs and test cases, and monitor model usage](site/assets/motion/portal-motion.gif)](https://kintsugi.evoelsewhere.asia/#product-tour)
+
+<p align="center">
+  <sub>Recorded from the product in light theme with AWS CardDemo development data. <a href="https://kintsugi.evoelsewhere.asia/">Explore Kintsugi →</a></sub>
+</p>
+
 ![From legacy monolith to modular system: Kintsugi understands the legacy application, designs each unit from your templates, then a member builds and an independent reviewer reads, with gates decided by people](assets/diagrams/hero.png)
 
 ---
