@@ -235,6 +235,8 @@ const SAFE_OUTPUT_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9._/-]+$/;
 const MAX_RESTRICTED_FILES = 100;
 /** The most of a stage's description that goes into a pull request (ADR-0054). */
 const MAX_DESCRIPTION_CHARS = 60_000;
+/** The most of a stage report kept in the run's summary (ADR-0083); a larger one is left out. */
+const MAX_REPORT_CHARS = 200_000;
 const MAX_RESTRICTED_BYTES = 1024 * 1024;
 
 /** Appended to an agent's task when the output checks flagged its files: what to fix, never the offending content. */
@@ -1111,6 +1113,7 @@ export class JobRunner {
       });
       const outcome = await executor.run();
       const description = await this.#description(plan, run.applicationId, work);
+      const report = await this.#report(plan, run.applicationId, work);
       // work/ goes only when the stage succeeds: a failed job keeps it beside out/ for its next attempt
       // (same retention, cleanup.ts).
       await removeTree(work).catch(() => undefined);
@@ -1119,6 +1122,7 @@ export class JobRunner {
           ...outcome,
           attempt: ws.attempt,
           ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }),
+          ...(report === undefined ? {} : { report }),
         },
         ...(agent === undefined ? {} : { agent }),
         ...(description === undefined ? {} : { description }),
@@ -1381,6 +1385,19 @@ export class JobRunner {
     const text = await readFile(join(work, ...path.split("/")), "utf8").catch(() => undefined);
     if (text === undefined || text.trim() === "") return undefined;
     return redactText(text.length > MAX_DESCRIPTION_CHARS ? `${text.slice(0, MAX_DESCRIPTION_CHARS)}\n\n... (cut)` : text);
+  }
+
+  /** The JSON report a stage kept for the portal (ADR-0083): bounded and redacted; undefined when it wrote none or it is not valid JSON. */
+  async #report(plan: StagePlan, app: string, work: string): Promise<unknown> {
+    const path = plan.report?.(app);
+    if (path === undefined) return undefined;
+    const text = await readFile(join(work, ...path.split("/")), "utf8").catch(() => undefined);
+    if (text === undefined || text.length > MAX_REPORT_CHARS) return undefined;
+    try {
+      return JSON.parse(redactText(text)) as unknown;
+    } catch {
+      return undefined;
+    }
   }
 
   /** A top-level run's out/ goes to the document repo through the writer; returns the write id. */

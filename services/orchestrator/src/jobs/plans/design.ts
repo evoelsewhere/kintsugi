@@ -32,6 +32,7 @@ import {
   assessmentDir,
   commonComponentsDir,
   designContractPath,
+  designLoopPath,
   designCoveragePath,
   designManifestPath,
   designMapPath,
@@ -60,6 +61,7 @@ const SUMMARY = designSummaryPath(APP_TOKEN);
 const MAP = designMapPath(APP_TOKEN);
 const PROGRESS = designProgressPath(APP_TOKEN);
 const COVERAGE = designCoveragePath(APP_TOKEN);
+const LOOP = designLoopPath(APP_TOKEN);
 const REVIEW_DIR = `${REPORT.slice(0, REPORT.lastIndexOf("/"))}/review`;
 const SET_ID = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 /** The designer agent of the `design` plugin. */
@@ -359,6 +361,7 @@ export const DESIGN: StagePlan = {
   id: "design",
   message: designMessage,
   description: (app) => designSummaryPath(app),
+  report: (app) => designLoopPath(app),
   documents: [
     "kintsugi.yaml",
     `${standardsDir()}/`,
@@ -526,9 +529,9 @@ export const DESIGN: StagePlan = {
       id: "summary",
       kind: "script",
       script: "render_design_review.py",
-      args: (ctx) => ["{app}", unitsOf(ctx).join(","), "--set", setOf(ctx), "--root", "{in}", "--out", `{out}/${SUMMARY}`],
+      args: (ctx) => ["{app}", unitsOf(ctx).join(","), "--set", setOf(ctx), "--root", "{in}", "--out", `{out}/${SUMMARY}`, "--loop", `{out}/${LOOP}`],
       intermediate: true,
-      expects: [SUMMARY],
+      expects: [SUMMARY, LOOP],
     },
   ],
 };

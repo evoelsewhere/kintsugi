@@ -296,6 +296,11 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
       expect(description).toContain("2 unit(s): 2 ready, 0 ready with findings, 0 incomplete.");
       expect(description).toContain("verified after its fixes");
       expect(description).toContain("1 finding(s) were fixed and checked again");
+      // The portal reads the loop from the run's summary: two rounds, clean, the blocker fixed.
+      const report = (run?.outputSummary as { report?: { stop: string; round: number; rounds: Array<{ round: number; open: number }>; units: Array<{ unit: string; state: string; findings: Array<{ status: string; severity: string; firstRound: number; lastRound: number }> }> } }).report!;
+      expect([report.stop, report.round, report.rounds.map((entry) => entry.open)]).toEqual(["clean", 2, [1, 0]]);
+      const closed = report.units.find((unit) => unit.unit === "payroll/close-period")!;
+      expect([closed.state, closed.findings.map((finding) => [finding.status, finding.severity, finding.firstRound, finding.lastRound])]).toEqual(["ready", [["fixed", "blocker", 1, 1]]]);
     }, 180_000);
 
     it("asks a reviewer whose note cannot be read again, and stops when it never produces one", async () => {

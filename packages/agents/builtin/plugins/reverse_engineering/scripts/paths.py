@@ -308,6 +308,10 @@ def design_coverage_path(app):
     return f'{design_run_dir(app)}/coverage.json'
 
 
+def design_loop_path(app):
+    return f'{design_run_dir(app)}/loop.json'
+
+
 def understand_run_dir(app):
     return scratch_file_path(app, 'understand')
 

@@ -359,6 +359,11 @@ export function designCoveragePath(app: string): string {
   return designRunFilePath(app, "coverage.json");
 }
 
+/** The verify loop of a design run as the portal shows it: rounds, why it stopped, the status of each finding (intermediate, ADR-0083). */
+export function designLoopPath(app: string): string {
+  return designRunFilePath(app, "loop.json");
+}
+
 /** The review of the whole run, written for the pull request description (intermediate, ADR-0054). */
 export function designSummaryPath(app: string): string {
   return designRunFilePath(app, "review.md");

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write the review of a design run, the description of its pull request (ADR-0054).
 
-    python3 render_design_review.py <app> <module/unit | @app>[,...] --set SET [--root DIR] --out FILE
+    python3 render_design_review.py <app> <module/unit | @app>[,...] --set SET [--root DIR] --out FILE [--loop FILE]
 
 Reads, under --root (the stage inputs), the check report of the run (`scratch/<app>/design/report.json`, written by
 `check_design.py --report`), the findings of the last review round (`scratch/<app>/design/review-report.json`, by `check_review.py`: the
@@ -13,6 +13,9 @@ A unit is
   ready-with-findings   the final check passes and the last review round still reported findings (the minors a person reads, or
                         the blockers and majors a stalled or interrupted loop could not clear);
   incomplete            the final check does not pass, or the unit was not reviewed.
+
+With --loop it also writes the same facts as JSON for the portal (ADR-0083): the rounds, why the loop stopped, and per unit its state and
+every finding with its status (`open`, or `fixed` when an earlier round reported it and the last one did not) and the rounds it was seen in.
 
 The exit code is 0, or 2 for input that cannot be used. Standard library only.
 """
@@ -91,6 +94,77 @@ def coverage_lines(report):
     if uncovered:
         lines += ['', 'Not referred to yet: ' + ', '.join(f'`{cell(ident)}`' for ident in uncovered[:30]) + (f' and {len(uncovered) - 30} more.' if len(uncovered) > 30 else '.')]
     return lines
+
+
+MAX_LOOP_FINDINGS_PER_UNIT = 40
+MAX_UNCOVERED = 50
+
+
+def trim(value, limit):
+    return re.sub(r'\s+', ' ', str(value or '')).strip()[:limit]
+
+
+def read_manifest_units(root, app):
+    try:
+        manifest = docmd.read_json(os.path.join(root, *paths.design_manifest_path(app).split('/')))
+    except (docmd.DataError, OSError):
+        return {}
+    return manifest.get('units', {}) if isinstance(manifest, dict) and isinstance(manifest.get('units'), dict) else {}
+
+
+def stop_reason(top):
+    """clean | stalled | limit (open findings and neither a stall nor a clean round: the stage ran out of agent jobs, or was interrupted) | none (no review ran)."""
+    if not top or not isinstance(top.get('round'), int):
+        return 'none'
+    if top.get('open', 0) == 0:
+        return 'clean'
+    return 'stalled' if top.get('stalled') else 'limit'
+
+
+def loop_report(app, keys, set_id, root):
+    """The verify loop of a run as data for the portal (ADR-0083)."""
+    checks = read_report(root, paths.design_report_path(app))
+    reviews = read_report(root, paths.design_review_report_path(app))
+    top = read_top(root, paths.design_review_report_path(app))
+    coverage = read_top(root, paths.design_coverage_path(app))
+    history = [r for r in (read_top(root, paths.design_progress_path(app)).get('rounds') or []) if isinstance(r, dict) and isinstance(r.get('round'), int)]
+    entries = read_manifest_units(root, app)
+    last = top.get('round') if isinstance(top.get('round'), int) else (history[-1]['round'] if history else 0)
+    # Where each blocker or major was first and last reported, and what it said then.
+    seen = {}
+    for record in history:
+        for found in record.get('findings') or []:
+            if isinstance(found, dict) and isinstance(found.get('fingerprint'), str):
+                entry = seen.setdefault(found['fingerprint'], {'first': record['round'], 'last': record['round'], 'finding': found})
+                entry['last'] = record['round']
+    units = []
+    for key in keys:
+        name = f'{app}/{key}'
+        check, review = checks.get(name), reviews.get(name)
+        state = 'draft' if entries.get(key, {}).get('draft') is True else state_of(check, review)
+        current = [f for f in (review or {}).get('findings', []) if isinstance(f, dict)]
+        open_prints = {f.get('fingerprint') for f in current}
+        found = [{'id': f.get('fingerprint', ''), 'severity': f['severity'], 'category': f['category'], 'source': f.get('source', 'review'), 'document': f['document'], 'section': f['section'],
+                  'finding': trim(f['finding'], 400), 'suggestion': trim(f['suggestion'], 240), 'status': 'open',
+                  'firstRound': seen.get(f.get('fingerprint'), {}).get('first', last), 'lastRound': last} for f in sorted(current, key=lambda f: RANK.get(f['severity'], 3))]
+        fixed = [{'id': fp, 'severity': e['finding'].get('severity', 'major'), 'category': e['finding'].get('category', ''), 'source': e['finding'].get('source', 'review'),
+                  'document': e['finding'].get('document', ''), 'section': e['finding'].get('section', ''), 'finding': trim(e['finding'].get('finding'), 400),
+                  'suggestion': trim(e['finding'].get('suggestion'), 240), 'status': 'fixed', 'firstRound': e['first'], 'lastRound': e['last']}
+                 for fp, e in seen.items() if e['finding'].get('unit') == key and fp not in open_prints]
+        units.append({'unit': key, 'kind': (check or {}).get('kind', ''), 'state': state, 'reviewed': bool(review and review.get('reviewed')),
+                      'findings': (found + sorted(fixed, key=lambda f: (RANK.get(f['severity'], 3), f['lastRound'])))[:MAX_LOOP_FINDINGS_PER_UNIT]})
+    rounds, previous = [], 0
+    for record in history:
+        total = int(record.get('resolvedTotal') or 0)
+        rounds.append({'round': record['round'], 'open': int(record.get('open') or 0), 'fixed': len(record.get('fix') or []), 'resolved': max(0, total - previous)})
+        previous = total
+    return {
+        'version': 1, 'set': set_id, 'round': last, 'stop': stop_reason(top), 'open': int(top.get('open') or 0), 'resolvedTotal': int(top.get('resolvedTotal') or 0),
+        'rounds': rounds,
+        'clusters': [{'id': c.get('cluster'), 'units': c.get('units', []), 'reviewed': bool(c.get('reviewed'))} for c in top.get('clusters', []) if isinstance(c, dict)],
+        'coverage': {'total': int(coverage.get('total') or 0), 'covered': int(coverage.get('covered') or 0), 'uncovered': [str(i) for i in coverage.get('uncovered', [])][:MAX_UNCOVERED]} if coverage else None,
+        'units': units,
+    }
 
 
 def state_of(check, review):
@@ -174,6 +248,7 @@ def main(argv=None):
     parser.add_argument('--set', dest='set_id', required=True, metavar='SET', help='the design set of the run')
     parser.add_argument('--root', default='.', metavar='DIR', help='the stage inputs (default: the working directory)')
     parser.add_argument('--out', required=True, metavar='FILE', help='the summary to write')
+    parser.add_argument('--loop', metavar='FILE', help='also write the verify loop of the run as JSON for the portal')
     args = parser.parse_args(argv)
     if not APP.match(args.app) or not SET_ID.match(args.set_id):
         print('render_design_review.py: the application and the set must be kebab-case ids', file=sys.stderr)
@@ -188,6 +263,8 @@ def main(argv=None):
         return 2
     try:
         docmd.write_text(os.path.abspath(args.out), render(args.app, keys, args.set_id, root))
+        if args.loop is not None:
+            docmd.write_text(os.path.abspath(args.loop), json.dumps(loop_report(args.app, keys, args.set_id, root), indent=1, ensure_ascii=False))
     except (docmd.DataError, OSError) as error:
         print(f'render_design_review.py: {error}', file=sys.stderr)
         return 2

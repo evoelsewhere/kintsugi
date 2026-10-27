@@ -230,5 +230,48 @@ class Summary(Repo):
         self.assertNotIn('Requirement coverage', rr.render(APP, ['pay/run'], 'detail', self.root))
 
 
+class LoopReport(Repo):
+    """The loop as data for the portal: rounds, why it stopped, and the status of each finding."""
+
+    def finding(self, fp, unit, text, severity='major'):
+        return {'fingerprint': fp, 'unit': unit, 'severity': severity, 'category': 'clarity', 'document': 'logic.md', 'section': 'Errors', 'finding': text, 'suggestion': 'Write it.', 'source': 'review'}
+
+    def reports(self, top, review_findings, history):
+        self.put(paths.design_report_path(APP), json.dumps({'units': [{'unit': 'billing/pay/run', 'kind': 'screen', 'ok': True, 'sets': []}]}))
+        self.put(paths.design_review_report_path(APP), json.dumps({**top, 'units': [{'unit': 'billing/pay/run', 'reviewed': True, 'blockers': 0, 'majors': len(review_findings), 'minors': 0, 'findings': review_findings}]}))
+        self.put(paths.design_progress_path(APP), json.dumps({'rounds': history}))
+
+    def test_a_finding_reported_before_and_gone_now_is_fixed_and_one_that_stays_is_open(self):
+        stays = {**self.finding('aaa', 'pay/run', 'No message.'), 'status': 'open'}
+        history = [
+            {'round': 1, 'open': 2, 'fix': ['pay/run'], 'resolvedTotal': 0, 'findings': [self.finding('aaa', 'pay/run', 'No message.'), self.finding('bbb', 'pay/run', 'RULE-4 has no row.', 'blocker')]},
+            {'round': 2, 'open': 1, 'fix': ['pay/run'], 'resolvedTotal': 1, 'findings': [self.finding('aaa', 'pay/run', 'No message.')]},
+        ]
+        self.reports({'round': 2, 'open': 1, 'stalled': False, 'resolvedTotal': 1, 'clusters': []}, [stays], history)
+        report = rr.loop_report(APP, ['pay/run'], 'detail', self.root)
+        self.assertEqual((report['round'], report['stop'], report['open'], report['resolvedTotal']), (2, 'limit', 1, 1))
+        self.assertEqual(report['rounds'], [{'round': 1, 'open': 2, 'fixed': 1, 'resolved': 0}, {'round': 2, 'open': 1, 'fixed': 1, 'resolved': 1}])
+        findings = {f['id']: f for f in report['units'][0]['findings']}
+        self.assertEqual((findings['aaa']['status'], findings['aaa']['firstRound'], findings['aaa']['lastRound']), ('open', 1, 2))
+        self.assertEqual((findings['bbb']['status'], findings['bbb']['firstRound'], findings['bbb']['lastRound'], findings['bbb']['severity']), ('fixed', 1, 1, 'blocker'))
+        self.assertEqual([f['status'] for f in report['units'][0]['findings']], ['open', 'fixed'])
+
+    def test_why_the_loop_stopped(self):
+        self.assertEqual(rr.stop_reason({'round': 3, 'open': 0}), 'clean')
+        self.assertEqual(rr.stop_reason({'round': 3, 'open': 2, 'stalled': True}), 'stalled')
+        self.assertEqual(rr.stop_reason({'round': 3, 'open': 2, 'stalled': False}), 'limit')
+        self.assertEqual(rr.stop_reason({}), 'none')
+
+    def test_the_command_line_writes_the_loop_and_coverage_and_clusters(self):
+        self.reports({'round': 1, 'open': 0, 'clusters': [{'cluster': 'c1', 'units': ['pay/run', 'pay/rates'], 'reviewed': True, 'findings': []}]}, [], [{'round': 1, 'open': 0, 'fix': [], 'resolvedTotal': 0, 'findings': []}])
+        self.put(paths.design_coverage_path(APP), json.dumps({'total': 3, 'covered': 2, 'uncovered': ['REQ-9']}))
+        out, loop = os.path.join(self.root, 'review.md'), os.path.join(self.root, 'out', 'loop.json')
+        self.assertEqual(run(rr.main, [APP, 'pay/run', '--set', 'detail', '--root', self.root, '--out', out, '--loop', loop])[0], 0)
+        with open(loop, encoding='utf-8') as handle:
+            data = json.load(handle)
+        self.assertEqual((data['stop'], data['clusters'], data['coverage']), ('clean', [{'id': 'c1', 'units': ['pay/run', 'pay/rates'], 'reviewed': True}], {'total': 3, 'covered': 2, 'uncovered': ['REQ-9']}))
+        self.assertEqual(data['units'][0]['state'], 'ready')
+
+
 if __name__ == '__main__':
     unittest.main()

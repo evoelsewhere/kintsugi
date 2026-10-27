@@ -197,6 +197,11 @@ export interface StagePlan {
    * description; the runner reads it when the stage is done (ADR-0054).
    */
   description?(app: string): string;
+  /**
+   * The document-repo path (intermediate, never published) of a JSON file in the stage's work area that is kept in the run's
+   * summary as `report`, for the portal to show (ADR-0083). Bounded, redacted, and dropped when it is not valid JSON.
+   */
+  report?(app: string): string;
   /** Document-repo files (or folders, ending in "/") every step sees under {in}; missing ones are skipped. */
   documents?: readonly string[];
   /** Files that must exist on the document repo's default branch before the stage starts. */

@@ -50,6 +50,7 @@ CATEGORIES = ('fidelity', 'coverage', 'consistency', 'clarity', 'convention', 'i
 COLUMNS = ['severity', 'document', 'section', 'category', 'finding', 'suggestion']
 MAX_FINDINGS = 200
 MAX_ROUNDS_KEPT = 200
+MAX_KEPT_FINDINGS = 120
 
 
 def fingerprint(unit, finding):
@@ -205,7 +206,10 @@ def build(root, app, keys, design_report=None, history=None):
               'stalled': open_count > 0 and streak >= 2, 'streak': streak, 'resolved': resolved, 'resolvedTotal': resolved_total, 'fix': fix,
               'unreviewed': unreviewed, 'rereview': sorted(set(fix) | set(unreviewed)), 'unreviewedClusters': missing_clusters,
               'units': [units[key] for key in keys], 'clusters': clusters}
-    record = {'round': number, 'open': open_count, 'streak': streak, 'fingerprints': open_fingerprints, 'fix': fix, 'resolvedTotal': resolved_total}
+    kept = [{'fingerprint': f['fingerprint'], 'unit': key, 'severity': f['severity'], 'category': f['category'], 'document': f['document'], 'section': f['section'],
+             'finding': f['finding'][:400], 'suggestion': f['suggestion'][:240], 'source': f['source']}
+            for key in keys for f in units[key]['findings'] if f['severity'] in ('blocker', 'major')][:MAX_KEPT_FINDINGS]
+    record = {'round': number, 'open': open_count, 'streak': streak, 'fingerprints': open_fingerprints, 'fix': fix, 'resolvedTotal': resolved_total, 'findings': kept}
     return report, record, rounds
 
 
