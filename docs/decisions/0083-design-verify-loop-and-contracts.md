@@ -27,6 +27,7 @@ The design run was a straight line: scaffold, a designer per unit, a structural 
 5. **Findings have identity.** `check_review.py` gives each finding a fingerprint (unit, document, section, category and normalised wording) and keeps the rounds in a scratch history, so a finding that disappeared is counted as fixed and one that stays is recognised. The reviewers are told to repeat a remaining problem in the same words.
 6. **Coverage is reported.** `check_coverage.py` lists the requirements that no design of the set refers to, across the merged designs and the run. It is information for the pull request and never fails a run.
 7. **The pull request says how it ended.** The description gives the rounds, the reason the loop stopped (verified after its fixes, stalled, or stopped at a limit with the last fix unreviewed), the number of findings fixed, the open findings and the requirement coverage. A unit is `ready` only when the last review round found nothing for it.
+8. **The portal shows the loop.** The summary step also writes `scratch/<app>/design/loop.json` (rounds with their open counts, why the loop stopped, the clusters, the requirement coverage and, per unit, every finding with its status: `open`, or `fixed` when an earlier round reported it and the last did not, with the rounds it was seen in). The plan names it as the stage's `report`; the worker keeps it, bounded and redacted, in the run's summary (`outputSummary.report`). The API returns it with the detail of a run and leaves it out of the lists of runs. The run overview of a design run shows it as the **Verify loop**.
 
 The mechanical vocabulary of ADR-0045 is unchanged: a check that a column's ids exist in other units' designs (`refs-resolve(Column -> peers)`) is not added; the contract reviewer covers it.
 
@@ -37,7 +38,7 @@ The mechanical vocabulary of ADR-0045 is unchanged: a check that a column's ids 
 - A reviewer can be wrong, and the loop can spend rounds on a finding a person would dismiss; the stall rule and the pull request's open list are the answer, not an override.
 - The reviewers and the designer are told they may see the same unit again; a fix can open a new finding, which the next round reports.
 - The structural check and the reviewers still do not prove that the design is right; a person reviews the pull request.
-- New scratch files under `scratch/<app>/design/`: `map.json`, `contract/<cluster>.md`, `progress.json`, `coverage.json`. The plugin `modernize` becomes 5.0.0 and the plan gains `repeat` members that fan out (`RepeatStep`, without `max`).
+- New scratch files under `scratch/<app>/design/`: `map.json`, `contract/<cluster>.md`, `progress.json` (the rounds, with the blockers and majors of each), `coverage.json`, `loop.json`. The plugin `modernize` becomes 5.0.0 and the plan gains `repeat` members that fan out (`RepeatStep`, without `max`).
 
 ## Alternatives considered
 
