@@ -270,12 +270,13 @@
   @media (max-width: 1100px) { .doc-grid { grid-template-columns: 1fr 1fr; } .community-grid, .image-install { grid-template-columns: 1fr; gap: 32px; } }
   @media (max-width: 640px) { .doc-grid { grid-template-columns: 1fr; } nav.links { gap: 12px; } nav.links a.github-nav { display: inline-flex; } header.nav .wrap { width: calc(100% - 24px); padding-left: 12px; } .logo { font-size: 23px; gap: 7px; } .logo img { width: 25px; } nav.links .btn { font-size: 12px; padding: 10px; } .image-install pre { padding: 20px 14px; font-size: 10px; } }
 
-  .hero-tour { min-width: 0; max-width: 1080px; margin: 48px auto 0; padding: 8px; border: 1px solid var(--line); border-radius: 24px; background: var(--paper); box-shadow: 0 34px 70px -40px rgba(30,42,68,.4); scroll-margin-top: 96px; }
-  .hero-tour .shot { border: 1px solid var(--line); border-radius: 16px; box-shadow: none; }
-  .hero-tour video { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; object-fit: contain; background: var(--cream); }
-  .hero-tour video:focus-visible { outline: 3px solid var(--gold-d); outline-offset: -3px; }
+  .hero-tour { min-width: 0; max-width: 1080px; margin: 48px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); box-shadow: 0 34px 70px -40px rgba(30,42,68,.4); scroll-margin-top: 96px; }
+  .hero-tour .shot { border: 0; border-radius: 0; box-shadow: none; }
+  .motion-toggle { display: block; cursor: pointer; }
+  .hero-tour img { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; object-fit: contain; background: var(--cream); }
+  .motion-toggle:focus-visible { outline: 3px solid var(--gold-d); outline-offset: -3px; }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-  @media (max-width: 640px) { .hero h1 { font-size: clamp(40px, 9vw, 54px); }.hero .cta { margin-top: 24px; }.hero .facts { gap: 8px 16px; font-size: 10px; }.hero-tour { margin-top: 32px; padding: 4px; border-radius: 16px; }.hero-tour .shot { border-radius: 12px; } }
+  @media (max-width: 640px) { .hero h1 { font-size: clamp(40px, 9vw, 54px); }.hero .cta { margin-top: 24px; }.hero .facts { gap: 8px 16px; font-size: 10px; }.hero-tour { margin-top: 32px; border-radius: 16px; } }
 </style>
 </head>
 <body>
@@ -320,8 +321,8 @@
       <div class="facts"><span>Self-hosted</span><span>Bring your own LLMs</span><span>Read-only on your source</span></div>
     </div>
     <figure class="hero-tour rv" id="product-tour">
-      <div class="shot"><video id="portal-motion" controls muted loop playsinline preload="metadata" width="1280" height="800" poster="assets/motion/portal-motion-poster.jpg?v=fixed-frame" aria-label="Kintsugi in action: a recording of real product interactions" aria-describedby="product-motion-description"><source src="assets/motion/portal-motion.mp4?v=fixed-frame" type="video/mp4"><track kind="captions" src="assets/motion/portal-motion.vtt" srclang="en" label="English"><a href="assets/motion/portal-motion.mp4">Watch Kintsugi in action</a></video></div>
-      <figcaption id="product-motion-description" class="sr-only">Browse legacy units, inspect business rules, explore unit designs and test cases, and monitor model usage. Recorded in light theme with CardDemo development data.</figcaption>
+      <div class="shot"><a id="motion-toggle" class="motion-toggle" href="assets/motion/portal-motion.gif?v=single-border" aria-label="Open product animation" aria-describedby="product-motion-description"><img id="portal-motion" src="assets/motion/portal-motion-poster.jpg?v=single-border" data-animation="assets/motion/portal-motion.gif?v=single-border" width="1080" height="675" fetchpriority="high" alt="Kintsugi in action: recorded scrolling, filtering, business rules, unit designs, test cases and telemetry"></a></div>
+      <figcaption id="product-motion-description" class="sr-only">Recorded in light theme with CardDemo development data. Activate the animation to pause or play it. The walkthrough shows legacy units, business rules, design standards, connected tests and model usage.</figcaption>
     </figure>
   </div>
 </section>

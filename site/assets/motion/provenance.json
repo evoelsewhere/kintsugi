@@ -3,7 +3,7 @@
   "theme": "light",
   "application": "AWS CardDemo development data",
   "captureMethod": "Continuous browser viewport recordings of real navigation, typing, tabs and scrolling",
-  "edit": "Fixed full viewport; small cursor and subtle click pulses at recorded targets, captions and crossfades; no zoom, pan or crop",
+  "edit": "Fixed full viewport without an inset border; small cursor and subtle click pulses at recorded targets, captions and crossfades; no zoom, pan or crop",
   "durationSeconds": 17.567,
   "outputFps": 30,
   "scenes": [
@@ -47,5 +47,11 @@
       "clicks": 1,
       "at": 13.933
     }
-  ]
+  ],
+  "gif": {
+    "source": "portal-motion.mp4",
+    "fps": 15,
+    "width": 1080,
+    "paletteColors": 128
+  }
 }

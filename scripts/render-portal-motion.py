@@ -76,21 +76,18 @@ def render_frame(data, folder, t, number, title):
     ui = Image.alpha_composite(ui, overlay).convert("RGB")
     # Keep the entire recorded viewport fixed; all UI movement comes from the
     # real interactions, without a camera zoom, pan or crop.
-    ui = ui.resize((1200, 675), Image.Resampling.LANCZOS)
     canvas = Image.new("RGB", (1280, 800), "#f7f2e6")
     d = ImageDraw.Draw(canvas)
-    d.rounded_rectangle((37, 17, 1243, 698), radius=18, fill="#ded5c0")
-    mask = Image.new("L", ui.size)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, 1199, 674), radius=15, fill=255)
-    canvas.paste(ui, (40, 20), mask)
+    # The website supplies the single outer border. Footage has no inset frame.
+    canvas.paste(ui, (0, 0))
     entrance = min(1, t/.35)
     offset = round(12*(1-entrance)**2)
-    d.text((42, 725+offset), f"0{number+1}", font=font(21, True), fill="#b8822a")
-    d.text((92, 716+offset), title, font=font(29, True), fill="#1e2a44")
-    d.text((1127, 729), "Kintsugi", font=font(17), fill="#5b6781")
+    d.text((32, 746+offset), f"0{number+1}", font=font(21, True), fill="#b8822a")
+    d.text((82, 737+offset), title, font=font(29, True), fill="#1e2a44")
+    d.text((1137, 750), "Kintsugi", font=font(17), fill="#5b6781")
     progress = (number + min(1, t / (data["durationMs"]/1000))) / len(SCENES)
-    d.line((40, 779, 1240, 779), fill="#ded5c0", width=2)
-    d.line((40, 779, 40+1200*progress, 779), fill="#b8822a", width=2)
+    d.line((32, 789, 1248, 789), fill="#ded5c0", width=2)
+    d.line((32, 789, 32+1216*progress, 789), fill="#b8822a", width=2)
     return canvas
 
 
@@ -132,6 +129,15 @@ subprocess.run([
     "-movflags", "+faststart", str(destination / "portal-motion.mp4"),
 ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+# Export the same fixed-frame footage for the landing-page GIF.
+subprocess.run([
+    ffmpeg, "-y", "-i", str(destination / "portal-motion.mp4"), "-filter_complex",
+    "[0:v]fps=15,scale=1080:-1:flags=lanczos,split[a][b];"
+    "[a]palettegen=max_colors=128:stats_mode=diff[p];"
+    "[b][p]paletteuse=dither=none:diff_mode=rectangle",
+    "-loop", "0", str(destination / "portal-motion.gif"),
+], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 
 def timestamp(seconds):
     ms = round(seconds*1000)
@@ -149,8 +155,9 @@ for number, record in enumerate(records):
 (destination / "provenance.json").write_text(json.dumps({
     "source": "https://kintsugi.fhmq9.cloud", "theme": "light", "application": "AWS CardDemo development data",
     "captureMethod": "Continuous browser viewport recordings of real navigation, typing, tabs and scrolling",
-    "edit": "Fixed full viewport; small cursor and subtle click pulses at recorded targets, captions and crossfades; no zoom, pan or crop",
+    "edit": "Fixed full viewport without an inset border; small cursor and subtle click pulses at recorded targets, captions and crossfades; no zoom, pan or crop",
     "durationSeconds": round(total, 3), "outputFps": FPS, "scenes": records,
+    "gif": {"source": "portal-motion.mp4", "fps": 15, "width": 1080, "paletteColors": 128},
 }, indent=2) + "\n")
 print(f"Rendered {total:.1f}s of product motion from {sum(r['recordedFrames'] for r in records)} recorded frames; "
       f"MP4: {(destination / 'portal-motion.mp4').stat().st_size / 1024 / 1024:.2f} MiB")
