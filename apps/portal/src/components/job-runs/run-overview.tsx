@@ -2,6 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { JobRunDetail, JobRunEvent } from "@/lib/api/job-runs";
 import { formatDateTime, formatDuration } from "@/lib/format";
+import { RunDesignLoop } from "./run-design-loop";
 import { humanize } from "./run-events";
 import { stepsForAttempt } from "./run-model";
 import { StepTimeline } from "./run-timeline";
@@ -99,6 +100,7 @@ export function RunOverview({
           </dl>
         </section>
       </div>
+      <RunDesignLoop run={run} />
       <RunUsage run={{ ...run, steps }} />
       {run.scope === undefined ? null : (
         <section className="rounded-xl bg-recessed/40 p-4 sm:p-5">
