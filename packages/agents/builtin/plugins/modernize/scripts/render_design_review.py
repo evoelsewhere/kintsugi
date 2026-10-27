@@ -4,13 +4,14 @@
     python3 render_design_review.py <app> <module/unit | @app>[,...] --set SET [--root DIR] --out FILE
 
 Reads, under --root (the stage inputs), the check report of the run (`scratch/<app>/design/report.json`, written by
-`check_design.py --report`) and the reviewer's findings (`scratch/<app>/design/review-report.json`, by `check_review.py`), and writes a
-Markdown summary: the state of each unit, then the findings still open for a person, the largest first.
+`check_design.py --report`), the findings of the last review round (`scratch/<app>/design/review-report.json`, by `check_review.py`: the
+reviewers' and the contract reviewer's) and, when they exist, the requirement coverage (`coverage.json`), and writes a Markdown summary:
+how the verify loop ended (ADR-0083), the state of each unit, then the findings still open for a person, the largest first.
 
 A unit is
   ready                 the final check passes and the review found nothing;
-  ready-with-findings   the final check passes and the review reported findings: the blockers and majors went to the designer's fix
-                        round and are not reviewed again, the minors are left for the person;
+  ready-with-findings   the final check passes and the last review round still reported findings (the minors a person reads, or
+                        the blockers and majors a stalled or interrupted loop could not clear);
   incomplete            the final check does not pass, or the unit was not reviewed.
 
 The exit code is 0, or 2 for input that cannot be used. Standard library only.
@@ -50,6 +51,48 @@ def read_report(root, relative):
     return {entry.get('unit'): entry for entry in data.get('units', []) if isinstance(entry, dict)} if isinstance(data, dict) else {}
 
 
+def read_top(root, relative):
+    """The report as a whole (not per unit): {} when it is missing or unreadable."""
+    path = os.path.join(root, *relative.split('/'))
+    if not os.path.isfile(path):
+        return {}
+    try:
+        data = docmd.read_json(path)
+    except (docmd.DataError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def loop_lines(top):
+    """How the verify loop ended, as plain sentences for the pull request."""
+    if not top or not isinstance(top.get('round'), int):
+        return []
+    rounds = top['round']
+    fixed = top.get('resolvedTotal', 0)
+    if top.get('open', 0) == 0:
+        end = f'The last review round ({rounds}) found no blocker, no major and no failing check: the design was verified after its fixes.'
+    elif top.get('stalled'):
+        end = f'The loop stopped after round {rounds}: the same {top.get("open")} blocker(s), major(s) or failing check(s) came back without improvement. A person has to decide them.'
+    else:
+        end = f'The loop stopped after round {rounds} with {top.get("open")} blocker(s), major(s) or failing check(s) open (the stage budget ran out or the run was interrupted); the last fix was not reviewed again.'
+    lines = [end]
+    if fixed:
+        lines.append(f'{fixed} finding(s) were fixed and checked again during the run.')
+    return lines
+
+
+def coverage_lines(report):
+    if not report or not isinstance(report.get('total'), int) or report['total'] == 0:
+        return []
+    uncovered = [str(ident) for ident in report.get('uncovered', [])]
+    lines = ['', '## Requirement coverage', '',
+             f'{report.get("covered", 0)} of {report["total"]} requirement(s) are referred to by a design of the set "{report.get("set", "")}", counting the merged designs and this run. '
+             'A requirement a later unit will take shows as not covered until then.']
+    if uncovered:
+        lines += ['', 'Not referred to yet: ' + ', '.join(f'`{cell(ident)}`' for ident in uncovered[:30]) + (f' and {len(uncovered) - 30} more.' if len(uncovered) > 30 else '.')]
+    return lines
+
+
 def state_of(check, review):
     if review is None or not review.get('reviewed') or check is None or check.get('ok') is not True:
         return 'incomplete'
@@ -72,6 +115,8 @@ def problems_of(check):
 def render(app, keys, set_id, root):
     checks = read_report(root, paths.design_report_path(app))
     reviews = read_report(root, paths.design_review_report_path(app))
+    top = read_top(root, paths.design_review_report_path(app))
+    covered = read_top(root, paths.design_coverage_path(app))
     manifest = {}
     try:
         manifest = docmd.read_json(os.path.join(root, *paths.design_manifest_path(app).split('/')))
@@ -112,11 +157,13 @@ def render(app, keys, set_id, root):
             sections.append(f'### {key}: {state}\n\n' + '\n\n'.join(lines))
     out = [f'## Review of the design run: {set_id}', '',
            f'{len(keys)} unit(s): {totals["ready"]} ready, {totals["ready-with-findings"]} ready with findings, {totals["incomplete"]} incomplete.', '',
-           'An independent reviewer read each unit against its specification of the old system (ADR-0054). Blockers and majors were sent to the designer for a fix round; '
-           'they are not reviewed again, so read the units with findings first.', '',
+           'An independent reviewer read each unit against its specification of the old system, and a contract reviewer read the units that share interfaces together '
+           '(ADR-0054, ADR-0083). Blockers and majors went to the designer and the fixed units were reviewed again, round after round.',
+           *(['', *loop_lines(top)] if loop_lines(top) else []), '',
            docmd.table(['Unit', 'Kind', 'State', 'Blockers', 'Majors', 'Minors'], rows).rstrip('\n')]
     if sections:
         out += ['', '## Findings', '', *('\n\n'.join(sections).split('\n'))]
+    out += coverage_lines(covered)
     return '\n'.join(out) + '\n'
 
 

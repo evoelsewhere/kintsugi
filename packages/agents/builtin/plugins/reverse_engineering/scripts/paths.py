@@ -292,6 +292,22 @@ def design_report_path(app):
     return f'{design_run_dir(app)}/report.json'
 
 
+def design_map_path(app):
+    return f'{design_run_dir(app)}/map.json'
+
+
+def design_contract_path(app, cluster):
+    return f'{design_run_dir(app)}/contract/{cluster}.md'
+
+
+def design_progress_path(app):
+    return f'{design_run_dir(app)}/progress.json'
+
+
+def design_coverage_path(app):
+    return f'{design_run_dir(app)}/coverage.json'
+
+
 def understand_run_dir(app):
     return scratch_file_path(app, 'understand')
 

@@ -339,6 +339,26 @@ export function designReviewReportPath(app: string): string {
   return designRunFilePath(app, "review-report.json");
 }
 
+/** The units of a design run in dependency order and the clusters of units that share interfaces (intermediate). */
+export function designMapPath(app: string): string {
+  return designRunFilePath(app, "map.json");
+}
+
+/** The contract reviewer's note on one cluster of units of a design run (intermediate). */
+export function designContractPath(app: string, cluster: string): string {
+  return designRunFilePath(app, `contract/${cluster}.md`);
+}
+
+/** The rounds of the verify loop of a design run: open findings per round (intermediate). */
+export function designProgressPath(app: string): string {
+  return designRunFilePath(app, "progress.json");
+}
+
+/** The requirements no design item of the set refers to, after `check_coverage.py` (intermediate). */
+export function designCoveragePath(app: string): string {
+  return designRunFilePath(app, "coverage.json");
+}
+
 /** The review of the whole run, written for the pull request description (intermediate, ADR-0054). */
 export function designSummaryPath(app: string): string {
   return designRunFilePath(app, "review.md");
