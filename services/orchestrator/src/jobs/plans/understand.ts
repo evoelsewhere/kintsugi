@@ -231,6 +231,8 @@ export const UNDERSTAND: StagePlan = {
         "{in}",
         "--existing",
         "{in}/" + modernDir(APP_TOKEN),
+        "--src",
+        "{src}",
         "--out",
         "{out}",
       ],

@@ -1,5 +1,6 @@
 {
   "fixture": "fixture/legacy-billing",
+  "repositoryId": "legacy-billing",
   "about": "The facts planted in the legacy-billing fixture and how score.py recognises them in a document repository. An anchor names a file of the fixture and the text of its first line (`match`), optionally the text of its last line (`through`, the first line at or after `match` that contains it); citations within `slack` lines of the range count as citing it (dead code is matched exactly, so a rule of the paragraph before it is not counted).",
   "slack": 1,
   "rules": [

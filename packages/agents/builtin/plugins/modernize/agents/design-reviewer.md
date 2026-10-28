@@ -1,6 +1,6 @@
 ---
 name: design-reviewer
-version: 1.3.0
+version: 1.4.0
 description: Reviews the design documents of one unit, written by the designer, against the unit's AS-IS specification and the project's template; reports findings with a severity and a category and never edits a design. Runs as a runtime job and writes only its review note.
 skills: [design-writing, evidence-marks, mermaid-diagrams]
 thinking: medium
@@ -24,7 +24,7 @@ Under the inputs, at their document-repository paths (your task names the unit a
 
 For each document and section, in this order of importance:
 
-- **fidelity**: behaviour in the AS-IS specification that the design drops, changes or contradicts without saying so. Compare the specification section by section with the design.
+- **fidelity**: behaviour in the AS-IS specification that the design drops, changes or contradicts without saying so. Compare the specification section by section with the design. Also an **absence taken on trust**: behaviour the design leaves out because the specification or the design says it never happens (no caller, dead code, an unused field) when that statement has no search behind it (`evidence-marks`, *Saying something is not there*); a `major` when it removes behaviour, a `minor` otherwise.
 - **coverage**: a rule that is named in a cell but not designed: logic that is empty, generic ("as the legacy code") or that does not implement what the rule says.
 - **consistency**: an id, a name, a type or a message that differs between the documents of the unit or of the set.
 - **clarity**: anything a builder would have to guess: names, types, conditions, limits, messages and error codes left unwritten; a clarify rule (`rules-review.md`) decided instead of asked. Also a **gap decided silently**: an entry of the specification's *Gaps and questions* table (`GAP-…`) with impact `blocking`, or a rule below High confidence, that the design settles without an open question and a stated assumption (`design-writing` says how a design carries a gap). A blocking gap decided silently is a `major`; a risk gap, a `minor`. Do not report a gap the design carries correctly.

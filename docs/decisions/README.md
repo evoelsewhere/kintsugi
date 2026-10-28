@@ -99,6 +99,7 @@ This page has two parts:
 | [0082](0082-design-readiness-drafts-and-in-place-gap-answers.md) | Check design readiness, distinguish drafts and resolve questions in place | Accepted (amends 0057, 0081) |
 | [0083](0083-design-verify-loop-and-contracts.md) | Design in dependency order and verify until a round finds nothing open | Accepted (amends 0054) |
 | [0084](0084-known-answer-evaluation-of-the-built-in-plugins.md) | Known-answer evaluation of the built-in plugins | Accepted |
+| [0085](0085-checked-citations-and-bounded-absence.md) | Check every citation against the source, and bound every claim of absence | Accepted (amends 0057) |
 
 ## Decision register
 
@@ -199,6 +200,7 @@ This page has two parts:
 | D96 | Design readiness, drafts and in-place gap answers | 🟠 | Final runs require merged evidence; explicit drafts cannot unlock later stages; answers correct their original specification rows through reviewed writes | M2 | ✅ [0082](0082-design-readiness-drafts-and-in-place-gap-answers.md) |
 | D97 | Design verify loop and contracts | 🟠 | A design run writes callees before callers, then reviews and fixes in rounds until a round finds nothing open (no round limit; it stops when stalled or at the agent cap); a contract reviewer reads units that share interfaces together; the pull request reports how the loop ended and which requirements no design refers to | M2 | ✅ [0083](0083-design-verify-loop-and-contracts.md) |
 | D98 | Measuring what the built-in plugins write | 🟢 | A COBOL fixture with planted rules, gaps, a secret and a prompt injection, an answer key and a deterministic scorer of the document repository a run wrote; runs are manual on a development installation and recorded per commit and model | M2 | ✅ [0084](0084-known-answer-evaluation-of-the-built-in-plugins.md) |
+| D99 | Checked citations and bounded absence | 🟠 | The understand stage checks every source citation of a unit's documents against the checkout and lists those that do not resolve in the understanding record (reported, never corrected); a claim that something is not there carries its search, and `confirmed` never means observed running | M2 | ✅ [0085](0085-checked-citations-and-bounded-absence.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |

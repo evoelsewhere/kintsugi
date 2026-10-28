@@ -69,7 +69,10 @@ run and be reviewed at the same time without conflicts. `$app` is the applicatio
    and saves `identifiers/gaps-ids.md`. A malformed gaps table fails the step. Per specified item it also writes the checked `trace.md` (only the rule and finding
    ids of that item, the dependencies that resolve inside it, and the requirements, pull requests and tests its
    specification recorded), `understanding.md` (the item's catalog digest, the source commit and the run: the item is
-   **understood** once it is on the default branch, **stale** when the catalog's digest moves away) and the unit's
+   **understood** once it is on the default branch, **stale** when the catalog's digest moves away; it also lists the
+   citations of the item's `spec.md`, `rules.md` and `findings.md` that name no file of the sources or no such line,
+   [ADR-0085](../../../../../../docs/decisions/0085-checked-citations-and-bounded-absence.md), reported and never
+   corrected) and the unit's
    card `10-applications/$app/02-modern/<module>/<unit>/README.md` (a card that already exists is never overwritten).
 
 Whole-application views — the rules and data objects, the security findings, the traceability totals and the

@@ -18,7 +18,10 @@ overwritten). Writes under --out:
   (requirements, pull requests, tests);
 - 01-legacy/<module>/<unit>/understanding.md - digest, sources, run, counts and the specification profile of the item's
   kind it was written with (`profile: <kind>@<version>`, `profileMissing` when the specification lacks a section of it, ADR-0060):
-  the item is `understood` once this file is on the default branch, `stale` when the catalog's digest moves away from it;
+  the item is `understood` once this file is on the default branch, `stale` when the catalog's digest moves away from it.
+  With --src (the folder the legacy repositories are checked out under), also the number of source citations of the
+  item's spec.md, rules.md and findings.md (`citations`), those that name no file of the sources or no such line
+  (`citationsInvalid`) and a table of them (ADR-0085); they are reported, never corrected;
 - 02-modern/<module>/<unit>/README.md - the unit's card (frontmatter = state).
 
 An item without its specification gets none of these (it shows as failed or not analysed).
@@ -32,6 +35,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import citations  # noqa: E402
 import docmd  # noqa: E402
 import gap_resolution
 import gaps_common  # noqa: E402
@@ -41,6 +45,7 @@ import render_rules as rr  # noqa: E402
 import split_findings as sf  # noqa: E402
 
 RUN = re.compile(r'^[A-Za-z0-9-]{1,80}$')
+MAX_UNRESOLVED = 40
 
 
 def strings(value, limit=200):
@@ -116,9 +121,20 @@ def render_trace(app, item_id, checked):
     return '\n'.join(out).rstrip() + '\n'
 
 
-def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=''):
-    """`notes`, when given, collects missing specification-profile sections for review."""
+def unresolved_citations(cited, unresolved):
+    """The section of the understanding record that lists the citations that do not resolve (ADR-0085)."""
+    rows = [[f'`{citation}`', document, why] for citation, document, why in unresolved[:MAX_UNRESOLVED]]
+    more = len(unresolved) - len(rows)
+    return ('\n## Citations that do not resolve\n\n'
+            f'{len(unresolved)} of the {cited} source citations of the item\'s documents name no file of the sources or no such line. '
+            'Correct them in this pull request.\n\n' + docmd.table(['Citation', 'Document', 'Why'], rows) + (f'\nAnd {more} more.\n' if more > 0 else ''))
+
+
+def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs='', src=None):
+    """`notes`, when given, collects missing specification-profile sections and citations that do not resolve for review;
+    `src`, when given, is the folder the legacy repositories are checked out under, one folder per repository id."""
     revision = paths.sources_spec(sources)
+    checker = citations.Sources({repo: os.path.join(src, repo) for repo, _ in sources}) if src else None
     texts, done, missing, new_units = {}, [], [], 0
     owners = cc.owner_of(items.values())
     for item in chosen:
@@ -154,6 +170,14 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
         findings_text = docmd.read_optional_text(os.path.join(inputs, *paths.unit_findings_path(app, *item_id.split('/')).split('/')))
         rules = {row['id'] for row in rr.unit_rule_rows(rules_text) if row.get('id') and row.get('status') != 'retired'} if rules_text else set()
         findings = {row.get('id', '') for row in sf.finding_rows(findings_text)} if findings_text else set()
+        cited, unresolved = 0, []
+        if checker is not None:
+            for document, text in (('spec.md', spec_text), ('rules.md', rules_text), ('findings.md', findings_text)):
+                count, problems = checker.check(text or '')
+                cited += count
+                unresolved += [(citation, document, why) for citation, why in problems]
+            if notes is not None:
+                notes.extend(f'{item_id}: citation {citation} in {document}: {why}' for citation, document, why in unresolved)
         dependencies = []
         for dep in trace.get('dependencies') or []:
             if not isinstance(dep, dict) or not isinstance(dep.get('target'), str):
@@ -193,9 +217,13 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
             record['profile'] = f'{profile["kind"]}@{profile["version"]}'
             if profile_missing:
                 record['profileMissing'] = profile_missing
+        if checker is not None:
+            record['citations'] = cited
+            record['citationsInvalid'] = len(unresolved)
         texts[paths.unit_understanding_path(app, *item_id.split('/'))] = (
             docmd.front_matter(record) + f'# Understanding record - {item_id}\n\nThe specification of this item was written at `{revision}`. '
             'Its presence on the default branch marks the item understood; a changed catalog digest marks it stale.\n'
+            + (unresolved_citations(cited, unresolved) if unresolved else '')
         )
         module, name = item_id.split('/', 1)
         if not (existing and os.path.exists(os.path.join(existing, module, name, paths.UNIT_CARD))):
@@ -229,6 +257,7 @@ def main(argv):
     ap.add_argument('--run', default='')
     ap.add_argument('--existing')
     ap.add_argument('--docs', default='', help='read-only document repository holding the allocation history')
+    ap.add_argument('--src', default='', help='the folder the legacy repositories are checked out under (as-is), to check the citations')
     args = ap.parse_args(argv[1:])
     try:
         if not cc.APP_RE.match(args.app):
@@ -242,7 +271,8 @@ def main(argv):
         items, _ = cc.load_catalog(args.catalog)
         chosen = cc.selected(items, args.items)
         notes = []
-        texts, done, missing, new_units = finish(args.app, items, chosen, os.path.realpath(args.inputs), sources, args.run, args.existing, notes, args.docs or args.out)
+        texts, done, missing, new_units = finish(args.app, items, chosen, os.path.realpath(args.inputs), sources, args.run, args.existing, notes, args.docs or args.out,
+                                                 os.path.realpath(args.src) if args.src else None)
         root = os.path.abspath(args.out)
         for path, text in texts.items():
             docmd.write_text(os.path.join(root, *path.split('/')), text)

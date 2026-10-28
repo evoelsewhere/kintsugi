@@ -6,7 +6,10 @@ catalog coverage, citation validity, rule and gap recall, the planted security f
 and secret, two heuristics, and whether the design carried the blocking gap. The Markdown is read with the
 `reverse_engineering` plugin's own readers, so the eval sees the documents as Kintsugi does. Standard library only.
 
-    python packages/agents/evals/known-answer/score.py <document repo checkout> [--app <app>] [--json report.json]
+    python packages/agents/evals/known-answer/score.py <document repo checkout> [--app <app>] [--repo-id <id>] [--json report.json]
+
+Citations are found and checked by the plugin's `citations.py`, the check the understand stage itself runs (ADR-0085),
+against the fixture as the repository `--repo-id` (default: `repositoryId` of the key).
 """
 import argparse
 import json
@@ -18,17 +21,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.normpath(os.path.join(HERE, '..', '..', 'builtin', 'plugins', 'reverse_engineering', 'scripts'))
 sys.path.insert(0, SCRIPTS)
 
+import citations  # noqa: E402
 import docmd  # noqa: E402
 import gaps_common  # noqa: E402
 import rule_docs  # noqa: E402
 import split_findings  # noqa: E402
 
-# `<path with an extension>:<line>[-<line>]`; a bare word before the colon is not a citation.
-CITATION = re.compile(r'(?<![\w./-])(?P<path>(?:[\w.-]+/)*[\w.-]+\.(?P<ext>[A-Za-z0-9]{1,8})):(?P<start>\d+)(?:\s*[-–]\s*(?P<end>\d+))?')
-# Citations of documents and of the run's own tools are not citations of the legacy source.
-NOT_SOURCE = {'md', 'json', 'mmd', 'yaml', 'yml', 'py', 'ts', 'js', 'html', 'txt'}
 CONFIDENCE_RANK = {'low': 0, 'medium': 1, 'high': 2}
 UNIT_DOCUMENTS = ('spec.md', 'rules.md', 'findings.md')
+citations_in = citations.citations_in
 
 
 class AnswerKeyError(Exception):
@@ -36,31 +37,21 @@ class AnswerKeyError(Exception):
 
 
 class Fixture:
-    """The fixture's files, read once: {relative path: lines}."""
+    """The fixture's files, read once ({relative path: lines}), and the fixture as the one legacy repository of the run."""
 
-    def __init__(self, root):
+    def __init__(self, root, repo_id):
         self.files = {}
         for folder, _, names in os.walk(root):
             for name in names:
                 path = os.path.join(folder, name)
                 with open(path, encoding='utf-8') as handle:
                     self.files[os.path.relpath(path, root).replace(os.sep, '/')] = handle.read().split('\n')
+        self.sources = citations.Sources({repo_id: root})
 
     def resolve(self, cited):
-        """(relative path, None) of the fixture file a cited path names, or (None, reason). A citation may carry the
-        repository id or `as-is/` in front of the path; a bare file name is not a repository path."""
-        parts = [part for part in cited.replace('\\', '/').split('/') if part and part != '.']
-        for index in range(len(parts)):
-            candidate = '/'.join(parts[index:])
-            if '/' in candidate and candidate in self.files:
-                return candidate, None
-        if parts and any(rel.rsplit('/', 1)[-1] == parts[-1] for rel in self.files):
-            return None, 'bare file name, not <repository id>/<path>' if len(parts) == 1 else 'wrong folder for this file'
-        return None, 'no such file in the source'
-
-    def line_count(self, rel):
-        lines = self.files[rel]
-        return len(lines) - 1 if lines and lines[-1] == '' else len(lines)
+        """(path inside the fixture, None) of the file a cited path names, or (None, why it does not resolve)."""
+        found, why = self.sources.resolve(cited)
+        return (found[1], None) if found else (None, why)
 
     def anchor(self, anchor):
         """(file, first line, last line) of an anchor of the answer key, 1-based."""
@@ -77,18 +68,6 @@ class Fixture:
             if end is None:
                 raise AnswerKeyError(f'{rel}: no line after {anchor["match"]!r} contains {anchor["through"]!r}')
         return rel, start + 1, end + 1
-
-
-def citations_in(text):
-    """[(cited path, start, end)] of the source citations in a text."""
-    found = []
-    for match in CITATION.finditer(text or ''):
-        if match.group('ext').lower() in NOT_SOURCE:
-            continue
-        start = int(match.group('start'))
-        end = int(match.group('end') or start)
-        found.append((match.group('path'), min(start, end), max(start, end)))
-    return found
 
 
 def overlaps(citation, ranges, fixture, slack):
@@ -211,21 +190,16 @@ def score_catalog(app_dir, fixture):
 
 
 def score_citations(app_dir, fixture):
-    seen, invalid = {}, []
+    seen, invalid, checked = {}, [], 0
     for path, text in documents(app_dir, skip=('_generated',)):
         for citation in citations_in(text):
             seen.setdefault(citation, path)
     for citation, path in sorted(seen.items()):
-        rel, reason = fixture.resolve(citation[0])
-        if rel is not None:
-            lines = fixture.line_count(rel)
-            if citation[1] < 1:
-                reason = 'no line number'
-            elif citation[2] > lines:
-                reason = f'line out of range (the file has {lines} lines)'
-        if reason:
-            invalid.append({'citation': f'{citation[0]}:{citation[1]}-{citation[2]}', 'document': path, 'reason': reason})
-    return {'unique': len(seen), 'valid': len(seen) - len(invalid), 'invalid': invalid}
+        source, why = fixture.sources.problem(citation)
+        checked += source
+        if why:
+            invalid.append({'citation': citations.label(citation), 'document': path, 'reason': why})
+    return {'unique': checked, 'valid': checked - len(invalid), 'invalid': invalid}
 
 
 def score_rules(units, answers, fixture, slack):
@@ -344,10 +318,10 @@ def score_design(app_dir, answers, gaps):
     return {'items': items}
 
 
-def score(repo, answers_path, app=None):
+def score(repo, answers_path, app=None, repo_id=None):
     with open(answers_path, encoding='utf-8') as handle:
         answers = json.load(handle)
-    fixture = Fixture(os.path.join(os.path.dirname(os.path.abspath(answers_path)), answers['fixture']))
+    fixture = Fixture(os.path.join(os.path.dirname(os.path.abspath(answers_path)), answers['fixture']), repo_id or answers['repositoryId'])
     slack = answers.get('slack', 0)
     app, app_dir = application(repo, app)
     units = read_units(app_dir)
@@ -424,10 +398,11 @@ def main(argv):
     parser = argparse.ArgumentParser(description='Score a document repository written by a run on the known-answer fixture.')
     parser.add_argument('repo', help='a checkout of the document repository the run wrote to')
     parser.add_argument('--app', help='the application id, when 10-applications/ holds more than one')
+    parser.add_argument('--repo-id', help='the id the fixture repository was registered with (default: repositoryId of the key)')
     parser.add_argument('--answers', default=os.path.join(HERE, 'answers.json'), help='the answer key (default: answers.json next to this script)')
     parser.add_argument('--json', help='also write the full report as JSON to this path')
     args = parser.parse_args(argv)
-    report = score(args.repo, args.answers, args.app)
+    report = score(args.repo, args.answers, args.app, args.repo_id)
     if args.json:
         with open(args.json, 'w', encoding='utf-8') as handle:
             json.dump(report, handle, indent=2)

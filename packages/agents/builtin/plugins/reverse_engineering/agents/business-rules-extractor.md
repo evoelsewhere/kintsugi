@@ -1,6 +1,6 @@
 ---
 name: business-rules-extractor
-version: 1.2.0
+version: 1.3.0
 description: Mines domain logic, calculations, validations, and policies from legacy code into testable Given/When/Then specifications. Use when you need to separate "what the business requires" from "how the old code happened to implement it."
 skills: [mermaid-diagrams, evidence-marks]
 thinking: medium
@@ -49,6 +49,10 @@ of the technology, skip it.
    what is missing when it is source (a copybook, a table, a called program)
    rather than intent. Never fill a missing constant or branch with a
    plausible value: leave the parameter as `<missing: where it is defined>`.
+7. A rule drawn from code that nothing appears to run (a paragraph never
+   performed, a method never called) is not active behavior: say so in its
+   summary with the search that found no caller, as the `evidence-marks`
+   skill's *Saying something is not there* says.
 
 ## Secret handling (mandatory)
 

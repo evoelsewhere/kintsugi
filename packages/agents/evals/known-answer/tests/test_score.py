@@ -21,7 +21,7 @@ def load_answers():
         return json.load(handle)
 
 
-FIXTURE = score.Fixture(os.path.join(EVAL, load_answers()['fixture']))
+FIXTURE = score.Fixture(os.path.join(EVAL, load_answers()['fixture']), REPO_ID)
 
 
 def cite(file, match, through=None):
@@ -147,8 +147,8 @@ class Scoring(unittest.TestCase):
         ]))
         report = score.score(self.root, ANSWERS)
         reasons = sorted(item['reason'] for item in report['citations']['invalid'])
-        lines = FIXTURE.line_count('cobol/INVCALC.cbl')
-        self.assertEqual(reasons, ['bare file name, not <repository id>/<path>', f'line out of range (the file has {lines} lines)', 'no such file in the source'])
+        lines = FIXTURE.sources.lines(REPO_ID, 'cobol/INVCALC.cbl')
+        self.assertEqual(reasons, [f'line 900 is past the end of the file ({lines} lines)', f'no such file in {REPO_ID}', 'no such file in the sources'])
         self.assertEqual(report['catalog']['status'], 'not-run')
         tax = next(item for item in report['rules']['items'] if item['id'] == 'tax')
         self.assertEqual(tax['confidenceViolations'], ['RULE-INV01-0001 is High, at most Medium expected'])
@@ -200,12 +200,13 @@ class AnswerKey(unittest.TestCase):
             self.assertIn(secret, source)
         self.assertNotIn('copy/TAXTAB.cpy', FIXTURE.files)
 
-    def test_citations_resolve_through_a_repository_id_or_as_is(self):
+    def test_citations_resolve_as_the_understand_stage_resolves_them(self):
         self.assertEqual(FIXTURE.resolve('legacy-billing/cobol/INVCALC.cbl'), ('cobol/INVCALC.cbl', None))
         self.assertEqual(FIXTURE.resolve('as-is/legacy-billing/cobol/INVCALC.cbl'), ('cobol/INVCALC.cbl', None))
-        self.assertEqual(FIXTURE.resolve('INVCALC.cbl')[1], 'bare file name, not <repository id>/<path>')
-        self.assertEqual(FIXTURE.resolve('legacy-billing/src/INVCALC.cbl')[1], 'wrong folder for this file')
-        self.assertEqual(FIXTURE.resolve('legacy-billing/copy/TAXTAB.cpy')[1], 'no such file in the source')
+        self.assertEqual(FIXTURE.resolve('cobol/INVCALC.cbl'), ('cobol/INVCALC.cbl', None))
+        self.assertEqual(FIXTURE.resolve('INVCALC.cbl')[1], 'no such file in the sources')
+        self.assertEqual(FIXTURE.resolve('legacy-billing/src/INVCALC.cbl')[1], 'no such file in legacy-billing')
+        self.assertEqual(FIXTURE.resolve('legacy-billing/copy/TAXTAB.cpy')[1], 'no such file in legacy-billing')
 
 
 if __name__ == '__main__':

@@ -24,7 +24,7 @@ Run it when an agent, skill, command, workflow or script of `reverse_engineering
    git remote add origin <url of an empty repository> && git push -u origin main
    ```
 
-2. **Register a project**, as in [Your first modernization project](../guides/first-project.md) step 2: an empty document repository seeded from the starter in `templates/document-repo/`, an application `billing` whose `legacy` repository is the fixture. Publish `kintsugi.yaml` and merge it.
+2. **Register a project**, as in [Your first modernization project](../guides/first-project.md) step 2: an empty document repository seeded from the starter in `templates/document-repo/`, an application `billing` whose `legacy` repository is the fixture, registered with the id `legacy-billing` (another id works when you pass it to the scorer with `--repo-id`). Publish `kintsugi.yaml` and merge it.
 3. **Assess** the application (step 3) and merge its pull request.
 4. **Understand every catalog item** (step 4). Do not merge yet: check out the branch of the stage's pull request in a clone of the document repository and score it:
 
@@ -32,7 +32,7 @@ Run it when an agent, skill, command, workflow or script of `reverse_engineering
    python packages/agents/evals/known-answer/score.py /path/to/document-repo --json report.json
    ```
 
-   The report is Markdown on standard output; `--json` keeps the full report. Pass `--app <id>` when the repository holds more than one application.
+   The report is Markdown on standard output; `--json` keeps the full report. Pass `--app <id>` when the repository holds more than one application. Citations are checked by the understand stage's own `citations.py` ([ADR-0085](../decisions/0085-checked-citations-and-bounded-absence.md)), so the eval and the understanding record agree on what a valid citation is.
 5. **Design** (optional): merge the understanding pull request, generate a design set for the unit that copies `TAXTAB` (step 5), check out the design pull request's branch and score again. Only the last line of the summary, whether the design carries the blocking gap, depends on this step.
 
 ## What it measures

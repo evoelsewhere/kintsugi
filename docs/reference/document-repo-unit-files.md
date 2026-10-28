@@ -9,7 +9,7 @@ In `01-legacy/<module>/<unit>/`:
 | File | Content | Written by |
 |---|---|---|
 | `spec.md` | the P1 AS-IS specification of the unit | the `understand` job |
-| `understanding.md` | the provenance record: digest, source commit, run (`status: understood`) | the `understand` job |
+| `understanding.md` | the provenance record: digest, source commit, run (`status: understood`), and the source citations of the unit's documents that do not resolve ([ADR-0085](../decisions/0085-checked-citations-and-bounded-absence.md)) | the `understand` job |
 | `rules.md` | the index of the unit's rules: id, name, category, priority, confidence, version, status, source and a link to each rule's file | the extract-rules step of `understand` |
 | `rules/<rule id>.md` | one rule: specification, evidence, edge cases, open questions, acceptance scenarios, version history | the extract-rules step of `understand` |
 | `identifiers/{rules,findings,gaps}-ids.md` | allocation history, including retired references; [identifier contract](document-identifiers.md) | split / finish scripts of `understand` |

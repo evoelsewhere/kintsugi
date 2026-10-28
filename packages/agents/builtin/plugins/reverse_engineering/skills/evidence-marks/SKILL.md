@@ -24,6 +24,26 @@ what you do not.
   is right).
 - Rule cards keep their `Confidence` field: High is confirmed, Medium is inferred, Low is a gap. A rule below High
   has a question for an expert, and the unit's gaps table lists it (kind `ambiguous`, `Where` = the rule id).
+- A citation names a line you read, in a file that is there. The understand stage checks every citation of `spec.md`,
+  `rules.md` and `findings.md` against the source and lists in the unit's `understanding.md` those that name no file or
+  no such line; such a citation supports nothing.
+- `confirmed` means the code says so, not that anyone saw it run. How often a branch is taken, volumes, timings, the
+  values the data holds in production: the code alone does not show them. Without data, a log or a test you ran, such a
+  statement is `inferred`, or a gap of kind `unverified`.
+
+## Saying something is not there
+
+"Nothing calls X", "this paragraph is dead", "only Y writes table Z", "the field is never empty", "the copybook is
+missing": a statement that something does not exist or does not happen is a claim about everything you did not read.
+
+- Write the search that supports it: what you looked for, where, and that nothing was found
+  (`searched as-is/*/** for "INVPRT" and "CALL 'INVPRT'": no hit`). A statement of absence without its search is
+  `inferred`, never confirmed.
+- A search covers only what it covers. A name built at run time (a dynamic call, a table-driven dispatch, reflection),
+  a caller in configuration or a job outside the repositories, or a generated file can still use it. Say which of
+  these the search cannot exclude; when one is plausible, the absence is a gap (`unresolved`), not a fact.
+- In a source that is known to be incomplete (a `missing-source` gap is open), "not found" means not found in what was
+  provided.
 
 ## Outside sources: the web and project memory
 
@@ -76,7 +96,7 @@ you looked and found none.
 
 - Do not fill it with a plausible guess. Write what the code shows, mark the rest, and add the row.
 - Look first: a "missing" file may be under another repository, a configuration folder or a generated path. Say what you
-  searched (`searched as-is/*/**/TAXTAB*`) when you conclude it is missing.
+  searched (`searched as-is/*/**/TAXTAB*`) when you conclude it is missing, as *Saying something is not there* says.
 - Keep gaps few and real. One gap per question, not per line; do not list what a reader can see from the code.
 - A later document that depends on a gap names it by id and states its assumption (`assumes GAP-…: <what>`); it never
   settles it silently. An answer from a person is recorded where the gap was found, in the pull request that carries

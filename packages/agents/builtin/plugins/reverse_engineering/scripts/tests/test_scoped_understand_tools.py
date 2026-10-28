@@ -355,6 +355,25 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual(docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'trace.md')))[0]['openQuestions'], 0)
         self.assertNotIn('gaps table', result.stdout)
 
+    def test_finish_items_lists_the_citations_that_do_not_resolve_in_the_understanding_record(self):
+        # With --src the citations of spec.md, rules.md and findings.md are checked against the checkout (ADR-0085).
+        inputs = self.finish_inputs()
+        src = os.path.join(self.root, 'as-is')
+        write(os.path.join(src, 'legacy', 'src', 'TAX.cbl'), ''.join(f'LINE {n}\n' for n in range(1, 6)))
+        args = ['finish_items.py', 'billing', '--catalog', self.catalog, '--items', 'tax/calc', '--inputs', inputs, '--out', self.out, '--sources', 'legacy@' + 'a' * 40, '--run', 'run-1']
+        result = run(*args, '--src', src)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('tax/calc: citation src/TAX.cbl:9 in findings.md: line 9 is past the end of the file (5 lines)', result.stdout)
+        front, body = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))
+        self.assertEqual((front['citations'], front['citationsInvalid']), (3, 1))
+        rows = docmd.records_in(dict(docmd.sections(body, 2))['Citations that do not resolve'])
+        self.assertEqual(rows, [{'citation': '`src/TAX.cbl:9`', 'document': 'findings.md', 'why': 'line 9 is past the end of the file (5 lines)'}])
+        # Without --src nothing is checked and the record is as before.
+        self.assertEqual(run(*args).returncode, 0)
+        front, body = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))
+        self.assertNotIn('citations', front)
+        self.assertNotIn('Citations that do not resolve', body)
+
     def test_the_unit_card_names_each_legacy_repository_its_files_come_from(self):
         # Two legacy repositories are mounted side by side: files are cited `<repository id>/<path>`.
         two = {**CATALOG, 'items': [

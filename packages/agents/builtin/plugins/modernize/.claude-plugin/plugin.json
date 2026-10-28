@@ -1,6 +1,6 @@
 {
   "name": "modernize",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "description": "Move the understood system to its target. At runtime, started from the portal: the design of each unit from the project's own templates, and the independent review of a merge request a member opened. In the member's own AI client: the build command, which implements and tests a designed unit on the member's machine and tells Kintsugi which unit was built in which merge request.",
   "author": {
     "name": "Kintsugi"

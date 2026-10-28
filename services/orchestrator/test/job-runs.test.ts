@@ -92,7 +92,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
         ["script", "style_architecture.py", "succeeded"],
       ]);
       expect(steps.rows[0]?.script_hash).toMatch(/^[0-9a-f]{64}$/);
-      expect(steps.rows[12]?.agent).toBe("legacy-analyst@1.3.0");
+      expect(steps.rows[12]?.agent).toBe("legacy-analyst@1.4.0");
 
       // Every agent step left the spans of its attempt (ADR-0048), tied to the step and the model it ran with.
       const spans = await db.pool.query<{ step_run_id: string; name: string; agent: string; provider: string; model: string; attempt: number }>(
@@ -130,11 +130,11 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
       // The output has landed: the job's workspace is gone.
       await expect.poll(() => existsSync(storage.job(id).root), { timeout: 10_000, interval: 100 }).toBe(false);
       const write = (await db.pool.query<{ branch: string; job_id: string; agent: string; actor: string }>("select branch, job_id, agent, actor from workflow.document_write where id = $1", [writeId])).rows[0]!;
-      expect(write).toMatchObject({ branch: `kintsugi/legacy-analyst/${id}`, job_id: id, agent: "legacy-analyst@1.3.0", actor: "alice" });
+      expect(write).toMatchObject({ branch: `kintsugi/legacy-analyst/${id}`, job_id: id, agent: "legacy-analyst@1.4.0", actor: "alice" });
       expect(remote.git("docs", "show", `${write.branch}:10-applications/web/01-legacy/assessment.md`)).toContain("Assessment of web");
       expect(remote.git("docs", "show", `${write.branch}:10-applications/web/01-legacy/inventory.md`)).toContain('sourceFileCount:');
       expect(() => remote.git("docs", "show", `${write.branch}:restricted/SECRETS.local.md`)).toThrow();
-      expect(remote.git("docs", "log", "-1", "--format=%(trailers:only,unfold)", write.branch).trim()).toBe(`Kintsugi-Job: ${id}\nKintsugi-Agent: legacy-analyst@1.3.0\nKintsugi-Actor: alice`);
+      expect(remote.git("docs", "log", "-1", "--format=%(trailers:only,unfold)", write.branch).trim()).toBe(`Kintsugi-Job: ${id}\nKintsugi-Agent: legacy-analyst@1.4.0\nKintsugi-Actor: alice`);
     } finally {
       await worker.stop();
     }
@@ -176,7 +176,7 @@ describe.skipIf(!hasDatabase)("job runs through the worker (integration)", () =>
     const span = (name: string, startedAt: string) => ({
       runId: id,
       projectId: "demo",
-      agent: "legacy-analyst@1.3.0",
+      agent: "legacy-analyst@1.4.0",
       provider: "mock",
       model: "mock",
       attempt: 1,
