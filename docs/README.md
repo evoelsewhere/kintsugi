@@ -83,6 +83,7 @@ Start with [Your first modernization project](guides/first-project.md) for a wal
 - [Member client compatibility](reference/member-client-compatibility.md): tested client versions and setup probes
 - [Member client capabilities](reference/member-client-capabilities.md): what Claude Code, Codex and GitHub Copilot support for plugins, hooks and transcripts
 - [Plugin workflow audit](development/plugin-workflow-audit.md): readiness, drafts, in-place question resolution and verification limits
+- [Known-answer eval](development/known-answer-eval.md): measure what a model writes with the built-in plugins on a fixture whose facts are known (ADR-0084)
 - [Implementation and verification record](development/implementation-delivery-record.md): the deployment work, its status and evidence; remaining release work
 
 ## Conventions
