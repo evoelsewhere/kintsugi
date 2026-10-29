@@ -26,11 +26,13 @@ The centered introduction leads into `assets/motion/portal-motion.gif`, exported
 
 `assets/motion/provenance.json` records the source, edit, scene timings and GIF export settings. `scripts/render-portal-motion.py <recordings-directory>` rebuilds the MP4, GIF, poster and English captions from each scene's `capture.json`, timestamped browser frames and recorded click positions; it needs Pillow and imageio-ffmpeg. The GIF uses 15 fps at 1080 pixels wide with a 128-color palette. Raw recordings and intermediate encodes stay outside the published bundle. Use browser tools to record real UI actions, then inspect the footage before editing.
 
-The GIF loops while visible. Clicking it or using Enter/Space switches between the animation and its still poster, without a separate toolbar. Reduced-motion and data-saving preferences require explicit playback; leaving the viewport or hiding the tab restores the poster. A hidden description explains the animation. Without JavaScript, the poster links directly to the GIF. The MP4 remains available as the source for future exports.
+The GIF loops while visible (`assets/product-gif.js`, shared with the Star animation). Clicking it or using Enter/Space switches between the animation and its still poster, without a separate toolbar. Reduced-motion and data-saving preferences require explicit playback; leaving the viewport or hiding the tab restores the poster. A hidden description explains the animation. Without JavaScript, the poster links directly to the GIF. The MP4 remains available as the source for future exports.
 
-## Star video and social card
+## Star animation and social card
 
-`scripts/generate-site-media.py` creates the 8-second H.264 MP4, its poster and the 1200×630 social card. It requires Pillow and imageio-ffmpeg. The video is explicitly labeled as an illustrative GitHub interaction and changes no account state. English captions and native video controls are included; playback starts only when the visitor requests it.
+`assets/video/github-star.gif` shows the public Kintsugi repository in GitHub's dark theme inside a browser window: the pointer moves to Star while the view pushes in, clicks, and the button changes to Starred with the count going up before the view pulls back out. `scripts/render-github-star.py` draws `scripts/github-star/scene.html` (with Primer Octicons, MIT, license beside it) frame by frame in headless Chromium and writes the GIF and its poster; it needs Playwright and Pillow. The scene is a local rendering of a snapshot of the repository page: nothing is sent to GitHub and no account is used. Refresh the snapshot in the scene (file list, commit, counts) before re-rendering. The GIF uses the same player as the product clip: it loops while visible, and clicking it toggles the poster.
+
+`scripts/generate-site-media.py` creates the 1200×630 social card; it requires Pillow.
 
 ## Platform strip
 

@@ -1,0 +1,267 @@
+<!doctype html>
+<!-- The scene for scripts/render-github-star.py: the public Kintsugi repository in GitHub's dark
+     theme inside a browser window. window.render(t) draws the frame at t seconds. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; background: #000; }
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; color: #f0f6fc; -webkit-font-smoothing: antialiased; }
+  svg.oct { display: inline-block; vertical-align: text-bottom; fill: currentColor; flex: none; }
+  #stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; background: #0d1117; }
+
+  /* browser chrome */
+  .tabs { height: 40px; background: #1f1f1f; display: flex; align-items: flex-end; padding: 0 0 0 8px; }
+  .tab { position: relative; width: 300px; height: 34px; border-radius: 9px 9px 0 0; background: #353535; display: flex; align-items: center; gap: 9px; padding: 0 12px; font-size: 12px; color: #e3e3e3; white-space: nowrap; }
+  .tab span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .tab .x { color: #c4c4c4; font-size: 14px; }
+  .newtab { width: 28px; height: 28px; margin: 0 0 3px 8px; display: grid; place-items: center; color: #c4c4c4; font-size: 20px; }
+  .win { margin-left: auto; align-self: stretch; display: flex; color: #e3e3e3; }
+  .win i { width: 46px; display: grid; place-items: center; font-style: normal; font-size: 14px; }
+  .toolbar { height: 42px; background: #353535; display: flex; align-items: center; gap: 6px; padding: 0 10px; color: #c4c4c4; border-bottom: 1px solid #1f1f1f; }
+  .toolbar .nav { width: 30px; height: 30px; display: grid; place-items: center; }
+  .omni { flex: 1; height: 32px; margin: 0 8px; border-radius: 16px; background: #282828; display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 14px; color: #e3e3e3; }
+  .omni b { font-weight: 400; color: #9aa0a6; }
+  .profile { width: 26px; height: 26px; border-radius: 50%; background: #5f6f86; margin: 0 4px; }
+
+  /* GitHub header */
+  .gh-header { background: #010409; border-bottom: 1px solid #3d444d; padding: 16px 16px 0; }
+  .gh-top { display: flex; align-items: center; gap: 12px; height: 32px; }
+  .icon-btn { width: 32px; height: 32px; border: 1px solid #3d444d; border-radius: 6px; display: grid; place-items: center; color: #9198a1; }
+  .crumbs { font-size: 14px; display: flex; gap: 4px; font-weight: 600; }
+  .crumbs .sep { color: #9198a1; font-weight: 400; }
+  .gh-search { margin-left: auto; width: 320px; height: 32px; border: 1px solid #3d444d; border-radius: 6px; display: flex; align-items: center; gap: 8px; padding: 0 8px; color: #9198a1; font-size: 14px; }
+  .gh-search kbd { margin-left: auto; font: 11px/16px inherit; border: 1px solid #3d444d; border-radius: 4px; padding: 0 5px; }
+  .me { width: 32px; height: 32px; border-radius: 50%; background: #8f7048; }
+  .reponav { display: flex; gap: 8px; height: 48px; align-items: stretch; margin-top: 8px; }
+  .reponav a { display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 14px; color: #f0f6fc; text-decoration: none; position: relative; }
+  .reponav a.sel { font-weight: 600; }
+  .reponav a.sel::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 6px; background: #f78166; }
+  .reponav svg { color: #9198a1; }
+  .counter { display: inline-block; min-width: 20px; padding: 0 6px; font-size: 12px; font-weight: 500; line-height: 18px; text-align: center; border-radius: 2em; background: #2f3742; color: #f0f6fc; }
+
+  /* repository */
+  .container { width: 1248px; margin: 0 auto; padding: 0 16px; }
+  .title-row { display: flex; align-items: center; gap: 8px; padding: 16px 0; border-bottom: 1px solid #3d444d; }
+  .org { width: 24px; height: 24px; border-radius: 6px; background: #f0f6fc; padding: 2px; }
+  .title-row strong { font-size: 20px; font-weight: 600; }
+  .label { font-size: 12px; font-weight: 500; line-height: 18px; padding: 0 7px; border: 1px solid #3d444d; border-radius: 2em; color: #9198a1; }
+  .actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn { display: flex; align-items: center; height: 28px; border: 1px solid #3d444d; border-radius: 6px; background: #212830; font-size: 12px; font-weight: 500; color: #f0f6fc; overflow: hidden; }
+  .btn .main { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 100%; }
+  .btn .drop { display: grid; place-items: center; width: 26px; height: 100%; border-left: 1px solid #3d444d; color: #9198a1; }
+  .btn svg { color: #9198a1; }
+  #star .main { transition: none; }
+  #star.hover .main { background: #262c36; }
+  #star.press .main { background: #2a313c; }
+  #star.on svg.fill { color: #e3b341; }
+  #star-icon { display: inline-grid; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 296px; gap: 24px; padding-top: 24px; }
+  .bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .bar .meta { display: flex; align-items: center; gap: 4px; color: #9198a1; font-size: 14px; }
+  .bar .meta b { color: #f0f6fc; font-weight: 600; }
+  .goto { margin-left: auto; width: 220px; height: 32px; border: 1px solid #3d444d; border-radius: 6px; display: flex; align-items: center; gap: 8px; padding: 0 8px; color: #9198a1; }
+  .btn.md { height: 32px; font-size: 14px; }
+  .btn.md .main { padding: 0 12px; gap: 8px; }
+  .btn.primary { background: #238636; border-color: rgba(240,246,252,.1); color: #fff; }
+  .btn.primary svg { color: #fff; }
+  .files { border: 1px solid #3d444d; border-radius: 6px; overflow: hidden; }
+  .head { display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 56px; background: #151b23; border-bottom: 1px solid #3d444d; font-size: 14px; }
+  .head .who { width: 20px; height: 20px; border-radius: 50%; background: #8f7048; }
+  .head .msg { color: #9198a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
+  .head .right { margin-left: auto; display: flex; align-items: center; gap: 8px; color: #9198a1; font-size: 12px; white-space: nowrap; }
+  .head .right .sha { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  .row { display: grid; grid-template-columns: 220px minmax(0, 1fr) 110px; align-items: center; height: 40px; padding: 0 16px; border-top: 1px solid #3d444d; font-size: 14px; }
+  .row:first-of-type { border-top: 0; }
+  .row .name { display: flex; align-items: center; gap: 10px; }
+  .row .name svg.dir { color: #9198a1; }
+  .row .name svg.file { color: #9198a1; }
+  .row .c { color: #9198a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 16px; }
+  .row .t { color: #9198a1; text-align: right; }
+
+  .about h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .about p { font-size: 16px; line-height: 1.5; margin-bottom: 16px; }
+  .about .link { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #4493f8; margin-bottom: 16px; }
+  .topics { display: flex; flex-wrap: wrap; gap: 6px 4px; margin-bottom: 16px; }
+  .topics span { font-size: 12px; font-weight: 500; line-height: 22px; padding: 0 10px; border-radius: 2em; color: #4493f8; background: rgba(56,139,253,.1); }
+  .facts div { display: flex; align-items: center; gap: 8px; color: #9198a1; font-size: 14px; margin-top: 8px; }
+  .facts b { color: #f0f6fc; font-weight: 600; }
+
+  /* pointer */
+  #cursor { position: absolute; left: 0; top: 0; width: 26px; height: 32px; pointer-events: none; filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)); }
+  #ripple { position: absolute; width: 0; height: 0; border-radius: 50%; border: 2px solid rgba(227,179,65,.9); pointer-events: none; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="tabs">
+    <div class="tab"><i data-icon="mark-github-24" data-size="16"></i><span>evoelsewhere/kintsugi: Enterprise platform for AI-driven legacy modernization</span><b class="x">×</b></div>
+    <div class="newtab">+</div>
+    <div class="win"><i>&#8212;</i><i>&#9744;</i><i>&#10005;</i></div>
+  </div>
+  <div class="toolbar">
+    <div class="nav"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 8H3m4-4L3 8l4 4"/></svg></div>
+    <div class="nav" style="opacity:.45"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10m-4-4 4 4-4 4"/></svg></div>
+    <div class="nav"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5V5h-2.5"/></svg></div>
+    <div class="omni"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4.5h8m3 0h1M2 11.5h1m3 0h8"/><circle cx="11.5" cy="4.5" r="1.6"/><circle cx="4.5" cy="11.5" r="1.6"/></svg>github.com<b>/evoelsewhere/kintsugi</b></div>
+    <div class="nav"><i data-icon="star-16"></i></div>
+    <div class="profile"></div>
+  </div>
+
+  <div class="gh-header">
+    <div class="gh-top">
+      <div class="icon-btn"><i data-icon="three-bars-16"></i></div>
+      <i data-icon="mark-github-24" data-size="32"></i>
+      <div class="crumbs"><span>evoelsewhere</span><span class="sep">/</span><span>kintsugi</span></div>
+      <div class="gh-search"><i data-icon="search-16"></i>Type <kbd>/</kbd> to search</div>
+      <div class="icon-btn"><i data-icon="copilot-16"></i></div>
+      <div class="icon-btn"><i data-icon="plus-16"></i></div>
+      <div class="icon-btn"><i data-icon="issue-opened-16"></i></div>
+      <div class="icon-btn"><i data-icon="git-pull-request-16"></i></div>
+      <div class="icon-btn"><i data-icon="bell-16"></i></div>
+      <div class="me"></div>
+    </div>
+    <nav class="reponav">
+      <a class="sel"><i data-icon="code-16"></i>Code</a>
+      <a><i data-icon="issue-opened-16"></i>Issues</a>
+      <a><i data-icon="git-pull-request-16"></i>Pull requests</a>
+      <a><i data-icon="play-16"></i>Actions</a>
+      <a><i data-icon="table-16"></i>Projects</a>
+      <a><i data-icon="shield-16"></i>Security</a>
+      <a><i data-icon="graph-16"></i>Insights</a>
+    </nav>
+  </div>
+
+  <div class="container">
+    <div class="title-row">
+      <img class="org" src="../../site/assets/brand/evoelsewhere-mark.png" alt="">
+      <strong>kintsugi</strong><span class="label">Public</span>
+      <div class="actions">
+        <div class="btn"><span class="main"><i data-icon="eye-16"></i>Watch <span class="counter">0</span></span><span class="drop"><i data-icon="triangle-down-16"></i></span></div>
+        <div class="btn"><span class="main"><i data-icon="repo-forked-16"></i>Fork <span class="counter">0</span></span><span class="drop"><i data-icon="triangle-down-16"></i></span></div>
+        <div class="btn" id="star"><span class="main"><span id="star-icon"></span><span id="star-label">Star</span> <span class="counter" id="star-count">2</span></span><span class="drop"><i data-icon="triangle-down-16"></i></span></div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div>
+        <div class="bar">
+          <div class="btn md"><span class="main"><i data-icon="git-branch-16"></i>master</span><span class="drop"><i data-icon="triangle-down-16"></i></span></div>
+          <div class="meta"><i data-icon="git-branch-16"></i><b>6</b> Branches</div>
+          <div class="meta"><i data-icon="tag-16"></i><b>0</b> Tags</div>
+          <div class="goto"><i data-icon="search-16"></i>Go to file</div>
+          <div class="btn md"><span class="main">Add file</span><span class="drop"><i data-icon="triangle-down-16"></i></span></div>
+          <div class="btn md primary"><span class="main"><i data-icon="code-16"></i>Code</span><span class="drop"><i data-icon="triangle-down-16"></i></span></div>
+        </div>
+        <div class="files">
+          <div class="head"><span class="who"></span><b>khuonghung</b><span class="msg">feat(runtime): record the source lines a job was shown and check citations against them</span>
+            <span class="right"><span class="sha">52559e1</span>·<span>7 minutes ago</span><i data-icon="history-16"></i><b style="color:#f0f6fc">554 Commits</b></span></div>
+          <div id="rows"></div>
+        </div>
+      </div>
+      <aside class="about">
+        <h2>About</h2>
+        <p>Enterprise platform for AI-driven legacy modernization. Reverse-engineer the as-is system, generate designs from your own templates, build with your own AI assistant, and review independently. Self-hosted, Git as the source of truth.</p>
+        <div class="link"><i data-icon="link-16"></i>kintsugi.evoelsewhere.asia</div>
+        <div class="topics" id="topics"></div>
+        <div class="facts">
+          <div><i data-icon="book-16"></i>Readme</div>
+          <div><i data-icon="law-16"></i>Apache-2.0 license</div>
+          <div><i data-icon="pulse-16"></i>Activity</div>
+          <div><i data-icon="star-16"></i><b id="stars">2</b> stars</div>
+          <div><i data-icon="eye-16"></i><b>0</b> watching</div>
+          <div><i data-icon="repo-forked-16"></i><b>0</b> forks</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div id="ripple"></div>
+  <svg id="cursor" viewBox="0 0 26 32"></svg>
+</div>
+
+<script>
+  // Repository snapshot from the public repository's default branch.
+  const ROWS = [
+    ['dir', '.github', 'feat(site): publish searchable docs and product showcase', '2 days ago'],
+    ['dir', 'apps', "feat(portal): show rounds, why the loop stopped and each finding's status on a design run", '35 hours ago'],
+    ['dir', 'assets', 'docs(readme): rewrite as an enterprise platform overview with brand diagrams', '4 days ago'],
+    ['dir', 'deploy', 'feat(site): publish searchable docs and product showcase', '2 days ago'],
+    ['dir', 'docs', 'feat(runtime): record the source lines a job was shown and check citations against them', '7 minutes ago'],
+    ['dir', 'packages', 'feat(runtime): record the source lines a job was shown and check citations against them', '7 minutes ago'],
+    ['dir', 'scripts', 'fix(site): show product gif with one border', '2 days ago'],
+    ['dir', 'services', 'feat(runtime): record the source lines a job was shown and check citations against them', '7 minutes ago'],
+    ['dir', 'site', 'feat(site): animate the hero headline and dot background', '7 minutes ago'],
+    ['dir', 'templates', 'feat(identifiers)!: add stable compact document references', '4 days ago'],
+    ['file', 'AGENTS.md', 'docs: record login, init and install, and what each member client supports (ADR-0072)', '5 days ago'],
+  ];
+  const TOPICS = ['ai-agents', 'application-modernization', 'claude-code', 'code-migration', 'codex', 'docker-compose', 'github-copilot', 'legacy-modernization', 'llm', 'mcp', 'pgvector', 'postgresql', 'reverse-engineering', 'self-hosted', 'software-migration', 'typescript'];
+
+  const icon = (name, size = 16, cls = '') => {
+    const [box, inner] = window.OCTICONS[name];
+    return `<svg class="oct ${cls}" width="${size}" height="${size}" viewBox="${box}">${inner}</svg>`;
+  };
+  document.getElementById('rows').innerHTML = ROWS.map(([kind, name, message, time]) =>
+    `<div class="row"><span class="name">${kind === 'dir' ? icon('file-directory-fill-16', 16, 'dir') : icon('file-16', 16, 'file')}${name}</span><span class="c">${message}</span><span class="t">${time}</span></div>`).join('');
+  document.getElementById('topics').innerHTML = TOPICS.map((t) => `<span>${t}</span>`).join('');
+  document.querySelectorAll('[data-icon]').forEach((el) => { el.outerHTML = icon(el.dataset.icon, Number(el.dataset.size || 16)); });
+
+  const ARROW = '<path d="M2 2 L2 25 L7.6 19.6 L11.4 28.4 L15.2 26.8 L11.5 18.2 L19 18.2 Z" fill="#fff" stroke="#000" stroke-width="1.4" stroke-linejoin="round"/>';
+  const HAND = '<path d="M9.5 3.2c0-1.1.9-1.9 1.9-1.9s1.9.8 1.9 1.9v8.1l1.1-.1c.9-.1 1.8.4 2 1.3l.1.3.9-.1c.9-.1 1.8.4 2 1.3l.1.4.6-.1c1-.1 1.9.6 2 1.6l.3 4.6c.2 2.8-.7 5.5-2.6 7.6l-.6.7H9.6l-.9-1.3-4.9-6.8c-.6-.9-.4-2.1.5-2.7.8-.5 1.8-.4 2.5.3l2.7 2.6V3.2Z" fill="#fff" stroke="#000" stroke-width="1.3" stroke-linejoin="round"/>';
+
+  const stage = document.getElementById('stage');
+  const star = document.getElementById('star');
+  const cursor = document.getElementById('cursor');
+  const ripple = document.getElementById('ripple');
+  const box = star.querySelector('.main').getBoundingClientRect();
+  const target = { x: box.left + 26, y: box.top + box.height / 2 + 1 };
+  const START = { x: 610, y: 560 };
+  const FOCUS = { x: target.x - 120, y: target.y + 30 };
+
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const ease = (p) => { p = clamp(p); return p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; };
+  const mix = (a, b, p) => a + (b - a) * p;
+
+  window.render = (t) => {
+    // camera: full page, push in on the Star button, then pull back out
+    const zin = ease((t - 1.5) / 1.1), zout = ease((t - 5.4) / 1.0);
+    const z = zin * (1 - zout);
+    const s = mix(1, 1.9, z);
+    const cx = clamp(mix(640, FOCUS.x, z), 640 / s, 1280 - 640 / s);
+    const cy = clamp(mix(360, FOCUS.y, z), 360 / s, 720 - 360 / s);
+    stage.style.transform = `translate(${640 - cx * s}px, ${360 - cy * s}px) scale(${s})`;
+
+    // pointer: a curved approach to the button, a click, then it eases away
+    const go = ease((t - .7) / 1.9);
+    const bend = Math.sin(go * Math.PI) * 70;
+    let x = mix(START.x, target.x, go) + bend * .35, y = mix(START.y, target.y, go) + bend;
+    const away = ease((t - 4.1) / 1.2);
+    x += away * 70; y += away * 92;
+    cursor.style.transform = `translate(${x - 2}px, ${y - 2}px)`;
+    const over = Math.abs(x - target.x) < 40 && Math.abs(y - target.y) < 13;
+    cursor.innerHTML = over ? HAND : ARROW;
+    if (over) cursor.style.transform = `translate(${x - 10}px, ${y - 2}px)`;
+
+    const pressed = t >= 3.0 && t < 3.16, on = t >= 3.16;
+    star.className = `btn${over ? ' hover' : ''}${pressed ? ' press' : ''}${on ? ' on' : ''}`;
+    const pop = on ? 1 + Math.sin(clamp((t - 3.16) / .32) * Math.PI) * .35 : 1;
+    document.getElementById('star-icon').innerHTML = on
+      ? icon('star-fill-16', 16, 'fill').replace('<svg', `<svg style="transform:scale(${pop.toFixed(3)})"`)
+      : icon('star-16');
+    document.getElementById('star-label').textContent = on ? 'Starred' : 'Star';
+    document.getElementById('star-count').textContent = on ? '3' : '2';
+    document.getElementById('stars').textContent = on ? '3' : '2';
+
+    const r = clamp((t - 3.16) / .5);
+    ripple.style.opacity = on && r < 1 ? String(1 - r) : '0';
+    const size = 10 + r * 46;
+    ripple.style.width = ripple.style.height = `${size}px`;
+    ripple.style.left = `${target.x - size / 2}px`;
+    ripple.style.top = `${target.y - size / 2}px`;
+  };
+  window.render(0);
+</script>
+</body>
+</html>
