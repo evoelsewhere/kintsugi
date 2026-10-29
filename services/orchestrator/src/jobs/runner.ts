@@ -23,7 +23,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { findBuiltinFile } from "@kintsugi/agents";
-import { DEFAULT_SANDBOX, legacySources, mcpServersNamedBy, sourceRole, sourceSpec, targetSources, THINKING_LEVELS, type PinnedSource, type Provenance, type SandboxSettings, type SourceRepo, type ThinkingLevel, MEMORY_CANDIDATES_FILE, MEMORY_WRITE_SCHEMA, type MemoryEvidence } from "@kintsugi/domain";
+import { DEFAULT_SANDBOX, legacySources, memberTestReportOf, mcpServersNamedBy, sourceRole, sourceSpec, targetSources, THINKING_LEVELS, type PinnedSource, type Provenance, type SandboxSettings, type SourceRepo, type ThinkingLevel, MEMORY_CANDIDATES_FILE, MEMORY_WRITE_SCHEMA, type MemoryEvidence } from "@kintsugi/domain";
 import { type CheckoutStorage, type JobPaths, runGit } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
 import { RESULT_FILE, RESULT_TOOL, MEMORY_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
@@ -178,7 +178,10 @@ export function scopeOf(inputs: Record<string, unknown>): StageScope | undefined
   if (!isRecord(scope) || !Array.isArray(scope["items"])) return undefined;
   const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
   const mr = scope["mr"];
-  const request = isRecord(mr) && typeof mr["url"] === "string" && typeof mr["commit"] === "string" ? { url: mr["url"], commit: mr["commit"], ...(typeof mr["branch"] === "string" && mr["branch"] !== "" ? { branch: mr["branch"] } : {}) } : undefined;
+  const request =
+    isRecord(mr) && typeof mr["url"] === "string" && typeof mr["commit"] === "string"
+      ? { url: mr["url"], commit: mr["commit"], ...(typeof mr["branch"] === "string" && mr["branch"] !== "" ? { branch: mr["branch"] } : {}), ...(isRecord(mr["tests"]) ? { tests: memberTestReportOf(mr["tests"]) } : {}) }
+      : undefined;
   return {
     items: strings(scope["items"]),
     files: strings(scope["files"]),

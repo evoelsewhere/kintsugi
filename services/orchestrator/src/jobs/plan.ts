@@ -21,6 +21,8 @@
 // `intermediate` are inputs for later steps only; everything else is the stage's output and goes
 // to the document repo through the writer.
 
+import type { MemberTestReport } from "@kintsugi/domain";
+
 export const PLACEHOLDER_NAMES = ["src", "tobe", "in", "out", "tmp", "sources", "app", "run", "item", "key", "round", "maxRounds", "error"] as const;
 export type PlaceholderName = (typeof PLACEHOLDER_NAMES)[number];
 export type Placeholders = Partial<Record<PlaceholderName, string>>;
@@ -55,8 +57,11 @@ export interface StageScope {
   readonly draft?: boolean;
   /** The target repository a review run reads (ADR-0071). */
   readonly target?: string;
-  /** The merge request a review run reads: the member recorded it for the units; the reviewer reads the repository at `commit`. */
-  readonly mr?: { readonly url: string; readonly commit: string; readonly branch?: string };
+  /**
+   * The merge request a review run reads: the member recorded it for the units; the reviewer reads the repository at `commit`.
+   * `tests` is what the member's command reported of its test run there (ADR-0088), shown in the review as their word.
+   */
+  readonly mr?: { readonly url: string; readonly commit: string; readonly branch?: string; readonly tests?: MemberTestReport };
 }
 
 /** What a plan's dynamic parts (conditions, arguments, items) can look at while the stage runs. */

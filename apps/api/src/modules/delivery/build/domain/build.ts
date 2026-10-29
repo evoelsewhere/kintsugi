@@ -2,8 +2,13 @@
 // tells Kintsugi which unit they built in which merge request; the runtime then reviews that merge request. The view joins
 // the two: what the member recorded, what the review found, and which merge requests can be reviewed. Pure types.
 
-/** What a member's harness recorded for a unit with the member command `build` (`build.test`, `build.mr`). Counts and links only. */
-export interface MemberBuild {
+import type { MemberTestReport } from "@kintsugi/domain";
+
+/**
+ * What a member's harness recorded for a unit with the member command `build` (`build.test`, `build.mr`). Counts, links and
+ * rule ids only (ADR-0088): the rules and the legacy comparison come from the `build.mr` record, the test run at its commit.
+ */
+export interface MemberBuild extends Pick<MemberTestReport, "rulesPassed" | "rulesFailed" | "legacyCases" | "legacyMatched"> {
   /** The merge request the member opened, as they recorded it (an http(s) URL). */
   mr?: string;
   branch?: string;

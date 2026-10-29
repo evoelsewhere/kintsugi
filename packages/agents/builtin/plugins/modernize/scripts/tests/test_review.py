@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 import check_code_review as ccr  # noqa: E402
 import mr_changes as mc  # noqa: E402
+import parity as par  # noqa: E402
 import prepare_review as pr  # noqa: E402
 import render_review as rr  # noqa: E402
 
@@ -169,6 +170,97 @@ class Render(World):
         document, summary = self.render()
         self.assertIn('0 blocker(s), 0 major(s) and 0 minor(s)', document)
         self.assertIn('clear', summary)
+
+
+class Parity(World):
+    """ADR-0088: per rule, what supports parity, each at its own level; never more than the evidence shows."""
+
+    def tobe(self, files):
+        root = os.path.join(self.base, 'to-be', 'api')
+        for path, text in files.items():
+            target = os.path.join(root, *path.split('/'))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, 'w', encoding='utf-8', newline='\n') as handle:
+                handle.write(text)
+        # No files: git could not tell what the merge request changes.
+        listed = [{'status': 'A', 'path': path} for path in files] + [{'status': 'D', 'path': 'src/gone.py'}] if files else []
+        with open(os.path.join(self.scratch, 'changes.json'), 'w', encoding='utf-8') as handle:
+            json.dump({'files': listed, 'note': '' if files else 'no common ancestor with main'}, handle)
+        return root
+
+    def parity(self, tests, files=None):
+        root = self.tobe(files if files is not None else {
+            'src/calc.py': '# RULE-001: the total\ndef total(): ...\n# RULE-002 rounds\n',
+            'tests/test_calc.py': 'def test_rule_001(): ...  # RULE-001\n',
+        })
+        code, out, err = run(par.main, ['--manifest', self.manifest, '--changes', os.path.join(self.scratch, 'changes.json'), '--report', os.path.join(self.scratch, 'review-report.json'),
+                                        '--tobe', root, '--tests', json.dumps(tests), '--out', os.path.join(self.scratch, 'parity.json')])
+        self.assertEqual(code, 0, err)
+        with open(os.path.join(self.scratch, 'parity.json'), encoding='utf-8') as handle:
+            return json.load(handle)
+
+    def test_each_rule_gets_the_level_its_evidence_supports(self):
+        self.unit()
+        self.prepare()
+        self.note('pay/run')
+        self.report()
+        unit = self.parity({'cases': 4, 'failed': 0, 'rulesPassed': ['RULE-001']})['units']['pay/run']
+        self.assertEqual([(rule['id'], rule['code'], rule['tests'], rule['reported'], rule['level']) for rule in unit['rules']], [
+            ('RULE-001', ['src/calc.py'], ['tests/test_calc.py'], 'passed', 'reported'),
+            ('RULE-002', ['src/calc.py'], [], None, 'untested'),
+        ])
+        self.assertEqual(unit['verdict'], 'partial')
+
+    def test_a_reported_failure_and_a_disputing_finding_win_over_the_static_reading(self):
+        self.unit()
+        self.prepare()
+        self.note('pay/run', '| major | `src/calc.py` | total | fidelity | RULE-002 rounds half down. | Round half up. |\n| minor | `src/calc.py` | x | design | RULE-001 name. | Rename. |\n')
+        self.report()
+        files = {'src/calc.py': '# RULE-001\n# RULE-002\n', 'tests/test_calc.py': '# RULE-001 RULE-002\n'}
+        unit = self.parity({'rulesPassed': ['RULE-002'], 'rulesFailed': ['RULE-001']}, files)['units']['pay/run']
+        self.assertEqual([(rule['level'], rule['reviewer']) for rule in unit['rules']], [('failed', []), ('disputed', ['major'])])
+        self.assertEqual(unit['verdict'], 'none')
+
+    def test_every_rule_reported_passing_is_reported_parity_and_unknown_files_are_unknown(self):
+        self.unit()
+        self.prepare()
+        self.note('pay/run')
+        self.report()
+        files = {'src/calc.py': '# RULE-001\n# RULE-002\n', 'src/CalcTest.java': '// RULE-001, RULE-002\n'}
+        self.assertEqual(self.parity({'rulesPassed': ['RULE-001', 'RULE-002']}, files)['units']['pay/run']['verdict'], 'reported')
+        self.assertEqual(self.parity({'rulesPassed': ['RULE-001', 'RULE-002']}, {})['units']['pay/run']['verdict'], 'unknown')
+
+    def test_the_review_shows_the_parity_table_and_says_kintsugi_ran_nothing(self):
+        self.unit()
+        self.prepare()
+        self.note('pay/run')
+        self.report()
+        self.parity({'cases': 4, 'failed': 0, 'rulesPassed': ['RULE-001'], 'legacyCases': 50, 'legacyMatched': 49})
+        out, summary = os.path.join(self.base, 'out'), os.path.join(self.base, 'summary.md')
+        code, _, err = run(rr.main, ['app', 'pay/run', '--manifest', self.manifest, '--root', self.root, '--scratch', self.scratch, '--out', out, '--summary', summary])
+        self.assertEqual(code, 0, err)
+        with open(os.path.join(out, '10-applications', 'app', '02-modern', 'pay', 'run', '_build', 'review.md'), encoding='utf-8') as handle:
+            document = handle.read()
+        self.assertIn('parity: "partial"', document)
+        self.assertIn('parityReported: 1', document)
+        self.assertIn('Kintsugi ran nothing', document)
+        self.assertIn('| RULE-001 | Total is computed | reported | `src/calc.py` | `tests/test_calc.py` | passed | - |', document)
+        self.assertIn('50 case(s) run on both the legacy system and the new code, 49 with the same result', document)
+        with open(summary, encoding='utf-8') as handle:
+            self.assertIn('| partial |', handle.read())
+
+    def test_all_tested_rules_passing_covers_only_the_rules_a_test_names(self):
+        self.unit()
+        self.prepare()
+        self.note('pay/run')
+        self.report()
+        unit = self.parity({'rulesPassed': ['*'], 'rulesFailed': []})['units']['pay/run']
+        self.assertEqual([(rule['id'], rule['reported'], rule['level']) for rule in unit['rules']], [('RULE-001', 'passed', 'reported'), ('RULE-002', None, 'untested')])
+
+    def test_rejects_tests_that_are_not_a_json_object(self):
+        self.unit()
+        self.prepare()
+        self.assertEqual(run(par.main, ['--manifest', self.manifest, '--changes', 'x', '--report', 'x', '--tobe', self.base, '--tests', '[1]', '--out', os.path.join(self.base, 'p.json')])[0], 2)
 
 
 class Changes(unittest.TestCase):

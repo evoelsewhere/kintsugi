@@ -102,6 +102,7 @@ This page has two parts:
 | [0085](0085-checked-citations-and-bounded-absence.md) | Check every citation against the source, and bound every claim of absence | Accepted (amends 0057) |
 | [0086](0086-record-of-the-source-a-job-was-shown.md) | Record what of the source a job was shown, and check citations against it | Accepted |
 | [0087](0087-who-settles-a-gap-and-evidence-that-moved.md) | Say who settles a gap, and tell which cited lines moved | Accepted (amends 0057) |
+| [0088](0088-parity-of-a-built-unit-with-its-rules.md) | Show the parity of a built unit with its rules, each claim at its own level of evidence | Accepted (amends 0071) |
 
 ## Decision register
 
@@ -205,6 +206,7 @@ This page has two parts:
 | D99 | Checked citations and bounded absence | 🟠 | The understand stage checks every source citation of a unit's documents against the checkout and lists those that do not resolve in the understanding record (reported, never corrected); a claim that something is not there carries its search, and `confirmed` never means observed running | M2 | ✅ [0085](0085-checked-citations-and-bounded-absence.md) |
 | D100 | Record of the source a job was shown | 🟠 | The kernel emits `source.read` (path and lines, no content) for what `read` and `grep` showed; an agent step with `readsTo` saves the job's record (partial when `shell` or `git` ran); the understand stage reports the specification's citations of lines its job was not shown and the share of the unit's code it was shown | M2 | ✅ [0086](0086-record-of-the-source-a-job-was-shown.md) |
 | D101 | Who settles a gap; evidence that moved | 🟢 | Optional `Settled by` (source-owner, expert, data, check; the kind's default when empty) and `Probe` columns in the gaps table, carried to `GAPS.md`, the API and the portal's filter; the understanding record keeps a digest per cited range and the plan lists the cited lines of understood units that changed, with the rules and gaps citing them | M2 | ✅ [0087](0087-who-settles-a-gap-and-evidence-that-moved.md) |
+| D102 | Parity of a built unit with its rules | 🟠 | The member records per-rule test results and a comparison with the legacy system (counts and rule ids); the review's deterministic parity step shows, per rule, the changed code and tests that name it, the member's reported result and the reviewer's disputes, with levels failed, disputed, reported, static, untested, missing, and `reported` as the highest Kintsugi can give | M2 | ✅ [0088](0088-parity-of-a-built-unit-with-its-rules.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |

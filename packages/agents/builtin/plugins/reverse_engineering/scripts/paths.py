@@ -520,6 +520,10 @@ def build_review_report_path(app):
     return build_run_file_path(app, 'review-report.json')
 
 
+def build_parity_path(app):
+    return build_run_file_path(app, 'parity.json')
+
+
 def build_summary_path(app):
     return build_run_file_path(app, 'summary.md')
 

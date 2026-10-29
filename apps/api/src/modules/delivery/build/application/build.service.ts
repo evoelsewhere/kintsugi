@@ -4,7 +4,7 @@
 // (front matter a script wrote), the member's record is an activity row, a running review is a job run.
 
 import { Injectable } from "@nestjs/common";
-import { unitCodeReviewPath } from "@kintsugi/domain";
+import { memberTestReportOf, unitCodeReviewPath } from "@kintsugi/domain";
 import { chunk } from "#common/util/async.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import { DesignService } from "#modules/delivery/design/index.js";
@@ -47,16 +47,12 @@ export function memberBuildOf(record: { at: string; username: string; harness?: 
   const mr = textOf(record.detail["mr"], 500);
   const commit = textOf(record.detail["commit"], 64);
   const branch = textOf(record.detail["branch"], 200);
-  const cases = numberOf(record.detail["cases"]);
-  const failed = numberOf(record.detail["failed"]);
-  const canary = record.detail["canary"] === "killed" || record.detail["canary"] === "survived" ? record.detail["canary"] : undefined;
+  const report = memberTestReportOf(record.detail);
   return {
     ...(mr !== undefined && HTTP_URL.test(mr) ? { mr } : {}),
     ...(branch === undefined ? {} : { branch }),
     ...(commit !== undefined && COMMIT.test(commit) ? { commit } : {}),
-    ...(cases === undefined ? {} : { cases }),
-    ...(failed === undefined ? {} : { failed }),
-    ...(canary === undefined ? {} : { canary }),
+    ...report,
     at: record.at,
     ...(withUser ? { username: record.username } : {}),
     ...(record.harness === undefined ? {} : { harness: record.harness }),

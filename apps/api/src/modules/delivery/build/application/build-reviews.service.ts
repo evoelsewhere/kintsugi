@@ -7,8 +7,12 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import type { Actor } from "#common/auth/decorators.js";
 import { JobRunsService, type JobRunView, REVIEW } from "#modules/delivery/runtime-jobs/index.js";
-import type { ReviewRunBody } from "../domain/build.js";
+import { memberTestReportOf, type MemberTestReport } from "@kintsugi/domain";
+import type { MemberBuild, ReviewRunBody } from "../domain/build.js";
 import { BuildService } from "./build.service.js";
+
+/** The test report of a member's build record, only its well-formed report fields. */
+const reportedTests = (build: MemberBuild): MemberTestReport => memberTestReportOf({ ...build });
 
 
 interface Conflict {
@@ -69,7 +73,8 @@ export class BuildReviewsService {
     return this.runs.startRun(projectId, applicationId, REVIEW, actor, {
       pins: { [target.repositoryId]: request.commit! },
       inputs: {
-        scope: { items: wanted, files: [], target: target.repositoryId, mr: { url: request.mr!, commit: request.commit!, ...(request.branch === undefined ? {} : { branch: request.branch }) } },
+        // What the member's command reported of its test run at that commit (ADR-0088): the review shows it as their word.
+        scope: { items: wanted, files: [], target: target.repositoryId, mr: { url: request.mr!, commit: request.commit!, ...(request.branch === undefined ? {} : { branch: request.branch }), tests: reportedTests(request) } },
         documentsCommit: overview.ref.commit,
       },
     });

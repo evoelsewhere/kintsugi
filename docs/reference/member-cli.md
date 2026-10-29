@@ -98,7 +98,7 @@ This is the only write of the base. It adds one record to the project's monitori
 
 ### Records of `modernize`
 
-`modernize` records two more kinds, with the unit (`<module>/<unit>`) as the summary: `build.test` (details `cases`, `failed`, `canary` = `killed` or `survived`) and `build.mr` (details `mr`, the URL of the merge request, `branch`, `commit`, the full head commit, and the same counts). The portal's Build page shows the latest `build.mr` of each unit and reviews that merge request at that commit; it displays a link only when it is an `http(s)` URL and a commit only when it is a full hexadecimal id.
+`modernize` records two more kinds, with the unit (`<module>/<unit>`) as the summary: `build.test` (details `cases`, `failed`, `canary` = `killed` or `survived`, `rulesPassed` and `rulesFailed`, each a comma-separated string of rule ids, `rulesPassed` `*` for every rule a test names except the failed ones, and `legacyCases` and `legacyMatched` when the new code was compared with the legacy system) and `build.mr` (details `mr`, the URL of the merge request, `branch`, `commit`, the full head commit, and the same values from a test run at that commit; [ADR-0088](../decisions/0088-parity-of-a-built-unit-with-its-rules.md)). The review shows them, rule by rule, as the member's report. The portal's Build page shows the latest `build.mr` of each unit and reviews that merge request at that commit; it displays a link only when it is an `http(s)` URL and a commit only when it is a full hexadecimal id.
 
 ## Serve the local MCP bridge
 

@@ -9,6 +9,7 @@
 //   mr_changes.py           the files the merge request changes, from the merge base with the default branch (scratch)
 //   forEach unit            a code-reviewer job reads the code and the tests and writes its findings (scratch)
 //   check_code_review.py    the findings per unit; a note that does not read counts as not reviewed
+//   parity.py               per rule of each unit: the changed files that name it, the member's reported run, what the reviewer disputes (scratch, ADR-0088)
 //   render_review.py        _build/review.md for each unit (published) and the description of the pull request (scratch)
 
 import {
@@ -17,6 +18,7 @@ import {
   assessmentCatalogPath,
   buildChangesPath,
   buildManifestPath,
+  buildParityPath,
   buildReviewNotePath,
   buildReviewReportPath,
   buildRunDir,
@@ -36,6 +38,7 @@ const APP = DOCUMENT_PATH_TOKENS.app;
 const MANIFEST = buildManifestPath(APP);
 const CHANGES = buildChangesPath(APP);
 const REPORT = buildReviewReportPath(APP);
+const PARITY = buildParityPath(APP);
 const SUMMARY = buildSummaryPath(APP);
 const SCRATCH = buildRunDir(APP);
 const REVIEWER = "code-reviewer";
@@ -154,6 +157,17 @@ export const REVIEW: StagePlan = {
       args: (ctx) => ["{app}", unitsOf(ctx).join(","), "--root", "{in}", "--report", `{out}/${REPORT}`],
       intermediate: true,
       expects: [REPORT],
+    },
+    {
+      id: "parity",
+      kind: "script",
+      script: "parity.py",
+      args: (ctx) => {
+        const mr = mergeRequestOf(ctx);
+        return ["--manifest", `{in}/${MANIFEST}`, "--changes", `{in}/${CHANGES}`, "--report", `{in}/${REPORT}`, "--tobe", `{tobe}/${mr.target}`, "--tests", JSON.stringify(ctx.scope?.mr?.tests ?? {}), "--out", `{out}/${PARITY}`];
+      },
+      intermediate: true,
+      expects: [PARITY],
     },
     {
       id: "summary",

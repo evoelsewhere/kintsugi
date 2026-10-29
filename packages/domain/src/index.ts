@@ -264,3 +264,4 @@ export * from "./mcp.js";
 export * from "./project-memory.js";
 export * from "./web-search.js";
 export { DEFAULT_GAP_SETTLER, GAP_SETTLERS, GAP_STATUSES, type GapSettler, type GapStatus, gapIsResolved, isGapSettler, isMeaningfulGapText } from "./gap.js";
+export { ALL_TESTED_RULES, MAX_REPORTED_RULES, memberTestReportOf, type MemberTestReport } from "./member-build.js";

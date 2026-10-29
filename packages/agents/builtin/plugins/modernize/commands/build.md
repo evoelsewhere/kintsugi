@@ -25,6 +25,7 @@ metadata:
     - step: Test every rule and count the cases that ran
       skill: unit-testing
     - step: Run the canary, break the code once, see a test fail, restore it
+    - step: Compare with the legacy system on the same inputs, when it can run or is recorded
     - step: Record the test run (build.test)
       tool: activity_record
     - gate: you decide what to commit and open as a merge request
@@ -71,13 +72,16 @@ Write the tests as `unit-testing` says: every rule named by a test that names it
 - Fix failures by deciding, from the rule, whether the test or the code is wrong.
 - **Canary.** Temporarily break the new code in one small way that matters, run the tests, confirm at least one turns red, and **restore the code** (check `git diff` shows the original). If nothing fails, the tests do not pin the behavior: add cases until one does.
 
-Call `activity_record` once with `pluginName` `modernize`, kind `build.test`, summary `$unit`, and details `application` (the application id), `cases` (executed), `failed` and `canary` (`killed` or `survived`). Counts only.
+- **Per rule.** List the rules whose tests all passed and those with a failing test, by id (`unit-testing`, *Results per rule*).
+- **The legacy system.** When it can run where you work, or its inputs and outputs are recorded, compare the new code with it on the same inputs (`unit-testing`, *Parity with the legacy system*) and count the cases run on both sides and how many matched. When it cannot, say that no comparison was made.
+
+Call `activity_record` once with `pluginName` `modernize`, kind `build.test`, summary `$unit`, and details `application` (the application id), `cases` (executed), `failed`, `canary` (`killed` or `survived`), `rulesPassed` and `rulesFailed` (each one string of rule ids separated by commas; when the passing ones do not fit in 500 characters, `rulesPassed` is `*`, every rule a test names except the failed ones), and, when you compared with the legacy system, `legacyCases` and `legacyMatched`. Counts and rule ids only.
 
 ## Step 5 — The merge request, and tell Kintsugi
 
 Suggest the commit and the merge request and let the member do them (or do them if the member asks, following the repository's own conventions). Put in the description what `build-method` §6 lists: the unit, a table of rules and design items with the file that carries each, the open questions with their assumptions, and how you built and tested it.
 
-When the member has pushed the branch and opened the merge request, call `activity_record` once with `pluginName` `modernize`, kind `build.mr`, summary `$unit` and details `application` (the application id), `mr` (the URL of the merge request), `branch` and `commit` (the full id of the head commit, from `git rev-parse HEAD`), plus `cases` and `canary` again. One record per unit; a merge request that builds several units gets one record for each, with the same `mr`. Never put code, document content, credentials or personal data in a record. Kintsugi's runtime reads the merge request at that commit: if you push more commits after a review, record again with the new commit.
+When the member has pushed the branch and opened the merge request, call `activity_record` once with `pluginName` `modernize`, kind `build.mr`, summary `$unit` and details `application` (the application id), `mr` (the URL of the merge request), `branch` and `commit` (the full id of the head commit, from `git rev-parse HEAD`), plus `cases`, `failed`, `canary`, `rulesPassed`, `rulesFailed`, `legacyCases` and `legacyMatched` again, from a test run **at that commit** (run the tests again if you committed after them). The review shows these as your report next to what it reads in the code (ADR-0088). One record per unit; a merge request that builds several units gets one record for each, with the same `mr`. Never put code, document content, credentials or personal data in a record. Kintsugi's runtime reads the merge request at that commit: if you push more commits after a review, record again with the new commit.
 
 Then report: the files written, the cases executed, the canary, the merge request, and what is still open.
 

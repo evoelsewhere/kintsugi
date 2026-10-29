@@ -5,6 +5,8 @@
 - Decision register: D85
 - Amends: [ADR-0068](0068-design-generation-in-the-modernize-plugin.md), [ADR-0069](0069-common-member-base-and-plugin-distribution.md)
 
+What a member records per rule, the comparison with the legacy system and the parity table of the review are amended by [ADR-0088](0088-parity-of-a-built-unit-with-its-rules.md).
+
 ## Context
 
 After the design of a unit is merged, the unit has to be implemented, tested, reviewed and, in the end, shown to be right. Which of these should the runtime do? The runtime reads the legacy code and writes documents through pull requests; it has no toolchain for the target stack, no way to run a project's build and tests safely beyond the worker's container, and it would have to write code into a repository that [ADR-0028](0028-remove-rulebook-single-document-repo.md) reserves for members. A member, on the other hand, already has the toolchain, the repository and an AI client; what the project lacks is a common method, and a record of which unit was built in which merge request so that someone else can look at it.

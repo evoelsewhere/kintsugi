@@ -398,6 +398,11 @@ export function buildReviewReportPath(app: string): string {
   return buildRunFilePath(app, "review-report.json");
 }
 
+/** The parity of the reviewed merge request with the units' rules (scratch, ADR-0088). */
+export function buildParityPath(app: string): string {
+  return buildRunFilePath(app, "parity.json");
+}
+
 /** The description of the pull request of a review run (intermediate). */
 export function buildSummaryPath(app: string): string {
   return buildRunFilePath(app, "summary.md");

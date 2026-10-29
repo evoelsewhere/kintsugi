@@ -147,7 +147,7 @@ describe("review stage (scripted reviewer, the plugin's scripts, a member's merg
     });
     expect(run?.failureReason).toBeUndefined();
     expect(run?.status).toBe("succeeded");
-    expect(steps.map((step) => step[0])).toEqual(["prepare", "changes", "review-unit", "check", "summary"]);
+    expect(steps.map((step) => step[0])).toEqual(["prepare", "changes", "review-unit", "check", "parity", "summary"]);
 
     // The reviewer reads the repository at the merge request, which the main branch does not have.
     const spec = agents.specs[0]!;

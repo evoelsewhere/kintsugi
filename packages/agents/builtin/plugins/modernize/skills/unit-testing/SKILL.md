@@ -51,6 +51,30 @@ rounding mode, drop a validation — make it, run the tests again, and look at t
 - **Restore the code** and check that the diff shows the original again. A canary is never committed.
 - Say what you changed, which rule it breaks and which tests failed.
 
+## Results per rule
+
+After the run, say for every rule of the unit whether all of its tests passed or one failed, by id: the rules whose tests passed,
+and the rules with a failing test. A rule with no test is in neither list. This is what the review's parity table shows next to the
+code (ADR-0088), as your report: count only tests that ran.
+
+## Parity with the legacy system
+
+A unit test pins what the rule says; a comparison with the old system pins what it does. When the legacy system can run where you
+work (a container, an emulator, a test environment the member was given) or the project has recordings of its inputs and outputs
+(batch input and output files, captured messages, a HAR of the API calls behind its screens), compare the new code with it:
+
+- Build the cases from the rules' Given/When/Then and their boundaries, plus the recorded inputs. Run each case on the legacy system
+  and on the new code with the same input, and compare the outputs field by field, with the tolerance the rule states (none otherwise).
+- A difference is a finding: decide from the rule which side is right. Legacy behavior that no rule describes is a question for the
+  member, never something to copy or drop silently.
+- For a web application, replay the recorded requests against the new API and compare the responses. Remove cookies, tokens and
+  personal data from a recording before you use it.
+- Keep the comparison as a test of the target repository when its data can be committed: no production data, no personal data, no
+  credentials; fake values of the same shape.
+- Count the cases that ran on both sides and how many gave the same result; a case that ran on one side only is not counted.
+- When the legacy system cannot run and nothing is recorded, say that no comparison was made. Never invent an expected output and
+  call it the legacy one. Never reach a production system: read-only copies only.
+
 ## What you never do
 
 - Never weaken an assertion, widen a tolerance, delete a test or mark one skipped to get green.
