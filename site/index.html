@@ -74,11 +74,20 @@
 
   /* hero */
   .hero { position: relative; overflow: hidden; padding: 138px 0 76px; }
+  .hero.has-dot-field { background-image: none; }
+  .hero .dot-field { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .hero .crack { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: .22; }
   .hero .wrap { position: relative; }
   .hero-intro { max-width: 1020px; margin-inline: auto; text-align: center; }
   .hero h1 { font-size: clamp(44px, 5.1vw, 76px); margin: 22px 0; line-height: 1.06; }
   .hero h1 em { display: block; font-style: italic; background: linear-gradient(135deg, #D9A63C 0%, #B8822A 60%, #8F6317 100%); -webkit-background-clip: text; background-clip: text; color: transparent; padding-right: .05em; }
+  .hero h1.is-typing { display: grid; }
+  .hero h1 .typing-stack, .hero h1 .typing-live { grid-area: 1 / 1; }
+  .hero h1 .typing-stack { display: grid; visibility: hidden; }
+  .hero h1 .typing-stack > span { grid-area: 1 / 1; }
+  .hero h1 .caret { display: inline-block; width: .055em; height: .9em; margin-left: .06em; vertical-align: -.1em; border-radius: 1px; background: var(--gold-d); animation: caret 1.05s steps(1) infinite; }
+  .hero h1.is-busy .caret { animation: none; }
+  @keyframes caret { 50% { opacity: 0; } }
   .hero .lead { max-width: 800px; margin-inline: auto; font-size: clamp(17px, 1.5vw, 20px); }
   .hero .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin: 26px 0 22px; }
   .hero .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 24px; font: 500 11px/1.4 var(--mono); color: var(--slate); }
@@ -153,7 +162,6 @@
   .feature ul { list-style: none; margin-top: 24px; display: grid; gap: 14px; }
   .feature li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; font-size: 16px; }
   .feature li::before { content: ''; width: 10px; height: 10px; margin-top: 8px; border-radius: 2px; background: var(--gold-grad); }
-  .sample { margin-top: 10px; font: 500 11.5px/1 var(--mono); color: var(--slate); text-align: right; letter-spacing: .04em; }
 
   /* model */
   .model { background: var(--cream-2); }
@@ -301,7 +309,7 @@
 <main id="top">
 
 <!-- HERO -->
-<section class="hero grid-bg">
+<section class="hero grid-bg" data-dot-field>
   <svg class="crack" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
     <defs><linearGradient id="gc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7D98A"/><stop offset=".55" stop-color="#E0B04A"/><stop offset="1" stop-color="#B8822A"/></linearGradient></defs>
     <g fill="none" stroke="url(#gc)" stroke-linecap="round" stroke-linejoin="round" opacity=".55">
@@ -313,7 +321,7 @@
   <div class="wrap">
     <div class="hero-intro rv">
       <span class="eyebrow">Open source · <b>legacy modernization</b></span>
-      <h1>Modernize the system you have. <em>Keep everything it knows.</em></h1>
+      <h1 data-typing>Modernize the system you have. <em>Keep everything it knows.</em></h1>
       <p class="lead">Kintsugi reverse-engineers legacy applications into reviewable specifications, designs each unit from your own templates, and lets your teams build with the AI assistants they already use. People decide at every gate. Everything lives in Git.</p>
       <div class="cta">
         <a class="btn" href="docs/guides/docker-images.html">Install Kintsugi <span aria-hidden="true">→</span></a>
@@ -382,8 +390,7 @@
     <div class="head rv">
       <span class="eyebrow">How it works</span>
       <h2>From legacy code to a reviewed build, one unit at a time.</h2>
-      <p class="lead">These are real screenshots in light theme from our running development portal, using the public AWS CardDemo application. Documents are Markdown in Git; the portal makes them explorable.</p>
-      <p class="capture-note">Captured 26 October 2026 · Development data, not customer results · <a href="docs/guides/first-project.html">Follow the workflow →</a></p>
+      <p class="lead">Documents are Markdown in Git; the portal makes them explorable.</p>
     </div>
 
     <article class="feature">
@@ -397,7 +404,7 @@
           <li>Several selections in flight at once, and a failed run resumes where it stopped</li>
         </ul>
       </div>
-      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/catalog.jpg" aria-label="Open full-size catalog screenshot"><img src="assets/screenshots/catalog.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Catalog of Card Demo legacy units, grouped by module with source size, complexity and understanding status"></a><p class="sample">Actual development portal · Card Demo · <a href="assets/screenshots/catalog.jpg">View full size ↗</a></p></div>
+      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/catalog.jpg" aria-label="Open full-size catalog screenshot"><img src="assets/screenshots/catalog.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Catalog of Card Demo legacy units, grouped by module with source size, complexity and understanding status"></a></div>
     </article>
 
     <article class="feature flip">
@@ -411,7 +418,7 @@
           <li>Traceability from legacy source to design, code and tests</li>
         </ul>
       </div>
-      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/understand.jpg" aria-label="Open full-size understand screenshot"><img src="assets/screenshots/understand.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="AS-IS understanding results for Card Demo, including unit specifications, business-rule coverage and source traceability"></a><p class="sample">Actual development portal · Card Demo · <a href="assets/screenshots/understand.jpg">View full size ↗</a></p></div>
+      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/understand.jpg" aria-label="Open full-size understand screenshot"><img src="assets/screenshots/understand.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="AS-IS understanding results for Card Demo, including unit specifications, business-rule coverage and source traceability"></a></div>
     </article>
 
     <article class="feature">
@@ -426,7 +433,7 @@
         </ul>
         <p class="capture-note"><a href="docs/guides/define-design-templates.html">Define design templates →</a></p>
       </div>
-      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/design.jpg" aria-label="Open full-size design screenshot"><img src="assets/screenshots/design.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Unit Design in the development portal showing project-defined design sets, their coverage and prerequisites"></a><p class="sample">Actual development portal · Card Demo · <a href="assets/screenshots/design.jpg">View full size ↗</a></p></div>
+      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/design.jpg" aria-label="Open full-size design screenshot"><img src="assets/screenshots/design.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Unit Design in the development portal showing project-defined design sets, their coverage and prerequisites"></a></div>
     </article>
 
     <article class="feature flip">
@@ -440,7 +447,7 @@
           <li>Role-based access with project-scoped member tokens</li>
         </ul>
       </div>
-      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/telemetry.jpg" aria-label="Open full-size telemetry screenshot"><img src="assets/screenshots/telemetry.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Runtime telemetry in the development portal showing token usage, cache hit rate, latency and attempts"></a><p class="sample">Actual development portal · Card Demo · <a href="assets/screenshots/telemetry.jpg">View full size ↗</a></p></div>
+      <div class="rv"><a class="shot screenshot-link" href="assets/screenshots/telemetry.jpg" aria-label="Open full-size telemetry screenshot"><img src="assets/screenshots/telemetry.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Runtime telemetry in the development portal showing token usage, cache hit rate, latency and attempts"></a></div>
     </article>
   </div>
 </section>
@@ -635,6 +642,8 @@ ghcr.io/evoelsewhere/kintsugi-worker
 
 <script src="assets/product-gif.js" defer></script>
 <script src="assets/platforms.js" defer></script>
+<script src="assets/dot-field.js" defer></script>
+<script src="assets/hero-typing.js" defer></script>
 <script>
   (function () {
     var els = document.querySelectorAll('.rv');

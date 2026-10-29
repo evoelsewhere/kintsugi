@@ -36,6 +36,14 @@ The GIF loops while visible. Clicking it or using Enter/Space switches between t
 
 The “Bring your own” strip pairs each platform name with its SVG mark (`assets/platforms/`; sources and license are included there). `assets/platforms.js` adds an inaccessible duplicate of the list for a seamless, left-to-right loop. Hovering, focusing the list, or using its pause button stops the movement. Reduced-motion preferences and browsers without JavaScript show the complete static list instead.
 
+## Hero headline
+
+`assets/hero-typing.js` types the headline and then cycles through the further messages listed at the top of the script: each is typed, held, erased and replaced, with a gold caret. Every message is laid out invisibly in the same place, so the heading keeps the height of the tallest one and the content below never moves. Screen readers get the headline from the HTML once; reduced-motion preferences and browsers without JavaScript show it as static text. Edit the HTML headline and the first message together.
+
+## Hero dot field
+
+`assets/dot-field.js` redraws the hero's dot grid on a canvas at the same positions as the CSS `.grid-bg` pattern. With a mouse over the hero, the plane tilts toward the pointer and the dots under it rise in a soft gold swell, seen in perspective; leaving the hero lets it settle flat, and drawing stops once it is still or scrolled out of view. Reduced-motion preferences, touch-only devices and browsers without JavaScript keep the static CSS dots.
+
 ## Verify and publish
 
 The build rejects missing local links and assets. Check desktop and mobile layouts, documentation navigation and search, image links, video playback, canonical metadata and the sitemap. Deployment uses `.github/workflows/deploy-site.yml` and its existing GitHub Pages environment; pushing to `master` or manually running that workflow publishes the generated bundle.
