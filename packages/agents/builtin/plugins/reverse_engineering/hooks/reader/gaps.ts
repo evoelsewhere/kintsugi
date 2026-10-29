@@ -1,4 +1,4 @@
-import { gapIsResolved, isMeaningfulGapText as meaningful, type GapStatus } from '@kintsugi/domain'
+import { DEFAULT_GAP_SETTLER, GAP_SETTLERS, gapIsResolved, isGapSettler, isMeaningfulGapText as meaningful, type GapSettler, type GapStatus } from '@kintsugi/domain'
 import { uncode } from './document.js'
 import { columnOf, sectionMatching, sectionsOf, tablesIn, tableRangesIn, type Table } from './markdown.js'
 
@@ -31,6 +31,10 @@ export type Gap = {
   evidence?: string
   /** The catalog item (`<module>/<unit>`) the gap belongs to, when the table says (the application's view does). */
   item?: string
+  /** Who or what can settle it (ADR-0087): the row's `Settled by`, or its kind's default when the row names none. */
+  settledBy: GapSettler
+  /** The concrete step that would settle it, when the row says (`Probe`). */
+  probe?: string
 }
 
 export type GapCounts = {
@@ -41,6 +45,8 @@ export type GapCounts = {
   units: number
   byKind: Record<GapKind, number>
   byImpact: Record<GapImpact, number>
+  /** Open gaps by who or what can settle them. */
+  bySettler: Record<GapSettler, number>
 }
 
 export type GapReport = {
@@ -82,8 +88,11 @@ function gapsOfTable(table: Table, defaultItem?: string): Gap[] {
     const status = cell(row, column(/^status$/i)).trim()
     const answer = cell(row, column(/^answer$/i)).trim()
     const evidence = cell(row, column(/^evidence$/i)).trim()
+    const settler = cell(row, column(/^settled by$/i)).trim()
+    const probe = cell(row, column(/^probe$/i)).trim()
     gaps.push({ id: ident, kind: found, impact: level, question: cell(row, question), where: uncode(cell(row, where)), ...(owner === '' ? {} : { item: owner }),
-      ...(status === 'resolved' || status === 'open' ? { status } : {}), ...(answer === '' ? {} : { answer }), ...(evidence === '' ? {} : { evidence }) })
+      ...(status === 'resolved' || status === 'open' ? { status } : {}), ...(answer === '' ? {} : { answer }), ...(evidence === '' ? {} : { evidence }),
+      settledBy: isGapSettler(settler) ? settler : DEFAULT_GAP_SETTLER[found], ...(probe === '' ? {} : { probe }) })
   }
 
   return gaps
@@ -107,6 +116,7 @@ export const countGaps = (gaps: readonly Gap[]): GapCounts => ({
   units: new Set(gaps.flatMap(gap => (gap.item === undefined ? [] : [gap.item]))).size,
   byKind: Object.fromEntries(GAP_KINDS.map(kind => [kind, gaps.filter(gap => gap.kind === kind).length])) as Record<GapKind, number>,
   byImpact: Object.fromEntries(GAP_IMPACTS.map(impact => [impact, gaps.filter(gap => gap.impact === impact).length])) as Record<GapImpact, number>,
+  bySettler: Object.fromEntries(GAP_SETTLERS.map(settler => [settler, gaps.filter(gap => gap.settledBy === settler && !gapIsResolved(gap)).length])) as Record<GapSettler, number>,
 })
 
 export { gapIsResolved }

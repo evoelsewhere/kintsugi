@@ -66,7 +66,7 @@ describe("built-in plugins", () => {
 
   it("reads plugin.json from the plugin folder and reads files only from the plugin", async () => {
     const plugins = await loadBuiltinPlugins();
-    expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "2.3.0" });
+    expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "2.4.0" });
     expect(JSON.parse((await readBuiltinPluginFile(plugins, "modernize", "kintsugi.json"))!)).toMatchObject({ audience: "both", requires: ["reverse_engineering"] });
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/modernize-design.md")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "../package.json")).toBeUndefined();

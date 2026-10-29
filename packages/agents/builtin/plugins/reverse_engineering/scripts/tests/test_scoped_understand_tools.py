@@ -10,6 +10,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
 sys.path.insert(0, SCRIPTS)
 import catalog_common as cc  # noqa: E402
+import citations  # noqa: E402
 import docmd  # noqa: E402
 import render_rules as rr  # noqa: E402
 import rule_docs as rd  # noqa: E402
@@ -366,6 +367,9 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertIn('tax/calc: citation src/TAX.cbl:9 in findings.md: line 9 is past the end of the file (5 lines)', result.stdout)
         front, body = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))
         self.assertEqual((front['citations'], front['citationsInvalid']), (3, 1))
+        # ADR-0087: the digest of each cited range that holds, for the plan to tell when the source moves on.
+        self.assertEqual(front['citedLines'], 2)
+        self.assertEqual(sorted(citations.recorded_cited_lines(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))), ['legacy/src/TAX.cbl:3-3', 'legacy/src/TAX.cbl:4-4'])
         rows = docmd.records_in(dict(docmd.sections(body, 2))['Citations that do not resolve'])
         self.assertEqual(rows, [{'citation': '`src/TAX.cbl:9`', 'document': 'findings.md', 'why': 'line 9 is past the end of the file (5 lines)'}])
         self.assertNotIn('readRecord', front, 'no record of reads: nothing said about them')
@@ -455,6 +459,11 @@ class UnderstandToolsTests(unittest.TestCase):
                          {'gaps': 3, 'units': 1, 'blocking': 1, 'risk': 1, 'note': 1, 'missingSource': 1, 'unresolved': 0, 'ambiguous': 1, 'unverified': 1})
         rows = docmd.records_in(body)
         self.assertEqual([(row['item'], row['id'], row['impact']) for row in rows], [('tax/calc', 'GAP-tax.calc-01', 'blocking'), ('tax/calc', 'GAP-tax.calc-02', 'risk'), ('tax/calc', 'GAP-tax.calc-03', 'note')])
+        # Who can settle each gap (ADR-0087): the row's own value, else its kind's default; open gaps counted per settler.
+        self.assertEqual([(row['settled by'], row['probe']) for row in rows],
+                         [('source-owner', 'Ask the owners of the copybook library for TAXTAB.'), ('expert', 'Ask the tax team which rate applies.'), ('check', '')])
+        self.assertEqual({key: front[key] for key in ('openForSourceOwner', 'openForExpert', 'openForData', 'openForCheck')},
+                         {'openForSourceOwner': 1, 'openForExpert': 1, 'openForData': 0, 'openForCheck': 1})
 
     def test_rebuild_aggregates_merges_the_units_into_markdown_read_models(self):
         docs = os.path.join(self.root, 'docs')

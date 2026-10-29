@@ -4,6 +4,17 @@ Shared verbatim by both plugins; keep parity with hooks/reader/gaps.ts.
 import re
 import docmd
 
+# Who or what can settle a gap (ADR-0087), the optional `Settled by` column. It advises, it never makes a table invalid:
+# a row without one, or with a value outside the list, takes its kind's default.
+GAP_SETTLERS = ('source-owner', 'expert', 'data', 'check')
+DEFAULT_SETTLER = {'missing-source': 'source-owner', 'unresolved': 'data', 'ambiguous': 'expert', 'unverified': 'check'}
+
+
+def settler(row):
+    """The `Settled by` of a gap row: its own value when it is one of GAP_SETTLERS, else the default of its kind."""
+    value = (row.get('settled by') or '').strip()
+    return value if value in GAP_SETTLERS else DEFAULT_SETTLER.get(row.get('kind', ''), 'expert')
+
 
 def meaningful(value):
     return isinstance(value, str) and not re.fullmatch(r'(?:\s*|[-—]|todo\b.*|tbd\b.*|none\.?)', value.strip(), re.IGNORECASE)

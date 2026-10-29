@@ -63,6 +63,30 @@ class Citations(SourcesCase):
         self.assertEqual(problems, [('legacy/src/TAXTAB.cpy:1', 'no such file in legacy'), ('legacy/src/TAX.cbl:9', 'line 9 is past the end of the file (4 lines)')])
 
 
+class CitedLines(SourcesCase):
+    def test_a_digest_names_the_lines_whatever_their_line_endings(self):
+        digest = self.sources.digest('legacy', 'src/TAX.cbl', 2, 3)
+        self.assertEqual(len(digest), 16)
+        write(self.root, 'legacy/src/TAX.cbl', 'LINE 1\r\nLINE 2\r\nLINE 3\r\nLINE 4\r\n')
+        self.assertEqual(self.sources.digest('legacy', 'src/TAX.cbl', 2, 3), digest)
+        self.assertIsNone(self.sources.digest('legacy', 'src/TAX.cbl', 4, 5))
+        self.assertIsNone(self.sources.digest('legacy', 'src/NONE.cbl', 1, 1))
+
+    def test_the_section_round_trips_and_moved_names_what_changed(self):
+        recorded = self.sources.cited_lines('See legacy/src/TAX.cbl:1-2, src/TAX.cbl:4, broken legacy/src/TAX.cbl:9 and schema/TAX.sql:2.')
+        self.assertEqual(sorted(recorded), ['legacy-data/schema/TAX.sql:2-2', 'legacy/src/TAX.cbl:1-2', 'legacy/src/TAX.cbl:4-4'])
+        self.assertEqual(citations.recorded_cited_lines('---\na: 1\n---\n# Record\n' + citations.cited_lines_section(recorded)), recorded)
+        self.assertEqual(citations.recorded_cited_lines('# Record without the section\n'), {})
+        self.assertEqual(self.sources.moved(recorded), [])
+        write(self.root, 'legacy/src/TAX.cbl', 'LINE 1\nLINE 2 CHANGED\n')
+        os.remove(os.path.join(self.root, 'legacy-data', 'schema', 'TAX.sql'))
+        self.assertEqual(self.sources.moved(recorded), [
+            ('legacy-data/schema/TAX.sql:2-2', 'no such file in legacy-data'),
+            ('legacy/src/TAX.cbl:1-2', 'the lines changed'),
+            ('legacy/src/TAX.cbl:4-4', 'line 4 is past the end of the file now'),
+        ])
+
+
 class ReadRecords(SourcesCase):
     def record(self, complete=True):
         return citations.ReadRecord({'agent': 'legacy-analyst@1.4.0', 'complete': complete, 'unrecorded': {} if complete else {'shell': 2},

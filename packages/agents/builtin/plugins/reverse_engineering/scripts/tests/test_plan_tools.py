@@ -9,6 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
 sys.path.insert(0, SCRIPTS)
 import catalog_common as cc  # noqa: E402
+import citations  # noqa: E402
 import docmd  # noqa: E402
 
 
@@ -181,6 +182,35 @@ class PlanToolsTests(unittest.TestCase):
         self.assertEqual(plan['leftOut'], [{'item': 'batch/a', 'reason': 'Low value.'}])
         self.assertEqual((plan['front']['batches'], plan['front']['planned']), (2, 3))
         self.assertNotIn('.json', docmd.read_text(self.plan_path))
+
+    def test_cited_lines_that_changed_since_an_item_was_understood_are_reported_with_what_cites_them(self):
+        # ADR-0087: the understanding record keeps a digest per cited range; the plan says which ones the source moved.
+        src = os.path.join(self.root, 'as-is')
+        write(os.path.join(src, 'legacy', 'src', 'BASE.cbl'), 'LINE 1\nLINE 2\nLINE 3\nLINE 4\n')
+        recorded = citations.Sources({'legacy': os.path.join(src, 'legacy')}).cited_lines('legacy/src/BASE.cbl:1-2, legacy/src/BASE.cbl:3, legacy/src/BASE.cbl:4')
+        folder = os.path.join(self.units, 'core', 'base')
+        write(os.path.join(folder, 'understanding.md'), '---\nstatus: "understood"\n---\n# Understanding record\n' + citations.cited_lines_section(recorded))
+        write(os.path.join(folder, 'spec.md'), '# Base\n\n## Gaps and questions\n\n| ID | Kind | Question | Where | Impact |\n| --- | --- | --- | --- | --- |\n'
+                                               '| GAP-BASE01-0001 | ambiguous | Why 3? | `legacy/src/BASE.cbl:3` | risk |\n')
+        write(os.path.join(folder, 'rules.md'), '# Rules\n\n| ID | Name | Category | Priority | Confidence | Version | Status | Source | Rule file |\n'
+                                                '| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| RULE-BASE01-0001 | One | Validation | P1 | High | 1 | confirmed | `legacy/src/BASE.cbl:1-2` | [x](rules/x.md) |\n')
+        # Line 3 changes and line 4 goes away; lines 1-2 stay as they were.
+        write(os.path.join(src, 'legacy', 'src', 'BASE.cbl'), 'LINE 1\nLINE 2\nLINE THREE\n')
+        result = run('plan_graph.py', 'shop', '--catalog', self.catalog, '--existing', self.units, '--src', src, '--out', self.out)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('2 cited line range(s) of understood items changed', result.stdout)
+        graph = load(self.graph_path)
+        self.assertEqual(graph['drift'], [
+            {'item': 'core/base', 'citation': 'legacy/src/BASE.cbl:3-3', 'why': 'the lines changed', 'citedBy': ['GAP-BASE01-0001']},
+            {'item': 'core/base', 'citation': 'legacy/src/BASE.cbl:4-4', 'why': 'line 4 is past the end of the file now', 'citedBy': []},
+        ])
+        self.assertEqual({entry['id']: entry.get('evidenceMoved') for entry in graph['items'] if entry['understood']}, {'core/base': 2})
+        draft_path = os.path.join(self.root, 'draft.json')
+        write(draft_path, {'strategy': 'Entry next.', 'batches': [{'title': 'Entry', 'items': ['web/entry'], 'rationale': 'Next.', 'risk': 'low'}]})
+        self.assertEqual(run('check_plan.py', 'shop', '--draft', draft_path, '--graph', self.graph_path, '--out', self.out).returncode, 0)
+        moved = docmd.records_in(dict(docmd.sections(docmd.split_front_matter(docmd.read_text(self.plan_path))[1], 2))['Evidence that moved'])
+        self.assertEqual([(row['item'], row['citation'], row['cited by']) for row in moved],
+                         [('core/base', '`legacy/src/BASE.cbl:3-3`', 'GAP-BASE01-0001'), ('core/base', '`legacy/src/BASE.cbl:4-4`', 'the specification')])
 
     def test_a_batch_that_leaves_a_dependency_for_later_says_so(self):
         result = self.plan({'batches': [{'title': 'Top first', 'items': ['web/entry'], 'rationale': '', 'risk': 'low'}]})

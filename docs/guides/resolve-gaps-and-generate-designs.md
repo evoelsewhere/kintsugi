@@ -14,7 +14,13 @@ required design set. Generate and Regenerate use the same guard. The API checks 
 2. Review uncertain rules. Correct the rule's own evidence/statement and its existing review ledger at
    `10-applications/<app>/01-legacy/<module>/<unit>/rules-review.md`; a `clarify` verdict is still unresolved.
 3. Generate and merge conformant prerequisite design sets. A waived document needs its existing recorded reason.
-4. Resolve blocking gaps as below. Risk/note gaps can remain with explicit assumptions.
+4. Resolve blocking gaps as below. Risk/note gaps can remain with explicit assumptions. On **Understand → Results →
+   Gaps**, filter by **Settled by** to hand each open question to whoever can answer it (the owner of a missing source,
+   an expert, production data, or a check); its **Probe** says what to do first.
+
+When the legacy source changes, the next **Plan understand** run lists in `01-legacy/plan.md`, under *Evidence that
+moved*, the cited lines of understood units that changed since they were written, with the rules and gaps that cite
+them. Understand those units again before a design relies on them.
 
 A catalog unit can appear on Design before Understand creates its card. Its final design remains blocked. Retired or
 unknown catalog units must first be reconciled through Assess, including for draft work.
@@ -31,9 +37,9 @@ The change updates the existing specification, for example:
 ```markdown
 ## Gaps and questions
 
-| ID | Kind | Question | Where | Impact | Status | Answer | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| GAP-BILL01-0001 | ambiguous | Which rounding rule applies? | legacy/tax.cbl:41 | blocking | resolved | Round down to cents after summing the invoice. | REQ-17, confirmed by the finance owner in the reviewed requirement. |
+| ID | Kind | Question | Where | Impact | Settled by | Probe | Status | Answer | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GAP-BILL01-0001 | ambiguous | Which rounding rule applies? | legacy/tax.cbl:41 | blocking | expert | Ask the finance owner which rounding the invoices must follow. | resolved | Round down to cents after summing the invoice. | REQ-17, confirmed by the finance owner in the reviewed requirement. |
 ```
 
 Keep the ID, question, impact and source location. Update any affected behavior explanation in this same specification

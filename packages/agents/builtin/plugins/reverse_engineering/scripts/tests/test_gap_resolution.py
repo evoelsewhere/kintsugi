@@ -62,6 +62,17 @@ class Resolution(unittest.TestCase):
             front = docmd.split_front_matter(rebuild.gaps_md('billing', gap_rows))[0]
             self.assertEqual((front['open'], front['resolved']), (0, 1))
 
+    def test_carrying_answers_keeps_who_settles_the_gap_and_its_probe(self):
+        # ADR-0087: the advisory columns survive the rewrite of the table; an unknown value reads as the kind's default.
+        written = spec().replace('| ID | Kind | Question | Where | Impact | Status | Answer | Evidence |\n| --- | --- | --- | --- | --- | --- | --- | --- |',
+                                 '| ID | Kind | Question | Where | Impact | Settled by | Probe | Status | Answer | Evidence |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
+        written = written.replace('| blocking | open |', '| blocking | expert | Ask the tax team. | open |')
+        row = gaps.checked_gaps(gaps.carry_resolutions(written, spec('Use 8%.', 'resolved'), True))[0]
+        self.assertEqual((row['settled by'], row['probe'], row['answer']), ('expert', 'Ask the tax team.', 'Use 8%.'))
+        self.assertEqual(gap_resolution.settler(row), 'expert')
+        self.assertEqual(gap_resolution.settler({**row, 'settled by': 'the tax team'}), 'expert')
+        self.assertEqual(gap_resolution.settler({'kind': 'missing-source'}), 'source-owner')
+
     def test_malformed_previously_answered_register_fails_instead_of_losing_answers(self):
         before = spec('Use 8%.', 'resolved').replace('| ambiguous |', '| wrong-kind |')
         with self.assertRaisesRegex(Exception, 'invalid gap answers'):

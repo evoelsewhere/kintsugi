@@ -1,9 +1,10 @@
 // Results of the gaps view (ADR-0057): what the legacy understanding could not settle. The application's gaps
 // (the units' `Gaps and questions` tables joined) or one unit's own: a count per impact and per kind that filter the
-// table, and the question, where it shows and which unit it belongs to. A specification written before the table
-// existed has none: the view says so instead of showing an empty list as a clean bill.
+// table, and the question, where it shows and which unit it belongs to. Who or what can settle each gap, with the step
+// that would (ADR-0087), filters it too, so the open questions read as work for the right people. A specification
+// written before the table existed has none: the view says so instead of showing an empty list as a clean bill.
 
-import { gapIsResolved } from "@kintsugi/domain";
+import { DEFAULT_GAP_SETTLER, GAP_SETTLERS, type GapSettler, gapIsResolved } from "@kintsugi/domain";
 import { CircleHelp } from "lucide-react";
 import { useState } from "react";
 import { InlineText } from "@/components/results/inline-text";
@@ -40,6 +41,20 @@ const KIND_NOTE: Record<GapKind, string> = {
   unverified: "A check could not be run here",
 };
 
+const SETTLER_LABEL: Record<GapSettler, string> = {
+  "source-owner": "Source owner",
+  expert: "Expert",
+  data: "Production data",
+  check: "A check",
+};
+const SETTLER_NOTE: Record<GapSettler, string> = {
+  "source-owner": "Whoever can provide the missing source, configuration or job description",
+  expert: "A person who knows the business: intent, a suspected defect, a comment that contradicts the code",
+  data: "Records, logs or a run of the system: what the code reads at run time",
+  check: "A tool or a test that could not be run here",
+};
+const settlerOf = (gap: Gap): GapSettler => gap.settledBy ?? DEFAULT_GAP_SETTLER[gap.kind];
+
 export function GapsResultsView({ results, projectId, onOpenItem }: { results: GapsResults; projectId?: string; onOpenItem?: ((item: string) => void) | undefined }): React.JSX.Element {
   const { can } = useAuth();
   const [editing, setEditing] = useState<Gap | undefined>();
@@ -58,8 +73,10 @@ export function GapsResultsView({ results, projectId, onOpenItem }: { results: G
   };
   const [impact, setImpact] = useState<GapImpact | "">("");
   const [kind, setKind] = useState<GapKind | "">("");
+  const [settler, setSettler] = useState<GapSettler | "">("");
   const { gaps } = results;
   const scopedGaps = gaps.filter((gap) => status === "all" || isResolved(gap) === (status === "resolved"));
+  const bySettler = Object.fromEntries(GAP_SETTLERS.map((entry) => [entry, scopedGaps.filter((gap) => settlerOf(gap) === entry).length])) as Record<GapSettler, number>;
   const gapCounts = { total: scopedGaps.length, byKind: Object.fromEntries(GAP_KINDS.map((entry) => [entry, scopedGaps.filter((gap) => gap.kind === entry).length])) as Record<GapKind, number>, byImpact: Object.fromEntries(GAP_IMPACTS.map((entry) => [entry, scopedGaps.filter((gap) => gap.impact === entry).length])) as Record<GapImpact, number> };
 
   if (results.noSection === true) {
@@ -74,13 +91,24 @@ export function GapsResultsView({ results, projectId, onOpenItem }: { results: G
     );
   }
 
-  const rows = scopedGaps.filter((gap) => (impact === "" || gap.impact === impact) && (kind === "" || gap.kind === kind));
+  const rows = scopedGaps.filter((gap) => (impact === "" || gap.impact === impact) && (kind === "" || gap.kind === kind) && (settler === "" || settlerOf(gap) === settler));
   const columns: Column<Gap>[] = [
     { id: "id", header: "ID", cell: (row) => <span className="font-mono text-[12px] whitespace-nowrap text-text">{row.id}</span>, sort: (row) => row.id },
     { id: "impact", header: "Impact", cell: (row) => <StatusBadge tone={IMPACT_TONE[row.impact]} label={row.impact} title={IMPACT_NOTE[row.impact]} />, sort: (row) => GAP_IMPACTS.indexOf(row.impact) },
     { id: "status", header: "Status", cell: (row) => <StatusBadge tone={isResolved(row) ? "green" : "orange"} label={isResolved(row) ? "Resolved" : "Open"} />, sort: (row) => Number(isResolved(row)) },
     { id: "kind", header: "Kind", cell: (row) => <span className="text-[12px] whitespace-nowrap text-text-secondary" title={KIND_NOTE[row.kind]}>{KIND_LABEL[row.kind]}</span>, sort: (row) => GAP_KINDS.indexOf(row.kind) },
-    { id: "question", header: "Question", cell: (row) => <InlineText text={row.question} className="text-text" />, sort: (row) => row.question, search: (row) => `${row.id} ${row.question} ${row.where} ${row.item ?? ""}`, className: "min-w-[280px]" },
+    { id: "question", header: "Question", cell: (row) => <InlineText text={row.question} className="text-text" />, sort: (row) => row.question, search: (row) => `${row.id} ${row.question} ${row.where} ${row.item ?? ""} ${row.probe ?? ""}`, className: "min-w-[280px]" },
+    {
+      id: "settler",
+      header: "Settled by",
+      cell: (row) => (
+        <span className="flex flex-col gap-1">
+          <span className="text-[12px] whitespace-nowrap text-text-secondary" title={SETTLER_NOTE[settlerOf(row)]}>{SETTLER_LABEL[settlerOf(row)]}</span>
+          {row.probe === undefined ? null : <InlineText text={row.probe} className="text-[12px] text-text-muted" />}
+        </span>
+      ),
+      sort: (row) => GAP_SETTLERS.indexOf(settlerOf(row)),
+    },
     { id: "where", header: "Where", cell: (row) => <InlineText text={row.where === "" ? "—" : row.where} className="font-mono text-[12px] text-text-muted" />, sort: (row) => row.where },
     { id: "answer", header: "Answer / evidence", cell: (row) => <span className="flex flex-col gap-1"><InlineText text={row.answer ?? "—"} className="text-text" />{row.evidence === undefined ? null : <InlineText text={row.evidence} className="text-[12px] text-text-muted" />}</span> },
     ...(projectId !== undefined && can("documents.resolve") ? [{ id: "resolve", header: "", cell: (row: Gap) => <Button size="small" variant="ghost" disabled={row.item === undefined} onClick={() => edit(row)}>{isResolved(row) ? "Reopen / edit" : "Answer"}</Button> } satisfies Column<Gap>] : []),
@@ -114,7 +142,7 @@ export function GapsResultsView({ results, projectId, onOpenItem }: { results: G
         {(results.problems?.length ?? 0) > 0 ? <p role="alert" className="mb-3 text-[13px] text-[var(--ds-status-orange)]">Repair the original specification before generating a final design: {results.problems!.join(" ")}</p> : null}
         <div className="mb-3 flex gap-2">{(["open", "resolved", "all"] as const).map((value) => <Button key={value} size="small" variant={status === value ? "solid" : "ghost"} onClick={() => setStatus(value)}>{value === "open" ? "Open" : value === "resolved" ? "Resolved" : "All statuses"}</Button>)}</div>
         <div className="flex flex-wrap items-center gap-2">
-          <CountChip label="All" count={gapCounts.total} active={impact === "" && kind === ""} onClick={() => (setImpact(""), setKind(""))} />
+          <CountChip label="All" count={gapCounts.total} active={impact === "" && kind === "" && settler === ""} onClick={() => (setImpact(""), setKind(""), setSettler(""))} />
           {GAP_IMPACTS.map((level) => (
             <CountChip key={level} label={level} count={gapCounts.byImpact[level]} tone={IMPACT_TONE[level]} active={impact === level} onClick={() => setImpact(impact === level ? "" : level)} />
           ))}
@@ -122,11 +150,15 @@ export function GapsResultsView({ results, projectId, onOpenItem }: { results: G
           {GAP_KINDS.map((entry) => (
             <CountChip key={entry} label={KIND_LABEL[entry]} count={gapCounts.byKind[entry]} active={kind === entry} onClick={() => setKind(kind === entry ? "" : entry)} />
           ))}
+          <span className="mx-1 h-4 w-px bg-[var(--color-border)]" aria-hidden />
+          {GAP_SETTLERS.map((entry) => (
+            <CountChip key={entry} label={SETTLER_LABEL[entry]} count={bySettler[entry]} active={settler === entry} onClick={() => setSettler(settler === entry ? "" : entry)} />
+          ))}
         </div>
         {gaps.length === 0 ? (
           <EmptyState icon={CircleHelp} title={results.problems?.length ? "The gaps register needs repair" : "No gaps recorded"} description="Read the original specifications to confirm their evidence and gaps. A missing or malformed register does not prove there are no questions." />
         ) : (
-          <DataTable label="Gaps and questions" rows={rows} columns={columns} rowKey={(row) => `${row.item ?? ""}|${row.id}`} searchPlaceholder="Search questions, ids, places" initialSort={{ id: "impact" }} minWidth={820} empty="No gap matches this filter." />
+          <DataTable label="Gaps and questions" rows={rows} columns={columns} rowKey={(row) => `${row.item ?? ""}|${row.id}`} searchPlaceholder="Search questions, ids, places, probes" initialSort={{ id: "impact" }} minWidth={820} empty="No gap matches this filter." />
         )}
       </Section>
       <ConfirmDialog open={editing !== undefined} title={`Answer ${editing?.id ?? ""} in its specification`} confirmLabel="Propose specification correction" busyLabel="Queuing…" confirmVariant="solid" onConfirm={propose} onClose={() => setEditing(undefined)}>

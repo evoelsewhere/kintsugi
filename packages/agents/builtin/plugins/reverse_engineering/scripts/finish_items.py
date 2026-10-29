@@ -25,7 +25,8 @@ overwritten). Writes under --out:
   specification job was shown (scratch/<app>/understand/reads/<module>/<unit>.json, ADR-0086): whether it is complete
   (`readRecord`), the lines of the item's files and how many the job was shown (`sourceLines`, `sourceLinesShown`), and
   the specification's citations of lines the job was not shown and that no rule or finding of the item cites
-  (`citationsUnshown`, and a table);
+  (`citationsUnshown`, and a table). Also with --src, the digest of every range of lines the documents cite
+  (`citedLines`, and a `Cited lines` table), which plan_graph.py compares with the source when it moves (ADR-0087);
 - 02-modern/<module>/<unit>/README.md - the unit's card (frontmatter = state).
 
 An item without its specification gets none of these (it shows as failed or not analysed).
@@ -199,12 +200,13 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
         findings_text = docmd.read_optional_text(os.path.join(inputs, *paths.unit_findings_path(app, *item_id.split('/')).split('/')))
         rules = {row['id'] for row in rr.unit_rule_rows(rules_text) if row.get('id') and row.get('status') != 'retired'} if rules_text else set()
         findings = {row.get('id', '') for row in sf.finding_rows(findings_text)} if findings_text else set()
-        cited, unresolved = 0, []
+        cited, unresolved, digests = 0, [], {}
         if checker is not None:
             for document, text in (('spec.md', spec_text), ('rules.md', rules_text), ('findings.md', findings_text)):
                 count, problems = checker.check(text or '')
                 cited += count
                 unresolved += [(citation, document, why) for citation, why in problems]
+                digests.update(checker.cited_lines(text or ''))
             if notes is not None:
                 notes.extend(f'{item_id}: citation {citation} in {document}: {why}' for citation, document, why in unresolved)
         reads = cc.read_optional_json(os.path.join(inputs, *paths.understand_reads_path(app, item_id).split('/'))) if checker is not None else None
@@ -254,6 +256,7 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
         if checker is not None:
             record['citations'] = cited
             record['citationsInvalid'] = len(unresolved)
+            record['citedLines'] = len(digests)
         if reads_record is not None:
             total, shown = read_coverage(item['files'], checker, reads_record)
             record['readRecord'] = 'complete' if reads_record.complete else 'partial'
@@ -265,6 +268,7 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
             'Its presence on the default branch marks the item understood; a changed catalog digest marks it stale.\n'
             + (unresolved_citations(cited, unresolved) if unresolved else '')
             + (unshown_citations(unshown, reads_record) if unshown else '')
+            + (citations.cited_lines_section(digests) if digests else '')
         )
         module, name = item_id.split('/', 1)
         if not (existing and os.path.exists(os.path.join(existing, module, name, paths.UNIT_CARD))):

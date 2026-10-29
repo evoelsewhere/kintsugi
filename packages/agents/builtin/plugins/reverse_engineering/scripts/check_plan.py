@@ -29,6 +29,7 @@ import paths  # noqa: E402
 RISKS = ('high', 'medium', 'low')
 MAX_TITLE = 100
 MAX_TEXT = 600
+MAX_DRIFT = 200
 
 
 def dropped(item, reason):
@@ -115,6 +116,8 @@ def check(app, draft, graph, max_batch, max_batches):
         'leftOut': left_out[:200],
         'dropped': drops[:200],
         'summary': {'batches': len(batches), 'planned': len(taken), 'open': open_items},
+        # Cited lines of understood items that changed since they were written (ADR-0087), as the graph computed them.
+        'drift': [entry for entry in graph.get('drift') or [] if isinstance(entry, dict) and entry.get('item') in by_id][:MAX_DRIFT],
     }
 
 
@@ -160,6 +163,12 @@ def render_plan(plan):
         out += ['## Left out', '', docmd.table(['Item', 'Reason'], [[entry['item'], entry['reason']] for entry in plan['leftOut']])]
     if plan['dropped']:
         out += ['## Dropped', '', 'Named by the planner and refused by the check.', '', docmd.table(['Item', 'Reason'], [[entry['item'], entry['reason']] for entry in plan['dropped']])]
+    if plan.get('drift'):
+        out += ['## Evidence that moved', '',
+                'Source lines that understood items cite and that changed since their documents were written: the statements, rules and gaps '
+                'that cite them may no longer hold. Understanding the item again rewrites them; until then, check them before relying on them.', '',
+                docmd.table(['Item', 'Citation', 'Why', 'Cited by'], [[entry['item'], f"`{entry['citation']}`", entry['why'], ', '.join(entry.get('citedBy') or []) or 'the specification']
+                                                                      for entry in plan['drift']])]
     return '\n'.join(out).rstrip() + '\n'
 
 

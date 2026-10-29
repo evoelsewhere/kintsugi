@@ -43,6 +43,9 @@ best in one run. This stage proposes that order.
    depends on and that use it (with the kinds of calls), the data stores it touches, its fan-in and fan-out, its
    depth (0 = depends on no other item) and its cycle (strongly connected components: items that depend on each
    other). An item with an `understanding.md` under `10-applications/$app/01-legacy/<module>/<unit>/` is understood.
+   With the checkouts (`{src}`), it also recomputes the digests of the cited lines each understood item's record keeps
+   and lists those that changed, with the rule and gap ids citing them
+   ([ADR-0087](../../../../../../docs/decisions/0087-who-settles-a-gap-and-evidence-that-moved.md)).
 2. One **understand-planner** job reads the graph and `assessment.md` under the `understand-planning` skill and
    returns the plan as structured data: a strategy, batches (title, items, rationale, risk) in the order they should
    run, and what it left out on purpose. It opens source files only to settle a doubt.
@@ -58,7 +61,8 @@ best in one run. This stage proposes that order.
 `plan.md` is Markdown: front matter with `version` 1, the sources the plan was made at (`catalogSources`, `<repository id>@<commit>` of each legacy repository), the
 number of items and of open ones, then the strategy and a section `## Batch <n>: <title>` per batch (the rationale; the
 fields `risk`, `loc`, `high complexity` and `cohesion`; the items; the items outside it that it depends on), and the tables
-`Left out` and `Dropped` (item and reason). The API serves it at
+`Left out` and `Dropped` (item and reason), and `Evidence that moved` (item, citation, why, the rules and gaps citing it)
+when cited lines of understood items changed. The API serves it at
 `GET /api/projects/:id/applications/:appId/understand/plan` with the current status of its items and `stale` when
 the catalog was reassessed since; the portal shows the batches above the catalog and selects one in a click.
 Understanding an item is never blocked by the plan: a person may still select anything.

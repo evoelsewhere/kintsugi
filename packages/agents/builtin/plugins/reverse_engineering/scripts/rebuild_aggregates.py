@@ -141,14 +141,19 @@ def gaps_md(app, gap_rows):
     ordered = sorted(gap_rows, key=lambda row: (gc.GAP_IMPACTS.index(row['impact']) if row['impact'] in gc.GAP_IMPACTS else len(gc.GAP_IMPACTS), row['item'], row['id']))
     by_kind = {kind: sum(1 for row in ordered if row['kind'] == kind) for kind in gc.GAP_KINDS}
     by_impact = {impact: sum(1 for row in ordered if row['impact'] == impact) for impact in gc.GAP_IMPACTS}
+    open_rows = [row for row in ordered if not gap_resolution.resolved(row)]
+    by_settler = {settler: sum(1 for row in open_rows if gap_resolution.settler(row) == settler) for settler in gc.GAP_SETTLERS}
     front = docmd.front_matter({'app': app, 'generatedBy': 'rebuild_aggregates.py', 'gaps': len(ordered), 'open': sum(1 for row in ordered if not gap_resolution.resolved(row)), 'resolved': sum(1 for row in ordered if gap_resolution.resolved(row)), 'units': len({row['item'] for row in ordered}),
                                 **{impact: count for impact, count in by_impact.items()}, 'missingSource': by_kind['missing-source'], 'unresolved': by_kind['unresolved'],
-                                'ambiguous': by_kind['ambiguous'], 'unverified': by_kind['unverified']})
+                                'ambiguous': by_kind['ambiguous'], 'unverified': by_kind['unverified'],
+                                'openForSourceOwner': by_settler['source-owner'], 'openForExpert': by_settler['expert'], 'openForData': by_settler['data'], 'openForCheck': by_settler['check']})
     doc = [front, f'# Gaps and questions - {rr.one_line(app, 80)}', '',
            f'Generated from the `Gaps and questions` tables of the understood units ({paths.legacy_dir(app)}/*/*/spec.md); do not edit by hand. '
            "An answer is written in the unit's specification, in the pull request that carries it.", '']
     if ordered:
-        table = docmd.table(['Item', 'ID', 'Kind', 'Impact', 'Question', 'Where', 'Status', 'Answer', 'Evidence'], [[row['item'], row['id'], row['kind'], row['impact'], row.get('question', ''), row.get('where', ''), row.get('status', 'open'), row.get('answer', ''), row.get('evidence', '')] for row in ordered])
+        table = docmd.table(['Item', 'ID', 'Kind', 'Impact', 'Question', 'Where', 'Settled by', 'Probe', 'Status', 'Answer', 'Evidence'],
+                            [[row['item'], row['id'], row['kind'], row['impact'], row.get('question', ''), row.get('where', ''), gap_resolution.settler(row), row.get('probe', ''),
+                              row.get('status', 'open'), row.get('answer', ''), row.get('evidence', '')] for row in ordered])
         doc.append(table.rstrip('\n'))
     else:
         doc.append('No gaps were recorded in the understood items.')

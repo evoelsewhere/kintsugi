@@ -1,6 +1,7 @@
 // Typed access to the document repo as Kintsugi's mirror holds it, and to the results of a stage
 // built from it. Mirrors apps/api → modules/delivery/documents (read-only; never restricted/).
 
+import type { GapSettler } from "@kintsugi/domain";
 import { apiGet, apiSend } from "../api";
 
 export type RefStatus = "default" | "merged" | "open" | "commit";
@@ -303,12 +304,16 @@ export interface Gap {
   where: string;
   /** The catalog item (`<module>/<unit>`) the gap belongs to. */
   item?: string;
+  /** Who or what can settle it (ADR-0087); the kind's default when the row names none. */
+  settledBy?: GapSettler;
+  /** The concrete step that would settle it. */
+  probe?: string;
 }
 
 export interface GapsResults extends ResultsBase {
   stage: "gaps";
   gaps: Gap[];
-  gapCounts: { total: number; open?: number; resolved?: number; units: number; byKind: Record<GapKind, number>; byImpact: Record<GapImpact, number> };
+  gapCounts: { total: number; open?: number; resolved?: number; units: number; byKind: Record<GapKind, number>; byImpact: Record<GapImpact, number>; bySettler?: Record<GapSettler, number> };
   /** One unit's view: its specification predates the `Gaps and questions` table. */
   noSection?: boolean;
   /** A malformed register never proves the absence of questions. */

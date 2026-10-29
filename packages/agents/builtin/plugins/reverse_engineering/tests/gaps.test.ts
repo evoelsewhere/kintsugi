@@ -36,6 +36,19 @@ describe('gaps', () => {
     expect(countGaps(gaps)).toMatchObject({ total: 3, units: 1, byImpact: { blocking: 1, risk: 1, note: 1 }, byKind: { 'missing-source': 1, unresolved: 0, ambiguous: 1, unverified: 1 } })
   })
 
+  test('who settles a gap is its Settled by, or its kind\'s default when the row names none or another value (ADR-0087)', () => {
+    const gaps = parseSpecGaps(SPEC, 'tax/calc') ?? []
+
+    expect(gaps.map(gap => [gap.id, gap.settledBy, gap.probe])).toEqual([
+      ['GAP-tax.calc-03', 'check', undefined],
+      ['GAP-tax.calc-01', 'source-owner', 'Ask the owners of the copybook library for TAXTAB.'],
+      ['GAP-tax.calc-02', 'expert', 'Ask the tax team which rate applies.'],
+    ])
+    expect(countGaps(gaps).bySettler).toEqual({ 'source-owner': 1, expert: 1, data: 0, check: 1 })
+    expect(inspectSpecGaps(SPEC).problems.filter(problem => /settled/i.test(problem))).toEqual([])
+    expect(parseGaps(GAPS).gaps.map(gap => gap.settledBy)).toEqual(['source-owner', 'expert', 'data'])
+  })
+
   test('a specification without the section is null, and with no rows has no gaps', () => {
     expect(parseSpecGaps('# Tax\n\n## Purpose\n\nRounds.\n')).toBeNull()
     expect(parseSpecGaps('# Tax\n\n## Gaps and questions\n\nNone.\n')).toEqual([])

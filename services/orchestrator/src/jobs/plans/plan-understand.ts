@@ -113,7 +113,7 @@ export const PLAN_UNDERSTAND: StagePlan = {
       id: "graph",
       kind: "script",
       script: "plan_graph.py",
-      args: ["{app}", "--catalog", `{in}/${assessmentCatalogDir(APP_TOKEN)}`, "--existing", `{in}/${legacyDir(APP_TOKEN)}`, "--out", "{out}"],
+      args: ["{app}", "--catalog", `{in}/${assessmentCatalogDir(APP_TOKEN)}`, "--existing", `{in}/${legacyDir(APP_TOKEN)}`, "--src", "{src}", "--out", "{out}"],
       intermediate: [GRAPH],
       expects: [GRAPH],
     },

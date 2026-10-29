@@ -9,10 +9,14 @@ the document repository (a Markdown file, or under one of its root folders) is n
 The check reports, it never edits a document.
 
 `ReadRecord` reads what the job that wrote a document was shown of the source (ADR-0086), so that a citation of a line
-the job never saw can be told apart from one it read. Standard library only.
+the job never saw can be told apart from one it read. `Sources.cited_lines` and `Sources.moved` keep a digest of the
+lines each citation names and tell, when the source has moved on, which of them changed (ADR-0087). Standard library only.
 """
+import hashlib
 import os
 import re
+
+import docmd
 
 # `<path with an extension>:<line>[-<line>]`; a bare word before the colon is not a citation.
 CITATION = re.compile(r'(?<![\w./-])(?P<path>(?:[\w.-]+/)*[\w.-]+\.(?P<ext>[A-Za-z0-9]{1,8})):(?P<start>\d+)(?:\s*[-–]\s*(?P<end>\d+))?')
@@ -103,6 +107,49 @@ class Sources:
             return True, f'line {end} is past the end of the file ({length} lines)'
         return True, None
 
+    def digest(self, repo, rel, start, end):
+        """The sha256 (first 16 hex digits) of lines `start`-`end` of `<repo>/<rel>`, line endings ignored; None when the
+        file or the lines are not there (ADR-0087)."""
+        path = self._file(repo, rel) if repo in self.roots else None
+        if path is None or start < 1:
+            return None
+        with open(path, 'rb') as handle:
+            lines = handle.read().split(b'\n')
+        if lines and lines[-1] == b'':
+            lines.pop()
+        if end > len(lines):
+            return None
+        return hashlib.sha256(b'\n'.join(line.rstrip(b'\r') for line in lines[start - 1:end])).hexdigest()[:16]
+
+    def cited_lines(self, text):
+        """{citation: digest} of the source citations of a text that hold, in the form `<repo>/<path>:<start>-<end>`."""
+        found = {}
+        for citation in citations_in(text):
+            source, why = self.problem(citation)
+            if not source or why:
+                continue
+            (repo, rel), _ = self.resolve(citation[0])
+            found[f'{repo}/{rel}:{citation[1]}-{citation[2]}'] = self.digest(repo, rel, citation[1], citation[2])
+        return found
+
+    def moved(self, recorded):
+        """[(citation, why)] of the recorded `{citation: digest}` whose lines are no longer what they were (ADR-0087)."""
+        out = []
+        for cited, digest in sorted(recorded.items()):
+            parsed = citations_in(cited)
+            if not parsed:
+                continue
+            found, why = self.resolve(parsed[0][0])
+            if found is None:
+                out.append((cited, why))
+                continue
+            now = self.digest(*found, parsed[0][1], parsed[0][2])
+            if now is None:
+                out.append((cited, f'line {parsed[0][2]} is past the end of the file now'))
+            elif now != digest:
+                out.append((cited, 'the lines changed'))
+        return out
+
     def unshown(self, text, record, inherited=''):
         """The valid source citations of `text` whose lines `record` does not show in one read, leaving out those a
         citation of `inherited` covers (the rules and findings the job was given: copied from a checked document)."""
@@ -156,3 +203,20 @@ class ReadRecord:
     def lines_shown(self, repo, rel, length):
         """How many of the `length` lines of `<repo>/<rel>` were shown."""
         return sum(max(0, min(length, length if last is None else last) - first + 1) for first, last in self.files.get(f'{repo}/{rel}', []))
+
+
+CITED_LINES_SECTION = 'Cited lines'
+
+
+def cited_lines_section(cited):
+    """The section of an understanding record that keeps the digest of every line range its unit's documents cite."""
+    rows = ''.join(f'| `{citation}` | {digest} |\n' for citation, digest in sorted(cited.items()))
+    return (f'\n## {CITED_LINES_SECTION}\n\nThe digest of each range of source lines the unit\'s documents cite, when they were written. '
+            'When the source moves on, a range whose digest changed points at the statements to check again.\n\n'
+            '| Citation | Digest |\n| --- | --- |\n' + rows)
+
+
+def recorded_cited_lines(text):
+    """{citation: digest} of an understanding record's `Cited lines` section; empty for a record without one."""
+    body = next((body for title, body in docmd.sections(docmd.split_front_matter(text or '')[1], 2) if title.strip() == CITED_LINES_SECTION), '')
+    return {docmd.uncode(row.get('citation', '')).strip(): row.get('digest', '').strip() for row in docmd.records_in(body) if row.get('citation')}

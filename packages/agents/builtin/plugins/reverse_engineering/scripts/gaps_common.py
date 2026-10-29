@@ -14,6 +14,7 @@ import gap_resolution
 GAP_ID = re.compile(r'^GAP-[A-Za-z0-9][A-Za-z0-9._-]*-\d{2,}$')
 GAP_KINDS = ('missing-source', 'unresolved', 'ambiguous', 'unverified')
 GAP_IMPACTS = ('blocking', 'risk', 'note')
+GAP_SETTLERS = gap_resolution.GAP_SETTLERS
 GAPS_SECTION = 'gaps and questions'
 GAP_REFERENCE = re.compile(r'(?<![A-Za-z0-9._-])GAP-[A-Za-z0-9][A-Za-z0-9._-]*-[0-9]{2,}(?![A-Za-z0-9_-])')
 
@@ -150,7 +151,7 @@ def carry_resolutions(text, previous_text, unchanged):
     for key, row in answered.items():
         if key not in seen:
             rows.append({**row, 'status': 'resolved' if unchanged and gap_resolution.resolved(row) else 'open'})
-    columns = ['ID', 'Kind', 'Question', 'Where', 'Impact', 'Status', 'Answer', 'Evidence']
+    columns = ['ID', 'Kind', 'Question', 'Where', 'Impact', 'Settled by', 'Probe', 'Status', 'Answer', 'Evidence']
     table = docmd.table(columns, [[row.get(column.lower(), '') for column in columns] for row in rows])
     lines = text.splitlines(keepends=True)
     start, end, fenced = None, len(lines), False

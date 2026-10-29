@@ -263,4 +263,4 @@ export * from "./traceability.js";
 export * from "./mcp.js";
 export * from "./project-memory.js";
 export * from "./web-search.js";
-export { GAP_STATUSES, type GapStatus, gapIsResolved, isMeaningfulGapText } from "./gap.js";
+export { DEFAULT_GAP_SETTLER, GAP_SETTLERS, GAP_STATUSES, type GapSettler, type GapStatus, gapIsResolved, isGapSettler, isMeaningfulGapText } from "./gap.js";

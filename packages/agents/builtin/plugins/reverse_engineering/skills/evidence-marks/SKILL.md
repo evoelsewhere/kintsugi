@@ -69,9 +69,9 @@ Every specification ends with `## Gaps and questions`, a table, one row per gap.
 you looked and found none.
 
 ```markdown
-| ID | Kind | Question | Where | Impact |
-| --- | --- | --- | --- | --- |
-| GAP-BILL01-0001 | missing-source | What does copybook TAXTAB hold? It is COPYed but not in any repository. | `legacy-app/src/INVOICE.cbl:41` | blocking |
+| ID | Kind | Question | Where | Impact | Settled by | Probe |
+| --- | --- | --- | --- | --- | --- | --- |
+| GAP-BILL01-0001 | missing-source | What does copybook TAXTAB hold? It is COPYed but not in any repository. | `legacy-app/src/INVOICE.cbl:41` | blocking | source-owner | Ask the owners of the copybook library for TAXTAB, or add the library to the application's repositories. |
 ```
 
 - **ID**: `GAP-<scope>-0001`, use `referenceCode` from the item brief as the scope. In an understanding job, use unique draft
@@ -91,6 +91,13 @@ you looked and found none.
 - **Where**: the first place the gap shows, `<repository id>/<path>:line`, or a RULE or SEC id.
 - **Impact**: `blocking` (a design or a rebuild cannot be right without the answer), `risk` (work can go on with a
   stated assumption that may prove wrong) or `note` (good to know).
+- **Settled by**: who or what can answer it: `source-owner` (whoever can provide the missing source, configuration or
+  job description), `expert` (a person who knows the business), `data` (production records, logs or a run of the
+  system) or `check` (a tool or a test that could not run here). Left empty, it is read as the usual one for the kind
+  (`missing-source` → `source-owner`, `unresolved` → `data`, `ambiguous` → `expert`, `unverified` → `check`); fill it
+  when the gap is the exception.
+- **Probe**: the one concrete step that would settle it, with the names in it (`Query RATE_TABLE for region codes in a
+  copy of production`, `Run the batch with a December order`). It is what the person who picks the gap up does first.
 
 ## What to do about a gap
 

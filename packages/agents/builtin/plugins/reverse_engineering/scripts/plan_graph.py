@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The item graph a planning run reasons over (ADR-0041): which catalog items call, read and use which.
 
-    python3 plan_graph.py <app> --catalog DIR --out DIR [--existing DIR]
+    python3 plan_graph.py <app> --catalog DIR --out DIR [--existing DIR] [--src DIR]
 
 --catalog is 10-applications/<app>/01-legacy/_catalog/, whose cards carry the links between items (the assess
 stage computed them from the topology); --existing the application's 01-legacy/ folder (an item with an
@@ -11,7 +11,11 @@ under (scratch/<app>/understand/graph.json, intermediate).
 Per active item: size, complexity, asset class, whether it holds an entry point, the items it depends
 on (with the kinds of calls and how many) and that use it, the data stores it touches, its depth
 (0 = depends on no other item, so its callers can be read with it explained) and its cycle (items
-that depend on each other, which are best understood together). No code is read. Standard library only.
+that depend on each other, which are best understood together).
+
+With --src (the legacy checkouts, one folder per repository id) and --existing, the drift of the understood items
+(ADR-0087): the cited lines their understanding record keeps a digest of that changed since, each with the rules and
+gaps that cite it (`drift`, and `evidenceMoved` per item). Otherwise no code is read. Standard library only.
 """
 import argparse
 import os
@@ -21,8 +25,11 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import catalog_common as cc  # noqa: E402
+import citations  # noqa: E402
 import docmd  # noqa: E402
+import gaps_common  # noqa: E402
 import paths  # noqa: E402
+import render_rules as rr  # noqa: E402
 
 # Keep in sync with classifyItem in packages/domain/src/catalog.ts.
 TEST_PATH = re.compile(r'(^|/)(tests?|__tests__|spec|specs|testing|testdata|fixtures)/|\.(test|spec)\.[a-z0-9]+$|(Tests?|IT)\.(java|kt|cs|scala|groovy)$|_test\.(go|py|rb|rs)$|(^|/)test_[^/]+\.py$', re.IGNORECASE)
@@ -82,6 +89,33 @@ def components(nodes, edges):
                 result.append(sorted(members))
     owner = {member: number for number, members in enumerate(result) for member in members}
     return owner, result
+
+
+def _overlaps(sources, cited, other):
+    """Whether two citations name overlapping lines of the same file."""
+    first, second = citations.citations_in(cited), citations.citations_in(other)
+    if not first or not second:
+        return False
+    a, b = sources.resolve(first[0][0])[0], sources.resolve(second[0][0])[0]
+    return a is not None and a == b and first[0][1] <= second[0][2] and second[0][1] <= first[0][2]
+
+
+def drift(understood, existing, sources):
+    """[{item, citation, why, citedBy}] of the cited lines of understood items that changed since they were written."""
+    found = []
+    for item_id in sorted(understood):
+        folder = os.path.join(existing, *paths.split_unit_key(item_id))
+        recorded = citations.recorded_cited_lines(docmd.read_optional_text(os.path.join(folder, 'understanding.md')))
+        moved = sources.moved(recorded) if recorded else []
+        if not moved:
+            continue
+        rules = rr.unit_rule_rows(docmd.read_optional_text(os.path.join(folder, 'rules.md')) or '')
+        gaps = gaps_common.spec_gaps(docmd.read_optional_text(os.path.join(folder, 'spec.md')) or '')[0] or []
+        for cited, why in moved:
+            cited_by = [row['id'] for row in rules if row.get('id') and _overlaps(sources, cited, docmd.uncode(row.get('source', '')))]
+            cited_by += [row['id'] for row in gaps if _overlaps(sources, cited, docmd.uncode(row.get('where', '')))]
+            found.append({'item': item_id, 'citation': cited, 'why': why, 'citedBy': cited_by})
+    return found
 
 
 def build(app, catalog_items, understood, sources):
@@ -160,6 +194,7 @@ def main(argv):
     ap.add_argument('--catalog', required=True, help='the catalog folder (01-legacy/_catalog/)')
     ap.add_argument('--existing', help='the application 01-legacy/ folder: an item with an understanding record there is understood')
     ap.add_argument('--out', required=True, help='the document-repository root to write under')
+    ap.add_argument('--src', help='the legacy checkouts (as-is), to tell which cited lines of the understood items changed')
     args = ap.parse_args(argv[1:])
     try:
         if not cc.APP_RE.match(args.app):
@@ -172,12 +207,22 @@ def main(argv):
                 if os.path.isfile(os.path.join(args.existing, module, unit, 'understanding.md')):
                     understood.add(item_id)
         graph = build(args.app, items, understood, cc.sources_of(catalog.get('sources')))
+        if args.src and args.existing and os.path.isdir(args.src):
+            checkouts = citations.Sources({name: os.path.join(args.src, name) for name in sorted(os.listdir(args.src)) if os.path.isdir(os.path.join(args.src, name))})
+            graph['drift'] = drift(understood, args.existing, checkouts)
+            moved = {}
+            for entry in graph['drift']:
+                moved[entry['item']] = moved.get(entry['item'], 0) + 1
+            for item in graph['items']:
+                if item['understood']:
+                    item['evidenceMoved'] = moved.get(item['id'], 0)
         docmd.write_json(os.path.join(os.path.abspath(args.out), *paths.understand_graph_path(args.app).split('/')), graph)
     except (cc.DataError, OSError, RecursionError) as error:
         print(f'plan_graph.py: {error}', file=sys.stderr)
         return 1
     stats = graph['stats']
-    print(f"{stats['items']} item(s), {stats['open']} open code item(s), {stats['edges']} dependency edge(s), {len(graph['cycles'])} cycle(s); links {'read' if stats['linked'] else 'absent'}")
+    print(f"{stats['items']} item(s), {stats['open']} open code item(s), {stats['edges']} dependency edge(s), {len(graph['cycles'])} cycle(s); links {'read' if stats['linked'] else 'absent'}"
+          + (f"; {len(graph['drift'])} cited line range(s) of understood items changed" if 'drift' in graph else ''))
     return 0
 
 
