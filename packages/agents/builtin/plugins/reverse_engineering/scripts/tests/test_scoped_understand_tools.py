@@ -368,6 +368,19 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertEqual((front['citations'], front['citationsInvalid']), (3, 1))
         rows = docmd.records_in(dict(docmd.sections(body, 2))['Citations that do not resolve'])
         self.assertEqual(rows, [{'citation': '`src/TAX.cbl:9`', 'document': 'findings.md', 'why': 'line 9 is past the end of the file (5 lines)'}])
+        self.assertNotIn('readRecord', front, 'no record of reads: nothing said about them')
+        # With the record of what the specification job was shown (ADR-0086): coverage, and the citations it was not shown.
+        write(unit_file(inputs, 'tax/calc', 'spec.md'), docmd.read_text(unit_file(inputs, 'tax/calc', 'spec.md')).replace('# Tax\n', '# Tax\n\nRounds (legacy/src/TAX.cbl:2), totals (legacy/src/TAX.cbl:5), rate legacy/src/TAX.cbl:3.\n', 1))
+        write(os.path.join(inputs, 'scratch', 'billing', 'understand', 'reads', 'tax', 'calc.json'),
+              {'agent': 'legacy-analyst@1.4.0', 'complete': False, 'unrecorded': {'shell': 2}, 'files': {'legacy/src/TAX.cbl': [[1, 2], [4, 4]]}})
+        result = run(*args, '--src', src)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('tax/calc: citation legacy/src/TAX.cbl:5 in spec.md: its job was not shown these lines', result.stdout)
+        front, body = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))
+        self.assertEqual((front['readRecord'], front['sourceLines'], front['sourceLinesShown'], front['citationsUnshown']), ('partial', 5, 3, 1))
+        section = dict(docmd.sections(body, 2))['Citations the specification job was not shown']
+        self.assertEqual(docmd.records_in(section), [{'citation': '`legacy/src/TAX.cbl:5`'}])
+        self.assertIn('The job also used shell (2)', section)
         # Without --src nothing is checked and the record is as before.
         self.assertEqual(run(*args).returncode, 0)
         front, body = docmd.split_front_matter(docmd.read_text(unit_file(self.out, 'tax/calc', 'understanding.md')))

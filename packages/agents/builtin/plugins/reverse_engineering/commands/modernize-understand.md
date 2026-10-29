@@ -72,7 +72,8 @@ run and be reviewed at the same time without conflicts. `$app` is the applicatio
    **understood** once it is on the default branch, **stale** when the catalog's digest moves away; it also lists the
    citations of the item's `spec.md`, `rules.md` and `findings.md` that name no file of the sources or no such line,
    [ADR-0085](../../../../../../docs/decisions/0085-checked-citations-and-bounded-absence.md), reported and never
-   corrected) and the unit's
+   corrected, and from the record of what the specification job was shown, that job's share of the item's code and the
+   citations of lines it was not shown, [ADR-0086](../../../../../../docs/decisions/0086-record-of-the-source-a-job-was-shown.md)) and the unit's
    card `10-applications/$app/02-modern/<module>/<unit>/README.md` (a card that already exists is never overwritten).
 
 Whole-application views — the rules and data objects, the security findings, the traceability totals and the

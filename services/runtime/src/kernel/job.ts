@@ -6,10 +6,21 @@
 import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { JobEvent, JobFailureReason, JobHandle, JobSpan, JobSpec } from "@kintsugi/runtime-sdk";
+import { realpathSync } from "node:fs";
+import { isAbsolute, relative, sep } from "node:path";
 import { EventStream } from "../event-stream.js";
+import type { SourceRead } from "./tools.js";
 import { beginSpan, JobTelemetry, type LiveSpan } from "./telemetry.js";
 
 type JobEnd = Extract<JobEvent, { type: "job.completed" | "job.failed" }>;
+
+function realRoot(root: string): string {
+  try {
+    return realpathSync(root);
+  } catch {
+    return root;
+  }
+}
 
 const now = (): string => new Date().toISOString();
 
@@ -48,6 +59,8 @@ export class KernelJob implements JobHandle {
   #stop: { reason: JobFailureReason; error: string } | undefined;
   #turns = 0;
   #blocked = 0;
+  /** The workspace root as given and as its real path, for the paths of source.read. */
+  #roots: string[] | undefined;
   #inputTokens = 0;
   #outputTokens = 0;
   #cacheReadTokens = 0;
@@ -143,6 +156,21 @@ export class KernelJob implements JobHandle {
   /** Called by write and edit after a file landed in the output directory. */
   output(path: string): void {
     if (!this.#ended) this.events.push({ type: "output", jobId: this.jobId, path });
+  }
+
+  /**
+   * Called by read and grep with the lines they showed; the path becomes relative to the workspace (ADR-0086). grep
+   * reports real paths (symbolic links resolved), so the root is tried as given and as its real path.
+   */
+  read(read: SourceRead): void {
+    if (this.#ended) return;
+    this.#roots ??= [...new Set([this.spec.workspace.root, realRoot(this.spec.workspace.root)])];
+    for (const root of this.#roots) {
+      const path = relative(root, read.path);
+      if (path === "" || path.startsWith("..") || isAbsolute(path)) continue;
+      this.events.push({ type: "source.read", jobId: this.jobId, tool: read.tool, path: path.split(sep).join("/"), from: read.from, to: read.to });
+      return;
+    }
   }
 
   async #halt(reason: JobFailureReason, error: string): Promise<void> {

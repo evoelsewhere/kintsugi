@@ -402,6 +402,7 @@ export class StagePlanExecutor {
             ...(step.documents === undefined ? {} : { documents: (await this.#resolve(step.documents)).map(partial) }),
             ...(step.schema === undefined ? {} : { schema: step.schema, resultFile: true }),
             ...(step.resultTo === undefined ? {} : { resultTo: partial(step.resultTo) }),
+            ...(step.readsTo === undefined ? {} : { readsTo: partial(step.readsTo) }),
             ...(expects.length === 0 ? {} : { expects }),
             label: step.id,
           },

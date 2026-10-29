@@ -58,6 +58,7 @@ import {
   isCancelled,
 } from "./model.js";
 import { type Placeholders, type StagePlan, type StageScope, fill } from "./plan.js";
+import { ReadRecord, type ReadRecordJson } from "./reads.js";
 import { STAGES } from "./stages.js";
 import { type AgentCallOptions, type WorkflowBudgets, loadWorkflow, runWorkflow } from "./workflow.js";
 
@@ -800,6 +801,8 @@ export class JobRunner {
       metadata: { jobRunId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }) },
     };
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, blocked: 0, cacheReadTokens: 0, cacheWriteTokens: 0, compactions: 0 };
+    // What the job was shown of the legacy source, over all its attempts (ADR-0086); saved when the step asks for it.
+    const reads = new ReadRecord(ws.asIs === undefined ? undefined : relative(ws.root, ws.asIs).split(sep).join("/"));
     const stepId = run.id === ws.rootId ? undefined : run.id;
     const roots = { "as-is": ws.asIs, "to-be": ws.toBe, in: ws.in, out: ws.out };
     // The job's spans (ADR-0048) are stored in batches as they arrive; each run of the agent is an attempt.
@@ -823,6 +826,7 @@ export class JobRunner {
       try {
         for await (const event of handle.events) {
           this.#count(event, usage);
+          reads.add(event);
           if (event.type === "span") {
             spans.push({
               runId: ws.rootId,
@@ -966,6 +970,7 @@ export class JobRunner {
       }
     }
     await this.#checkExpected(run, ws, `Agent ${run.name}`);
+    if (run.inputs["readsTo"] !== undefined) await this.#saveReads(run, ws, reads.toJSON(agentId));
     const provenance: Provenance = { origin: "runtime-agent", runtimeAgent: definition.id, model: `${binding.provider}/${binding.model}`, assetVersion: definition.version };
     const files = await listFiles(ws.out);
     return {
@@ -974,6 +979,13 @@ export class JobRunner {
       provenance: new Map(files.filter((entry) => !entry.path.startsWith("restricted/")).map((entry) => [entry.path, provenance])),
       ...(result === undefined ? {} : { result }),
     };
+  }
+
+  /** Saves the record of what the job read of the source as JSON at inputs.readsTo in out/ (ADR-0086). */
+  async #saveReads(run: JobRun, ws: StepWorkspace, record: ReadRecordJson): Promise<void> {
+    const target = join(ws.out, ...this.#outputPath(run, ws, run.inputs["readsTo"], "readsTo").split("/"));
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, `${JSON.stringify(record)}\n`, "utf8");
   }
 
   /** Saves a structured result as JSON at inputs.resultTo in out/. */

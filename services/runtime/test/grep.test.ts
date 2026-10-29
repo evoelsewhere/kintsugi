@@ -57,6 +57,17 @@ describe("kernel grep", () => {
     expect((await grep({ pattern: "NOT_THERE" })).text).toBe("No matches found");
   });
 
+  it("reports the lines it showed, matches and context, one read per run of lines", async () => {
+    const reads: unknown[] = [];
+    const tool = createKernelGrepTool(workspace.src, new PathGuard([workspace.src]), workspace.src, (read) => reads.push({ ...read, path: read.path.slice(workspace.src.length + 1).replaceAll("\\", "/") }));
+    await (tool.execute as unknown as (id: string, params: unknown) => Promise<Result>)("call", { pattern: "SELECT", context: 1 });
+    expect(reads).toEqual([
+      { tool: "grep", path: "src/Repo.java", from: 1, to: 3 },
+      // The file ends with a newline: its empty last line is shown as context.
+      { tool: "grep", path: "src/notes.md", from: 1, to: 2 },
+    ]);
+  });
+
   it("stops at the match limit", async () => {
     const { text } = await grep({ pattern: "SELECT", limit: 1 });
     expect(text).toContain("1 matches limit reached");

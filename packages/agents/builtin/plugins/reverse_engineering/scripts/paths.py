@@ -356,6 +356,10 @@ def understand_trace_draft_path(app, unit_key):
     return understand_run_file_path(app, f'trace/{unit_key}.json')
 
 
+def understand_reads_path(app, unit_key):
+    return understand_run_file_path(app, f'reads/{unit_key}.json')
+
+
 # ---------------------------------------------------------------------------
 # Generated read models
 # ---------------------------------------------------------------------------

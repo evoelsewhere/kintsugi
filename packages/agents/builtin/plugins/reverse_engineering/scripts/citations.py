@@ -6,7 +6,10 @@ the known-answer eval (`packages/agents/evals/known-answer/score.py`). A citatio
 of the repositories and lines that file has; a leading `as-is/` is dropped and a path without its repository id
 resolves when exactly one repository has it, as `catalog_common.Owners` resolves them. A path that names a document of
 the document repository (a Markdown file, or under one of its root folders) is not a source citation and is skipped.
-The check reports, it never edits a document. Standard library only.
+The check reports, it never edits a document.
+
+`ReadRecord` reads what the job that wrote a document was shown of the source (ADR-0086), so that a citation of a line
+the job never saw can be told apart from one it read. Standard library only.
 """
 import os
 import re
@@ -100,6 +103,27 @@ class Sources:
             return True, f'line {end} is past the end of the file ({length} lines)'
         return True, None
 
+    def unshown(self, text, record, inherited=''):
+        """The valid source citations of `text` whose lines `record` does not show in one read, leaving out those a
+        citation of `inherited` covers (the rules and findings the job was given: copied from a checked document)."""
+        given = []
+        for path, start, end in citations_in(inherited):
+            found, _ = self.resolve(path)
+            if found is not None:
+                given.append((found, start, end))
+        out = []
+        for citation in dict.fromkeys(citations_in(text)):
+            source, why = self.problem(citation)
+            if not source or why:
+                continue
+            found, _ = self.resolve(citation[0])
+            if record.shown(*found, citation[1], citation[2]):
+                continue
+            if any(other == found and start <= citation[1] and end >= citation[2] for other, start, end in given):
+                continue
+            out.append(label(citation))
+        return out
+
     def check(self, text):
         """(the number of source citations, [(citation, why)] of those that do not hold) of a text; each citation once."""
         checked, problems = 0, []
@@ -109,3 +133,26 @@ class Sources:
             if why:
                 problems.append((label(citation), why))
         return checked, problems
+
+
+class ReadRecord:
+    """What the job that wrote a document was shown of the source (ADR-0086): the JSON the orchestrator saves for an agent
+    step with `readsTo`, `{agent, complete, unrecorded, files: {<repository id>/<path>: [[from, to or null], ...]}}`.
+    `complete` is false when the job also used a tool that reads without telling which lines (`shell`, `git`)."""
+
+    def __init__(self, data):
+        files = data.get('files') if isinstance(data, dict) else None
+        self.files = {}
+        for path, ranges in (files or {}).items():
+            kept = [(int(r[0]), None if r[1] is None else int(r[1])) for r in ranges if isinstance(r, list) and len(r) == 2 and isinstance(r[0], int)]
+            self.files[str(path)] = kept
+        self.complete = bool(data.get('complete')) if isinstance(data, dict) else False
+        self.unrecorded = data.get('unrecorded') if isinstance(data, dict) and isinstance(data.get('unrecorded'), dict) else {}
+
+    def shown(self, repo, rel, start, end):
+        """Whether every line from `start` to `end` of `<repo>/<rel>` was shown in one read."""
+        return any(first <= start and (last is None or last >= end) for first, last in self.files.get(f'{repo}/{rel}', []))
+
+    def lines_shown(self, repo, rel, length):
+        """How many of the `length` lines of `<repo>/<rel>` were shown."""
+        return sum(max(0, min(length, length if last is None else last) - first + 1) for first, last in self.files.get(f'{repo}/{rel}', []))

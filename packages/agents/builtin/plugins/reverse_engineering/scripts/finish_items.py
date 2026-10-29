@@ -21,7 +21,11 @@ overwritten). Writes under --out:
   the item is `understood` once this file is on the default branch, `stale` when the catalog's digest moves away from it.
   With --src (the folder the legacy repositories are checked out under), also the number of source citations of the
   item's spec.md, rules.md and findings.md (`citations`), those that name no file of the sources or no such line
-  (`citationsInvalid`) and a table of them (ADR-0085); they are reported, never corrected;
+  (`citationsInvalid`) and a table of them (ADR-0085); they are reported, never corrected. With the record of what the
+  specification job was shown (scratch/<app>/understand/reads/<module>/<unit>.json, ADR-0086): whether it is complete
+  (`readRecord`), the lines of the item's files and how many the job was shown (`sourceLines`, `sourceLinesShown`), and
+  the specification's citations of lines the job was not shown and that no rule or finding of the item cites
+  (`citationsUnshown`, and a table);
 - 02-modern/<module>/<unit>/README.md - the unit's card (frontmatter = state).
 
 An item without its specification gets none of these (it shows as failed or not analysed).
@@ -130,6 +134,31 @@ def unresolved_citations(cited, unresolved):
             'Correct them in this pull request.\n\n' + docmd.table(['Citation', 'Document', 'Why'], rows) + (f'\nAnd {more} more.\n' if more > 0 else ''))
 
 
+def unshown_citations(unshown, record):
+    """The section of the understanding record that lists the specification's citations its job was not shown (ADR-0086)."""
+    rows = [[f'`{citation}`'] for citation in unshown[:MAX_UNRESOLVED]]
+    more = len(unshown) - len(rows)
+    caveat = ('' if record.complete else
+              ' The job also used ' + ', '.join(f'{tool} ({count})' for tool, count in sorted(record.unrecorded.items()))
+              + ', which read without telling which lines: some of these may have been read there.')
+    return ('\n## Citations the specification job was not shown\n\n'
+            f'The job that wrote the specification was not shown these lines, and no rule or finding of the item cites them.{caveat} '
+            'Check that each one supports what it is cited for.\n\n' + docmd.table(['Citation'], rows) + (f'\nAnd {more} more.\n' if more > 0 else ''))
+
+
+def read_coverage(files, checker, record):
+    """(lines of the item's files, lines of them the job was shown)."""
+    total = shown = 0
+    for cited in files:
+        found, _ = checker.resolve(cited)
+        if found is None:
+            continue
+        length = checker.lines(*found)
+        total += length
+        shown += record.lines_shown(*found, length)
+    return total, shown
+
+
 def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs='', src=None):
     """`notes`, when given, collects missing specification-profile sections and citations that do not resolve for review;
     `src`, when given, is the folder the legacy repositories are checked out under, one folder per repository id."""
@@ -178,6 +207,11 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
                 unresolved += [(citation, document, why) for citation, why in problems]
             if notes is not None:
                 notes.extend(f'{item_id}: citation {citation} in {document}: {why}' for citation, document, why in unresolved)
+        reads = cc.read_optional_json(os.path.join(inputs, *paths.understand_reads_path(app, item_id).split('/'))) if checker is not None else None
+        reads_record = citations.ReadRecord(reads) if isinstance(reads, dict) else None
+        unshown = checker.unshown(spec_text, reads_record, f'{rules_text or ""}\n{findings_text or ""}') if reads_record is not None else []
+        if reads_record is not None and notes is not None:
+            notes.extend(f'{item_id}: citation {citation} in spec.md: its job was not shown these lines' for citation in unshown)
         dependencies = []
         for dep in trace.get('dependencies') or []:
             if not isinstance(dep, dict) or not isinstance(dep.get('target'), str):
@@ -220,10 +254,17 @@ def finish(app, items, chosen, inputs, sources, run, existing, notes=None, docs=
         if checker is not None:
             record['citations'] = cited
             record['citationsInvalid'] = len(unresolved)
+        if reads_record is not None:
+            total, shown = read_coverage(item['files'], checker, reads_record)
+            record['readRecord'] = 'complete' if reads_record.complete else 'partial'
+            record['sourceLines'] = total
+            record['sourceLinesShown'] = shown
+            record['citationsUnshown'] = len(unshown)
         texts[paths.unit_understanding_path(app, *item_id.split('/'))] = (
             docmd.front_matter(record) + f'# Understanding record - {item_id}\n\nThe specification of this item was written at `{revision}`. '
             'Its presence on the default branch marks the item understood; a changed catalog digest marks it stale.\n'
             + (unresolved_citations(cited, unresolved) if unresolved else '')
+            + (unshown_citations(unshown, reads_record) if unshown else '')
         )
         module, name = item_id.split('/', 1)
         if not (existing and os.path.exists(os.path.join(existing, module, name, paths.UNIT_CARD))):

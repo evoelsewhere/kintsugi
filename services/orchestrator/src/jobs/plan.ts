@@ -122,6 +122,8 @@ export interface AgentStep extends StepBase {
   schema?: Record<string, unknown>;
   /** Where the structured result is saved (document-repo path). */
   resultTo?: string;
+  /** Where the record of the source lines the job was shown is saved (document-repo path, scratch; ADR-0086). */
+  readsTo?: string;
 }
 
 export interface WorkflowStep extends StepBase {

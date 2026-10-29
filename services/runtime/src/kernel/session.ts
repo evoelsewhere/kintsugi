@@ -42,6 +42,8 @@ export interface CreateJobSessionOptions {
   /** Reports a call a policy refused (a script calling a tool it may not). */
   onBlocked?: (tool: string, reason: string, input: unknown) => void;
   onOutput: ToolContext["onOutput"];
+  /** Reports the lines of a file the read tools showed the model (ADR-0086). */
+  onRead?: ToolContext["onRead"];
 }
 
 export async function createJobSession(options: CreateJobSessionOptions): Promise<JobSession> {
@@ -88,7 +90,7 @@ export async function createJobSession(options: CreateJobSessionOptions): Promis
     // The same tools in the same order for every job of the agent: tool definitions open the cached prefix.
     // A job with a result schema also gets submit_result, last: the agent's own tools keep their order.
     const tools = [...withAliases(normalizeTools(spec.agent.tools)), ...(spec.resultSchema === undefined ? [] : [RESULT_TOOL])];
-    const toolContext: ToolContext = { cwd, searchDir: spec.workspace.readOnly[0]!, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput };
+    const toolContext: ToolContext = { cwd, searchDir: spec.workspace.readOnly[0]!, readOnly: spec.workspace.readOnly, outDir: spec.workspace.outDir, tmpDir: scratch, onOutput: options.onOutput, ...(options.onRead === undefined ? {} : { onRead: options.onRead }) };
     const { session } = await createAgentSession({
       cwd,
       agentDir,

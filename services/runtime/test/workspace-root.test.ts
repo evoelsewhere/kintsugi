@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createKernelGrepTool } from "../src/kernel/grep.js";
 import { createKernelLsTool } from "../src/kernel/ls.js";
 import { PathGuard } from "../src/kernel/paths.js";
-import { createTools } from "../src/kernel/tools.js";
+import { createTools, linesShown, type SourceRead } from "../src/kernel/tools.js";
 import { createWorkspace } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -57,5 +57,26 @@ describe("a workspace root above the read-only folders", () => {
     expect(state.text).toMatch(/outside the job workspace/);
     const found = await run(find, { pattern: "**/*.vue" });
     expect(found.text).toContain("web/src/App.vue");
+  });
+
+  it("reports the lines read showed the model, and nothing for a read that failed", async () => {
+    const reads: SourceRead[] = [];
+    const [read] = createTools(["read"], { cwd: workspace.root, searchDir: asIs, readOnly: [asIs, stepIn, guide], outDir: workspace.out, tmpDir: workspace.outside, onOutput: () => undefined, onRead: (entry) => reads.push(entry) }) as unknown as [{ execute: unknown }];
+    await run(read, { path: "as-is/web/src/App.vue" });
+    await run(read, { path: "as-is/web/src/App.vue", offset: 1, limit: 5 });
+    await run(read, { path: ".state/ledger.json" });
+    expect(reads.map((entry) => ({ ...entry, path: entry.path.slice(workspace.root.length + 1).replaceAll("\\", "/") }))).toEqual([
+      { tool: "read", path: "as-is/web/src/App.vue", from: 1, to: null },
+      { tool: "read", path: "as-is/web/src/App.vue", from: 1, to: 5 },
+    ]);
+  });
+});
+
+describe("linesShown", () => {
+  it("takes the lines the output kept, the limit, or the rest of the file", () => {
+    expect(linesShown({ offset: 10 }, { truncation: { truncated: true, outputLines: 2000 } })).toEqual({ from: 10, to: 2009 });
+    expect(linesShown({ offset: 3, limit: 4 }, undefined)).toEqual({ from: 3, to: 6 });
+    expect(linesShown({}, { truncation: { truncated: false } })).toEqual({ from: 1, to: null });
+    expect(linesShown({ offset: 7 }, { truncation: { truncated: true, firstLineExceedsLimit: true } })).toBeUndefined();
   });
 });

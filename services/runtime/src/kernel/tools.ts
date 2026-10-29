@@ -4,7 +4,7 @@
 // Adding a tool here widens what any agent can do: review its security boundary.
 
 import { glob as fsGlob, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, relative, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import {
   createEditToolDefinition,
   createFindToolDefinition,
@@ -32,6 +32,16 @@ export interface ToolContext {
   tmpDir: string;
   /** Reports a file written to outDir (path relative to outDir). */
   onOutput(path: string): void;
+  /** Reports the lines of a file `read` or `grep` showed the model (absolute path; `to` null for the rest of the file). */
+  onRead?(read: SourceRead): void;
+}
+
+/** Lines of a file shown to the model (ADR-0086). */
+export interface SourceRead {
+  tool: "read" | "grep";
+  path: string;
+  from: number;
+  to: number | null;
 }
 
 type ToolFactory = (context: ToolContext) => ToolDefinition;
@@ -41,9 +51,23 @@ const erase = (tool: unknown): ToolDefinition => tool as ToolDefinition;
 
 const readGuard = (context: ToolContext): PathGuard => new PathGuard(context.readOnly);
 
+/**
+ * The lines a successful `read` showed, from its parameters and pi's truncation details: from `offset`, as many lines
+ * as the output kept, or `limit` of them, or the rest of the file. Undefined when no line was shown (a first line over
+ * the size limit).
+ */
+export function linesShown(params: { offset?: number; limit?: number }, details: unknown): { from: number; to: number | null } | undefined {
+  const from = params.offset !== undefined && params.offset > 1 ? Math.floor(params.offset) : 1;
+  const truncation = (details as { truncation?: { truncated?: boolean; firstLineExceedsLimit?: boolean; outputLines?: number } } | undefined)?.truncation;
+  if (truncation?.firstLineExceedsLimit === true) return undefined;
+  if (truncation?.truncated === true && typeof truncation.outputLines === "number") return { from, to: from + Math.max(1, truncation.outputLines) - 1 };
+  if (params.limit !== undefined && params.limit > 0) return { from, to: from + Math.floor(params.limit) - 1 };
+  return { from, to: null };
+}
+
 const readTool: ToolFactory = (context) => {
   const guard = readGuard(context);
-  return erase(
+  const tool = erase(
     createReadToolDefinition(context.cwd, {
       operations: {
         readFile: (path) => readFile(guard.check(path)),
@@ -53,12 +77,24 @@ const readTool: ToolFactory = (context) => {
       },
     }),
   );
+  const onRead = context.onRead;
+  if (onRead === undefined) return tool;
+  return {
+    ...tool,
+    execute: async (toolCallId, params, signal, onUpdate, ctx) => {
+      const result = await tool.execute(toolCallId, params, signal, onUpdate, ctx);
+      const given = params as { path: string; offset?: number; limit?: number };
+      const shown = (result as { isError?: boolean }).isError === true ? undefined : linesShown(given, result.details);
+      if (shown !== undefined) onRead({ tool: "read", path: resolve(context.cwd, given.path), ...shown });
+      return result;
+    },
+  };
 };
 
 const lsTool: ToolFactory = (context) => erase(createKernelLsTool(context.cwd, readGuard(context), context.searchDir));
 
 // grep searches in-process (grep.ts): pi's grep needs ripgrep, which a job has no way to get.
-const grepTool: ToolFactory = (context) => erase(createKernelGrepTool(context.cwd, readGuard(context), context.searchDir));
+const grepTool: ToolFactory = (context) => erase(createKernelGrepTool(context.cwd, readGuard(context), context.searchDir, context.onRead));
 
 // pi's find searches the working directory when given no path; here that is the workspace root, which is not
 // readable as a whole, so a call without a path searches the first read-only root instead.

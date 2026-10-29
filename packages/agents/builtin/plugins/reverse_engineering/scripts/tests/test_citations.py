@@ -15,7 +15,7 @@ def write(root, rel, text):
         handle.write(text)
 
 
-class Citations(unittest.TestCase):
+class SourcesCase(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
         write(self.root, 'legacy/src/TAX.cbl', 'LINE 1\nLINE 2\nLINE 3\nLINE 4\n')
@@ -28,6 +28,8 @@ class Citations(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
 
+
+class Citations(SourcesCase):
     def test_finds_citations_with_a_line_or_a_range_in_running_text(self):
         text = 'Rounds half up (`legacy/src/TAX.cbl:3`), see legacy/src/TAX.cbl:4-2 and RULE-TAX01-0001; at 10:30 nothing.'
         self.assertEqual(citations.citations_in(text), [('legacy/src/TAX.cbl', 3, 3), ('legacy/src/TAX.cbl', 2, 4)])
@@ -59,6 +61,33 @@ class Citations(unittest.TestCase):
         checked, problems = self.sources.check(text)
         self.assertEqual(checked, 4)
         self.assertEqual(problems, [('legacy/src/TAXTAB.cpy:1', 'no such file in legacy'), ('legacy/src/TAX.cbl:9', 'line 9 is past the end of the file (4 lines)')])
+
+
+class ReadRecords(SourcesCase):
+    def record(self, complete=True):
+        return citations.ReadRecord({'agent': 'legacy-analyst@1.4.0', 'complete': complete, 'unrecorded': {} if complete else {'shell': 2},
+                                     'files': {'legacy/src/TAX.cbl': [[1, 2]], 'legacy-data/schema/TAX.sql': [[1, None]]}})
+
+    def test_a_range_is_shown_only_when_one_read_covers_all_of_it(self):
+        record = self.record()
+        self.assertTrue(record.shown('legacy', 'src/TAX.cbl', 1, 2))
+        self.assertFalse(record.shown('legacy', 'src/TAX.cbl', 2, 3))
+        self.assertTrue(record.shown('legacy-data', 'schema/TAX.sql', 2, 2), 'a read to the end of the file covers every line')
+        self.assertFalse(record.shown('legacy', 'src/SHARED.cpy', 1, 1))
+        self.assertEqual(record.lines_shown('legacy', 'src/TAX.cbl', 4), 2)
+        self.assertEqual(record.lines_shown('legacy-data', 'schema/TAX.sql', 2), 2)
+        self.assertEqual(record.lines_shown('legacy', 'src/SHARED.cpy', 1), 0)
+
+    def test_unshown_leaves_out_invalid_citations_and_those_a_given_rule_cites(self):
+        text = 'Read legacy/src/TAX.cbl:2, not read legacy/src/TAX.cbl:3 and legacy/src/TAX.cbl:4, broken legacy/src/TAX.cbl:9 and legacy/src/NONE.cbl:1.'
+        self.assertEqual(self.sources.unshown(text, self.record()), ['legacy/src/TAX.cbl:3', 'legacy/src/TAX.cbl:4'])
+        self.assertEqual(self.sources.unshown(text, self.record(), 'Rule source `src/TAX.cbl:3-4`'), [])
+
+    def test_a_record_that_is_not_one_reads_as_empty_and_incomplete(self):
+        for data in (None, [], {'files': {'legacy/src/TAX.cbl': 'all'}}):
+            record = citations.ReadRecord(data)
+            self.assertFalse(record.complete)
+            self.assertFalse(record.shown('legacy', 'src/TAX.cbl', 1, 1))
 
 
 if __name__ == '__main__':

@@ -40,6 +40,14 @@ describe("job outcome", () => {
     expect(await job.done).toMatchObject({ type: "job.failed", reason: "aborted", error: "user cancelled" });
   });
 
+  it("reports what read showed as source.read, with the path relative to the workspace root", async () => {
+    const readFromRoot = () => fauxAssistantMessage([fauxToolCall("read", { path: "src/hello.txt" })], { stopReason: "toolUse" });
+    const runtime = await fauxRuntime([readFromRoot, fauxAssistantMessage("done")]);
+    const { done, events } = await runJob(runtime, jobSpec(workspace, agent(["read"]), {}, workspace.root));
+    expect(done.type).toBe("job.completed");
+    expect(events.filter((event) => event.type === "source.read")).toEqual([{ type: "source.read", jobId: done.jobId, tool: "read", path: "src/hello.txt", from: 1, to: null }]);
+  });
+
   it("completes with usage on a normal answer", async () => {
     const runtime = await fauxRuntime([fauxAssistantMessage("all good")]);
     const { done, events } = await runJob(runtime, jobSpec(workspace, agent([])));

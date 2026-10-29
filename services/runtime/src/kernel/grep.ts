@@ -14,6 +14,7 @@ import { join, relative, resolve, sep } from "node:path";
 import { DEFAULT_MAX_BYTES, defineTool, formatSize, truncateHead, truncateLine, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { PathGuard } from "./paths.js";
+import type { SourceRead } from "./tools.js";
 
 const DEFAULT_LIMIT = 100;
 /** pi's truncateLine default (its GREP_MAX_LINE_LENGTH, not exported). */
@@ -103,9 +104,24 @@ async function filesUnder(root: string, isFile: boolean): Promise<string[]> {
   return files;
 }
 
+/** Reports runs of consecutive shown lines of a file as one read each. */
+function reportShown(origins: ReadonlyArray<{ file: string; line: number }>, onRead: (read: SourceRead) => void): void {
+  let current: SourceRead | undefined;
+  for (const { file, line } of origins) {
+    if (current !== undefined && current.path === file && current.to === line - 1) {
+      current.to = line;
+      continue;
+    }
+    if (current !== undefined) onRead(current);
+    current = { tool: "grep", path: file, from: line, to: line };
+  }
+  if (current !== undefined) onRead(current);
+}
+
 /** The kernel `grep` tool over the workspace's read-only roots. */
 /** `defaultDir`: where a call without a path searches (the workspace root cannot be searched as a whole). */
-export function createKernelGrepTool(cwd: string, guard: PathGuard, defaultDir: string = cwd): ToolDefinition {
+/** `onRead`: told the lines of each file the output showed (matches and their context), after truncation (ADR-0086). */
+export function createKernelGrepTool(cwd: string, guard: PathGuard, defaultDir: string = cwd, onRead?: (read: SourceRead) => void): ToolDefinition {
   return defineTool({
     name: "grep",
     label: "grep",
@@ -133,6 +149,8 @@ export function createKernelGrepTool(cwd: string, guard: PathGuard, defaultDir: 
       const context = params.context !== undefined && params.context > 0 ? Math.floor(params.context) : 0;
       const limit = Math.max(1, Math.floor(params.limit ?? DEFAULT_LIMIT));
       const output: string[] = [];
+      /** The file and line of each output line, to report what the model was shown. */
+      const origins: Array<{ file: string; line: number }> = [];
       let matches = 0;
       let linesTruncated = false;
       const show = (line: string): string => {
@@ -165,6 +183,7 @@ export function createKernelGrepTool(cwd: string, guard: PathGuard, defaultDir: 
           const end = Math.min(lines.length - 1, index + context);
           for (let at = start; at <= end; at++) {
             output.push(at === index ? `${rel}:${at + 1}: ${show(lines[at]!)}` : `${rel}-${at + 1}- ${show(lines[at]!)}`);
+            origins.push({ file, line: at + 1 });
           }
           shownUpTo = end + 1;
         }
@@ -172,6 +191,7 @@ export function createKernelGrepTool(cwd: string, guard: PathGuard, defaultDir: 
 
       if (matches === 0) return { details: undefined, content: [{ type: "text", text: "No matches found" }] };
       const truncation = truncateHead(output.join("\n"), { maxLines: Number.MAX_SAFE_INTEGER });
+      if (onRead !== undefined) reportShown(origins.slice(0, truncation.truncated ? truncation.outputLines : origins.length), onRead);
       const notices: string[] = [];
       if (matches >= limit) notices.push(`${limit} matches limit reached. Use limit=${limit * 2} for more, or refine pattern`);
       if (truncation.truncated) notices.push(`${formatSize(DEFAULT_MAX_BYTES)} limit reached`);

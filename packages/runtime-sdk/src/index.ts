@@ -139,6 +139,11 @@ export type JobEvent =
   | { type: "tool.call"; jobId: string; callId: string; tool: string; input: unknown; decision: "allowed" | "blocked"; reason?: string }
   | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string; durationMs?: number }
   | { type: "output"; jobId: string; path: string }
+  /**
+   * Lines of a file the model was shown by `read` or `grep` (ADR-0086): the path relative to the job workspace,
+   * the first line and the last one (1-based; `to` null when the rest of the file was shown). No content.
+   */
+  | { type: "source.read"; jobId: string; tool: "read" | "grep"; path: string; from: number; to: number | null }
   /** Totals of the job, summarisation included. Cache tokens are not part of `inputTokens`. */
   | {
       type: "usage";

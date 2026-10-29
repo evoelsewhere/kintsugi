@@ -417,6 +417,11 @@ export function understandTraceDraftPath(app: string, unitKey: string): string {
   return understandRunFilePath(app, `trace/${unitKey}.json`);
 }
 
+/** The record of the source lines the specification job of one unit was shown (intermediate, ADR-0086). */
+export function understandReadsPath(app: string, unitKey: string): string {
+  return understandRunFilePath(app, `reads/${unitKey}.json`);
+}
+
 // ---------------------------------------------------------------------------
 // Generated read models
 // ---------------------------------------------------------------------------

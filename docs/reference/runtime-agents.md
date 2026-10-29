@@ -65,6 +65,7 @@ Further tools (for example knowledge-base search) are added to the kernel tool r
 | `tool.call` | Tool, input, `allowed` / `blocked` (with reason) |
 | `tool.result` | Success flag, summary, duration |
 | `output` | Path of a file written to `outDir` |
+| `source.read` | Lines of a file `read` or `grep` showed the model: the tool, the path relative to the workspace, the first and last line (`to` null for the rest of the file); never content ([ADR-0086](../decisions/0086-record-of-the-source-a-job-was-shown.md)) |
 | `usage` | Model, input and output tokens, cost, cache read and write tokens, turns, compactions and the context peak (% of the window); summaries of compactions included. Cache tokens are not part of the input tokens |
 | `span` | One settled span of the job ([ADR-0048](../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)): `kintsugi.job`, `.turn`, `.tool`, `.codemode`, `.mcp`, `.compaction`, `.retry` with start, duration, status and scalar attributes (counts and names, never content) |
 | `job.completed` | Summary |
