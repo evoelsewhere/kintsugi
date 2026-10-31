@@ -131,13 +131,20 @@ export interface JobSpan {
   attributes: Record<string, string | number | boolean>;
 }
 
+/** The most of a tool result a `tool.result` event previews. */
+export const TOOL_RESULT_PREVIEW_CHARS = 300;
+
 export type JobEvent =
   | { type: "job.started"; jobId: string; at: string; runtimeVersion: string; agent: string; metadata?: Record<string, string> }
   | { type: "message.delta"; jobId: string; text: string }
   /** Periodic sign of work while the model streams: characters so far per kind and the current turn. */
   | { type: "progress"; jobId: string; turn: number; thinkingChars: number; toolArgsChars: number; textChars: number }
   | { type: "tool.call"; jobId: string; callId: string; tool: string; input: unknown; decision: "allowed" | "blocked"; reason?: string }
-  | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string; durationMs?: number }
+  /**
+   * A tool call ended. `preview` is the start of what the model was given back (at most `TOOL_RESULT_PREVIEW_CHARS`,
+   * whitespace folded, not redacted): the worker keeps it, redacted, only to explain a step that failed.
+   */
+  | { type: "tool.result"; jobId: string; callId: string; ok: boolean; summary?: string; durationMs?: number; preview?: string }
   | { type: "output"; jobId: string; path: string }
   /**
    * Lines of a file the model was shown by `read` or `grep` (ADR-0086): the path relative to the job workspace,

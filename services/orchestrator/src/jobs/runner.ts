@@ -38,6 +38,7 @@ import { digestOf, filesDigest, Ledger, type LedgerOutput } from "../workspace/l
 import { readManifest, writeAtomically, writeManifest, type WorkspaceManifest } from "../workspace/manifest.js";
 import { dropCheckouts, mountFolder, mountPath, mountSources } from "../workspace/provision.js";
 import type { AgentResolver } from "./agents.js";
+import { ToolTail } from "./diagnostic.js";
 import { materializeSkillFiles } from "./skill-files.js";
 import { type LeafPlacement, type LeafResult, type LeafRun, StageFailure, StagePlanExecutor, type StepReuse } from "./executor.js";
 import { copyTree, listFiles } from "./files.js";
@@ -828,6 +829,7 @@ export class JobRunner {
     };
     const attempt = async (task: string = spec.task): Promise<Extract<JobEvent, { type: "job.completed" | "job.failed" }>> => {
       attempts += 1;
+      const tail = new ToolTail();
       const handle = await this.#deps.agents.startJob({ ...spec, task }, services);
       // Why it is stopped: a person cancelled the run, a sibling of its group failed, or the worker is stopping.
       const stoppedFor = (): string => (isCancelled(signal) ? "cancelled" : signal?.reason instanceof Error && signal.reason.message.startsWith("another step of the group failed") ? "another step of its group failed" : "the worker is stopping");
@@ -875,6 +877,9 @@ export class JobRunner {
             const line = summarizeToolCall(event.tool, event.input, roots);
             const reason = event.reason === undefined ? "" : ` (${event.reason})`;
             await this.#event(ws, stepId, "tool", event.decision === "blocked" ? `blocked: ${line}${reason}` : line, { tool: event.tool, decision: event.decision });
+            tail.call(event.callId, event.tool, line, event.decision === "blocked");
+          } else if (event.type === "tool.result") {
+            tail.result(event.callId, event.ok, event.preview);
           }
         }
       } finally {
@@ -882,6 +887,14 @@ export class JobRunner {
         await flushSpans();
       }
       const end = await handle.done;
+      // Why a model looped is in what it called last and what it got back: kept when the attempt failed or was stopped.
+      if (end.type === "job.failed" && tail.size > 0) {
+        const lines = tail.lines();
+        await this.#event(ws, stepId, "log", `agent ${run.name} stopped (${end.reason}): its last ${lines.length} tool call${lines.length === 1 ? "" : "s"} and what they returned`, { diagnostic: true, calls: lines.length, attempt: attempts });
+        for (const [index, line] of lines.entries()) {
+          await this.#event(ws, stepId, "log", `diagnostic ${index + 1}/${lines.length}: ${line}`, { diagnostic: true, index: index + 1 });
+        }
+      }
       // The full end of the attempt (the recorded failure reason is cut short).
       this.#log(`${ws.rootId.slice(0, 8)}${stepId === undefined ? "" : `/${stepId.slice(0, 8)}`} agent ${agentId} attempt ${attempts} ${end.type}${end.type === "job.failed" ? ` (${end.reason}): ${redactText(end.error).slice(0, 4000)}` : ""}; usage ${JSON.stringify(usage)}`);
       return end;

@@ -3,7 +3,8 @@
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { afterAll, describe, expect, it } from "vitest";
-import { KernelJob } from "../src/kernel/job.js";
+import { TOOL_RESULT_PREVIEW_CHARS } from "@kintsugi/runtime-sdk";
+import { KernelJob, resultPreview } from "../src/kernel/job.js";
 import { agent, createWorkspace, fauxRuntime, jobSpec, runJob, sleep } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -46,6 +47,17 @@ describe("job outcome", () => {
     const { done, events } = await runJob(runtime, jobSpec(workspace, agent(["read"]), {}, workspace.root));
     expect(done.type).toBe("job.completed");
     expect(events.filter((event) => event.type === "source.read")).toEqual([{ type: "source.read", jobId: done.jobId, tool: "read", path: "src/hello.txt", from: 1, to: null }]);
+  });
+
+  it("previews what a tool gave the model back in its tool.result, whitespace folded and cut short", async () => {
+    const runtime = await fauxRuntime([readTurn, fauxAssistantMessage("done")]);
+    const { events } = await runJob(runtime, jobSpec(workspace, agent(["read"])));
+    const result = events.find((event) => event.type === "tool.result");
+    expect(result).toMatchObject({ type: "tool.result", ok: true, preview: expect.any(String) });
+    expect(resultPreview({ content: [{ type: "text", text: "No files\n\n  found" }, { type: "image", data: "x" }] })).toBe("No files found");
+    expect(resultPreview({ content: [{ type: "text", text: "x".repeat(500) }] })).toHaveLength(TOOL_RESULT_PREVIEW_CHARS);
+    expect(resultPreview({ content: [] })).toBeUndefined();
+    expect(resultPreview(undefined)).toBeUndefined();
   });
 
   it("completes with usage on a normal answer", async () => {

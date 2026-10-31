@@ -5,7 +5,7 @@
 
 import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import type { JobEvent, JobFailureReason, JobHandle, JobSpan, JobSpec } from "@kintsugi/runtime-sdk";
+import { TOOL_RESULT_PREVIEW_CHARS, type JobEvent, type JobFailureReason, type JobHandle, type JobSpan, type JobSpec } from "@kintsugi/runtime-sdk";
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, sep } from "node:path";
 import { EventStream } from "../event-stream.js";
@@ -43,6 +43,22 @@ interface Usage {
 
 const isAssistant = (message: unknown): message is AssistantLike =>
   typeof message === "object" && message !== null && (message as { role?: unknown }).role === "assistant";
+
+/**
+ * The start of what a tool gave the model back: its text parts, whitespace folded, at most
+ * `TOOL_RESULT_PREVIEW_CHARS`. Undefined when it gave no text. The worker redacts it before it keeps it.
+ */
+export function resultPreview(result: unknown): string | undefined {
+  const content = typeof result === "object" && result !== null ? (result as { content?: unknown }).content : undefined;
+  const parts = typeof result === "string" ? [result] : Array.isArray(content) ? content : [];
+  const text = parts
+    .map((part: unknown) => (typeof part === "string" ? part : typeof part === "object" && part !== null && (part as { type?: unknown }).type === "text" ? String((part as { text?: unknown }).text ?? "") : ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text === "") return undefined;
+  return text.length > TOOL_RESULT_PREVIEW_CHARS ? `${text.slice(0, TOOL_RESULT_PREVIEW_CHARS - 1)}…` : text;
+}
 
 export class KernelJob implements JobHandle {
   readonly events = new EventStream<JobEvent>();
@@ -234,13 +250,17 @@ export class KernelJob implements JobHandle {
         return;
       case "tool_execution_end":
         this.#endTool(event.toolCallId, !event.isError, event.durationMs);
-        this.events.push({
-          type: "tool.result",
-          jobId: this.jobId,
-          callId: event.toolCallId,
-          ok: !event.isError,
-          ...(event.durationMs === undefined ? {} : { summary: `took ${event.durationMs} ms`, durationMs: event.durationMs }),
-        });
+        {
+          const preview = resultPreview(event.result);
+          this.events.push({
+            type: "tool.result",
+            jobId: this.jobId,
+            callId: event.toolCallId,
+            ok: !event.isError,
+            ...(event.durationMs === undefined ? {} : { summary: `took ${event.durationMs} ms`, durationMs: event.durationMs }),
+            ...(preview === undefined ? {} : { preview }),
+          });
+        }
         return;
       case "message_end": {
         if (!isAssistant(event.message)) return;
