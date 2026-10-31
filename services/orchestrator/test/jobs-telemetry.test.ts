@@ -179,3 +179,51 @@ describe("the spans an attempt settled", () => {
     expect(root?.attributes).toMatchObject({ turns: 0, inputTokens: 0, outcome: "cancelled" });
   });
 });
+
+describe("run events of an agent step (T2-027)", () => {
+  let legacy: ReturnType<typeof fixtureRepository>;
+  let docs: ReturnType<typeof fixtureRepository>;
+  let dataDir: string;
+  let storage: CheckoutStorage;
+  beforeAll(async () => {
+    legacy = fixtureRepository({ "src/main.c": "int main(void) { return 0; }\n" });
+    docs = fixtureRepository({ "kintsugi.yaml": "version: 1\nproject: { id: demo }\n" });
+    dataDir = mkdtempSync(join(tmpdir(), "kintsugi-redact-data-"));
+    storage = new CheckoutStorage(dataDir);
+    await storage.prepare();
+  });
+  afterAll(async () => {
+    await legacy?.remove();
+    await docs?.remove();
+    await removeTree(dataDir);
+  });
+
+  it("keep no credential the model read or searched for, in the tool lines or the diagnostic tail", async () => {
+    const secret = "Sup3r-Secret!";
+    const agents: AgentRuntime = {
+      engine: "mock@leaking",
+      async startJob(spec): Promise<JobHandle> {
+        const jobId = randomUUID();
+        const end = { type: "job.failed" as const, jobId, at: new Date().toISOString(), reason: "max-turns" as const, error: "stopped after 60 turn(s)" };
+        const events: JobEvent[] = [
+          { type: "job.started", jobId, at: new Date().toISOString(), runtimeVersion: "0", agent: `${spec.agent.id}@${spec.agent.version}` },
+          { type: "tool.call", jobId, callId: "c1", tool: "grep", input: { pattern: `BILLADM|${secret}|password|PASSWORD`, path: "as-is/legacy-billing" }, decision: "allowed" },
+          { type: "tool.result", jobId, callId: "c1", ok: true, preview: `cobol/CUSTVAL.cbl:11: 01 WS-DB-PASSWORD PIC X(14) VALUE '${secret}'.` },
+          end,
+        ];
+        return { jobId, events: (async function* () { yield* events; })(), abort: async () => undefined, done: Promise.resolve(end) };
+      },
+    };
+    const store = new MemoryJobStore();
+    const logged: string[] = [];
+    const runner = new JobRunner({ store, gates: DEFAULT_GATE_DECIDER, storage, checkouts: new LocalCheckouts({ legacy: legacy.bare, docs: docs.bare }), agents, agentDefinitions: builtinAgents(), interpreters: interpretersFromEnv(), requestWrite: async () => undefined, log: (line) => logged.push(line) });
+    const id = randomUUID();
+    await store.create({ id, projectId: "demo", applicationId: "demo", kind: "agent", name: "legacy-analyst", sourceRepositoryId: "legacy", inputs: { task: "Look at the code." } });
+    expect((await runner.run(id))?.status).toBe("failed");
+    const stored = JSON.stringify(store.events);
+    expect(stored).toContain("diagnostic 1/1");
+    expect(stored).toContain("WS-DB-PASSWORD [redacted]");
+    expect(stored).not.toContain(secret);
+    expect(logged.join("\n")).not.toContain(secret);
+  });
+});
