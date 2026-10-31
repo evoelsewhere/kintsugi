@@ -1,14 +1,18 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildRelease, type ReleaseManifest } from "../src/release/build.js";
+import { buildRelease, bundleCli, type ReleaseManifest } from "../src/release/build.js";
 import { fetchPackageFiles } from "../src/release/registry.js";
 import { createTarGz, readTarGz } from "../src/release/tar.js";
 
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const execFileAsync = promisify(execFile);
 const folders: string[] = [];
 afterEach(async () => {
   await Promise.all(folders.splice(0).map((folder) => rm(folder, { recursive: true, force: true })));
@@ -100,6 +104,36 @@ describe("buildRelease", () => {
     expect(linux.some((entry) => entry.path.includes("@napi-rs"))).toBe(false);
     expect(windows.map((entry) => entry.path)).toEqual(expect.arrayContaining(["kintsugi/node_modules/@napi-rs/keyring/package.json", "kintsugi/node_modules/@napi-rs/keyring-win32-x64-msvc/keyring.win32-x64-msvc.node"]));
     expect(windows.some((entry) => entry.path.endsWith(".node") && !entry.path.includes("keyring-win32-x64-msvc"))).toBe(false);
+  });
+
+  it("packs a CLI that starts: the unpacked package answers --version and --help", { timeout: 120_000 }, async () => {
+    const dir = await temp();
+    const manifest = await buildRelease({ entry: join(packageDir, "src", "main.ts"), packageDir, outDir: join(dir, "out"), version: "9.9.9", platforms: ["linux-x64"] });
+    const unpacked = join(dir, "unpacked");
+    for (const entry of readTarGz(await readFile(join(dir, "out", "9.9.9", manifest.assets[0]!.file)))) {
+      await mkdir(dirname(join(unpacked, entry.path)), { recursive: true });
+      await writeFile(join(unpacked, entry.path), entry.data);
+    }
+    const cli = join(unpacked, "kintsugi", "lib", "kintsugi.mjs");
+    const version = await execFileAsync(process.execPath, [cli, "--version"], { timeout: 60_000 });
+    expect(version.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+    const help = await execFileAsync(process.execPath, [cli, "--help"], { timeout: 60_000 });
+    expect(help.stdout).toContain("login");
+  });
+
+  it("bundles the hook check with its YAML parser as the CLI is bundled, and it still refuses a hidden hook", { timeout: 60_000 }, async () => {
+    const dir = await temp();
+    // The hook check's own module (the package index also needs zod, which the release keeps outside the bundle).
+    const sdk = join(dirname(createRequire(join(packageDir, "package.json")).resolve("@kintsugi/harness-sdk")), "distributable.js");
+    const entry = join(dir, "smoke.mjs");
+    await writeFile(entry, [
+      `import { assertSafeHooks } from ${JSON.stringify(sdk)};`,
+      `const hidden = "---\\nhooks:\\n  Stop:\\n    - hooks:\\n        - {type: command, command: calc.exe}\\n---\\n";`,
+      `try { assertSafeHooks("commands/build.md", hidden); console.log("accepted"); } catch (error) { console.log(error.code); }`,
+    ].join("\n"));
+    const bundled = join(dir, "smoke.bundle.mjs");
+    await writeFile(bundled, await bundleCli(entry));
+    expect((await execFileAsync(process.execPath, [bundled], { timeout: 30_000 })).stdout.trim()).toBe("PLUGIN_FILE_NOT_DISTRIBUTABLE");
   });
 
   it("builds the same bytes twice", async () => {

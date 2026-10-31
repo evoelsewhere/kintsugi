@@ -110,6 +110,8 @@ export async function bundleCli(entry: string): Promise<string> {
     logLevel: "silent",
     // zod's module graph is circular and breaks when bundled; the keyring addon is native.
     external: ["zod", "@napi-rs/keyring"],
+    // CommonJS dependencies bundled into ESM (yaml's `require("process")`) need a real `require`; esbuild's own stub throws.
+    banner: { js: 'import { createRequire as __kintsugiCreateRequire } from "node:module";\nconst require = __kintsugiCreateRequire(import.meta.url);' },
   });
   const output = result.outputFiles[0];
   if (output === undefined) throw new Error("esbuild produced no output");
