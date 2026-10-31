@@ -28,6 +28,7 @@ import { type CheckoutStorage, type JobPaths, runGit } from "@kintsugi/git";
 import { type Interpreters, makeReadOnly, redactText, removeTree, runScript } from "@kintsugi/runtime/launcher";
 import { RESULT_FILE, RESULT_TOOL, MEMORY_TOOL_NAMES } from "@kintsugi/runtime/tool-names";
 import type { AgentRuntime, JobEvent, JobSpec, McpServerSpec, JobServices } from "@kintsugi/runtime-sdk";
+import { explainFailure } from "../failures.js";
 import type { DocumentWriteRequest } from "../queues.js";
 import { bindWebTools, type PgWebSearch } from "../web-search/index.js";
 import { bindProjectMemory, type ProjectMemory, type MemoryContext } from "../project-memory/index.js";
@@ -278,8 +279,8 @@ const sha256 = (content: Buffer): string => createHash("sha256").update(content)
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-/** A recordable reason: JobFailure messages are safe by construction; anything else is redacted. */
-const reasonOf = (error: unknown): string => (error instanceof JobFailure ? error.message : redactText(message(error)).slice(0, 1000));
+/** A recordable reason: JobFailure messages are safe by construction; anything else is redacted. A known raw failure is said plainly. */
+const reasonOf = (error: unknown): string => explainFailure(error instanceof JobFailure ? error.message : redactText(message(error)).slice(0, 1000));
 
 const isInside = (root: string, path: string): boolean => {
   const rel = relative(root, path);

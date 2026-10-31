@@ -5,6 +5,7 @@
 import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { CheckoutStorage, cloneMirror, fetchMirror, isLoopbackUrl, prefetchDocumentBlobs, type RemoteOptions, resolveCommit } from "@kintsugi/git";
+import { explainFailure } from "../failures.js";
 import type { RepositoryStore, SyncTarget } from "./repositories.js";
 
 export interface SyncDeps {
@@ -126,7 +127,8 @@ async function syncUnlocked({ store, storage }: SyncDeps, repositoryId: string):
     }
     return { repositoryId: target.id, commit, cloned };
   } catch (error) {
-    await store.markError(target.id, error instanceof Error ? error.message : String(error));
+    // A known raw git failure (an empty repository) is said plainly, the git message kept as its detail.
+    await store.markError(target.id, explainFailure(error instanceof Error ? error.message : String(error)));
     throw error;
   }
 }
