@@ -76,7 +76,7 @@ export function ProjectAccessPanel({ projectId, canManage }: { projectId: string
   return <section aria-labelledby="project-access-heading" className="flex flex-col gap-3">
     <div>
       <h2 id="project-access-heading" className="text-[15px] font-medium text-text">Project Access</h2>
-      <p className="mt-0.5 text-[12px] text-text-muted">A person needs an explicit grant here to record the decisions a stage run waits for, and to use this project from the Kintsugi CLI or an AI client; being assigned to the project does not give one, and no role does. Gates in Governance are different: anyone with the <code>gates.decide</code> permission, such as an administrator, decides them without a grant.</p>
+      <p className="mt-0.5 text-[12px] text-text-muted">A person needs an explicit grant here to record the decisions a stage run waits for, and to use this project from the Kintsugi CLI or an AI client; being assigned to the project does not give one, and no role does. Gates in Governance are different: anyone with the <code>gates.decide</code> permission, such as an administrator, decides them without a grant. A grant does not hide the project in the portal: every signed-in member can read every project there.</p>
     </div>
     <div className="flex flex-wrap items-end gap-2">
       <Field label={users.length > 0 ? "Member" : "Member user ID"} className="min-w-56 flex-1">
