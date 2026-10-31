@@ -9,7 +9,7 @@ import type { Pool } from "pg";
 /** A worker not seen for this long is dead (the API reports a worker up within 45 s). */
 const ALIVE_SECONDS = 45;
 
-export const INTERRUPTED = "Interrupted: the worker stopped while this run was running. Run the stage again.";
+export const INTERRUPTED = "Interrupted: the worker stopped while this run was running. Retry the run to continue from the finished steps.";
 
 /** Whether a worker of this host is still running (a restart leaves its row looking fresh for a while). */
 function processExists(pid: number): boolean {
