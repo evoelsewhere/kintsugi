@@ -5,7 +5,7 @@ import type { BrainCrumb, BrainNode } from "@kintsugi/domain";
 import { SearchX } from "lucide-react";
 import { Loaded } from "@/components/loaded";
 import { brainApi } from "@/lib/api/brain";
-import { searchIntent } from "@/lib/brain";
+import { BRAIN_SEARCH_MAX, searchIntent, searchProblem } from "@/lib/brain";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
 import { BrainNodeIcon } from "./brain-tree";
@@ -26,6 +26,8 @@ async function search(projectId: string, text: string): Promise<Results> {
   if (searchIntent(text) === "lookup") {
     const found = await brainApi.lookup(projectId, text);
     if (found.matches.length > 0) return { mode: "lookup", items: found.matches.map(({ breadcrumb, ...node }) => ({ node, breadcrumb, lines: [] })), truncated: false };
+    // A long path that names nothing is not a text the grep takes.
+    if (text.trim().length > BRAIN_SEARCH_MAX) return { mode: "lookup", items: [], truncated: false };
   }
   const found = await brainApi.grep(projectId, text);
   const byNode = new Map<string, Result>();
@@ -51,7 +53,22 @@ function Highlighted({ text, needle }: { text: string; needle: string }): React.
   return <>{parts}</>;
 }
 
-export function BrainSearch({ projectId, version, text, selected, onSelect }: { projectId: string; version: string; text: string; selected: string; onSelect: (id: string) => void }): React.JSX.Element {
+type SearchProps = { projectId: string; version: string; text: string; selected: string; onSelect: (id: string) => void };
+
+/** The results of a text the Brain can search for; a text too short or too long says so and sends nothing. */
+export function BrainSearch(props: SearchProps): React.JSX.Element {
+  const problem = searchProblem(props.text);
+  if (problem !== undefined) {
+    return (
+      <p role="status" className="px-3 py-10 text-center text-[12px] text-text-muted">
+        {problem}
+      </p>
+    );
+  }
+  return <SearchResults {...props} />;
+}
+
+function SearchResults({ projectId, version, text, selected, onSelect }: SearchProps): React.JSX.Element {
   const results = useLoader(`brain/${projectId}/${version}/search/${text}`, () => search(projectId, text));
   return (
     <Loaded loader={results} rows={6}>
