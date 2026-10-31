@@ -4,7 +4,7 @@ import { Injectable } from "@nestjs/common";
 import type { Pool } from "pg";
 import type { Page } from "#common/application/pagination.js";
 import { getPool } from "#common/db/pool.js";
-import type { MemberActivity, MemberActivityFilter, MemberActivityInput, MemberUsage } from "../domain/member-activity.js";
+import { KINTSUGI_ACTIVITY_PREFIXES, type MemberActivity, type MemberActivityFilter, type MemberActivityInput, type MemberUsage } from "../domain/member-activity.js";
 import { MemberActivityRepository } from "../domain/member-activity.repository.js";
 
 interface ActivityRow {
@@ -43,8 +43,11 @@ export class PgMemberActivityRepository extends MemberActivityRepository {
     );
   }
 
-  async countSince(userId: string, since: Date): Promise<number> {
-    const result = await this.#pool.query<{ count: string }>("select count(*) from monitoring.member_activity where user_id = $1 and at >= $2", [userId, since]);
+  async countWrittenSince(userId: string, since: Date): Promise<number> {
+    const result = await this.#pool.query<{ count: string }>(
+      "select count(*) from monitoring.member_activity where user_id = $1 and at >= $2 and not (kind like any($3::text[]))",
+      [userId, since, KINTSUGI_ACTIVITY_PREFIXES.map((prefix) => `${prefix}.%`)],
+    );
     return Number(result.rows[0]?.count ?? 0);
   }
 

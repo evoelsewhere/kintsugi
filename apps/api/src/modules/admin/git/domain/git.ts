@@ -3,6 +3,7 @@
 // Pure types and rules — no framework, no I/O.
 
 import type { GitServerKind } from "@kintsugi/domain";
+import type { ShownSyncStatus } from "#common/domain/repository-sync.js";
 
 export type GitAuthType = "none" | "token" | "ssh-key";
 
@@ -40,7 +41,8 @@ export interface RegisterGitServer {
   credential: GitServerCredential;
 }
 
-export type SyncStatus = "pending" | "cloning" | "ready" | "error";
+/** The worker's sync states, plus `empty` for a repository with no commit yet (shown, never stored). */
+export type SyncStatus = ShownSyncStatus;
 
 export interface GitRepositoryRecord {
   id: string;

@@ -5,6 +5,13 @@ export const MEMBER_ACTIVITY_SUMMARY_MAX = 500;
 export const MEMBER_ACTIVITY_DETAIL_MAX_BYTES = 4096;
 /** The most records one user can add in an hour; bounds what a connection can write. */
 export const MEMBER_ACTIVITY_HOURLY_LIMIT = 600;
+/** The kinds Kintsugi records itself (`plugin.download`, `document.read`, `brain.read`): a connection never writes them. */
+export const KINTSUGI_ACTIVITY_PREFIXES = ["plugin", "document", "brain"] as const;
+
+/** True for a kind only Kintsugi records. */
+export function isKintsugiActivityKind(kind: string): boolean {
+  return KINTSUGI_ACTIVITY_PREFIXES.some((prefix) => kind.startsWith(`${prefix}.`));
+}
 
 export interface MemberActivityInput {
   userId: string;

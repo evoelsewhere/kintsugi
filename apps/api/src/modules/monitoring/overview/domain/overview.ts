@@ -3,6 +3,8 @@
 // gates and worker heartbeats) and from the worker's job queue. Read-only; counts are of top-level runs (a stage, not its
 // steps). Pure types and constants.
 
+import type { ShownSyncStatus } from "#common/domain/repository-sync.js";
+
 /** Look-back windows and limits of the overview. */
 export const OVERVIEW_LIMITS = {
   /** Items in the attention list and in the activity feed. */
@@ -39,6 +41,8 @@ export interface OverviewCounts {
   repositoriesWithErrorsUnlinked: number;
   /** Repositories still pending or cloning. */
   repositoriesNotReady: number;
+  /** Repositories with no commit yet (a new target repository): neither an error nor ready. */
+  repositoriesEmpty: number;
   /** Gates waiting for a decision. */
   pendingGates: number;
 }
@@ -182,7 +186,8 @@ export interface WorkerTimes {
   oldestQueuedRunAt?: string;
 }
 
-export type RepositorySyncStatus = "pending" | "cloning" | "ready" | "error";
+/** The worker's sync state, with `empty` for a repository that has no commit yet (the worker records it as an error). */
+export type RepositorySyncStatus = ShownSyncStatus;
 
 /** Where a repository is used. */
 export interface RepositoryLink {
