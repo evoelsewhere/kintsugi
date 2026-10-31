@@ -80,7 +80,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
   const { pathname } = useLocation();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const health = useHealth();
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
   const dynamicChildren = useDynamicNavChildren();
   // Narrow screens always use the icon rail so content keeps its width.
   const targetRail = collapsed || !isDesktop;
@@ -132,6 +132,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
     return NAV_SECTIONS.map((section) => ({
       ...section,
       items: section.items.flatMap((item) => {
+        if (item.anyPermission !== undefined && !item.anyPermission.some((code) => can(code))) return [];
         const children = item.childrenFrom === undefined ? item.children : dynamicChildren[item.childrenFrom];
         const matchesParent = item.label.toLowerCase().includes(needle);
         const matchingChildren = children?.filter((child) => child.label.toLowerCase().includes(needle));
@@ -139,7 +140,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }): Rea
         return [{ ...item, children: needle.length > 0 && !matchesParent ? matchingChildren : children }];
       }),
     })).filter((section) => section.items.length > 0);
-  }, [query, dynamicChildren]);
+  }, [query, dynamicChildren, can]);
 
   const toggle = (): void => {
     setCollapsed((prev) => {

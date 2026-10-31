@@ -13,16 +13,16 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { type SandboxSettingsView, sandboxApi } from "@/lib/api/sandbox";
 import { errorText } from "@/lib/format";
-import { type SandboxForm, formProblems, isUnchanged, toForm, toSettings } from "@/lib/sandbox-form";
-
-type NumericField = Exclude<keyof SandboxForm, "markReadOnly">;
+import { type SandboxForm, type SandboxNumberField, defaultLabel, defaultValue, formProblems, isUnchanged, toForm, toSettings } from "@/lib/sandbox-form";
 
 interface FieldSpec {
-  id: NumericField;
+  id: SandboxNumberField;
   label: string;
   /** What the number counts, shown beside the input. */
   unit: string;
   hint: string;
+  /** What 0 means, for a field where 0 turns the limit off. */
+  zero?: string;
   step?: string;
   min?: number;
 }
@@ -57,10 +57,10 @@ const GROUPS: GroupSpec[] = [
     description: "What one agent job may use before it is stopped. 0 means no limit.",
     icon: Bot,
     fields: [
-      { id: "agentTimeoutMin", label: "Job timeout", unit: "min", hint: "A stalled provider is still caught by the idle limit.", step: "any" },
-      { id: "agentIdleTimeoutMin", label: "Idle limit", unit: "min", hint: "No sign of life from the model for this long and the job is stopped as stalled and tried once more. 0 turns it off.", step: "any" },
-      { id: "maxTurns", label: "Turns per job", unit: "turns", hint: "Assistant turns before the job is stopped." },
-      { id: "maxCostUsd", label: "Cost per job", unit: "USD", hint: "Spend before the job is stopped.", step: "any" },
+      { id: "agentTimeoutMin", label: "Job timeout", unit: "min", zero: "no limit", hint: "A stalled provider is still caught by the idle limit.", step: "any" },
+      { id: "agentIdleTimeoutMin", label: "Idle limit", unit: "min", zero: "off", hint: "No sign of life from the model for this long and the job is stopped as stalled and tried once more. 0 turns it off.", step: "any" },
+      { id: "maxTurns", label: "Turns per job", unit: "turns", zero: "no limit", hint: "Assistant turns before the job is stopped." },
+      { id: "maxCostUsd", label: "Cost per job", unit: "USD", zero: "no limit", hint: "Spend before the job is stopped.", step: "any" },
     ],
   },
   {
@@ -135,6 +135,7 @@ export function SandboxSection(): React.JSX.Element {
           {spec.label}
         </label>
         <p className="mt-0.5 text-[12px] text-text-muted">{spec.hint}</p>
+        <p className="mt-0.5 text-[12px] text-text-muted">Default: {defaultLabel(spec.id, spec.unit, spec.zero)}.</p>
       </div>
       <div className="flex items-center gap-2">
         <Input
@@ -143,6 +144,7 @@ export function SandboxSection(): React.JSX.Element {
           inputMode="decimal"
           min={spec.min ?? 0}
           {...(spec.step === undefined ? {} : { step: spec.step })}
+          placeholder={defaultValue(spec.id)}
           value={form?.[spec.id] ?? ""}
           disabled={form === null}
           onChange={(event) => setForm((current) => (current === null ? current : { ...current, [spec.id]: event.target.value }))}
@@ -211,14 +213,15 @@ export function SandboxSection(): React.JSX.Element {
           </Button>
         </p>
       )}
-      <div className="sticky bottom-0 -mx-1 flex items-center justify-between gap-2 bg-surface px-1 py-3 [box-shadow:0_-1px_0_0_rgba(0,0,0,0.08)]">
+      {/* Full-bleed over the scroll area's padding and above the cards, so no heading shows through or beside it. */}
+      <div className="sticky bottom-0 z-10 -mx-6 -mb-5 mt-2 flex items-center justify-between gap-2 bg-surface px-6 py-3 [box-shadow:0_-1px_0_0_rgba(0,0,0,0.08)] dark:[box-shadow:0_-1px_0_0_rgba(255,255,255,0.12)]">
         <p className="text-[12px] text-text-muted">
           {stored === null
             ? loadError !== null
               ? "Not loaded."
               : "Loading…"
             : stored.isDefault
-              ? "Default settings (not set yet)."
+              ? "Nothing saved yet: the defaults shown under each field apply."
               : `Set by ${stored.updatedBy ?? "an admin"}${stored.updatedAt === undefined ? "" : ` on ${new Date(stored.updatedAt).toLocaleString()}`}.`}
         </p>
         <Button size="small" variant="solid" disabled={busy || !changed || problems.length > 0} onClick={() => void save()}>

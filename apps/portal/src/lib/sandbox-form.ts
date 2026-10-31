@@ -68,4 +68,15 @@ export function toSettings(form: SandboxForm): SandboxSettings | undefined {
 
 export const isUnchanged = (form: SandboxForm, stored: SandboxSettings): boolean => JSON.stringify(form) === JSON.stringify(toForm(stored));
 
+export type SandboxNumberField = Exclude<keyof SandboxForm, "markReadOnly">;
+
+/** What a field holds when nothing is saved: the installation's default, in the units of the form. */
+export const defaultValue = (field: SandboxNumberField): string => toForm(DEFAULT_SANDBOX)[field];
+
+/** The default of a field in words: "24 hours", or what 0 means (`zero`) for a limit that can be off. */
+export function defaultLabel(field: SandboxNumberField, unit: string, zero?: string): string {
+  const value = defaultValue(field);
+  return Number(value) === 0 && zero !== undefined ? zero : `${value} ${unit}`;
+}
+
 export { DEFAULT_SANDBOX };

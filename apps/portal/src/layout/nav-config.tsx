@@ -8,9 +8,11 @@ import {
   Gauge,
   type LucideIcon,
   Package,
+  Settings,
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { SETTINGS_ADMIN_PERMISSIONS } from "@/pages/settings/settings-access";
 
 export interface NavChildItem {
   id: string;
@@ -36,6 +38,8 @@ export interface NavItem {
   end?: boolean;
   /** Non-navigation entry: handled by the sidebar (e.g. open the settings modal). */
   action?: "open-settings";
+  /** Shown only to a person who holds at least one of these permissions; everyone when absent. */
+  anyPermission?: readonly string[];
   /** Nested destinations displayed while the parent section is active. */
   children?: NavChildItem[];
   /** Nested destinations loaded at runtime instead of `children`. */
@@ -66,6 +70,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: "projects", label: "Projects", icon: FolderKanban, to: "/projects" },
       { id: "plugins", label: "Plugins", icon: Blocks, to: "/plugins" },
       { id: "members", label: "Members & Permissions", icon: Users, to: "/members" },
+      { id: "settings", label: "Settings", icon: Settings, to: "#settings", action: "open-settings", anyPermission: SETTINGS_ADMIN_PERMISSIONS },
     ],
   },
   {

@@ -86,7 +86,7 @@ export function CodingAgentSecuritySection(): React.JSX.Element {
     <section aria-labelledby="coding-agent-security-heading" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="coding-agent-security-heading" className="text-[15px] font-medium text-text">coding agent access</h2>
+          <h2 id="coding-agent-security-heading" className="text-[15px] font-medium text-text">Coding agent access</h2>
           <p className="mt-0.5 max-w-2xl text-[12px] text-text-muted">Set how long a member connection can renew, and revoke a connection before it reaches that limit.</p>
         </div>
         <Button size="icon" variant="ghost" aria-label="Refresh coding agent security" onClick={() => { setLoading(true); void load(); }}><RefreshCw className="size-4" /></Button>

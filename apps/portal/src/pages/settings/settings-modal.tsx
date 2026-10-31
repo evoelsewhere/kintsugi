@@ -12,7 +12,7 @@ export interface SettingsModalProps {
 export function SettingsModal({ open, onClose, initialTab }: SettingsModalProps): React.JSX.Element {
   return (
     <Modal open={open} size="page" title="Settings" description="Installation-level configuration, stored in the database." onClose={onClose}>
-      <SettingsTabs initial={initialTab} />
+      <SettingsTabs initial={initialTab} onClose={onClose} />
     </Modal>
   );
 }

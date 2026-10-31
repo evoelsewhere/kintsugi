@@ -4,7 +4,6 @@ import { subscribeToSystemAppearance } from "./lib/appearance";
 import { PanelShell } from "./layout/panel-shell";
 import { ToastProvider } from "./components/ui/toast";
 import { AuthProvider, useAuth } from "./lib/auth";
-import { AdminPage } from "./pages/admin";
 import { AgentPage } from "./pages/agents/agent-page";
 import { AgentsPage } from "./pages/agents/agents-page";
 import { SkillPage } from "./pages/agents/skill-page";
@@ -50,7 +49,6 @@ export function App(): React.JSX.Element {
             }
           >
             <Route index element={<OverviewPage />} />
-            <Route path="admin" element={<AdminPage />} />
             <Route path="delivery" element={<DeliveryOverviewPage />} />
             {/* One page per pipeline stage; unknown ids (former per-workstream paths) go back to the overview. */}
             <Route path="delivery/:stage" element={<DeliveryStagePage />} />

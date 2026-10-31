@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SANDBOX, formProblems, fromForm, isUnchanged, toForm, toSettings } from "./sandbox-form";
+import { DEFAULT_SANDBOX, defaultLabel, defaultValue, formProblems, fromForm, isUnchanged, toForm, toSettings } from "./sandbox-form";
 
 describe("the sandbox form", () => {
   it("shows minutes and megabytes and gives back seconds and bytes", () => {
@@ -28,5 +28,13 @@ describe("the sandbox form", () => {
       "Output limit must be between 1048576 and 10737418240",
       "Turn limit must be 0 or between 1 and 10000",
     ]);
+  });
+
+  it("names each field's default in the units of the form, and what 0 means for a limit that can be off", () => {
+    expect(defaultValue("retentionDays")).toBe(String(DEFAULT_SANDBOX.retentionDays));
+    expect(defaultLabel("retentionDays", "days")).toBe(`${DEFAULT_SANDBOX.retentionDays} days`);
+    expect(defaultValue("scriptTimeoutMin")).toBe(String(DEFAULT_SANDBOX.scriptTimeoutSec / 60));
+    const turns = DEFAULT_SANDBOX.maxTurns;
+    expect(defaultLabel("maxTurns", "turns", "no limit")).toBe(turns === 0 ? "no limit" : `${turns} turns`);
   });
 });
