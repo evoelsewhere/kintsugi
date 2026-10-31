@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SANDBOX, defaultLabel, defaultValue, formProblems, fromForm, isUnchanged, toForm, toSettings } from "./sandbox-form";
+import { DEFAULT_SANDBOX, agentLimitsOff, defaultLabel, defaultValue, formProblems, fromForm, isUnchanged, toForm, toSettings } from "./sandbox-form";
 
 describe("the sandbox form", () => {
   it("shows minutes and megabytes and gives back seconds and bytes", () => {
@@ -36,5 +36,21 @@ describe("the sandbox form", () => {
     expect(defaultValue("scriptTimeoutMin")).toBe(String(DEFAULT_SANDBOX.scriptTimeoutSec / 60));
     const turns = DEFAULT_SANDBOX.maxTurns;
     expect(defaultLabel("maxTurns", "turns", "no limit")).toBe(turns === 0 ? "no limit" : `${turns} turns`);
+  });
+});
+
+describe("agent limits switched off", () => {
+  const limited = { ...toForm(DEFAULT_SANDBOX), agentTimeoutMin: "45", maxTurns: "150", maxCostUsd: "10" };
+
+  it("names each agent limit set to 0, and none when all are set", () => {
+    expect(agentLimitsOff(limited)).toEqual([]);
+    expect(agentLimitsOff({ ...limited, maxTurns: "0" })).toEqual(["maxTurns"]);
+    expect(agentLimitsOff({ ...limited, agentTimeoutMin: "0", maxTurns: "0", maxCostUsd: "0.0" })).toEqual(["agentTimeoutMin", "maxTurns", "maxCostUsd"]);
+  });
+
+  it("counts a field being typed only once it reads 0, and leaves the idle limit out", () => {
+    expect(agentLimitsOff({ ...limited, maxTurns: "" })).toEqual([]);
+    expect(agentLimitsOff({ ...limited, maxCostUsd: "abc" })).toEqual([]);
+    expect(agentLimitsOff({ ...limited, agentIdleTimeoutMin: "0" })).toEqual([]);
   });
 });

@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { StatusDot } from "@/components/ui/status-dot";
 import { useToast } from "@/components/ui/toast";
 import { type SandboxSettingsView, sandboxApi } from "@/lib/api/sandbox";
 import { errorText } from "@/lib/format";
-import { type SandboxForm, type SandboxNumberField, defaultLabel, defaultValue, formProblems, isUnchanged, toForm, toSettings } from "@/lib/sandbox-form";
+import { type SandboxForm, type SandboxNumberField, agentLimitsOff, defaultLabel, defaultValue, formProblems, isUnchanged, toForm, toSettings } from "@/lib/sandbox-form";
 
 interface FieldSpec {
   id: SandboxNumberField;
@@ -85,6 +86,9 @@ const GROUPS: GroupSpec[] = [
   },
 ];
 
+/** "A", "A and B", "A, B and C". */
+const listed = (names: readonly string[]): string => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
+
 export function SandboxSection(): React.JSX.Element {
   const [stored, setStored] = useState<SandboxSettingsView | null>(null);
   const [form, setForm] = useState<SandboxForm | null>(null);
@@ -110,6 +114,7 @@ export function SandboxSection(): React.JSX.Element {
   }, [load]);
 
   const problems = form === null ? [] : formProblems(form);
+  const limitsOff = form === null ? [] : agentLimitsOff(form);
   const changed = form !== null && stored !== null && !isUnchanged(form, stored);
 
   async function save(): Promise<void> {
@@ -175,6 +180,19 @@ export function SandboxSection(): React.JSX.Element {
                   {group.title}
                 </CardTitle>
                 <CardDescription>{group.description}</CardDescription>
+                {group.id === "agent" ? (
+                  <div role="status">
+                    {limitsOff.length === 0 ? null : (
+                      <p className="mt-2 flex items-start gap-2 text-[12px] text-text">
+                        <StatusDot tone="orange" className="mt-1 size-2 shrink-0" />
+                        <span>
+                          {listed(limitsOff.map((id) => group.fields.find((field) => field.id === id)?.label ?? id))} {limitsOff.length === 1 ? "is" : "are"} 0, so off: a model that loops then runs, and bills, until someone cancels
+                          the job.
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent className="flex flex-col divide-y divide-[rgba(0,0,0,0.08)] p-0 pb-1 dark:divide-[rgba(255,255,255,0.12)]">
