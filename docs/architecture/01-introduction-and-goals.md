@@ -15,7 +15,7 @@ Kintsugi is an application portal that orchestrates migration and modernization 
 
 | Priority | Quality goal | Meaning for Kintsugi |
 |---|---|---|
-| 1 | **Security of customer code** | Customer code is read-only for the runtime, every job is isolated in its own container, egress is restricted, and credentials are never written to disk |
+| 1 | **Security of customer code** | Customer code is read-only for the runtime, every job runs in its own job workspace with its agents confined to it by the kernel, and credentials are held in memory, never written to disk; Kintsugi does not filter network traffic, so egress is restricted at deployment level where required ([Security](concepts/security.md)) |
 | 2 | **Simple deployability** | A project installs and operates Kintsugi on one Docker host with `docker compose up`; Postgres is the only stateful service |
 | 3 | **Traceability** | Every artifact, KB entry and gate decision references `repo@commit:path`; audit is append-only |
 | 4 | **Harness neutrality** | Members keep their existing AI tools; assets are packaged once as agent plugins and installed natively, or rendered where plugins are unsupported |
