@@ -6,9 +6,9 @@
 //
 // Not wired yet: persona flows, per-node descriptions and chunked mapping of big estates.
 
-import type { AgentStep, ScriptStep } from "../plan.js";
+import type { AgentStep, ScriptStep, StageContext } from "../plan.js";
 import { DOCUMENT_PATH_TOKENS, applicationInputPath, assessmentDir, assessmentInventoryPath, assessmentTopologyPath, scratchDir, scratchInventoryPath, scratchTopologyPath } from "@kintsugi/domain";
-import { CREDENTIALS, UNTRUSTED, WORKSPACE } from "./common.js";
+import { CREDENTIALS, STOP, UNTRUSTED, WORKSPACE, optionalInput } from "./common.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
 const DIR = assessmentDir(APP_TOKEN);
@@ -26,15 +26,26 @@ const SCHEMA = `{
   "entryPoints": ["<leaf id>"], "deadEnds": ["<leaf id>"], "observations": [], "flows": []
 }`;
 
-const topologyTask = (script: string, domains: string): string => `Write the topology extraction script of application {app}.
+const GRAPH = `${applicationInputPath(APP_TOKEN, "graph")}/`;
+
+/** What the topology job is told about the dependency export a person may attach: there, not there, or unknown. */
+const graphInput = (ctx: StageContext): Promise<string> =>
+  optionalInput(ctx, GRAPH, {
+    present: `{in}/${GRAPH} holds a dependency export a person attached (a compiler index, jdeps, a call graph in JSON, CSV, DOT or GraphML): map
+its nodes and edges instead of parsing the code, spot-check about ten edges against the source, and still add what graphs omit (entry points
+from deployment configuration, data stores).`,
+    absent: `Nobody attached a dependency export for this application: the script derives the graph from the source.`,
+    unknown: `{in}/${GRAPH} holds a dependency export a person attached (a compiler index, jdeps, a call graph in JSON, CSV, DOT or GraphML), when
+the folder exists: if it does, map its nodes and edges instead of parsing the code, spot-check about ten edges against the source, and still
+add what graphs omit (entry points from deployment configuration, data stores); if it does not, the script derives the graph from the source.`,
+  });
+
+const topologyTask = (script: string, domains: string, graph: string): string => `Write the topology extraction script of application {app}.
 
 ${WORKSPACE}
 
-If present, ${domains} (group modules under
-them), {in}/${scratchInventoryPath(APP_TOKEN)} the measured inventory (every file; {in}/${assessmentInventoryPath(APP_TOKEN)} summarises it), and {in}/${applicationInputPath(APP_TOKEN, "graph")}/ a dependency export a person attached
-(a compiler index, jdeps, a call graph in JSON, CSV, DOT or GraphML): if one exists, map its nodes and edges instead of
-parsing the code, spot-check about ten edges against the source, and still add what graphs omit (entry points from
-deployment configuration, data stores).
+Your inputs: ${domains} (group modules under them), and {in}/${scratchInventoryPath(APP_TOKEN)} is the measured inventory (every file;
+{in}/${assessmentInventoryPath(APP_TOKEN)} summarises it). ${graph}
 
 The script does the reading of the source tree, not you: never read the code file by file to build the topology
 yourself. Take the layout and the file list from the inputs above, then read only what teaches you how modules refer
@@ -78,7 +89,10 @@ give two leaves the same file. Datastore ids and names are logical identifiers (
 credential parameters from any URL or DSN, and never copy raw configuration values into the file.
 
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+When ${script} is written, reply DONE and stop. Do not look for it under {in} or anywhere else: your output folder cannot be
+read, the script step reads the file from there, and your step is done when the file is written.`;
 
 const repairTask = (script: string): string => `The topology extraction script of application {app} failed.
 
@@ -93,18 +107,21 @@ Fix the script and write the corrected version to ${script} with write (standard
 only, no network, reads only the source directory). Keep the topology.json schema and every top-level key.
 
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 
 /**
  * The topology extraction as three steps: a legacy-analyst job writes the extraction script at `script`
  * (a document-repo path), a script step runs it to the run's scratch topology (`scratchTopologyPath`) and,
  * when it fails, the job gets the error once to fix it; then render_topology.py checks the result and writes
- * the summary at `assessmentTopologyPath`. `domains` tells the job where the domains found so far are. Used
+ * the summary at `assessmentTopologyPath`. `domains` tells the job where the domains found so far are (an input that is
+ * there when the job runs). Used
  * by `assess` (ADR-0033).
  */
 export function topologySteps(script: string, domains: string): [AgentStep, ScriptStep, ScriptStep] {
   return [
-    { id: "topology", kind: "agent", agent: "legacy-analyst", task: topologyTask(script, domains), expects: [script] },
+    { id: "topology", kind: "agent", agent: "legacy-analyst", task: async (ctx) => topologyTask(script, domains, await graphInput(ctx)), expects: [script] },
     {
       id: "extract",
       kind: "script",

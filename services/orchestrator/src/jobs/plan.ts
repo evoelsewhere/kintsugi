@@ -75,6 +75,13 @@ export interface StageContext {
   readonly round: number;
   /** A file the next step would see under {in} (document-repo path, placeholders filled); undefined when absent. */
   readText(path: string): Promise<string | undefined>;
+  /**
+   * Whether a document-repo file, or a folder when the path ends in "/", is among the stage's documents (its declared
+   * documents at the pinned document commit; placeholders filled), whatever its steps wrote: the same answer in every
+   * attempt, so a task built from it keeps its fingerprint. Optional: without it, a plan can tell only a file's presence,
+   * by readText, and only for a file no step of the stage writes.
+   */
+  exists?(path: string): Promise<boolean>;
   /** Like readText, parsed as JSON; an invalid file fails the stage. */
   readJson(path: string): Promise<unknown>;
   /** Standard output of an earlier script step (bounded, redacted). */

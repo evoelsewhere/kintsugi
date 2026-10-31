@@ -32,7 +32,7 @@ import {
   unitKeyLegacyPath,
 } from "@kintsugi/domain";
 import type { AgentStep, ForEachStep, StageContext, StagePlan, StageScope } from "../plan.js";
-import { CREDENTIALS, UNTRUSTED } from "./common.js";
+import { CREDENTIALS, STOP, UNTRUSTED } from "./common.js";
 
 const APP = DOCUMENT_PATH_TOKENS.app;
 const MANIFEST = buildManifestPath(APP);
@@ -77,7 +77,8 @@ async function preparedUnits(ctx: StageContext): Promise<Array<{ key: string; it
 const WORKSPACE = (target: string): string => `Your working directory is the job workspace. Read-only: the target repository "${target}" at {tobe}/${target}/, checked out at the head commit of the merge request
 (the code and the tests the member wrote), the legacy repositories under {src}/<repository id>/ (cite what you rely on as <repository id>/<path>:line), and the project's documents and
 the outputs of the steps before yours under {in}, at their document-repository paths. You cannot run anything: say so where a finding depends on a run. \`write\` works in your output
-directory: give it the full path the task names.`;
+folder {out}, which cannot be read: give it the full path the task names, never a path that starts with {out}/. There is no src/, in/ or out/ folder at
+the workspace root: use {tobe}/, {src}/ and {in}/ as written.`;
 
 const reviewTask = (target: string): string => `Review unit {key} of application {app}: its code and its tests in the merge request {mr}. You did not write them.
 
@@ -91,7 +92,9 @@ Read, under {in}:
 Follow the code-review skill: the five lenses, one after the other. Write your review note at ${buildReviewNotePath(APP, "{key}")}, in the form your instructions give (front matter unit "{key}", the table Severity | File | Where | Category | Finding | Suggestion); write no other file.
 
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 
 /** The pull-request title: the units of the merge request (the module when one module's units are selected). */
 export function reviewMessage(app: string, scope?: StageScope): string {

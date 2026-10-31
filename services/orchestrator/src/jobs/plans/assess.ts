@@ -11,7 +11,7 @@
 // inventory summary, the extraction script, the topology summary, the catalog and the synthesis are committed.
 // Portfolio mode (workflows/portfolio-assess.js) is not a portal stage yet.
 
-import type { StagePlan } from "../plan.js";
+import type { StageContext, StagePlan } from "../plan.js";
 import {
   DOCUMENT_PATH_TOKENS,
   applicationInputPath,
@@ -31,7 +31,7 @@ import {
   standardsDir,
   topologyExtractorPath,
 } from "@kintsugi/domain";
-import { CREDENTIALS, HEADER, RESTRICTED, UNTRUSTED, WORKSPACE } from "./common.js";
+import { CREDENTIALS, HEADER, RESTRICTED, STOP, UNTRUSTED, WORKSPACE, inputPresent, optionalInput } from "./common.js";
 import { topologySteps } from "./topology.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
@@ -73,7 +73,9 @@ ${COVERAGE}
 
 ${HEADER}
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 
 const DEBT_TASK = `Identify the technical debt of the legacy source of {app} (every legacy repository linked to it).
 
@@ -89,7 +91,9 @@ ${COVERAGE}
 
 ${HEADER}
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 
 const SECURITY_TASK = `Scan the legacy source of {app} (every legacy repository linked to it) for vulnerabilities.
 
@@ -106,7 +110,9 @@ ${HEADER}
 ${COVERAGE}
 
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 
 const CATALOG_OPS = ["rename", "set-kind", "describe", "rename-module", "move-item", "merge", "split", "move-files", "unassign-files", "add-parts"];
 
@@ -145,7 +151,24 @@ export const CATALOG_EDITS_SCHEMA: Record<string, unknown> = {
   },
 };
 
-const CURATE_TASK = `Curate the item catalog of application {app}.
+/** What the curation job is told about the catalog on the default branch: the previous one, or that this is the first. */
+const PREVIOUS = `{in}/${assessmentCatalogDir(APP_TOKEN)}/ (index.md and a document per module) is the previous catalog (on the default branch, reviewed by a
+person): where a proposed item covers mostly the same files as a previous one, keep its name, kind and summary.`;
+const FIRST = `This is the first catalog of the application: there is no previous one to keep names from, so do not look for one.`;
+
+/**
+ * What the curation job is told about the catalog on the default branch: the previous one, that this is the first, or (when
+ * the stage cannot tell, since render_catalog.py writes the same path) one read that settles it, never an open search.
+ */
+const PREVIOUS_CATALOG = (previous: boolean | undefined): string =>
+  previous === undefined
+    ? `Read {in}/${assessmentCatalogPath(APP_TOKEN)} once. If it exists, ${PREVIOUS} If it does not, this is the first catalog of the
+application: there is no previous one, so do not look for it anywhere else.`
+    : previous
+      ? PREVIOUS
+      : FIRST;
+
+const curateTask = (previous: boolean | undefined): string => `Curate the item catalog of application {app}.
 
 ${WORKSPACE}
 
@@ -153,10 +176,8 @@ The catalog lists what the application consists of, as items a person later sele
 -> item; functions inside an item are its parts. {in}/${DRAFT}/proposed.json is the catalog a script derived from the
 extracted topology ({in}/${scratchTopologyPath(APP_TOKEN)}) without reading code: a module per domain, an item per topology leaf,
 small leaves of one directory grouped. {in}/${scratchInventoryPath(APP_TOKEN)} lists every file, {in}/${ANALYSIS}/structure.md
-holds the structure job's domains and {in}/kintsugi.yaml names the allowed item kinds (unitKinds). If present,
-{in}/${assessmentCatalogDir(APP_TOKEN)}/ (index.md and a document per module) is the previous catalog (on the default branch, reviewed by a person): where a proposed item
-covers mostly the same files as a previous one, keep its name, kind and summary. Ids are kept by a later script; do not
-try to keep them yourself.
+holds the structure job's domains and {in}/kintsugi.yaml names the allowed item kinds (unitKinds).
+${PREVIOUS_CATALOG(previous)} Ids are kept by a later script; do not try to keep them yourself. These are all your inputs.
 
 Every file of the inventory must stay in exactly one item or in "unassigned", and no item may end up without files.
 Improve the catalog where it helps a person choose what to analyse, and only there:
@@ -173,7 +194,32 @@ Return the edits in order as your structured result; return {"edits": []} when t
 ${CREDENTIALS}
 ${UNTRUSTED}`;
 
-const SYNTHESIS_TASK = `Write the assessment of application {app}.
+/** The inputs a person may attach, each stated as there or not (a model told "if present" searches for a missing one). */
+async function attachedInputs(ctx: StageContext): Promise<string> {
+  const intent = applicationInputPath(APP_TOKEN, "INTENT.md");
+  const telemetry = `${applicationInputPath(APP_TOKEN, "telemetry")}/`;
+  const standards = `${standardsDir()}/`;
+  const lines = [
+    await optionalInput(ctx, intent, {
+      present: `- {in}/${intent} — what the team wants from the modernization; take it into account.`,
+      absent: `- No INTENT.md: the team has not written what it wants from the modernization.`,
+      unknown: `- {in}/${intent} — what the team wants from the modernization, when the team wrote it; take it into account.`,
+    }),
+    await optionalInput(ctx, telemetry, {
+      present: `- {in}/${telemetry} — production exports a person attached (APM, batch logs).`,
+      absent: `- No telemetry: nobody attached production exports, so write "no telemetry available" in the runtime profile.`,
+      unknown: `- {in}/${telemetry} — production exports a person attached (APM, batch logs), when the folder exists; if it does not, there is no telemetry.`,
+    }),
+    await optionalInput(ctx, standards, {
+      present: `- {in}/${standards} — the project's conventions.`,
+      absent: `- No project standards: the project has written no conventions yet.`,
+      unknown: `- {in}/${standards} — the project's conventions, when the folder exists.`,
+    }),
+  ];
+  return lines.join("\n");
+}
+
+const synthesisTask = (attached: string): string => `Write the assessment of application {app}.
 
 ${WORKSPACE}
 
@@ -183,9 +229,8 @@ Your inputs, read-only:
   fingerprint, technical debt, vulnerabilities and masked credentials). Check what they cite before you repeat it.
 - {in}/${assessmentCatalogPath(APP_TOKEN)} — the item catalog index, and a document per module next to it (modules and their
   items, from the extracted topology); the domain table may follow its modules.
-- {in}/${applicationInputPath(APP_TOKEN, "INTENT.md")}, if present — what the team wants from the modernization; take it into account.
-- {in}/${applicationInputPath(APP_TOKEN, "telemetry")}/, if present — production exports a person attached (APM, batch logs).
-- {in}/${standardsDir()}/, if present — the project's conventions.
+${attached}
+These are all your inputs: do not search for others.
 
 Write ${SYNTHESIS} with write, a fact-grounded brief a VP of Engineering could take into a
 budget meeting, with these sections: Executive Summary (3–4 sentences: what it is, how big, how risky, the headline
@@ -220,7 +265,9 @@ came from. ${RESTRICTED} Security Findings then points to "Credential inventory 
 committed; not for sharing)".
 
 ${HEADER}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 
 export const ASSESS: StagePlan = {
   id: "assess",
@@ -266,7 +313,7 @@ export const ASSESS: StagePlan = {
       id: "catalog-curate",
       kind: "agent",
       agent: "legacy-analyst",
-      task: CURATE_TASK,
+      task: async (ctx) => curateTask(await inputPresent(ctx, assessmentCatalogPath(APP_TOKEN), { writtenByStage: true })),
       schema: CATALOG_EDITS_SCHEMA,
       resultTo: `${DRAFT}/edits.json`,
       intermediate: true,
@@ -320,7 +367,7 @@ export const ASSESS: StagePlan = {
       id: "synthesis",
       kind: "agent",
       agent: "legacy-analyst",
-      task: SYNTHESIS_TASK,
+      task: async (ctx) => synthesisTask(await attachedInputs(ctx)),
       expects: [SYNTHESIS, DIAGRAM],
     },
     {

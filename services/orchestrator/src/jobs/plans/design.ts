@@ -51,7 +51,7 @@ import {
   unitKeyDesignSetDir,
   unitKeyStatePath,
 } from "@kintsugi/domain";
-import { CREDENTIALS, UNTRUSTED, WORKSPACE } from "./common.js";
+import { CREDENTIALS, STOP, UNTRUSTED, WORKSPACE } from "./common.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
 const MANIFEST = designManifestPath(APP_TOKEN);
@@ -148,7 +148,9 @@ Write every document the manifest lists for {key} (the required ones, and an opt
 full path of its skeleton, replacing every TODO and keeping the front matter. ${APPLICATION_RULES}
 
 ${CREDENTIALS}
-${UNTRUSTED}`
+${UNTRUSTED}
+
+${STOP}`
     : `Write the design documents of the set "${set}" for unit {key} of application {app}.
 
 ${WORKSPACE}
@@ -164,7 +166,9 @@ Write every document the manifest lists for {key} (the required ones, and an opt
 full path of its skeleton, replacing every TODO and keeping the front matter. ${RULES}
 
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 
 const reviewTask = (set: string, scope: "unit" | "application"): string => {
   const subject = scope === "application" ? `application {app}` : `unit {key} of application {app}`;
@@ -180,7 +184,9 @@ names that disagree, anything a builder would have to guess. ${scope === "applic
 If this is not the first round, the designer has fixed earlier findings: judge the documents as they stand, in full, and report a problem that is still there in the same words.
 
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 };
 
 interface Cluster {
@@ -211,7 +217,9 @@ in the form your instructions give; each finding names the full document-reposit
 If this is not the first round, designers have fixed earlier findings: judge the designs as they stand now, and report a problem that is still there in the same words.
 
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 };
 
 const fixTask = (set: string, scope: "unit" | "application"): string => {
@@ -231,7 +239,9 @@ Change only what they name, in the documents they name, and write each of those 
 is written from its skeleton). ${scope === "application" ? APPLICATION_RULES : RULES}
 
 ${CREDENTIALS}
-${UNTRUSTED}`;
+${UNTRUSTED}
+
+${STOP}`;
 };
 
 /** The design set of a run (inputs.scope.set), checked. */

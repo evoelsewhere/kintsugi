@@ -53,6 +53,9 @@ export function renderGuide(input: GuideInput): string {
     "",
     "Anything else in the workspace is the worker's and is out of reach.",
     "",
+    "Your task gives the exact paths of your step: `{in}` is a folder such as `steps/<step>/in`, `{out}` its sibling `steps/<step>/out`, and the legacy code is under",
+    `\`${SOURCE_ZONES.legacy}/\`. Use them as written. There is no \`in/\`, \`out/\` or \`src/\` folder at the root of the workspace, and the folders of other steps are not yours.`,
+    "",
   ];
 
   if (input.sources.length > 0) {
@@ -75,7 +78,7 @@ export function renderGuide(input: GuideInput): string {
     "",
     "- Write each result to its file as soon as it is finished, not at the end: if the job is stopped, what is written is kept for the next attempt.",
     "- A path given to write or edit is relative to your output folder and is a document-repository path; never prefix it with a repository or a workspace folder.",
-    "- Do not rewrite a file to check it, and do not look for what you wrote: your output folder cannot be read.",
+    "- Do not rewrite a file to check it, and do not look for what you wrote: your output folder cannot be read, and a step is done when its files are written. Then reply with your result (DONE when the task asks for nothing else) and stop.",
     "",
   );
 
