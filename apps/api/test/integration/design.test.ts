@@ -191,6 +191,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
 
   type Overview = {
     sets: Array<{ id: string }>;
+    unitKinds: string[];
     units: Array<{ key: string; kind: string; wave?: string; owner?: string; sets: Record<string, { state: string; ready: boolean; files: { total: number; stale: number; waived: number } }>; rules: { total: number; uncovered: number | null } }>;
     counts: Record<string, Record<string, number>>;
     rules: { units: number; total: number; uncovered: number };
@@ -203,6 +204,8 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     expect(response.status).toBe(200);
     const view = response.body.data!;
     expect(view.sets.map((set) => set.id)).toEqual(["basic", "detail"]);
+    // The kinds the project declares, not the template folders.
+    expect(view.unitKinds).toEqual(["screen", "api", "batch"]);
     expect(view.units.map((unit) => unit.key)).toEqual(["billing/invoice", "billing/tax", "customers/lookup", "customers/report"]);
     const states = Object.fromEntries(view.units.map((unit) => [unit.key, Object.fromEntries(Object.entries(unit.sets).map(([set, summary]) => [set, summary.state]))]));
     expect(states).toEqual({

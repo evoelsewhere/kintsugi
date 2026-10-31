@@ -17,6 +17,7 @@ import { documentsApi, type StageHeadline } from "@/lib/api/documents";
 import { type JobRunView, jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
 import { formatDateTime, formatDuration, formatRelative } from "@/lib/format";
+import { designHeadline } from "@/lib/design-headline";
 import { deliveryLink } from "@/lib/links";
 import { isActiveStatus } from "@/lib/status";
 import { latestRun, pipelineStages, runBlocker, runsOfStage, runtimePipelineStages, stageLabel } from "@/lib/stages";
@@ -143,18 +144,10 @@ function ApplicationStrip({ project, application, stages, runs }: StripProps): R
     catalog.data === undefined || catalog.data === null
       ? undefined
       : [`${catalog.data.counts.understood ?? 0}/${catalog.data.items.filter((item) => item.status !== "retired").length} items understood`];
-  // The design stage is tracked by its documents (ADR-0044): how many units have each design set written.
+  // The design stage is tracked by its documents (ADR-0044): per declared unit kind, how many units have their designs written.
   const design = useLoader(`overview-design/${project.id}/${application.id}`, () => (project.documentRepository === null ? Promise.resolve(null) : designApi.overview(project.id, application.id).catch(() => null)));
-  const designHeadline = (): string[] | undefined => {
-    if (design.data === undefined || design.data === null || design.data.sets.length === 0) return undefined;
-    const written = design.data.sets.map((set) => {
-      const here = design.data?.counts[set.id] ?? {};
-      const total = Object.values(here).reduce((sum, value) => sum + (value ?? 0), 0);
-      return `${set.id} ${(here.conformant ?? 0) + (here.waived ?? 0) + (here.stale ?? 0)}/${total}`;
-    });
-    return design.data.attention.length === 0 ? written : [...written, `${design.data.attention.length} to look at`];
-  };
-  const headlineOf = (stage: string): string[] | undefined => (stage === "understand" ? understood : stage === "design" ? designHeadline() : headlines.data?.find((entry) => entry.stage === stage)?.headline);
+  const designed = design.data === undefined || design.data === null || design.data.sets.length === 0 ? undefined : designHeadline(design.data);
+  const headlineOf = (stage: string): string[] | undefined => (stage === "understand" ? understood : stage === "design" ? designed : headlines.data?.find((entry) => entry.stage === stage)?.headline);
 
   const pipeline = pipelineStages(stages);
   const tracked = runtimePipelineStages(stages);

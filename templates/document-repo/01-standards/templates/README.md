@@ -14,16 +14,17 @@ The project's **design sets**: what each design document of a unit contains, in 
   <kind>/         the profile of one unit kind (optional): see "A profile per unit kind"
 ```
 
-The starter has one set for each unit kind it declares in `unitKinds`, each only for units of that kind (the set has no files table; its documents come from the profile folder named after the kind), and a `test` set for every kind:
+The starter's `kintsugi.yaml` declares Kintsugi's core unit kinds in `unitKinds` (`screen`, `api`, `batch-job`, `report`, `event`, `integration`, `module`; ADR-0060), the kinds the portal renders until a project declares its own. The starter has a set for four of them, each only for units of that kind (the set has no files table; its documents come from the profile folder named after the kind), and a `test` set for every kind; an `event`, `integration` or `module` unit gets the `test` set until you add a set or a profile for its kind:
 
 | Set | For units of kind | Documents |
 | --- | --- | --- |
 | `screen` | `screen` | `overview.md`, `layout.md`, `events.md`, `data.md` (optional) |
 | `api` | `api` | `overview.md`, `endpoints.md`, `security.md` (optional) |
 | `batch-job` | `batch-job` | `overview.md`, `schedule.md`, `steps.md`, `operations.md` (optional) |
-| `db-object` | `db-object` | `overview.md`, `definition.md`, `migration.md` |
 | `report` | `report` | `overview.md`, `parameters.md`, `layout.md`, `data.md` |
 | `test` | every kind | `cases.md`, `test-data.md` (optional) |
+
+Data is not a unit kind: a table or a record layout is a data object of the units that use it (ADR-0060), and its mapping goes in `../mappings/`. A profile folder is only valid for a kind in `unitKinds`; a project that adds a kind of its own (`ledger-close`) declares it there first.
 
 Every document carries the contract of its sections (tables, id patterns, vocabularies, checks) and guidance for the designer; `_examples/` holds a finished document of a kind. Replace them with the sets your project needs: keep a set per kind, or give one set a profile per kind (below), or define the sets by level of design (`basic`, `detail`, ...) as your customer does.
 
@@ -49,7 +50,7 @@ A description for people: when the set is written and by whom.
 
 ## A profile per unit kind
 
-Units of different kinds (a screen, a batch job, a database object) need different documents and different sections. A folder named after a unit kind of `unitKinds` holds the profile of that kind for this set:
+Units of different kinds (a screen, a batch job, an integration) need different documents and different sections. A folder named after a unit kind of `unitKinds` holds the profile of that kind for this set:
 
 ```text
 design/
@@ -59,20 +60,20 @@ design/
     profile.md                 kind, version, files added or removed, instructions for this kind
     logic.md                   replaces the base logic.md for screens, as a whole file
     _examples/logic.md         a finished screen logic, read by the designer and never checked
-  db-object/
-    profile.md                 removes data-access.md, adds ddl.md
-    ddl.md                     a document only database objects have
+  integration/
+    profile.md                 removes data-access.md, adds field-mapping.md
+    field-mapping.md           a document only integrations have
 ```
 
 ```markdown
 ---
-kind: db-object            # the folder name
+kind: integration          # the folder name
 version: 1                 # raise it when a change affects the designs written with this profile's templates
 removes: ["data-access.md"]   # base files this kind does not have
 ---
 | Path | Template | Required |
 | --- | --- | --- |
-| ddl.md | ddl.md | yes |
+| field-mapping.md | field-mapping.md | yes |
 
 ## Instructions
 Read by the designer after the set's own.

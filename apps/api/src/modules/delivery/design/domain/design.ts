@@ -142,6 +142,8 @@ export interface DesignOverviewView {
   ref: { ref: string; commit: string };
   /** The sets of the project, in the order they are written (a set after the ones it needs). */
   sets: Array<{ id: string; title: string; version: number; needs: string[]; scope: "unit" | "application" }>;
+  /** The unit kinds of the project: kintsugi.yaml's `unitKinds`, else the default the portal renders. */
+  unitKinds: string[];
   /** Where the application's own design stands, per set of scope `application` (ADR-0050). */
   application: { sets: Record<string, UnitSetSummary> };
   units: UnitDesignRow[];

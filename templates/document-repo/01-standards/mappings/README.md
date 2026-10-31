@@ -11,7 +11,7 @@ One file per mapping: how a legacy construct or UI pattern becomes its target eq
 | `legacy-construct.example.md` | the format of any mapping: legacy, target, example, edge cases |
 | `search-list-screen.example.md` | a UI pattern: a screen with filters, a search action and a result grid |
 | `batch-job.example.md` | a processing pattern: a legacy batch step becomes a target job step |
-| `db-object.example.md` | a data construct: a legacy table or file becomes a target table |
+| `database-object.example.md` | a data construct: a legacy table or file becomes a target table |
 
 The `*.example.md` files teach the format: they are not loaded and not seeded. Copy one to a real name (for example `invoice-grid.md`) and adapt it; name the file after the construct.
 

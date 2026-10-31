@@ -10,7 +10,7 @@ The project's own decisions about the target, written as plain Markdown. There i
 | --- | --- | --- |
 | `conventions/` | Target conventions: layering, naming, idioms, UI kit, API style, testing, build and CI. Extract them from the scaffolded target repos; do not invent them. | the designers, the members' harnesses, the reviewers |
 | `mappings/` | How a legacy construct or UI pattern becomes its target equivalent, one file per mapping. | the designers and the members' harnesses |
-| `templates/` | The project's design sets: the format and the required content of the design documents of every unit, one set per unit kind (screen, API, batch job, database object, report) and a test set, as templates with checks. | the runtime's design stage, the design checks, the portal |
+| `templates/` | The project's design sets: the format and the required content of the design documents of every unit, one set per unit kind (screen, API, batch job, report) and a test set, as templates with checks. | the runtime's design stage, the design checks, the portal |
 | `review-rules.md` | The rules reviewers enforce, each with a short id that review findings cite. | the runtime's review and the human reviewers |
 
 ## Order of authority

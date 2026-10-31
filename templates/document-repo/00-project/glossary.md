@@ -11,7 +11,7 @@ One row per term the project uses. Add a column per language the project works i
 
 | Term | Japanese | Vietnamese | Definition | Notes |
 | --- | --- | --- | --- | --- |
-| Unit | ユニット | Đơn vị | The thing being migrated: one screen, API, batch job, database object or report, `<app>/<module>/<unit>` | Sample row: replace it |
+| Unit | ユニット | Đơn vị | The thing being migrated: one screen, API, batch job, report, event handler, integration or internal module, `<app>/<module>/<unit>` | Sample row: replace it |
 | Item | アイテム | Mục | An entry of an application's catalog (`<module>/<item>`); once selected for migration it becomes a unit | Sample row: replace it |
 | Business rule | ビジネスルール | Quy tắc nghiệp vụ | A behaviour of the legacy system that the target must keep, with an id `RULE-…` | Sample row: replace it |
 

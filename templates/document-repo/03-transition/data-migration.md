@@ -37,7 +37,7 @@ flowchart LR
 
 ## Mapping rules
 
-The mapping of every field is in the object designs (`db-object` units) and in `../01-standards/mappings/`; list here the rules that cut across them.
+The mapping of every field is in the data objects of the units (`data-objects.md` in each unit's `01-legacy/` folder) and in `../01-standards/mappings/`; list here the rules that cut across them.
 
 | Rule | Legacy | Target | Applies to |
 | --- | --- | --- | --- |

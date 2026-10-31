@@ -49,8 +49,10 @@ Which component each kind of unit lands in, so a unit's design knows where its c
 | screen | <!-- web --> | <!-- src/pages --> |
 | api | <!-- api --> | <!-- src/controllers --> |
 | batch-job | <!-- batch --> | <!-- src/jobs --> |
-| db-object | <!-- database --> | <!-- migrations/ --> |
 | report | <!-- api or reporting --> | <!-- src/reports --> |
+| event | <!-- api or a worker --> | <!-- src/handlers --> |
+| integration | <!-- integration --> | <!-- src/integrations --> |
+| module | <!-- api --> | <!-- src/domain --> |
 
 ## Common components
 

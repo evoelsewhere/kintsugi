@@ -119,6 +119,8 @@ export interface DesignAttention {
 export interface DesignOverview {
   ref: { ref: string; commit: string };
   sets: Array<{ id: string; title: string; version: number; needs: string[]; scope: "unit" | "application" }>;
+  /** The unit kinds of the project: kintsugi.yaml's `unitKinds`, else the default the portal renders. */
+  unitKinds: string[];
   /** Where the application's own design stands, per set of scope `application`. */
   application: { sets: Record<string, UnitSetSummary> };
   units: UnitDesignRow[];

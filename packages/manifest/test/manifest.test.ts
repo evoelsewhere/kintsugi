@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { DEFAULT_AUTO_COMMIT_PATHS, manifestFromProject } from "@kintsugi/domain";
+import { DEFAULT_AUTO_COMMIT_PATHS, DEFAULT_UNIT_KINDS, manifestFromProject } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { parseKintsugiYaml, renderKintsugiYaml } from "../src/index.js";
 
@@ -13,6 +13,8 @@ describe("kintsugi.yaml", () => {
     if (!result.ok) return;
     expect(result.manifest.applications[0]!.repos.map((repo) => repo.role)).toEqual(["legacy", "legacy-data", "target", "target"]);
     expect(result.manifest.autoCommitPaths).toEqual(DEFAULT_AUTO_COMMIT_PATHS);
+    // One source of unit kinds: the starter declares the kinds the portal renders by default.
+    expect(result.manifest.unitKinds).toEqual([...DEFAULT_UNIT_KINDS]);
   });
 
   it("parses the example in the document repo reference", () => {

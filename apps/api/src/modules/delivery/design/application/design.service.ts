@@ -37,6 +37,7 @@ import {
 } from "@kintsugi/agents/reader";
 import {
   COMPONENT_ID_PATTERN,
+  DEFAULT_UNIT_KINDS,
   DESIGN_EXAMPLES_DIR,
   DESIGN_PROFILE_FILE,
   type DesignState,
@@ -108,6 +109,8 @@ interface Opened {
 /** The sets of a project at a commit, in the order they are written, and what the manifest says about them. */
 interface ProjectSets {
   sets: LoadedDesignSet[];
+  /** The unit kinds kintsugi.yaml declares, else the default the portal renders (DEFAULT_UNIT_KINDS). */
+  unitKinds: string[];
   problems: DesignTemplateProblemView[];
   pipelines: Array<{ id: string; stages: Array<{ id: string; produces?: string }> }>;
 }
@@ -302,6 +305,7 @@ export class DesignService {
     return {
       ref: resolved,
       sets: scan.project.sets.map(({ set }) => ({ id: set.id, title: set.title, version: set.version, needs: set.needs, scope: set.scope })),
+      unitKinds: scan.project.unitKinds,
       application: { sets: scan.application.summaries },
       units: scan.units.map((unit) => unit.row),
       counts,
@@ -466,7 +470,7 @@ export class DesignService {
           if (stage.produces !== undefined && !known.has(stage.produces)) problems.push({ path: "kintsugi.yaml", message: `pipeline "${pipeline.id}", stage "${stage.id}" produces "${stage.produces}", which is not a design set` });
         }
       }
-      return { sets: writtenOrder(loaded.sets), problems, pipelines };
+      return { sets: writtenOrder(loaded.sets), unitKinds: unitKinds === undefined ? [...DEFAULT_UNIT_KINDS] : [...unitKinds], problems, pipelines };
     });
   }
 

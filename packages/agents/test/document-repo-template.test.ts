@@ -4,7 +4,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applicationDesignPath, applicationInputPath, applicationRequirementsPath, architectureDir, commonComponentsDir, designSetsDir, generatedDir, glossaryPath, legacyDir, modernDir, transitionDir } from "@kintsugi/domain";
+import { applicationDesignPath, applicationInputPath, applicationRequirementsPath, architectureDir, commonComponentsDir, DEFAULT_UNIT_KINDS, designSetsDir, generatedDir, glossaryPath, legacyDir, modernDir, transitionDir } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { DESIGN_SETS_PREFIX, designFilesFor, loadDesignSets, type DesignProfileSource, type DesignSetSource } from "../builtin/plugins/reverse_engineering/hooks/reader/design.js";
 
@@ -66,15 +66,19 @@ describe("the document repo starter template", () => {
       });
     const manifest = readFileSync(fileURLToPath(new URL("../../../templates/document-repo/kintsugi.yaml", import.meta.url)), "utf8");
     const kinds = /^unitKinds:\s*\[([^\]]*)\]/m.exec(manifest)?.[1]?.split(",").map((kind) => kind.trim()) ?? [];
+    // One source of unit kinds: the starter declares the kinds the portal renders when a project declares none,
+    // so a repo made from the starter and a manifest published from the portal check the templates the same way.
+    expect(kinds).toEqual([...DEFAULT_UNIT_KINDS]);
     const loaded = loadDesignSets(sources, { unitKinds: kinds });
     expect(loaded.problems).toEqual([]);
-    expect(loaded.sets.map((entry) => [entry.set.id, entry.set.needs])).toEqual([["api", []], ["batch-job", []], ["db-object", []], ["report", []], ["screen", []], ["test", []]]);
+    expect(loaded.sets.map((entry) => [entry.set.id, entry.set.needs])).toEqual([["api", []], ["batch-job", []], ["report", []], ["screen", []], ["test", []]]);
     // The profiles (ADR-0053): each kind has its own set, which is only for units of that kind; the test set is for every kind.
-    expect(loaded.sets.map((entry) => [entry.set.id, Object.keys(entry.profiles)])).toEqual([["api", ["api"]], ["batch-job", ["batch-job"]], ["db-object", ["db-object"]], ["report", ["report"]], ["screen", ["screen"]], ["test", []]]);
+    expect(loaded.sets.map((entry) => [entry.set.id, Object.keys(entry.profiles)])).toEqual([["api", ["api"]], ["batch-job", ["batch-job"]], ["report", ["report"]], ["screen", ["screen"]], ["test", []]]);
+    // Every profile folder is a declared kind (data is not a unit kind, ADR-0060).
+    for (const entry of loaded.sets) for (const kind of Object.keys(entry.profiles)) expect(DEFAULT_UNIT_KINDS, kind).toContain(kind);
     const set = (id: string) => loaded.sets.find((entry) => entry.set.id === id)!;
     expect(designFilesFor(set("screen"), "screen").map((file) => [file.path, file.required])).toEqual([["overview.md", true], ["layout.md", true], ["events.md", true], ["data.md", false]]);
     expect(designFilesFor(set("screen"), "screen").map((file) => [file.path, file.ref.id, file.example])).toContainEqual(["events.md", "screen/screen", "screen/_examples/events.md"]);
-    expect(designFilesFor(set("db-object"), "db-object").map((file) => file.path)).toEqual(["overview.md", "definition.md", "migration.md"]);
     expect(designFilesFor(set("api"), "api").map((file) => file.path)).toEqual(["overview.md", "endpoints.md", "security.md"]);
     expect(designFilesFor(set("batch-job"), "batch-job").map((file) => file.path)).toEqual(["overview.md", "schedule.md", "steps.md", "operations.md"]);
     expect(designFilesFor(set("report"), "report").map((file) => file.path)).toEqual(["overview.md", "parameters.md", "layout.md", "data.md"]);
