@@ -170,6 +170,20 @@ describe.skipIf(!hasDatabase)("units members build and the review of their merge
 
   });
 
+  it("still finds every unit's merge request after more than 500 newer records of the plugin (one per turn of a build session)", async () => {
+    await app.db.query(
+      `insert into monitoring.member_activity (id, at, user_id, project_id, plugin_name, harness, kind, summary, detail)
+       select gen_random_uuid()::text, now() - make_interval(secs => n), $1, 'shop', 'modernize', 'claude-code', case when n % 10 = 0 then 'plugin.download' else 'command.run' end, 'build', '{}'::jsonb
+         from generate_series(1, 650) as n`,
+      [adminId],
+    );
+    const view = (await admin.get<Overview>(OVERVIEW)).body.data!;
+    // The newest merge request of the unit (an earlier test recorded a newer commit for it).
+    expect(unitOf(view, "billing/invoice").member).toMatchObject({ mr: PR_INVOICE, commit: C3 });
+    expect(unitOf(view, "billing/tax").member).toMatchObject({ mr: PR_TAX, commit: C2, cases: 5, failed: 1 });
+    // The next test starts the review of billing/tax with these records in place.
+  });
+
   it("queues the review of a merge request pinned to its head commit, shows it as running, and refuses the same unit again", async () => {
     const started = await admin.request<{ id: string; name: string; status: string }>("POST", REVIEWS, { body: { units: ["billing/tax"] } });
     expect(started.status, JSON.stringify(started.body)).toBe(202);
