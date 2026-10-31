@@ -230,6 +230,15 @@ describe("attentionOf", () => {
     const items = attentionOf({ ...quiet, totals: { ...quiet.totals, compactions: 6 }, tools: [{ tool: "mcp__tracker__search", calls: 10, errors: 3 }, { tool: "read", calls: 100, errors: 1 }] });
     expect(items.map((item) => item.id)).toEqual(["tool:mcp__tracker__search", "compacting"]);
   });
+
+  it("points a failing MCP tool at its server, and a failing kernel tool at the run", () => {
+    const [mcp, kernel] = attentionOf({ ...quiet, tools: [{ tool: "mcp__tracker__search", calls: 10, errors: 3 }, { tool: "ls", calls: 30, errors: 8 }] });
+    expect(mcp?.detail).toBe("3 of 10 calls failed. Check the MCP server tracker, or the tools allowed on it (Settings → MCP servers).");
+    expect(kernel?.title).toBe("ls fails in 27% of its calls");
+    expect(kernel?.detail).toContain("kernel tool");
+    expect(kernel?.detail).toContain("workspace guard");
+    expect(kernel?.detail).not.toContain("MCP");
+  });
 });
 
 describe("contextSeries", () => {

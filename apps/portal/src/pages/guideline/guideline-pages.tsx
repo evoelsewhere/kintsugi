@@ -130,8 +130,14 @@ const install: GuidePage = {
       <H2>Update</H2>
       <P>Run the same installer again. It replaces the CLI in place, so the plugins you generated for your AI client keep working. Set <Code>KINTSUGI_HOME</Code> before running it to install somewhere else.</P>
       <H2>Remove</H2>
-      <CodeBlock label="Remove" code={"# Remove the plugins from your AI client first\nkintsugi remove modernize --all\n\n# Then delete the folder\nrm -rf ~/.kintsugi"} />
-      <P>On Windows, delete <Code>%LOCALAPPDATA%\Kintsugi</Code> and remove its <Code>bin</Code> folder from your user PATH.</P>
+      <P>Take Kintsugi out of each AI client first: the plugins you installed, then the Kintsugi connector and its marketplace, which <Code>kintsugi remove</Code> leaves in place. Their names end in your profile: <Code>kintsugi plugins setup --harness &lt;client&gt; --url &lt;url&gt; --verbose</Code> prints the exact commands under &ldquo;Rollback commands&rdquo;.</P>
+      <CodeBlock
+        label="Remove"
+        code={
+          "# 1. The plugins you installed from Kintsugi\nkintsugi remove modernize --all\n\n# 2. The connector and its marketplace, per client\n# Claude Code\nclaude plugin uninstall --scope user kintsugi@<marketplace>\nclaude plugin marketplace remove --scope user <marketplace>\n# Codex\ncodex plugin remove kintsugi@<marketplace>\ncodex plugin marketplace remove <marketplace>\n# GitHub Copilot CLI\ncopilot plugin uninstall kintsugi\ncopilot plugin marketplace remove <marketplace>\n\n# 3. The CLI and your profile (macOS: ~/Library/Application Support/Kintsugi)\nrm -rf ~/.kintsugi ~/.config/kintsugi"
+        }
+      />
+      <P>On Windows, delete <Code>%LOCALAPPDATA%\Kintsugi</Code> (the CLI) and <Code>%APPDATA%\Kintsugi</Code> (your profile), and remove the CLI&apos;s <Code>bin</Code> folder from your user PATH. Removing the CLI before the connector leaves your AI client starting an MCP server that no longer exists.</P>
       <H2>Troubleshooting</H2>
       <Table
         head={["You see", "What to do"]}

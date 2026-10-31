@@ -36,7 +36,7 @@ const TABS: SettingsTab[] = [
   { id: "diagnostics", label: "Diagnostics", icon: Activity, component: ({ close }) => <DiagnosticsSection onNavigate={close} /> },
 ];
 
-export function SettingsTabs({ initial = "appearance", onClose }: { initial?: string; onClose: () => void }): React.JSX.Element {
+export function SettingsTabs({ initial = "appearance", onClose, guard = (action) => action() }: { initial?: string; onClose: () => void; guard?: (action: () => void) => void }): React.JSX.Element {
   const { can } = useAuth();
   const tabs = TABS.filter((tab) => tab.permission === undefined || can(tab.permission));
   const [active, setActive] = useState(initial);
@@ -58,7 +58,7 @@ export function SettingsTabs({ initial = "appearance", onClose }: { initial?: st
               type="button"
               aria-label={tab.label}
               aria-current={tab.id === current.id ? "page" : undefined}
-              onClick={() => setActive(tab.id)}
+              onClick={() => (tab.id === current.id ? undefined : guard(() => setActive(tab.id)))}
               className={cn(
                 "flex h-9 w-auto shrink-0 items-center gap-2.5 rounded-[var(--geist-radius)] px-2.5 text-left text-[13px] text-text-secondary hover:bg-hover hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)] md:w-full",
                 tab.id === current.id && "bg-hover font-medium text-text",
