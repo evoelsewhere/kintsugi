@@ -14,6 +14,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ProviderIcon } from "@/components/ui/provider-icon";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { SkeletonRows } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useToast } from "@/components/ui/toast";
 import { agentsApi, type AgentSummary } from "@/lib/api/agents";
@@ -49,6 +50,8 @@ export function ProvidersSection(): React.JSX.Element {
   const [applying, setApplying] = useState(false);
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
+  /** Whether a first answer came: until then the lists are unknown, not empty. */
+  const [loaded, setLoaded] = useState(false);
   const [dialog, setDialog] = useState<{ open: boolean; provider: ProviderView | null }>({ open: false, provider: null });
   const [removeTarget, setRemoveTarget] = useState<ProviderView | null>(null);
   const [tests, setTests] = useState<Record<string, TestConnectionResult>>({});
@@ -74,6 +77,7 @@ export function ProvidersSection(): React.JSX.Element {
       setSupported(catalog);
       setProjects(allProjects);
       setAgents(catalogAgents.filter((agent) => agent.audience === "runtime"));
+      setLoaded(true);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -146,11 +150,21 @@ export function ProvidersSection(): React.JSX.Element {
         </Button>
       </div>
 
-      {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
+      {error === null ? null : (
+        <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">
+          {error}
+        </p>
+      )}
 
       {/* Provider list */}
       <Card className="overflow-hidden p-0">
-        {providers.length === 0 ? (
+        {!loaded ? (
+          error === null ? (
+            <div className="px-4 py-3">
+              <SkeletonRows rows={2} />
+            </div>
+          ) : null
+        ) : providers.length === 0 ? (
           <p className="px-4 py-8 text-center text-[13px] text-text-secondary">No providers configured yet — add one to let runtime agents call models.</p>
         ) : (
           providers.map((provider, index) => {
@@ -255,7 +269,11 @@ export function ProvidersSection(): React.JSX.Element {
           </div>
         </CardHeader>
         <CardContent className="mt-4">
-          {bindings.length === 0 ? (
+          {!loaded ? (
+            error === null ? (
+              <SkeletonRows rows={3} />
+            ) : null
+          ) : bindings.length === 0 ? (
             <div className="rounded-lg bg-recessed px-4 py-5 text-center">
               <p className="text-[13px] font-medium text-text">No model bindings yet</p>
               <p className="mt-1 text-[12px] text-text-secondary">Runtime agents will use the installation default until you add a binding.</p>
