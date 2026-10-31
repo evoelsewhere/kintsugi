@@ -2,10 +2,11 @@ import { WebSearchPanel } from "./web-search-panel";
 import { ProjectMemoryPanel } from "./project-memory-panel";
 // Project configuration (Administration → Projects, ADR-0028): the project's fields, per
 // application the AS-IS group (legacy code and legacy data repos, read-only for Kintsugi) and
-// the TO-BE group (the project's document repo and the target repos, each implementing an
-// architecture component), plus the kintsugi.yaml that Kintsugi renders from this state and
-// its publication to the document repo as a pull request. Running stages, job runs and
-// document writes live in Delivery. Repository sync states refresh while not ready.
+// the TO-BE group (the target repos, each implementing an architecture component), the
+// project-level document repo in a block of its own, plus the kintsugi.yaml that Kintsugi
+// renders from this state and its publication to the document repo as a pull request, whose
+// status shows until it is merged. Running stages, job runs and document writes live in
+// Delivery. Repository sync states refresh while not ready.
 
 import type { ApplicationRepositoryRole } from "@kintsugi/domain";
 import { FolderGit2, GitPullRequestArrow, Package, Pencil, Plus, Trash2, Unlink } from "lucide-react";
@@ -26,12 +27,14 @@ import { type ApplicationView, type ProjectDetail, type ProjectRepositoryView, p
 import { useAuth } from "@/lib/auth";
 import { deliveryLink } from "@/lib/links";
 import { subscribeLive } from "@/lib/live";
+import { useLoader } from "@/lib/use-loader";
 import { Tabs } from "@/components/ui/tabs";
 import { DesignSetsCard } from "./design-sets-card";
 import { MemberConnectPanel } from "../member/connect-panel";
 import { PluginAccessPanel } from "./plugin-access-panel";
 import { ProjectAccessPanel } from "./project-access-panel";
 import { ProjectInsights } from "./projects-insights";
+import { ManifestPublishStatus } from "./manifest-publish-status";
 import { NoRepositories } from "./no-repositories";
 import { ApplicationDialog, LinkDialog, ProjectDialog } from "./project-dialogs";
 
@@ -70,6 +73,8 @@ export function ProjectDetailPage(): React.JSX.Element {
   const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null);
   const [confirm, setConfirm] = useState<ConfirmTarget | null>(null);
   const toast = useToast();
+  // The latest publication of kintsugi.yaml, followed until its pull request is merged.
+  const writes = useLoader(`project-writes/${projectId}`, async () => (await projectsApi.documentWrites(projectId, 20)).items, { live: [`document-writes:${projectId}`] });
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -136,10 +141,6 @@ export function ProjectDetailPage(): React.JSX.Element {
               {project.id}
               {project.description === undefined ? "" : ` · ${project.description}`}
             </CardDescription>
-            <p className="mt-2 flex items-center gap-1.5 text-[12px] text-text-secondary">
-              <FolderGit2 className="size-4 text-text-muted" strokeWidth={1.5} />
-              Document repo: {project.documentRepository === null ? "none" : `${project.documentRepository.repositoryId} (${project.documentRepository.url})`}
-            </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Link to={deliveryLink({ projectId: project.id })} className="inline-flex h-[var(--geist-form-small-height)] items-center gap-1.5 rounded-[var(--geist-radius)] px-3 text-[14px] text-text-secondary hover:bg-hover hover:text-text">
@@ -168,6 +169,22 @@ export function ProjectDetailPage(): React.JSX.Element {
         {canManage && repositories.length === 0 ? <NoRepositories onSettingsClosed={() => void load()} /> : null}
 
         <ProjectInsights project={project} />
+
+        <Card>
+          <CardHeader>
+            <div className="min-w-0">
+              <CardTitle>Document repo</CardTitle>
+              <CardDescription>Project level, shared by every application: everything except code (ADR-0028). Kintsugi writes to it as kintsugi-bot, through pull requests.</CardDescription>
+            </div>
+          </CardHeader>
+          <div className="mt-3">
+            <RepositoryList
+              title="Repository"
+              {...(canManage ? { hint: "change it with Edit" } : {})}
+              repositories={project.documentRepository === null ? [] : [project.documentRepository]}
+            />
+          </div>
+        </Card>
 
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -223,6 +240,7 @@ export function ProjectDetailPage(): React.JSX.Element {
               </Button>
             ) : null}
           </CardHeader>
+          {writes.data === undefined ? null : <ManifestPublishStatus projectId={project.id} writes={writes.data} />}
           <pre className="shadow-border mt-3 max-h-[28rem] overflow-auto rounded-[var(--geist-radius)] bg-recessed px-3 py-2 font-mono text-[12px] leading-5 text-text">{manifest}</pre>
         </Card>
         </>
@@ -242,7 +260,8 @@ export function ProjectDetailPage(): React.JSX.Element {
         confirmVariant="solid"
         onConfirm={async () => {
           await projectsApi.publishManifest(projectId, { scaffold });
-          toast.success(scaffold ? "kintsugi.yaml and the starter structure queued" : "kintsugi.yaml queued for publishing", "Follow the pull request under Document writes in Delivery.");
+          toast.success(scaffold ? "kintsugi.yaml and the starter structure queued" : "kintsugi.yaml queued for publishing", "Its status and pull request show under kintsugi.yaml until it is merged.");
+          await writes.reload();
         }}
         onClose={() => setPublishOpen(false)}
       >
@@ -251,7 +270,7 @@ export function ProjectDetailPage(): React.JSX.Element {
         <div className="mt-3">
           <Checkbox checked={scaffold} onChange={setScaffold} label="Also create the starter structure that is missing" />
           <p className="mt-1 pl-6 text-[12px] text-text-muted">
-            Program, portfolio, architecture, standards, plugins and gate folders with their READMEs, and one skeleton per application ({project.applications.length}). Files already in the repo are never replaced.
+            Project, standards, architecture, transition and plugins folders with their READMEs, and one folder per application ({project.applications.length}). Files already in the repo are never replaced.
           </p>
         </div>
       </ConfirmDialog>
@@ -379,11 +398,6 @@ function ApplicationCard({ projectId, application, canManage, canLink, onEdit, o
             <h4 className="text-[13px] font-medium text-text">TO-BE</h4>
             <p className="text-[12px] text-text-muted">Members write; the runtime never does.</p>
           </div>
-          <RepositoryList
-            title="Document repo"
-            hint="Project level — change it with Edit project."
-            repositories={application.toBe.document === null ? [] : [application.toBe.document]}
-          />
           {group("Target repos", "target", application.toBe.targets)}
         </section>
       </div>
