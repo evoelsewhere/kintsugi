@@ -279,7 +279,7 @@ describe("built-in commands", () => {
     const commands = await loadBuiltinCommands();
     expect(commands).toHaveLength(6);
     expect(commands[0]).toMatchObject({ id: "assess", command: "assess", audience: "runtime" });
-    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand", "design", "review"]);
+    expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "plan-understand", "understand", "design", "review"]);
     expect(commands.filter((command) => command.audience === "member").map((command) => command.id)).toEqual(["build"]);
     expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "understand", "design"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({

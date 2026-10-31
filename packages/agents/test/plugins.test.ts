@@ -14,7 +14,7 @@ describe("built-in plugins", () => {
     const understand = plugins.find((plugin) => plugin.name === "reverse_engineering")!;
     const names = (kind: string): string[] => understand.components.filter((component) => component.kind === kind).map((component) => component.name);
     expect(names("agent")).toEqual(["business-rules-extractor", "legacy-analyst", "security-auditor", "understand-planner"]);
-    expect(names("command")).toEqual(["assess", "understand", "plan-understand"]);
+    expect(names("command")).toEqual(["assess", "plan-understand", "understand"]);
     expect(names("workflow")).toContain("harden-scan");
     expect(understand.components.find((component) => component.name === "extract-rules")?.description).not.toBe("");
     expect(understand.files.map((file) => file.path)).toEqual(
@@ -93,6 +93,9 @@ describe("plugin flows", () => {
     expect(understandFlow.gates.length).toBeGreaterThan(0);
 
     expect(understand!.pipeline).toEqual(expect.arrayContaining([{ from: "assess", to: "understand", via: expect.arrayContaining(["10-applications/<app>/01-legacy/_catalog/"]) }]));
+    // In the order a person goes: assess feeds the plan, the plan comes before understand, and understand feeds the next plan.
+    expect(understand!.flows.map((entry) => entry.command)).toEqual(["assess", "plan-understand", "understand"]);
+    expect(understand!.pipeline.find((link) => link.from === "assess" && link.to === "plan-understand")?.via).toEqual(expect.arrayContaining(["10-applications/<app>/01-legacy/inventory.md"]));
     // The plan reads what assess wrote and which items understand has finished (their understanding.md); nothing else.
     expect(understand!.pipeline.find((link) => link.to === "plan-understand" && link.from === "understand")?.via).toEqual(["10-applications/<app>/01-legacy/<module>/<unit>/understanding.md"]);
     expect(modernize!.flows.map((entry) => entry.command)).toEqual(["design", "build", "review"]);

@@ -38,11 +38,14 @@ export interface BuiltinCommand {
   flow?: FlowNode[];
 }
 
-/** Pipeline order of the stages; unknown ids follow alphabetically. */
+/**
+ * Pipeline order of the stages, as a person goes through them: assess, then plan what to understand, then understand the
+ * items the plan proposes (and plan again with what is understood). Unknown ids follow alphabetically.
+ */
 export const COMMAND_ORDER: readonly string[] = [
   "assess",
-  "understand",
   "plan-understand",
+  "understand",
   "design",
   "build",
   "review",

@@ -7,6 +7,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FlowNode, PluginFlow, PluginFlowStep, PluginLink } from "@/lib/api/plugins";
 import { cn } from "@/lib/utils";
 import { applicationDir, assessmentDir, DOCUMENT_PATH_TOKENS } from "@kintsugi/domain";
+import { linkLabel } from "./link-label";
 
 /** What a box is. The colors are tinted over the page, so they read on a light and a dark theme. */
 const KIND = {
@@ -64,10 +65,10 @@ function ArrowDown({ label }: { label?: string }): React.JSX.Element {
   );
 }
 
-function ArrowRight({ label, className }: { label?: string; className?: string }): React.JSX.Element {
+function ArrowRight({ label, title, className }: { label?: string; title?: string; className?: string }): React.JSX.Element {
   return (
-    <div className={cn("flex shrink-0 flex-col items-center justify-center text-text-muted", className)} aria-hidden="true">
-      {label === undefined ? null : <span className="max-w-24 truncate text-[10px] italic">{label}</span>}
+    <div className={cn("flex shrink-0 flex-col items-center justify-center text-text-muted", className)} aria-hidden="true" title={title}>
+      {label === undefined || label === "" ? null : <span className="max-w-28 px-1 text-center text-[10px] italic leading-tight [overflow-wrap:anywhere]">{label}</span>}
       <svg width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M0 6h22M17 2l5 4-5 4" />
       </svg>
@@ -198,7 +199,7 @@ export function PipelineBoard({ flows, pipeline, selected, onSelect }: { flows: 
             const fromPrev = prev === undefined ? undefined : (feeds.get(prev.command) ?? []).find((link) => link.to === flow.command);
             return (
               <div key={flow.command} className="flex items-stretch">
-                {prev === undefined ? null : fromPrev === undefined ? <div className="w-6" /> : <ArrowRight label={short(fromPrev.via[0] ?? "").split("/").at(-1)} />}
+                {prev === undefined ? null : fromPrev === undefined ? <div className="w-6" /> : <ArrowRight label={linkLabel(fromPrev.via)} title={fromPrev.via.map(short).join("\n")} />}
                 <Box
                   kind="command"
                   title={`/${flow.command}`}

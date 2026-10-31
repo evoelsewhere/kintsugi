@@ -177,17 +177,22 @@ function feeds(write: string, read: string): boolean {
   return write === read || (read.endsWith("/") && write.startsWith(read)) || (write.endsWith("/") && read.startsWith(write));
 }
 
-/** Which command feeds which, without the links another path already implies (a → c when a → b → c). */
+/**
+ * Which command feeds which. A command feeds a later one of the pipeline order, without the links another path already
+ * implies (a → c when a → b → c); and it feeds an earlier one on that one's next run (understand → plan-understand), kept as
+ * they are.
+ */
 function pipelineOf(flows: readonly PluginFlow[]): PluginLink[] {
-  const links: PluginLink[] = flows.flatMap((from, index) =>
-    flows.slice(index + 1).flatMap((to) => {
-      const via = from.writes.filter((write) => to.reads.some((readPath) => feeds(write, readPath)));
-      return via.length === 0 ? [] : [{ from: from.command, to: to.command, via }];
-    }),
-  );
+  const link = (from: PluginFlow, to: PluginFlow): PluginLink[] => {
+    const via = from.writes.filter((write) => to.reads.some((readPath) => feeds(write, readPath)));
+    return via.length === 0 ? [] : [{ from: from.command, to: to.command, via }];
+  };
+  const links: PluginLink[] = flows.flatMap((from, index) => flows.slice(index + 1).flatMap((to) => link(from, to)));
   const reaches = (from: string, to: string, skip: PluginLink): boolean =>
-    links.some((link) => link !== skip && link.from === from && (link.to === to || reaches(link.to, to, skip)));
-  return links.filter((link) => !links.some((other) => other !== link && other.from === link.from && other.to !== link.to && reaches(other.to, link.to, link)));
+    links.some((entry) => entry !== skip && entry.from === from && (entry.to === to || reaches(entry.to, to, skip)));
+  const forward = links.filter((entry) => !links.some((other) => other !== entry && other.from === entry.from && other.to !== entry.to && reaches(other.to, entry.to, entry)));
+  const backward = flows.flatMap((from, index) => flows.slice(0, index).flatMap((to) => link(from, to)));
+  return [...forward, ...backward];
 }
 
 /**

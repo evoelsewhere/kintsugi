@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { PluginFlow } from "@/lib/api/plugins";
-import { CommandBoard } from "./workflow-board";
+import { linkLabel } from "./link-label";
+import { CommandBoard, PipelineBoard } from "./workflow-board";
 
 const BUILD: PluginFlow = {
   command: "build",
@@ -34,5 +35,31 @@ describe("the Runs lane of a command a member's harness carries out", () => {
   it("says so when a command declares no steps", () => {
     const html = renderToStaticMarkup(<CommandBoard flow={{ ...BUILD, flow: undefined }} onOpenFile={() => undefined} />);
     expect(html).toContain("declares no steps");
+  });
+});
+
+describe("the pipeline of a plugin", () => {
+  const runtime = (command: string): PluginFlow => ({ ...BUILD, command, path: `commands/${command}.md`, audience: "runtime", flow: undefined });
+
+  it("labels a link with the file name it carries, in full, and how many more", () => {
+    expect(linkLabel(["10-applications/<app>/01-legacy/inventory.md", "10-applications/<app>/01-legacy/_catalog/"])).toBe("inventory.md +1");
+    expect(linkLabel(["10-applications/<app>/01-legacy/_catalog/"])).toBe("_catalog/");
+    expect(linkLabel([])).toBe("");
+  });
+
+  it("draws the commands in the order given, with the label of the link between neighbours untruncated", () => {
+    const html = renderToStaticMarkup(
+      <PipelineBoard
+        flows={[runtime("assess"), runtime("plan-understand"), runtime("understand")]}
+        pipeline={[{ from: "assess", to: "plan-understand", via: ["10-applications/<app>/01-legacy/inventory.md"] }, { from: "understand", to: "plan-understand", via: ["10-applications/<app>/01-legacy/<module>/<unit>/understanding.md"] }]}
+        selected="assess"
+        onSelect={() => undefined}
+      />,
+    );
+    expect(html.indexOf("/assess")).toBeLessThan(html.indexOf("/plan-understand"));
+    expect(html.indexOf("/plan-understand")).toBeLessThan(html.indexOf("/understand<"));
+    expect(html).toContain(">inventory.md<");
+    expect(html).not.toContain("truncate");
+    expect(html).toContain("feeds /plan-understand");
   });
 });
