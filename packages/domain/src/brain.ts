@@ -26,6 +26,7 @@ export const BRAIN_SUMMARY_SOURCES = [
   "readme", // a folder's README.md or index.md
   "layout", // what the document layout says the folder holds
   "children", // the titles of the node's children
+  "section", // a document's Summary, Purpose or Decision section, or its first section in prose
   "none",
 ] as const;
 export type BrainSummarySource = (typeof BRAIN_SUMMARY_SOURCES)[number];
@@ -33,7 +34,7 @@ export type BrainSummarySource = (typeof BRAIN_SUMMARY_SOURCES)[number];
 /** The id of the tree's root. A folder's id is its path with a trailing `/`, a document's its path, a section's `path#anchor`. */
 export const BRAIN_ROOT_ID = "/";
 /** Bumped when the builder changes what it produces, so every index is rebuilt once. */
-export const BRAIN_BUILDER_VERSION = 2;
+export const BRAIN_BUILDER_VERSION = 3;
 export const BRAIN_SUMMARY_MAX = 240;
 export const BRAIN_TITLE_MAX = 200;
 /** Larger files are left out, as the document read API refuses them (docs/reference/document-repo-read-path.md). */
@@ -338,9 +339,15 @@ const PROSE_LOOKAHEAD = 4;
 function summaryOfText(lines: readonly string[]): Summary | undefined {
   const blocks = blocksOf(lines);
   const found = blocks.map(summaryOfBlock);
-  const prose = found.slice(0, PROSE_LOOKAHEAD).find((summary) => summary?.source === "paragraph");
+  const proseAt = found.slice(0, PROSE_LOOKAHEAD).findIndex((summary) => summary?.source === "paragraph");
+  const prose = proseAt < 0 ? undefined : found[proseAt];
   if (prose !== undefined) {
     if (blocks.length === 1 && plain(lines.join(" ")).length <= BRAIN_SUMMARY_MAX) return { summary: prose.summary, source: "text" };
+    // A sentence that ends on a colon introduces the list after it: the list is what it says.
+    const next = found[proseAt + 1];
+    if (prose.summary.endsWith(":") && next !== undefined && (next.source === "list" || next.source === "fields")) {
+      return { summary: clip(`${prose.summary} ${next.summary}`, BRAIN_SUMMARY_MAX), source: "paragraph" };
+    }
     // A short introduction to a table says what the table is; its rows say what it holds.
     const table = blocks.slice(0, PROSE_LOOKAHEAD).find((block) => block[0]?.trim().startsWith("|"));
     const keys = table === undefined ? "" : tableKeys(table);
@@ -449,7 +456,7 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
   const sections = titleHeading === undefined ? headings : headings.slice(1);
   const fileName = path.split("/").pop() ?? path;
   const title = clip(
-    front.fields.get("title") ?? (titleHeading !== undefined ? plain(titleHeading.text) : fileName.replace(/\.md$/i, "")),
+    front.fields.get("title") ?? (titleHeading !== undefined ? plain(titleHeading.text) : (front.fields.get("name") ?? fileName.replace(/\.md$/i, ""))),
     BRAIN_TITLE_MAX,
   );
 
@@ -538,10 +545,14 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
     if (node.summarySource === "none") Object.assign(node, toNode(summaryOfChildren(childTitles.get(node.id) ?? [])));
   }
   const ownSummary = front.fields.get("summary") ?? front.fields.get("description");
+  const ownText = summaryOfText(ownLines.filter((line) => !/^\s*\[!/.test(line)));
   const documentSummary: Summary | undefined =
     ownSummary !== undefined && ownSummary !== ""
       ? { summary: clip(ownSummary, BRAIN_SUMMARY_MAX), source: "front-matter" }
-      : (summaryOfText(ownLines.filter((line) => !/^\s*\[!/.test(line))) ??
+      : ((ownText !== undefined && isProse(ownText) ? ownText : undefined) ??
+        sectionSummary(nodes.filter((node) => node.parentId === path), true) ??
+        ownText ??
+        sectionSummary(nodes.filter((node) => node.parentId === path), false) ??
         (factsOf(front.fields) !== "" ? { summary: clip(factsOf(front.fields), BRAIN_SUMMARY_MAX), source: "facts" } : undefined));
   if (documentSummary !== undefined) Object.assign(document, toNode(documentSummary));
   // A document its own front matter retires says so first, so a reader does not take it for the current word.
@@ -552,6 +563,28 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
     document.summary = clip(document.summary === "" ? note : `${note} ${document.summary}`, BRAIN_SUMMARY_MAX);
   }
   return { nodes, links };
+}
+
+/**
+ * Sections that say what their document is, best first. A document that opens on its sections (a rule file, a
+ * decision record) is summed up by the first of these that is written in prose.
+ */
+const SUMMARY_SECTIONS = ["summary", "purpose", "overview", "description", "abstract", "decision", "intent", "goal", "objective", "scope", "context"];
+
+function isProse(summary: Summary): boolean {
+  return summary.source === "paragraph" || summary.source === "text";
+}
+
+/**
+ * The summary of a document taken from its top sections: the best-named section in prose, or (`named` false) the
+ * first section in prose.
+ */
+function sectionSummary(sections: readonly BrainNode[], named: boolean): Summary | undefined {
+  const prose = sections.filter((section) => isProse({ summary: section.summary, source: section.summarySource }));
+  const chosen = named
+    ? SUMMARY_SECTIONS.map((name) => prose.find((section) => section.title.trim().toLowerCase().replace(/[:.]$/, "") === name)).find((section) => section !== undefined)
+    : prose[0];
+  return chosen === undefined ? undefined : { summary: chosen.summary, source: "section" };
 }
 
 /** Front matter statuses of a document that no longer holds: its summary starts with them. */

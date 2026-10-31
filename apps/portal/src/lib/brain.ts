@@ -26,6 +26,7 @@ export const SUMMARY_SOURCE_LABEL: Record<BrainSummarySource, string> = {
   readme: "the folder's README",
   layout: "the document layout",
   children: "what it contains",
+  section: "its summary section",
   none: "nothing yet",
 };
 

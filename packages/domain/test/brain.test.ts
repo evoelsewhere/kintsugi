@@ -107,6 +107,52 @@ describe("buildBrainDocument", () => {
     expect(only[0]).toMatchObject({ title: "understanding", summary: "status: understood · rules: 4", summarySource: "facts" });
   });
 
+  it("sums up a document that opens on its sections by its Summary or Decision section", () => {
+    const rule = [
+      "---",
+      'id: "RULE-SPL03-0002"',
+      'name: "Monetary amounts are signed"',
+      'category: "Calculation"',
+      "---",
+      "",
+      "# RULE-SPL03-0002: Monetary amounts are signed",
+      "",
+      "## Specification",
+      "",
+      "```text",
+      "Given an account",
+      "```",
+      "",
+      "## Summary",
+      "",
+      "Every money value is a signed number with two decimals.",
+    ].join("\n");
+    expect(buildBrainDocument("rules/RULE-SPL03-0002.md", rule).nodes[0]).toMatchObject({
+      title: "RULE-SPL03-0002: Monetary amounts are signed",
+      summary: "Every money value is a signed number with two decimals.",
+      summarySource: "section",
+    });
+    const decision = "# ADR-001: Use Kafka\n\n## Context\n\nThe services exchange events.\n\n## Decision\n\nThe services use a managed Kafka service.";
+    expect(buildBrainDocument("adr/ADR-001.md", decision).nodes[0]).toMatchObject({ summary: "The services use a managed Kafka service.", summarySource: "section" });
+  });
+
+  it("follows a sentence that ends on a colon with the list it introduces", () => {
+    const decision = "# ADR-0001: Build a modular monolith\n\n## Decision\n\nBuild one repository with these modules:\n\n- `api`: the REST back end\n- `web`: the React client\n\n## Consequences\n\nOne build.";
+    expect(buildBrainDocument("adr/0001.md", decision).nodes[0]?.summary).toBe("Build one repository with these modules: api: the REST back end; web: the React client");
+  });
+
+  it("takes the first section in prose before front matter facts, and a front matter name as the title", () => {
+    const mapping = '---\nstatus: "draft"\nversion: 1\n---\n## Mapping\n\n| From | To |\n| --- | --- |\n| a | b |\n\n## Notes\n\nA VSAM browse becomes a paged query.';
+    // The table is the Mapping section's own; the first section in prose says what the document is.
+    expect(buildBrainDocument("mappings/browse.md", mapping).nodes[0]).toMatchObject({ summary: "A VSAM browse becomes a paged query.", summarySource: "section" });
+    const named = '---\nname: "Browse paging"\nstatus: "draft"\n---\n## Notes\n\nA VSAM browse becomes a paged query.';
+    expect(buildBrainDocument("mappings/browse.md", named).nodes[0]).toMatchObject({
+      title: "Browse paging",
+      summary: "A VSAM browse becomes a paged query.",
+      summarySource: "section",
+    });
+  });
+
   it("prefers a document's own summary and id", () => {
     const { nodes: only } = buildBrainDocument("rules/RULE-INV01-0001.md", '---\nid: "RULE-INV01-0001"\ntitle: "Late fee"\nsummary: "A fee applies after 30 days."\n---\nBody.');
     expect(only[0]).toMatchObject({ title: "Late fee", summary: "A fee applies after 30 days.", summarySource: "front-matter", ids: ["RULE-INV01-0001"] });

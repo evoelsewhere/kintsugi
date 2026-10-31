@@ -10,7 +10,7 @@ The Brain is a tree index of one branch of a project's document repository. Agen
 | --- | --- | --- |
 | `root` | `/` | The repository at the indexed branch |
 | `folder` | `01-standards/` | A directory that holds an indexed document |
-| `document` | `01-standards/review-rules.md` | A Markdown file; a single top `#` heading is its title |
+| `document` | `01-standards/review-rules.md` | A Markdown file; its title is the front matter `title`, else a single top `#` heading, else the front matter `name`, else the file name |
 | `section` | `…/spec.md#business-rules` | A heading; the anchor is the heading's GitHub-style slug, unique in the document |
 | `card` | `…/spec.md#RULE-INV01-0001` | A heading that starts with a reference id ([identifiers](document-identifiers.md)); the anchor is the id |
 
@@ -26,8 +26,10 @@ Nothing calls a model. The summary of a node is the first that applies, and `sum
 | --- | --- |
 | `front-matter` | the document's `summary` or `description` |
 | `text` / `paragraph` | the node's whole text when short, else its first paragraph (a paragraph among the first four blocks wins over a list, table or diagram before it); when a table follows it, the keys of the table's rows are added (`Rows: R-01 Prices differ; …`) |
+| `section` | for a document that opens on its sections (a rule file, a decision record): its section named Summary, Purpose, Overview, Description, Abstract, Decision, Intent, Goal, Objective, Scope or Context, in that order, when written in prose |
 | `fields`, `list`, `table`, `diagram`, `code` | the first block of the node: a card's `- **key:** value` fields, a list, a table's columns, row count and row keys (the first cell, with the second when the first is a short code), a Mermaid diagram's kind |
-| `facts` | the document's front matter facts (`status: understood · rules: 12`) |
+| `section` (again) | a document's first section in prose, when nothing above applies |
+| `facts` | the document's front matter facts (`status: understood · rules: 12`), only when no section is in prose |
 | `readme` | a folder's `README.md` or `index.md` |
 | `children` | for a folder without a README that holds one document, that document's title and summary; for any other node, the titles of what it contains |
 | `layout` | what the [layout](document-repo.md) says the folder holds, followed by its entries (`Holds: rtn01 (Unopened articles) · rtn02 (…)`), a one-document folder named with its document's title |
