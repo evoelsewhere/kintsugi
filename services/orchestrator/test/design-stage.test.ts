@@ -159,7 +159,8 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
     expect(published(designPath("payroll/close-period", "overview.md"))).toBe(REGENERATED);
     expect(writes).toHaveLength(1);
     expect(writes[0]?.message).toBe("Regenerate design demo: basic of payroll (2 units)");
-  }, 120_000);
+    // A whole design run, scripted: 70–80 s alone, over 120 s on a loaded machine.
+  }, 300_000);
 
   it("blocks final generation before agents run, but an explicit draft stays marked in every published document", async () => {
     const blocked = await runDesign({ docs: "missing-docs", units: ["payroll/close-period"], files: { designer: () => written("payroll/close-period") } });
@@ -442,7 +443,8 @@ describe("design stage (scripted designer, the plugin's scripts)", () => {
       expect(steps.filter((step) => step[0] === "fix-unit")).toEqual([["fix-unit", "succeeded", "@app"]]);
       expect(agents.specs.find((spec) => spec.task.startsWith("Fix the design documents"))!.task).toContain("application demo");
       expect(published(ARCH_PATH)).toBe(ARCH_OK);
-    }, 120_000);
+      // A design and its fix, scripted: 70–80 s alone, over 120 s on a loaded machine.
+    }, 300_000);
 
     it("does not write the application design again, and a unit set cannot be generated for the application", async () => {
       const done = await runDesign({ docs: "app-done-docs", units: ["@app"], set: "arch", files: { designer: () => ({ [ARCH_PATH]: ARCH_OK }) } });
