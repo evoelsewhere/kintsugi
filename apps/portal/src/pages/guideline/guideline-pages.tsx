@@ -163,7 +163,7 @@ const connect: GuidePage = {
       <P>A connection links your AI clients to one project. It is made of a small Kintsugi package in each client (it starts a local program that talks to Kintsugi), and your sign-in, which is separate and revocable.</P>
       <H2>Sign in, then init</H2>
       <CodeBlock label="Set up" code={"kintsugi login my-project\nkintsugi init"} />
-      <P><Code>init</Code> finds the clients on your machine and asks two things: <strong>which clients</strong> to set up, and whether to install <strong>globally</strong> (every workspace) or only for <strong>the current workspace</strong>. It then installs the Kintsugi connector in each. Skip the questions with flags:</P>
+      <P><Code>init</Code> finds the clients on your machine and asks two things: <strong>which clients</strong> to set up, and whether to install <strong>globally</strong> (every workspace) or only for <strong>the current workspace</strong>. It then installs the Kintsugi connector in each. Set up one project per client and scope: two projects of one installation in the same client at the same scope install two plugins with the same name, and the client does not keep them apart (the member CLI reference, Current limits). Skip the questions with flags:</P>
       <CodeBlock label="Without questions" code={"# Every client found, for all workspaces\nkintsugi init --all\n\n# Claude Code only, for this folder only\nkintsugi init -H claude --scope workspace"} />
       <Table
         head={["Client", "Set up by init", "Notes"]}

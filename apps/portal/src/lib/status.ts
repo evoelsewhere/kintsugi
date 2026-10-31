@@ -44,6 +44,8 @@ export const SYNC_STATUS: Record<string, StatusStyle> = {
   pending: { tone: "muted", label: "Waiting for first clone" },
   cloning: { tone: "blue", label: "Cloning" },
   ready: { tone: "green", label: "Ready" },
+  // Reachable, but the repository has no commit yet: nothing failed, there is nothing to read.
+  empty: { tone: "muted", label: "Empty — no commits yet" },
   error: { tone: "red", label: "Sync failed" },
 };
 

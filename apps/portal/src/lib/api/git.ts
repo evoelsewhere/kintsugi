@@ -34,7 +34,8 @@ export interface GitServerInput {
   knownHosts?: string;
 }
 
-export type SyncStatus = "pending" | "cloning" | "ready" | "error";
+/** `empty`: reachable, with no commit yet (not a failure). */
+export type SyncStatus = "pending" | "cloning" | "ready" | "empty" | "error";
 
 export interface GitRepositoryView {
   id: string;

@@ -125,4 +125,6 @@ Plugins add their own commands and skills on top of this set.
 
 ## Current limits
 
-The CLI and the bridge cannot change a project, a document or a repository; their one write is the activity record. `doctor` checks the runtime, the profile credential and an authorized API read; it does not certify support for a Claude Code, Codex or Copilot version.
+The CLI and the bridge cannot change a project, a document or a repository; their one write is the activity record.
+
+**One project per client and scope.** Every profile installs a connector plugin named `kintsugi` (with an MCP server `kintsugi`) from a marketplace of its own, and member plugins keep their names (`modernize`). Setting up two projects of one installation in the same client at the same scope (for example `init` for both at user scope in Claude Code) installs two plugins with the same name: the client namespaces a plugin's server, tools and hooks by that name, so which project's connector answers, and which `/modernize:build` runs, is not defined, calls for the other project are refused ("Token is not scoped to this project"), and the activity hook of one copy is left out. Until the connector serves several projects, set up one project per client and scope; a second project in its own workspace (`init --scope workspace`) is not yet confirmed to avoid the clash. `doctor` checks the runtime, the profile credential and an authorized API read; it does not certify support for a Claude Code, Codex or Copilot version.

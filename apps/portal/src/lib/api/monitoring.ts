@@ -106,7 +106,7 @@ export interface MonitoredRepository {
   serverId: string;
   url: string;
   defaultBranch?: string;
-  syncStatus: "pending" | "cloning" | "ready" | "error";
+  syncStatus: "pending" | "cloning" | "ready" | "empty" | "error";
   lastCommit?: string;
   lastSyncedAt?: string;
   lastError?: string;

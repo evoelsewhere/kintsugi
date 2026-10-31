@@ -1,7 +1,7 @@
 {
   "name": "my-project-stack",
   "version": "0.1.0",
-  "description": "Stack-specific skills, reviewer agent and hooks for my-project",
+  "description": "Stack-specific skill and reviewer agent for my-project",
   "author": {
     "name": "my-project team"
   },
