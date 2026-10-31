@@ -7,15 +7,19 @@ import { Plus, Search, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { identityApi, type PermissionRecord, type RoleRecord } from "@/lib/api/identity";
+import { useToast } from "@/components/ui/toast";
+import { identityApi, type PermissionRecord, type RoleRecord, type UserRecord } from "@/lib/api/identity";
 import { uniqueId } from "@/lib/ids";
 
 export function RolesTab(): React.JSX.Element {
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [permissions, setPermissions] = useState<PermissionRecord[]>([]);
+  /** Null when the viewer may not list members (members.manage): the dialog then cannot count the holders. */
+  const [users, setUsers] = useState<UserRecord[] | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -25,12 +29,15 @@ export function RolesTab(): React.JSX.Element {
   const inFlight = useRef(new Set<string>());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newRole, setNewRole] = useState({ name: "", description: "" });
+  const [removeTarget, setRemoveTarget] = useState<RoleRecord | null>(null);
+  const toast = useToast();
 
   const load = async (): Promise<void> => {
     try {
-      const [roleList, catalog] = await Promise.all([identityApi.roles(), identityApi.permissions()]);
+      const [roleList, catalog, userList] = await Promise.all([identityApi.roles(), identityApi.permissions(), identityApi.users().catch(() => null)]);
       setRoles(roleList);
       setPermissions(catalog);
+      setUsers(userList);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -120,15 +127,14 @@ export function RolesTab(): React.JSX.Element {
     }
   }
 
-  async function removeSubRole(id: string): Promise<void> {
-    if (!window.confirm(`Remove sub-role "${id}"?`)) return;
-    try {
-      await identityApi.deleteSubRole(id);
-      await load();
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : String(removeError));
-    }
+  /** Runs from the confirm dialog, which keeps an error on screen instead of closing. */
+  async function removeSubRole(role: RoleRecord): Promise<void> {
+    await identityApi.deleteSubRole(role.id);
+    toast.success(`Sub-role ${role.name} removed`);
+    await load();
   }
+
+  const holders = removeTarget === null || users === null ? undefined : users.filter((user) => user.roleIds.includes(removeTarget.id)).length;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -178,7 +184,7 @@ export function RolesTab(): React.JSX.Element {
                       <button
                         type="button"
                         aria-label={`Remove ${role.id}`}
-                        onClick={() => void removeSubRole(role.id)}
+                        onClick={() => setRemoveTarget(role)}
                         className="flex size-5 items-center justify-center rounded-[var(--geist-radius)] text-text-muted hover:bg-hover hover:text-[var(--ds-status-red)] focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]"
                       >
                         <Trash2 className="size-3" />
@@ -253,6 +259,25 @@ export function RolesTab(): React.JSX.Element {
           </Field>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        title="Remove sub-role?"
+        description={removeTarget === null ? undefined : `Remove ${removeTarget.name} (${removeTarget.id})?`}
+        confirmLabel="Remove sub-role"
+        busyLabel="Removing…"
+        onConfirm={() => (removeTarget === null ? Promise.resolve() : removeSubRole(removeTarget))}
+        onClose={() => setRemoveTarget(null)}
+      >
+        <p className="text-[13px] text-text-secondary">
+          {holders === undefined
+            ? "The members who hold it lose the permissions it grants."
+            : holders === 0
+              ? "No member holds it."
+              : `${holders} member${holders === 1 ? " holds" : "s hold"} it and lose${holders === 1 ? "s" : ""} the permissions it grants.`}{" "}
+          The removal is recorded in the audit log.
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }

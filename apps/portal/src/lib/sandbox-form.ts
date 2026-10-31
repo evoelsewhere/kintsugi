@@ -79,4 +79,11 @@ export function defaultLabel(field: SandboxNumberField, unit: string, zero?: str
   return Number(value) === 0 && zero !== undefined ? zero : `${value} ${unit}`;
 }
 
+/** The agent limits that 0 switches off: with all of them off, nothing stops a model that loops but a person. */
+export const AGENT_LIMIT_FIELDS = ["agentTimeoutMin", "maxTurns", "maxCostUsd"] as const satisfies readonly SandboxNumberField[];
+
+/** The agent limits the form switches off (0); a field that is empty or not a number is a problem, not a 0. */
+export const agentLimitsOff = (form: SandboxForm): Array<(typeof AGENT_LIMIT_FIELDS)[number]> =>
+  AGENT_LIMIT_FIELDS.filter((field) => form[field].trim() !== "" && Number(form[field]) === 0);
+
 export { DEFAULT_SANDBOX };

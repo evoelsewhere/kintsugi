@@ -43,7 +43,7 @@ export function AgentsPage(): React.JSX.Element {
   const navigate = useNavigate();
   const toast = useToast();
   const [agents, setAgents] = useState<AgentSummary[] | null>(null);
-  const [skills, setSkills] = useState<SharedSkillView[]>([]);
+  const [skills, setSkills] = useState<SharedSkillView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copySource, setCopySource] = useState<string | null>(null);
   const [skillDialog, setSkillDialog] = useState<{ open: boolean; skill: SharedSkillView | null }>({ open: false, skill: null });
@@ -138,7 +138,7 @@ export function AgentsPage(): React.JSX.Element {
           <span>Status</span>
           <span className="w-[104px]" />
         </div>
-        {agents === null ? (
+        {agents === null && error === null ? (
           <div className="px-4 pb-3">
             <SkeletonRows rows={4} />
           </div>
@@ -201,7 +201,13 @@ export function AgentsPage(): React.JSX.Element {
             </Button>
           ) : null}
         </CardHeader>
-        {skills.length === 0 ? (
+        {skills === null ? (
+          error === null ? (
+            <div className="px-4 pb-4">
+              <SkeletonRows rows={2} />
+            </div>
+          ) : null
+        ) : skills.length === 0 ? (
           <CardContent>
             <p className="py-2 text-center text-[13px] text-text-secondary">No shared skills yet.</p>
           </CardContent>

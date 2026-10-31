@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SyncStatusBadge } from "@/components/status-badges";
+import { SkeletonRows } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useToast } from "@/components/ui/toast";
 import { gitApi, type GitRepositoryView, type GitServerInput, type GitServerView } from "@/lib/api/git";
@@ -28,6 +29,8 @@ export function GitSection(): React.JSX.Element {
   const [servers, setServers] = useState<GitServerView[]>([]);
   const [repositories, setRepositories] = useState<GitRepositoryView[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** Whether a first answer came: until then the lists are unknown, not empty. */
+  const [loaded, setLoaded] = useState(false);
   const [serverDialog, setServerDialog] = useState<{ open: boolean; server: GitServerView | null }>({ open: false, server: null });
   const [repositoryDialog, setRepositoryDialog] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
@@ -39,6 +42,7 @@ export function GitSection(): React.JSX.Element {
       const [allServers, allRepositories] = await Promise.all([gitApi.listServers(), gitApi.listRepositories()]);
       setServers(allServers);
       setRepositories(allRepositories);
+      setLoaded(true);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -79,7 +83,11 @@ export function GitSection(): React.JSX.Element {
         </p>
       </div>
 
-      {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
+      {error === null ? null : (
+        <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">
+          {error}
+        </p>
+      )}
 
       <Card className="overflow-hidden p-0">
         <CardHeader className="px-4 pt-3">
@@ -92,7 +100,13 @@ export function GitSection(): React.JSX.Element {
             Add server
           </Button>
         </CardHeader>
-        {servers.length === 0 ? (
+        {!loaded ? (
+          error === null ? (
+            <div className="px-4 pb-4">
+              <SkeletonRows rows={2} />
+            </div>
+          ) : null
+        ) : servers.length === 0 ? (
           <p className="px-4 py-6 text-center text-[13px] text-text-secondary">No Git servers yet — add one, then register its repositories.</p>
         ) : (
           servers.map((server) => (
@@ -133,7 +147,13 @@ export function GitSection(): React.JSX.Element {
             Add repository
           </Button>
         </CardHeader>
-        {repositories.length === 0 ? (
+        {!loaded ? (
+          error === null ? (
+            <div className="px-4 pb-4">
+              <SkeletonRows rows={3} />
+            </div>
+          ) : null
+        ) : repositories.length === 0 ? (
           <CardContent>
             <p className="py-2 text-center text-[13px] text-text-secondary">No repositories registered yet.</p>
           </CardContent>
