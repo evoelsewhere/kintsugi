@@ -13,7 +13,7 @@ import { Modal } from "@/components/ui/modal";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { gitApi, type GitRepositoryView } from "@/lib/api/git";
-import { uniqueId } from "@/lib/ids";
+import { takenName, uniqueId } from "@/lib/ids";
 import { type ApplicationInput, type ApplicationView, type LinkInput, type ProjectInput, projectsApi, type ProjectView, type RepositoryLinkView } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { documentRepositoryOptions } from "@/lib/repository-options";
@@ -76,6 +76,8 @@ export interface ProjectDialogProps {
   /** null creates a project. */
   project: ProjectView | null;
   existingIds: string[];
+  /** The names of the other projects: a name is not taken twice. */
+  existingNames?: string[];
   onClose: () => void;
   onSubmit: (id: string, input: ProjectInput) => Promise<void>;
 }
@@ -90,7 +92,7 @@ async function loadRepositoryChoices(): Promise<{ repositories: GitRepositoryVie
   return { repositories, links };
 }
 
-function ProjectForm({ project, existingIds, onClose, onSubmit }: ProjectDialogProps): React.JSX.Element {
+function ProjectForm({ project, existingIds, existingNames = [], onClose, onSubmit }: ProjectDialogProps): React.JSX.Element {
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
   const [documentRepositoryId, setDocumentRepositoryId] = useState(project?.documentRepositoryId ?? "");
@@ -100,9 +102,11 @@ function ProjectForm({ project, existingIds, onClose, onSubmit }: ProjectDialogP
   const choices = useLoader("project-dialog/repositories", loadRepositoryChoices, { live: ["repositories"] });
   const options = choices.data === undefined ? [] : documentRepositoryOptions(choices.data.repositories, choices.data.links, project?.id ?? null);
   const available = options.filter((option) => option.disabled !== true).length;
+  const taken = takenName(name, existingNames);
 
   function submit(): void {
     if (name.trim() === "") return setError("Enter a name.");
+    if (taken !== undefined) return;
     const effectiveId = project?.id ?? uniqueId(name, existingIds);
     if (effectiveId === "") return setError("The name needs at least one letter or digit.");
     if (documentRepositoryId === "") return setError("Pick the document repository.");
@@ -120,8 +124,8 @@ function ProjectForm({ project, existingIds, onClose, onSubmit }: ProjectDialogP
       footer={<Footer saving={saving} label={project === null ? "Create project" : "Save"} onClose={onClose} onSubmit={submit} />}
     >
       <div className="flex flex-col gap-4">
-        <Field label="Name">
-          <Input value={name} placeholder="Billing modernization" onChange={(event) => setName(event.target.value)} />
+        <Field label="Name" error={taken === undefined ? undefined : `A project named ${taken} already exists.`}>
+          <Input value={name} placeholder="Billing modernization" aria-invalid={taken === undefined ? undefined : true} onChange={(event) => setName(event.target.value)} />
         </Field>
         <Field label="Description">
           <Textarea value={description} rows={3} onChange={(event) => setDescription(event.target.value)} />
@@ -158,6 +162,8 @@ export interface ApplicationDialogProps {
   /** null adds an application. */
   application: ApplicationView | null;
   existingIds: string[];
+  /** The names of the project's other applications: a name is not taken twice. */
+  existingNames?: string[];
   onClose: () => void;
   onSubmit: (id: string, input: ApplicationInput) => Promise<void>;
 }
@@ -166,12 +172,14 @@ export function ApplicationDialog(props: ApplicationDialogProps): React.JSX.Elem
   return props.open ? <ApplicationForm {...props} /> : null;
 }
 
-function ApplicationForm({ application, existingIds, onClose, onSubmit }: ApplicationDialogProps): React.JSX.Element {
+function ApplicationForm({ application, existingIds, existingNames = [], onClose, onSubmit }: ApplicationDialogProps): React.JSX.Element {
   const [name, setName] = useState(application?.name ?? "");
   const { saving, error, setError, run } = useSubmit(onClose);
+  const taken = takenName(name, existingNames);
 
   function submit(): void {
     if (name.trim() === "") return setError("Enter a name.");
+    if (taken !== undefined) return;
     const effectiveId = application?.id ?? uniqueId(name, existingIds);
     if (effectiveId === "") return setError("The name needs at least one letter or digit.");
     void run(() => onSubmit(effectiveId, { name: name.trim() }));
@@ -186,8 +194,8 @@ function ApplicationForm({ application, existingIds, onClose, onSubmit }: Applic
       footer={<Footer saving={saving} label={application === null ? "Add application" : "Save"} onClose={onClose} onSubmit={submit} />}
     >
       <div className="flex flex-col gap-4">
-        <Field label="Name">
-          <Input value={name} placeholder="Billing web" onChange={(event) => setName(event.target.value)} />
+        <Field label="Name" error={taken === undefined ? undefined : `An application named ${taken} already exists in this project.`}>
+          <Input value={name} placeholder="Billing web" aria-invalid={taken === undefined ? undefined : true} onChange={(event) => setName(event.target.value)} />
         </Field>
         <FormError error={error} />
       </div>
