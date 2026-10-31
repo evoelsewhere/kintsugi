@@ -4,6 +4,8 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
+- The design sets named are the starter's. `modernize` 5.3.0: the `design` command's description gives the screen or the API design as examples (the starter ships api, batch-job, report, screen and test, no basic or detail design), and its rule on sets that need another says to generate and merge that set first, without naming sets. No agent or skill changes.
+
 - Masked previews show no character of a credential, and security citations name their repository. `reverse_engineering` 2.5.0: `security-auditor` 1.2.0 cites every location as `<repository id>/<path>:<line>` (never a note that paths are relative to a repository) and masks a credential to its kind and length (`password ***** (8 chars)`), never its first characters; `legacy-analyst` 1.5.0, `business-rules-extractor` 1.4.0, the commands `assess` and `understand` and the workflows `harden-scan`, `extract-rules` and `portfolio-assess` mask the same way; `split_findings.py` replaces a partly masked value (`AKIA****`) in a finding's evidence with `*****`. `modernize` 5.3.0: `architecture-critic` 1.3.0 and `code-reviewer` 2.1.0 mask the same way.
 
 - Command names without a plugin prefix ([ADR-0089](../../../docs/decisions/0089-command-names-without-plugin-prefix.md)). `reverse_engineering` 2.5.0: the commands `modernize-assess`, `modernize-plan-understand` and `modernize-understand` are `assess`, `plan-understand` and `understand`. `modernize` 5.3.0: `modernize-design` and `modernize-review` are `design` and `review`; `build` keeps its name. A command's stage id is its name, and a member runs a member command as `/<plugin>:<command>` (`/modernize:build`).
