@@ -8,10 +8,15 @@ import type { AgentDefinition } from "@kintsugi/runtime-sdk";
 import type { Response } from "express";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { AgentsService } from "../application/agents.service.js";
-import type { AgentBuilderContext, AgentDetail, AgentPreview, AgentSummary, AgentVersionDetail, AgentVersionView, SharedSkillView } from "../domain/agent.js";
+import type { AgentBuilderContext, AgentDetail, AgentPreview, AgentSummary, AgentVersionDetail, AgentVersionView, ModelBindingStatus, SharedSkillView } from "../domain/agent.js";
 import {
   type AgentDraftInput,
   agentDraftSchema,
+  type AgentScopeQuery,
+  agentScopeQuerySchema,
+  type ApplyModelToProjectInput,
+  applyModelToProjectSchema,
+  toApplyModelToProject,
   type CopyAgentInput,
   copyAgentSchema,
   type ExportQuery,
@@ -35,10 +40,10 @@ export class AgentsController {
   constructor(private readonly agents: AgentsService) {}
 
   @Get()
-  @ApiOperation({ summary: "List built-in and custom agents with audience, version, validity and model binding" })
+  @ApiOperation({ summary: "List built-in and custom agents with audience, version, validity and model binding (for ?projectId=, the binding that project's jobs use, with its scope)" })
   @ApiOkResponse({ description: "The agent catalog." })
-  list(): Promise<AgentSummary[]> {
-    return this.agents.list();
+  list(@Query({ schema: agentScopeQuerySchema }) query: AgentScopeQuery): Promise<AgentSummary[]> {
+    return this.agents.list(query.projectId);
   }
 
   @Get("context")
@@ -74,10 +79,10 @@ export class AgentsController {
   }
 
   @Get(":name")
-  @ApiOperation({ summary: "Get an agent: manifest, instructions, skills, package files and model bindings" })
+  @ApiOperation({ summary: "Get an agent: manifest, instructions, skills, package files and model bindings (?projectId= resolves its binding for that project)" })
   @ApiOkResponse({ description: "The agent." })
-  get(@Param("name") name: string): Promise<AgentDetail> {
-    return this.agents.get(name);
+  get(@Param("name") name: string, @Query({ schema: agentScopeQuerySchema }) query: AgentScopeQuery): Promise<AgentDetail> {
+    return this.agents.get(name, query.projectId);
   }
 
   @Put(":name")
@@ -200,5 +205,32 @@ export class AgentSkillsController {
   @ApiNoContentResponse({ description: "The skill is deleted." })
   async remove(@Param("name") name: string, @CurrentActor() actor: Actor): Promise<void> {
     await this.agents.removeSkill(name, actor);
+  }
+}
+
+/**
+ * The model-binding routes that need the agent catalog, beside the registry's own
+ * `GET`/`PUT /admin/llm-providers/model-bindings` (same path and permission, served here
+ * because the registry does not know the agents).
+ */
+@ApiTags("admin · LLM providers")
+@Controller("admin/llm-providers/model-bindings")
+@RequirePermission("providers.manage")
+export class AgentModelBindingsController {
+  constructor(private readonly agents: AgentsService) {}
+
+  @Get("status")
+  @ApiOperation({ summary: "List agent → provider/model bindings, flagging those whose agent no longer exists (orphan)" })
+  @ApiOkResponse({ description: "The bindings with an orphan flag." })
+  status(): Promise<ModelBindingStatus[]> {
+    return this.agents.bindingStatus();
+  }
+
+  @Post("apply")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Bind every runtime agent of a project to one provider and model (one project-scoped binding each, in one save)" })
+  @ApiOkResponse({ description: "The stored bindings with an orphan flag." })
+  apply(@Body({ schema: applyModelToProjectSchema }) input: ApplyModelToProjectInput, @CurrentActor() actor: Actor): Promise<ModelBindingStatus[]> {
+    return this.agents.applyToProject(toApplyModelToProject(input), actor);
   }
 }

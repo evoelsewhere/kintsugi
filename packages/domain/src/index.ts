@@ -40,6 +40,17 @@ export type RuntimeAgentId = string;
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
+/** How a thinking level reads in the portal ("Off", "Low", …). */
+export const THINKING_LEVEL_LABELS: Record<ThinkingLevel, string> = {
+  off: "Off",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+};
+
 /** Work item status as stored in the unit file frontmatter. */
 export const WORK_ITEM_STATUSES = ["pending", "in-progress", "awaiting-review", "approved", "rejected", "blocked", "done", "skipped"] as const;
 export type WorkItemStatus = (typeof WORK_ITEM_STATUSES)[number];
@@ -263,5 +274,6 @@ export * from "./traceability.js";
 export * from "./mcp.js";
 export * from "./project-memory.js";
 export * from "./web-search.js";
+export * from "./model-binding.js";
 export { DEFAULT_GAP_SETTLER, GAP_SETTLERS, GAP_STATUSES, type GapSettler, type GapStatus, gapIsResolved, isGapSettler, isMeaningfulGapText } from "./gap.js";
 export { ALL_TESTED_RULES, MAX_REPORTED_RULES, memberTestReportOf, type MemberTestReport } from "./member-build.js";

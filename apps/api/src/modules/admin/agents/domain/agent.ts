@@ -3,6 +3,7 @@
 // from the release (packages/agents/builtin) and are read-only.
 
 import type { AgentAudience, AgentManifest, AgentSource, SkillPackage } from "@kintsugi/agents";
+import type { ModelBindingScope } from "@kintsugi/domain";
 import type { AgentDefinition, AgentModelBinding } from "@kintsugi/runtime-sdk";
 
 export type { AgentAudience, AgentSource };
@@ -79,8 +80,14 @@ export interface SharedSkillRecord {
   updatedAt: string;
 }
 
-/** The installation-default model binding of an agent (Settings → Providers). */
-export type AgentBinding = Omit<AgentModelBinding, "agent" | "projectId">;
+/**
+ * The model binding a job of an agent uses (Settings → Providers): for a project, its
+ * project-scoped binding, else the installation default; `scope` says which.
+ */
+export type AgentBinding = Omit<AgentModelBinding, "agent" | "projectId"> & { scope: ModelBindingScope };
+
+/** A stored model binding, flagged when its agent is no longer in the catalog (built-in or custom). */
+export type ModelBindingStatus = AgentModelBinding & { orphan: boolean };
 
 export interface AgentSummary {
   name: string;
@@ -95,7 +102,7 @@ export interface AgentSummary {
   copiedFrom?: string;
   updatedAt?: string;
   updatedBy?: string;
-  /** The installation-default model binding, when one is set. */
+  /** The binding jobs use: for the project asked about, else the installation default; absent when none is set. */
   binding?: AgentBinding;
 }
 

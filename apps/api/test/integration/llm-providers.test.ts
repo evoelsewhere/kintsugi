@@ -39,6 +39,8 @@ describe.skipIf(!hasDatabase)("llm providers (integration)", () => {
       ["GET", "/admin/llm-providers/supported"],
       ["GET", "/admin/llm-providers/model-bindings"],
       ["PUT", "/admin/llm-providers/model-bindings"],
+      ["GET", "/admin/llm-providers/model-bindings/status"],
+      ["POST", "/admin/llm-providers/model-bindings/apply"],
       ["POST", "/admin/llm-providers"],
       ["GET", "/admin/llm-providers/any"],
       ["PATCH", "/admin/llm-providers/any"],

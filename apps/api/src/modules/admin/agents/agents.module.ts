@@ -8,12 +8,12 @@ import { AgentsService } from "./application/agents.service.js";
 import { AgentCatalog, AgentRepository } from "./domain/agent.repository.js";
 import { PackagedAgentCatalog } from "./infrastructure/packaged-agent.catalog.js";
 import { PgAgentRepository } from "./infrastructure/pg-agent.repository.js";
-import { AgentSkillsController, AgentsController } from "./interface/agents.controller.js";
+import { AgentModelBindingsController, AgentSkillsController, AgentsController } from "./interface/agents.controller.js";
 
-/** admin · agents (A4, ADR-0026): built-in and custom agents, shared skills. */
+/** admin · agents (A4, ADR-0026): built-in and custom agents, shared skills, the catalog checks of model bindings. */
 @Module({
   imports: [LlmProvidersModule],
-  controllers: [AgentsController, AgentSkillsController],
+  controllers: [AgentsController, AgentSkillsController, AgentModelBindingsController],
   providers: [AgentsService, { provide: AgentRepository, useClass: PgAgentRepository }, { provide: AgentCatalog, useClass: PackagedAgentCatalog }],
   exports: [AgentsService],
 })

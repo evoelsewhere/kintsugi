@@ -2,3 +2,4 @@
 
 export { LlmProvidersModule } from "./llm-providers.module.js";
 export { LlmProvidersService } from "./application/llm-providers.service.js";
+export type { ApplyModelToProject } from "./domain/llm-provider.js";

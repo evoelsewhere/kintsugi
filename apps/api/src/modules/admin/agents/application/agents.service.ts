@@ -22,10 +22,11 @@ import {
   validateAgent,
   zipFiles,
 } from "@kintsugi/agents";
+import { effectiveModelBinding } from "@kintsugi/domain";
 import type { AgentDefinition, AgentModelBinding } from "@kintsugi/runtime-sdk";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
-import { LlmProvidersService } from "#modules/admin/llm-providers/index.js";
+import { type ApplyModelToProject, LlmProvidersService } from "#modules/admin/llm-providers/index.js";
 import type {
   AgentBuilderContext,
   AgentDetail,
@@ -36,6 +37,7 @@ import type {
   AgentVersionDetail,
   AgentVersionView,
   CustomAgentRecord,
+  ModelBindingStatus,
   PackageFileMap,
   SharedSkillRecord,
   SharedSkillView,
@@ -126,22 +128,49 @@ export class AgentsService {
     };
   }
 
-  async list(): Promise<AgentSummary[]> {
+  /** The catalog; `binding` is the one a job in `projectId` uses (the installation default without a project). */
+  async list(projectId?: string): Promise<AgentSummary[]> {
     const [installation, custom, bindings] = await Promise.all([this.#installation(), this.agents.list(), this.providers.listBindings()]);
     return [
-      ...installation.builtin.agents.map((agent) => this.#builtinDetail(agent, installation, bindings)),
-      ...custom.map((record) => this.#customDetail(record, installation, bindings)),
+      ...installation.builtin.agents.map((agent) => this.#builtinDetail(agent, installation, bindings, projectId)),
+      ...custom.map((record) => this.#customDetail(record, installation, bindings, projectId)),
     ].map(({ manifest: _manifest, instructions: _instructions, localSkills: _localSkills, files: _files, bindings: _bindings, ...summary }) => summary);
   }
 
-  async get(name: string): Promise<AgentDetail> {
+  async get(name: string, projectId?: string): Promise<AgentDetail> {
     const [installation, bindings] = await Promise.all([this.#installation(), this.providers.listBindings()]);
     const builtin = installation.builtin.agents.find((agent) => agent.manifest.name === name);
-    if (builtin !== undefined) return this.#builtinDetail(builtin, installation, bindings);
-    return this.#customDetail(await this.#mustGetCustom(name), installation, bindings);
+    if (builtin !== undefined) return this.#builtinDetail(builtin, installation, bindings, projectId);
+    return this.#customDetail(await this.#mustGetCustom(name), installation, bindings, projectId);
   }
 
-  #builtinDetail(agent: AgentPackage, installation: Installation, bindings: AgentModelBinding[]): AgentDetail {
+  // -------------------------------------------------------------------------
+  // Model bindings (stored by the LLM provider registry, checked against the catalog)
+  // -------------------------------------------------------------------------
+
+  /** Every agent of the catalog, built-in and custom, with its audience. */
+  async #agentNames(): Promise<Array<{ name: string; audience: AgentSummary["audience"] }>> {
+    const [builtin, custom] = await Promise.all([this.catalog.builtin(), this.agents.list()]);
+    return [
+      ...builtin.agents.map((agent) => ({ name: agent.manifest.name, audience: agent.manifest.audience })),
+      ...custom.map((record) => ({ name: record.name, audience: record.audience })),
+    ];
+  }
+
+  /** The stored bindings, each flagged when its agent no longer exists. */
+  async bindingStatus(): Promise<ModelBindingStatus[]> {
+    const [agents, bindings] = await Promise.all([this.#agentNames(), this.providers.listBindings()]);
+    return withOrphans(bindings, agents);
+  }
+
+  /** One provider and model for every runtime agent of a project, in one save. */
+  async applyToProject(input: ApplyModelToProject, actor: Actor): Promise<ModelBindingStatus[]> {
+    const agents = await this.#agentNames();
+    const runtime = agents.filter((agent) => agent.audience === "runtime").map((agent) => agent.name);
+    return withOrphans(await this.providers.applyToProject(input, runtime, actor), agents);
+  }
+
+  #builtinDetail(agent: AgentPackage, installation: Installation, bindings: AgentModelBinding[], projectId: string | undefined): AgentDetail {
     const { manifest } = agent;
     return {
       name: manifest.name,
@@ -151,7 +180,7 @@ export class AgentsService {
       description: manifest.description,
       enabled: true,
       problems: this.#validate(agent, installation),
-      ...bindingOf(manifest.name, bindings),
+      ...bindingOf(manifest.name, bindings, projectId),
       manifest,
       instructions: agent.instructions,
       localSkills: agent.localSkills,
@@ -160,7 +189,7 @@ export class AgentsService {
     };
   }
 
-  #customDetail(record: CustomAgentRecord, installation: Installation, bindings: AgentModelBinding[]): AgentDetail {
+  #customDetail(record: CustomAgentRecord, installation: Installation, bindings: AgentModelBinding[], projectId: string | undefined): AgentDetail {
     const parsed = parseStoredAgent(record.files);
     const base = {
       name: record.name,
@@ -171,7 +200,7 @@ export class AgentsService {
       ...(record.copiedFrom === undefined ? {} : { copiedFrom: record.copiedFrom }),
       updatedAt: record.updatedAt,
       ...(record.updatedBy === undefined ? {} : { updatedBy: record.updatedBy }),
-      ...bindingOf(record.name, bindings),
+      ...bindingOf(record.name, bindings, projectId),
       files: record.files,
       bindings: bindings.filter((binding) => binding.agent === record.name),
     };
@@ -487,8 +516,16 @@ function versionOf(agent: AgentPackage): { version: string; audience: string } {
   return { version: agent.manifest.version, audience: agent.manifest.audience };
 }
 
-function bindingOf(agent: string, bindings: AgentModelBinding[]): { binding?: AgentSummary["binding"] } {
-  const binding = bindings.find((entry) => entry.agent === agent && entry.projectId === undefined);
-  if (binding === undefined) return {};
-  return { binding: { provider: binding.provider, model: binding.model, ...(binding.thinking === undefined ? {} : { thinking: binding.thinking }) } };
+/** The binding a job of `agent` in `projectId` uses: the project's own, else the installation default (as the worker resolves it). */
+function bindingOf(agent: string, bindings: AgentModelBinding[], projectId: string | undefined): { binding?: AgentSummary["binding"] } {
+  const effective = effectiveModelBinding(bindings, agent, projectId);
+  if (effective === undefined) return {};
+  const { binding, scope } = effective;
+  return { binding: { provider: binding.provider, model: binding.model, ...(binding.thinking === undefined ? {} : { thinking: binding.thinking }), scope } };
+}
+
+/** Flags the bindings whose agent is not in the catalog any more (a removed custom agent, a renamed built-in one). */
+function withOrphans(bindings: AgentModelBinding[], agents: ReadonlyArray<{ name: string }>): ModelBindingStatus[] {
+  const names = new Set(agents.map((agent) => agent.name));
+  return bindings.map((binding) => ({ ...binding, orphan: !names.has(binding.agent) }));
 }

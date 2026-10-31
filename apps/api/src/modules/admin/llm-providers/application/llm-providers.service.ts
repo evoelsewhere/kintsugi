@@ -7,7 +7,8 @@ import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
-import type { LlmProviderRecord, ProviderConfigInput, ProviderKind, RegisterLlmProvider } from "../domain/llm-provider.js";
+import { withProjectBindings } from "@kintsugi/domain";
+import type { ApplyModelToProject, LlmProviderRecord, ProviderConfigInput, ProviderKind, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";
 import { ProviderCatalog } from "../domain/provider-catalog.js";
@@ -179,6 +180,31 @@ export class LlmProvidersService {
     await this.audit.recordChange(
       auditRecord(actor, AUDIT_ACTIONS.modelBindingsSave, {
         detail: { bindings: bindings.map((binding) => (binding.projectId === undefined ? binding.agent : `${binding.agent}@${binding.projectId}`)) },
+      }),
+    );
+    return this.providers.listBindings();
+  }
+
+  /**
+   * Binds every agent of `agents` to one provider and model in a project, in one save: each
+   * gets a project-scoped binding (an existing one for that project is replaced); the
+   * installation defaults and the other projects' bindings are kept.
+   */
+  async applyToProject(input: ApplyModelToProject, agents: readonly string[], actor: Actor): Promise<AgentModelBinding[]> {
+    if (agents.length === 0) throw new BadRequestException("There are no runtime agents to bind");
+    await this.#mustGet(input.provider);
+    const { projectId, provider, model, thinking } = input;
+    const merged = withProjectBindings(await this.providers.listBindings(), projectId, agents, (agent) => ({
+      agent,
+      projectId,
+      provider,
+      model,
+      ...(thinking === undefined ? {} : { thinking }),
+    }));
+    await this.providers.replaceBindings(merged);
+    await this.audit.recordChange(
+      auditRecord(actor, AUDIT_ACTIONS.modelBindingsSave, {
+        detail: { projectId, provider, model, ...(thinking === undefined ? {} : { thinking }), bindings: [...new Set(agents)].map((agent) => `${agent}@${projectId}`) },
       }),
     );
     return this.providers.listBindings();

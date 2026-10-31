@@ -195,12 +195,33 @@ describe.skipIf(!hasDatabase)("agents (integration)", () => {
     await admin.request("POST", "/admin/llm-providers", { body: { kind: "custom", id: "gateway", api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", models: [{ id: "m1" }] } });
     await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [{ agent: "my-analyst", provider: "gateway", model: "m1" }] });
     const list = await admin.get<Summary[]>("/admin/agents");
-    expect(list.body.data!.find((agent) => agent.name === "my-analyst")!.binding).toEqual({ provider: "gateway", model: "m1" });
+    expect(list.body.data!.find((agent) => agent.name === "my-analyst")!.binding).toEqual({ provider: "gateway", model: "m1", scope: "installation" });
 
     expect((await admin.request("DELETE", "/admin/agents/legacy-analyst")).status).toBe(400);
     expect((await admin.request("DELETE", "/admin/agents/my-analyst")).status).toBe(204);
     expect((await admin.get("/admin/agents/my-analyst")).status).toBe(404);
     const rows = await app.db.query("select 1 from admin.agent_version where name = 'my-analyst'");
     expect(rows.rowCount).toBe(0);
+
+    const status = await admin.get<Array<{ agent: string; orphan: boolean }>>("/admin/llm-providers/model-bindings/status");
+    expect(status.body.data).toEqual([expect.objectContaining({ agent: "my-analyst", orphan: true })]);
+    await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [] });
+  });
+
+  it("resolves a project's bindings and binds every runtime agent of a project at once", async () => {
+    expect((await admin.get("/admin/agents?projectId=Not_An_Id")).status).toBe(400);
+    expect((await admin.request("POST", "/admin/llm-providers/model-bindings/apply", { body: { projectId: "billing", provider: "missing", model: "m1" } })).status).toBe(404);
+    await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [{ agent: "legacy-analyst", provider: "gateway", model: "m1" }] });
+    const applied = await admin.request("POST", "/admin/llm-providers/model-bindings/apply", { body: { projectId: "billing", provider: "gateway", model: "m1", thinking: "low" } });
+    expect(applied.status).toBe(200);
+    const bindings = applied.body.data as Array<{ agent: string; projectId?: string; orphan: boolean }>;
+    expect(bindings.filter((binding) => binding.projectId === "billing").length).toBeGreaterThan(1);
+    expect(bindings.some((binding) => binding.agent === "legacy-analyst" && binding.projectId === undefined)).toBe(true);
+
+    const scoped = await admin.get<Summary[]>("/admin/agents?projectId=billing");
+    expect(scoped.body.data!.find((agent) => agent.name === "legacy-analyst")!.binding).toEqual({ provider: "gateway", model: "m1", thinking: "low", scope: "project" });
+    const installation = await admin.get<Summary[]>("/admin/agents?projectId=payroll");
+    expect(installation.body.data!.find((agent) => agent.name === "legacy-analyst")!.binding).toEqual({ provider: "gateway", model: "m1", scope: "installation" });
+    await admin.request("PUT", "/admin/llm-providers/model-bindings", { body: [] });
   });
 });

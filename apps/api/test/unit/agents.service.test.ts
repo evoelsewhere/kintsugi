@@ -10,7 +10,10 @@ import { AgentsService } from "#modules/admin/agents/application/agents.service.
 import type { AgentDraft, AgentVersionRecord, CustomAgentRecord, SaveAgent, SharedSkillRecord } from "#modules/admin/agents/domain/agent.js";
 import { AgentRepository } from "#modules/admin/agents/domain/agent.repository.js";
 import { PackagedAgentCatalog } from "#modules/admin/agents/infrastructure/packaged-agent.catalog.js";
-import type { LlmProvidersService } from "#modules/admin/llm-providers/index.js";
+import { LlmProvidersService } from "#modules/admin/llm-providers/index.js";
+import type { LlmProviderRecord } from "#modules/admin/llm-providers/domain/llm-provider.js";
+import { LlmProviderRepository } from "#modules/admin/llm-providers/domain/llm-provider.repository.js";
+import type { ProviderCatalog } from "#modules/admin/llm-providers/domain/provider-catalog.js";
 import { MemoryAuditTrail, testAdmin as admin } from "../support/audit.js";
 
 class MemoryAgents extends AgentRepository {
@@ -242,5 +245,104 @@ describe("agents service", () => {
     // Each successful change is audited once; refused ones are not.
     expect(audit.actions()).toEqual(["skill.create", "agent.create", "agent.disable", "agent.delete", "skill.delete"]);
     expect(audit.entries[1]).toMatchObject({ actor: "u-admin", subject: "house-reviewer", detail: { version: "1.0.0", audience: "runtime", username: "admin" } });
+  });
+});
+
+/** The provider registry's storage: one provider ("gateway") and the bindings, in memory. */
+class MemoryProviders extends LlmProviderRepository {
+  constructor(public bindings: AgentModelBinding[]) {
+    super();
+  }
+  readonly #gateway: LlmProviderRecord = {
+    id: "gateway",
+    kind: "custom",
+    enabled: true,
+    config: { kind: "custom", id: "gateway", api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", models: [{ id: "m1" }] } as LlmProviderRecord["config"],
+    hasApiKey: false,
+    envKeys: [],
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  async list() {
+    return [this.#gateway];
+  }
+  async get(id: string) {
+    return id === "gateway" ? this.#gateway : undefined;
+  }
+  async create(): Promise<LlmProviderRecord> {
+    throw new Error("not used");
+  }
+  async replace() {
+    return undefined;
+  }
+  async remove() {
+    return false;
+  }
+  async listBindings() {
+    return [...this.bindings];
+  }
+  async replaceBindings(bindings: AgentModelBinding[]) {
+    this.bindings = [...bindings];
+  }
+  async resolveApiKey() {
+    return undefined;
+  }
+  async resolveSecret() {
+    return undefined;
+  }
+}
+
+function withRegistry(bindings: AgentModelBinding[]) {
+  const store = new MemoryProviders(bindings);
+  const audit = new MemoryAuditTrail();
+  const providers = new LlmProvidersService(store, {} as ProviderCatalog, audit);
+  return { store, audit, service: new AgentsService(new MemoryAgents(), new PackagedAgentCatalog(), providers, audit) };
+}
+
+describe("agent model bindings", () => {
+  const bindings: AgentModelBinding[] = [
+    { agent: "legacy-analyst", provider: "gateway", model: "pro" },
+    { agent: "legacy-analyst", projectId: "billing", provider: "gateway", model: "flash", thinking: "off" },
+    { agent: "designer", projectId: "billing", provider: "gateway", model: "flash" },
+    { agent: "version-delta-analyst", provider: "gateway", model: "pro" },
+  ];
+
+  it("resolves each agent's binding for a project, else the installation default, and says which", async () => {
+    const { service } = withRegistry(bindings);
+    const billing = await service.list("billing");
+    expect(billing.find((agent) => agent.name === "legacy-analyst")!.binding).toEqual({ provider: "gateway", model: "flash", thinking: "off", scope: "project" });
+    expect(billing.find((agent) => agent.name === "designer")!.binding).toEqual({ provider: "gateway", model: "flash", scope: "project" });
+
+    const payroll = await service.list("payroll");
+    expect(payroll.find((agent) => agent.name === "legacy-analyst")!.binding).toEqual({ provider: "gateway", model: "pro", scope: "installation" });
+    expect(payroll.find((agent) => agent.name === "designer")!.binding).toBeUndefined();
+
+    expect((await service.list()).find((agent) => agent.name === "designer")!.binding).toBeUndefined();
+    expect((await service.get("designer", "billing")).binding).toEqual({ provider: "gateway", model: "flash", scope: "project" });
+    expect((await service.get("designer")).binding).toBeUndefined();
+  });
+
+  it("flags the bindings whose agent no longer exists", async () => {
+    const { service } = withRegistry(bindings);
+    const status = await service.bindingStatus();
+    expect(status.filter((binding) => binding.orphan).map((binding) => binding.agent)).toEqual(["version-delta-analyst"]);
+    expect(status).toHaveLength(bindings.length);
+  });
+
+  it("binds every runtime agent of a project in one save and keeps the other bindings", async () => {
+    const { service, store, audit } = withRegistry(bindings);
+    const saved = await service.applyToProject({ projectId: "billing", provider: "gateway", model: "m1", thinking: "low" }, admin);
+
+    const runtime = (await service.list()).filter((agent) => agent.audience === "runtime").map((agent) => agent.name);
+    expect(runtime.length).toBeGreaterThan(1);
+    const billing = store.bindings.filter((binding) => binding.projectId === "billing");
+    expect(billing.map((binding) => binding.agent).sort()).toEqual([...runtime].sort());
+    expect(billing.every((binding) => binding.provider === "gateway" && binding.model === "m1" && binding.thinking === "low")).toBe(true);
+    // The installation defaults (and the orphan) stay as they were.
+    expect(store.bindings.filter((binding) => binding.projectId === undefined)).toEqual([bindings[0], bindings[3]]);
+    expect(saved.find((binding) => binding.agent === "version-delta-analyst")!.orphan).toBe(true);
+    expect(audit.actions()).toEqual(["model-bindings.save"]);
+    expect(audit.entries[0]).toMatchObject({ detail: { projectId: "billing", provider: "gateway", model: "m1", thinking: "low" } });
+
+    expect(await rejection(service.applyToProject({ projectId: "billing", provider: "missing", model: "m1" }, admin))).toMatchObject({ type: NotFoundException });
   });
 });

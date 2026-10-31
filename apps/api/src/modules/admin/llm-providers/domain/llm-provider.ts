@@ -33,6 +33,14 @@ export interface RegisterLlmProvider {
   credentials: ProviderCredentials;
 }
 
+/** Application command: one provider and model for every agent of a project (one project-scoped binding each). */
+export interface ApplyModelToProject {
+  projectId: string;
+  provider: string;
+  model: string;
+  thinking?: ThinkingLevel;
+}
+
 /** Persisted provider. `config.auth` references secrets by id — never plaintext. */
 export interface LlmProviderRecord {
   id: string;

@@ -4,6 +4,8 @@
 
 import { THINKING_LEVELS } from "@kintsugi/domain";
 import { z } from "zod";
+import { idSchema } from "#common/interface/dto.js";
+import type { ApplyModelToProject } from "#modules/admin/llm-providers/index.js";
 import type { AgentDraft, AgentImport, SkillDraft } from "../domain/agent.js";
 
 const shortText = z.string().max(200);
@@ -50,6 +52,23 @@ export type ImportAgentInput = z.infer<typeof importAgentSchema>;
 
 export const exportQuerySchema = z.object({ version: z.string().min(1).max(64).optional() });
 export type ExportQuery = z.infer<typeof exportQuerySchema>;
+
+/** `?projectId=`: resolve each agent's binding for that project (project binding, else the installation default). */
+export const agentScopeQuerySchema = z.object({ projectId: idSchema.optional() });
+export type AgentScopeQuery = z.infer<typeof agentScopeQuerySchema>;
+
+/** One provider and model for every runtime agent of a project (Settings → Providers). */
+export const applyModelToProjectSchema = z.object({
+  projectId: idSchema,
+  provider: idSchema,
+  model: z.string().min(1).max(200),
+  thinking: z.enum(THINKING_LEVELS).optional(),
+});
+export type ApplyModelToProjectInput = z.infer<typeof applyModelToProjectSchema>;
+
+export function toApplyModelToProject(input: ApplyModelToProjectInput): ApplyModelToProject {
+  return { projectId: input.projectId, provider: input.provider, model: input.model, ...(input.thinking === undefined ? {} : { thinking: input.thinking }) };
+}
 
 export function toDraft(input: AgentDraftInput): AgentDraft {
   return {
