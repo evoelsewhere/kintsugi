@@ -36,7 +36,7 @@ The settings of the environment jobs run in are set by an administrator in **Set
 
 | Setting | Default | Meaning |
 |---|---|---|
-| Keep the checkouts of a failed job (hours) | `24` | After this long the sweep drops the checkouts and the documents of a failed job; a retry makes them again from the pinned commits. 1 to 720 |
+| Keep the checkouts of a failed job (hours) | `24` | After this long the sweep drops the checkouts and the documents of a failed or cancelled job; a retry makes them again from the pinned commits. 1 to 720 |
 | Keep the results of a failed job (days) | `7` | Days the workspace of a failed or cancelled run, or of a run whose document write failed, is kept for inspection and retries. Outputs whose document write is committed, opened as a pull request, merged, closed or unchanged are deleted at once. 1 to 90 |
 | Script timeout (minutes) | `10` | Wall-clock limit of a script step; the process tree is killed when it is exceeded. 10 seconds to 24 hours |
 | Agent job timeout (minutes) | `0` | Wall-clock limit of an agent job; `0` = no limit |

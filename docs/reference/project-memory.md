@@ -21,7 +21,7 @@ The model cannot supply another project/application/run/author or a trust level.
 
 Evidence is optional for all four kinds. If supplied, its repository and path must exist as a regular file inside a readable pinned checkout. The worker records the actual commit. An optional quote must match that file exactly (12–400 characters; quoted files are at most 512,000 bytes). Reads of evidence-bound notes require that source revision and a current repository link in the caller's application. General notes do not become invalid simply because a source commit changes.
 
-There is no memory snapshot, preselected memory corpus, read cache, automatic context injection or extra summarization LLM call. Every lookup queries current Postgres state. Content already returned stays in the conversation; reset cannot remove prior model context. Live-memory steps and enclosing workflows run again on retry rather than assuming mutable knowledge stayed unchanged.
+There is no memory snapshot, preselected memory corpus, read cache, automatic context injection or extra summarization LLM call. Every lookup queries current Postgres state. Content already returned stays in the conversation; reset cannot remove prior model context. A retry reuses a step that can read memory only while the memory it can see is unchanged: its fingerprint holds a revision of that memory, leaving out what its own run wrote or forgot, so an entry another run or a person writes, forgets, restores or reviews makes the step and enclosing workflows run again ([ADR-0090](../decisions/0090-retry-cancelled-runs-and-memory-revision.md)).
 
 ## Tools
 

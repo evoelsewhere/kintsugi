@@ -63,16 +63,18 @@ The worker makes the workspace match the manifest, and can do it again: a checko
 
 ## Attempts, the ledger and reuse
 
-A retry of a failed stage run puts **the same run** back in the queue as its next attempt (`workflow.job_run.attempt`, history in `attempts`). The worker records every leaf step of the plan in `.state/ledger.json`: its status, the **fingerprint** it ran with and what it wrote.
+A retry of a failed or cancelled stage run puts **the same run** back in the queue as its next attempt (`workflow.job_run.attempt`, history in `attempts`). The worker records every leaf step of the plan in `.state/ledger.json`: its status, the **fingerprint** it ran with and what it wrote.
 
 A step is skipped when the ledger holds a success with an equal fingerprint and every file it wrote is still there. The fingerprint is the hash of:
 
 - the **definition**: the agent (instructions, skills, tools) or the workflow, by content;
 - the **task** as the stage filled it, the arguments and the expected files;
 - the pinned **sources** and **documents**;
-- the **upstream chain**: a hash of every step that came before it in the plan, each contributing its fingerprint and, for an agent, the digest of what it wrote. A change anywhere upstream re-runs what follows. The members of a `parallel` or `forEach` group do not depend on each other.
+- the **upstream chain**: a hash of every step that came before it in the plan, each contributing its fingerprint and, for an agent, the digest of what it wrote. A change anywhere upstream re-runs what follows. The members of a `parallel` or `forEach` group do not depend on each other;
+- with [project memory](project-memory.md) on, for a step that can read it, the memory's **revision**: a digest of the entries it can see and their review state, leaving out what its own run wrote or forgot. The step is reused while nobody else changed the memory ([ADR-0090](../decisions/0090-retry-cancelled-runs-and-memory-revision.md));
+- for a step whose agent may look things up on the [web](web-search.md), the attempt: what a search or a page returns has no revision, so such a step runs again on every retry. The retry's answer names those agents and the run's log says, step by step, why it runs again.
 
-Script steps always run again (they are cheap, deterministic and the guard before publication) and contribute their fingerprint only, since what they wrote may carry a timestamp. A group that fails keeps what its members that succeeded wrote. An agent step that fails keeps its output folder, and its next try is told which files are in it (names only: it cannot read them) and to write the missing ones. Files the JobOutput hook flagged are removed first.
+Script steps always run again (they are cheap, deterministic and the guard before publication) and contribute their fingerprint only, since what they wrote may carry a timestamp. A group that fails or is cancelled keeps what its members that succeeded wrote. An agent step that fails keeps its output folder, and its next try is told which files are in it (names only: it cannot read them) and to write the missing ones. Files the JobOutput hook flagged are removed first.
 
 **Retry from scratch** (`fresh`) discards `out/`, `work/`, `steps/`, `docs/` and the ledger and reads the same pinned commits.
 
@@ -80,8 +82,8 @@ Script steps always run again (they are cheap, deterministic and the guard befor
 
 | When | What goes |
 |---|---|
-| an attempt ends well, or the job is cancelled | the checkouts, `docs/`, `steps/`, `tmp/` |
-| the job failed, after the checkout hours | the checkouts, `docs/`, `steps/`, `tmp/` (the next attempt makes them again) |
+| an attempt ends well | the checkouts, `docs/`, `steps/`, `tmp/` |
+| the job failed or was cancelled, after the checkout hours | the checkouts, `docs/`, `steps/`, `tmp/` (the next attempt makes them again) |
 | the document write of `out/` is final (`committed`, `pr-opened`, `merged`, `closed`, `unchanged`) | the whole workspace |
 | the job failed or was cancelled, or its write failed, after the retention days | the whole workspace |
 

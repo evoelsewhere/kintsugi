@@ -80,7 +80,7 @@ HTML/XHTML, plain text, Markdown and JSON are supported. PDF, images, downloads,
 
 Quotas are independent between search and fetch. The worker atomically reserves in Postgres before network access. Failed/cancelled attempts count; argument, policy, concurrency and exhausted-budget denials before reservation do not. Redirects within one fetch count as one logical reservation, not as additional fetch calls. Leases expire after 45 seconds if a worker dies. Reservations survive retries and restarts; logical step keys survive newly allocated child run IDs. Re-executed steps do not reset quota.
 
-Agent summaries count search and fetch tool calls separately, including unsuccessful service calls; these differ from upstream reservations. Live external inputs cause participating steps/workflows to execute again on retry rather than reuse stale results.
+Agent summaries count search and fetch tool calls separately, including unsuccessful service calls; these differ from upstream reservations. Live external inputs cause participating steps/workflows to execute again on retry rather than reuse stale results; the retry's answer names the agents with web lookups, the portal says their steps run again, and the run's log says so for each such step ([ADR-0090](../decisions/0090-retry-cancelled-runs-and-memory-revision.md)).
 
 ## Errors
 
