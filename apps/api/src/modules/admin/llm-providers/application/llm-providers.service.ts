@@ -7,7 +7,7 @@ import type { Page, PageQuery } from "#common/application/pagination.js";
 import { toPage } from "#common/application/pagination.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
 import type { Actor } from "#common/auth/decorators.js";
-import { withProjectBindings } from "@kintsugi/domain";
+import { explainFailure, withProjectBindings } from "@kintsugi/domain";
 import type { ApplyModelToProject, LlmProviderRecord, ProviderConfigInput, ProviderKind, RegisterLlmProvider } from "../domain/llm-provider.js";
 import { LlmProviderRepository } from "../domain/llm-provider.repository.js";
 import type { SupportedProviders } from "../domain/provider-catalog.js";
@@ -249,7 +249,7 @@ export class LlmProvidersService {
         message: response.ok ? `Reachable: GET ${probe.url} → ${response.status}` : `GET ${probe.url} → ${response.status} ${response.statusText}`,
       };
     } catch (error) {
-      return { ok: false, message: `GET ${probe.url} failed: ${error instanceof Error ? error.message : String(error)}` };
+      return { ok: false, message: explainFailure(`GET ${probe.url} failed: ${error instanceof Error ? error.message : String(error)}`) };
     }
   }
 
