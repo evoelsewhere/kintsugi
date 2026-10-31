@@ -58,6 +58,29 @@ describe("OAuth browser connection", () => {
     expect(h.raw()).toBe("");
   });
 
+  it("keeps the connection when a refresh never reached the installation, and fails closed when it may have", async () => {
+    const failing = (code: string) => Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(code), { code }) });
+    for (const code of ["ECONNREFUSED", "ENOTFOUND", "UND_ERR_CONNECT_TIMEOUT"]) {
+      const h = setup();
+      let calls = 0;
+      h.deps.fetch = async (_url, init) => {
+        calls++;
+        if (calls === 1) throw failing(code);
+        return Response.json({ success: true, data: { ...tokens, refreshToken: `knt_crt_after_${(JSON.parse(String(init?.body)) as { refreshToken: string }).refreshToken.slice(8)}` } });
+      };
+      await expect(h.session.accessTokenFor(profile), code).rejects.toMatchObject({ code: "OAUTH_NETWORK_ERROR" });
+      expect(JSON.parse(h.raw()).refreshPending, code).toBeUndefined();
+      // The next invocation refreshes with the same, never-sent credential and goes on.
+      await expect(new OAuthSession(h.deps).accessTokenFor(profile), code).resolves.toBe("knt_caw_new");
+      expect(JSON.parse(h.raw()).refreshToken, code).toBe("knt_crt_after_old");
+    }
+    // A connection reset may come after the request was sent: the refresh stays uncertain, and the next run signs in again.
+    const h = setup();
+    h.deps.fetch = async () => { throw failing("ECONNRESET"); };
+    await expect(h.session.accessTokenFor(profile)).rejects.toMatchObject({ code: "OAUTH_NETWORK_ERROR" });
+    expect(JSON.parse(h.raw()).refreshPending).toBe(true);
+  });
+
   it("does not consume refresh if the keyring cannot first save its pending marker", async () => {
     const h = setup();
     h.deps.credentials.set = async () => { throw new Error("keyring unavailable"); };
