@@ -63,7 +63,20 @@ export interface RuleRequirementTraceChain {
 }
 
 const REQUIREMENT_HEADING = /^#{2,6}\s+(REQ-[A-Za-z0-9][A-Za-z0-9._-]*)(?:\s*(?:[—–:-]\s*|\s+)(.*))?\s*$/;
-const DERIVED_FROM = /^\s*(?:[-+]\s+|\*\s+)?(?:\*\*)?derived(?:\s+from|From)(?:\*\*)?\s*:\s*(.*?)\s*$/i;
+// The ids are matched to the end of the line: `(.*?)\s*$` backtracks quadratically on a long run of spaces (T3-011).
+const DERIVED_FROM = /^\s*(?:[-+]\s+|\*\s+)?(?:\*\*)?derived(?:\s+from|From)(?:\*\*)?\s*:(.*)$/i;
+
+/**
+ * A listed id without the marks around it (bold, brackets, a closing dot), as `^[^A-Za-z0-9]+|[^A-Za-z0-9._-]+$`
+ * removed them; that pattern tried its second half at every character of a long run, quadratically (T3-011).
+ */
+function bareId(text: string): string {
+  let start = 0;
+  let end = text.length;
+  while (start < end && !/[A-Za-z0-9]/.test(text[start]!)) start += 1;
+  while (end > start && !/[A-Za-z0-9._-]/.test(text[end - 1]!)) end -= 1;
+  return text.slice(start, end);
+}
 
 /** Parse requirement sections headed by `REQ-…`; source Rule IDs use a `derivedFrom:` line. */
 export function parseRequirementsMarkdown(markdown: string): RequirementRecord[] {
@@ -80,7 +93,7 @@ export function parseRequirementsMarkdown(markdown: string): RequirementRecord[]
         derivedFrom.push(
           ...source[1]!
             .split(/[,;]/)
-            .map((id) => id.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9._-]+$/g, ""))
+            .map((id) => bareId(id.trim()))
             .filter(Boolean),
         );
       } else {

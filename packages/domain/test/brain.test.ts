@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  atxHeading,
   BRAIN_ROOT_ID,
   brainAnchor,
   buildBrainDocument,
@@ -283,5 +284,32 @@ describe("helpers", () => {
     expect(describeDocumentFolder("10-applications/billing/02-modern/invoice/tax")).toMatch(/^Unit invoice\/tax in the new system/);
     expect(describeDocumentFolder("10-applications/billing/01-legacy/invoice/tax/rules")).toMatch(/business rules/);
     expect(describeDocumentFolder("somewhere/else")).toBeUndefined();
+  });
+});
+
+describe("ATX headings (T3-011)", () => {
+  const OLD = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/;
+  const old = (line: string): { level: number; text: string } | undefined => {
+    const match = OLD.exec(line);
+    return match === null ? undefined : { level: match[1]!.length, text: match[2]! };
+  };
+
+  it("reads every line as the regex it replaces did", () => {
+    const lines = ["# Title", "## Title ##", "### a b c   ", "# C# notes", "# x #y", "#nospace", "# ", "#  ", "#### Deep ###   ", "# a #", "# #", "# C#", "# a ## ##", "####### seven", "#\ttab", "# a\rb"];
+    let seed = 11;
+    const next = (): number => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const alphabet = ["#", " ", "\t", "a", "\r"];
+    for (let index = 0; index < 5000; index++) {
+      const marker = "#".repeat(Math.floor(next() * 8));
+      lines.push(marker + Array.from({ length: Math.floor(next() * 9) }, () => alphabet[Math.floor(next() * alphabet.length)]).join(""));
+    }
+    for (const line of lines) expect(atxHeading(line), JSON.stringify(line)).toEqual(old(line));
+  });
+
+  it("reads a heading with a long run of spaces in linear time", () => {
+    const started = performance.now();
+    const document = buildBrainDocument("10-applications/a/01-legacy/x.md", `# a${" ".repeat(200_000)}x\n\nbody\n`);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(document).toBeDefined();
   });
 });

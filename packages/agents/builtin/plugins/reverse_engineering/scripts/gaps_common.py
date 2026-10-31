@@ -91,9 +91,9 @@ def _deduplicate_rows(text, replacements):
         if re.match(r'^\s*(```|~~~)', line):
             fenced = not fenced
         if not fenced:
-            heading = re.match(r'^(#{1,2})\s+(.+?)\s*#*\s*$', line)
+            heading = docmd.heading_of(line, 2)
             if heading:
-                in_gaps = len(heading[1]) == 2 and heading[2].strip().lower() == GAPS_SECTION
+                in_gaps = len(heading[0]) == 2 and heading[1].strip().lower() == GAPS_SECTION
             if in_gaps and line.strip().startswith('|'):
                 cells = docmd.split_row(line)
                 lowered = [cell.lower() for cell in cells]
@@ -158,12 +158,12 @@ def carry_resolutions(text, previous_text, unchanged):
     for index, line in enumerate(lines):
         if re.match(r'^\s*(```|~~~)', line):
             fenced = not fenced
-        heading = None if fenced else re.match(r'^(#{1,2})\s+(.+?)\s*#*\s*$', line)
+        heading = None if fenced else docmd.heading_of(line, 2)
         if heading:
             if start is not None:
                 end = index
                 break
-            if len(heading[1]) == 2 and heading[2].strip().lower() == GAPS_SECTION:
+            if len(heading[0]) == 2 and heading[1].strip().lower() == GAPS_SECTION:
                 start = index + 1
     if start is None:
         return text

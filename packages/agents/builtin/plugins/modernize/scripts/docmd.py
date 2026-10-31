@@ -331,6 +331,23 @@ def records_in(text, index=0):
 # Sections, cards and fields
 # ---------------------------------------------------------------------------
 
+def heading_of(line, deepest=6):
+    """(marker, title) of an ATX heading line (`## Title ##`) of at most `deepest` levels, or None. Linear: the regex
+    it replaces, `^(#{1,6})\\s+(.+?)\\s*#*\\s*$`, backtracked cubically on a long run of spaces, so one line of a
+    document held a step for minutes (T3-011). The results are the same, a closing run of `#` included."""
+    level = len(line) - len(line.lstrip('#'))
+    if not 1 <= level <= deepest or not line[level:level + 1].isspace():
+        return None
+    text = line[level:].strip()
+    if not text:
+        # Only spaces after the marker: the regex took the last one `.` matches, after the first, as the title.
+        rest = line[level + 1:].rstrip('\n')
+        return (line[:level], rest[-1]) if rest else None
+    # Only `#` after the marker (`# #`): the regex kept the first. `.` matches no newline, so a title holding one was no heading.
+    title = text.rstrip('#').rstrip() or text[0]
+    return None if '\n' in title else (line[:level], title)
+
+
 def sections(text, level):
     """(title, body) of every heading of exactly `level`, outside fenced code. A body runs to the
     next heading of the same or a higher level, so deeper headings stay in it."""
@@ -340,9 +357,9 @@ def sections(text, level):
         if re.match(r'^\s*(```|~~~)', line):
             fenced = not fenced
             continue
-        match = None if fenced else re.match(r'^(#{1,6})\s+(.+?)\s*#*\s*$', line)
+        match = None if fenced else heading_of(line)
         if match:
-            heads.append((index, len(match.group(1)), match.group(2)))
+            heads.append((index, len(match[0]), match[1]))
     out = []
     for position, (index, depth, title) in enumerate(heads):
         if depth != level:

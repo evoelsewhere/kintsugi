@@ -160,7 +160,8 @@ export function findingsOfTable(table: Table, status: FindingStatus = 'confirmed
   return findings
 }
 
-const CARD = /^#{3,4}\s+((?:SEC|RULE)-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*-\d+|[A-Z][A-Z0-9]*-\d+[a-z]?)\s*[·:\-–—]\s*(.+?)\s*$/
+/** A finding card heading; its title is matched to the end of the line and trimmed where it is used (T3-011). */
+const CARD = /^#{3,4}\s+((?:SEC|RULE)-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*-\d+|[A-Z][A-Z0-9]*-\d+[a-z]?)\s*[·:\-–—](.+)$/
 
 const labelled = (body: string, name: string): string | undefined => {
   const match = new RegExp(`^[ \\t>*-]*\\*\\*${name}:?\\*\\*:?[ \\t]*(.*)$`, 'im').exec(body)
@@ -183,15 +184,16 @@ function findingsOfCards(text: string, statusOf: (line: number) => FindingStatus
 
     const end = lines.findIndex((next, at) => at > index && /^#{1,4}\s/.test(next))
     const body = lines.slice(index + 1, end < 0 ? lines.length : end).join('\n')
-    const severityText = labelled(body, 'Severity') ?? card[2] ?? ''
+    const heading = (card[2] ?? '').trim()
+    const severityText = labelled(body, 'Severity') ?? heading
     const location = labelled(body, '(?:Location|File)')
-    const cwe = cweOf(labelled(body, 'CWE') ?? '') ?? cweOf(`${card[2] ?? ''} ${body}`)
+    const cwe = cweOf(labelled(body, 'CWE') ?? '') ?? cweOf(`${heading} ${body}`)
     const confidence = confidenceOf(labelled(body, 'Confidence') ?? '')
     const detail = paragraphsIn(body.replace(/^[ \t>*-]*\*\*(?:Severity|Confidence|CWE|Location|File|Status):?\*\*.*$/gim, '')).join('\n\n')
 
     findings.push({
       id: card[1] ?? '',
-      title: cellText(card[2] ?? '').replace(/\s*[([]?(Critical|High|Medium|Low)[)\]]?\s*$/i, ''),
+      title: cellText(heading).replace(/\s*[([]?(Critical|High|Medium|Low)[)\]]?\s*$/i, ''),
       severity: severityOf(severityText),
       ...(confidence !== undefined && { confidence }),
       ...(cwe !== undefined && { cwe }),
