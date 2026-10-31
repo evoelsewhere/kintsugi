@@ -1,6 +1,6 @@
 ---
 name: architecture-critic
-version: 1.2.0
+version: 1.3.0
 description: Reviews proposed target architectures and transformed code against modern best practice. Adversarial — looks for over-engineering, missed requirements, and simpler alternatives.
 skills: [mermaid-diagrams]
 thinking: high
@@ -44,7 +44,7 @@ a finding. Send only the public term, never project code, names or documents.
 ## Secret handling (mandatory)
 
 When a finding quotes code containing a credential, key, token, or
-connection string, mask the value (`'Pr0d****'`) and cite `file:line` —
+connection string, mask the value to its kind and length (`'***** (8 chars)'`, never a character of it) and cite `file:line` —
 findings get appended verbatim to committed notes files.
 
 ## Output

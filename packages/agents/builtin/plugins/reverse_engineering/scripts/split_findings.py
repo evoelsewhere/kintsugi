@@ -16,6 +16,7 @@ never go into the file: they belong to the restricted record. Standard library o
 """
 import argparse
 import os
+import re
 import sys
 
 sys.dont_write_bytecode = True
@@ -67,6 +68,16 @@ def one_line(value, limit=200):
     return docmd.clean_text(value, limit) if isinstance(value, str) else ''
 
 
+# A masked value that still shows its first characters (`AKIA****`, `'Pr0d****'`): a masked preview shows the kind and the
+# length of a credential only, never a character of it, since the first characters help to guess the rest.
+PARTIAL_MASK = re.compile(r'(?<![\w*])[A-Za-z0-9+/_.\-]{1,8}\*{2,}(?![\w*])')
+
+
+def hide_partial_masks(text):
+    """`text` with every partly masked value replaced by `*****`; the kind and length a model wrote next to it stay."""
+    return PARTIAL_MASK.sub('*****', text)
+
+
 def render_findings(app, item_id, findings, reviewed, tools, dead):
     """The findings.md of one unit (ADR-0042): the table SECURITY_FINDINGS.md has, plus a short card per
     finding for the fix and the masked evidence. Credential details never go in: they belong to the restricted record."""
@@ -89,7 +100,7 @@ def render_findings(app, item_id, findings, reviewed, tools, dead):
     if details:
         doc += ['## Details', '']
         for finding in details:
-            doc += [docmd.heading(3, finding['id']), '', docmd.field_lines({'recommended fix': one_line(finding.get('recommendedFix'), 600), 'evidence (masked)': one_line(finding.get('maskedEvidence'), 300)})]
+            doc += [docmd.heading(3, finding['id']), '', docmd.field_lines({'recommended fix': one_line(finding.get('recommendedFix'), 600), 'evidence (masked)': hide_partial_masks(one_line(finding.get('maskedEvidence'), 300))})]
     if tools:
         doc += ['## Tools not run', '', docmd.table(['Tool', 'Why'], [[one_line(tool.get('tool') or tool.get('name'), 80), one_line(tool.get('reason') or tool.get('why'), 200)] for tool in tools])]
     if dead:

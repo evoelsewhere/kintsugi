@@ -1,6 +1,6 @@
 ---
 name: business-rules-extractor
-version: 1.3.0
+version: 1.4.0
 description: Mines domain logic, calculations, validations, and policies from legacy code into testable Given/When/Then specifications. Use when you need to separate "what the business requires" from "how the old code happened to implement it."
 skills: [mermaid-diagrams, evidence-marks]
 thinking: medium
@@ -59,8 +59,8 @@ of the technology, skip it.
 Rule parameters sometimes *are* credentials — hardcoded passwords in auth
 checks, API keys in partner-service calls, connection strings in batch
 routines. Record the **rule**, never the **value**: write the parameter as
-`<credential — masked, see file:line>` with at most a 2–4 character
-preview. Rule cards flow into briefs and steering decks; a raw credential
+`<credential — masked, see file:line>` with at most its kind and length
+(`password ***** (8 chars)`), never a character of it. Rule cards flow into briefs and steering decks; a raw credential
 in a parameter list is a leak.
 
 ## Output format

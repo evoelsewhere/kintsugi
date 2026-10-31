@@ -137,7 +137,7 @@ and rough coverage signal. This is part of the structure job's task (Step 3, job
 3. **security-auditor** — "Scan the legacy source of $app (every legacy repository) for vulnerabilities: injection, auth
    weaknesses, hardcoded secrets, vulnerable dependencies, missing input
    validation. Return a CWE-tagged table with file:line and severity. Mask every
-   credential (file:line plus a 2–4 character preview, never the value)."
+   credential (`<repository id>/<path>:<line>` plus its kind and length, `***** (8 chars)`, never a character of the value)."
 
 The orchestrator waits for all three and hands their outputs to the next steps.
 

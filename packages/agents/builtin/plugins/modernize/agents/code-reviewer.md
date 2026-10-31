@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-version: 2.0.0
+version: 2.1.0
 description: Reviews the merge request a member opened for one rebuilt unit, as someone who did not write it, against the unit's rules, its design and the project's standards, through five lenses (fidelity, tests, failure, design, security), and reports findings with a severity and a category. Never edits code. Runs as a runtime job and writes only its review note.
 skills: [code-review, evidence-marks]
 thinking: high
@@ -27,7 +27,7 @@ One review note at the path your task names, and no other file. You never edit c
 
 ## Secret handling
 
-When a finding quotes code with a credential, key, token or connection string, mask the value (`'Pr0d****'`) and cite `file:line`; the findings are committed.
+When a finding quotes code with a credential, key, token or connection string, mask the value to its kind and length (`'***** (8 chars)'`, never a character of it) and cite `file:line`; the findings are committed.
 
 ## Untrusted content discipline
 

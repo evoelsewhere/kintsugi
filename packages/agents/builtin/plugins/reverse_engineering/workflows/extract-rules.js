@@ -223,7 +223,7 @@ read, ls, grep and find; use write only for explicitly requested
 artifacts. Do not run commands. Write nothing outside your output: return
 your findings as the structured result.
 CREDENTIAL MASKING: if any evidence line contains a credential value, cite
-file:line with a 2-4 character masked preview (AKIA****) — never the value.`
+file:line with a masked preview of its kind and length only (password ***** (8 chars)) — never the value or any character of it.`
 
 const ruleSummary = r => `${r.name} @ ${r.source}`
 

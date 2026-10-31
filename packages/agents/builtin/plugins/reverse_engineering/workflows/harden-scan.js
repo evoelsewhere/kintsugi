@@ -79,7 +79,7 @@ artifacts. Do not run commands, including npm audit, pip-audit or any other
 SAST/audit tooling. Write nothing outside your output: return your findings as
 the structured result.
 CREDENTIAL MASKING: every discovered credential value is cited as file:line
-plus a 2-4 character masked preview (AKIA****) — the raw value never appears
+plus a masked preview of its kind and length only (AWS access key ***** (20 chars)) — the raw value, or any character of it, never appears
 in any output field.`
 
 const FINDING_SCHEMA = {

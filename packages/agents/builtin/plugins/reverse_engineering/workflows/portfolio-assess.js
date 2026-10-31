@@ -81,8 +81,8 @@ to as-is/ and starts with its repository folder. Read it only through the kernel
 and find; use write only for explicitly requested artifacts. Do not run
 commands such as scc, cloc, lizard or any other audit tooling. Write nothing
 outside your output: return your findings as the structured result. Mask any
-credential value you happen to see: file:line plus a 2-4 character preview,
-never the value.`
+credential value you happen to see: file:line plus its kind and length only (password ***** (8 chars)),
+never the value or any character of it.`
 
 // The job fills in only what needs reading the code; the measured figures are
 // merged in from the inventory below.

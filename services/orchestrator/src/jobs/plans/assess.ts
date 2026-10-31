@@ -31,7 +31,7 @@ import {
   standardsDir,
   topologyExtractorPath,
 } from "@kintsugi/domain";
-import { CREDENTIALS, HEADER, RESTRICTED, STOP, UNTRUSTED, WORKSPACE, inputPresent, optionalInput } from "./common.js";
+import { CREDENTIALS, HEADER, MASKED_PREVIEW, RESTRICTED, STOP, UNTRUSTED, WORKSPACE, inputPresent, optionalInput } from "./common.js";
 import { topologySteps } from "./topology.js";
 
 const APP_TOKEN = DOCUMENT_PATH_TOKENS.app;
@@ -101,10 +101,12 @@ ${WORKSPACE}
 
 Look for injection, authentication and session weaknesses, hardcoded secrets, vulnerable dependencies (read the
 manifests and lock files; no audit tool runs here, say which ones would apply) and missing input validation.
-Write ${ANALYSIS}/security.md with write: a table with CWE, severity, file:line, title and a one-sentence
-exploit scenario. For each hardcoded credential add a row to a separate "Credentials" table: masked preview (2–4
-characters), file:line, type, what it appears to grant, production or test guess. These notes are input for the
-synthesis job, not a final document.
+Write ${ANALYSIS}/security.md with write: a table with CWE, severity, location, title and a one-sentence
+exploit scenario. For each hardcoded credential add a row to a separate "Credentials" table: masked preview
+(${MASKED_PREVIEW}), location, type, what it appears to grant, production or test guess. Every location is
+<repository id>/<path>:<line>, in every row and sentence, even when the application has one repository: never drop
+the repository folder, and never write a note such as "paths are relative to <repository>/" instead. These notes are
+input for the synthesis job, not a final document.
 
 ${HEADER}
 ${COVERAGE}

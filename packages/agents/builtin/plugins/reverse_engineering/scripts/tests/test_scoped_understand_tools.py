@@ -233,6 +233,17 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertIn('Bind the parameter.', text)
         self.assertEqual(docmd.split_front_matter(text)[0]['filesReviewed'], 1)
 
+    def test_masked_evidence_never_shows_the_first_characters_of_a_value(self):
+        import split_findings as sf
+        self.assertEqual(sf.hide_partial_masks("VALUE 'Pr0d****' and key AKIA****, hu**"), "VALUE '*****' and key *****, *****")
+        # The kind and the length stay, and so do a mask with nothing before it and code that is not a mask.
+        self.assertEqual(sf.hide_partial_masks('password=***** (8 chars)'), 'password=***** (8 chars)')
+        self.assertEqual(sf.hide_partial_masks('postgres://app:*****@db x = a**2'), 'postgres://app:*****@db x = a**2')
+        text = sf.render_findings('billing', 'tax/calc', [{'id': 'SEC-TAX01-0001', 'cwe': 'CWE-798', 'severity': 'High', 'source': 'legacy/src/TAX.cbl:2', 'title': 'Key',
+                                                           'maskedEvidence': "MOVE 'Pr0d****' TO WS-PASS"}], [], [], [])
+        self.assertIn("MOVE '*****' TO WS-PASS", text)
+        self.assertNotIn('Pr0d', text)
+
     def test_a_rerun_keeps_rules_review_and_reports_orphaned_verdicts(self):
         rules = os.path.join(self.root, 'rules_result.json')
         write(rules, {'confirmedRules': [{'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAXLIB.cbl:12'}], 'dataObjects': []})

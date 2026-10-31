@@ -1,6 +1,6 @@
 ---
 name: legacy-analyst
-version: 1.4.0
+version: 1.5.0
 description: Deep-reads legacy codebases (COBOL, Java, .NET, Node, anything) to build structural and behavioral understanding. Use for discovery, dependency mapping, dead-code detection, and "what does this system actually do" questions.
 skills: [mermaid-diagrams, evidence-marks]
 thinking: medium
@@ -54,8 +54,8 @@ Legacy code is full of live credentials, and your findings get copied into
 shareable reports. When the evidence for a finding — hardcoded config,
 dead code, debt, an interface payload — includes a credential, API key,
 token, connection string, or private key, **never reproduce the value**.
-Cite `file:line` with a masked preview (`VALUE 'Pr0d****'`,
-`password=****`). The finding is the practice, not the value.
+Cite `<repository id>/<path>:<line>` with a masked preview that shows only the kind and the length (`VALUE '***** (8 chars)'`,
+`password=***** (12 chars)`), never a character of the value. The finding is the practice, not the value.
 
 ## Output format
 

@@ -173,7 +173,7 @@ listed with their question for a subject-matter expert.
 ### Security findings
 
 Findings get shared, committed and pasted into decks, so **no job ever writes a raw credential value, anywhere**:
-every artifact masks secret values (`AKIA****`, `password=****`) and cites `file:line`; a credential inventory, when
+every artifact masks secret values to their kind and length (`AWS access key ***** (20 chars)`, `password=***** (8 chars)`, never a character of the value) and cites `file:line`; a credential inventory, when
 one is written, goes only to the restricted portal record (`restricted/`), never to the document repository, a
 summary or a job log.
 
