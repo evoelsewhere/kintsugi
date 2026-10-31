@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SANDBOX, agentLimitsOff, defaultLabel, defaultValue, formProblems, fromForm, isUnchanged, toForm, toSettings } from "./sandbox-form";
+import { DEFAULT_SANDBOX, agentLimitsOff, defaultLabel, defaultValue, fieldProblems, footerStatus, formProblems, fromForm, isUnchanged, toForm, toSettings } from "./sandbox-form";
 
 describe("the sandbox form", () => {
   it("shows minutes and megabytes and gives back seconds and bytes", () => {
@@ -52,5 +52,45 @@ describe("agent limits switched off", () => {
     expect(agentLimitsOff({ ...limited, maxTurns: "" })).toEqual([]);
     expect(agentLimitsOff({ ...limited, maxCostUsd: "abc" })).toEqual([]);
     expect(agentLimitsOff({ ...limited, agentIdleTimeoutMin: "0" })).toEqual([]);
+  });
+});
+
+describe("field problems", () => {
+  const names = {
+    maxTurns: { label: "Turns per job", unit: "turns" },
+    agentTimeoutMin: { label: "Job timeout", unit: "min" },
+    maxCostUsd: { label: "Cost per job", unit: "USD" },
+    retentionDays: { label: "Keep results", unit: "days" },
+  };
+  const valid = { ...toForm(DEFAULT_SANDBOX), agentTimeoutMin: "45", maxTurns: "150", maxCostUsd: "10" };
+
+  it("puts each problem on its field, in the form's own label and unit", () => {
+    const { fields, other } = fieldProblems({ ...valid, maxTurns: "-5", agentTimeoutMin: "0.5", maxCostUsd: "" }, names);
+    expect(fields).toEqual({
+      maxTurns: "Turns per job must be 0 or between 1 and 10000 turns",
+      agentTimeoutMin: "Job timeout must be 0 or between 1 and 1440 min",
+      maxCostUsd: "Cost per job must be a number",
+    });
+    expect(other).toEqual([]);
+  });
+
+  it("keeps a problem of a field the form does not name apart", () => {
+    expect(fieldProblems({ ...valid, retentionDays: "500", checkoutHours: "0" }, names)).toEqual({
+      fields: { retentionDays: "Keep results must be between 1 and 90 days" },
+      other: ["Checkout hours must be between 1 and 720"],
+    });
+  });
+
+  it("finds nothing in a valid form", () => {
+    expect(fieldProblems(valid, names)).toEqual({ fields: {}, other: [] });
+  });
+});
+
+describe("the footer", () => {
+  it("says the changes are unsaved before anything else", () => {
+    expect(footerStatus({ changed: true, loaded: true, failed: false, isDefault: true })).toBe("Unsaved changes: save them to apply them to the next job.");
+    expect(footerStatus({ changed: false, loaded: true, failed: false, isDefault: true })).toBe("Nothing saved yet: the defaults shown under each field apply.");
+    expect(footerStatus({ changed: false, loaded: true, failed: false, isDefault: false, updatedBy: "admin" })).toBe("Set by admin.");
+    expect(footerStatus({ changed: false, loaded: false, failed: false, isDefault: false })).toBe("Loading…");
   });
 });
