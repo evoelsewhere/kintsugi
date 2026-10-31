@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createKernelGrepTool } from "../src/kernel/grep.js";
 import { createKernelLsTool } from "../src/kernel/ls.js";
 import { PathGuard } from "../src/kernel/paths.js";
-import { createTools, linesShown, type SourceRead } from "../src/kernel/tools.js";
+import { OUTPUT_FOLDER_NOTE, createTools, linesShown, type SourceRead } from "../src/kernel/tools.js";
 import { createWorkspace } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -57,6 +57,19 @@ describe("a workspace root above the read-only folders", () => {
     expect(state.text).toMatch(/outside the job workspace/);
     const found = await run(find, { pattern: "**/*.vue" });
     expect(found.text).toContain("web/src/App.vue");
+  });
+
+  it("answers a search of the output folder with a note instead of a denial", async () => {
+    mkdirSync(join(workspace.out, "docs"), { recursive: true });
+    writeFileSync(join(workspace.out, "docs", "written.md"), "# written\n");
+    const tools = createTools(["ls", "grep", "find", "glob"], { cwd: workspace.root, searchDir: asIs, readOnly: [asIs, stepIn, guide], outDir: workspace.out, tmpDir: workspace.outside, onOutput: () => undefined });
+    for (const tool of tools as unknown as Array<{ execute: unknown }>) {
+      const result = await run(tool, { path: "out/docs", pattern: "written" });
+      expect(result).toEqual({ text: OUTPUT_FOLDER_NOTE, error: false });
+      expect((await run(tool, { path: workspace.out, pattern: "*" })).text).toBe(OUTPUT_FOLDER_NOTE);
+    }
+    const [ls] = tools as unknown as [{ execute: unknown }];
+    expect((await run(ls, { path: "as-is/web" })).text).toContain("src");
   });
 
   it("reports the lines read showed the model, and nothing for a read that failed", async () => {

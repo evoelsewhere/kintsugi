@@ -15,7 +15,7 @@ import {
 import { createKernelGrepTool } from "./grep.js";
 import { createKernelGitTool } from "./git.js";
 import { createKernelLsTool } from "./ls.js";
-import { PathGuard } from "./paths.js";
+import { PathGuard, isInside, realPath } from "./paths.js";
 import { createKernelShellTool } from "./shell.js";
 import { CODEMODE_TOOL, SCRIPT_TOOLS } from "./codemode.js";
 import { MCP_TOOL_PREFIX } from "./mcp.js";
@@ -91,10 +91,29 @@ const readTool: ToolFactory = (context) => {
   };
 };
 
-const lsTool: ToolFactory = (context) => erase(createKernelLsTool(context.cwd, readGuard(context), context.searchDir));
+/** What ls, grep, find and glob answer when asked to search the output folder: models that look for what they wrote loop on a denial. */
+export const OUTPUT_FOLDER_NOTE = "Your output folder is write-only and cannot be listed. A step is done when its files are written; reply with your result.";
+
+// A search tool given a path inside the output folder answers with OUTPUT_FOLDER_NOTE instead of running: the folder
+// is not readable, and a plain denial or an empty result sends a model looking for its files again and again.
+const notInOutput = (tool: ToolDefinition, context: ToolContext): ToolDefinition => {
+  const out = realPath(context.outDir);
+  return {
+    ...tool,
+    execute: (toolCallId, params, signal, onUpdate, ctx) => {
+      const given = (params as { path?: unknown }).path;
+      if (typeof given === "string" && given.trim() !== "" && isInside(out, realPath(resolve(context.cwd, given.trim())))) {
+        return Promise.resolve({ content: [{ type: "text" as const, text: OUTPUT_FOLDER_NOTE }], details: undefined }) as ReturnType<ToolDefinition["execute"]>;
+      }
+      return tool.execute(toolCallId, params, signal, onUpdate, ctx);
+    },
+  };
+};
+
+const lsTool: ToolFactory = (context) => notInOutput(erase(createKernelLsTool(context.cwd, readGuard(context), context.searchDir)), context);
 
 // grep searches in-process (grep.ts): pi's grep needs ripgrep, which a job has no way to get.
-const grepTool: ToolFactory = (context) => erase(createKernelGrepTool(context.cwd, readGuard(context), context.searchDir, context.onRead));
+const grepTool: ToolFactory = (context) => notInOutput(erase(createKernelGrepTool(context.cwd, readGuard(context), context.searchDir, context.onRead)), context);
 
 // pi's find searches the working directory when given no path; here that is the workspace root, which is not
 // readable as a whole, so a call without a path searches the first read-only root instead.
@@ -108,7 +127,7 @@ const searchingIn = (tool: ToolDefinition, dir: string): ToolDefinition => ({
 
 const findTool: ToolFactory = (context) => {
   const guard = readGuard(context);
-  return searchingIn(erase(
+  return notInOutput(searchingIn(erase(
     createFindToolDefinition(context.cwd, {
       operations: {
         exists: async (path) => {
@@ -131,7 +150,7 @@ const findTool: ToolFactory = (context) => {
         },
       },
     }),
-  ), context.searchDir);
+  ), context.searchDir), context);
 };
 
 // Models trained on other harnesses call `glob` (also as `tools.glob` in a codemode script) and failed every
