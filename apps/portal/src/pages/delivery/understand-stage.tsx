@@ -109,6 +109,9 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
     await Promise.all([runs.reload(), catalog.reload()]);
   }
 
+  // Why Rebuild generated views cannot start: said on the button, as Run says it on Assess.
+  const rebuildDisabled = runDisabled ?? (rebuilding || rebuilds.some((run) => isActiveStatus(run.status)) ? "A rebuild is already running." : undefined);
+
   return (
     <div className="flex flex-col gap-4">
       <StageHeader
@@ -120,7 +123,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
         actions={
           <>
             <span className="text-[13px] font-medium text-text tabular-nums">{catalog.data === undefined || catalog.data === null ? "" : `${counts?.understood ?? 0}/${total} items understood`}</span>
-            <Button size="small" variant="ghost" className="shadow-border" disabled={runDisabled !== undefined || rebuilding || rebuilds.some((run) => isActiveStatus(run.status))} onClick={() => void rebuild()}>
+            <Button size="small" variant="ghost" className="shadow-border" disabled={rebuildDisabled !== undefined} title={rebuildDisabled} onClick={() => void rebuild()}>
               <RefreshCw className="size-3.5" />
               Rebuild generated views
             </Button>
@@ -183,7 +186,7 @@ export function UnderstandStage({ project, application, stage }: { project: Proj
 
       {tab === "results" ? (
         <Suspense fallback={<Card><SkeletonRows rows={6} /></Card>}>
-          <UnderstandResultsTab project={project} application={application} catalog={catalog.data ?? null} version={version} runs={understandRuns} onOpenCatalog={() => setParam({ tab: "catalog" })} onOpenRuns={() => setParam({ tab: "runs" })} />
+          <UnderstandResultsTab project={project} application={application} catalog={catalog.data ?? null} version={version} runs={understandRuns} onOpenCatalog={() => setParam({ tab: "catalog" })} onOpenRuns={() => setParam({ tab: "runs" })} onRebuild={() => void rebuild()} rebuildDisabled={rebuildDisabled} />
         </Suspense>
       ) : null}
     </div>

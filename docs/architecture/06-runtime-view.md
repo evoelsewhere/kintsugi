@@ -78,7 +78,7 @@ Not part of this build: no member-harness integration ships ([ADR-0067](../decis
 
 ## 6.4 KB question & answer
 
-For Coding Agent Workflow questions, the developer's chosen AI reads authorized project documents through the local CLI/MCP access path and answers with citations. A Kintsugi-owned conversational assistant is deferred. Server-side review is a separate workflow job over fixed pull-request inputs.
+For a member's questions, the member's own AI client reads authorized project documents and the Brain through the local CLI/MCP access path and answers with citations. A Kintsugi-owned conversational assistant is deferred. Server-side review is a separate workflow job over fixed pull-request inputs.
 
 ## 6.5 Git sync and change detection
 

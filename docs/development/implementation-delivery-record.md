@@ -2,7 +2,7 @@
 
 Updated: 23 October 2026
 
-This page consolidates the approved design, implementation status, remaining work, known issues, test plan, and recorded evidence for the GHCR/SSH deployment work (the Coding Agent Workflow part was removed, ADR-0067). It replaces the dated implementation notes as the maintained delivery record.
+This page consolidates the approved design, implementation status, remaining work, known issues, test plan, and recorded evidence for the GHCR/SSH deployment work (the Coding Agent Workflow part was removed, ADR-0067). Its scope is that deployment work only: other workstreams are recorded in their ADRs and reference pages, and the decision register lists them.
 
 Stable product contracts remain in the ADRs and reference pages linked below. Update this page when implementation status or verification changes; do not create another dated status plan.
 

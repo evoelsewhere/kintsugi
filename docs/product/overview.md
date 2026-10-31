@@ -17,7 +17,7 @@ Migration and modernization at portfolio scale (tens to hundreds of applications
 2. **A configurable delivery pipeline**: P0 Mobilize → P1 Discover & Assess → P2 Define To-Be → P3 Prepare Factory → P4 Migrate. See [delivery pipeline](../methodology/delivery-pipeline.md).
 3. **Four pillars** (Admin · Delivery · Monitoring · Governance) on a shared core platform. See [building block view](../architecture/05-building-block-view.md).
 4. **Two kinds of agents.** See [runtime and member harnesses](../architecture/concepts/runtime-and-member-harnesses.md).
-   - **The Kintsugi Runtime, built on pi**, runs the platform's own agents: knowledge ingest, KB assistant, assessment, wave planning, to-be analysis, task planning, gate review, insight.
+   - **The Kintsugi Runtime, built on pi**, runs the platform's own agents, shipped as two built-in plugins: `reverse_engineering` assesses and understands the legacy system, and `modernize` designs each unit and reviews the merge request a member opened ([Runtime agents](../reference/runtime-agents.md) lists them). Knowledge ingest, a KB assistant, wave planning, task planning, gate review and insight agents are planned.
    - **Members' own AI harnesses** (Claude Code, GitHub Copilot, ChatGPT/Codex) do the implementation, with context supplied by Kintsugi.
 5. **A self-hosted package with Git as the source of truth.**
    - Each project installs Kintsugi with Docker Compose.
