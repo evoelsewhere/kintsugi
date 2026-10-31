@@ -3,10 +3,11 @@
 // plane where a person decides. Plain HTML/SVG from the design tokens, so it follows light and dark.
 // Everything is drawn from the plugin's own manifests (PluginFlow, PluginLink).
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FlowNode, PluginFlow, PluginFlowStep, PluginLink } from "@/lib/api/plugins";
 import { cn } from "@/lib/utils";
 import { applicationDir, assessmentDir, DOCUMENT_PATH_TOKENS } from "@kintsugi/domain";
+import { type FlowSize, packRows, rowHeight, rowLink } from "./flow-layout";
 import { linkLabel } from "./link-label";
 
 /** What a box is. The colors are tinted over the page, so they read on a light and a dark theme. */
@@ -48,7 +49,7 @@ function Box({ kind, title, subtitle, onOpen, selected, className }: { kind: Kin
 function Lane({ title, kind, children, className }: { title: string; kind: Kind; children: React.ReactNode; className?: string }): React.JSX.Element {
   return (
     <section style={tint(kind)} aria-label={title} className={cn("rounded-lg border-[1.5px] border-dashed border-[color-mix(in_srgb,var(--c)_70%,transparent)] p-3", className)}>
-      <h3 className="mb-2 font-mono text-[11px] tracking-[0.14em] text-[var(--c)] uppercase">{title}</h3>
+      <h3 className="mb-2 font-mono text-[11px] tracking-[0.14em] break-words text-[var(--c)] uppercase">{title}</h3>
       {children}
     </section>
   );
@@ -76,86 +77,174 @@ function ArrowRight({ label, title, className }: { label?: string; title?: strin
   );
 }
 
-/** One measured link between two boxes that ended up on different rows: out of the first box's bottom edge, down into the next one's top. */
-type Elbow = { x1: number; y1: number; x2: number; y2: number; midY: number };
-
-/** Reads where every neighbouring pair sits: the elbow when the pair fell on two rows, null when it did not. */
-function readFlowLinks(host: HTMLDivElement, itemRefs: readonly (HTMLDivElement | null)[], items: readonly unknown[]): Array<Elbow | null> {
-  const origin = host.getBoundingClientRect();
-  const box = (index: number): DOMRect | null => itemRefs[index]?.lastElementChild?.getBoundingClientRect() ?? null;
-  const next: Array<Elbow | null> = [];
-  for (let index = 0; index + 1 < items.length; index += 1) {
-    const from = box(index);
-    const to = box(index + 1);
-    if (from === null || to === null || to.top <= from.bottom + 2) {
-      next.push(null);
-      continue;
-    }
-    const fromX = from.left + from.width / 2;
-    next.push({
-      x1: fromX - origin.left,
-      y1: from.bottom - origin.top,
-      x2: Math.min(Math.max(fromX, to.left + 6), to.right - 6) - origin.left,
-      y2: to.top - origin.top,
-      midY: (from.bottom + to.top) / 2 - origin.top,
-    });
-  }
-  return next;
+/** One box of a line, and the link drawn from the box before it: an arrow (with a label), or `false` when the two are not linked. */
+interface FlowLineItem {
+  key: string;
+  node: React.ReactNode;
+  link?: { label?: string; title?: string } | false;
 }
 
-function sameLinks(a: readonly (Elbow | null)[], b: readonly (Elbow | null)[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((link, index) => {
-      const other = b[index] ?? null;
-      if (link === null || other === null) return link === other;
-      return link.x1 === other.x1 && link.y1 === other.y1 && link.x2 === other.x2 && link.y2 === other.y2 && link.midY === other.midY;
-    })
-  );
-}
+/** The space between two rows of a wrapped line, where the link from one row to the next turns. */
+const ROW_GAP = 28;
+
+type Measured = { width: number; sizes: FlowSize[] };
+
+const sameMeasure = (a: Measured | undefined, b: Measured): boolean =>
+  a !== undefined &&
+  a.width === b.width &&
+  a.sizes.length === b.sizes.length &&
+  a.sizes.every((size, index) => {
+    const other = b.sizes[index];
+    return other !== undefined && size.width === other.width && size.height === other.height && size.arrow === other.arrow;
+  });
 
 /**
- * How a row of boxes wrapped: one slot per neighbouring pair, holding the elbow when the pair fell
- * on two rows and null when it did not. A wrapped row is pushed under the end of the one above it
- * (see FlowRow), so the elbow is usually a straight drop; the polyline bends only when the two
- * boxes do not line up. Measured after every render — the pushed rows move once the first reading
- * decides where they go — and again whenever anything is resized.
+ * A line of boxes linked by arrows that wraps onto as many rows as its lane needs. Every box and arrow is measured at
+ * its own size, which does not depend on the row it lands in; packRows decides the rows, and the boxes, the arrows and
+ * the links between rows are placed from those same numbers. Nothing is read back after it moved, so the links always
+ * end on their boxes, and a resize only repacks. Before the first measurement (and without a layout engine) the boxes
+ * simply flow and wrap.
  */
-function useFlowLinks(hostRef: { current: HTMLDivElement | null }, itemRefs: { current: Array<HTMLDivElement | null> }, items: readonly unknown[]): readonly (Elbow | null)[] {
-  const [links, setLinks] = useState<readonly (Elbow | null)[]>([]);
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (host === null) return;
-    const next = readFlowLinks(host, itemRefs.current, items);
-    setLinks((prev) => (sameLinks(prev, next) ? prev : next));
-  }, [hostRef, itemRefs, items]);
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (host === null) return;
-    const observer = new ResizeObserver(() => {
-      const next = readFlowLinks(host, itemRefs.current, items);
-      setLinks((prev) => (sameLinks(prev, next) ? prev : next));
-    });
-    observer.observe(host);
-    for (const item of itemRefs.current) if (item !== null) observer.observe(item);
-    return () => observer.disconnect();
-  }, [hostRef, itemRefs, items]);
-  return links;
-}
+function FlowLine({ items }: { items: readonly FlowLineItem[] }): React.JSX.Element {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const boxes = useRef(new Map<string, HTMLElement>());
+  const arrows = useRef(new Map<string, HTMLElement>());
+  const observer = useRef<ResizeObserver | null>(null);
+  const [measured, setMeasured] = useState<Measured | undefined>(undefined);
+  // The items of the latest render, so the measure (and the observer that calls it) outlive a parent that rebuilds them.
+  const latest = useRef(items);
 
-/** The elbows themselves: one polyline per wrapped pair, in the arrows' own color and weight, tipped with the same head. */
-function ElbowLayer({ links }: { links: readonly (Elbow | null)[] }): React.JSX.Element | null {
-  const elbows = links.filter((link): link is Elbow => link !== null);
-  if (elbows.length === 0) return null;
+  const measure = useCallback(() => {
+    const host = hostRef.current;
+    if (host === null) return;
+    setMeasured((prev) => {
+      const sizes = latest.current.map((item, index): FlowSize => {
+        const old = prev?.sizes[index];
+        const box = boxes.current.get(item.key);
+        const arrow = arrows.current.get(item.key);
+        return {
+          width: box?.offsetWidth ?? old?.width ?? 0,
+          height: box?.offsetHeight ?? old?.height ?? 0,
+          arrow: index === 0 ? 0 : (arrow?.offsetWidth ?? old?.arrow ?? 0),
+        };
+      });
+      const next = { width: host.clientWidth, sizes };
+      return sameMeasure(prev, next) ? prev : next;
+    });
+  }, []);
+
+  // After every render (sizes do not depend on the layout, so this settles at once) and whenever something resizes.
+  useLayoutEffect(() => {
+    latest.current = items;
+    measure();
+  });
+  useLayoutEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const watcher = new ResizeObserver(() => measure());
+    observer.current = watcher;
+    if (hostRef.current !== null) watcher.observe(hostRef.current);
+    for (const element of boxes.current.values()) watcher.observe(element);
+    return () => {
+      watcher.disconnect();
+      observer.current = null;
+    };
+  }, [measure]);
+
+  // One stable ref for every box and arrow (they say which they are in data attributes), so a render neither detaches
+  // nor re-observes them; React 19 calls the returned cleanup when one goes.
+  const register = useCallback((element: HTMLElement | null) => {
+    if (element === null) return;
+    const key = element.dataset["flowKey"] ?? "";
+    const isBox = element.dataset["flowPart"] === "box";
+    const map = isBox ? boxes.current : arrows.current;
+    map.set(key, element);
+    if (isBox) observer.current?.observe(element);
+    return () => {
+      if (map.get(key) === element) map.delete(key);
+      observer.current?.unobserve(element);
+    };
+  }, []);
+
+  const layout = useMemo(() => {
+    if (measured === undefined || measured.width <= 0 || measured.sizes.length !== items.length || measured.sizes.some((size) => size.width <= 0)) return undefined;
+    const { sizes } = measured;
+    const rows = packRows(sizes, measured.width);
+    const tops: number[] = [];
+    let top = 0;
+    for (const row of rows) {
+      tops.push(top);
+      top += rowHeight(row, sizes) + ROW_GAP;
+    }
+    const box = new Map<number, { left: number; top: number }>();
+    const arrow = new Map<number, { left: number; top: number; height: number }>();
+    rows.forEach((row, r) => {
+      const height = rowHeight(row, sizes);
+      let x = 0;
+      row.forEach((index, position) => {
+        const size = sizes[index]!;
+        if (position > 0) {
+          arrow.set(index, { left: x, top: tops[r]!, height });
+          x += size.arrow;
+        }
+        box.set(index, { left: x, top: tops[r]! + (height - size.height) / 2 });
+        x += size.width;
+      });
+    });
+    const links = rows.slice(1).flatMap((row, r) => {
+      const link = items[row[0]!]?.link;
+      if (link === false) return [];
+      const drawn = rowLink(rows[r]!, row, sizes, ROW_GAP);
+      return drawn === undefined ? [] : [{ ...drawn, top: tops[r]! + rowHeight(rows[r]!, sizes), label: link?.label }];
+    });
+    return { box, arrow, links, height: Math.max(0, top - ROW_GAP) };
+  }, [measured, items]);
+
   return (
-    <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible text-text-muted" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
-      {elbows.map((elbow, index) => (
-        <g key={index}>
-          <path d={`M ${elbow.x1} ${elbow.y1} V ${elbow.midY} H ${elbow.x2} V ${elbow.y2}`} />
-          <path d={`M ${elbow.x2 - 4} ${elbow.y2 - 5} L ${elbow.x2} ${elbow.y2} L ${elbow.x2 + 4} ${elbow.y2 - 5}`} />
-        </g>
-      ))}
-    </svg>
+    <div ref={hostRef} className={cn("relative", layout === undefined && "flex flex-wrap items-center gap-y-3")} style={layout === undefined ? undefined : { height: layout.height }}>
+      {items.map((item, index) => {
+        const box = layout?.box.get(index);
+        const arrow = layout?.arrow.get(index);
+        return (
+          <div key={item.key} className="contents">
+            {index === 0 ? null : (
+              <div
+                ref={register}
+                data-flow-key={item.key}
+                data-flow-part="arrow"
+                className={cn("flex", layout !== undefined && "absolute top-0 left-0", layout !== undefined && arrow === undefined && "invisible")}
+                style={arrow === undefined ? undefined : { transform: `translate(${arrow.left}px, ${arrow.top}px)`, height: arrow.height }}
+              >
+                {item.link === false ? <div className="w-6" /> : <ArrowRight label={item.link?.label} title={item.link?.title} />}
+              </div>
+            )}
+            <div
+              ref={register}
+              data-flow-key={item.key}
+              data-flow-part="box"
+              className={cn("flex w-max max-w-full shrink-0", layout !== undefined && "absolute top-0 left-0")}
+              style={box === undefined ? undefined : { transform: `translate(${box.left}px, ${box.top}px)` }}
+            >
+              {item.node}
+            </div>
+          </div>
+        );
+      })}
+      {layout === undefined || layout.links.length === 0 ? null : (
+        <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible text-text-muted" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
+          {layout.links.map((link, index) => (
+            <g key={index} transform={`translate(0 ${link.top})`}>
+              <path d={link.path} />
+              <path d={link.head} />
+              {link.label === undefined || link.label === "" ? null : (
+                <text x={link.x} y={link.y - 4} textAnchor="middle" stroke="none" fill="currentColor" fontSize="10" fontStyle="italic">
+                  {link.label}
+                </text>
+              )}
+            </g>
+          ))}
+        </svg>
+      )}
+    </div>
   );
 }
 
@@ -192,14 +281,15 @@ export function PipelineBoard({ flows, pipeline, selected, onSelect }: { flows: 
   const lane = (title: string, items: readonly PluginFlow[]): React.JSX.Element | null =>
     items.length === 0 ? null : (
       <Lane title={title} kind="command">
-        <div className="flex flex-wrap items-center gap-y-3">
-          {items.map((flow, index) => {
+        <FlowLine
+          items={items.map((flow, index): FlowLineItem => {
             const next = feeds.get(flow.command) ?? [];
             const prev = index === 0 ? undefined : items[index - 1];
             const fromPrev = prev === undefined ? undefined : (feeds.get(prev.command) ?? []).find((link) => link.to === flow.command);
-            return (
-              <div key={flow.command} className="flex items-stretch">
-                {prev === undefined ? null : fromPrev === undefined ? <div className="w-6" /> : <ArrowRight label={linkLabel(fromPrev.via)} title={fromPrev.via.map(short).join("\n")} />}
+            return {
+              key: flow.command,
+              link: fromPrev === undefined ? false : { label: linkLabel(fromPrev.via), title: fromPrev.via.map(short).join("\n") },
+              node: (
                 <Box
                   kind="command"
                   title={`/${flow.command}`}
@@ -213,10 +303,10 @@ export function PipelineBoard({ flows, pipeline, selected, onSelect }: { flows: 
                     </>
                   }
                 />
-              </div>
-            );
+              ),
+            };
           })}
-        </div>
+        />
       </Lane>
     );
   return (
@@ -231,49 +321,18 @@ export function PipelineBoard({ flows, pipeline, selected, onSelect }: { flows: 
 
 /** A declared flow as boxes: steps in a row with arrows, parallel steps stacked in a group, per-item steps in a group of their own. */
 function FlowRow({ nodes, flow, onOpenFile }: { nodes: readonly FlowNode[]; flow: PluginFlow; onOpenFile: (path: string) => void }): React.JSX.Element {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const links = useFlowLinks(hostRef, itemRefs, nodes);
-  return (
-    <div ref={hostRef} className="relative flex flex-wrap items-center gap-y-3">
-      {nodes.map((node, index) => {
-        const wrapped = index > 0 && (links[index - 1] ?? null) !== null;
-        return (
-          <div
-            key={index}
-            ref={(element) => {
-              itemRefs.current[index] = element;
-            }}
-            className={cn("flex items-stretch", wrapped && "ms-auto")}
-          >
-            {index === 0 ? null : <ArrowRight className={wrapped ? "invisible" : undefined} />}
-            <FlowItem node={node} flow={flow} onOpenFile={onOpenFile} />
-          </div>
-        );
-      })}
-      <ElbowLayer links={links} />
-    </div>
-  );
+  const items = useMemo(() => nodes.map((node, index): FlowLineItem => ({ key: String(index), node: <FlowItem node={node} flow={flow} onOpenFile={onOpenFile} /> })), [nodes, flow, onOpenFile]);
+  return <FlowLine items={items} />;
 }
 
 /** The same row for a command without a declared flow: its scripts and workflows in the order its text names them. */
 function WorkRow({ work, onOpenFile }: { work: readonly PluginFlowStep[]; onOpenFile: (path: string) => void }): React.JSX.Element {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const links = useFlowLinks(hostRef, itemRefs, work);
-  return (
-    <div ref={hostRef} className="relative flex flex-wrap items-center gap-y-3">
-      {work.map((step, index) => {
-        const wrapped = index > 0 && (links[index - 1] ?? null) !== null;
-        return (
-          <div
-            key={step.name}
-            ref={(element) => {
-              itemRefs.current[index] = element;
-            }}
-            className={cn("flex items-stretch", wrapped && "ms-auto")}
-          >
-            {index === 0 ? null : <ArrowRight className={wrapped ? "invisible" : undefined} />}
+  const items = useMemo(
+    () =>
+      work.map(
+        (step): FlowLineItem => ({
+          key: step.name,
+          node: (
             <Box
               kind={step.kind === "workflow" ? "workflow" : "script"}
               title={step.name}
@@ -281,12 +340,12 @@ function WorkRow({ work, onOpenFile }: { work: readonly PluginFlowStep[]; onOpen
               onOpen={() => onOpenFile(step.path)}
               className="min-w-32"
             />
-          </div>
-        );
-      })}
-      <ElbowLayer links={links} />
-    </div>
+          ),
+        }),
+      ),
+    [work, onOpenFile],
   );
+  return <FlowLine items={items} />;
 }
 
 /** What a harness step uses, in a few words: the Kintsugi tool it calls or the skill it follows. */
@@ -320,7 +379,7 @@ function FlowItem({ node, flow, onOpenFile }: { node: FlowNode; flow: PluginFlow
       return <Box kind="step" title={node.label} subtitle={stepHint(node)} className="min-w-32 max-w-56" />;
     case "parallel":
       return (
-        <Lane title="In parallel" kind="workflow" className="p-2">
+        <Lane title="In parallel" kind="workflow" className="max-w-[32rem] p-2">
           <div className="flex flex-col gap-2">
             {node.steps.map((step, index) => (
               <FlowItem key={index} node={step} flow={flow} onOpenFile={onOpenFile} />
@@ -330,7 +389,7 @@ function FlowItem({ node, flow, onOpenFile }: { node: FlowNode; flow: PluginFlow
       );
     case "each":
       return (
-        <Lane title={`For each ${node.label}`} kind="agent" className="p-2">
+        <Lane title={`For each ${node.label}`} kind="agent" className="max-w-[32rem] p-2">
           <FlowItem node={node.step} flow={flow} onOpenFile={onOpenFile} />
         </Lane>
       );
