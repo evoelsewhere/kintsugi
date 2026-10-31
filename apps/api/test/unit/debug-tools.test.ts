@@ -70,6 +70,20 @@ describe("debug MCP helpers (ADR-0056)", () => {
       "select rolpassword from pg_authid",
       "select pg_terminate_backend(pid) from pg_stat_activity",
       "select set_config('role', 'x', true)",
+      // Server state a read-only transaction and its rollback do not undo (never executed here: slots and locks are server-wide).
+      "select pg_create_physical_replication_slot('x', true)",
+      "select pg_create_logical_replication_slot('x', 'test_decoding')",
+      "select pg_drop_replication_slot('x')",
+      "select pg_replication_origin_create('x')",
+      "select pg_advisory_lock(1)",
+      "select pg_try_advisory_lock(1)",
+      "select pg_advisory_xact_lock(1)",
+      "select pg_notify('kintsugi_change', '{}')",
+      "select pg_stat_reset()",
+      "select pg_stat_reset_shared('bgwriter')",
+      "select pg_switch_wal()",
+      "select pg_promote()",
+      "select pg_log_backend_memory_contexts(pg_backend_pid())",
     ]) {
       expect(() => checkStatement(bad), bad).toThrow();
     }
@@ -82,6 +96,9 @@ describe("debug MCP helpers (ADR-0056)", () => {
       "select column_name, data_type from information_schema.columns where table_schema = 'workflow'",
       "with recent as (select * from workflow.job_run order by created_at desc limit 5) select id, status from recent",
       "select pid, state, wait_event from pg_stat_activity",
+      "select count(*) from workflow.job_run",
+      "select slot_name, active from pg_replication_slots",
+      "select locktype, mode, granted from pg_locks",
       "select copied_from from admin.agent",
       "select sum((output_summary->'usage'->>'tokens')::int) from workflow.job_run",
     ]) {
