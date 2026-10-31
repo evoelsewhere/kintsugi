@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultCliDeps, runCli } from "../src/cli.js";
-import { getNativeClientVersion } from "../src/client-version.js";
+import { clientUnavailable, clientVersionTimedOut, getNativeClientVersion } from "../src/client-version.js";
 import { EventEmitter } from "node:events";
 import * as cliModule from "../src/cli.js";
 import type { MemberPort } from "@kintsugi/harness-sdk";
@@ -30,6 +30,26 @@ describe("native client version detection", () => {
     expect(execute.mock.calls[1]![2]).toMatchObject({ env: { KINTSUGI_NATIVE_EXECUTABLE: "claude", KINTSUGI_NATIVE_ARGS: '["--version"]' } });
     // A client that is not installed at all still fails, and Unix never retries.
     await expect(getNativeClientVersion("claude", "linux", vi.fn().mockRejectedValue(missing) as never)).rejects.toBe(missing);
+  });
+
+  it("waits longer for a client started through PowerShell, and tells a timeout from a missing client", async () => {
+    const missing = Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" });
+    const killed = Object.assign(new Error("Command failed"), { killed: true, signal: "SIGTERM", code: null });
+    // A PowerShell start that answers after 6 s, as execFile does: killed when the budget is shorter.
+    const slow = vi.fn(async (command: string, _args: string[], options: { timeout: number }) => {
+      if (command === "claude") throw missing;
+      if (options.timeout < 6_000) throw killed;
+      return { stdout: "2.1.260 (Claude Code)\n", stderr: "" };
+    });
+    await expect(getNativeClientVersion("claude", "win32", slow as never)).resolves.toBe("2.1.260");
+
+    const timedOut = await getNativeClientVersion("claude", "linux", vi.fn().mockRejectedValue(killed) as never).catch((error: unknown) => error);
+    expect(clientUnavailable("claude", timedOut).message).toMatch(/did not answer its version check within 5 s/);
+    expect(clientUnavailable("claude", timedOut).message).not.toMatch(/install it/);
+    const notFound = await getNativeClientVersion("claude", "linux", vi.fn().mockRejectedValue(missing) as never).catch((error: unknown) => error);
+    expect(clientUnavailable("claude", notFound)).toMatchObject({ code: "PLUGIN_CLIENT_UNAVAILABLE", message: expect.stringMatching(/install it or make it available on PATH/) });
+    expect(clientVersionTimedOut(timedOut)).toBe(true);
+    expect(clientVersionTimedOut(notFound)).toBe(false);
   });
 
   it("keeps direct execution on Unix", async () => {

@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli } from "../src/cli.js";
+import { ClientVersionTimeout } from "../src/client-version.js";
 import { summarizeTranscript } from "../src/commands/activity-hook.js";
 import { parseChoice } from "../src/prompt.js";
 import { stableProjectProfileId } from "../src/profile.js";
@@ -60,6 +61,23 @@ describe("kintsugi init", () => {
     expect(scope).toEqual({ scope: "local", workspace: state.root });
     expect(state.runClientCommand.mock.calls.map((call) => (call as unknown[])[1] as string[])[0]).toEqual(["plugin", "marketplace", "add", "--scope", "local", artifactRoot(state.root, "claude-code", PROFILE)]);
     expect(state.stdout.join("")).toContain(`workspace ${state.root}`);
+  });
+
+  it("asks each client for its version once, and says which client did not answer in time instead of dropping it", async () => {
+    const { state } = await initialised();
+    const probes: string[] = [];
+    (state.deps as { getClientVersion: (target: string) => Promise<string> }).getClientVersion = async (target) => {
+      probes.push(target);
+      if (target === "codex") throw new ClientVersionTimeout("codex", 20_000);
+      if (target === "claude") return "2.1.260";
+      throw new Error("not installed");
+    };
+    expect(await runCli(["init", "shop", "--all"], state.deps), state.stderr.join("")).toBe(0);
+    expect(probes.filter((target) => target === "claude")).toHaveLength(1);
+    expect(probes.filter((target) => target === "codex")).toHaveLength(1);
+    expect(state.stdout.join("")).toContain("✓ Claude Code — global");
+    expect(state.stderr.join("")).toMatch(/codex did not answer its version check within 20 s/);
+    expect(state.stderr.join("")).toContain("kintsugi init -H codex");
   });
 
   it("shares one profile between login and init, so signing in and setting up meet", async () => {
