@@ -244,6 +244,25 @@ class UnderstandToolsTests(unittest.TestCase):
         self.assertIn("MOVE '*****' TO WS-PASS", text)
         self.assertNotIn('Pr0d', text)
 
+    def test_any_value_that_shows_some_of_its_characters_is_masked_whole_in_every_free_text_field(self):
+        import split_findings as sf
+        for shown in ('AKIAIOSFODNN****', '****1234', 'ab****yz', 'AKIA••••', 'AKIA...', 'sk-live-…', 'hu**.'):
+            self.assertEqual(sf.hide_partial_masks(f'key {shown} (8 chars)'), f"key *****{'.' if shown == 'hu**.' else ''} (8 chars)", shown)
+        # A whole mask, emphasis, code and plain prose stay as they are.
+        for kept in ('***** (8 chars)', 'password=***** (8 chars)', '**Never** store it', 'call f(**kwargs) and x = a**2', 'and so on...', 'Then...'):
+            self.assertEqual(sf.hide_partial_masks(kept), kept)
+        text = sf.render_findings('billing', 'tax/calc', [{
+            'id': 'SEC-TAX01-0001', 'cwe': 'CWE-798', 'severity': 'High', 'source': 'legacy/src/TAX.cbl:2',
+            'title': 'Hard-coded key AKIAIOSFODNN****', 'exploitScenario': 'Log in with ****1234 from the source.',
+            'recommendedFix': 'Rotate ab****yz and move AKIA•••• to a vault.', 'maskedEvidence': "MOVE 'AKIA...' TO WS-KEY",
+        }], [], [], [])
+        for shown in ('AKIAIOSFODNN', '1234', 'ab', 'AKIA'):
+            self.assertNotIn(shown, text)
+        self.assertIn('Hard-coded key *****', text)
+        self.assertIn('Log in with ***** from the source.', text)
+        self.assertIn('Rotate ***** and move ***** to a vault.', text)
+        self.assertIn("MOVE '*****' TO WS-KEY", text)
+
     def test_a_rerun_keeps_rules_review_and_reports_orphaned_verdicts(self):
         rules = os.path.join(self.root, 'rules_result.json')
         write(rules, {'confirmedRules': [{'name': 'Tax rounding', 'category': 'Calculation', 'priority': 'P0', 'source': 'src/TAXLIB.cbl:12'}], 'dataObjects': []})
