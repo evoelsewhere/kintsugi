@@ -5,15 +5,23 @@ import { Plus, Search, Settings2, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
+import { useToast } from "@/components/ui/toast";
 import { permissionsOf } from "@/lib/access";
 import { identityApi, type RoleRecord, type UserRecord } from "@/lib/api/identity";
+import { formErrorsOf } from "@/lib/form-errors";
 import { cn } from "@/lib/utils";
+import { passwordProblem, usernameProblem } from "./member-form";
 import { AccessOverview, MembersSummary } from "./members-insights";
+
+/** The fields a refusal of the API can name. */
+const FORM_FIELDS = ["username", "password", "email", "displayName"] as const;
+type FormField = (typeof FORM_FIELDS)[number];
 
 interface FormState {
   id: string | null;
@@ -58,7 +66,11 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  /** What the API refused, per field; cleared on the field as soon as it changes. */
+  const [serverErrors, setServerErrors] = useState<Partial<Record<FormField, string>>>({});
   const [saving, setSaving] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<UserRecord | null>(null);
+  const toast = useToast();
 
   const primaryRoles: RoleRecord[] = useMemo(() => roles.filter((role) => role.kind === "primary"), [roles]);
   const subRoles: RoleRecord[] = useMemo(() => roles.filter((role) => role.kind === "sub"), [roles]);
@@ -102,6 +114,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
   function openCreate(): void {
     setForm({ ...EMPTY_FORM, primaryRole: primaryRoles.at(-1)?.id ?? "user" });
     setFormError(null);
+    setServerErrors({});
     setDialogOpen(true);
   }
 
@@ -117,6 +130,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
       enabled: user.enabled,
     });
     setFormError(null);
+    setServerErrors({});
     setDialogOpen(true);
   }
 
@@ -127,8 +141,25 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
     }));
   }
 
+  /** Changes one text field of the form and drops what the API said about its old value. */
+  function setField(field: FormField, value: string): void {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setServerErrors((prev) => {
+      if (prev[field] === undefined) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  const usernameError = form.id === null ? (usernameProblem(form.username) ?? serverErrors.username) : undefined;
+  const passwordError = passwordProblem(form.password) ?? serverErrors.password;
+  const invalid = usernameError !== undefined || passwordError !== undefined;
+
   async function save(): Promise<void> {
     setSaving(true);
+    setFormError(null);
+    setServerErrors({});
     try {
       const roleIds = [form.primaryRole, ...form.subRoles];
       if (form.id === null) {
@@ -150,23 +181,23 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
       }
       setDialogOpen(false);
       setError(null);
+      toast.success(form.id === null ? `Member ${form.username} created` : `Member ${form.username} saved`);
       await load();
     } catch (saveError) {
-      // Shown inside the dialog — the page behind it is covered by the overlay.
-      setFormError(saveError instanceof Error ? saveError.message : String(saveError));
+      // Shown inside the dialog — the page behind it is covered by the overlay: on the field it names, else below.
+      const errors = formErrorsOf(saveError, FORM_FIELDS);
+      setServerErrors(errors.fields);
+      setFormError(errors.form);
     } finally {
       setSaving(false);
     }
   }
 
+  /** Runs from the confirm dialog, which keeps an error on screen instead of closing. */
   async function remove(user: UserRecord): Promise<void> {
-    if (!window.confirm(`Remove member "${user.username}"?`)) return;
-    try {
-      await identityApi.deleteUser(user.id);
-      await load();
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : String(removeError));
-    }
+    await identityApi.deleteUser(user.id);
+    toast.success(`Member ${user.username} removed`);
+    await load();
   }
 
   const roleLabel = (id: string): string => roles.find((role) => role.id === id)?.name ?? id;
@@ -237,7 +268,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
                 <Settings2 className="size-4" />
                 Edit
               </Button>
-              <Button size="icon" variant="danger" aria-label={`Remove ${user.username}`} onClick={() => void remove(user)}>
+              <Button size="icon" variant="danger" aria-label={`Remove ${user.username}`} onClick={() => setRemoveTarget(user)}>
                 <Trash2 className="size-4" />
               </Button>
             </div>
@@ -267,7 +298,7 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
               size="small"
               variant="solid"
               onClick={() => void save()}
-              disabled={saving || (form.id === null && (form.username === "" || form.password === ""))}
+              disabled={saving || invalid || (form.id === null && (form.username === "" || form.password === ""))}
             >
               {saving ? "Saving…" : form.id === null ? "Create member" : "Save changes"}
             </Button>
@@ -276,20 +307,33 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
       >
         <div className="flex flex-col gap-3">
           {form.id === null ? (
-            <Field label="Username" hint="Lowercase kebab-case, unique.">
-              <Input value={form.username} placeholder="jane-doe" onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))} />
+            <Field label="Username" hint="Lowercase kebab-case, unique." error={usernameError}>
+              <Input
+                value={form.username}
+                placeholder="jane-doe"
+                autoComplete="off"
+                aria-invalid={usernameError === undefined ? undefined : true}
+                onChange={(event) => setField("username", event.target.value)}
+              />
             </Field>
           ) : null}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Display name">
-              <Input value={form.displayName} placeholder="Jane Doe" onChange={(event) => setForm((prev) => ({ ...prev, displayName: event.target.value }))} />
+            <Field label="Display name" error={serverErrors.displayName}>
+              <Input value={form.displayName} placeholder="Jane Doe" onChange={(event) => setField("displayName", event.target.value)} />
             </Field>
-            <Field label="Email">
-              <Input value={form.email} placeholder="jane@example.com" onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} />
+            <Field label="Email" error={serverErrors.email}>
+              <Input value={form.email} placeholder="jane@example.com" onChange={(event) => setField("email", event.target.value)} />
             </Field>
           </div>
-          <Field label={form.id === null ? "Password" : "Password (leave blank to keep)"} hint="At least 8 characters.">
-            <Input type="password" value={form.password} placeholder="••••••••" onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} />
+          <Field label={form.id === null ? "Password" : "Password (leave blank to keep)"} hint="At least 8 characters." error={passwordError}>
+            <Input
+              type="password"
+              value={form.password}
+              placeholder="••••••••"
+              autoComplete="new-password"
+              aria-invalid={passwordError === undefined ? undefined : true}
+              onChange={(event) => setField("password", event.target.value)}
+            />
           </Field>
           <Field label="Primary role">
             <Select
@@ -307,9 +351,23 @@ export function MembersTable({ onManageRoles }: MembersTableProps): React.JSX.El
           {form.id === null ? null : (
             <Checkbox checked={form.enabled} onChange={(value) => setForm((prev) => ({ ...prev, enabled: value }))} label="Enabled" />
           )}
-          {formError === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{formError}</p>}
+          {formError === null ? null : <p role="alert" className="text-[13px] text-[var(--ds-status-red)]">{formError}</p>}
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        title="Remove member?"
+        description={removeTarget === null ? undefined : `Remove ${removeTarget.displayName || removeTarget.username} (${removeTarget.username})?`}
+        confirmLabel="Remove member"
+        busyLabel="Removing…"
+        onConfirm={() => (removeTarget === null ? Promise.resolve() : remove(removeTarget))}
+        onClose={() => setRemoveTarget(null)}
+      >
+        <p className="text-[13px] text-text-secondary">
+          The member can no longer sign in. The removal is recorded in the audit log.
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }
