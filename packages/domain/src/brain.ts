@@ -167,7 +167,11 @@ const ID_MENTIONS = new RegExp(`(?<![A-Za-z0-9-])${ID_SOURCE}(?![A-Za-z0-9-])`, 
 const CARD_HEADING = new RegExp(`^(${ID_SOURCE})(?:\\s*:\\s*(.*))?$`);
 const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})/;
 /** A Markdown link; its target is written bare or in angle brackets, which allow spaces (`[x](<my notes.md>)`). */
-const LINK = /(?<!!)\[([^\]]*)\]\((?:<([^>\n]+)>|([^)\s]+))(?:\s+"[^"]*")?\)/g;
+// Neither part runs past the start of another link (`[` in the text and a bare target, `<` in an angle target), so each
+// line is read in linear time.
+const LINK = /(?<!!)\[([^[\]\n]{0,1000})\]\((?:<([^<>\n]{1,2048})>|([^)\s[]{1,2048}))(?:[ \t]+"[^"\n]{0,300}")?\)/g;
+/** The characters of a line the link pattern reads, as the reader's line cap. */
+const LINK_LINE = 4_000;
 
 export function isBrainReferenceId(value: string): boolean {
   return ID_PATTERN.test(value);
@@ -210,12 +214,15 @@ function clip(text: string, max: number): string {
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:.–-]+$/, "")}…`;
 }
 
-/** Plain text of inline Markdown: links keep their text, emphasis and code marks go. */
+/**
+ * Plain text of inline Markdown: links keep their text, emphasis and code marks go. No part of a link or a tag runs past
+ * the start of the next one, so a paragraph of `[`, `[a](` or `<` is read in linear time (T3-016).
+ */
 function plain(text: string): string {
   return text
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]+>/g, "")
+    .replace(/!\[[^[\]]*\]\([^)[]*\)/g, "")
+    .replace(/\[([^[\]]*)\]\([^)[]*\)/g, "$1")
+    .replace(/<[^<>]+>/g, "")
     .replace(/(\*\*|__)(.+?)\1/g, "$2")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/\\([\\`*_{}[\]()#+\-.!|])/g, "$1")
@@ -504,11 +511,15 @@ function resolveTarget(fromPath: string, target: string): { path: string; anchor
 
 function linksOf(fromId: string, fromPath: string, lines: readonly string[]): PendingLink[] {
   const found: PendingLink[] = [];
-  const text = lines.join("\n");
-  for (const match of text.matchAll(LINK)) {
-    const target = resolveTarget(fromPath, match[2] ?? match[3] ?? "");
-    if (target !== undefined) found.push({ fromId, ...target });
+  // Line by line, at most LINK_LINE characters of each, with a bounded pattern: over a whole document a run of `[` or
+  // of `[a](` made the link pattern quadratic and held the worker (T3-016).
+  for (const line of lines) {
+    for (const match of line.slice(0, LINK_LINE).matchAll(LINK)) {
+      const target = resolveTarget(fromPath, match[2] ?? match[3] ?? "");
+      if (target !== undefined) found.push({ fromId, ...target });
+    }
   }
+  const text = lines.join("\n");
   for (const match of text.matchAll(ID_MENTIONS)) found.push({ fromId, id: match[0] });
   return found;
 }
