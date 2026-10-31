@@ -183,9 +183,20 @@ const globTool: ToolFactory = (context) => {
 
 // write and edit are pi's own tools, working in the job's output directory: a relative path is
 // relative to it, and every path (symlinks included) must stay inside it. The read-only roots and
-// the rest of the filesystem are out of reach. Each file written is reported as an output.
-const outputOperations = (context: ToolContext): { guard: PathGuard; save: (path: string, content: string) => Promise<void> } => {
-  const guard = new PathGuard([context.outDir]);
+// the rest of the filesystem are out of reach. Each file written is reported as an output. The inside of a
+// repository's .git folder is out of reach too: a config or hook written there would make git run a command (T3-003).
+const outputOperations = (context: ToolContext): { guard: Pick<PathGuard, "check">; save: (path: string, content: string) => Promise<void> } => {
+  const output = new PathGuard([context.outDir]);
+  const root = output.check(context.outDir);
+  const guard = {
+    check: (path: string): string => {
+      const real = output.check(path);
+      if (relative(root, real).split(sep).some((part) => part.toLowerCase() === ".git")) {
+        throw new Error(`path is inside a repository's .git folder, which git keeps: ${path}`);
+      }
+      return real;
+    },
+  };
   return {
     guard,
     save: async (path, content) => {

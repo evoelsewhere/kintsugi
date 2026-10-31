@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createKernelGitTool } from "../src/kernel/git.js";
+import { createTools } from "../src/kernel/tools.js";
 import { PathGuard } from "../src/kernel/paths.js";
 import { createWorkspace } from "./helpers.js";
 
@@ -148,5 +149,82 @@ describe("kernel git diff", () => {
       expect(text).toContain("outside the job workspace");
       expect(text).not.toContain("TOP_SECRET_VALUE");
     }
+  });
+});
+
+describe("kernel git confinement (T3-003)", () => {
+  const repo = join(workspace.out, "confined");
+  const marker = join(workspace.root, "command-ran.txt").replaceAll("\\", "/");
+
+  beforeAll(() => {
+    mkdirSync(tmp, { recursive: true });
+    mkdirSync(repo, { recursive: true });
+    execFileSync("git", ["init", "-q"], { cwd: repo });
+    writeFileSync(join(repo, "a.txt"), "a\n");
+    execFileSync("git", ["add", "a.txt"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-q", "-m", "a"], { cwd: repo });
+  });
+
+  it("lets config read, never write or read a file of its choosing", async () => {
+    expect((await git({ args: ["config", "--get", "core.bare"], cwd: repo })).text).toContain("false");
+    expect((await git({ args: ["config", "--list"], cwd: repo })).error).toBe(false);
+    for (const args of [
+      ["config", "filter.probe.clean", `touch '${marker}'; cat`],
+      ["config", "--add", "core.sshCommand", "x"],
+      ["config", "--unset", "core.bare"],
+      ["config", "--global", "user.name", "x"],
+      ["config", "--file", join(workspace.outside, "token.txt"), "--list"],
+      ["config", "-f/etc/gitconfig", "--list"],
+      ["config", "set", "core.bare", "true"],
+    ]) {
+      expect((await git({ args, cwd: repo })).text, args.join(" ")).toContain("only reads");
+    }
+  });
+
+  it("makes repositories only in the writable area, and clones only from inside the workspace", async () => {
+    const away = join(workspace.outside, "made");
+    for (const args of [["init", away], ["clone", repo, away], ["clone", "--origin", "up", repo, away], ["worktree", "add", away]]) {
+      const { text } = await git({ args, cwd: repo });
+      expect(text, args.join(" ")).toContain("writable area");
+    }
+    for (const source of [workspace.outside, `file:///${workspace.outside.replaceAll("\\", "/").replace(/^\//, "")}`]) {
+      expect((await git({ args: ["clone", source, join(workspace.out, "from-outside")], cwd: workspace.out })).text, source).toContain("inside the job workspace");
+    }
+    expect(existsSync(away)).toBe(false);
+    expect((await git({ args: ["init", "-q", join(workspace.out, "made")], cwd: workspace.out })).error).toBe(false);
+    expect((await git({ args: ["clone", "-q", "--origin", "up", repo, join(workspace.out, "copy")], cwd: workspace.out })).error).toBe(false);
+    expect((await git({ args: ["worktree", "add", "-q", join(workspace.out, "tree")], cwd: repo })).error).toBe(false);
+  });
+
+  it("refuses options that start a command, bundled, attached or abbreviated", async () => {
+    for (const args of [
+      ["rebase", "-x", `touch '${marker}'`, "HEAD"],
+      ["rebase", `-xtouch '${marker}'`, "HEAD"],
+      ["rebase", "-ix", "true", "HEAD"],
+      ["grep", "-O", "a"],
+      ["grep", `-Otouch '${marker}'`, "a"],
+      ["grep", "--open-files-in-pager", "a"],
+      ["clone", `-utouch '${marker}'`, repo, join(workspace.out, "u1")],
+      ["clone", "-qu", `touch '${marker}'`, repo, join(workspace.out, "u2")],
+      ["clone", "--reference", workspace.outside, repo, join(workspace.out, "r1")],
+      ["init", "--template", workspace.out, join(workspace.out, "t1")],
+    ]) {
+      const cwd = args[0] === "clone" || args[0] === "init" ? workspace.out : repo;
+      expect((await git({ args, cwd })).text, args.join(" ")).toContain("is not allowed");
+    }
+    // An abbreviated long option is refused by git itself.
+    const abbreviated = await git({ args: ["clone", `--upload=touch '${marker}'`, repo, join(workspace.out, "u3")], cwd: workspace.out });
+    expect(abbreviated.text).toContain("abbreviated");
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it("cannot reach a repository's .git folder with write, so no filter driver can be set", async () => {
+    const [write] = createTools(["write"], { cwd: workspace.src, searchDir: workspace.src, readOnly: [workspace.src], outDir: workspace.out, tmpDir: tmp, onOutput: () => undefined }) as unknown as [{ execute: (id: string, params: unknown) => Promise<unknown> }];
+    const config = `[filter "probe"]\n\tclean = touch '${marker}'; cat\n`;
+    await expect(write.execute("call", { path: "confined/.git/config", content: config })).rejects.toThrow(/\.git folder/);
+    await write.execute("call", { path: "confined/.gitattributes", content: "*.txt filter=probe\n" });
+    writeFileSync(join(repo, "b.txt"), "b\n");
+    expect((await git({ args: ["add", "b.txt"], cwd: repo })).error).toBe(false);
+    expect(existsSync(marker)).toBe(false);
   });
 });
