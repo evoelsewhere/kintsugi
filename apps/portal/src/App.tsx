@@ -18,6 +18,7 @@ import { MemberAuthorizePage } from "./pages/member/authorize";
 import { MonitoringPage } from "./pages/monitoring";
 import { OverviewPage } from "./pages/overview";
 import { MembersPermissionsPage } from "./pages/members-permissions";
+import { NotFoundPage } from "./pages/not-found";
 import { ProjectDetailPage } from "./pages/projects/project-detail-page";
 import { ProjectsPage } from "./pages/projects/projects-page";
 
@@ -66,7 +67,7 @@ export function App(): React.JSX.Element {
             <Route path="members" element={<MembersPermissionsPage />} />
             <Route path="guideline" element={<GuidelinePage />} />
             <Route path="guideline/:page" element={<GuidelinePage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
