@@ -7,6 +7,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
+import { API_UNREACHABLE_MESSAGE, isApiUnreachable } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { safeMemberReturnTo } from "./member/install-model";
 
@@ -29,7 +30,7 @@ export function LoginPage(): React.JSX.Element {
       await login(username, password);
       navigate(returnTo, { replace: true });
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : String(loginError));
+      setError(signInErrorMessage(loginError));
     } finally {
       setSubmitting(false);
     }
@@ -70,4 +71,10 @@ export function LoginPage(): React.JSX.Element {
       </Card>
     </div>
   );
+}
+
+/** The sign-in error to show: an API that cannot be reached is named as such; other messages are kept. */
+function signInErrorMessage(error: unknown): string {
+  if (isApiUnreachable(error)) return API_UNREACHABLE_MESSAGE;
+  return error instanceof Error ? error.message : String(error);
 }

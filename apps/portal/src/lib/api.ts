@@ -37,23 +37,40 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly body: ApiErrorBody,
+    /** True when no answer came from the API itself: a network error, or a proxy/gateway error page. */
+    readonly unreachable = false,
   ) {
     super(typeof body.message === "string" ? body.message : body.message.join(", "));
   }
 }
 
+/** What to tell a person when the API cannot be reached at all. */
+export const API_UNREACHABLE_MESSAGE = "Kintsugi's API is not reachable. Check that it is running (and the portal's KINTSUGI_API_URL).";
+
+/** Whether an error means the API itself could not be reached (rather than an answer from it). */
+export function isApiUnreachable(error: unknown): boolean {
+  return error instanceof ApiError && error.unreachable;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const unsafe = init.method !== undefined && init.method !== "GET";
-  const response = await fetch(path, {
-    ...init,
-    credentials: "same-origin",
-    headers: {
-      accept: "application/json",
-      ...(init.body === undefined ? {} : { "content-type": "application/json" }),
-      ...(unsafe ? { [CSRF_HEADER]: "1" } : {}),
-      ...init.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      credentials: "same-origin",
+      headers: {
+        accept: "application/json",
+        ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+        ...(unsafe ? { [CSRF_HEADER]: "1" } : {}),
+        ...init.headers,
+      },
+    });
+  } catch (networkError) {
+    // An aborted request is the caller's own doing; anything else is the network.
+    if (networkError instanceof DOMException && networkError.name === "AbortError") throw networkError;
+    throw new ApiError(0, { ...failureBody(path, 0, "Network error"), message: API_UNREACHABLE_MESSAGE }, true);
+  }
   const body = (await response.json().catch(() => null)) as ApiSuccess<T> | ApiErrorBody | null;
 
   // A rejected session ends it everywhere (a failed sign-in is not a lost session).
@@ -61,19 +78,27 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   // No content (e.g. 204 on delete) — nothing to unwrap.
   if (body === null) {
-    if (!response.ok) throw new ApiError(response.status, failureOf(path, response));
+    if (!response.ok) throw failureOf(path, response);
     return undefined as T;
   }
   if ("success" in body && body.success === false) throw new ApiError(response.status, body);
-  if (!response.ok) throw new ApiError(response.status, failureOf(path, response));
+  if (!response.ok) throw failureOf(path, response);
   return (body as ApiSuccess<T>).data;
 }
 
-function failureOf(path: string, response: Response): ApiErrorBody {
+/** Gateway statuses a proxy answers with when the API behind it is down or does not answer. */
+const GATEWAY_STATUSES = new Set([502, 503, 504]);
+
+/** An error answer that is not the API's envelope: a gateway status means the API was not reached. */
+function failureOf(path: string, response: Response): ApiError {
+  return new ApiError(response.status, failureBody(path, response.status, response.statusText), GATEWAY_STATUSES.has(response.status));
+}
+
+function failureBody(path: string, status: number, error: string): ApiErrorBody {
   return {
     success: false,
-    statusCode: response.status,
-    error: response.statusText,
+    statusCode: status,
+    error,
     message: `Request failed: ${path}`,
     timestamp: new Date().toISOString(),
     path,
