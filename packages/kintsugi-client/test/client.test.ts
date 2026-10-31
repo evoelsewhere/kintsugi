@@ -159,6 +159,14 @@ describe("typed member HTTP client", () => {
     });
     await expect(client.listProjects({})).rejects.toMatchObject({ code: "FORBIDDEN", status: 403, message: "[redacted] denied", details: { echoed: "[redacted]" } });
   });
+  it("joins the problems of a failed validation into one message", async () => {
+    const client = createMemberClient({
+      baseUrl: "https://kintsugi.example",
+      tokenProvider: async () => "TEST-private-token",
+      fetch: async () => new Response(JSON.stringify({ success: false, statusCode: 400, error: "Bad Request", message: ["limit: Too small: expected number to be >=1", "cursor: Required"] }), { status: 400 }),
+    });
+    await expect(client.listProjects({})).rejects.toMatchObject({ status: 400, message: "limit: Too small: expected number to be >=1; cursor: Required" });
+  });
   it("redacts a credential echoed in the API error code", async () => {
     const secret = "TEST-private-token";
     const responses: unknown[] = [

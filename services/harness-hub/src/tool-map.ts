@@ -51,13 +51,24 @@ const RECORDS_ACTIVITY = {
   idempotentHint: false,
 } as const;
 
+/** The longest API message a failed tool call passes on to the agent. */
+const MESSAGE_MAX = 300;
+
+/**
+ * A failed call in a stable code; a refusal of the member API (a 4xx of the Kintsugi client, which has already taken the
+ * token out of it) also carries the API's own message, written for the agent ("No node … in the Brain; start from the
+ * root"), on one line. A server or network failure says nothing more than its code.
+ */
 function toolFailure(error: unknown) {
-  const candidate = error !== null && typeof error === "object" ? error as { code?: unknown } : {};
+  const candidate = error !== null && typeof error === "object" ? error as { code?: unknown; status?: unknown; message?: unknown; name?: unknown } : {};
   const code = typeof candidate.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(candidate.code)
     ? candidate.code
     : "KINTSUGI_REQUEST_FAILED";
+  const refused = candidate.name === "KintsugiClientError" && typeof candidate.status === "number" && candidate.status >= 400 && candidate.status < 500;
+  const said = refused && typeof candidate.message === "string" ? candidate.message.replace(/\s+/g, " ").trim() : "";
+  const message = said.length > MESSAGE_MAX ? `${said.slice(0, MESSAGE_MAX - 1)}…` : said;
   return {
-    content: [{ type: "text" as const, text: "Kintsugi request failed (" + code + ")." }],
+    content: [{ type: "text" as const, text: "Kintsugi request failed (" + code + ")" + (message === "" ? "." : ": " + message) }],
     isError: true,
   };
 }

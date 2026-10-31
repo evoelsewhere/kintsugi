@@ -9,6 +9,14 @@ const member = {
       error.code = "TOKEN_EXPIRED";
       throw error;
     }
+    if (process.env.KINTSUGI_TEST_STATUS !== undefined) {
+      // As the Kintsugi client throws a refusal of the member API (its message already without the token).
+      const error = new Error(process.env.KINTSUGI_TEST_ERROR_MESSAGE ?? "refused");
+      error.name = "KintsugiClientError";
+      error.code = "NOT_FOUND";
+      error.status = Number(process.env.KINTSUGI_TEST_STATUS);
+      throw error;
+    }
     return { schemaVersion: "1", items: [{ projectId: "shop", name: "Shop" }], limit: query.limit ?? 25 };
   },
   async documentTree(query) {

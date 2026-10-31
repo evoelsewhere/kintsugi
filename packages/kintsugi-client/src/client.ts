@@ -134,7 +134,9 @@ function errorFromEnvelope(status: number, body: unknown, secret?: string): Kint
   const envelope = body !== null && typeof body === "object" ? body as ErrorEnvelope : {};
   const nested = envelope.details !== null && typeof envelope.details === "object" ? envelope.details as Record<string, unknown> : undefined;
   const code = typeof nested?.code === "string" ? redactText(nested.code, secret) : typeof envelope.error === "string" ? redactText(envelope.error, secret).toUpperCase().replace(/[^A-Z0-9_]+/g, "_") : `HTTP_${status}`;
-  let message = typeof envelope.message === "string" ? envelope.message : `Kintsugi request failed (${status})`;
+  // A failed validation sends its problems as a list: one message, "; " between them.
+  const said = typeof envelope.message === "string" ? envelope.message : Array.isArray(envelope.message) && envelope.message.length > 0 && envelope.message.every((entry) => typeof entry === "string") ? envelope.message.join("; ") : undefined;
+  let message = said ?? `Kintsugi request failed (${status})`;
   if (secret) message = message.split(secret).join("[redacted]");
   return new KintsugiClientError({ code, status, message, details: redactSecret(envelope.details, secret) });
 }
