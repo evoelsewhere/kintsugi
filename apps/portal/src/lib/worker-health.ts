@@ -38,3 +38,10 @@ export function splitWorkers(workers: readonly WorkerStatus[], now: number = Dat
   const old = (worker: WorkerStatus): boolean => worker.state !== "up" && now - new Date(worker.lastSeenAt).getTime() > STOPPED_WORKER_HIDDEN_AFTER_MS;
   return { current: workers.filter((worker) => !old(worker)), stopped: workers.filter(old) };
 }
+
+/**
+ * The jobs the workers that are up are running. A worker that stopped keeps the count of its last heartbeat for good,
+ * so it is left out: summing every worker ever seen showed jobs running while nothing ran.
+ */
+export const activeJobsOnLiveWorkers = (workers: readonly WorkerStatus[]): number =>
+  workers.reduce((total, worker) => total + (worker.state === "up" ? worker.activeJobs : 0), 0);

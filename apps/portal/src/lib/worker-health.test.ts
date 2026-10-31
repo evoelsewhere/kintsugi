@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkerHealth, WorkerStatus } from "./api/monitoring";
-import { splitWorkers, workerVerdict } from "./worker-health";
+import { activeJobsOnLiveWorkers, splitWorkers, workerVerdict } from "./worker-health";
 
 const NOW = Date.parse("2026-10-31T12:00:00Z");
 const ago = (hours: number): string => new Date(NOW - hours * 60 * 60 * 1000).toISOString();
@@ -40,5 +40,14 @@ describe("splitWorkers", () => {
     );
     expect(current.map((entry) => entry.workerId)).toEqual(["up", "recent"]);
     expect(stopped.map((entry) => entry.workerId)).toEqual(["stale", "old"]);
+  });
+});
+
+describe("activeJobsOnLiveWorkers", () => {
+  it("counts the jobs of the workers that are up, not the last count of a stopped one", () => {
+    const stale = { ...worker("w1", "stale", ago(2)), activeJobs: 1 };
+    const stopped = { ...worker("w2", "stopped", ago(30)), activeJobs: 1 };
+    expect(activeJobsOnLiveWorkers([worker("w0", "up", ago(0)), stale, stopped])).toBe(0);
+    expect(activeJobsOnLiveWorkers([{ ...worker("w0", "up", ago(0)), activeJobs: 2 }, stale])).toBe(2);
   });
 });
