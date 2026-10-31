@@ -52,7 +52,7 @@ The project's knowledge about the target is plain Markdown under `01-standards/`
 | `plugins/<project>-<topic>/` | Member plugins: skills, reviewer agents, commands, hooks. Validate with `claude plugin validate --strict` | The built-in `kintsugi` plugin as a base |
 
 Notes:
-- **Design**: the common design (the architecture and `02-architecture/common/`) is written by the foundation team with `/kintsugi:modernize-design-architecture`; each unit's basic and detail design is generated from the Design page of the portal and reviewed in its pull request ([ADR-0049](../decisions/0049-design-sets-generated-by-the-runtime.md)).
+- **Design**: the common design (the architecture and `02-architecture/common/`) is written by hand by the foundation team, one document per component, and merged through a pull request (no command writes it); each unit's basic and detail design is generated from the Design page of the portal and reviewed in its pull request ([ADR-0049](../decisions/0049-design-sets-generated-by-the-runtime.md)).
 - **Samples**: the template's `.example` files show the shape. Copy the ones you adopt to a real name and delete the rest.
 - **Pilot units**: flag 1–2 representative units per kind as `pilot: true` and run them first. Fix the standards where results were inconsistent, unclear or wrong.
 - **Gate G3** (Prepare Factory) is a human decision: the target repos are scaffolded, the standards are written and the pilots are reviewed.

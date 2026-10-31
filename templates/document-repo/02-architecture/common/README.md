@@ -24,4 +24,4 @@ How a unit calls it: the operation, its inputs and its result.
 When a unit must call it, and what it must never do.
 ```
 
-`status` is `draft` until the architecture approval gate; the foundation team writes these in `/kintsugi:modernize-design-architecture`. The design checks resolve `COM-` ids against the files of this folder.
+`status` is `draft` until the architecture approval gate; the foundation team writes these by hand, one file per component, and merges them through a pull request (no command writes them). The design checks resolve `COM-` ids against the files of this folder.

@@ -19,7 +19,7 @@ export function DesignCommonTab({ common, onOpenUnit }: { common: CommonDesign; 
     <div className="flex flex-col gap-4">
       {common.components.length === 0 ? (
         <Card>
-          <EmptyState title="No common components yet" description="The foundation team writes one document per component in 02-architecture/common/ (COM-<AREA>-<NN>.md) with /kintsugi:modernize-design-architecture. Unit designs refer to a component by its id." />
+          <EmptyState title="No common components yet" description="The foundation team writes one document per component by hand in 02-architecture/common/ (COM-<AREA>-<NN>.md) and merges it through a pull request; no command writes them. Unit designs refer to a component by its id." />
         </Card>
       ) : (
         <DataTable label="Common components" rows={common.components} columns={columns} rowKey={(component) => component.id} searchPlaceholder="Search components" pageSize={25} minWidth={520} />
