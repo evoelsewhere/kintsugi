@@ -3,7 +3,10 @@
 One repository holds everything Kintsugi and the project's people write about a migration:
 program framing, portfolio decisions, standards, architecture, and per application the old system
 as it is understood and the new system as it is designed. This folder is the Kintsugi starter
-template; `scripts/e2e/start.mjs` seeds it into the end-to-end environment's document repository.
+template. *Publish kintsugi.yaml* in the portal proposes what the repository does not have yet,
+and makes the folder of every application of the project, `10-applications/<app>/`, from the
+application skeleton (`templates/document-repo-application/` in Kintsugi). The starter holds no
+application of its own.
 
 ## Layout
 
@@ -75,7 +78,7 @@ a pull request from a `kintsugi/<user>/<write-id>` branch.
 
 ## Format samples
 
-Files and folders whose name contains `.example` (the unit samples under
-`10-applications/<app>/01-legacy/_example.example/` and `02-modern/_example.example/`, the standards
-samples, the plugin sample) teach a file format. They are not loaded and are not seeded into a
+Files and folders whose name contains `.example` (the standards samples, the plugin sample, and in
+Kintsugi's application skeleton the unit samples `01-legacy/_example.example/` and
+`02-modern/_example.example/`) teach a file format. They are not loaded and are not seeded into a
 project's document repository; copy them to a real name and adapt the content.

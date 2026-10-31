@@ -1,4 +1,4 @@
-# `10-applications/billing-web/01-legacy/`
+# `10-applications/{{app}}/01-legacy/`
 
 - Written by: the Kintsugi runtime (`assess`, `plan-understand`, `understand`) and people (rule verdicts)
 - Serves: P1, the reverse engineering of the old system: what it is and what it does

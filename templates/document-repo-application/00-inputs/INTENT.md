@@ -51,8 +51,8 @@ What the people who run the application know that the code does not say: workaro
 
 | Role | Repository | Component |
 | --- | --- | --- |
-| legacy | <!-- org/billing-web-legacy --> | - |
-| target | <!-- org/billing-web-ui --> | <!-- web --> |
+| legacy | <!-- org/{{app}}-legacy --> | - |
+| target | <!-- org/{{app}}-ui --> | <!-- web --> |
 
 ## People
 

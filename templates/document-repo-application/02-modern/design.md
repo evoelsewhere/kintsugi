@@ -5,16 +5,16 @@ version: 1
 ---
 # Application design
 
-The target design of this application: what it is made of, how the pieces talk, who owns which data and where each part of the old system goes. The design every application shares (principles, technology, security, quality targets) is in `../../../02-architecture/`; this document says only what is specific to `billing-web`.
+The target design of this application: what it is made of, how the pieces talk, who owns which data and where each part of the old system goes. The design every application shares (principles, technology, security, quality targets) is in `../../../02-architecture/`; this document says only what is specific to `{{app}}`.
 
 ## Components and repositories
 
 | Component | Responsibility | Repository | Unit kinds it receives |
 | --- | --- | --- | --- |
-| <!-- web --> | <!-- the screens --> | <!-- org/billing-web-ui --> | screen |
-| <!-- api --> | <!-- the operations and rules --> | <!-- org/billing-api --> | api, report |
-| <!-- batch --> | <!-- the scheduled jobs --> | <!-- org/billing-batch --> | batch-job |
-| <!-- database --> | <!-- the schema --> | <!-- org/billing-db --> | db-object |
+| <!-- web --> | <!-- the screens --> | <!-- org/{{app}}-ui --> | screen |
+| <!-- api --> | <!-- the operations and rules --> | <!-- org/{{app}}-api --> | api, report, event, integration, module |
+| <!-- batch --> | <!-- the scheduled jobs --> | <!-- org/{{app}}-batch --> | batch-job |
+| <!-- database --> | <!-- the schema: the data objects of the units --> | <!-- org/{{app}}-db --> | none |
 
 The component names are the ones declared on the target repositories in `kintsugi.yaml`.
 

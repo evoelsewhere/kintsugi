@@ -1,4 +1,4 @@
-# `10-applications/billing-web/02-modern/`
+# `10-applications/{{app}}/02-modern/`
 
 - Written by: people, members in their harness, and the Kintsugi runtime (`understand` proposes the unit cards, `design` writes the design sets)
 - Serves: P2-P4, the development of the new system; input to gate G2

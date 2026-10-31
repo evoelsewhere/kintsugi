@@ -27,7 +27,7 @@ In `02-modern/<module>/<unit>/`:
 | `<set>/<file>` | the unit's design: one folder per design set the project defines, one document per file of the set, from the set's template ([design templates](design-templates.md)) | the runtime `design` stage (generated from the portal), through a pull request that people review and correct |
 | `task.md` | the P4 task pack (transformation notes) | planned; auto-committed |
 
-A Git host renders a folder's `README.md` when a person opens the folder, so opening a unit's modern folder shows its card. Format samples for the card, `rules.md`, `rules/<rule id>.md`, `rules-review.md` and `trace.md` live in `templates/document-repo/10-applications/billing-web/01-legacy/_example.example/` and `02-modern/_example.example/`; they teach the formats and are not loaded.
+A Git host renders a folder's `README.md` when a person opens the folder, so opening a unit's modern folder shows its card. Format samples for the card, `rules.md`, `rules/<rule id>.md`, `rules-review.md` and `trace.md` live in the application skeleton, `templates/document-repo-application/01-legacy/_example.example/` and `02-modern/_example.example/`; they teach the formats and are not loaded.
 
 ## The card's frontmatter
 

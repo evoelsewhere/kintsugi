@@ -1,10 +1,10 @@
-# `10-applications/billing-web/`
+# `10-applications/{{app}}/`
 
 - Written by: per folder below
 - Serves: P1-P4 for this application
 - Auto-commit: per folder — see each folder's README
 
-The overview of the `billing-web` application and the map of its folders. Replace the sample name with the application's, and fill the overview from the assessment and the intent.
+The overview of the `{{app}}` application and the map of its folders. Fill the overview from the assessment and the intent.
 
 ## Overview
 

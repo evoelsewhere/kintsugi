@@ -1,4 +1,4 @@
-# `10-applications/billing-web/_generated/`
+# `10-applications/{{app}}/_generated/`
 
 - Written by: Kintsugi (`rebuild_aggregates.py` and the application Overview run)
 - Serves: the read models rebuilt from the units

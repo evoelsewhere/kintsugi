@@ -4,34 +4,44 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applicationDesignPath, applicationInputPath, applicationRequirementsPath, architectureDir, commonComponentsDir, DEFAULT_UNIT_KINDS, designSetsDir, generatedDir, glossaryPath, legacyDir, modernDir, transitionDir } from "@kintsugi/domain";
+import { applicationDesignPath, applicationDir, applicationInputPath, applicationRequirementsPath, architectureDir, commonComponentsDir, DEFAULT_UNIT_KINDS, designSetsDir, generatedDir, glossaryPath, legacyDir, modernDir, transitionDir } from "@kintsugi/domain";
 import { describe, expect, it } from "vitest";
 import { DESIGN_SETS_PREFIX, designFilesFor, loadDesignSets, type DesignProfileSource, type DesignSetSource } from "../builtin/plugins/reverse_engineering/hooks/reader/design.js";
 
 const TEMPLATE = fileURLToPath(new URL("../../../templates/document-repo", import.meta.url));
+/** The per-application skeleton, made under 10-applications/<app>/ for every application (the starter holds none). */
+const APPLICATION_TEMPLATE = fileURLToPath(new URL("../../../templates/document-repo-application", import.meta.url));
 
 describe("the document repo starter template", () => {
   it("lays out the numbered folders the domain paths name, and no gate records", () => {
-    const app = "billing-web";
-    const expected = [glossaryPath(), designSetsDir(), architectureDir(), commonComponentsDir(), transitionDir(), applicationInputPath(app, "INTENT.md"), legacyDir(app), modernDir(app), applicationRequirementsPath(app), applicationDesignPath(app), generatedDir(app)];
+    const expected = [glossaryPath(), designSetsDir(), architectureDir(), commonComponentsDir(), transitionDir()];
     for (const path of expected) expect(existsSync(join(TEMPLATE, path)), path).toBe(true);
     for (const old of ["program", "portfolio", "standards", "architecture", "gates", "applications"]) expect(existsSync(join(TEMPLATE, old)), old).toBe(false);
   });
 
+  it("holds no application: the application skeleton lays out the folders the domain paths name", () => {
+    expect(readdirSync(join(TEMPLATE, "10-applications"))).toEqual(["README.md"]);
+    const app = "app";
+    const inApplication = (path: string): string => path.slice(`${applicationDir(app)}/`.length);
+    const expected = [applicationInputPath(app, "INTENT.md"), legacyDir(app), modernDir(app), applicationRequirementsPath(app), applicationDesignPath(app), generatedDir(app)].map(inApplication);
+    for (const path of expected) expect(existsSync(join(APPLICATION_TEMPLATE, path)), path).toBe(true);
+    expect(readFileSync(join(APPLICATION_TEMPLATE, "README.md"), "utf8")).toContain("# `10-applications/{{app}}/`");
+  });
+
   it("holds no JSON outside the project plugins", () => {
-    const root = fileURLToPath(new URL("../../../templates/document-repo", import.meta.url));
     const found: string[] = [];
-    const walk = (directory: string): void => {
+    const walk = (root: string, directory: string): void => {
       for (const entry of readdirSync(directory, { withFileTypes: true })) {
         const path = join(directory, entry.name);
         if (entry.isDirectory()) {
-          if (entry.name !== "plugins") walk(path);
+          if (entry.name !== "plugins") walk(root, path);
         } else if (/\.json(\.example)?$/.test(entry.name)) {
           found.push(relative(root, path));
         }
       }
     };
-    walk(root);
+    walk(TEMPLATE, TEMPLATE);
+    walk(APPLICATION_TEMPLATE, APPLICATION_TEMPLATE);
     expect(found).toEqual([]);
   });
 

@@ -1,8 +1,8 @@
-// Infrastructure: the document repo starter structure, read from templates/document-repo (the same
-// folder the end-to-end seed uses). The template's `billing-web` folder is the per-application
-// skeleton: it is made once for every application of the project, with its id in place of the
-// sample's. Format samples (`.example`) stay in the template, and kintsugi.yaml is rendered by the
-// portal, not copied.
+// Infrastructure: the document repo starter structure, read from templates/document-repo, and the
+// per-application skeleton, read from templates/document-repo-application. The starter holds no
+// application: the skeleton is made once for every application of the project under
+// 10-applications/<app>/, with the application's id in place of `{{app}}`. Format samples
+// (`.example`) stay in the templates, and kintsugi.yaml is rendered by the portal, not copied.
 
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
@@ -13,9 +13,10 @@ import type { DocumentWriteFile } from "../domain/document-write.js";
 import { DocumentRepoSkeleton } from "../domain/document-write.ports.js";
 
 const TEMPLATE = "templates/document-repo";
-/** The sample application folder of the template. */
-const SAMPLE_ID = "billing-web";
-const SAMPLE_APPLICATION = `${applicationDir(SAMPLE_ID)}/`;
+/** The folder of the per-application skeleton, beside the starter. */
+const APPLICATION_TEMPLATE = "document-repo-application";
+/** Where the skeleton names its application. */
+const APPLICATION_TOKEN = "{{app}}";
 const MANIFEST = "kintsugi.yaml";
 
 /** KINTSUGI_TEMPLATES_DIR, else the `templates` folder above the running code (the repository root, or /app in the image). */
@@ -47,16 +48,16 @@ const isStructure = (path: string): boolean => path !== MANIFEST && !path.split(
 @Injectable()
 export class FsDocumentRepoSkeleton extends DocumentRepoSkeleton {
   async files(applicationIds: readonly string[]): Promise<DocumentWriteFile[]> {
-    const root = join(templatesRoot(), "document-repo");
+    const root = templatesRoot();
     const files: DocumentWriteFile[] = [];
-    for (const path of (await walk(root)).filter(isStructure)) {
-      const content = await readFile(join(root, path), "utf8");
-      if (!path.startsWith(SAMPLE_APPLICATION)) {
-        files.push({ path, content, createOnly: true });
-        continue;
-      }
-      const rest = path.slice(SAMPLE_APPLICATION.length);
-      for (const id of applicationIds) files.push({ path: `${applicationDir(id)}/${rest}`, content: content.replaceAll(SAMPLE_ID, id), createOnly: true });
+    const starter = join(root, "document-repo");
+    for (const path of (await walk(starter)).filter(isStructure)) {
+      files.push({ path, content: await readFile(join(starter, path), "utf8"), createOnly: true });
+    }
+    const application = join(root, APPLICATION_TEMPLATE);
+    for (const path of (await walk(application)).filter(isStructure)) {
+      const content = await readFile(join(application, path), "utf8");
+      for (const id of applicationIds) files.push({ path: `${applicationDir(id)}/${path}`, content: content.replaceAll(APPLICATION_TOKEN, id), createOnly: true });
     }
     return files;
   }

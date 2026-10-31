@@ -4,8 +4,10 @@
 - Serves: P1-P4, everything application-specific
 - Auto-commit: per folder — see each folder's README
 
-One folder per application in scope. The sample application `billing-web` shows the structure;
-replace it with the applications named in `kintsugi.yaml`.
+One folder per application in scope, named after its id in `kintsugi.yaml`. *Publish kintsugi.yaml*
+in the portal creates the folder of every application of the project with its READMEs, the
+migration intent, the requirements record and the application design to fill in; the starter
+itself holds no application.
 
 ```text
 10-applications/<app>/

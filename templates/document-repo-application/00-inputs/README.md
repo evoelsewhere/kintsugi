@@ -1,4 +1,4 @@
-# `10-applications/billing-web/00-inputs/`
+# `10-applications/{{app}}/00-inputs/`
 
 - Written by: people
 - Serves: P2 intent; input to the migration stages
