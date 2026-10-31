@@ -2,4 +2,5 @@
 
 export { MemberActivityModule } from "./member-activity.module.js";
 export { MemberActivityService } from "./application/member-activity.service.js";
+export { isKintsugiActivityKind } from "./domain/member-activity.js";
 export type { MemberActivity, MemberActivityInput, MemberUsage, MemberUsageSummary } from "./domain/member-activity.js";

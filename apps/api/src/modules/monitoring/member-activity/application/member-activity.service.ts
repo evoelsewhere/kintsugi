@@ -25,7 +25,8 @@ export class MemberActivityService {
   async record(input: MemberActivityInput): Promise<string> {
     if ((input.summary ?? "").length > MEMBER_ACTIVITY_SUMMARY_MAX) throw new BadRequestException(`summary is longer than ${MEMBER_ACTIVITY_SUMMARY_MAX} characters`);
     if (Buffer.byteLength(JSON.stringify(input.detail ?? {}), "utf8") > MEMBER_ACTIVITY_DETAIL_MAX_BYTES) throw new BadRequestException(`detail is larger than ${MEMBER_ACTIVITY_DETAIL_MAX_BYTES} bytes`);
-    if ((await this.store.countSince(input.userId, new Date(Date.now() - 3_600_000))) >= MEMBER_ACTIVITY_HOURLY_LIMIT) {
+    // The limit bounds what a connection writes; the reads and downloads Kintsugi observes itself never use it up.
+    if ((await this.store.countWrittenSince(input.userId, new Date(Date.now() - 3_600_000))) >= MEMBER_ACTIVITY_HOURLY_LIMIT) {
       throw new HttpException("Too many activity records in the last hour", HttpStatus.TOO_MANY_REQUESTS);
     }
     const id = randomUUID();

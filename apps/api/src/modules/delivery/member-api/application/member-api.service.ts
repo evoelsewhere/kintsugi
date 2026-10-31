@@ -35,7 +35,7 @@ import { ProjectAccessService } from "#modules/admin/project-access/index.js";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
 import { BrainService } from "#modules/delivery/brain/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
-import { MemberActivityService } from "#modules/monitoring/member-activity/index.js";
+import { isKintsugiActivityKind, MemberActivityService } from "#modules/monitoring/member-activity/index.js";
 
 const MAX_PROJECTS_PER_TOKEN = 100;
 const MAX_LIST_LIMIT = 100;
@@ -49,8 +49,6 @@ const MAX_BUNDLE_BYTES = 1024 * 1024;
 const BUNDLE_PATH = /^(?:skills\/[^/]+\/.+|agents\/[^/]+\.md|commands\/[^/]+\.md)$/;
 const BUNDLE_TEXT = /\.(?:md|txt|json|ya?ml|csv)$/i;
 
-/** Kinds Kintsugi writes itself from what it observes; a plugin cannot claim them. */
-const RESERVED_KIND = /^(?:plugin|document|brain)\./;
 /** What one Brain read hands a member's agent: enough to reason on, small enough for a tool result. */
 const BRAIN_READ_CHARS = 24_000;
 const BRAIN_READ_CHILDREN = 30;
@@ -189,7 +187,7 @@ export class MemberApiService {
 
   /** A plugin's write-back: a named, bounded fact about the member's own work. */
   async recordActivity(userId: string, input: ActivityInput): Promise<ActivityReceipt> {
-    if (RESERVED_KIND.test(input.kind)) throw new BadRequestException("kinds starting with plugin., document. or brain. are set by Kintsugi");
+    if (isKintsugiActivityKind(input.kind)) throw new BadRequestException("kinds starting with plugin., document. or brain. are set by Kintsugi");
     if (input.pluginName !== undefined && !(await this.pluginAccess.pluginsFor(userId, input.projectId)).includes(input.pluginName)) {
       throw new ForbiddenException("This plugin is not available to you in this project");
     }
