@@ -320,7 +320,8 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     store.requeue(changed);
     expect((await runner.run(changed))?.status).toBe("succeeded");
     expect(agentSteps(changed, before)).toEqual(expect.arrayContaining(["structure", "debt", "topology", "catalog-curate", "synthesis"]));
-  }, 120_000);
+    // Two runs and a retry of a whole stage: 76 s alone, over 120 s on a loaded machine (RL-002).
+  }, 300_000);
 
   it("runs the steps again when the job is retried from scratch", async () => {
     let fail = true;
