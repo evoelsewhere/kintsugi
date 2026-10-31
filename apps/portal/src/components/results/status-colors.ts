@@ -15,6 +15,7 @@ export const SYNC_COLOR: Record<string, string> = {
   ready: CHART_COLOR.green,
   cloning: CHART_COLOR.blue,
   pending: CHART_COLOR.muted,
+  empty: CHART_COLOR.purple,
   error: CHART_COLOR.red,
 };
 
