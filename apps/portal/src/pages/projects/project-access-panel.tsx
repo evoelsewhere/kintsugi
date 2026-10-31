@@ -1,4 +1,6 @@
-// Project Access of one project: who may record its stage decisions. Grants are explicit; assignment does not give one.
+// Project Access of one project: who may record its stage decisions and use it from the Kintsugi CLI or an AI client.
+// Grants are explicit; assignment does not give one. Gates are not covered: gates.decide alone decides them (apps/api →
+// governance/stage-decisions checks the grant, governance/gates only the permission).
 
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Shield, Trash2 } from "lucide-react";
@@ -74,7 +76,7 @@ export function ProjectAccessPanel({ projectId, canManage }: { projectId: string
   return <section aria-labelledby="project-access-heading" className="flex flex-col gap-3">
     <div>
       <h2 id="project-access-heading" className="text-[15px] font-medium text-text">Project Access</h2>
-      <p className="mt-0.5 text-[12px] text-text-muted">A person needs explicit Project Access to record decisions on this project's stages. Assignment does not grant access.</p>
+      <p className="mt-0.5 text-[12px] text-text-muted">A person needs an explicit grant here to record the decisions a stage run waits for, and to use this project from the Kintsugi CLI or an AI client; being assigned to the project does not give one, and no role does. Gates in Governance are different: anyone with the <code>gates.decide</code> permission, such as an administrator, decides them without a grant.</p>
     </div>
     <div className="flex flex-wrap items-end gap-2">
       <Field label={users.length > 0 ? "Member" : "Member user ID"} className="min-w-56 flex-1">
@@ -84,7 +86,7 @@ export function ProjectAccessPanel({ projectId, canManage }: { projectId: string
       <Button size="icon" variant="ghost" aria-label="Refresh Project Access" onClick={() => { setLoading(true); void load(); }}><RefreshCw className="size-4" /></Button>
     </div>
     {error === null ? null : <p role="alert" className="text-[12px] text-[var(--ds-status-red)]">{error}</p>}
-    {loading ? <p className="text-[12px] text-text-muted">Loading access grants…</p> : grants.length === 0 ? <EmptyState icon={Shield} title="No explicit grants" description="Only users with a grant can record stage decisions for this project." className="py-3" /> : <ul className="flex flex-col">
+    {loading ? <p className="text-[12px] text-text-muted">Loading access grants…</p> : grants.length === 0 ? <EmptyState icon={Shield} title="No explicit grants" description="Only people with a grant can record this project's stage decisions or use it from the CLI. Gates need gates.decide only." className="py-3" /> : <ul className="flex flex-col">
       {grants.map((grant, index) => {
         const member = users.find((user) => user.id === grant.userId);
         return <li key={grant.userId} className={`flex flex-wrap items-center gap-2 py-2 text-[12px] ${index > 0 ? "[box-shadow:0_-1px_0_rgba(0,0,0,0.06)]" : ""}`}>
