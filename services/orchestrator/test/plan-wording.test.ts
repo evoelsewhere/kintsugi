@@ -68,6 +68,14 @@ describe("assess task wording", () => {
     expect(topology).not.toMatch(/if present/i);
   });
 
+  it("gives the topology job a reading budget, the write-first order and the small-repository rule (T2-023)", async () => {
+    const topology = (await taskOf("topology", context({}, []))).replace(/\s+/g, " ");
+    expect(topology).toContain("Your reading budget is about 20 tool calls, and grep, ls, find and read all count.");
+    expect(topology).toMatch(/Write the first version of \S+extract_topology\.py with write before your 20th tool call/);
+    expect(topology).toContain("then refine it with edit rather than rewriting it");
+    expect(topology).toContain("When the inventory lists about 50 files or fewer, read each file you need once, whole, with read, and never grep it afterwards");
+  });
+
   it("names the step's exact folders and says the root has no src/ or in/", () => {
     for (const placeholder of ["{src}/", "{in}/", "{out}/"]) expect(WORKSPACE).toContain(placeholder);
     expect(WORKSPACE).toContain("There is no src/, in/ or out/ folder at the workspace root");
