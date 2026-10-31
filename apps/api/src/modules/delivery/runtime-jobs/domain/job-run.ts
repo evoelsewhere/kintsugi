@@ -11,6 +11,8 @@ export type JobRunStatus = (typeof JOB_RUN_STATUSES)[number];
 
 /** Statuses a run does not leave. */
 export const FINAL_RUN_STATUSES: readonly JobRunStatus[] = ["succeeded", "failed", "cancelled"];
+/** A stage run that stopped before it finished can be retried as its next attempt (ADR-0055, ADR-0090). */
+export const RETRYABLE_RUN_STATUSES: readonly JobRunStatus[] = ["failed", "cancelled"];
 
 export type JobRunEventKind = "status" | "step.started" | "step.finished" | "tool" | "log";
 
@@ -82,7 +84,7 @@ export interface JobRunView {
   sourceCommit?: string;
   /** Every repository the run reads, each at its commit and with its role: the legacy code and the target code (ADR-0052, ADR-0055). */
   sources?: SourceRepo[];
-  /** 1 for the first attempt; a retry of a failed stage run is the next attempt of the same run (ADR-0055). */
+  /** 1 for the first attempt; a retry of a failed or cancelled stage run is the next attempt of the same run (ADR-0055, ADR-0090). */
   attempt: number;
   /** The attempts that ended, oldest first (top-level runs). */
   attempts?: JobAttemptView[];
@@ -103,6 +105,12 @@ export interface JobRunView {
   finishedAt?: string;
   createdAt: string;
 }
+
+/** A run a retry put back in the queue, with what its next attempt will not reuse (ADR-0090). */
+export type RetriedRunView = JobRunView & {
+  /** The agents whose steps run again whatever changed: they may look things up on the web, which has no revision. */
+  rerunsWebAgents?: string[];
+};
 
 export interface JobRunDetail extends JobRunView {
   steps: JobRunView[];

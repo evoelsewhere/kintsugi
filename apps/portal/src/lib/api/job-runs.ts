@@ -19,7 +19,7 @@ export interface JobRunView {
   sourceCommit?: string;
   /** Every repository the run reads, each at its commit: the legacy code (the first is `sourceRepositoryId`) and the target code, read-only (ADR-0055). */
   sources?: Array<{ repositoryId: string; commit?: string; role?: "legacy" | "target" }>;
-  /** 1 for the first attempt; a retry of a failed stage run is the next attempt of the same run. */
+  /** 1 for the first attempt; a retry of a failed or cancelled stage run is the next attempt of the same run. */
   attempt: number;
   /** The attempts that ended, oldest first (top-level runs). */
   attempts?: JobAttempt[];
@@ -65,6 +65,12 @@ export interface JobRunEvent {
   attempt?: number;
   data: Record<string, unknown>;
 }
+
+/** A run a retry put back in the queue (ADR-0090). */
+export type RetriedRunView = JobRunView & {
+  /** The agents whose steps run again whatever changed: they may look things up on the web. */
+  rerunsWebAgents?: string[];
+};
 
 export const isActive = (run: Pick<JobRunView, "status">): boolean => run.status === "queued" || run.status === "running";
 
@@ -150,7 +156,7 @@ export const jobRunsApi = {
    * nothing (its results are discarded, its pinned commits stay).
    */
   retry: (projectId: string, id: string, options: { fresh?: boolean } = {}) =>
-    apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/retry`, "POST", options.fresh === true ? { fresh: true } : {}),
+    apiSend<RetriedRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/retry`, "POST", options.fresh === true ? { fresh: true } : {}),
   /** Abandons the closed pull request of an understand run: its items are released. */
   abandon: (projectId: string, id: string) => apiSend<JobRunView>(`${project(projectId)}/job-runs/${encodeURIComponent(id)}/abandon`, "POST"),
   /**

@@ -247,12 +247,17 @@ export class PgJobRunStore extends JobRunStore {
     };
   }
 
+  async webLookupAgents(projectId: string): Promise<string[]> {
+    const result = await this.#pool.query<{ agents: string[] }>("select agents from knowledge.web_search_setting where project_id = $1 and enabled", [projectId]);
+    return result.rows[0]?.agents ?? [];
+  }
+
   async requeue(projectId: string, id: string, options: { fresh: boolean; documentsCommit?: string }): Promise<boolean> {
     return withTransaction(async (tx) => {
       // Scope and creation time are immutable. Recheck status after obtaining the admission lock:
       // concurrent retries must not both increment the attempt or enqueue the same run.
       const previous = await tx.query<{ application_id: string; name: string; inputs: Record<string, unknown>; created_at: Date }>(
-        "select application_id, name, inputs, created_at from workflow.job_run where project_id = $1 and id = $2 and parent_id is null and status = 'failed'",
+        "select application_id, name, inputs, created_at from workflow.job_run where project_id = $1 and id = $2 and parent_id is null and status in ('failed', 'cancelled')",
         [projectId, id],
       );
       const run = previous.rows[0];
@@ -264,7 +269,7 @@ export class PgJobRunStore extends JobRunStore {
                 cancel_requested_at = null, cancel_requested_by = null,
                 inputs = inputs || jsonb_build_object('fresh', $3::boolean)
                         || case when inputs ? 'documentsCommit' or $4::text is null then '{}'::jsonb else jsonb_build_object('documentsCommit', $4::text) end
-          where project_id = $1 and id = $2 and parent_id is null and status = 'failed'`,
+          where project_id = $1 and id = $2 and parent_id is null and status in ('failed', 'cancelled')`,
         [projectId, id, options.fresh, options.documentsCommit ?? null],
       );
       return (result.rowCount ?? 0) > 0;

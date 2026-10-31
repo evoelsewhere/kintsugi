@@ -44,10 +44,12 @@ export abstract class JobRunStore {
   abstract abandon(projectId: string, id: string, actor: string): Promise<boolean>;
   /** The inputs a run was started with (scope, documentsCommit, fresh); undefined when unknown. */
   abstract inputs(projectId: string, id: string): Promise<Record<string, unknown> | undefined>;
+  /** The runtime agents of the project that may look things up on the web (empty when web lookups are off). */
+  abstract webLookupAgents(projectId: string): Promise<string[]>;
   /**
-   * Puts a failed top-level run back in the queue as its next attempt (ADR-0055): attempt + 1, no failure, no
-   * cancel request; `fresh` asks the worker to begin from nothing; `documentsCommit` pins the documents the run
-   * read when its inputs do not say. False when the run is not failed (a race). Scope claims are atomic with
+   * Puts a failed or cancelled top-level run back in the queue as its next attempt (ADR-0055, ADR-0090): attempt + 1,
+   * no failure, no cancel request; `fresh` asks the worker to begin from nothing; `documentsCommit` pins the documents
+   * the run read when its inputs do not say. False when the run is not failed or cancelled (a race). Scope claims are atomic with
    * this update; RunScopeConflict reports overlap or pins made stale by a competing merge.
    */
   abstract requeue(projectId: string, id: string, options: { fresh: boolean; documentsCommit?: string }): Promise<boolean>;

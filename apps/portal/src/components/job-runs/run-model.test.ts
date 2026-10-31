@@ -3,7 +3,7 @@ import type { JobRunEvent, JobRunView } from "@/lib/api/job-runs";
 vi.hoisted(() => {
   (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
 });
-import { eventStepLabels, filterJobRuns, filterRunEvents, stepsForAttempt } from "./run-model";
+import { eventStepLabels, filterJobRuns, filterRunEvents, retryNotice, stepsForAttempt } from "./run-model";
 import { timelineOf } from "./run-events";
 
 const job = (id: string, createdAt: string, extra: Partial<JobRunView> = {}): JobRunView => ({
@@ -110,5 +110,15 @@ describe("nested console labels", () => {
       event("2", { stepRunId: "nested", message: "read file" }),
     ];
     expect(eventStepLabels(events).get("nested")).toBe("Security auditor");
+  });
+});
+
+describe("the retry notice", () => {
+  it("says which agents' steps run again because they look things up on the web", () => {
+    expect(retryNotice({}, false)).toBe("Reuses the steps whose inputs have not changed.");
+    expect(retryNotice({ rerunsWebAgents: ["legacy-analyst"] }, false)).toBe(
+      "Reuses the steps whose inputs have not changed. Steps of Legacy analyst run again: it looks things up on the web, and what it finds may have changed.",
+    );
+    expect(retryNotice({ rerunsWebAgents: ["legacy-analyst"] }, true)).toBe("Starts again from the pinned source commits.");
   });
 });

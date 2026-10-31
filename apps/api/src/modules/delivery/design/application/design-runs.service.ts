@@ -20,7 +20,7 @@ const RECENT_RUNS = 200;
 export interface DesignSelection {
   set?: string;
   units?: string[];
-  /** A failed design run to resume instead (same as POST job-runs/:runId/retry). */
+  /** A failed or cancelled design run to resume instead (same as POST job-runs/:runId/retry). */
   resumeOf?: string;
   /** Write the set again for units that already have it, over their design (ADR-0081). */
   regenerate?: boolean;

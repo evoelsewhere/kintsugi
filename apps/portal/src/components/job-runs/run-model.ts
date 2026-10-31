@@ -1,4 +1,4 @@
-import type { JobRunEvent, JobRunStatus, JobRunView } from "@/lib/api/job-runs";
+import type { JobRunEvent, JobRunStatus, JobRunView, RetriedRunView } from "@/lib/api/job-runs";
 import { stageLabel } from "@/lib/stages";
 import { categoryOf, humanize, isProblem, toolOf } from "./run-events";
 
@@ -92,4 +92,13 @@ export function eventStepLabels(events: readonly JobRunEvent[]): Map<string, str
     if (match?.[1] !== undefined) labels.set(event.stepRunId, humanize(match[1]));
   }
   return labels;
+}
+
+/** What a retry will do, as the toast says it: truthful about the steps that run again whatever changed (ADR-0090). */
+export function retryNotice(run: Pick<RetriedRunView, "rerunsWebAgents">, fresh: boolean): string {
+  if (fresh) return "Starts again from the pinned source commits.";
+  const web = run.rerunsWebAgents ?? [];
+  const base = "Reuses the steps whose inputs have not changed.";
+  if (web.length === 0) return base;
+  return `${base} Steps of ${web.map(humanize).join(", ")} run again: ${web.length === 1 ? "it looks" : "they look"} things up on the web, and what ${web.length === 1 ? "it finds" : "they find"} may have changed.`;
 }

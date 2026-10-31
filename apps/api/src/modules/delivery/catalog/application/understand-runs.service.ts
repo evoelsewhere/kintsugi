@@ -15,7 +15,7 @@ import { CatalogService, UNDERSTAND_STAGE } from "./catalog.service.js";
 export interface UnderstandSelection {
   items?: string[];
   modules?: string[];
-  /** A failed understand run to resume instead (same as POST job-runs/:runId/retry). */
+  /** A failed or cancelled understand run to resume instead (same as POST job-runs/:runId/retry). */
   resumeOf?: string;
 }
 

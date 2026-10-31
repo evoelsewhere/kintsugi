@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { isActive, jobRunsApi, type JobRunView } from "@/lib/api/job-runs";
+import { retryNotice } from "./run-model";
 
 type Action = "cancel" | "fresh" | "abandon";
 export interface RunActionProps {
@@ -28,17 +29,16 @@ export function RunActions({
   const toast = useToast();
   const [confirm, setConfirm] = useState<Action | null>(null);
   const [busy, setBusy] = useState(false);
-  const retryable = canRetry === true && run.status === "failed" && run.kind === "stage" && run.applicationId !== undefined;
+  // A cancelled run keeps its finished steps like a failed one (ADR-0090), so both can be retried.
+  const retryable =
+    canRetry === true && (run.status === "failed" || run.status === "cancelled") && run.kind === "stage" && run.applicationId !== undefined;
   const abandonable =
     canAbandon === true && run.status === "succeeded" && canAbandonDocumentWrite(run.documentWrite) && run.abandonedAt === undefined;
   async function retry(fresh = false): Promise<void> {
     setBusy(true);
     try {
       const next = await jobRunsApi.retry(run.projectId, run.id, fresh ? { fresh: true } : {});
-      toast.success(
-        `Attempt ${next.attempt} queued`,
-        fresh ? "Starts again from the pinned source commits." : "Resumes using the steps whose inputs have not changed.",
-      );
+      toast.success(`Attempt ${next.attempt} queued`, retryNotice(next, fresh));
       onRetried?.(next);
       onChanged();
     } catch (error) {
@@ -107,7 +107,7 @@ export function RunActions({
         }}
       >
         {confirm === "cancel"
-          ? "The worker stops this run and its running processes. Its output will not be proposed to the document repository."
+          ? "The worker stops this run and its running processes. Its output will not be proposed to the document repository. The steps that finished are kept: Retry run continues from them."
           : confirm === "fresh"
             ? "Discard the step results kept in this run's workspace and start again from the same pinned source commits. A normal retry reuses completed steps when their inputs have not changed."
             : `Use this when the pull request was closed without merging. The ${run.scope?.items.length ?? 0} ${scopeNoun}s in its scope will be released for another run.`}

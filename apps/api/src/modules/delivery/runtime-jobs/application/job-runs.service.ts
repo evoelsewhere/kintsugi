@@ -13,11 +13,13 @@ import { ChangeFeed } from "#common/realtime/change-feed.js";
 import { ProjectsService } from "#modules/admin/projects/index.js";
 import {
   FINAL_RUN_STATUSES,
+  RETRYABLE_RUN_STATUSES,
   type JobRunDetail,
   type JobRunFilter,
   type JobRunFollowUpdate,
   type JobRunView,
   type RestrictedRecordFilter,
+  type RetriedRunView,
   type RestrictedRecordSummary,
   type RestrictedRecordView,
 } from "../domain/job-run.js";
@@ -148,21 +150,22 @@ export class JobRunsService {
   }
 
   /**
-   * Retries a failed stage run (ADR-0055): the same run goes back in the queue as its next attempt, in the same
-   * workspace, on the same pinned commits, scope and documents; the worker skips the steps whose inputs did not
-   * change and whose results are still there. `fresh` begins from nothing instead (the job's results and ledger are
-   * discarded; the pins stay). 409 unless the run failed, or another run of the stage is active.
+   * Retries a failed or cancelled stage run (ADR-0055, ADR-0090): the same run goes back in the queue as its next
+   * attempt, in the same workspace, on the same pinned commits, scope and documents; the worker skips the steps whose
+   * inputs did not change and whose results are still there. `fresh` begins from nothing instead (the job's results
+   * and ledger are discarded; the pins stay). 409 unless the run failed or was cancelled, or another run of the stage
+   * is active.
    */
-  async retry(projectId: string, id: string, actor: Actor, options: { fresh?: boolean } = {}): Promise<JobRunView> {
+  async retry(projectId: string, id: string, actor: Actor, options: { fresh?: boolean } = {}): Promise<RetriedRunView> {
     const run = await this.summary(projectId, id);
     if (run.parentId !== undefined || run.kind !== "stage" || run.applicationId === undefined) throw new BadRequestException(`Job run ${id} is not a stage run of an application`);
-    if (run.status !== "failed") throw new ConflictException(`Job run ${id} did not fail (${run.status}): only a failed run is retried`);
+    if (!RETRYABLE_RUN_STATUSES.includes(run.status)) throw new ConflictException(`Job run ${id} is ${run.status}: only a failed or cancelled run is retried`);
     // The same conditions as a start: the stage may be running for another reason by now, or a stage it reads may have been undone.
     await this.#checkStart(projectId, run.applicationId, run.name);
     const fresh = options.fresh === true;
-    // The documents the failed attempt read stay the ones the job reads.
+    // The documents the stopped attempt read stay the ones the job reads.
     const read = run.outputSummary?.["documentsCommit"];
-    if (!(await this.#withScopeConflict(() => this.store.requeue(projectId, id, { fresh, ...(typeof read === "string" ? { documentsCommit: read } : {}) })))) throw new ConflictException(`Job run ${id} is no longer failed`);
+    if (!(await this.#withScopeConflict(() => this.store.requeue(projectId, id, { fresh, ...(typeof read === "string" ? { documentsCommit: read } : {}) })))) throw new ConflictException(`Job run ${id} is no longer failed or cancelled`);
     try {
       await this.queue.enqueue(id);
     } catch (error) {
@@ -171,7 +174,9 @@ export class JobRunsService {
     }
     const retried = await this.summary(projectId, id);
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.jobRunRetry, { projectId, subject: id, detail: { name: run.name, attempt: retried.attempt, fresh } }));
-    return retried;
+    // What a person is told the retry reuses must be true: steps of agents with web lookups always run again.
+    const web = fresh ? [] : await this.store.webLookupAgents(projectId).catch(() => []);
+    return web.length === 0 ? retried : { ...retried, rerunsWebAgents: web };
   }
 
   /**

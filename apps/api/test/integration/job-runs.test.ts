@@ -150,6 +150,17 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     const row = await app.db.query<{ cancel_requested_by: string }>("select cancel_requested_by from workflow.job_run where id = $1", [running.id]);
     expect(row.rows[0]?.cancel_requested_by).toBe("admin");
 
+    // The worker stops it: a cancelled run is retried as its next attempt, like a failed one (ADR-0090).
+    await app.db.query("update workflow.job_run set status = 'cancelled', finished_at = now() where id = $1", [running.id]);
+    // The retry says which agents' steps run again whatever changed: those that look things up on the web.
+    await app.db.query("insert into knowledge.web_search_setting (project_id, enabled, agents) values ('billing', true, array['legacy-analyst'])");
+    const retried = await admin.request<RunView & { attempt: number; cancelRequestedAt?: string; rerunsWebAgents?: string[] }>("POST", `/projects/billing/job-runs/${running.id}/retry`);
+    await app.db.query("delete from knowledge.web_search_setting where project_id = 'billing'");
+    expect(retried.status).toBe(202);
+    expect(retried.body.data).toMatchObject({ id: running.id, status: "queued", attempt: 2, rerunsWebAgents: ["legacy-analyst"] });
+    expect(retried.body.data?.cancelRequestedAt).toBeUndefined();
+    expect((await admin.request("POST", `/projects/billing/job-runs/${running.id}/cancel`)).status).toBe(200);
+
     expect((await admin.request("POST", "/projects/billing/job-runs/step-2/cancel")).status).toBe(400);
     expect((await admin.request("POST", "/projects/billing/job-runs/missing/cancel")).status).toBe(404);
   });
