@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { identityApi, type PermissionRecord, type RoleRecord, type UserRecord } from "@/lib/api/identity";
 import { uniqueId } from "@/lib/ids";
+import { grantLabel } from "./roles-matrix";
 
 export function RolesTab(): React.JSX.Element {
   const [roles, setRoles] = useState<RoleRecord[]>([]);
@@ -215,6 +216,7 @@ export function RolesTab(): React.JSX.Element {
                           <Checkbox
                             checked={role.permissions.includes(permission.code)}
                             onChange={() => toggle(role, permission.code)}
+                            ariaLabel={grantLabel(permission.code, role.name)}
                           />
                         </div>
                       </td>

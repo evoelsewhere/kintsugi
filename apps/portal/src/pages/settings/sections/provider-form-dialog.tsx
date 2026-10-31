@@ -514,13 +514,15 @@ function ProviderForm({ provider, existingIds, onClose, onSubmit }: ProviderForm
                         checked={row.inputTypes.includes("text")}
                         onChange={(checked) => update({ inputTypes: checked ? [...row.inputTypes, "text" as const].filter((value, i, all) => all.indexOf(value) === i) : row.inputTypes.filter((value) => value !== "text") })}
                         label="Text"
+                        ariaLabel={`Model ${index + 1} accepts text`}
                       />
                       <Checkbox
                         checked={row.inputTypes.includes("image")}
                         onChange={(checked) => update({ inputTypes: checked ? [...row.inputTypes, "image" as const].filter((value, i, all) => all.indexOf(value) === i) : row.inputTypes.filter((value) => value !== "image") })}
                         label="Image"
+                        ariaLabel={`Model ${index + 1} accepts images`}
                       />
-                      <Checkbox checked={row.reasoning} onChange={(reasoning) => update({ reasoning })} label="Reasoning" />
+                      <Checkbox checked={row.reasoning} onChange={(reasoning) => update({ reasoning })} label="Reasoning" ariaLabel={`Model ${index + 1} supports reasoning`} />
                     </div>
 
                     <Field label="Compatibility overrides (JSON)" hint="Optional object containing boolean compatibility flags.">

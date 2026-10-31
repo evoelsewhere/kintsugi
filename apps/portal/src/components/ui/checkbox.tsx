@@ -8,17 +8,20 @@ export interface CheckboxProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: string;
+  /** The accessible name when there is no visible label (a cell of a matrix), or a fuller one than the label. */
+  ariaLabel?: string;
   disabled?: boolean;
   id?: string;
 }
 
-export function Checkbox({ checked, onChange, label, disabled, id }: CheckboxProps): React.JSX.Element {
+export function Checkbox({ checked, onChange, label, ariaLabel, disabled, id }: CheckboxProps): React.JSX.Element {
   return (
     <button
       id={id}
       type="button"
       role="checkbox"
       aria-checked={checked}
+      aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
