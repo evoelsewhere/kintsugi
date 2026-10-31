@@ -163,6 +163,52 @@ function checkRepositoryPaths(subcommand: string, args: readonly string[], dir: 
   }
 }
 
+/** Subcommands that move objects between repositories, and where a local repository they reach must be. */
+const TRANSPORTS: Readonly<Record<string, "read" | "write">> = { fetch: "read", pull: "read", push: "write", remote: "read", submodule: "read" };
+
+/**
+ * A local repository that fetch, pull, push, remote or submodule reach stays in the workspace (T3-012): a path or `file:`
+ * URL outside it would read another project's repositories or write refs into them (the worker's mirrors, other jobs).
+ * A remote named by the command, or every remote when none is named, is read from the repository's configuration, and
+ * for submodules the URLs of `.gitmodules` too. What push reaches must be writable; the rest readable.
+ */
+async function checkTransportPaths(subcommand: string, args: readonly string[], dir: string, env: Record<string, string>, guard: PathGuard, writeGuard: PathGuard): Promise<void> {
+  const mode = TRANSPORTS[subcommand];
+  if (mode === undefined) return;
+  const configured = async (file?: string): Promise<{ key: string; url: string }[]> => {
+    const result = await runProcess({ command: "git", args: ["config", ...(file === undefined ? [] : ["-f", file]), "--get-regexp", "url$"], cwd: dir, env, timeoutMs: 30_000 });
+    return result.stdout.split(/\r?\n/).flatMap((line) => {
+      const space = line.indexOf(" ");
+      return space < 0 ? [] : [{ key: line.slice(0, space), url: line.slice(space + 1) }];
+    });
+  };
+  const remotes = (await configured()).filter((entry) => /^(remote\..+\.(push)?url|submodule\..+\.url)$/i.test(entry.key));
+  const targets: string[] = [];
+  if (subcommand === "submodule") targets.push(...remotes.map((entry) => entry.url), ...(await configured(".gitmodules")).map((entry) => entry.url));
+  const positional: string[] = [];
+  for (const [index, arg] of args.entries()) {
+    if (arg === "--repo") positional.push(args[index + 1] ?? "");
+    else if (arg.startsWith("--repo=")) positional.push(arg.slice("--repo=".length));
+    else if (!arg.startsWith("-")) positional.push(arg);
+  }
+  // A remote's name stands for its URLs; with no name, fetch, pull and push may use any configured remote.
+  const named = (name: string): string[] => remotes.filter((entry) => entry.key.toLowerCase().startsWith(`remote.${name.toLowerCase()}.`)).map((entry) => entry.url);
+  if ((subcommand === "fetch" || subcommand === "pull" || subcommand === "push") && positional.length === 0) targets.push(...remotes.map((entry) => entry.url));
+  for (const arg of positional) {
+    const urls = named(arg);
+    targets.push(...(urls.length > 0 ? urls : [arg]));
+  }
+  for (const target of targets) {
+    const local = localPath(target);
+    if (local === undefined) continue;
+    try {
+      (mode === "write" ? writeGuard : guard).check(resolve(dir, local));
+    } catch {
+      throw new Error(`git "${subcommand}" may not reach ${target}: a local repository is ${mode === "write" ? "pushed to only in the job's writable area" : "read only inside the job workspace"}`);
+    }
+  }
+}
+
 export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: PathGuard, tmp: string): ToolDefinition {
   return defineTool({
     name: "git",
@@ -232,6 +278,7 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
         GIT_CONFIG_KEY_4: "credential.helper",
         GIT_CONFIG_VALUE_4: "",
       };
+      await checkTransportPaths(subcommand, rest, dir, env, guard, writeGuard);
       const timeoutSec = clampTimeoutSec(params.timeout);
       const result = await runProcess({
         command: "git",
