@@ -29,6 +29,37 @@ export const cellText = (cell: string): string =>
     .replace(/\s+/g, ' ')
     .trim()
 
+const space = (char: string | undefined): boolean => char !== undefined && /\s/.test(char)
+const TERMINATOR = /[\n\r\u2028\u2029]/
+
+/**
+ * The level and title of an ATX heading line (`## Title ##`), or null. Linear: the regex it replaces,
+ * `^(#{1,6})\s+(.+?)\s*#*\s*$`, backtracked cubically on a long run of spaces, so one line of a document blocked the
+ * API for minutes (T3-011). The results are the same, a closing run of `#` included.
+ */
+export function headingOf(line: string): { level: number; title: string } | null {
+  let level = 0
+  while (line[level] === '#') level += 1
+  if (level < 1 || level > 6 || !space(line[level])) return null
+  let start = level
+  while (space(line[start])) start += 1
+  let end = line.length
+  while (end > start && space(line[end - 1])) end -= 1
+  if (end === start) {
+    // Only spaces after the marker: the regex took the last one `.` matches, after the first, as the title.
+    let last = line.length - 1
+    while (last > level && TERMINATOR.test(line[last] ?? '')) last -= 1
+    return last > level ? { level, title: line.slice(last, last + 1) } : null
+  }
+  let close = end
+  while (close > start && line[close - 1] === '#') close -= 1
+  while (close > start && space(line[close - 1])) close -= 1
+  // Only `#` after the marker (`# #`): the regex kept the first.
+  const title = close === start ? line.slice(start, start + 1) : line.slice(start, close)
+  // `.` matches no line terminator, so a title holding one was no heading.
+  return TERMINATOR.test(title) ? null : { level, title }
+}
+
 /** Every heading of `text` with the content it owns. Headings inside fenced code are not headings. */
 export function sectionsOf(text: string): Section[] {
   const lines = linesOf(text.replace(/\r\n/g, '\n'))
@@ -42,10 +73,10 @@ export function sectionsOf(text: string): Section[] {
       return
     }
 
-    const match = fenced ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line)
+    const heading = fenced ? null : headingOf(line)
 
-    if (match !== null) {
-      headings.push({ index, level: match[1]?.length ?? 1, title: cellText(match[2] ?? '') })
+    if (heading !== null) {
+      headings.push({ index, level: heading.level, title: cellText(heading.title) })
     }
   })
 

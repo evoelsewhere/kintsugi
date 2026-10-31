@@ -51,7 +51,15 @@ The script does the reading of the source tree, not you: never read the code fil
 yourself. Take the layout and the file list from the inputs above, then read only what teaches you how modules refer
 to each other in these repositories: their entry points and build or deployment configuration, and one or two
 representative files per domain (about 15 files in all; stop reading as soon as you can name the reference patterns).
-Then write ${script} with write, early, and refine it with edit rather than rewriting it: a Python 3 script using the
+
+Your reading budget is about 20 tool calls, and grep, ls, find and read all count. Write the first version of ${script}
+with write before your 20th tool call, or as soon as you can name the reference patterns, whichever comes first; then
+refine it with edit rather than rewriting it. When the inventory lists about 50 files or fewer, read each file you need
+once, whole, with read, and never grep it afterwards: searching the same files again with a variant of a pattern shows
+you nothing new. You need one example of each reference pattern, not every occurrence: finding them all is the script's
+work.
+
+${script} is a Python 3 script using the
 standard library only. You cannot run it (no shell): a script step runs it after you finish and gives you its error once
 to fix, so do not re-read your own output to check it. It is run as
 \`python extract_topology.py <source dir> <output dir>\`: it reads only the source directory, uses no network, writes <output dir>/topology.json and prints a summary (at most about 200 lines) headed by

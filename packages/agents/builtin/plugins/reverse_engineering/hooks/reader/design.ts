@@ -1,5 +1,5 @@
 import { frontmatterOf } from './work-item.js'
-import { cellText, tablesIn, type Table } from './markdown.js'
+import { cellText, headingOf, tablesIn, type Table } from './markdown.js'
 import { linesOf } from './text.js'
 
 /**
@@ -186,9 +186,9 @@ function headingsOf(lines: readonly string[]): Heading[] {
       return
     }
 
-    const match = fenced ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line)
+    const heading = fenced ? null : headingOf(line)
 
-    if (match !== null) found.push({ level: match[1]?.length ?? 1, title: cellText(match[2] ?? ''), line: index })
+    if (heading !== null) found.push({ level: heading.level, title: cellText(heading.title), line: index })
   })
 
   return found

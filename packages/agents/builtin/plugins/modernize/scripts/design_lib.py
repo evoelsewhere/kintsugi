@@ -168,9 +168,9 @@ def headings_of(lines):
         if re.match(r'^\s*(```|~~~)', line):
             fenced = not fenced
             continue
-        match = None if fenced else re.match(r'^(#{1,6})\s+(.+?)\s*#*\s*$', line)
+        match = None if fenced else docmd.heading_of(line)
         if match:
-            found.append({'level': len(match.group(1)), 'title': cell_text(match.group(2)), 'line': index})
+            found.append({'level': len(match[0]), 'title': cell_text(match[1]), 'line': index})
     return found
 
 
