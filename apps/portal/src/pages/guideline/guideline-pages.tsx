@@ -93,7 +93,7 @@ const overview: GuidePage = {
         </Step>
         <Step number={3} eyebrow="~2 min · plugins" title="Install a plugin into all of them">
           <P>Plugins are the flows your project offers to its members. See what you may install, then install one into every client you set up.</P>
-          <CodeBlock label="Install a plugin" code={"# What does my project offer?\nkintsugi plugins list\n\n# Install it into every client you set up\nkintsugi install plugin modernize --all\n\n# Later: bring it up to date\nkintsugi install fetch modernize"} />
+          <CodeBlock label="Install a plugin" code={"# What does my project offer?\nkintsugi plugins list\n\n# Install it into every client you set up\nkintsugi install plugin modernize --all\n\n# Later: bring it up to date\nkintsugi update modernize"} />
           <H3>Use it in your AI tool</H3>
           <P>Start a new session in Claude Code or Codex. A plugin command is named after the plugin: for example <Code>/modernize:build billing/invoice my-project</Code> builds a unit (see <Link className="text-[var(--ds-accent)] hover:underline" to="/guideline/build-a-unit">Build a unit</Link>).</P>
         </Step>
@@ -188,7 +188,7 @@ const plugins: GuidePage = {
   render: () => (
     <>
       <P>A member plugin is a flow for your own AI client, written as skills, agents and commands that your AI reads. Your project&apos;s administrators decide which plugins you may use.</P>
-      <CodeBlock label="Plugins" code={"# What may I install, and what is installed?\nkintsugi plugins list\n\n# Install it into every client you set up with init\nkintsugi install plugin modernize --all\n\n# Bring installed plugins up to date (one, or all when no name)\nkintsugi install fetch modernize\n\n# Remove it\nkintsugi remove modernize --all"} />
+      <CodeBlock label="Plugins" code={"# What may I install, and what is installed?\nkintsugi plugins list\n\n# Install it into every client you set up with init\nkintsugi install plugin modernize --all\n\n# Bring installed plugins up to date (one, or all when no name)\nkintsugi update modernize\n\n# Remove it\nkintsugi remove modernize --all"} />
       <H2>Which client?</H2>
       <P><Code>--all</Code> means every client you set up with <Code>init</Code>. Without it, one client is used; with several set up, <Code>kintsugi</Code> asks (or pass <Code>-H claude</Code>, <Code>-H codex</Code> or <Code>-H copilot</Code>). Plugins follow the scope you chose in <Code>init</Code>: a workspace install must be run from that workspace.</P>
       <H2>What gets installed</H2>
@@ -297,7 +297,7 @@ const reference: GuidePage = {
           [<Code key="2">kintsugi init [project]</Code>, "Find your AI clients, choose which to set up and global or this workspace. Flags: -H, --all, --scope, --yes."],
           [<Code key="3">kintsugi plugins list</Code>, "Plugins you may install, and where they are installed."],
           [<Code key="4">kintsugi install plugin &lt;plugin&gt; [--all | -H client]</Code>, "Install a plugin into the clients you set up. Short form: add."],
-          [<Code key="5">kintsugi install fetch [plugin]</Code>, "Bring an installed plugin (or all) up to date."],
+          [<Code key="5">kintsugi update [plugin]</Code>, "Bring an installed plugin (or all) up to date. Also: install fetch."],
           [<Code key="5b">kintsugi remove &lt;plugin&gt; [--all | -H client]</Code>, "Remove a member plugin."],
           [<Code key="5c">kintsugi connect &lt;client&gt; [project]</Code>, "Set up one client (the short form of init -H)."],
           [<Code key="6">kintsugi project list | use &lt;id&gt;</Code>, "List your projects; choose the default one."],

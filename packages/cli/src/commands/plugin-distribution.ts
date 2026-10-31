@@ -191,7 +191,7 @@ async function installAction(deps: CliDeps, command: Command, names: readonly st
   const project = projectId(options, profile.projectId);
   const { client } = await apiFor(deps, command);
 
-  // `fetch` with no name updates every plugin installed in the chosen clients.
+  // `update` (`install fetch`) with no name updates every plugin installed in the chosen clients.
   let plugins = names ?? [];
   if (plugins.length === 0) {
     const installed = new Set<string>();
@@ -278,19 +278,30 @@ export function registerPluginDistribution(plugins: Command, deps: CliDeps, name
     });
 }
 
-/** `kintsugi install plugin <name>` and `kintsugi install fetch [name]`: put a plugin into the clients, and bring it up to date. */
+/** Options and action of `kintsugi update [name]` and its alias `kintsugi install fetch [name]`. */
+function updateCommand(command: Command, deps: CliDeps): Command {
+  return command
+    .option(CLIENT_OPTION, CLIENT_HELP)
+    .option(ALL_OPTION, ALL_HELP)
+    .option("--project <id>", "Project id")
+    .action(async function(this: Command, name: string | undefined) { await installAction(deps, this, name === undefined ? undefined : [name], "fetch"); });
+}
+
+/**
+ * `kintsugi install plugin <name>` puts a plugin into the clients; `kintsugi update [name]` brings installed plugins
+ * up to date, and `kintsugi install fetch [name]` is kept as its alias.
+ */
 export function registerInstallCommands(program: Command, deps: CliDeps): void {
-  const install = program.command("install").description("Install plugins into the AI clients you set up, and update them");
+  const install = program.command("install").description("Install plugins into the AI clients you set up (update them with kintsugi update)");
   install.command("plugin <name>")
     .description("Install a plugin your project offers (add --all for every client you set up)")
     .option(CLIENT_OPTION, CLIENT_HELP)
     .option(ALL_OPTION, ALL_HELP)
     .option("--project <id>", "Project id")
     .action(async function(this: Command, name: string) { await installAction(deps, this, [name], "install"); });
-  install.command("fetch [name]")
-    .description("Fetch the latest version of an installed plugin (every installed plugin when no name is given)")
-    .option(CLIENT_OPTION, CLIENT_HELP)
-    .option(ALL_OPTION, ALL_HELP)
-    .option("--project <id>", "Project id")
-    .action(async function(this: Command, name: string | undefined) { await installAction(deps, this, name === undefined ? undefined : [name], "fetch"); });
+  updateCommand(install.command("fetch [name]").description("Alias of kintsugi update"), deps);
+  updateCommand(
+    program.command("update [plugin]").description("Bring an installed plugin up to date (every installed plugin when no name is given)"),
+    deps,
+  );
 }

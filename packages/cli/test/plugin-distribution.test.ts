@@ -97,6 +97,7 @@ describe("member plugin distribution", () => {
 
     responses["/api/member/v1/plugins/modernize"] = bundleOf("modernize", "1.0.1", FILES);
     state.runClientCommand.mockClear();
+    // `install fetch` is kept as an alias of `update`.
     expect(await runCli(["install", "fetch", "modernize", "--harness", "copilot", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
     expect(state.runClientCommand.mock.calls.map((call) => (call as unknown[])[1] as string[]).some((args) => args[0] === "plugin" && args[1] === "update")).toBe(true);
   });

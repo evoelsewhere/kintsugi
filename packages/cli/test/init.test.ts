@@ -93,7 +93,7 @@ describe("kintsugi init", () => {
 });
 
 describe("kintsugi install", () => {
-  it("installs a plugin into every client that was set up, then fetches the latest and leaves an unchanged one alone", async () => {
+  it("installs a plugin into every client that was set up, then updates it and leaves an unchanged one alone", async () => {
     const { state, responses } = await initialised();
     expect(await runCli(["init", "shop", "--all"], state.deps)).toBe(0);
     state.stdout.length = 0;
@@ -106,13 +106,13 @@ describe("kintsugi install", () => {
 
     state.stdout.length = 0;
     state.runClientCommand.mockClear();
-    expect(await runCli(["install", "fetch", "modernize", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
+    expect(await runCli(["update", "modernize", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
     expect(state.stdout.join("")).toContain("up to date in Claude Code");
     expect(state.runClientCommand).not.toHaveBeenCalled();
 
     responses["/api/member/v1/plugins/modernize"] = bundleOf("modernize", "1.1.0", FILES);
     state.stdout.length = 0;
-    expect(await runCli(["install", "fetch", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
+    expect(await runCli(["update", "--token-stdin"], state.deps), state.stderr.join("")).toBe(0);
     expect(state.stdout.join("")).toContain("Updated modernize 1.1.0 for claude-code");
     expect(state.stdout.join("")).toContain("Updated modernize 1.1.0 for codex");
     expect(state.runClientCommand.mock.calls.map((call) => (call as unknown[])[1] as string[]).some((args) => args[1] === "update")).toBe(true);

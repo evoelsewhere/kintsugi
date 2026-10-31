@@ -68,7 +68,7 @@ In the AI client, ask it to list your Kintsugi projects and read a relevant stan
 ## Maintain or disconnect
 
 ```sh
-kintsugi install fetch modernize
+kintsugi update modernize
 kintsugi remove modernize --all
 kintsugi auth logout
 ```
