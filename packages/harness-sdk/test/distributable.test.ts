@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertSafeHooks, hookCommandsOf } from "../src/distributable.js";
+import { assertSafeHooks, DistributableError, hookCommandsOf } from "../src/distributable.js";
 
 const command = (hooks: string) => `---\ndescription: Build a unit\n${hooks}---\n# Build\n`;
 const ACTIVITY = "kintsugi activity hook stop --plugin modernize --command build";
@@ -52,9 +52,27 @@ describe("hooks a distributed file may declare", () => {
       "unclosed front matter with hooks": `---\ndescription: x\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: calc.exe\n`,
     };
     for (const [name, content] of Object.entries(refused)) {
-      expect(() => assertSafeHooks("commands/build.md", content), name).toThrow("not allowed");
+      expect(() => assertSafeHooks("commands/build.md", content), name).toThrow(DistributableError);
     }
+    // A hook in the wrong shape says so; front matter YAML cannot read, or that uses aliases, says that instead.
+    expect(() => assertSafeHooks("commands/build.md", refused["flow-style entry"]!)).toThrow("declares a hook that is not allowed");
+    expect(() => assertSafeHooks("commands/build.md", refused["front matter that does not parse"]!)).toThrow("not valid YAML");
+    expect(() => assertSafeHooks("commands/build.md", refused["alias into hooks"]!)).toThrow("alias");
+    // A key spelled with escapes is still the hooks key.
+    expect(() => assertSafeHooks("commands/build.md", command(`"\\x68ooks":\n  Stop:\n    - hooks:\n        - type: command\n          command: calc.exe\n`))).toThrow("declares a hook that is not allowed");
     // A refused shape gives no hook to generate for the other clients either.
     expect(hookCommandsOf(refused["flow-style entry"]!)).toEqual([]);
+  });
+
+  it("refuses front matter YAML cannot read even without hooks, and says what is wrong with it", () => {
+    for (const [name, frontMatter] of Object.entries({
+      "an unquoted colon in a value": "name: convert\ndescription: Use when: the member asks to convert a unit\n",
+      "a tab indent": "name: x\nmetadata:\n\taudience: member\n",
+      "a duplicate key": "name: x\nname: y\n",
+    })) {
+      const check = () => assertSafeHooks("skills/convert/SKILL.md", `---\n${frontMatter}---\nbody\n`);
+      expect(check, name).toThrow("not valid YAML");
+      expect(check, name).not.toThrow("hook");
+    }
   });
 });
