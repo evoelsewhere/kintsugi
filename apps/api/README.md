@@ -228,7 +228,8 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
   - the installation keeps at least one enabled `admin` access role, which keeps
     `members.manage` and `roles.manage`, and nobody removes or disables themselves;
   - a member holds exactly one primary access role;
-  - resetting a password or disabling a member ends their sessions.
+  - resetting a password or disabling a member ends every credential they hold: sessions, member
+    tokens and AI-client connections with their refresh tokens (audited with the counts).
 - **Password hashing**: argon2id (`@node-rs/argon2`, 19 MiB / 2 passes / 1 lane) stored as a
   PHC string. Older scrypt hashes, or argon2id hashes with other parameters, are re-hashed
   at the next successful sign-in.

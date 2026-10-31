@@ -19,6 +19,9 @@ export abstract class UserRepository {
   abstract passwordOf(id: string): Promise<PasswordHash | undefined>;
   /** Enabled members holding the role — guards against removing the last admin. */
   abstract countEnabledWithRole(roleId: string): Promise<number>;
-  /** Ends every session of the member (password reset, disable). */
-  abstract revokeSessions(id: string): Promise<void>;
+  /**
+   * Ends every credential of the member (password reset, disable): sessions, member tokens, AI-client connections and
+   * their refresh tokens. Says how many tokens and connections it revoked.
+   */
+  abstract revokeCredentials(id: string, actorId: string): Promise<{ tokens: number; connections: number }>;
 }
