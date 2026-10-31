@@ -9,13 +9,13 @@ import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
 import { API_UNREACHABLE_MESSAGE, isApiUnreachable } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { safeMemberReturnTo } from "./member/install-model";
+import { safeReturnTo } from "./member/install-model";
 
 export function LoginPage(): React.JSX.Element {
   const { user, loading, login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const returnTo = safeMemberReturnTo(searchParams.get("returnTo"));
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);

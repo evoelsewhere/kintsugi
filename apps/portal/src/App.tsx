@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { subscribeToSystemAppearance } from "./lib/appearance";
 import { PanelShell } from "./layout/panel-shell";
 import { ToastProvider } from "./components/ui/toast";
@@ -25,12 +25,15 @@ import { ProjectsPage } from "./pages/projects/projects-page";
 
 function RequireAuth({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-[13px] text-text-muted">Loading…</div>
     );
   }
-  return user === null ? <Navigate to="/login" replace /> : <>{children}</>;
+  // The page asked for comes back after sign-in (checked again there, safeReturnTo).
+  const target = `${location.pathname}${location.search}`;
+  return user === null ? <Navigate to={target === "/" ? "/login" : `/login?returnTo=${encodeURIComponent(target)}`} replace /> : <>{children}</>;
 }
 
 export function App(): React.JSX.Element {
