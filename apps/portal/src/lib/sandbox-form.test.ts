@@ -4,7 +4,7 @@ import { DEFAULT_SANDBOX, defaultLabel, defaultValue, formProblems, fromForm, is
 describe("the sandbox form", () => {
   it("shows minutes and megabytes and gives back seconds and bytes", () => {
     const form = toForm(DEFAULT_SANDBOX);
-    expect(form).toMatchObject({ checkoutHours: "24", retentionDays: "7", scriptTimeoutMin: "10", agentTimeoutMin: "0", agentIdleTimeoutMin: "5", maxOutputMib: "50", maxTurns: "0", maxCostUsd: "0", markReadOnly: true });
+    expect(form).toMatchObject({ checkoutHours: "24", retentionDays: "7", scriptTimeoutMin: "10", agentTimeoutMin: "45", agentIdleTimeoutMin: "5", maxOutputMib: "50", maxTurns: "150", maxCostUsd: "10", markReadOnly: true });
     expect(toSettings(form)).toEqual(DEFAULT_SANDBOX);
     expect(isUnchanged(form, DEFAULT_SANDBOX)).toBe(true);
     expect(isUnchanged({ ...form, retentionDays: "8" }, DEFAULT_SANDBOX)).toBe(false);

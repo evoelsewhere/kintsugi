@@ -29,15 +29,17 @@ export interface SandboxSettings {
   markReadOnly: boolean;
 }
 
+// The agent limits are on by default: a model that loops keeps every sign of life the idle watchdog looks for, so
+// without them a job runs, and bills, until someone cancels it. An administrator may still set 0 (no limit).
 export const DEFAULT_SANDBOX: SandboxSettings = {
   checkoutHours: 24,
   retentionDays: 7,
   scriptTimeoutSec: 600,
-  agentTimeoutSec: 0,
+  agentTimeoutSec: 45 * 60,
   agentIdleTimeoutSec: 300,
   maxOutputBytes: 50 * 1024 * 1024,
-  maxTurns: 0,
-  maxCostUsd: 0,
+  maxTurns: 150,
+  maxCostUsd: 10,
   maxJobConcurrency: 2,
   markReadOnly: true,
 };
