@@ -29,7 +29,7 @@ import { formatDateTime, formatRelative, shortSha } from "@/lib/format";
 import { type MonitoringTab } from "@/lib/links";
 import { OVERVIEW_TOPICS, WORKER_AGES } from "@/lib/live";
 import { useLoader } from "@/lib/use-loader";
-import { workerVerdict } from "@/lib/worker-health";
+import { splitWorkers, workerVerdict } from "@/lib/worker-health";
 import { MonitoringInsights } from "./monitoring-insights";
 import { MembersView } from "./monitoring-members";
 import { SandboxView } from "./monitoring-sandbox";
@@ -433,10 +433,11 @@ function WorkerView(): React.JSX.Element {
                     <p className="text-[12px] text-text-secondary">{verdict.detail}</p>
                   </div>
                   <div>
-                    <p className="text-[12px] text-text-muted">Oldest queued run</p>
+                    <p className="text-[12px] text-text-muted">Oldest queued stage run</p>
                     <p className="text-text" title={formatDateTime(data.worker.oldestQueuedRunAt)}>
                       {data.worker.oldestQueuedRunAt === undefined ? "None waiting" : formatRelative(data.worker.oldestQueuedRunAt)}
                     </p>
+                    <p className="text-[12px] text-text-secondary">Stage and agent runs only; the queue table counts the jobs of every queue.</p>
                   </div>
                   <div>
                     <p className="text-[12px] text-text-muted">Last repository sync</p>
@@ -446,7 +447,7 @@ function WorkerView(): React.JSX.Element {
                   </div>
                 </div>
                 <Loaded loader={workers} rows={2}>
-                  {(list) => <WorkerTable workers={list} />}
+                  {(list) => <Workers workers={list} />}
                 </Loaded>
                 {data.worker.queues === null ? (
                   <EmptyState
@@ -485,6 +486,26 @@ function WorkerView(): React.JSX.Element {
         </Loaded>
       </div>
     </Card>
+  );
+}
+
+/** The workers running or seen in the last day; the ones stopped or gone for longer behind a toggle. */
+function Workers({ workers }: { workers: WorkerStatus[] }): React.JSX.Element {
+  const [showStopped, setShowStopped] = useState(false);
+  const { current, stopped } = splitWorkers(workers);
+  return (
+    <div className="flex flex-col gap-1">
+      {current.length === 0 && stopped.length > 0 && !showStopped ? (
+        <p className="text-[12px] text-text-muted">No worker has been seen in the last 24 hours.</p>
+      ) : (
+        <WorkerTable workers={showStopped ? [...current, ...stopped] : current} />
+      )}
+      {stopped.length === 0 ? null : (
+        <Button size="small" variant="link" className="h-auto self-start px-0 text-[12px]" aria-expanded={showStopped} onClick={() => setShowStopped((shown) => !shown)}>
+          {showStopped ? "Hide" : "Show"} {stopped.length} stopped worker{stopped.length === 1 ? "" : "s"} not seen for more than 24 hours
+        </Button>
+      )}
+    </div>
   );
 }
 
