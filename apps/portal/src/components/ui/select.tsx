@@ -7,10 +7,16 @@
 // trigger cancels the label's default action, so the label never replays the click on the
 // trigger, and a press on the enclosing label does not count as "outside" (the label's own
 // click toggles the menu instead of closing and immediately reopening it).
+//
+// Keyboard (WAI-ARIA select-only combobox): focus stays on the trigger and the highlighted option
+// is its aria-activedescendant. ArrowDown/ArrowUp (also to open), Home/End and a typed character
+// move the highlight (lib/select-keys.ts); Enter or Space chooses it; Escape and Tab close. The
+// options are no Tab stops, so the list works inside a dialog's focus trap too.
 
 import { Check, ChevronDown } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { openingOption, optionAfterKey } from "@/lib/select-keys";
 import { cn } from "@/lib/utils";
 import { type MenuPlacement, placeMenu } from "./menu-placement";
 
@@ -39,9 +45,37 @@ export interface SelectProps {
 export function Select({ value, options, onChange, placeholder = "Select…", disabled, className, id, size = "default" }: SelectProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<MenuPlacement | null>(null);
+  /** The highlighted option, by index. */
+  const [active, setActive] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const selected = options.find((option) => option.value === value);
+  const listId = useId();
+  const optionId = (index: number): string => `${listId}-option-${index}`;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // A combobox takes its name from a label, not from its text: one without a <label> is named by the value it shows,
+  // as the button it was before.
+  const [labelled, setLabelled] = useState(true);
+  useLayoutEffect(() => {
+    // Read once from the DOM after mount: whether a <label> names the trigger.
+    setLabelled((triggerRef.current?.labels?.length ?? 0) > 0);
+  }, []);
+
+  const show = (key?: string): void => {
+    const opening = openingOption(options, options.findIndex((option) => option.value === value));
+    setActive(key === undefined ? opening : optionAfterKey(options, opening, key));
+    setOpen(true);
+  };
+  const choose = (index: number): void => {
+    const option = options[index];
+    if (option === undefined || option.disabled === true) return;
+    onChange(option.value);
+    setOpen(false);
+  };
+
+  useEffect(() => {
+    if (open && placement !== null) menuRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [open, placement, active]);
 
   // Layout effect: the menu is placed before paint, so it never flashes at a stale position.
   useLayoutEffect(() => {
@@ -79,16 +113,49 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
   return (
     <div ref={rootRef} className={cn("relative", className)}>
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         disabled={disabled}
         onClick={(event) => {
           // Inside a <label>, the label would replay this click on the trigger.
           event.preventDefault();
-          setOpen((prev) => !prev);
+          if (open) setOpen(false);
+          else show();
         }}
+        onKeyDown={(event) => {
+          const key = event.key;
+          if (!open) {
+            if (key === "ArrowDown" || key === "ArrowUp") {
+              event.preventDefault();
+              show();
+            } else if (key.length === 1 && key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey) {
+              event.preventDefault();
+              show(key);
+            }
+            return;
+          }
+          if (key === "Enter" || key === " ") {
+            // Chosen here: the button's own click would reopen the list.
+            event.preventDefault();
+            choose(active);
+          } else if (key === "Tab") {
+            setOpen(false);
+          } else if (!event.ctrlKey && !event.metaKey && !event.altKey && (key.length === 1 || key === "ArrowDown" || key === "ArrowUp" || key === "Home" || key === "End")) {
+            event.preventDefault();
+            setActive((current) => optionAfterKey(options, current, key));
+          }
+        }}
+        onKeyUp={(event) => {
+          // Space activates a button on key up: the choice was made on key down.
+          if (event.key === " ") event.preventDefault();
+        }}
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-labelledby={labelled ? undefined : `${listId}-value`}
+        aria-activedescendant={open && placement !== null && options[active] !== undefined ? optionId(active) : undefined}
         className={cn(
           "shadow-border flex w-full items-center gap-2 rounded-[var(--geist-radius)] bg-transparent text-left text-text",
           size === "small" ? "h-[var(--geist-form-small-height)] px-2.5 text-[13px]" : "h-[var(--geist-form-height)] px-3 text-[14px]",
@@ -97,7 +164,9 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
       >
         <span className={cn("flex min-w-0 flex-1 items-center gap-2", selected === undefined && "text-text-muted")}>
           {selected?.icon}
-          <span className="min-w-0 truncate">{selected?.label ?? placeholder}</span>
+          <span id={`${listId}-value`} className="min-w-0 truncate">
+            {selected?.label ?? placeholder}
+          </span>
         </span>
         <ChevronDown className={cn("shrink-0 text-text-muted", size === "small" ? "size-3.5" : "size-4", open && "rotate-180")} strokeWidth={1.75} />
       </button>
@@ -106,31 +175,34 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
         ? createPortal(
             <ul
               ref={menuRef}
+              id={listId}
               role="listbox"
               className="fixed z-[60] overflow-y-auto rounded-xl bg-surface p-1"
               style={{ boxShadow: "var(--ds-shadow-menu)", ...placement }}
             >
-              {options.map((option) => {
-                const active = option.value === value;
+              {options.map((option, index) => {
+                const current = option.value === value;
                 return (
                   <li key={option.value}>
                     <button
+                      id={optionId(index)}
+                      data-index={index}
                       type="button"
                       role="option"
-                      aria-selected={active}
+                      tabIndex={-1}
+                      aria-selected={current}
                       aria-disabled={option.disabled === true ? true : undefined}
                       disabled={option.disabled === true}
-                      onClick={() => {
-                        onChange(option.value);
-                        setOpen(false);
-                      }}
+                      onMouseEnter={() => (option.disabled === true ? undefined : setActive(index))}
+                      onClick={() => choose(index)}
                       className={cn(
                         "flex w-full items-center gap-2 rounded-[var(--geist-radius)] px-2.5 py-2 text-left text-[14px] text-text-secondary hover:bg-hover hover:text-text",
-                        active && "text-text",
+                        current && "text-text",
+                        index === active && "bg-hover text-text",
                         option.disabled === true && "cursor-not-allowed text-text-muted hover:bg-transparent hover:text-text-muted",
                       )}
                     >
-                      <Check className={cn("size-3.5 shrink-0", active ? "opacity-100" : "opacity-0")} strokeWidth={2} />
+                      <Check className={cn("size-3.5 shrink-0", current ? "opacity-100" : "opacity-0")} strokeWidth={2} />
                       {option.icon}
                       <span className="min-w-0 flex-1 truncate">{option.label}</span>
                       {option.hint === undefined ? null : <span title={option.hint} className="max-w-[40%] min-w-0 shrink truncate text-right text-[11px] text-text-muted">{option.hint}</span>}
