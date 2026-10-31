@@ -90,6 +90,8 @@ shaped the design:
   only reads (`--get`, `--get-all`, `--get-regexp`, `--list`; no `--file`): configuration names commands (filter
   drivers, `core.sshCommand`, `gpg.program`). `init`, `worktree` and the target of `clone` must be in the writable
   area, the source of a local clone in the workspace; `--reference`, `--separate-git-dir`, `--template` and
-  `--open-files-in-pager` are refused, and `write`/`edit` do not reach inside a `.git` folder. Still open: `fetch`,
-  `pull`, `push` and `remote add` accept a local path outside the workspace; an agent granted `git` without `shell`
-  can reach another repository on the disk through them.
+  `--open-files-in-pager` are refused, and `write`/`edit` do not reach inside a `.git` folder.
+- **Transports (2026-11-01).** A local repository (a path or a `file:` URL) that `fetch`, `pull`, `remote` or
+  `submodule` reach must be inside the job workspace, and one that `push` reaches must be in the writable area: a
+  remote named by the command, or every configured remote when none is named, is read from the repository's
+  configuration first, and for `submodule` the URLs of `.gitmodules` too. Network remotes are unchanged.

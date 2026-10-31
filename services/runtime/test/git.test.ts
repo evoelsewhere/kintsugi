@@ -228,3 +228,54 @@ describe("kernel git confinement (T3-003)", () => {
     expect(existsSync(marker)).toBe(false);
   });
 });
+
+describe("kernel git transports (T3-012)", () => {
+  const work = join(workspace.out, "transports");
+  const away = join(workspace.outside, "away.git");
+  const inside = join(workspace.out, "inside.git");
+  const awayUrl = `file:///${away.replaceAll("\\", "/").replace(/^\//, "")}`;
+  const refs = (bare: string): string => execFileSync("git", ["for-each-ref", "--format=%(refname)"], { cwd: bare, encoding: "utf8" });
+
+  beforeAll(() => {
+    mkdirSync(tmp, { recursive: true });
+    execFileSync("git", ["init", "-q", "--bare", away]);
+    execFileSync("git", ["init", "-q", "--bare", inside]);
+    execFileSync("git", ["clone", "-q", workspace.src, work]);
+    writeFileSync(join(work, "t.txt"), "t\n");
+    execFileSync("git", ["add", "t.txt"], { cwd: work });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-q", "-m", "t"], { cwd: work });
+  });
+
+  it("refuses to push into, fetch from or name as a remote a repository outside the workspace", async () => {
+    for (const args of [
+      ["push", away, "HEAD:refs/heads/planted"],
+      ["push", awayUrl, "HEAD:refs/heads/planted"],
+      ["push", "--repo", away, "HEAD:refs/heads/planted"],
+      ["fetch", away],
+      ["pull", awayUrl],
+      ["remote", "add", "away", away],
+      ["remote", "set-url", "origin", awayUrl],
+      ["submodule", "add", away, "sub"],
+    ]) {
+      const { text } = await git({ args, cwd: work });
+      expect(text, args.join(" ")).toMatch(/may not reach/);
+    }
+    expect(refs(away)).toBe("");
+  });
+
+  it("pushes only where the job may write, also through a named remote", async () => {
+    // origin is the read-only checkout the clone came from: readable, not writable.
+    expect((await git({ args: ["push", "origin", "HEAD:refs/heads/planted"], cwd: work })).text).toMatch(/may not reach/);
+    expect((await git({ args: ["push"], cwd: work })).text).toMatch(/may not reach/);
+    expect((await git({ args: ["remote", "add", "mine", inside], cwd: work })).error).toBe(false);
+    const pushed = await git({ args: ["push", "-q", "mine", "HEAD:refs/heads/kept"], cwd: work });
+    expect(pushed.error, pushed.text).toBe(false);
+    expect(refs(inside)).toContain("refs/heads/kept");
+    expect((await git({ args: ["fetch", "-q", "origin"], cwd: work })).error).toBe(false);
+  });
+
+  it("leaves remotes over the network alone", async () => {
+    expect((await git({ args: ["remote", "add", "upstream", "https://example.invalid/team/repo.git"], cwd: work })).error).toBe(false);
+    expect((await git({ args: ["remote", "set-url", "upstream", "git@example.invalid:team/repo.git"], cwd: work })).error).toBe(false);
+  });
+});
