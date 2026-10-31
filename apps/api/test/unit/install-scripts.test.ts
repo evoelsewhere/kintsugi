@@ -75,6 +75,11 @@ describe("install.ps1", () => {
     expect(script).not.toMatch(/\$home\b/i);
   });
 
+  it("puts a POSIX shim with LF endings beside kintsugi.cmd, for Git Bash", () => {
+    expect(script).toContain("Join-Path $bin 'kintsugi.cmd'");
+    expect(script).toContain("[System.IO.File]::WriteAllText((Join-Path $bin 'kintsugi'), '#!/bin/sh' + [char]10 + 'exec \"$(dirname \"$0\")/../app/bin/kintsugi\" \"$@\"' + [char]10)");
+  });
+
   it("doubles single quotes in the base URL", () => {
     expect(renderInstallPs1({ baseUrl: "http://localhost:8080/a'b", manifest })).toContain("$BaseUrl = 'http://localhost:8080/a''b'");
   });

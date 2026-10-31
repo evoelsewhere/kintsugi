@@ -59,7 +59,7 @@ function PackageList({ context }: { context: GuideContext }): React.JSX.Element 
   if (context.assets.length === 0) return <P>This installation has no CLI release yet; an administrator builds it with the image.</P>;
   return (
     <>
-      <P>Version {context.version}. Download the package for your platform, check its SHA-256, unpack it, and put its <Code>bin</Code> folder on your PATH.</P>
+      <P>Version {context.version}. Download the package for your platform, check its SHA-256, unpack it, and put its <Code>bin</Code> folder on your PATH. On Windows keep both <Code>kintsugi.cmd</Code> and <Code>kintsugi</Code> in it: Git Bash, where Claude Code runs a plugin&apos;s hooks, starts the second.</P>
       <Table
         head={["Platform", "Package", "SHA-256"]}
         rows={context.assets.map((asset) => [
@@ -123,7 +123,7 @@ const install: GuidePage = {
       </List>
       <H2>Install</H2>
       <InstallCommands context={context} />
-      <P>The installer downloads the package for your platform from this installation, checks it against a SHA-256 that came with the installer, and unpacks it into <Code>~/.kintsugi</Code> (<Code>%LOCALAPPDATA%\Kintsugi</Code> on Windows). It changes nothing else, except that on Windows it adds its <Code>bin</Code> folder to your user PATH. On macOS and Linux it prints the line to add to your shell profile instead of editing it.</P>
+      <P>The installer downloads the package for your platform from this installation, checks it against a SHA-256 that came with the installer, and unpacks it into <Code>~/.kintsugi</Code> (<Code>%LOCALAPPDATA%\Kintsugi</Code> on Windows). It changes nothing else, except that on Windows it adds its <Code>bin</Code> folder to your user PATH, with <Code>kintsugi.cmd</Code> and a <Code>kintsugi</Code> script for Git Bash, where Claude Code runs a plugin&apos;s hooks. On macOS and Linux it prints the line to add to your shell profile instead of editing it.</P>
       <CodeBlock label="Verify" code={"# Open a new terminal, then:\nkintsugi --version"} />
       <H2>Manual download</H2>
       <PackageList context={context} />
