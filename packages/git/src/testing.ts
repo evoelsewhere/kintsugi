@@ -14,6 +14,8 @@ export interface GitHttpServer {
   baseUrl: string;
   /** Creates a bare repository with one commit on `branch`. */
   createRepository(name: string, branch?: string): Promise<void>;
+  /** Creates a bare repository with no commit at all, as a new repository on a forge starts. */
+  createEmptyRepository(name: string): Promise<void>;
   /** Adds a commit to `branch` (on top of its current tip) of an existing repository and returns its id. */
   commit(name: string, file: string, content: string, branch?: string): Promise<string>;
   /** Adds many files in one commit for large-diff integration tests. */
@@ -79,6 +81,9 @@ export async function startGitHttpServer(): Promise<GitHttpServer> {
       fixtureGit(work, "add", "README.md");
       fixtureGit(work, "commit", "-q", "-m", "init");
       fixtureGit(root, "clone", "-q", "--bare", work, `${name}.git`);
+    },
+    async createEmptyRepository(name) {
+      fixtureGit(root, "init", "-q", "--bare", `${name}.git`);
     },
     async commit(name, file, content, branch = "main") {
       const work = join(root, `${name}-work`);

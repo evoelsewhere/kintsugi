@@ -295,3 +295,36 @@ export async function writeFiles(input: WriteFilesInput, options: RemoteOptions 
     await clearWorktree(input.mirrorPath, input.worktree).catch(() => undefined);
   }
 }
+
+export interface SeedInput {
+  /** Remote URL of the empty repository (credentials travel in `options`, never here). */
+  url: string;
+  /** The branch the first commit starts: the repository's default branch. */
+  branch: string;
+  /** A scratch folder for the new repository; removed afterwards. */
+  worktree: string;
+  message: string;
+  identity: CommitIdentity;
+  files: readonly FileWrite[];
+}
+
+/**
+ * Gives a repository with no commit its first one on `branch`, so a mirror and a pull request have a base. The push
+ * is a plain one: a repository that got a commit meanwhile refuses it, and the caller syncs again either way.
+ */
+export async function seedEmptyRepository(input: SeedInput, options: RemoteOptions = {}): Promise<string> {
+  assertSafeRemoteUrl(input.url);
+  assertIdentity(input.identity);
+  await rm(input.worktree, { recursive: true, force: true });
+  await mkdir(input.worktree, { recursive: true });
+  try {
+    const run = { ...options, cwd: input.worktree };
+    await runGit(["init", "--quiet", "--initial-branch", input.branch], run);
+    const commit = await commitFiles(input.worktree, { message: input.message, identity: input.identity, files: input.files }, options);
+    if (commit === undefined) throw new GitError("Nothing to commit: no files", null, "");
+    await runGit(["push", "--no-verify", "--", input.url, `HEAD:refs/heads/${input.branch}`], run);
+    return commit;
+  } finally {
+    await rm(input.worktree, { recursive: true, force: true }).catch(() => undefined);
+  }
+}

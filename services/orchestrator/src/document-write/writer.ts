@@ -19,11 +19,12 @@ import {
   pullRequestProvider,
   resolveCommit,
   runGit,
+  seedEmptyRepository,
   writeFiles,
 } from "@kintsugi/git";
 import { MANIFEST_FILE, parseKintsugiYaml } from "@kintsugi/manifest";
 import type { RepositoryStore } from "../git-sync/repositories.js";
-import { remoteOptions, syncRepository, withMirrorLock } from "../git-sync/sync.js";
+import { EmptyRepositoryError, remoteOptions, syncRepository, withMirrorLock } from "../git-sync/sync.js";
 import type { DocumentWriteRequest } from "../queues.js";
 import { OutputRuleError, decodeFiles, readOutputDir, splitByAutoCommit, validateOutputs } from "./outputs.js";
 import type { DocumentWriteOutcome, DocumentWriteStore } from "./store.js";
@@ -118,6 +119,12 @@ function pullRequestBody(request: DocumentWriteRequest, files: readonly FileWrit
  * (bad paths, sizes, no document repo) are recorded and returned as `failed` without a
  * retry; other failures are recorded and rethrown so the queue retries them.
  */
+/** The first commit of an empty document repository: the rest of the starter arrives through the pull request. */
+const SEED_README = `# Document repository
+
+The project's documents for Kintsugi: everything except code. Kintsugi proposes its changes through pull requests.
+`;
+
 export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequest): Promise<DocumentWriteOutcome | { status: "failed"; error: string }> {
   await deps.writes.ensure(request);
   const secrets: string[] = [];
@@ -136,8 +143,24 @@ export async function writeDocument(deps: WriterDeps, request: DocumentWriteRequ
       request.files !== undefined ? decodeFiles(request.files) : request.outputOfJob !== undefined ? await readOutputDir(deps.storage.job(request.outputOfJob).out) : [],
     );
 
-    // Fetch (or first clone) the mirror; this also refreshes the repository's sync status.
-    await syncRepository({ store: deps.repositories, storage: deps.storage }, repository.id);
+    // Fetch (or first clone) the mirror; this also refreshes the repository's sync status. A repository with no commit
+    // (the guide's "create an empty repository") first gets a README on its default branch, so the write has a base.
+    const sync = () => syncRepository({ store: deps.repositories, storage: deps.storage }, repository.id);
+    await sync().catch(async (error: unknown) => {
+      if (!(error instanceof EmptyRepositoryError)) throw error;
+      await seedEmptyRepository(
+        {
+          url: repository.url,
+          branch: repository.defaultBranch ?? "main",
+          worktree: join(deps.storage.workspace(request.projectId), `${request.writeId}-seed`),
+          message: "Start the document repository",
+          identity: await deps.writes.commitIdentity(),
+          files: [{ path: "README.md", content: SEED_README }],
+        },
+        remoteOptions(repository),
+      ).catch(() => undefined); // someone else may have pushed first: the sync below tells
+      await sync();
+    });
     const mirror = deps.storage.mirror(repository.serverId, repository.id);
     const options = remoteOptions(repository);
     const defaultBranch = repository.defaultBranch ?? (await mirrorDefaultBranch(mirror));

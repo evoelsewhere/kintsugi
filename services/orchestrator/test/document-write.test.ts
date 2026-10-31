@@ -198,6 +198,17 @@ describe.skipIf(!hasDatabase)("document writer (integration)", () => {
     );
   });
 
+  it("gives an empty document repository a first commit, then proposes the files on top of it", async () => {
+    await remote.createEmptyRepository("empty-docs");
+    await db.pool.query("insert into admin.git_repository (id, server_id, url, default_branch) values ($1, 'plain', $2, 'main')", ["empty-docs", `${remote.baseUrl}/empty-docs.git`]);
+    await db.pool.query("insert into admin.project (id, name) values ($1, $1)", ["empty-docs"]);
+    await db.pool.query("insert into admin.project_repository (project_id, repository_id, role) values ($1, $1, 'document')", ["empty-docs"]);
+    const write = request("empty-docs", { files: [{ path: "kintsugi.yaml", content: "schemaVersion: 1\n" }] });
+    expect(await writeDocument(deps, write)).toMatchObject({ status: "committed", branch: `kintsugi/alice/${write.writeId}` });
+    expect(remote.git("empty-docs", "show", "main:README.md")).toContain("# Document repository");
+    expect(remote.git("empty-docs", "show", `kintsugi/alice/${write.writeId}:kintsugi.yaml`)).toBe("schemaVersion: 1\n");
+  });
+
   it("records output rule violations without retrying", async () => {
     for (const path of ["../escape.md", "/etc/passwd", ".git/config"]) {
       const write = request("docs", { files: [{ path, content: "x" }] });
