@@ -7,6 +7,13 @@ describe("sandbox settings (ADR-0055)", () => {
     expect([...SANDBOX_FIELDS].sort()).toEqual(Object.keys(DEFAULT_SANDBOX).filter((field) => field !== "markReadOnly").sort());
   });
 
+  it("bounds an agent job by default, so a model that loops is stopped without an administrator setting a limit", () => {
+    expect(DEFAULT_SANDBOX).toMatchObject({ maxTurns: 150, agentTimeoutSec: 2700, maxCostUsd: 10 });
+    expect(resolveSandbox(undefined)).toMatchObject({ maxTurns: 150, agentTimeoutSec: 2700, maxCostUsd: 10 });
+    expect(resolveSandbox({})).toMatchObject({ maxTurns: 150, agentTimeoutSec: 2700, maxCostUsd: 10 });
+    expect(resolveSandbox({ maxTurns: 0, agentTimeoutSec: 0, maxCostUsd: 0 })).toMatchObject({ maxTurns: 0, agentTimeoutSec: 0, maxCostUsd: 0 });
+  });
+
   it("names every field that is out of range, a fraction where a whole number is due, or not a number", () => {
     const problems = sandboxProblems({ ...DEFAULT_SANDBOX, checkoutHours: 0, retentionDays: 365, scriptTimeoutSec: 5.5, agentTimeoutSec: 30, agentIdleTimeoutSec: 10, maxOutputBytes: 10, maxTurns: -1, maxCostUsd: "a lot", markReadOnly: "yes" });
     expect(problems).toEqual([

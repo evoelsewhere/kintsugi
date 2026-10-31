@@ -81,7 +81,8 @@ describe.skipIf(!hasDatabase)("job attempts and reads per repository (integratio
 
   it("turns the settings into the limits of a job: 0 means no limit", () => {
     const base = { script: { timeoutSec: 1, maxOutputBytes: 1 }, agent: { timeoutSec: 1, maxOutputBytes: 1 }, workflow: { maxAgents: 7, concurrency: 2, maxTokens: 0 }, stage: { maxAgents: 9, concurrency: 3 } };
-    expect(limitsWith(base, DEFAULT_SANDBOX)).toEqual({ ...base, script: { timeoutSec: 600, maxOutputBytes: 52428800 }, agent: { timeoutSec: 0, maxOutputBytes: 52428800 } });
+    expect(limitsWith(base, DEFAULT_SANDBOX)).toEqual({ ...base, script: { timeoutSec: 600, maxOutputBytes: 52428800 }, agent: { timeoutSec: 2700, maxOutputBytes: 52428800, maxTurns: 150, maxCostUsd: 10 } });
+    expect(limitsWith(base, { ...DEFAULT_SANDBOX, agentTimeoutSec: 0, maxTurns: 0, maxCostUsd: 0 })).toEqual({ ...base, script: { timeoutSec: 600, maxOutputBytes: 52428800 }, agent: { timeoutSec: 0, maxOutputBytes: 52428800 } });
     expect(limitsWith(base, { ...DEFAULT_SANDBOX, agentTimeoutSec: 900, maxTurns: 25, maxCostUsd: 1.5, scriptTimeoutSec: 60 })).toEqual({
       ...base,
       script: { timeoutSec: 60, maxOutputBytes: 52428800 },
