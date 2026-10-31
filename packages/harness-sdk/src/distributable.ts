@@ -36,65 +36,81 @@ function frontMattersOf(content: string): string[] | undefined {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const nonEmptyList = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;
 
+/** What reading a front matter's hooks gave: the activity hook commands it declares, or why the file is refused. */
+type HookReading = { commands: string[] } | { refused: string };
+
+/** The first line of a YAML parser message, without where the parser was (the file is named anyway). */
+const yamlProblem = (message: string): string => (message.split("\n")[0] ?? message).replace(/ at line \d+, column \d+:?$/, "");
+
 /**
  * The commands of a front matter's hooks when it is safe to read them as YAML does: it parses cleanly, has no alias,
  * anchor, merge key or collection as a key, and `hooks` has exactly the allowed shape, every command being the
- * activity hook. `[]` when it declares no hooks; `undefined` when it is refused.
+ * activity hook. Front matter that does not parse is refused even without the word `hooks`: an escaped key can spell it.
  */
-function safeHookCommands(frontMatter: string): string[] | undefined {
+function readHooks(frontMatter: string): HookReading {
   const document = parseDocument(frontMatter, { uniqueKeys: true, prettyErrors: false });
-  if (document.errors.length > 0 || document.warnings.length > 0) return undefined;
+  const problem = document.errors[0] ?? document.warnings[0];
+  if (problem !== undefined) return { refused: `has front matter that is not valid YAML (${yamlProblem(problem.message)}); a distributed file's front matter must parse` };
   let tricky = false;
   visit(document, {
     Alias: () => { tricky = true; return visit.BREAK; },
     Node: (_key, node) => { if (node.anchor !== undefined) { tricky = true; return visit.BREAK; } return undefined; },
     Pair: (_key, pair) => { if (!isScalar(pair.key) || pair.key.value === "<<") { tricky = true; return visit.BREAK; } return undefined; },
   });
-  if (tricky) return undefined;
+  if (tricky) return { refused: "has front matter with an alias, an anchor, a merge key or a collection as a key, which a distributed file may not use" };
   const root: unknown = document.toJS();
-  if (root === null || root === undefined) return [];
-  if (!isRecord(root)) return undefined;
+  if (root === null || root === undefined) return { commands: [] };
+  if (!isRecord(root)) return { refused: "has front matter that is not a mapping of keys to values" };
   // A client that matched keys loosely would read these as hooks.
-  if (Object.keys(root).some((key) => key !== "hooks" && key.trim().toLowerCase() === "hooks")) return undefined;
-  if (!("hooks" in root)) return [];
+  if (Object.keys(root).some((key) => key !== "hooks" && key.trim().toLowerCase() === "hooks")) return { refused: NOT_ALLOWED };
+  if (!("hooks" in root)) return { commands: [] };
   const { hooks } = root;
-  if (!isRecord(hooks) || Object.keys(hooks).length === 0) return undefined;
+  if (!isRecord(hooks) || Object.keys(hooks).length === 0) return { refused: NOT_ALLOWED };
   const commands: string[] = [];
   for (const groups of Object.values(hooks)) {
-    if (!nonEmptyList(groups)) return undefined;
+    if (!nonEmptyList(groups)) return { refused: NOT_ALLOWED };
     for (const group of groups) {
-      if (!isRecord(group) || Object.keys(group).some((key) => !GROUP_KEYS.has(key))) return undefined;
-      if (group["matcher"] !== undefined && typeof group["matcher"] !== "string") return undefined;
-      if (!nonEmptyList(group["hooks"])) return undefined;
+      if (!isRecord(group) || Object.keys(group).some((key) => !GROUP_KEYS.has(key))) return { refused: NOT_ALLOWED };
+      if (group["matcher"] !== undefined && typeof group["matcher"] !== "string") return { refused: NOT_ALLOWED };
+      if (!nonEmptyList(group["hooks"])) return { refused: NOT_ALLOWED };
       for (const handler of group["hooks"]) {
-        if (!isRecord(handler) || Object.keys(handler).some((key) => !HANDLER_KEYS.has(key))) return undefined;
+        if (!isRecord(handler) || Object.keys(handler).some((key) => !HANDLER_KEYS.has(key))) return { refused: NOT_ALLOWED };
         const { type, command, timeout } = handler;
-        if (type !== "command" || typeof command !== "string" || !ACTIVITY_HOOK_COMMAND.test(command)) return undefined;
-        if (timeout !== undefined && !(typeof timeout === "number" && Number.isFinite(timeout) && timeout > 0)) return undefined;
+        if (type !== "command" || typeof command !== "string" || !ACTIVITY_HOOK_COMMAND.test(command)) return { refused: NOT_ALLOWED };
+        if (timeout !== undefined && !(typeof timeout === "number" && Number.isFinite(timeout) && timeout > 0)) return { refused: NOT_ALLOWED };
         commands.push(command);
       }
     }
   }
-  return commands;
+  return { commands };
 }
 
 /** The hook commands a file declares in its front matter (none when it declares no hooks or declares them in a refused shape). */
 export function hookCommandsOf(content: string): string[] {
   const frontMatters = frontMattersOf(content) ?? [];
-  return [...new Set(frontMatters.flatMap((frontMatter) => safeHookCommands(frontMatter) ?? []))];
+  return [...new Set(frontMatters.flatMap((frontMatter) => {
+    const reading = readHooks(frontMatter);
+    return "commands" in reading ? reading.commands : [];
+  }))];
 }
 
 /**
  * Throws unless every hook the file declares is the activity hook. The front matter is read as YAML, as a client reads it,
  * and checked strictly: a file that declares hooks in any other shape (a prompt, an agent, a URL, a script, a second key,
- * an alias, front matter that does not parse) is refused whole.
+ * an alias), or whose front matter does not parse, is refused whole, with the reason.
  */
 export function assertSafeHooks(path: string, content: string): void {
   if (!path.endsWith(".md")) return;
   const frontMatters = frontMattersOf(content);
   // An opening line that is never closed is no front matter, unless some client reads it as one.
-  const refused = frontMatters === undefined ? /hooks/i.test(content) : frontMatters.some((frontMatter) => safeHookCommands(frontMatter) === undefined);
-  if (refused) throw new DistributableError(`${path} ${NOT_ALLOWED}`);
+  if (frontMatters === undefined) {
+    if (/hooks/i.test(content)) throw new DistributableError(`${path} has front matter that is never closed and mentions hooks; ${NOT_ALLOWED}`);
+    return;
+  }
+  for (const frontMatter of frontMatters) {
+    const reading = readHooks(frontMatter);
+    if ("refused" in reading) throw new DistributableError(`${path} ${reading.refused}`);
+  }
 }
 
 /** The plugin and command an activity hook command line reports for, or undefined when the line is not an activity hook. */

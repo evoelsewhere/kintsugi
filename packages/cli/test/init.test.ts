@@ -169,6 +169,26 @@ describe("the activity hook of a plugin command", () => {
     expect(summarizeTranscript("", "modernize", "build")).toMatchObject({ turns: 0, inputTokens: 0 });
   });
 
+  it("counts from the member's invocation, not from a tool result that mentions the command", () => {
+    const toolResult = (text: string, timestamp: string) => JSON.stringify({ type: "user", timestamp, message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: text }] } });
+    const session = (middle: string) => [
+      user("chat", "2026-10-24T10:00:00Z"),
+      user("<command-name>/modernize:build</command-name> billing/tax shop", "2026-10-24T10:00:10Z"),
+      assistant("msg_a", { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 50 }, "2026-10-24T10:00:20Z"),
+      assistant("msg_a", { input_tokens: 10, output_tokens: 7, cache_read_input_tokens: 100, cache_creation_input_tokens: 50 }, "2026-10-24T10:00:21Z"),
+      middle,
+      assistant("msg_b", { input_tokens: 20, output_tokens: 30, cache_read_input_tokens: 200 }, "2026-10-24T10:01:10Z"),
+    ].join("\n");
+    const typed = summarizeTranscript(session(user("ok", "2026-10-24T10:00:40Z")), "modernize", "build");
+    expect(typed).toEqual({ inputTokens: 30, outputTokens: 37, cacheReadTokens: 300, cacheCreationTokens: 50, turns: 2, durationSeconds: 60, model: "claude-opus-5-5" });
+    expect(summarizeTranscript(session(toolResult("Guideline: run /modernize:build <module>/<unit> to build a unit.", "2026-10-24T10:00:40Z")), "modernize", "build")).toEqual(typed);
+    // A second invocation typed by the member starts the count again.
+    const again = summarizeTranscript(session(user("/modernize:build billing/ledger", "2026-10-24T10:00:40Z")), "modernize", "build");
+    expect(again).toMatchObject({ turns: 1, inputTokens: 20, durationSeconds: 30 });
+    // A plugin whose client name differs (underscores become hyphens) is found under that name too.
+    expect(summarizeTranscript(session(user("ok", "2026-10-24T10:00:40Z")).replace("/modernize:build", "/my-plugin:build"), "my_plugin", "build")).toEqual(typed);
+  });
+
   it("records one factual note with numbers and names only, and never fails the session", async () => {
     const state = await createState({ "/api/member/v1/activity": { schemaVersion: "1", id: "act-1" } });
     const transcript = join(state.root, "session.jsonl");

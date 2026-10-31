@@ -35,19 +35,21 @@ export class AuthService implements OnApplicationBootstrap {
 
   /** Checks a username and password the way a sign-in does (same lockout) without creating a session. */
   async verifyCredentials(username: string, password: string): Promise<SessionUser> {
-    const retryAfter = this.throttle.retryAfter(username);
+    // The attempt is counted before the password is checked: guesses sent at once cannot all pass the limit.
+    const retryAfter = await this.throttle.begin(username);
     if (retryAfter !== undefined) {
       throw new HttpException(
         `Too many failed sign-ins for this account; try again in ${Math.ceil(retryAfter / 60)} min`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    const user = await this.users.validateCredentials(username, password);
-    if (user === undefined) {
-      this.throttle.recordFailure(username);
-      throw new UnauthorizedException("Invalid username or password");
+    let user: UserRecord | undefined;
+    try {
+      user = await this.users.validateCredentials(username, password);
+    } finally {
+      this.throttle.end(username, user !== undefined);
     }
-    this.throttle.recordSuccess(username);
+    if (user === undefined) throw new UnauthorizedException("Invalid username or password");
     return this.sessionUser(user);
   }
 

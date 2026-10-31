@@ -9,6 +9,7 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { type Algorithm, hash as argon2Hash, parseOptions, verify as argon2Verify } from "@node-rs/argon2";
+import { limitConcurrency } from "../util/async.js";
 
 /** OWASP baseline for argon2id: 19 MiB, 2 passes, 1 lane. */
 const ARGON2ID = 2 as Algorithm;
@@ -26,12 +27,16 @@ export interface PasswordHash {
 
 const isArgon2 = (stored: PasswordHash): boolean => stored.hash.startsWith("$argon2");
 
+/** Each argon2 call takes 19 MiB: a burst of sign-ins waits its turn instead of exhausting the API's memory. */
+const ARGON2_AT_ONCE = 4;
+const argon2Gate = limitConcurrency(ARGON2_AT_ONCE);
+
 export async function hashPassword(password: string): Promise<PasswordHash> {
-  return { hash: await argon2Hash(password, ARGON2_OPTIONS), salt: "" };
+  return { hash: await argon2Gate(() => argon2Hash(password, ARGON2_OPTIONS)), salt: "" };
 }
 
 export async function verifyPassword(password: string, stored: PasswordHash): Promise<boolean> {
-  if (isArgon2(stored)) return argon2Verify(stored.hash, password);
+  if (isArgon2(stored)) return argon2Gate(() => argon2Verify(stored.hash, password));
   const candidate = await scryptAsync(password, stored.salt, LEGACY_SCRYPT_KEY_LENGTH);
   const expected = Buffer.from(stored.hash, "base64");
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
