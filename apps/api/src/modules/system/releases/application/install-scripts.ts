@@ -145,6 +145,8 @@ export function renderInstallPs1({ baseUrl, manifest }: InstallScriptInput): str
     "  Move-Item (Join-Path $work 'kintsugi') $app",
     "  Remove-Item -Recurse -Force \"$app.old\" -ErrorAction SilentlyContinue",
     "  Set-Content -Path (Join-Path $bin 'kintsugi.cmd') -Encoding Ascii -Value \"@echo off`r`n`\"$app\\bin\\kintsugi.cmd`\" %*`r`n\"",
+    "  # Git Bash, where Claude Code runs a plugin's hooks on Windows, does not find a .cmd: a POSIX shim beside it, LF endings.",
+    "  [System.IO.File]::WriteAllText((Join-Path $bin 'kintsugi'), '#!/bin/sh' + [char]10 + 'exec \"$(dirname \"$0\")/../app/bin/kintsugi\" \"$@\"' + [char]10)",
     "  Set-Content -Path (Join-Path $KintsugiHome 'install.json') -Encoding Ascii -Value (ConvertTo-Json @{ baseUrl = $BaseUrl } -Compress)",
     "",
     "  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')",
