@@ -13,7 +13,7 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { runProcess } from "../launcher/process.js";
 import { jobEnvironment } from "../launcher/script.js";
 import { boundOutput } from "./output.js";
@@ -47,8 +47,9 @@ const FORBIDDEN_OPTIONS = [
   "--upload-pack", "--receive-pack", "--ext-diff", "--textconv", "--output", "--exec",
 ];
 
-/** Subcommands that accept `--no-textconv` to keep repository-configured converters (which are
- * commands) out of diff rendering. */
+/** Subcommands that accept `--no-ext-diff` and `--no-textconv`, to keep repository-configured diff drivers and
+ * converters (which are commands) out of diff rendering. An empty GIT_EXTERNAL_DIFF or `diff.external` does not
+ * switch them off: git takes it as an external diff command named "" and every patch fails (T3-002). */
 const TEXTCONV_SUBCOMMANDS = new Set(["diff", "log", "show"]);
 
 const parameters = Type.Object({
@@ -64,6 +65,19 @@ const parameters = Type.Object({
 function clampTimeoutSec(timeout: number | undefined): number {
   if (timeout === undefined || Number.isNaN(timeout)) return DEFAULT_TIMEOUT_SEC;
   return Math.min(Math.max(Math.round(timeout), 1), MAX_TIMEOUT_SEC);
+}
+
+/**
+ * `git diff` with a path outside the repository (or run outside one) compares the two paths as files anywhere on disk,
+ * as `--no-index` does: every argument that is not an option must stay in the workspace. A revision resolves to a
+ * path inside the directory, so it passes.
+ */
+function checkDiffPaths(args: readonly string[], dir: string, guard: PathGuard): void {
+  let paths = false;
+  for (const arg of args) {
+    if (!paths && arg === "--") paths = true;
+    else if (paths || !arg.startsWith("-")) guard.check(resolve(dir, arg));
+  }
 }
 
 function findForbiddenOption(args: readonly string[]): string | undefined {
@@ -91,10 +105,14 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
       if (forbidden !== undefined) {
         throw new Error(`git option "${forbidden}" is not allowed: it redirects the repository or starts an external helper`);
       }
+      if (subcommand === "diff" && rest.includes("--no-index")) {
+        throw new Error('git "diff --no-index" is not allowed: it compares files outside a repository, anywhere on disk; diff commits or the working tree of a repository instead');
+      }
       if (subcommand === "submodule" && rest[0] === "foreach") {
         throw new Error('git "submodule foreach" is not allowed: it runs a shell command');
       }
       const dir = params.cwd === undefined ? cwd : guard.check(params.cwd);
+      if (subcommand === "diff") checkDiffPaths(rest, dir, guard);
       if (!READ_ONLY_SUBCOMMANDS.has(subcommand)) {
         try {
           writeGuard.check(dir);
@@ -112,7 +130,6 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
         GIT_PAGER: "cat",
         GIT_EDITOR: "true",
         GIT_SEQUENCE_EDITOR: "true",
-        GIT_EXTERNAL_DIFF: "",
         GIT_OPTIONAL_LOCKS: "0",
         // `ext::` and `fd::` transports execute commands; the rest are ordinary remotes.
         // The list is colon-separated (git's GIT_ALLOW_PROTOCOL format).
@@ -122,24 +139,22 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
         GIT_COMMITTER_NAME: "Kintsugi Job",
         GIT_COMMITTER_EMAIL: "job@kintsugi.invalid",
         // Command-line-style configuration beats the repository's own config, which is untrusted.
-        GIT_CONFIG_COUNT: "6",
+        GIT_CONFIG_COUNT: "5",
         GIT_CONFIG_KEY_0: "core.hooksPath",
         GIT_CONFIG_VALUE_0: join(tmp, "no-hooks"),
         GIT_CONFIG_KEY_1: "core.fsmonitor",
         GIT_CONFIG_VALUE_1: "",
-        GIT_CONFIG_KEY_2: "diff.external",
-        GIT_CONFIG_VALUE_2: "",
-        GIT_CONFIG_KEY_3: "core.pager",
-        GIT_CONFIG_VALUE_3: "cat",
-        GIT_CONFIG_KEY_4: "core.askpass",
+        GIT_CONFIG_KEY_2: "core.pager",
+        GIT_CONFIG_VALUE_2: "cat",
+        GIT_CONFIG_KEY_3: "core.askpass",
+        GIT_CONFIG_VALUE_3: "",
+        GIT_CONFIG_KEY_4: "credential.helper",
         GIT_CONFIG_VALUE_4: "",
-        GIT_CONFIG_KEY_5: "credential.helper",
-        GIT_CONFIG_VALUE_5: "",
       };
       const timeoutSec = clampTimeoutSec(params.timeout);
       const result = await runProcess({
         command: "git",
-        args: TEXTCONV_SUBCOMMANDS.has(subcommand) ? [subcommand, "--no-textconv", ...rest] : params.args,
+        args: TEXTCONV_SUBCOMMANDS.has(subcommand) ? [subcommand, "--no-ext-diff", "--no-textconv", ...rest] : params.args,
         cwd: dir,
         env,
         timeoutMs: timeoutSec * 1000,
