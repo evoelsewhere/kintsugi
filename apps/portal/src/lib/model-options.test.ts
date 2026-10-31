@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderView, SupportedProviders } from "./api/providers";
-import { modelThinkingLevels } from "./model-options";
+import { modelThinkingLevels, thinkingOptions } from "./model-options";
 
 const supported = {
   builtin: [
@@ -37,5 +37,18 @@ describe("modelThinkingLevels", () => {
     expect(modelThinkingLevels(builtin, supported, "unknown")).toEqual([]);
     expect(modelThinkingLevels(builtin, undefined, "opus")).toEqual([]);
     expect(modelThinkingLevels(custom, supported, "unknown")).toEqual([]);
+  });
+});
+
+describe("thinkingOptions", () => {
+  it("labels Default and every level alike, in title case", () => {
+    expect(thinkingOptions(["off", "low", "medium", "high"]).map((option) => option.label)).toEqual(["Default", "Off", "Low", "Medium", "High"]);
+    expect(thinkingOptions(undefined).map((option) => option.label)).toEqual(["Default", "Off", "Minimal", "Low", "Medium", "High", "Extra high", "Max"]);
+  });
+
+  it("says why Default is the only choice and keeps an unsupported current level", () => {
+    expect(thinkingOptions([])[0]).toMatchObject({ hint: "Choose a model to see its reasoning levels" });
+    expect(thinkingOptions(["off"])[0]).toMatchObject({ hint: "This model has no reasoning effort" });
+    expect(thinkingOptions(["off"], "high").at(-1)).toEqual({ value: "high", label: "High", hint: "not supported by this model" });
   });
 });

@@ -12,6 +12,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { type MenuPlacement, placeMenu } from "./menu-placement";
 
 export interface SelectOption {
   value: string;
@@ -32,28 +33,6 @@ export interface SelectProps {
   size?: "default" | "small";
 }
 
-/** Viewport-anchored placement for the portaled menu. */
-interface MenuPlacement {
-  left: number;
-  width: number;
-  maxHeight: number;
-  top?: number;
-  bottom?: number;
-}
-
-const MENU_MARGIN = 6;
-const MENU_FALLBACK_HEIGHT = 260;
-
-function placeMenu(trigger: HTMLElement): MenuPlacement {
-  const rect = trigger.getBoundingClientRect();
-  const spaceBelow = window.innerHeight - rect.bottom - MENU_MARGIN * 2;
-  const spaceAbove = rect.top - MENU_MARGIN * 2;
-  const flip = spaceBelow < MENU_FALLBACK_HEIGHT && spaceAbove > spaceBelow;
-  const maxHeight = Math.max(96, Math.min(256, flip ? spaceAbove : spaceBelow));
-  return flip
-    ? { bottom: window.innerHeight - rect.top + MENU_MARGIN, left: rect.left, width: rect.width, maxHeight }
-    : { top: rect.bottom + MENU_MARGIN, left: rect.left, width: rect.width, maxHeight };
-}
 
 export function Select({ value, options, onChange, placeholder = "Select…", disabled, className, id, size = "default" }: SelectProps): React.JSX.Element {
   const [open, setOpen] = useState(false);

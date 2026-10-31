@@ -4,7 +4,7 @@
 // with restore, and the agent's model binding. Built-in agents open read-only, with "Copy to
 // edit".
 
-import { isMcpToolEntry, THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
+import { isMcpToolEntry, type ThinkingLevel } from "@kintsugi/domain";
 import { ArrowLeft, Copy, Download, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -30,7 +30,7 @@ import {
 import { type McpServerChoice, mcpServersApi } from "@/lib/api/mcp-servers";
 import { type AgentModelBindingInput, providersApi, type ProviderView, type SupportedProviders } from "@/lib/api/providers";
 import { useAuth } from "@/lib/auth";
-import { modelOptions, modelThinkingLevels } from "@/lib/model-options";
+import { modelOptions, modelThinkingLevels, thinkingLabel, thinkingOptions } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
 import { CopyAgentDialog } from "./agent-dialogs";
 
@@ -38,7 +38,7 @@ type EditorTarget = { mode: "create" } | { mode: "open"; name: string };
 
 type Tab = "agent" | "skills" | "history" | "preview";
 
-const THINKING_OPTIONS: SelectOption[] = [{ value: "", label: "Default" }, ...THINKING_LEVELS.map((level) => ({ value: level, label: level }))];
+const THINKING_OPTIONS: SelectOption[] = thinkingOptions(undefined);
 const AUDIENCE_OPTIONS: SelectOption[] = [
   { value: "runtime", label: "runtime", hint: "runs in Kintsugi jobs" },
   { value: "member", label: "member", hint: "runs in members' harnesses" },
@@ -554,18 +554,14 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
 
   const selectedProvider = providers.find((entry) => entry.id === provider);
   const levels = modelThinkingLevels(selectedProvider, supported, model);
-  const thinkingOptions: SelectOption[] = [
-    { value: "", label: "Default", ...(levels.length === 0 ? { hint: "Choose a model to see its reasoning levels" } : levels.every((level) => level === "off") ? { hint: "This model has no reasoning effort" } : {}) },
-    ...levels.map((level) => ({ value: level, label: level })),
-    ...(thinking !== "" && !levels.includes(thinking as ThinkingLevel) ? [{ value: thinking, label: thinking, hint: "not supported by this model" }] : []),
-  ];
+  const thinkingChoices = thinkingOptions(levels, thinking);
   const perProject = detail.bindings.filter((binding) => binding.projectId !== undefined);
   return (
     <div className="flex flex-col gap-2 rounded-[var(--geist-radius)] p-3 shadow-border">
       <span className="text-[14px] text-text">Model binding</span>
       {!allowed ? (
         <p className="text-[13px] text-text-secondary">
-          {detail.binding === undefined ? "No installation-default model is bound." : `${detail.binding.provider} / ${detail.binding.model}${detail.binding.thinking === undefined ? "" : ` · thinking ${detail.binding.thinking}`}`}
+          {detail.binding === undefined ? "No installation-default model is bound." : `${detail.binding.provider} / ${detail.binding.model}${detail.binding.thinking === undefined ? "" : ` · thinking ${thinkingLabel(detail.binding.thinking).toLowerCase()}`}`}
           <span className="text-text-muted"> · bindings are managed with providers.manage</span>
         </p>
       ) : (
@@ -590,7 +586,7 @@ function ModelBinding({ agent, detail, onSaved }: { agent: string; detail: Agent
               if (thinking !== "" && !modelThinkingLevels(selectedProvider, supported, value).includes(thinking as ThinkingLevel)) setThinking("");
             }}
           />
-          <Select value={thinking} options={thinkingOptions} onChange={setThinking} />
+          <Select value={thinking} options={thinkingChoices} onChange={setThinking} />
           <Button size="small" variant="solid" disabled={busy || provider === "" || model.trim() === ""} onClick={() => void save(false)}>
             Save binding
           </Button>

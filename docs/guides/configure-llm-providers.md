@@ -28,8 +28,12 @@ Use this for vLLM, Ollama, LM Studio, LiteLLM or any internal gateway.
 
 ## Bind models to runtime agents
 
-1. Settings → Providers → **Agent model bindings**: per row, choose a runtime agent from the catalog, the scope **All projects** (the installation default), a provider and one of its models. **Save bindings** confirms with a notification. An agent's own page (Administration → Agents) sets its installation-default binding too.
+1. Settings → Providers → **Agent model bindings**: per row, choose a runtime agent from the catalog, the scope **All projects** (the installation default), a provider and one of its models. Type in the agent and model pickers to filter them. **Save bindings** confirms with a notification. An agent's own page (Administration → Agents) sets its installation-default binding too.
 2. To use a different model for a single project, add a second row for the same agent with that project as its scope; it takes precedence over the default.
+3. To move a whole project to one model, click **Apply to a project**, choose the project, provider, model and thinking level, and apply. Every runtime agent gets a binding for that project in one save; the installation defaults and the other projects' bindings stay as they are.
+4. A row marked **agent no longer exists** binds an agent that was removed or renamed. Jobs never use it; remove it with the row's remove button, or all at once with **Remove orphans**, and save.
+
+A stage page shows, for its project, the model each agent will run with and whether it comes from a **project binding** or the **installation default**. The worker resolves a job's model the same way.
 
 ## Notes
 

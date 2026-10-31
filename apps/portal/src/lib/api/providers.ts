@@ -60,6 +60,17 @@ export interface AgentModelBindingInput {
   thinking?: ThinkingLevel;
 }
 
+/** A stored binding; `orphan` when its agent is no longer in the catalog. */
+export type ModelBindingStatus = AgentModelBindingInput & { orphan: boolean };
+
+/** One provider and model for every runtime agent of a project. */
+export interface ApplyModelToProjectInput {
+  projectId: string;
+  provider: string;
+  model: string;
+  thinking?: ThinkingLevel;
+}
+
 export interface TestConnectionResult {
   ok: boolean;
   message: string;
@@ -101,4 +112,6 @@ export const providersApi = {
   test: (id: string) => apiSend<TestConnectionResult>(`${BASE}/${id}/test`, "POST"),
   listBindings: () => apiGet<AgentModelBindingInput[]>(`${BASE}/model-bindings`),
   replaceBindings: (bindings: AgentModelBindingInput[]) => apiSend<AgentModelBindingInput[]>(`${BASE}/model-bindings`, "PUT", bindings),
+  bindingStatus: () => apiGet<ModelBindingStatus[]>(`${BASE}/model-bindings/status`),
+  applyToProject: (input: ApplyModelToProjectInput) => apiSend<ModelBindingStatus[]>(`${BASE}/model-bindings/apply`, "POST", input),
 };

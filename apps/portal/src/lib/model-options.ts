@@ -2,7 +2,7 @@
 // (all models of its pi catalog entry when none are listed), a custom provider the models it
 // declares. A binding's current model stays selectable even when it is no longer offered.
 
-import type { ThinkingLevel } from "@kintsugi/domain";
+import { THINKING_LEVEL_LABELS, THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
 import type { SelectOption } from "@/components/ui/select";
 import type { ProviderView, SupportedProviders } from "./api/providers";
 
@@ -22,6 +22,27 @@ export function modelOptions(provider: ProviderView | undefined, supported: Supp
   }
   if (current !== undefined && current !== "" && !options.some((option) => option.value === current)) options.unshift({ value: current, label: current, hint: "not offered by this provider" });
   return options;
+}
+
+/** How a stored thinking level reads ("Off", "Low", …); an unknown value stays as it is. */
+export function thinkingLabel(level: string): string {
+  return (THINKING_LEVEL_LABELS as Record<string, string>)[level] ?? level;
+}
+
+/**
+ * The choices of a Thinking picker: "Default" (the agent's own level), then `levels` (a model's
+ * levels from modelThinkingLevels; omit for every level), all labelled alike. A `current` level
+ * the model does not support stays selectable, marked so.
+ */
+export function thinkingOptions(levels: readonly ThinkingLevel[] | undefined, current = ""): SelectOption[] {
+  const offered = levels ?? THINKING_LEVELS;
+  const defaultHint =
+    levels === undefined ? {} : levels.length === 0 ? { hint: "Choose a model to see its reasoning levels" } : levels.every((level) => level === "off") ? { hint: "This model has no reasoning effort" } : {};
+  return [
+    { value: "", label: "Default", ...defaultHint },
+    ...offered.map((level) => ({ value: level, label: thinkingLabel(level) })),
+    ...(current !== "" && !(offered as readonly string[]).includes(current) ? [{ value: current, label: thinkingLabel(current), hint: "not supported by this model" }] : []),
+  ];
 }
 
 /** What pi accepts for a custom reasoning model that declares no level map: everything up to `high`. */
