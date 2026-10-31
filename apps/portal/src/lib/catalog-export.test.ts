@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { CatalogItem, CatalogView } from "./api/catalog";
 import { CATALOG_COLUMNS, catalogRows, catalogWorkbook } from "./catalog-export";
 
@@ -23,6 +23,11 @@ const item: CatalogItem = {
 const view = { items: [item], catalog: { modules: [{ id: "billing", name: "Billing", summary: "" }] } } as unknown as CatalogView;
 
 describe("the catalog export", () => {
+  // exceljs is large and loaded on first use: cold, on a busy machine, that alone can pass the default 5 s.
+  beforeAll(async () => {
+    await import("exceljs");
+  }, 60_000);
+
   it("has a row per item with a cell for every column", () => {
     const [row] = catalogRows(view);
     expect(row).toHaveLength(CATALOG_COLUMNS.length);
@@ -34,5 +39,5 @@ describe("the catalog export", () => {
   it("writes an xlsx workbook", async () => {
     const bytes = await catalogWorkbook(view);
     expect(new Uint8Array(bytes).slice(0, 2)).toEqual(new Uint8Array([0x50, 0x4b]));
-  });
+  }, 30_000);
 });
