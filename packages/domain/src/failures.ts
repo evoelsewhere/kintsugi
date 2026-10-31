@@ -18,7 +18,8 @@ const KNOWN: readonly KnownFailure[] = [
   },
   {
     // git rev-parse of HEAD (or the default branch) in a mirror of a repository without any commit.
-    match: /Needed a single revision/i,
+    // git says it either way: `Needed a single revision`, or `ambiguous argument 'HEAD': unknown revision`.
+    match: /Needed a single revision|ambiguous argument 'HEAD': unknown revision/i,
     plain: "The repository has no commits yet. Push a first commit to its default branch, then sync it again.",
   },
 ];
