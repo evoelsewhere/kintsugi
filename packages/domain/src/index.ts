@@ -277,3 +277,4 @@ export * from "./web-search.js";
 export * from "./model-binding.js";
 export { DEFAULT_GAP_SETTLER, GAP_SETTLERS, GAP_STATUSES, type GapSettler, type GapStatus, gapIsResolved, isGapSettler, isMeaningfulGapText } from "./gap.js";
 export { ALL_TESTED_RULES, MAX_REPORTED_RULES, memberTestReportOf, type MemberTestReport } from "./member-build.js";
+export { EMPTY_REPOSITORY_MESSAGE, describeSyncError } from "./repository-sync.js";

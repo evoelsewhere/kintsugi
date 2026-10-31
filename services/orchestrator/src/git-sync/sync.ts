@@ -4,7 +4,8 @@
 
 import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { CheckoutStorage, cloneMirror, fetchMirror, isLoopbackUrl, prefetchDocumentBlobs, type RemoteOptions, resolveCommit } from "@kintsugi/git";
+import { EMPTY_REPOSITORY_MESSAGE } from "@kintsugi/domain";
+import { CheckoutStorage, cloneMirror, fetchMirror, isLoopbackUrl, prefetchDocumentBlobs, type RemoteOptions, resolveCommit, runGit } from "@kintsugi/git";
 import { explainFailure } from "../failures.js";
 import type { RepositoryStore, SyncTarget } from "./repositories.js";
 
@@ -41,9 +42,27 @@ export function remoteOptions(target: SyncTarget): RemoteOptions {
 }
 
 /**
+ * A repository with no commit yet. Retrying does not help until someone pushes, so the git-sync
+ * queue does not retry it: the next poll looks again.
+ */
+export class EmptyRepositoryError extends Error {
+  constructor(readonly repositoryId: string) {
+    super(EMPTY_REPOSITORY_MESSAGE);
+    this.name = "EmptyRepositoryError";
+  }
+}
+
+/** Whether a mirror has no ref at all: the repository it mirrors has no commit. */
+async function isEmptyMirror(mirror: string): Promise<boolean> {
+  const { stdout } = await runGit(["--git-dir", mirror, "for-each-ref", "--count=1"]).catch(() => ({ stdout: "x" }));
+  return stdout.trim() === "";
+}
+
+/**
  * Brings one repository's mirror up to date. Returns undefined when the repository was
  * removed meanwhile. On failure the repository is marked `error` and the error rethrown,
- * so the queue retries it.
+ * so the queue retries it; an empty repository is marked with a plain message and throws
+ * EmptyRepositoryError, which the queue does not retry.
  */
 // One mirror operation per repository at a time in this process: the git-sync queue, job
 // checkouts and the document writer all sync mirrors, and two clones of one mirror collide.
@@ -111,7 +130,10 @@ async function syncUnlocked({ store, storage }: SyncDeps, repositoryId: string):
     const ref = target.defaultBranch === undefined ? "HEAD" : `refs/heads/${target.defaultBranch}`;
     const previous = cloned ? undefined : await resolveCommit(mirror, ref).catch(() => undefined);
     if (!cloned) await fetchMirror(mirror, options);
-    const commit = await resolveCommit(mirror, ref);
+    const commit = await resolveCommit(mirror, ref).catch(async (error: unknown) => {
+      // A repository with no commit has nothing to resolve: say so instead of Git's message.
+      throw (await isEmptyMirror(mirror)) ? new EmptyRepositoryError(target.id) : error;
+    });
     // The API reads the mirror without a credential, so the documents of the tip must already be local.
     // Best effort: a server that refuses the fetch leaves the sync as it was, and a job checkout still fetches blobs.
     await prefetchDocumentBlobs(mirror, commit, options).catch(() => undefined);

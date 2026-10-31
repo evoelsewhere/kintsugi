@@ -16,7 +16,7 @@ export {
   type JobRunRequest,
 } from "./queues.js";
 export { RepositoryStore, type SyncStatus, type SyncTarget } from "./git-sync/repositories.js";
-export { pruneMirrors, syncRepository, withMirrorLock, type SyncDeps, type SyncResult } from "./git-sync/sync.js";
+export { EmptyRepositoryError, pruneMirrors, syncRepository, withMirrorLock, type SyncDeps, type SyncResult } from "./git-sync/sync.js";
 export { DocumentWriteStore, type DocumentRepoTarget, type DocumentWriteOutcome, type DocumentWriteStatus } from "./document-write/store.js";
 export { OUTPUT_LIMITS, OutputRuleError, readOutputDir, splitByAutoCommit, validateOutputs } from "./document-write/outputs.js";
 export { writeDocument, writerBranch, writerTrailers, type WriterDeps } from "./document-write/writer.js";

@@ -3,7 +3,7 @@
 // leaves this adapter only through serverAccess(), for one Git call.
 
 import { Injectable } from "@nestjs/common";
-import type { GitServerKind } from "@kintsugi/domain";
+import { describeSyncError, type GitServerKind } from "@kintsugi/domain";
 import type { Pool } from "pg";
 import { getPool, type Queryable, withTransaction } from "#common/db/pool.js";
 import { readSecret, type SecretTable, secretExists, storeSecret } from "#common/db/secret-store.js";
@@ -200,7 +200,8 @@ function toRepository(row: RepositoryRow): GitRepositoryRecord {
     syncStatus: row.sync_status,
     ...(row.last_commit === null ? {} : { lastCommit: row.last_commit }),
     ...(row.last_synced_at === null ? {} : { lastSyncedAt: row.last_synced_at.toISOString() }),
-    ...(row.last_error === null ? {} : { lastError: row.last_error }),
+    // Git's message for the known failures (an empty repository) is said plainly.
+    ...(row.last_error === null ? {} : { lastError: describeSyncError(row.last_error) }),
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };

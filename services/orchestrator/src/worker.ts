@@ -26,7 +26,7 @@ import { createPersistedGateDecider } from "./jobs/persisted-gate-decider.js";
 import { type JobDefaults, JobRunner } from "./jobs/runner.js";
 import { JobCancelled } from "./jobs/model.js";
 import { PgJobStore } from "./jobs/store.js";
-import { onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.js";
+import { EmptyRepositoryError, onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.js";
 import { triggerRebuilds } from "./aggregates.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
 import {
@@ -140,7 +140,11 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
   await ensureDocumentWriteQueue(boss);
   await boss.work<{ repositoryId: string }>(GIT_SYNC_QUEUE, { localConcurrency: options.concurrency ?? 2 }, counted(async ([job]) => {
     if (job === undefined) return;
-    const result = await syncRepository(deps, job.data.repositoryId);
+    // An empty repository is recorded as such; retrying cannot help until someone pushes, so the job ends and the next poll looks again.
+    const result = await syncRepository(deps, job.data.repositoryId).catch((error: unknown) => {
+      if (error instanceof EmptyRepositoryError) return undefined;
+      throw error;
+    });
     if (result !== undefined) log(`${result.cloned ? "cloned" : "fetched"} ${result.repositoryId} at ${result.commit.slice(0, 12)}`);
   }));
 

@@ -5,6 +5,7 @@
 // time windows use the database clock. Never selects a credential or restricted content.
 
 import { Injectable } from "@nestjs/common";
+import { describeSyncError } from "@kintsugi/domain";
 import type { Pool } from "pg";
 import { getPool } from "#common/db/pool.js";
 import type {
@@ -45,6 +46,9 @@ interface WriteRow {
   branch: string | null;
   at: Date;
 }
+
+/** A recorded sync error in plain words for the known Git failures (an empty repository). */
+const syncError = (raw: string | null): string | null => (raw === null ? null : describeSyncError(raw));
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
@@ -229,7 +233,7 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
         where sync_status = 'error' order by at desc, id limit $1`,
       [limit],
     );
-    return result.rows.map((row) => ({ id: row.id, ...optional("lastError", row.last_error), at: row.at.toISOString() }));
+    return result.rows.map((row) => ({ id: row.id, ...optional("lastError", syncError(row.last_error)), at: row.at.toISOString() }));
   }
 
   async recentRuns(limit: number): Promise<RunRecord[]> {
@@ -284,7 +288,7 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
       syncStatus: row.sync_status,
       ...optional("lastCommit", row.last_commit),
       ...optional("lastSyncedAt", row.last_synced_at?.toISOString() ?? null),
-      ...optional("lastError", row.last_error),
+      ...optional("lastError", syncError(row.last_error)),
       projects: byRepository.get(row.id) ?? [],
     }));
   }

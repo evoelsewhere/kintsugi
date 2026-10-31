@@ -6,12 +6,13 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EMPTY_REPOSITORY_MESSAGE } from "@kintsugi/domain";
 import { encryptSecret } from "@kintsugi/secrets";
 import { CheckoutStorage } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RepositoryStore } from "../src/git-sync/repositories.js";
-import { pruneMirrors, syncRepository } from "../src/git-sync/sync.js";
+import { EmptyRepositoryError, pruneMirrors, syncRepository } from "../src/git-sync/sync.js";
 import { startWorker } from "../src/worker.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
 
@@ -70,6 +71,18 @@ describe.skipIf(!hasDatabase)("git sync (integration)", () => {
     expect(failed?.sync_status).toBe("error");
     expect(failed?.last_error).toMatch(/git clone/);
     expect(existsSync(storage.mirror("internal", "missing"))).toBe(false);
+  });
+
+  it("says a repository with no commit is empty, with an error the queue does not retry", async () => {
+    remote.git("empty", "init", "--bare", "-q");
+    await repository("empty", `${remote.baseUrl}/empty.git`);
+    await expect(syncRepository(deps, "empty")).rejects.toBeInstanceOf(EmptyRepositoryError);
+    expect(await row("empty")).toMatchObject({ sync_status: "error", last_error: EMPTY_REPOSITORY_MESSAGE });
+    // Once someone pushes, the next sync is ready.
+    await remote.createRepository("empty-work-source");
+    remote.git("empty", "fetch", "-q", `${remote.git("empty-work-source", "rev-parse", "--git-dir").trim()}`, "main:main");
+    expect(await syncRepository(deps, "empty")).toMatchObject({ cloned: false });
+    expect((await row("empty"))?.sync_status).toBe("ready");
   });
 
   it("decrypts the server's token for the call and never stores it in the mirror", async () => {
