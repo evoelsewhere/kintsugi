@@ -4,7 +4,7 @@
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { afterAll, describe, expect, it } from "vitest";
-import { canonicalJson, KernelJob, LOOP_REPEATS, RUNAWAY_TURN_CHARS } from "../src/kernel/job.js";
+import { canonicalJson, KernelJob, LOOP_REPEATS, RUNAWAY_TOOL_ARGS_CHARS, RUNAWAY_TURN_CHARS } from "../src/kernel/job.js";
 import { agent, createWorkspace, fauxRuntime, jobSpec, runJob } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -146,14 +146,26 @@ describe("runaway turn", () => {
     return { end: await job.done, events };
   }
 
-  it("halts a turn that streams more than 150k characters without a tool call, naming the size and what it was", async () => {
+  it("halts a turn past 150k characters of thinking and text, or 400k of tool-call arguments, without a tool call, naming the size and what it was", async () => {
     expect(RUNAWAY_TURN_CHARS).toBe(150_000);
+    expect(RUNAWAY_TOOL_ARGS_CHARS).toBe(400_000);
     const thinking = await stream([{ turn: true }, { delta: "thinking_delta", chars: 190_000 }]);
     expect(thinking.end).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: one turn produced 160k characters of thinking without a tool call" });
-    const text = await stream([{ turn: true }, { delta: "thinking_delta", chars: 40_000 }, { delta: "text_delta", chars: 120_000 }]);
+    const text = await stream([{ turn: true }, { delta: "thinking_delta", chars: 10_000 }, { delta: "text_delta", chars: 150_000 }]);
     expect(text.end).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: one turn produced 160k characters of text without a tool call" });
+    const both = await stream([{ turn: true }, { delta: "thinking_delta", chars: 40_000 }, { delta: "text_delta", chars: 120_000 }]);
+    expect(both.end).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: one turn produced 160k characters of thinking and text without a tool call" });
     const args = await stream([{ turn: true }, { delta: "toolcall_delta", chars: 600_000 }]);
-    expect(args.end).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: one turn produced 160k characters of tool-call arguments without a tool call" });
+    expect(args.end).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: one turn produced 410k characters of tool-call arguments without a tool call" });
+  });
+
+  it("lets one large write through, and thinking beside it, when neither passes its own limit", async () => {
+    const write = await stream([{ turn: true }, { delta: "toolcall_delta", chars: 200_000 }, { tool: "write" }]);
+    expect(write.end).toMatchObject({ type: "job.completed" });
+    const mixed = await stream([{ turn: true }, { delta: "thinking_delta", chars: 80_000 }, { delta: "toolcall_delta", chars: 80_000 }, { tool: "write" }]);
+    expect(mixed.end).toMatchObject({ type: "job.completed" });
+    const near = await stream([{ turn: true }, { delta: "thinking_delta", chars: 140_000 }, { delta: "toolcall_delta", chars: 390_000 }, { tool: "write" }]);
+    expect(near.end).toMatchObject({ type: "job.completed" });
   });
 
   it("counts again at each turn and after each completed tool call, so a long job of normal turns is not a loop", async () => {
