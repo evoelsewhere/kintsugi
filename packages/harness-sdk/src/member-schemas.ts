@@ -1,4 +1,4 @@
-import { BRAIN_NODE_KINDS, BRAIN_SUMMARY_SOURCES, IDENTIFIER_MAX_LENGTH, PROJECT_ID_PATTERN } from "@kintsugi/domain";
+import { BRAIN_CHANGE_STATUSES, BRAIN_NODE_KINDS, BRAIN_SUMMARY_SOURCES, IDENTIFIER_MAX_LENGTH, PROJECT_ID_PATTERN } from "@kintsugi/domain";
 import { z } from "zod";
 
 export const MEMBER_SCHEMA_VERSION = "1" as const;
@@ -154,6 +154,7 @@ export const brainNodeSchema = z.object({
   subtreeTokens: z.number().int().min(0),
   children: z.number().int().min(0),
   ids: z.array(z.string()),
+  changed: z.object({ commit: z.string(), at: z.string(), subject: z.string() }).strict().nullable(),
 }).strict();
 
 const brainCrumbSchema = z.object({ id: z.string(), kind: brainNodeSchema.shape.kind, title: z.string() }).strict();
@@ -233,5 +234,27 @@ export const brainGrepSchema = z.object({
   text: z.string(),
   under: z.string().nullable(),
   matches: z.array(z.object({ node: brainNodeSchema, breadcrumb: z.array(brainCrumbSchema), line: z.number().int(), excerpt: z.string() }).strict()),
+  truncated: z.boolean(),
+}).strict();
+
+export const brainChangesQuerySchema = z.object({
+  schemaVersion: versionSchema,
+  projectId: projectIdSchema,
+  since: z.string().trim().regex(/^[0-9a-fA-F]{7,64}$/, "must be a commit id"),
+  under: brainNodeIdSchema.optional(),
+}).strict();
+
+export const brainChangesSchema = z.object({
+  ...brainIndexSchema,
+  since: z.string(),
+  files: z.array(z.object({
+    path: z.string(),
+    status: z.enum(BRAIN_CHANGE_STATUSES),
+    previousPath: z.string().nullable(),
+    added: z.number().int().min(0),
+    removed: z.number().int().min(0),
+    nodes: z.array(brainNodeSchema),
+  }).strict()),
+  linesKnown: z.boolean(),
   truncated: z.boolean(),
 }).strict();

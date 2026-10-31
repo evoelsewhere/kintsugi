@@ -3,7 +3,7 @@
 // it contains and what links to it. A folder shows its contents as cards instead of text.
 
 import { type BrainCrumb, type BrainLinkedNode, type BrainNode, type BrainReadView, isBrainIndexedPath } from "@kintsugi/domain";
-import { ArrowDownLeft, ArrowUpRight, ChevronRight } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronRight, History } from "lucide-react";
 import { useState } from "react";
 import { Loaded } from "@/components/loaded";
 import { Markdown } from "@/components/results/lazy-markdown";
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { brainApi } from "@/lib/api/brain";
 import { BRAIN_KIND_LABEL, SUMMARY_SOURCE_LABEL, citationText, formatTokens, linkedNodeIds } from "@/lib/brain";
-import { errorText } from "@/lib/format";
+import { errorText, formatDateTime, formatRelative, shortSha } from "@/lib/format";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { useLoader } from "@/lib/use-loader";
 import { BrainNodeIcon } from "./brain-tree";
@@ -76,6 +76,16 @@ function NodeView({ projectId, view, onSelect }: { projectId: string; view: Brai
             </span>
           ) : null}
           <span title="About four characters per token, with everything under this node">≈ {formatTokens(node.subtreeTokens)} tokens</span>
+          {node.changed === null ? null : (
+            <span
+              className="flex min-w-0 items-center gap-1"
+              title={`${node.kind === "document" ? "Last changed" : "Latest change inside"} ${formatDateTime(node.changed.at)} in ${node.changed.commit}: ${node.changed.subject}`}
+            >
+              <History className="size-3.5 shrink-0" strokeWidth={1.75} />
+              changed {formatRelative(node.changed.at)} in <code className="font-mono text-[11px]">{shortSha(node.changed.commit)}</code>
+              <span className="max-w-[320px] truncate">{node.changed.subject}</span>
+            </span>
+          )}
         </div>
         {node.summary === "" ? null : (
           <p className="max-w-3xl text-[13px] leading-5 text-text-secondary">

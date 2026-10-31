@@ -7,7 +7,7 @@ import { Brain, ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Hash, T
 import { useCallback, useEffect, useRef, useState } from "react";
 import { brainApi } from "@/lib/api/brain";
 import { formatTokens } from "@/lib/brain";
-import { errorText } from "@/lib/format";
+import { errorText, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const PAGE = 100;
@@ -167,7 +167,7 @@ export function BrainTree({ projectId, root, selected, reveal, showSummaries, on
                   aria-expanded={expandable ? isOpen : undefined}
                   data-node-id={node.id}
                   data-expandable={expandable}
-                  title={node.summary === "" ? node.title : `${node.title}\n\n${node.summary}`}
+                  title={[node.title, node.summary, node.changed === null ? "" : `Changed ${formatRelative(node.changed.at)}: ${node.changed.subject}`].filter((line) => line !== "").join("\n\n")}
                   className={cn(
                     "flex min-w-0 flex-1 items-start gap-1.5 rounded-[var(--geist-radius)] px-1.5 py-1 text-left hover:bg-hover focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]",
                     active ? "bg-hover text-text" : "text-text-secondary",

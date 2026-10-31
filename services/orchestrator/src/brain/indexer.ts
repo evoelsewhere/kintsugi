@@ -3,7 +3,7 @@
 // A build reads a commit, so it needs no lock on the mirror: a fetch running meanwhile only adds objects.
 
 import { randomBytes } from "node:crypto";
-import { BRAIN_BUILDER_VERSION, BRAIN_MAX_FILE_BYTES, type BrainSource, type BrainSourceDocument, buildBrainTree, isBrainIndexedPath } from "@kintsugi/domain";
+import { BRAIN_BUILDER_VERSION, BRAIN_MAX_FILE_BYTES, type BrainChange, type BrainSource, type BrainSourceDocument, buildBrainTree, isBrainIndexedPath } from "@kintsugi/domain";
 import { type CheckoutStorage, prefetchDocumentBlobs, resolveCommit, runGit } from "@kintsugi/git";
 import type { Pool } from "pg";
 import type { RepositoryStore, SyncTarget } from "../git-sync/repositories.js";
@@ -26,6 +26,53 @@ export type BrainIndexOutcome =
 const BATCH_BYTES = 24 * 1024 * 1024;
 /** A build stuck this long in `queued` or `indexing` was lost with its worker and is due again. */
 const STUCK_MS = 30 * 60 * 1000;
+/** Commits of history read for the last change of each document; older changes stay unknown. */
+const HISTORY_COMMITS = 10_000;
+const SUBJECT_MAX = 200;
+
+/**
+ * The last commit that changed each of `paths`, from a walk of the history up to `commit` (trees only, so a
+ * partial mirror needs no blob). The history is a help, not the index: a history too large to read in one go is
+ * read again over fewer commits, and one that cannot be read leaves every change unknown rather than failing the
+ * build.
+ */
+export async function lastChanges(mirror: string, commit: string, paths: ReadonlySet<string>): Promise<Map<string, BrainChange>> {
+  for (const commits of [HISTORY_COMMITS, HISTORY_COMMITS / 10]) {
+    try {
+      return await walkHistory(mirror, commit, paths, commits);
+    } catch {
+      // Over the output or time limit of git: try fewer commits, then give up on the history.
+    }
+  }
+  return new Map();
+}
+
+async function walkHistory(mirror: string, commit: string, paths: ReadonlySet<string>, commits: number): Promise<Map<string, BrainChange>> {
+  const marker = `@@kintsugi-change-${randomBytes(8).toString("hex")}@@`;
+  // `-z` keeps every path as it is (Git quotes a path with non-ASCII letters otherwise), and the extension matches in
+  // any case, as the Brain indexes it.
+  const { stdout } = await runGit(
+    ["--git-dir", mirror, "log", "-z", `--format=${marker}%H%x09%cI%x09%s`, "--name-only", "--no-renames", `--max-count=${commits}`, commit, "--", ":(glob)**/*.[mM][dD]"],
+    { timeoutMs: 2 * 60 * 1000 },
+  );
+  const found = new Map<string, BrainChange>();
+  let current: BrainChange | undefined;
+  for (const token of stdout.split("\0")) {
+    // A commit's header line ends with a newline before its paths.
+    const field = token.startsWith("\n") ? token.slice(1) : token;
+    if (field.startsWith(marker)) {
+      const [id = "", at = "", ...subject] = field.slice(marker.length).split("\t");
+      current = { commit: id, at: new Date(at).toISOString(), subject: subject.join("\t").slice(0, SUBJECT_MAX) };
+      continue;
+    }
+    const path = field;
+    if (current !== undefined && path !== "" && paths.has(path) && !found.has(path)) {
+      found.set(path, current);
+      if (found.size === paths.size) break;
+    }
+  }
+  return found;
+}
 
 interface DocumentRepo {
   target: SyncTarget;
@@ -117,9 +164,11 @@ export async function indexBrain(deps: BrainIndexDeps, projectId: string): Promi
       bytes += size;
     }
     await flush();
+    const changes = await lastChanges(repo.mirror, commit, new Set(listed.map((entry) => entry.path)));
     const documents: BrainSourceDocument[] = listed.flatMap((entry) => {
       const text = texts.get(entry.blob);
-      return text === undefined ? [] : [{ path: entry.path, text }];
+      const changed = changes.get(entry.path);
+      return text === undefined ? [] : [{ path: entry.path, text, ...(changed === undefined ? {} : { changed }) }];
     });
     const tree = buildBrainTree(documents, `${repo.projectName} · ${source.branch}`);
     const durationMs = Date.now() - started;

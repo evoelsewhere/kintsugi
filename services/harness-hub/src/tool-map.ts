@@ -1,6 +1,8 @@
 import {
   activityInputSchema,
   activityReceiptSchema,
+  brainChangesQuerySchema,
+  brainChangesSchema,
   brainGrepQuerySchema,
   brainGrepSchema,
   brainLookupQuerySchema,
@@ -29,6 +31,7 @@ export const MEMBER_TOOL_NAMES = [
   "brain_read",
   "brain_lookup",
   "brain_grep",
+  "brain_changes",
   "plugin_list",
   "activity_record",
 ] as const;
@@ -140,6 +143,17 @@ export function registerMemberTools(server: McpServer, member: MemberPort): void
     outputSchema: brainGrepSchema,
     annotations: READ_ONLY,
   }, (query) => invokeRead(() => member.brainGrep(query)));
+
+  server.registerTool("brain_changes", {
+    title: "What changed since a commit",
+    description:
+      "What changed in the Brain's documents from an earlier commit (such as the commit of a citation you read before) to the indexed one: " +
+      "each changed document with the sections and cards whose lines changed, optionally under one node. Read the changed nodes with brain_read. " +
+      "Each node also carries `changed`, the last commit that changed its document.",
+    inputSchema: brainChangesQuerySchema,
+    outputSchema: brainChangesSchema,
+    annotations: READ_ONLY,
+  }, (query) => invokeRead(() => member.brainChanges(query)));
 
   server.registerTool("plugin_list", {
     title: "List member plugins",

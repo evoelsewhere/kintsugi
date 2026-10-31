@@ -40,3 +40,12 @@ export const brainGrepQuerySchema = z.object({
   ignoreCase: ignoreCaseQuery,
 });
 export type BrainGrepQueryDto = z.infer<typeof brainGrepQuerySchema>;
+
+/** An earlier commit: a full or abbreviated commit id. */
+export const brainCommitSchema = z.string().trim().regex(/^[0-9a-fA-F]{7,64}$/, "must be a commit id");
+
+export const brainChangesQuerySchema = z.object({
+  since: brainCommitSchema,
+  under: brainNodeIdSchema.optional(),
+});
+export type BrainChangesQueryDto = z.infer<typeof brainChangesQuerySchema>;

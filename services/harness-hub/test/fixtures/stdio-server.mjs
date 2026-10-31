@@ -32,7 +32,7 @@ const member = {
   async brainTree(query) {
     const node = (id, kind, title, summary, children) => ({
       id, kind, title, summary, summarySource: "readme", path: id.replace(/\/$/, ""), anchor: null,
-      lineStart: null, lineEnd: null, subtreeEnd: null, tokens: 0, subtreeTokens: 10, children, ids: [],
+      lineStart: null, lineEnd: null, subtreeEnd: null, tokens: 0, subtreeTokens: 10, children, ids: [], changed: null,
     });
     return {
       schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"),
@@ -43,7 +43,7 @@ const member = {
   async brainRead(query) {
     const node = {
       id: query.node, kind: "document", title: "Standards", summary: "", summarySource: "none", path: query.node, anchor: null,
-      lineStart: 1, lineEnd: 1, subtreeEnd: 1, tokens: 3, subtreeTokens: 3, children: 0, ids: [],
+      lineStart: 1, lineEnd: 1, subtreeEnd: 1, tokens: 3, subtreeTokens: 3, children: 0, ids: [], changed: null,
     };
     return {
       schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), node, breadcrumb: [], scope: "subtree",
@@ -56,6 +56,9 @@ const member = {
   },
   async brainGrep(query) {
     return { schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), text: query.text, under: null, matches: [], truncated: false };
+  },
+  async brainChanges(query) {
+    return { schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), since: sha("b"), files: [], linesKnown: true, truncated: false };
   },
   async recordActivity(input) {
     return { schemaVersion: "1", id: "act-" + input.kind };

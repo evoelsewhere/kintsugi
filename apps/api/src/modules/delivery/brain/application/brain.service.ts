@@ -8,6 +8,8 @@ import {
   BRAIN_ROOT_ID,
   type BrainCrumb,
   type BrainGrepMatch,
+  type BrainChangedFile,
+  type BrainChangesView,
   type BrainGrepView,
   type BrainLookupView,
   type BrainNode,
@@ -16,13 +18,14 @@ import {
   type BrainState,
   type BrainStatusView,
   type BrainTreeView,
+  brainLines,
   isBrainIndexedPath,
   isBrainReferenceId,
   parseBrainNodeId,
 } from "@kintsugi/domain";
 import type { Actor } from "#common/auth/decorators.js";
 import { AUDIT_ACTIONS, AuditTrail, auditRecord } from "#common/audit/audit-trail.js";
-import { type DocumentContext, DocumentsService } from "#modules/delivery/documents/index.js";
+import { type DocumentContext, DocumentsService, diffFileWithin } from "#modules/delivery/documents/index.js";
 import { BrainBuildQueue, BrainIndex } from "../domain/brain.ports.js";
 
 /** A node at most this large is read whole with what is under it when the reader does not say. */
@@ -57,6 +60,16 @@ export interface BrainGrepQuery {
   under?: string | undefined;
   ignoreCase: boolean;
 }
+
+export interface BrainChangesQuery {
+  /** An earlier commit, such as the commit of a citation read before. */
+  since: string;
+  under?: string | undefined;
+}
+
+/** Changed documents one call lists, and nodes it names per document. */
+const CHANGED_FILES = 100;
+const CHANGED_NODES = 30;
 
 interface ReadyIndex {
   source: BrainSource & { indexedCommit: string };
@@ -231,7 +244,8 @@ export class BrainService {
     const context = await this.documents.context(projectId);
     const text = await this.documents.readText(context, source.indexedCommit, node.path);
     if (text === undefined) throw new ConflictException(`${node.path} can no longer be read at the indexed commit; rebuild the Brain.`);
-    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    // Lines as Git and the tree count them, so a citation opens on the same lines in any Git viewer.
+    const lines = brainLines(text);
     const end = scope === "subtree" ? (node.subtreeEnd ?? node.lineEnd) : node.lineEnd;
     const start = Math.max(node.lineStart, Math.min(query.fromLine ?? node.lineStart, end));
     const kept: string[] = [];
@@ -311,6 +325,47 @@ export class BrainService {
       under: scope?.id ?? null,
       matches,
       truncated: found.truncated || inScope.length > kept.length,
+    };
+  }
+
+  /**
+   * What changed in the indexed documents from an earlier commit to the indexed one: each changed document with the
+   * sections and cards whose lines changed, under a folder, document or section when given. Computed from Git on
+   * each call; nothing of it is kept in the index.
+   */
+  async changes(projectId: string, query: BrainChangesQuery): Promise<BrainChangesView> {
+    const { source } = await this.ready(projectId);
+    const scope = query.under === undefined || query.under === "" || query.under === BRAIN_ROOT_ID ? undefined : await this.nodeOf(projectId, query.under);
+    const under = scope === undefined ? undefined : parseBrainNodeId(scope.id).path;
+    const context = await this.documents.context(projectId);
+    const diff = await this.documents.diff(context, query.since.trim(), source.indexedCommit, under === "" ? undefined : under);
+    if (diff === undefined) throw new NotFoundException(`Commit ${query.since.slice(0, 64)} is not in the document repo mirror.`);
+    // A document moved out of what the Brain indexes is gone, and one moved in is new.
+    const inScope = diff.files.flatMap((file) => diffFileWithin(file, isBrainIndexedPath) ?? []);
+    const files: BrainChangedFile[] = [];
+    for (const file of inScope.slice(0, CHANGED_FILES)) {
+      // Within a section, only the lines under it count; without the older text, which lines changed is unknown.
+      const within = scope !== undefined && scope.lineStart !== null && scope.subtreeEnd !== null && diff.linesKnown;
+      const hunks = within ? file.hunks.filter((hunk) => hunk.start <= (scope.subtreeEnd ?? 0) && hunk.end >= (scope.lineStart ?? 0)) : file.hunks;
+      if (within && hunks.length === 0) continue;
+      let nodes: BrainNode[] = [];
+      if (file.status !== "deleted") {
+        nodes = diff.linesKnown && hunks.length > 0 ? await this.index.nodesInRanges(projectId, file.path, hunks, CHANGED_NODES) : [];
+        if (nodes.length === 0) {
+          const document = await this.index.node(projectId, file.path);
+          if (document !== undefined) nodes = [document];
+        }
+      }
+      files.push({ path: file.path, status: file.status, previousPath: file.previousPath, added: file.added, removed: file.removed, nodes });
+    }
+    return {
+      projectId,
+      branch: source.branch,
+      commit: source.indexedCommit,
+      since: diff.from,
+      files,
+      linesKnown: diff.linesKnown,
+      truncated: inScope.length > CHANGED_FILES,
     };
   }
 }

@@ -116,7 +116,8 @@ The bridge has no inbound listener. It uses the selected profile and refreshes c
 | `brain_tree` | One level of the project's [Brain](brain.md) (the tree index of its documents) with a summary per node and no text |
 | `brain_read` | A Brain node's text with its citation (path, lines, commit), its children and its links, in bounded parts |
 | `brain_lookup` | The Brain nodes a reference id, node id or repository path names |
-| `brain_grep` | The Brain nodes whose text contains an exact string |
+| `brain_grep` | The Brain nodes with a line that holds every word of a text (quoted: the exact phrase) |
+| `brain_changes` | What changed in the Brain's documents since an earlier commit, by document and by section |
 | `plugin_list` | The member plugins the member may install in a project |
 | `activity_record` | Records one bounded note for the project's monitoring (the only tool that is not read-only) |
 

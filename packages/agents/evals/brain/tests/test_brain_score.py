@@ -214,19 +214,79 @@ def test_a_missing_answer_counts_as_wrong():
     assert report['totals']['answered'] == len(KEY['questions']) - 1
 
 
+def test_an_answer_written_as_json_is_read_as_its_text():
+    answers = perfect_answers()
+    question = next(question for question in KEY['questions'] if question['kind'] != 'refuse')
+    entry = next(answer for answer in answers if answer['id'] == question['id'])
+    entry['answer'] = {'values': [group[0] for group in question['allOf']]}
+    assert by_id(score.score_run(run(answers), KEY, FIXTURE))[question['id']]['right'] is True
+    # A refusal written in JSON with letters beyond ASCII is still read.
+    key = {**KEY, 'refusals': [*KEY['refusals'], 'không có thông tin']}
+    refusal = next(question for question in KEY['questions'] if question['kind'] == 'refuse')
+    said = [{**answer, 'answer': {'note': 'Tài liệu không có thông tin.'}} if answer['id'] == refusal['id'] else answer for answer in perfect_answers()]
+    assert by_id(score.score_run(run(said), key, FIXTURE))[refusal['id']]['right'] is True
+
+
+def test_the_first_answer_to_a_question_counts_and_only_numbers_are_counted():
+    answers = perfect_answers()
+    answers[0]['toolCalls'] = True
+    answers[1]['tokens'] = '9'
+    duplicate = dict(answers[2], answer='wrong', citations=[])
+    report = score.score_run(run(['not an answer', {'answer': 'no id'}, *answers, duplicate]), KEY, FIXTURE)
+    results = by_id(report)
+    assert results[answers[0]['id']]['toolCalls'] is None
+    assert results[answers[1]['id']]['tokens'] is None
+    assert results[answers[2]['id']]['right'] is True
+    assert report['totals']['toolCalls'] == sum(answer['toolCalls'] for answer in answers[1:])
+    assert not any(result['documentOnly'] for result in report['questions'])
+
+
+def test_the_totals_a_run_reports_win_over_the_sum_of_its_answers():
+    assert {key: score.score_run(run(toolCalls=7, tokens=900), KEY, FIXTURE)['totals'][key] for key in ('toolCalls', 'tokens')} == {'toolCalls': 7, 'tokens': 900}
+    silent = [{**answer, 'toolCalls': None, 'tokens': None} for answer in perfect_answers()]
+    assert {key: score.score_run(run(silent), KEY, FIXTURE)['totals'][key] for key in ('toolCalls', 'tokens')} == {'toolCalls': None, 'tokens': None}
+
+
+def test_an_anchor_that_does_not_fit_the_fixture_is_a_bug_of_the_key():
+    rel = next(iter(FIXTURE.files))
+    first_line = FIXTURE.files[rel][0]
+    with pytest.raises(score.AnswerKeyError, match='not in the fixture'):
+        FIXTURE.anchor({'file': 'nowhere.md', 'match': 'x'})
+    with pytest.raises(score.AnswerKeyError, match='no line of'):
+        FIXTURE.anchor({'file': rel, 'match': 'no such text anywhere 7731'})
+    with pytest.raises(score.AnswerKeyError, match='after line 1'):
+        FIXTURE.anchor({'file': rel, 'match': first_line, 'through': 'no such text anywhere 7731'})
+    last_line = FIXTURE.files[rel][-1]
+    assert FIXTURE.anchor({'file': rel, 'match': first_line, 'through': last_line}) == (rel, 1, len(FIXTURE.files[rel]))
+
+
+def test_a_citation_without_a_path_is_none():
+    assert score.parse_citation(':12') is None
+    assert score.parse_citation({'path': ''}) is None
+    assert score.parse_citation({'path': 5}) is None
+    assert score.parse_citation(5) is None
+    assert score.parse_citation({'path': '/a.md', 'lineStart': 3}) == {'path': 'a.md', 'start': 3, 'end': 3, 'commit': None}
+    assert score.parse_citation('`a b.md:3-5@abcdef1`') == {'path': 'a b.md', 'start': 3, 'end': 5, 'commit': 'abcdef1'}
+
+
 # ---------------------------------------------------------------------------
 # Run files, reports and the prompt
 # ---------------------------------------------------------------------------
 
 def test_a_transcript_with_one_answer_per_line_is_a_run(tmp_path):
-    lines = ['Here are my answers:', ''] + ['`' + json.dumps(answer) + '`' for answer in perfect_answers()] + ['', 'Done.']
+    lines = ['Here are my answers, one "id" each:', ''] + ['`' + json.dumps(answer) + '`' for answer in perfect_answers()] + ['{"answer": "no id"}', '', 'Done.']
     path = tmp_path / 'transcript.md'
     path.write_text('\n'.join(lines), encoding='utf-8')
     loaded = score.load_run(str(path), 'documents')
     assert loaded['mode'] == 'documents'
     assert len(loaded['answers']) == len(KEY['questions'])
+    assert loaded['unreadable'] == 0
     with pytest.raises(score.RunError):
         score.load_run(str(path))
+    empty = tmp_path / 'empty.md'
+    empty.write_text('No answers here.', encoding='utf-8')
+    with pytest.raises(score.RunError, match='neither a run object'):
+        score.load_run(str(empty), 'brain')
 
 
 def test_a_report_compares_runs_and_writes_json(tmp_path, capsys):

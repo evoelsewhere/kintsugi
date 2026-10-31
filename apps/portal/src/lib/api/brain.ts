@@ -1,4 +1,4 @@
-import type { BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { apiGet, apiSend } from "../api";
 
 const path = (projectId: string): string => `/api/projects/${encodeURIComponent(projectId)}/brain`;
@@ -18,4 +18,5 @@ export const brainApi = {
   node: (projectId: string, node: string, fromLine?: number) => apiGet<BrainReadView>(`${path(projectId)}/node${query({ node, fromLine })}`),
   lookup: (projectId: string, q: string) => apiGet<BrainLookupView>(`${path(projectId)}/lookup${query({ q })}`),
   grep: (projectId: string, text: string, under?: string) => apiGet<BrainGrepView>(`${path(projectId)}/grep${query({ text, under })}`),
+  changes: (projectId: string, since: string, under?: string) => apiGet<BrainChangesView>(`${path(projectId)}/changes${query({ since, under })}`),
 };

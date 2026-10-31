@@ -52,6 +52,10 @@ export class PgBrainIndex extends BrainIndex {
     return this.store.links(projectId, id, limit);
   }
 
+  nodesInRanges(projectId: string, path: string, ranges: ReadonlyArray<{ start: number; end: number }>, limit: number): Promise<BrainNode[]> {
+    return this.store.nodesInRanges(projectId, path, ranges, limit);
+  }
+
   nodesAtLines(projectId: string, hits: ReadonlyArray<{ path: string; line: number }>): Promise<Array<BrainNode | undefined>> {
     return this.store.nodesAtLines(projectId, hits);
   }

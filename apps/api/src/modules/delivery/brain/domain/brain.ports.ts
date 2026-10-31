@@ -16,6 +16,8 @@ export abstract class BrainIndex {
   abstract byPath(projectId: string, path: string, limit: number): Promise<BrainNode[]>;
   abstract links(projectId: string, id: string, limit: number): Promise<BrainLinks>;
   abstract nodesAtLines(projectId: string, hits: ReadonlyArray<{ path: string; line: number }>): Promise<Array<BrainNode | undefined>>;
+  /** The nodes of a document whose own text overlaps the line ranges, in document order. */
+  abstract nodesInRanges(projectId: string, path: string, ranges: ReadonlyArray<{ start: number; end: number }>, limit: number): Promise<BrainNode[]>;
 }
 
 export abstract class BrainBuildQueue {

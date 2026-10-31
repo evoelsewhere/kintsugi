@@ -173,7 +173,8 @@ def score_run(run, key, fixture):
     for question in key['questions']:
         entry = answers.get(question['id'])
         answer = entry.get('answer', '') if entry else ''
-        answer = answer if isinstance(answer, str) else json.dumps(answer)
+        # An answer written as JSON is read as its text, letters of any script kept as they are.
+        answer = answer if isinstance(answer, str) else json.dumps(answer, ensure_ascii=False)
         citations = []
         for raw in (entry.get('citations', []) if entry else []) or []:
             parsed = parse_citation(raw)

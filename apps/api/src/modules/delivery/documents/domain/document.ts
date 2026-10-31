@@ -270,3 +270,33 @@ export interface GrepLine {
   line: number;
   text: string;
 }
+
+/** One Markdown file that changed between two commits, with the line ranges of the later commit that changed. */
+export interface DiffFile {
+  path: string;
+  previousPath: string | null;
+  status: "added" | "modified" | "deleted" | "renamed";
+  added: number;
+  removed: number;
+  hunks: Array<{ start: number; end: number }>;
+}
+
+/** The changed Markdown files between two commits; `linesKnown` is false when the older text is not in the mirror. */
+export interface DocumentDiff {
+  from: string;
+  files: DiffFile[];
+  linesKnown: boolean;
+}
+
+/**
+ * A changed file as a reader who sees only some paths sees it: a file moved out of sight is gone (under the path it
+ * had), and one moved into sight is new (the path it came from is not named). Undefined when neither side is seen.
+ */
+export function diffFileWithin(file: DiffFile, visible: (path: string) => boolean): DiffFile | undefined {
+  const now = visible(file.path);
+  const before = file.previousPath !== null && visible(file.previousPath);
+  if (file.status !== "renamed" || (now && before)) return now ? file : undefined;
+  if (now) return { ...file, status: "added", previousPath: null, hunks: [] };
+  if (before) return { ...file, path: file.previousPath ?? file.path, status: "deleted", previousPath: null, hunks: [] };
+  return undefined;
+}

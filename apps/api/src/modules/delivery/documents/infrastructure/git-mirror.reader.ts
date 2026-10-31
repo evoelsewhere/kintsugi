@@ -5,7 +5,7 @@
 import { access } from "node:fs/promises";
 import { Injectable } from "@nestjs/common";
 import { CheckoutStorage, GitError, dataDirFromEnv, runGit } from "@kintsugi/git";
-import type { DocumentRepo, FileRead, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
+import type { DiffFile, DocumentDiff, DocumentRepo, FileRead, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 
 const TIMEOUT_MS = 30_000;
@@ -95,10 +95,8 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
   async grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
     // Fixed strings over the Markdown files only: their blobs are in the mirror, and a pattern cannot backtrack.
     // Several terms must all be on the same line.
-    const under = options.under ?? "";
-    const pathspec = under === "" ? "**/*.md" : under.toLowerCase().endsWith(".md") ? under : `${under}/**/*.md`;
     const patterns = terms.flatMap((term, index) => [...(index === 0 ? [] : ["--and"]), "-e", term]);
-    const args = ["grep", "-z", "-n", "-I", "-F", "--full-name", ...(options.ignoreCase ? ["-i"] : []), ...patterns, commit, "--", `:(glob)${pathspec}`];
+    const args = ["grep", "-z", "-n", "-I", "-F", "--full-name", ...(options.ignoreCase ? ["-i"] : []), ...patterns, commit, "--", markdownPathspec(options.under ?? "")];
     const out = await this.git(repo, args).catch((error: unknown) => {
       // Exit status 1 is "no match".
       if (error instanceof GitError && error.exitCode === 1) return "";
@@ -119,8 +117,113 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
     return { matches, truncated };
   }
 
+  async diff(repo: DocumentRepo, from: string, to: string, under: string | undefined): Promise<DocumentDiff | undefined> {
+    const resolved = (await this.git(repo, ["rev-parse", "--verify", "-q", "--end-of-options", `${from}^{commit}`]).catch(() => "")).trim();
+    if (!/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(resolved)) return undefined;
+    const scope = under ?? "";
+    const within = (path: string): boolean => scope === "" || path === scope || path.startsWith(`${scope}/`);
+    // Which files changed needs trees only, which a partial mirror always has. All Markdown files are compared, so a
+    // document moved into or out of the scope is seen as moved rather than as added or deleted.
+    const names = await this.git(repo, ["diff", "--name-status", "-z", "-M", resolved, to, "--", markdownPathspec("")]);
+    const files = new Map<string, DiffFile>();
+    const tokens = names.split("\0");
+    for (let index = 0; index < tokens.length; ) {
+      const status = tokens[index++] ?? "";
+      if (status === "") continue;
+      if (status.startsWith("R")) {
+        const previous = tokens[index++] ?? "";
+        const path = tokens[index++] ?? "";
+        if (within(path) || within(previous)) files.set(path, { path, previousPath: previous, status: "renamed", added: 0, removed: 0, hunks: [] });
+      } else {
+        const path = tokens[index++] ?? "";
+        const kind = status === "A" ? "added" : status === "D" ? "deleted" : "modified";
+        if (within(path)) files.set(path, { path, previousPath: null, status: kind, added: 0, removed: 0, hunks: [] });
+      }
+    }
+    if (files.size === 0) return { from: resolved, files: [], linesKnown: true };
+    // Which lines changed needs the text of both commits; an older text the mirror never fetched leaves them unknown.
+    // A move across the scope needs both of its paths in the patch.
+    const crossing = [...files.values()].some((file) => file.previousPath !== null && !(within(file.path) && within(file.previousPath)));
+    let linesKnown = true;
+    try {
+      const patch = await this.git(repo, ["-c", "core.quotePath=false", "diff", "--unified=0", "--no-color", "-M", resolved, to, "--", markdownPathspec(crossing ? "" : scope)]);
+      let current: DiffFile | undefined;
+      let removedPath: string | undefined;
+      let header = false;
+      for (const line of patch.split("\n")) {
+        // A file's header runs from its `diff --git` line to its first hunk; a changed line that looks like a
+        // header line (an added "++ x") is text.
+        if (line.startsWith("diff --git ")) {
+          header = true;
+          current = undefined;
+          removedPath = undefined;
+        } else if (header && line.startsWith("--- ")) removedPath = patchPath(line.slice(4));
+        else if (header && line.startsWith("+++ ")) current = files.get(patchPath(line.slice(4)) ?? removedPath ?? "");
+        else if (line.startsWith("@@")) {
+          header = false;
+          const hunk = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
+          if (hunk === null || current === undefined) continue;
+          const removed = hunk[1] === undefined ? 1 : Number(hunk[1]);
+          const start = Number(hunk[2]);
+          const count = hunk[3] === undefined ? 1 : Number(hunk[3]);
+          current.removed += removed;
+          current.added += count;
+          // Lines only removed are placed on the line after which they were.
+          if (current.status !== "deleted") current.hunks.push(count > 0 ? { start, end: start + count - 1 } : { start: Math.max(start, 1), end: Math.max(start, 1) });
+        }
+      }
+    } catch {
+      linesKnown = false;
+    }
+    return { from: resolved, files: [...files.values()], linesKnown };
+  }
+
   private async objectType(repo: DocumentRepo, commit: string, path: string): Promise<string | undefined> {
     const out = await this.git(repo, ["cat-file", "-t", `${commit}:${path}`]).catch(() => "");
     return out.trim() === "" ? undefined : out.trim();
   }
+}
+
+/**
+ * The Markdown files under a folder, or one document, as a pathspec. Glob characters of the path match themselves
+ * (each in a class of its own: a backslash would be a path separator on Windows), and the extension matches in any
+ * case, as the Brain indexes it.
+ */
+export function markdownPathspec(under: string): string {
+  const literal = under.replace(/[[*?]/g, (char) => `[${char}]`);
+  return `:(glob)${under === "" ? "**/*.[mM][dD]" : under.toLowerCase().endsWith(".md") ? literal : `${literal}/**/*.[mM][dD]`}`;
+}
+
+/**
+ * The path of a patch's `---` or `+++` line without its `a/` or `b/`: git ends a path holding a space with a tab and
+ * quotes one with special characters C-style. Undefined for `/dev/null`.
+ */
+export function patchPath(raw: string): string | undefined {
+  let path = raw.endsWith("\t") ? raw.slice(0, -1) : raw;
+  if (path === "/dev/null") return undefined;
+  if (path.length > 1 && path.startsWith('"') && path.endsWith('"')) path = unquoteC(path.slice(1, -1));
+  return path.replace(/^[ab]\//, "");
+}
+
+const C_ESCAPES: Record<string, string> = { a: "\x07", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v" };
+
+/** Undoes git's C-style quoting, whose octal escapes are the bytes of UTF-8 text. */
+function unquoteC(quoted: string): string {
+  const bytes: number[] = [];
+  for (let at = 0; at < quoted.length; at += 1) {
+    const char = quoted[at] ?? "";
+    if (char !== "\\") {
+      bytes.push(...Buffer.from(char));
+      continue;
+    }
+    const next = quoted[at + 1] ?? "";
+    if (/[0-7]/.test(next)) {
+      bytes.push(Number.parseInt(quoted.slice(at + 1, at + 4), 8));
+      at += 3;
+    } else {
+      bytes.push(...Buffer.from(C_ESCAPES[next] ?? next));
+      at += 1;
+    }
+  }
+  return Buffer.from(bytes).toString("utf8");
 }

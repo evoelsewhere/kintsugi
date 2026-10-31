@@ -62,10 +62,13 @@ interface NodeRow {
   subtree_tokens: string;
   children: number;
   ids: string[];
+  changed_commit: string | null;
+  changed_at: Date | null;
+  changed_subject: string | null;
 }
 
 const NODE_COLUMNS =
-  "id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end, tokens, subtree_tokens, children, ids";
+  "id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end, tokens, subtree_tokens, children, ids, changed_commit, changed_at, changed_subject";
 /** Rows per insert statement while a tree is written. */
 const INSERT_CHUNK = 1000;
 const iso = (value: Date | null): string | null => (value === null ? null : value.toISOString());
@@ -114,6 +117,7 @@ function toNode(row: NodeRow): BrainNode {
     subtreeTokens: Number(row.subtree_tokens),
     children: row.children,
     ids: row.ids,
+    changed: row.changed_commit === null || row.changed_at === null ? null : { commit: row.changed_commit, at: row.changed_at.toISOString(), subject: row.changed_subject ?? "" },
   };
 }
 
@@ -313,6 +317,24 @@ export class PgBrainStore {
     };
   }
 
+  /**
+   * The nodes of a document whose own text overlaps any of the line ranges, in document order. Own ranges split a
+   * document without overlap, so a change is placed on the sections and cards it touched, not on their parents.
+   */
+  async nodesInRanges(projectId: string, path: string, ranges: ReadonlyArray<{ start: number; end: number }>, limit: number): Promise<BrainNode[]> {
+    if (ranges.length === 0) return [];
+    const result = await this.db.query<NodeRow>(
+      `select distinct ${NODE_COLUMNS.split(", ").map((column) => `n.${column}`).join(", ")}
+         from knowledge.brain_node n
+         join unnest($3::int[], $4::int[]) as r(first, last) on n.line_start <= r.last and n.line_end >= r.first
+        where n.project_id = $1 and n.path = $2 and n.kind in ('document', 'section', 'card')
+        order by n.line_start
+        limit $5`,
+      [projectId, path, ranges.map((range) => range.start), ranges.map((range) => range.end), limit],
+    );
+    return result.rows.map(toNode);
+  }
+
   /** For each (path, line), the deepest node whose own text holds the line. */
   async nodesAtLines(projectId: string, hits: ReadonlyArray<{ path: string; line: number }>): Promise<Array<BrainNode | undefined>> {
     if (hits.length === 0) return [];
@@ -336,11 +358,12 @@ async function insertNodes(client: PoolClient, projectId: string, nodes: readonl
     await client.query(
       `insert into knowledge.brain_node (project_id, ${NODE_COLUMNS})
        select $1, id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end,
-              tokens, subtree_tokens, children, case when ids = '' then '{}'::text[] else string_to_array(ids, ' ') end
+              tokens, subtree_tokens, children, case when ids = '' then '{}'::text[] else string_to_array(ids, ' ') end,
+              changed_commit, changed_at, changed_subject
          from unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::int[], $11::int[],
-                     $12::int[], $13::int[], $14::int[], $15::int[], $16::bigint[], $17::int[], $18::text[])
+                     $12::int[], $13::int[], $14::int[], $15::int[], $16::bigint[], $17::int[], $18::text[], $19::text[], $20::timestamptz[], $21::text[])
            as t(id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end,
-                tokens, subtree_tokens, children, ids)`,
+                tokens, subtree_tokens, children, ids, changed_commit, changed_at, changed_subject)`,
       [
         projectId,
         column((node) => node.id),
@@ -360,6 +383,9 @@ async function insertNodes(client: PoolClient, projectId: string, nodes: readonl
         column((node) => node.subtreeTokens),
         column((node) => node.children),
         column((node) => node.ids.join(" ")),
+        column((node) => node.changed?.commit ?? null),
+        column((node) => node.changed?.at ?? null),
+        column((node) => node.changed?.subject ?? null),
       ],
     );
   }

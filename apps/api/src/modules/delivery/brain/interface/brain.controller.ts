@@ -3,15 +3,17 @@
 
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
-import type { BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { BrainService } from "../application/brain.service.js";
 import {
+  type BrainChangesQueryDto,
   type BrainConfigureBody,
   type BrainGrepQueryDto,
   type BrainLookupQueryDto,
   type BrainReadQueryDto,
   type BrainTreeQueryDto,
+  brainChangesQuerySchema,
   brainConfigureSchema,
   brainGrepQuerySchema,
   brainLookupQuerySchema,
@@ -70,5 +72,11 @@ export class BrainController {
   @ApiOperation({ summary: "The nodes whose text holds a fixed string" })
   grep(@Param("id") id: string, @Query({ schema: brainGrepQuerySchema }) query: BrainGrepQueryDto): Promise<BrainGrepView> {
     return this.brain.grep(id, query);
+  }
+
+  @Get("changes")
+  @ApiOperation({ summary: "What changed in the indexed documents since an earlier commit, by document and by section" })
+  changes(@Param("id") id: string, @Query({ schema: brainChangesQuerySchema }) query: BrainChangesQueryDto): Promise<BrainChangesView> {
+    return this.brain.changes(id, query);
   }
 }

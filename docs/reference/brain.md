@@ -16,7 +16,7 @@ The Brain is a tree index of one branch of a project's document repository. Agen
 
 Folders come first, then documents (a `README.md` or `index.md` first), in name order. Sections and cards keep their order in the document.
 
-Every node has a title and a summary of at most 240 characters. It also has its line range: its own text, and the end of everything under it. Its size is counted at about four characters per token. Cards and documents with a front matter `id` define reference ids. Links between nodes come from Markdown links and from mentions of ids that another node defines.
+Every node has a title and a summary of at most 240 characters. It also has its line range: its own text, and the end of everything under it. Lines are counted as Git counts them (a newline ends a line), so a citation opens on the same lines in any Git viewer. Its size is counted at about four characters per token. Headings inside code fences and HTML comments are text, not nodes. Cards and documents with a front matter `id` define reference ids. Links between nodes come from Markdown links (a target in angle brackets may hold spaces; a card is found by its id or by the GitHub anchor of its heading) and from mentions of ids that one to three other nodes define. A link Git or a browser could not follow is left out. A document carries `changed`, the last commit that changed it up to the indexed commit, with its date and the first line of its message, read from one walk of the history at build time (the last 10,000 commits, or the last 1,000 when that history is too large to read; when neither can be read, the changes stay unknown and the build goes on). A folder and the root carry the latest change of what they hold. Sections and cards carry none, because the history is kept per file.
 
 ### Where summaries come from
 
@@ -40,8 +40,8 @@ A document whose front matter `status` is `superseded`, `deprecated`, `rejected`
 
 The following are never indexed:
 
-- files that are not Markdown;
-- anything under `restricted/`, `plugins/`, `scratch/` or a hidden folder;
+- files that are not Markdown (`.md` in any case);
+- anything under a `restricted/` folder at any depth and in any case, under `plugins/` or `scratch/` at the root, or under a hidden folder;
 - identifier ledgers (`identifiers/`);
 - files over 2 MiB.
 
@@ -76,6 +76,7 @@ All reads use the tree of the indexed commit and fail with 409 until a first bui
 | `GET …/brain/node?node&scope&fromLine` | `GET /api/member/v1/brain/read?projectId&node&scope&fromLine` | `brain_read` | The node's text, its `citation` (`nodeId`, `path`, `lineStart`, `lineEnd`, `commit`: the range read), children, and up to 20 links each way |
 | `GET …/brain/lookup?q` | `GET /api/member/v1/brain/lookup?projectId&query` | `brain_lookup` | The nodes a reference id, node id or path names, with breadcrumbs |
 | `GET …/brain/grep?text&under&ignoreCase` | `GET /api/member/v1/brain/grep?projectId&text&under&ignoreCase` | `brain_grep` | Up to 50 lines that hold every word of the text, in any order (a quoted text: that exact phrase), case-insensitive by default, each in the deepest node that holds it |
+| `GET …/brain/changes?since&under` | `GET /api/member/v1/brain/changes?projectId&since&under` | `brain_changes` | What changed from an earlier commit (full or abbreviated id, such as the commit of a citation) to the indexed one: up to 100 changed documents with their status (added, modified, deleted, renamed), lines added and removed, and up to 30 sections and cards whose own lines changed. It is computed from Git on each call and never stored. A document moved within the scope is `renamed`; one moved into what the Brain indexes is `added` and one moved out of it is `deleted` under its old path. When the mirror lacks the older text, `linesKnown` is false and documents are listed without their sections. A commit the mirror does not have answers 404 |
 
 `scope` of a read is `subtree` (the node with everything under it), `node` (its own text; its children are listed) or `auto`. With `auto`, which members get by default, a node with children is read whole up to about 6,000 tokens and as its own text above that. A member's read starts every line of its text with the line number and a tab (`lineNumbers: true`), so the agent cites only the lines that hold the answer rather than the whole range read; the portal's read is the text as written. Text is cut at 24,000 characters for members (200,000 in the portal); `truncated` and `nextLine` say where to continue.
 
@@ -97,6 +98,7 @@ The MCP server's instructions and the tool descriptions say how to use the Brain
 3. Read the chosen nodes with `brain_read` and cite the numbered lines that hold the answer, with the read's path and commit.
 4. Use `brain_lookup` for an id or a path, and `brain_grep` for words no summary shows.
 5. When the Brain does not hold the answer, say so.
+6. To learn what changed since an earlier read, call `brain_changes` with the commit of its citation, then read the changed nodes.
 
 How well agents answer this way is measured by the [Brain eval](../development/brain-eval.md).
 

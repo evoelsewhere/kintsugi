@@ -231,6 +231,25 @@ describe("buildBrainTree", () => {
     expect(only[0]?.summary).toBe("Table of 2 rows: ID, Risk. Rows: R-01 Prices differ; R-02 Team leaves.");
   });
 
+  it("keeps the last change of each document and the latest one up the folders", () => {
+    const early = { commit: "a".repeat(40), at: "2026-10-01T10:00:00.000Z", subject: "Add the standards" };
+    const late = { commit: "b".repeat(40), at: "2026-10-20T10:00:00.000Z", subject: "Rename the tables" };
+    const dated = buildBrainTree(
+      [
+        { path: "01-standards/README.md", text: "# Standards\n\nHow we write code.", changed: early },
+        { path: "01-standards/naming.md", text: "# Naming\n\n## Tables\n\nPlural names.", changed: late },
+        { path: "00-project/charter.md", text: "# Charter" },
+      ],
+      "x",
+    );
+    const at = (id: string) => dated.nodes.find((candidate) => candidate.id === id);
+    expect(at("01-standards/naming.md")?.changed).toEqual(late);
+    expect(at("01-standards/naming.md#tables")?.changed).toBeNull();
+    expect(at("01-standards/")?.changed).toEqual(late);
+    expect(at("00-project/")?.changed).toBeNull();
+    expect(at("/")?.changed).toEqual(late);
+  });
+
   it("sums tokens up the folders", () => {
     const standards = node("01-standards/");
     const naming = node("01-standards/conventions/naming.md");

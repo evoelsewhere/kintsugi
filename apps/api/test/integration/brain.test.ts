@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
+import type { BrainChangesView, BrainGrepView, BrainLookupView, BrainReadView, BrainStatusView, BrainTreeView } from "@kintsugi/domain";
 import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { RepositoryStore } from "@kintsugi/orchestrator";
@@ -44,6 +44,8 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
   let dataDir: string;
   let token: string;
   let pool: pg.Pool;
+  let firstCommit: string;
+  let secondCommit: string;
   const previousDataDir = process.env["KINTSUGI_DATA_DIR"];
   const build = () =>
     indexBrain({ pool, repositories: new RepositoryStore(pool), storage: new CheckoutStorage(dataDir), log: () => undefined }, "shop");
@@ -53,11 +55,12 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     process.env["KINTSUGI_DATA_DIR"] = dataDir;
     remote = await startGitHttpServer();
     await remote.createRepository("docs");
-    await remote.commitFiles("docs", [
+    firstCommit = await remote.commitFiles("docs", [
       { path: "01-standards/README.md", content: "# Standards\n\nHow this project names and reviews code.\n" },
       { path: "10-applications/web/01-legacy/billing/tax/spec.md", content: SPEC },
       { path: "10-applications/web/01-legacy/billing/tax/data-objects.md", content: "## Invoice line\n\nAmounts round half up.\n" },
     ]);
+    secondCommit = await remote.commit("docs", "10-applications/web/01-legacy/billing/tax/data-objects.md", "## Invoice line\n\nAmounts round half up.\nTotals round once per line.\n");
     await remote.commit("docs", "01-standards/README.md", "# Standards (next)\n", "release");
     await cloneMirror(`${remote.baseUrl}/docs.git`, new CheckoutStorage(dataDir).mirror("local", "docs"), { allowHttp: true });
 
@@ -154,6 +157,30 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     expect(words.matches.map((match) => match.line)).toEqual([7, 9]);
     const phrase = (await admin.get<BrainGrepView>(`/projects/shop/brain/grep?text=${encodeURIComponent('"fee late"')}`)).body.data!;
     expect(phrase.matches).toEqual([]);
+  });
+
+  it("says what changed since an earlier commit, by section, and when each document last changed", async () => {
+    const changes = (await admin.get<BrainChangesView>(`/projects/shop/brain/changes?since=${firstCommit.slice(0, 12)}`)).body.data!;
+    expect(changes).toMatchObject({ since: firstCommit, commit: secondCommit, linesKnown: true, truncated: false });
+    expect(changes.files.map((file) => [file.path, file.status, file.added, file.removed, file.nodes.map((node) => node.id)])).toEqual([
+      ["10-applications/web/01-legacy/billing/tax/data-objects.md", "modified", 1, 0, ["10-applications/web/01-legacy/billing/tax/data-objects.md#invoice-line"]],
+    ]);
+    const elsewhere = await new Client(app).request<BrainChangesView>(
+      "GET",
+      `/member/v1/brain/changes?projectId=shop&since=${firstCommit}&under=${encodeURIComponent("01-standards/")}`,
+      bearer(token),
+    );
+    expect(elsewhere.status).toBe(200);
+    expect(elsewhere.body.data?.files).toEqual([]);
+    expect((await admin.get(`/projects/shop/brain/changes?since=${"f".repeat(40)}`)).status).toBe(404);
+    expect((await admin.get("/projects/shop/brain/changes?since=not-a-commit")).status).toBe(400);
+
+    const changed = (await admin.get<BrainReadView>(`/projects/shop/brain/node?node=${encodeURIComponent("10-applications/web/01-legacy/billing/tax/data-objects.md")}`)).body.data!;
+    expect(changed.node.changed).toMatchObject({ commit: secondCommit, subject: expect.any(String) });
+    const untouched = (await admin.get<BrainReadView>(`/projects/shop/brain/node?node=${encodeURIComponent("10-applications/web/01-legacy/billing/tax/spec.md")}`)).body.data!;
+    expect(untouched.node.changed?.commit).toBe(firstCommit);
+    const root = (await admin.get<BrainTreeView>("/projects/shop/brain/tree")).body.data!;
+    expect(root.node.changed?.commit).toBe(secondCommit);
   });
 
   it("follows another branch and turns off", async () => {

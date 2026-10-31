@@ -35,7 +35,7 @@ describe("member stdio MCP process", () => {
     const listed = await client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
 
-    expect(names).toEqual(["activity_record", "brain_grep", "brain_lookup", "brain_read", "brain_tree", "document_get", "document_tree", "plugin_list", "project_list"]);
+    expect(names).toEqual(["activity_record", "brain_changes", "brain_grep", "brain_lookup", "brain_read", "brain_tree", "document_get", "document_tree", "plugin_list", "project_list"]);
     expect(listed.tools.filter((tool) => tool.annotations?.readOnlyHint !== true).map((tool) => tool.name)).toEqual(["activity_record"]);
 
     const documentTool = listed.tools.find((tool) => tool.name === "document_get");

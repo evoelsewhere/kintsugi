@@ -34,7 +34,7 @@ export type BrainSummarySource = (typeof BRAIN_SUMMARY_SOURCES)[number];
 /** The id of the tree's root. A folder's id is its path with a trailing `/`, a document's its path, a section's `path#anchor`. */
 export const BRAIN_ROOT_ID = "/";
 /** Bumped when the builder changes what it produces, so every index is rebuilt once. */
-export const BRAIN_BUILDER_VERSION = 3;
+export const BRAIN_BUILDER_VERSION = 4;
 export const BRAIN_SUMMARY_MAX = 240;
 export const BRAIN_TITLE_MAX = 200;
 /** Larger files are left out, as the document read API refuses them (docs/reference/document-repo-read-path.md). */
@@ -70,6 +70,18 @@ export interface BrainNode {
   children: number;
   /** Reference identifiers the node defines: a card's heading id, or a document's front matter `id`. */
   ids: string[];
+  /**
+   * The last commit that changed the document, up to the indexed commit; for a folder or the root, the latest of
+   * what it holds. Null for a section or a card (history is kept per file), and when the history is not known.
+   */
+  changed: BrainChange | null;
+}
+
+/** A commit that changed a document: its id, its date and the first line of its message. */
+export interface BrainChange {
+  commit: string;
+  at: string;
+  subject: string;
 }
 
 export interface BrainLink {
@@ -91,10 +103,15 @@ export interface BrainTree {
 export interface BrainSourceDocument {
   path: string;
   text: string;
+  /** The last commit that changed the file, when the caller read the history. */
+  changed?: BrainChange;
 }
 
-const EXCLUDED_ROOTS = new Set(["plugins", "scratch", "restricted"]);
-/** Allocation ledgers (ADR-0075) are machine-maintained history, not knowledge. */
+const EXCLUDED_ROOTS = new Set(["plugins", "scratch"]);
+/**
+ * Restricted records, at any depth and in any case, as the documents API keeps them; allocation ledgers
+ * (ADR-0075) are machine-maintained history, not knowledge.
+ */
 const EXCLUDED_FOLDERS = new Set(["restricted", "identifiers"]);
 const README_FILES = ["readme.md", "index.md"];
 
@@ -105,9 +122,16 @@ const README_FILES = ["readme.md", "index.md"];
 export function isBrainIndexedPath(path: string): boolean {
   if (!path.toLowerCase().endsWith(".md")) return false;
   const segments = path.split("/");
-  if (segments.some((segment) => segment === "" || segment === "." || segment === ".." || segment.startsWith("."))) return false;
+  // An empty segment, `.`, `..` and hidden names all fail here.
+  if (segments.some((segment) => segment === "" || segment.startsWith("."))) return false;
   if (EXCLUDED_ROOTS.has(segments[0] ?? "")) return false;
-  return !segments.slice(0, -1).some((segment) => EXCLUDED_FOLDERS.has(segment));
+  // The file's own name ends in `.md`, so only folders can match.
+  return !segments.some((segment) => EXCLUDED_FOLDERS.has(segment.toLowerCase()));
+}
+
+/** A document's lines as Git counts them: a newline ends a line, and a carriage return before it is dropped. */
+export function brainLines(text: string): string[] {
+  return text.split("\n").map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line));
 }
 
 /** Approximate model tokens of a text: about four characters each. */
@@ -123,12 +147,17 @@ export function brainSectionId(path: string, anchor: string): string {
   return `${path}#${anchor}`;
 }
 
+/** An anchor is a heading slug or a reference id: never a dot or a `#`, so a `#` in a file name stays in the path. */
+const ANCHOR = /^[\p{L}\p{N}_-]+$/u;
+
 /** The document path and anchor of a node id; a folder id gives its path and no anchor. */
 export function parseBrainNodeId(id: string): { path: string; anchor: string | null } {
-  if (id === BRAIN_ROOT_ID) return { path: "", anchor: null };
+  // The root `/` is the folder with the empty path.
   if (id.endsWith("/")) return { path: id.slice(0, -1), anchor: null };
-  const hash = id.indexOf("#");
-  return hash < 0 ? { path: id, anchor: null } : { path: id.slice(0, hash), anchor: id.slice(hash + 1) };
+  const hash = id.lastIndexOf("#");
+  const path = id.slice(0, hash);
+  const anchor = id.slice(hash + 1);
+  return path.toLowerCase().endsWith(".md") && ANCHOR.test(anchor) ? { path, anchor } : { path: id, anchor: null };
 }
 
 /** A reference id: uppercase segments joined by `-`, ending in digits (`RULE-CARD01-0001`, `COM-LOG-01`, `API-001`). */
@@ -138,7 +167,8 @@ const ID_MENTIONS = new RegExp(`(?<![A-Za-z0-9-])${ID_SOURCE}(?![A-Za-z0-9-])`, 
 const CARD_HEADING = new RegExp(`^(${ID_SOURCE})(?:\\s*:\\s*(.*))?$`);
 const HEADING = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/;
 const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})/;
-const LINK = /(?<!!)\[([^\]]*)\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)/g;
+/** A Markdown link; its target is written bare or in angle brackets, which allow spaces (`[x](<my notes.md>)`). */
+const LINK = /(?<!!)\[([^\]]*)\]\((?:<([^>\n]+)>|([^)\s]+))(?:\s+"[^"]*")?\)/g;
 
 export function isBrainReferenceId(value: string): boolean {
   return ID_PATTERN.test(value);
@@ -195,6 +225,8 @@ function scalar(raw: string): string {
       // not JSON: shown as written
     }
   }
+  // A single-quoted YAML scalar writes a quote inside it twice.
+  if (value.length > 1 && value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1).replace(/''/g, "'");
   return value;
 }
 
@@ -206,7 +238,9 @@ function frontMatterOf(lines: readonly string[]): FrontMatter {
   if (end < 0 || end > 400) return { fields, lines: 0 };
   for (const line of lines.slice(1, end)) {
     const pair = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/.exec(line);
-    if (pair?.[1] !== undefined && pair[2] !== undefined && pair[2].trim() !== "") fields.set(pair[1], scalar(pair[2]));
+    // An empty value (`title: ""` too) says nothing: the next source of the title or summary applies.
+    const value = pair?.[2] === undefined ? "" : scalar(pair[2]);
+    if (pair?.[1] !== undefined && value !== "") fields.set(pair[1], value);
   }
   return { fields, lines: end + 1 };
 }
@@ -229,6 +263,15 @@ interface Summary {
   source: BrainSummarySource;
 }
 
+/**
+ * Whether a line closes the code fence `fence` opened (CommonMark): a run of the same character at least as long,
+ * with nothing after it. A shorter run inside, as in a fence that shows a fenced example, is text.
+ */
+function closesFence(line: string, fence: string): boolean {
+  const run = /^(`+|~+)\s*$/.exec(line.trim())?.[1];
+  return run !== undefined && run[0] === fence[0] && run.length >= fence.length;
+}
+
 /** The blocks of a node's own text: runs of non-blank lines, code fences kept whole, HTML comments dropped. */
 function blocksOf(lines: readonly string[]): string[][] {
   const blocks: string[][] = [];
@@ -242,7 +285,7 @@ function blocksOf(lines: readonly string[]): string[][] {
   for (const line of lines) {
     if (fence !== undefined) {
       current.push(line);
-      if (line.trim().startsWith(fence)) {
+      if (closesFence(line, fence)) {
         fence = undefined;
         flush();
       }
@@ -260,7 +303,7 @@ function blocksOf(lines: readonly string[]): string[][] {
     const open = FENCE.exec(line);
     if (open?.[1] !== undefined) {
       flush();
-      fence = open[1].slice(0, 3);
+      fence = open[1];
       current.push(line);
       continue;
     }
@@ -379,18 +422,28 @@ interface Heading {
   text: string;
 }
 
+/** The headings of a document, outside code fences and HTML comments (a commented-out section is not one). */
 function headingsOf(lines: readonly string[], from: number): Heading[] {
   const headings: Heading[] = [];
   let fence: string | undefined;
+  let comment = false;
   for (let index = from; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     const open = FENCE.exec(line);
     if (fence !== undefined) {
-      if (line.trim().startsWith(fence)) fence = undefined;
+      if (closesFence(line, fence)) fence = undefined;
+      continue;
+    }
+    if (comment) {
+      if (line.includes("-->")) comment = false;
+      continue;
+    }
+    if (line.trim().startsWith("<!--")) {
+      comment = !line.includes("-->");
       continue;
     }
     if (open?.[1] !== undefined) {
-      fence = open[1].slice(0, 3);
+      fence = open[1];
       continue;
     }
     const match = HEADING.exec(line);
@@ -405,11 +458,13 @@ function resolveTarget(fromPath: string, target: string): { path: string; anchor
   if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("//")) return undefined;
   const hash = target.indexOf("#");
   const rawPath = hash < 0 ? target : target.slice(0, hash);
-  const anchor = hash < 0 ? undefined : decodeURIComponent(target.slice(hash + 1));
   let decoded: string;
+  let anchor: string | undefined;
   try {
     decoded = decodeURIComponent(rawPath.split("?")[0] ?? "");
+    anchor = hash < 0 ? undefined : decodeURIComponent(target.slice(hash + 1));
   } catch {
+    // A malformed escape (`#50%`) points nowhere; it must not stop the build.
     return undefined;
   }
   if (decoded === "") return anchor === undefined || anchor === "" ? undefined : { path: fromPath, anchor };
@@ -429,7 +484,7 @@ function linksOf(fromId: string, fromPath: string, lines: readonly string[]): Pe
   const found: PendingLink[] = [];
   const text = lines.join("\n");
   for (const match of text.matchAll(LINK)) {
-    const target = resolveTarget(fromPath, match[2] ?? "");
+    const target = resolveTarget(fromPath, match[2] ?? match[3] ?? "");
     if (target !== undefined) found.push({ fromId, ...target });
   }
   for (const match of text.matchAll(ID_MENTIONS)) found.push({ fromId, id: match[0] });
@@ -447,7 +502,7 @@ interface DocumentNodes {
  * Depths, ordinals and parents below the document are set; the document's own are set by the tree.
  */
 export function buildBrainDocument(path: string, text: string): DocumentNodes {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const lines = brainLines(text);
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   const front = frontMatterOf(lines);
   const headings = headingsOf(lines, front.lines);
@@ -482,6 +537,7 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
     subtreeTokens: brainTokens(lines.join("\n")),
     children: 0,
     ids: documentIds,
+    changed: null,
   };
   const nodes: BrainNode[] = [document];
   const links: PendingLink[] = linksOf(path, path, ownLines);
@@ -527,6 +583,7 @@ export function buildBrainDocument(path: string, text: string): DocumentNodes {
       subtreeTokens: brainTokens(lines.slice(heading.line, subtreeEndLine).join("\n")),
       children: 0,
       ids: id !== undefined ? [id] : [],
+      changed: null,
     };
     const own = lines.slice(heading.line + 1, ownEnd);
     const summary = summaryOfText(own) ?? (card?.[2] !== undefined && card[2] !== "" ? { summary: clip(card[2], BRAIN_SUMMARY_MAX), source: "text" as const } : undefined);
@@ -634,6 +691,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
     subtreeTokens: 0,
     children: 0,
     ids: [],
+    changed: null,
   };
   const folders = new Map<string, BrainNode>([[root.id, root]]);
   const folderOf = (path: string): BrainNode => {
@@ -656,6 +714,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
     const document = built.nodes[0];
     if (document === undefined) continue;
     document.parentId = folder.id;
+    document.changed = source.changed ?? null;
     documents.push(built);
     folderChildren.set(folder.id, [...(folderChildren.get(folder.id) ?? []), { name: source.path, node: document, folder: false }]);
   }
@@ -686,6 +745,10 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
     });
     folder.children = children.length;
     folder.subtreeTokens = children.reduce((total, child) => total + child.node.subtreeTokens, 0);
+    folder.changed = children.reduce<BrainChange | null>(
+      (latest, child) => (child.node.changed !== null && (latest === null || child.node.changed.at > latest.at) ? child.node.changed : latest),
+      null,
+    );
     const readme = children.find((child) => !child.folder && README_FILES.includes(child.name.split("/").pop()?.toLowerCase() ?? ""));
     const layout = folder.kind === "folder" ? describeDocumentFolder(folder.path) : undefined;
     const only = children.length === 1 && children[0]?.folder === false ? children[0].node : undefined;
@@ -710,6 +773,15 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
 
   // Links: Markdown links to indexed nodes, and mentions of ids another node defines.
   const byId = new Map(nodes.map((node) => [node.id, node]));
+  // A link may name a section in another case, and a card by the GitHub anchor of its heading
+  // (`#rule-inv01-0001-late-fee`) rather than by its id.
+  const headingAnchors = new Map<string, BrainNode>();
+  for (const node of nodes) {
+    const key = node.kind === "card" ? brainSectionId(node.path, brainAnchor(node.title)) : undefined;
+    if (key !== undefined && !headingAnchors.has(key)) headingAnchors.set(key, node);
+  }
+  const anchored = (path: string, anchor: string): BrainNode | undefined =>
+    byId.get(brainSectionId(path, anchor)) ?? byId.get(brainSectionId(path, anchor.toLowerCase())) ?? headingAnchors.get(brainSectionId(path, anchor.toLowerCase()));
   const definers = new Map<string, string[]>();
   for (const node of nodes) for (const id of node.ids) definers.set(id, [...(definers.get(id) ?? []), node.id]);
   const links: BrainLink[] = [];
@@ -732,7 +804,7 @@ export function buildBrainTree(sources: readonly BrainSourceDocument[], rootTitl
         continue;
       }
       if (link.path === undefined) continue;
-      const exact = link.anchor !== undefined ? byId.get(brainSectionId(link.path, link.anchor)) : undefined;
+      const exact = link.anchor !== undefined ? anchored(link.path, link.anchor) : undefined;
       const target = exact ?? byId.get(link.path) ?? byId.get(brainFolderId(link.path));
       if (target !== undefined) add(link.fromId, target.id, "link");
     }
@@ -859,6 +931,38 @@ export interface BrainGrepView {
   under: string | null;
   matches: BrainGrepMatch[];
   /** More lines matched than were returned. */
+  truncated: boolean;
+}
+
+export const BRAIN_CHANGE_STATUSES = ["added", "modified", "deleted", "renamed"] as const;
+export type BrainChangeStatus = (typeof BRAIN_CHANGE_STATUSES)[number];
+
+/** One indexed document that changed between two commits. */
+export interface BrainChangedFile {
+  path: string;
+  status: BrainChangeStatus;
+  /** The path before a rename. */
+  previousPath: string | null;
+  added: number;
+  removed: number;
+  /**
+   * The sections and cards of the current document whose lines changed, deepest first in document order; the
+   * document itself when its lines could not be told apart; none for a deleted document.
+   */
+  nodes: BrainNode[];
+}
+
+/** What changed in the indexed documents between an earlier commit and the indexed one. */
+export interface BrainChangesView {
+  projectId: string;
+  branch: string;
+  commit: string;
+  /** The earlier commit, in full. */
+  since: string;
+  files: BrainChangedFile[];
+  /** False when the earlier commit's text is not in the mirror: documents are listed without their sections. */
+  linesKnown: boolean;
+  /** More documents changed than were returned. */
   truncated: boolean;
 }
 

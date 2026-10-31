@@ -1,7 +1,7 @@
 // The common member contract: what any member harness may ask Kintsugi for through the CLI or the local
 // MCP bridge. It is the same for every plugin; plugins add their own flows on top (ADR-0067).
 
-import type { BrainCitation, BrainCrumb, BrainNode } from "@kintsugi/domain";
+import type { BrainChangeStatus, BrainCitation, BrainCrumb, BrainNode } from "@kintsugi/domain";
 
 export type MemberSchemaVersion = "1";
 
@@ -132,6 +132,7 @@ export interface MemberPort {
   brainRead(query: BrainReadQuery): Promise<BrainRead>;
   brainLookup(query: BrainLookupQuery): Promise<BrainLookup>;
   brainGrep(query: BrainGrepQuery): Promise<BrainGrep>;
+  brainChanges(query: BrainChangesQuery): Promise<BrainChanges>;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,5 +217,20 @@ export interface BrainGrep extends BrainIndexed {
   text: string;
   under: string | null;
   matches: Array<{ node: MemberBrainNode; breadcrumb: BrainCrumb[]; line: number; excerpt: string }>;
+  truncated: boolean;
+}
+
+export interface BrainChangesQuery {
+  schemaVersion?: MemberSchemaVersion;
+  projectId: string;
+  /** An earlier commit, full or abbreviated, such as the commit of a citation. */
+  since: string;
+  under?: string;
+}
+
+export interface BrainChanges extends BrainIndexed {
+  since: string;
+  files: Array<{ path: string; status: BrainChangeStatus; previousPath: string | null; added: number; removed: number; nodes: MemberBrainNode[] }>;
+  linesKnown: boolean;
   truncated: boolean;
 }

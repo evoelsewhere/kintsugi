@@ -1,15 +1,17 @@
 // The Brain index (ADR-0091) against a real git remote and a throwaway database: a build of the chosen branch,
 // a rebuild when it moves, a failure recorded on the index, and when a build is due.
 
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAIN_BUILDER_VERSION, type BrainSource } from "@kintsugi/domain";
+import { BRAIN_BUILDER_VERSION, BRAIN_MAX_FILE_BYTES, type BrainSource } from "@kintsugi/domain";
 import { CheckoutStorage } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PgBrainStore, brainBuildDue, dueBrainBuilds, indexBrain } from "../src/brain/index.js";
+import { lastChanges } from "../src/brain/indexer.js";
 import { RepositoryStore } from "../src/git-sync/repositories.js";
 import { syncRepository } from "../src/git-sync/sync.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
@@ -86,6 +88,45 @@ describe.skipIf(!hasDatabase)("brain index (integration)", () => {
     expect(after.indexedCommit).toBe(next);
     expect(after.indexedCommit).not.toBe(before.indexedCommit);
     expect(after.documents).toBe(5);
+    // The new document and the root carry the commit that changed it; an older document keeps its own.
+    expect((await store.node("shop", "00-project/charter.md"))?.changed).toMatchObject({ commit: next });
+    expect((await store.node("shop", "/"))?.changed?.commit).toBe(next);
+    expect((await store.node("shop", "01-standards/README.md"))?.changed?.commit).toBe(before.indexedCommit);
+    const ranged = await store.nodesInRanges("shop", "10-applications/billing/01-legacy/invoice/tax/spec.md", [{ start: 2, end: 7 }], 10);
+    expect(ranged.map((node) => node.id)).toEqual([
+      "10-applications/billing/01-legacy/invoice/tax/spec.md",
+      "10-applications/billing/01-legacy/invoice/tax/spec.md#business-rules",
+      "10-applications/billing/01-legacy/invoice/tax/spec.md#RULE-INV01-0001",
+    ]);
+  });
+
+  it("knows the last change of a document whose name Git would quote or whose extension is upper case", async () => {
+    const next = await remote.commitFiles("shop-docs", [
+      { path: "00-project/kế hoạch.md", content: "# Kế hoạch\n\nVì sao chuyển đổi.\n" },
+      { path: "00-project/NOTES.MD", content: "# Notes\n\nOpen points.\n" },
+    ]);
+    await syncRepository({ store: deps.repositories, storage: deps.storage }, "shop-docs");
+    await indexBrain(deps, "shop");
+    expect((await store.node("shop", "00-project/kế hoạch.md"))?.changed?.commit).toBe(next);
+    expect((await store.node("shop", "00-project/NOTES.MD"))?.changed?.commit).toBe(next);
+  });
+
+  it("leaves out a document over 2 MiB, and keeps one of exactly 2 MiB", async () => {
+    const size = BRAIN_MAX_FILE_BYTES;
+    await remote.commitFiles("shop-docs", [
+      { path: "00-project/bound.md", content: `# Bound\n\n${"x".repeat(size - 10)}\n` },
+      { path: "00-project/over.md", content: `# Over\n\n${"x".repeat(size - 8)}\n` },
+    ]);
+    await syncRepository({ store: deps.repositories, storage: deps.storage }, "shop-docs");
+    await indexBrain(deps, "shop");
+    expect(await store.node("shop", "00-project/bound.md")).toBeDefined();
+    expect(await store.node("shop", "00-project/over.md")).toBeUndefined();
+  });
+
+  it("fails the build of a project without a document repository", async () => {
+    await db.pool.query("insert into admin.project (id, name) values ('bare', 'Bare')");
+    await store.configure("bare", { branch: "main", enabled: true }, "alice");
+    expect(await indexBrain(deps, "bare")).toEqual({ status: "failed", error: "The project has no document repository." });
   });
 
   it("records a failure on the index and does not try the same commit again", async () => {
@@ -101,6 +142,52 @@ describe.skipIf(!hasDatabase)("brain index (integration)", () => {
   it("skips a project whose Brain is off", async () => {
     await store.configure("shop", { branch: "main", enabled: false }, "alice");
     expect(await indexBrain(deps, "shop")).toMatchObject({ status: "skipped" });
+  });
+});
+
+describe("lastChanges", () => {
+  let dir: string;
+  let mirror: string;
+  let one: string;
+  let two: string;
+  let three: string;
+  const git = (args: string[], input?: string, date?: string) =>
+    execFileSync("git", ["--git-dir", mirror, ...args], {
+      input,
+      encoding: "utf8",
+      env: { ...process.env, GIT_INDEX_FILE: join(dir, "index"), GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t", ...(date === undefined ? {} : { GIT_COMMITTER_DATE: date }) },
+    }).trim();
+  const commit = (files: Record<string, string>, message: string, date: string, parent?: string): string => {
+    git(["read-tree", "--empty"]);
+    for (const [path, text] of Object.entries(files)) git(["update-index", "--add", "--cacheinfo", `100644,${git(["hash-object", "-w", "--stdin"], text)},${path}`]);
+    return git(["commit-tree", git(["write-tree"]), "-m", message, ...(parent === undefined ? [] : ["-p", parent])], undefined, date);
+  };
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), "kintsugi-history-"));
+    mirror = join(dir, "docs.git");
+    execFileSync("git", ["init", "-q", "--bare", mirror]);
+    const files = { "a.md": "a", "kế hoạch.md": "k", "Docs/UP.MD": "u", "notes.txt": "n" };
+    one = commit(files, "one", "2026-10-01T00:00:00Z");
+    two = commit({ ...files, "a.md": "a2" }, `two ${"x".repeat(300)}`, "2026-10-02T00:00:00Z", one);
+    three = commit({ ...files, "a.md": "a2", "b.md": "b" }, "three", "2026-10-03T00:00:00Z", two);
+  });
+  afterAll(async () => {
+    if (dir !== undefined) await rm(dir, { recursive: true, force: true });
+  });
+
+  it("finds the newest change of each path, whatever Git would quote, its subject cut short", async () => {
+    const found = await lastChanges(mirror, three, new Set(["a.md", "kế hoạch.md", "Docs/UP.MD", "b.md", "missing.md"]));
+    expect(found.get("a.md")).toEqual({ commit: two, at: "2026-10-02T00:00:00.000Z", subject: `two ${"x".repeat(196)}` });
+    expect(found.get("kế hoạch.md")?.commit).toBe(one);
+    expect(found.get("Docs/UP.MD")?.commit).toBe(one);
+    expect(found.get("b.md")).toMatchObject({ commit: three, subject: "three" });
+    expect(found.has("missing.md")).toBe(false);
+    expect((await lastChanges(mirror, one, new Set(["a.md"]))).get("a.md")?.commit).toBe(one);
+  });
+
+  it("leaves every change unknown when the history cannot be read", async () => {
+    expect((await lastChanges(join(dir, "nowhere.git"), three, new Set(["a.md"]))).size).toBe(0);
   });
 });
 

@@ -10,6 +10,8 @@ import {
   assertSafeHooks,
   type ActivityInput,
   type ActivityReceipt,
+  type BrainChanges,
+  type BrainChangesQuery,
   type BrainGrep,
   type BrainGrepQuery,
   type BrainLookup,
@@ -142,6 +144,12 @@ export class MemberApiService {
   async brainGrep(query: BrainGrepQuery): Promise<BrainGrep> {
     const view = await this.brain.grep(query.projectId, { text: query.text, under: query.under, ignoreCase: query.ignoreCase ?? true });
     return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, matches: view.matches.map((match) => ({ ...match, node: memberNode(match.node) satisfies MemberBrainNode })) };
+  }
+
+  /** What changed in the Brain's documents since an earlier commit. */
+  async brainChanges(query: BrainChangesQuery): Promise<BrainChanges> {
+    const view = await this.brain.changes(query.projectId, { since: query.since, under: query.under });
+    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, files: view.files.map((file) => ({ ...file, nodes: file.nodes.map((node) => memberNode(node)) })) };
   }
 
   /** The member plugins the user may use in the project. */
