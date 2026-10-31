@@ -11,7 +11,7 @@
 // A later attempt of the job skips a step that already succeeded when nothing it was given changed (StepReuse):
 // the executor keeps the upstream chain, a hash of everything that came before a step in the plan.
 
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { isTransientFailure } from "../failures.js";
 import { chainAfter, contributionOf, digestOf, type LedgerOutput } from "../workspace/ledger.js";
@@ -232,6 +232,13 @@ export class StagePlanExecutor {
       scope: this.#deps.scope,
       round: this.#round,
       readText,
+      // Only the stage's own documents, never what its steps wrote: every attempt gets the same answer.
+      exists: async (path) => {
+        const relative = fill(path, this.#values(), { partial: true }).replace(/\/$/, "");
+        if (!SAFE_PATH.test(relative)) throw new JobFailure(`Invalid stage path "${relative}"`);
+        const stats = await stat(join(dirs.in, ...relative.split("/"))).catch(() => undefined);
+        return path.endsWith("/") ? stats?.isDirectory() === true : stats?.isFile() === true;
+      },
       readJson: async (path) => {
         const text = await readText(path);
         if (text === undefined) return undefined;
