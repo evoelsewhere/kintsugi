@@ -40,7 +40,7 @@ function evidenceOf(stage: StageView, writes: DocumentWriteView[]): DocumentWrit
 }
 
 export function MemberStage({ project, application, stage }: { project: ProjectDetail; application: ApplicationView; stage: StageView }): React.JSX.Element {
-  const agents = useLoader("agents", agentsApi.list);
+  const agents = useLoader(`agents/${project.id}`, () => agentsApi.list(project.id));
   const writes = useLoader(`writes/${project.id}/${EVIDENCE_WINDOW}`, async () => (await projectsApi.documentWrites(project.id, EVIDENCE_WINDOW)).items, {
     live: [`document-writes:${project.id}`],
   });

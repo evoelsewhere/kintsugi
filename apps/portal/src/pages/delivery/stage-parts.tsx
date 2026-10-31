@@ -11,7 +11,7 @@ import type { AgentSummary } from "@/lib/api/agents";
 import type { JobRunView, StageView } from "@/lib/api/job-runs";
 import { useAuth } from "@/lib/auth";
 import { useShell } from "@/lib/shell";
-import { matchesPattern, resolvePath } from "@/lib/stages";
+import { agentBindingLabel, matchesPattern, resolvePath } from "@/lib/stages";
 import type { Loader } from "@/lib/use-loader";
 
 export interface StagePathsProps {
@@ -148,11 +148,10 @@ export function DecisionPoints({ stage }: { stage: StageView }): React.JSX.Eleme
   );
 }
 
-const bindingLabel = (binding: NonNullable<AgentSummary["binding"]>): string => `${binding.provider} · ${binding.model}${binding.thinking === undefined ? "" : ` · thinking ${binding.thinking}`}`;
-
 /**
- * The agents a stage starts with their model binding. `runtime` agents need a binding (Settings
- * → Providers) or their jobs fail; member agents run with the member's own harness model.
+ * The agents a stage starts with their model binding and its scope (read `agents` for the
+ * stage's project). `runtime` agents need a binding (Settings → Providers) or their jobs fail;
+ * member agents run with the member's own harness model.
  */
 export function StageAgents({ stage, agents }: { stage: StageView; agents: Loader<AgentSummary[]> }): React.JSX.Element | null {
   const { can } = useAuth();
@@ -213,8 +212,8 @@ export function StageAgents({ stage, agents }: { stage: StageView; agents: Loade
                           )}
                         </>
                       ) : (
-                        <span className="max-w-full truncate font-mono text-[11px] text-text-secondary" title={bindingLabel(agent.binding)}>
-                          {bindingLabel(agent.binding)}
+                        <span className="max-w-full truncate font-mono text-[11px] text-text-secondary" title={agentBindingLabel(agent.binding)}>
+                          {agentBindingLabel(agent.binding)}
                         </span>
                       )}
                     </span>

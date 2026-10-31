@@ -50,7 +50,7 @@ export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, b
   const view = useLoader(`understand-plan/${projectId}/${applicationId}/${version}`, () => catalogApi.plan(projectId, applicationId));
   // The planner is an agent like the others: without a model bound to it (Settings → Providers) its job fails.
   const stages = useLoader("stages", jobRunsApi.stages);
-  const agents = useLoader("agents", agentsApi.list);
+  const agents = useLoader(`agents/${projectId}`, () => agentsApi.list(projectId));
   const stage = stages.data?.find((entry) => entry.id === "plan-understand");
   const problems = stage === undefined ? [] : agentProblems(stage, agents.data);
   const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);

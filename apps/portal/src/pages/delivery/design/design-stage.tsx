@@ -85,7 +85,7 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
   const common = useLoader(`design/common/${project.id}/${application.id}/${refParam ?? ""}/${version}`, () => designApi.common(project.id, application.id, refParam));
   const activity = useLoader<DesignActivity>(`design/activity/${project.id}/${application.id}/${version}`, () => designApi.activity(project.id, application.id));
   const refs = useLoader(`refs/${project.id}`, () => documentsApi.refs(project.id));
-  const agents = useLoader("agents", agentsApi.list);
+  const agents = useLoader(`agents/${project.id}`, () => agentsApi.list(project.id));
   const problems = agentProblems(stage, agents.data);
 
   const [pending, setPending] = useState<PendingRun | undefined>(undefined);

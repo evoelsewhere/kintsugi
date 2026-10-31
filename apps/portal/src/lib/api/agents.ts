@@ -1,7 +1,7 @@
 // Typed access to the Agent Builder (Administration → Agents, ADR-0026).
 // Mirrors apps/api → modules/admin/agents.
 
-import type { ThinkingLevel } from "@kintsugi/domain";
+import type { ModelBindingScope, ThinkingLevel } from "@kintsugi/domain";
 import { ApiError, apiGet, apiSend, type ApiErrorBody } from "../api";
 import type { AgentModelBindingInput } from "./providers";
 
@@ -41,7 +41,16 @@ export interface AgentSummary {
   copiedFrom?: string;
   updatedAt?: string;
   updatedBy?: string;
-  binding?: { provider: string; model: string; thinking?: ThinkingLevel };
+  /** The binding jobs use: for the project the list was read for (its own, else the installation default), else the installation default. */
+  binding?: AgentBinding;
+}
+
+export interface AgentBinding {
+  provider: string;
+  model: string;
+  thinking?: ThinkingLevel;
+  /** Whether it is the project's own binding or the installation default. */
+  scope: ModelBindingScope;
 }
 
 export interface AgentDetail extends AgentSummary {
@@ -131,7 +140,8 @@ async function download(name: string, version?: string): Promise<void> {
 }
 
 export const agentsApi = {
-  list: () => apiGet<AgentSummary[]>(BASE),
+  /** The catalog; with a project, each agent's binding is the one that project's jobs use. */
+  list: (projectId?: string) => apiGet<AgentSummary[]>(projectId === undefined ? BASE : `${BASE}?projectId=${encodeURIComponent(projectId)}`),
   context: () => apiGet<AgentBuilderContext>(`${BASE}/context`),
   get: (name: string) => apiGet<AgentDetail>(at(name)),
   definition: (name: string) => apiGet<AgentDefinition>(`${at(name)}/definition`),

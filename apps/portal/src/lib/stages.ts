@@ -5,7 +5,7 @@
 import type { AgentSummary } from "@/lib/api/agents";
 import type { JobRunView, StageView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
-import { DOCUMENT_PATH_TOKENS } from "@kintsugi/domain";
+import { DOCUMENT_PATH_TOKENS, THINKING_LEVEL_LABELS } from "@kintsugi/domain";
 
 export type StageAudience = StageView["audience"];
 
@@ -68,7 +68,23 @@ export function runBlocker(project: ProjectDetail, application: ApplicationView)
   return undefined;
 }
 
-/** Agents of a stage that cannot run as configured: unknown, disabled, invalid or without a model binding. */
+/** Where an agent's model comes from, as an agent card says it. */
+export const BINDING_SCOPE_LABEL: Record<NonNullable<AgentSummary["binding"]>["scope"], string> = {
+  project: "project binding",
+  installation: "installation default",
+};
+
+/** An agent's binding on a stage page, e.g. "gateway · mimo-v2.6-flash · thinking off · project binding". */
+export function agentBindingLabel(binding: NonNullable<AgentSummary["binding"]>): string {
+  const thinking = binding.thinking === undefined ? [] : [`thinking ${THINKING_LEVEL_LABELS[binding.thinking].toLowerCase()}`];
+  return [binding.provider, binding.model, ...thinking, BINDING_SCOPE_LABEL[binding.scope]].join(" · ");
+}
+
+/**
+ * Agents of a stage that cannot run as configured: unknown, disabled, invalid or without a model
+ * binding. Read `agents` for the stage's project (`agentsApi.list(projectId)`), so a project
+ * binding counts as the worker counts it.
+ */
 export function agentProblems(stage: StageView, agents: AgentSummary[] | undefined): string[] {
   if (agents === undefined) return [];
   return stage.agents.flatMap((name) => {

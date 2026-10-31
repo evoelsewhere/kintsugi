@@ -61,7 +61,7 @@ export function BuildStage({ project, application, stage }: { project: ProjectDe
   const version = (reviewRuns ?? []).map((run) => `${run.id}:${run.status}:${run.documentWrite?.status ?? ""}:${run.abandonedAt ?? ""}`).join(",");
   const overview = useLoader(`build/overview/${project.id}/${application.id}/${version}`, () => buildApi.overview(project.id, application.id));
   const stages = useLoader("stages", jobRunsApi.stages);
-  const agents = useLoader("agents", agentsApi.list);
+  const agents = useLoader(`agents/${project.id}`, () => agentsApi.list(project.id));
   const reviewStage = stages.data?.find((entry) => entry.id === "review");
   const problems = reviewStage === undefined ? [] : agentProblems(reviewStage, agents.data);
 

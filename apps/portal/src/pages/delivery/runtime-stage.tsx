@@ -64,7 +64,7 @@ export function RuntimeStage({
       live: [`job-runs:${project.id}`, `document-writes:${project.id}`],
     },
   );
-  const agents = useLoader("agents", agentsApi.list);
+  const agents = useLoader(`agents/${project.id}`, () => agentsApi.list(project.id));
 
   const stageRuns = runs.data === undefined ? undefined : runsOfStage(runs.data, stage.id);
   const visibleStageRuns = filterJobRuns(stageRuns ?? [], runFilter, runSearch);
