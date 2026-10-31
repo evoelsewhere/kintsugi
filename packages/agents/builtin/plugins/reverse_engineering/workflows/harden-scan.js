@@ -7,7 +7,7 @@ export const meta = {
   phases: [
     { title: 'Find', detail: 'one finder per vulnerability class, a manual review of the code' },
     { title: 'Carry over', detail: "the assessment's security highlights, each tied to a finding or refuted" },
-    { title: 'Verify', detail: 'one refuter per finding; second judge for Critical/High' },
+    { title: 'Verify', detail: 'one refuter per finding, at most 40 per run, highest severity first (the rest are returned unverified); second judge for Critical/High' },
   ],
 }
 
@@ -401,8 +401,17 @@ ${UNTRUSTED}`,
   )
 }
 
+// At most VERIFY_CAP findings get a refuter, the most severe first: one agent per finding has no other bound, and a
+// noisy scan would start hundreds (T3-015). The rest are returned unverified with the reason, never as confirmed.
+const VERIFY_CAP = 40
+const toJudge = deduped.length <= VERIFY_CAP
+  ? deduped
+  : [...deduped].sort((a, b) => (SEV_RANK[a.severity] ?? 4) - (SEV_RANK[b.severity] ?? 4)).slice(0, VERIFY_CAP)
+const overCap = deduped.filter(f => !toJudge.includes(f))
+if (overCap.length) log(`Verify: ${overCap.length} findings over the cap of ${VERIFY_CAP} are returned unverified`)
+
 const verified = await parallel(
-  deduped.map(f => () =>
+  toJudge.map(f => () =>
     judge(
       f,
       'You are an adversarial reviewer trying to REFUTE one reported security finding. Look for reasons it is a false positive: input already sanitized upstream, dead code nothing can ever reach, test fixture not production code, version not actually vulnerable, the code does not do what is claimed. A weakness the code exhibits is real even when no caller in this repository reaches it (a public method of a library is reachable by its users): lower its severity with adjustedSeverity instead of refuting it.',
@@ -414,11 +423,11 @@ const verified = await parallel(
 const survivors = []
 const refuted = []
 const unverified = [] // findings no refuter judged — returned, never counted as confirmed or as refuted
-// parallel() keeps positions: verified[i] is the verdict for deduped[i]. It is
+// parallel() keeps positions: verified[i] is the verdict for toJudge[i]. It is
 // null when the thunk threw (agent error, token budget spent) and {v: null}
 // when the agent returned nothing. Walk by index so a finding that got no
 // verdict is recorded instead of disappearing from the run.
-deduped.forEach((f, i) => {
+toJudge.forEach((f, i) => {
   const v = verified[i] && verified[i].v
   if (!v) {
     unverified.push({ ...f, unverifiedReason: 'no refuter verdict (agent skipped, errored, or the token budget ran out)' })
@@ -428,6 +437,9 @@ deduped.forEach((f, i) => {
     refuted.push({ ...f, refutationReason: v.reason })
   }
 })
+for (const f of overCap) {
+  unverified.push({ ...f, unverifiedReason: `over the verification cap: at most ${VERIFY_CAP} findings are verified per run, the most severe first (re-run with these findings to verify them)` })
+}
 unverified.sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity])
 log(
   `${survivors.length} findings survived refutation; ${refuted.length} killed as false positives` +
