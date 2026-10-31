@@ -1,7 +1,7 @@
 // The agent works in the job workspace (ADR-0055): a relative path is read against its root, a search without a path
 // looks in the first read-only directory, and the root as a whole is not readable.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createKernelGrepTool } from "../src/kernel/grep.js";
@@ -57,6 +57,28 @@ describe("a workspace root above the read-only folders", () => {
     expect(state.text).toMatch(/outside the job workspace/);
     const found = await run(find, { pattern: "**/*.vue" });
     expect(found.text).toContain("web/src/App.vue");
+  });
+
+  it("never names a file outside the readable locations through a find pattern", async () => {
+    const tools = createTools(["find", "glob"], { cwd: workspace.root, searchDir: asIs, readOnly: [asIs, stepIn, guide], outDir: workspace.out, tmpDir: workspace.outside, onOutput: () => undefined });
+    const outside = workspace.outside.replaceAll("\\", "/");
+    // A link inside the as-is folder to a folder outside: what it holds is not readable, so it is not listed either.
+    symlinkSync(workspace.outside, join(asIs, "linked"), "junction");
+    try {
+      for (const tool of tools as unknown as Array<{ execute: unknown }>) {
+        for (const pattern of ["../outside/*", `${outside}/*`, "C:/Users/*", "/etc/*", "..\\outside\\*", "{..,x}/outside/*", ".[.]/outside/*", "[.][.]/outside/*", "{.,.}./outside/*", "*/../../outside/*", "**/../outside/*"]) {
+          const found = await run(tool, { pattern });
+          expect(found.text, pattern).not.toContain("token.txt");
+          expect(found.text, pattern).toMatch(/leaves the search path|No files found/);
+        }
+        const all = await run(tool, { pattern: "**/*" });
+        expect(all.text).toContain("App.vue");
+        expect(all.text).not.toContain("token.txt");
+        expect((await run(tool, { pattern: "web/**/*.vue" })).text).toContain("web/src/App.vue");
+      }
+    } finally {
+      rmSync(join(asIs, "linked"), { recursive: false, force: true });
+    }
   });
 
   it("answers a search of the output folder with a note instead of a denial", async () => {
