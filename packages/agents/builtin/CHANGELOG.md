@@ -4,6 +4,8 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
+- One writer of documents. `reverse_engineering` 2.5.0: `render_rules.py` keeps its check that a file stays inside `--out` and writes `BUSINESS_RULES.md`, the rule files, the identifier ledger and `DATA_OBJECTS.md` through `docmd.write_text` (LF ends, a final newline, the size limit, an atomic replace), as every other script does. No agent or skill changes.
+
 - Ids with a trailing newline are refused. `reverse_engineering` 2.5.0 and `modernize` 5.3.0: the id and path validators of both plugins' identical `paths.py` (unit segment, source folder, commit) and of `catalog_common.py` (module, item id, application) match to the true end of the text, so `core/invoice` followed by a newline is refused at validation, as the TypeScript twins refuse it, instead of failing the run's document write. No agent or skill changes.
 
 - The design sets named are the starter's. `modernize` 5.3.0: the `design` command's description gives the screen or the API design as examples (the starter ships api, batch-job, report, screen and test, no basic or detail design), and its rule on sets that need another says to generate and merge that set first, without naming sets. No agent or skill changes.

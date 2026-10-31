@@ -181,9 +181,8 @@ def write_text(root, name, text):
     temporary = path + '.tmp'
     if not within(real_root, path) or os.path.islink(path) or os.path.islink(temporary):
         raise DataError(f'refusing to write outside --out or through a symbolic link: {path}')
-    with open(temporary, 'w', encoding='utf-8', newline='\n') as handle:
-        handle.write(text)
-    os.replace(temporary, path)
+    # The one writer of documents (LF ends, a final newline, the size limit, an atomic replace).
+    docmd.write_text(path, text)
 
 
 def main(argv):
@@ -351,7 +350,7 @@ def main(argv):
         write_text(os.path.join(base, os.path.dirname(registry_file)), os.path.basename(registry_file), ledger)
         write_text(base, 'BUSINESS_RULES.md', business_rules)
         write_text(base, 'DATA_OBJECTS.md', '\n'.join(dto).rstrip() + '\n')
-    except (DataError, OSError) as error:
+    except (DataError, docmd.DataError, OSError) as error:
         print(f'render_rules.py: {error}', file=sys.stderr)
         return 1
 
