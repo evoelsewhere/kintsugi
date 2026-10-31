@@ -48,7 +48,7 @@ export function ProjectsPage(): React.JSX.Element {
       <PageHeader crumbs={["Administration", "Projects"]} />
       {error === null ? null : <p className="text-[13px] text-[var(--ds-status-red)]">{error}</p>}
 
-      <ProjectsInsights projects={projects} />
+      <ProjectsInsights projects={projects} registered={canManage || can("git.manage") ? repositories.map((repository) => repository.id) : undefined} />
 
       <Card className="overflow-hidden p-0">
         <CardHeader className="px-4 pt-3 pb-3">

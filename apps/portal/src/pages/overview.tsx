@@ -276,24 +276,34 @@ type Tone = StatusTone;
 
 /** One line of operational health: each figure links to its Monitoring tab. Detail and charts live there. */
 function Operations({ counts }: { counts: OverviewCounts | undefined }): React.JSX.Element {
-  const items: Array<{ label: string; value: string; tone: Tone; to: string; busy?: "spin" }> =
+  // Repository errors count every registered repository (Settings → Git); the Projects page counts the linked ones only.
+  const unlinkedErrors = counts?.repositoriesWithErrorsUnlinked ?? 0;
+  const items: Array<{ label: string; value: string; tone: Tone; to: string; busy?: "spin"; note?: string; title?: string }> =
     counts === undefined
       ? []
       : [
           { label: "Active runs", value: String(counts.activeRuns), tone: counts.activeRuns > 0 ? "blue" : "muted", to: monitoringLink("runs", "queued,running"), ...(counts.activeRuns > 0 ? { busy: "spin" as const } : {}) },
           { label: "Failed runs · 24 h", value: String(counts.failedRuns24h), tone: counts.failedRuns24h > 0 ? "red" : "green", to: monitoringLink("runs", "failed") },
           { label: "Pending writes", value: String(counts.pendingWrites), tone: counts.failedWrites24h > 0 ? "red" : counts.pendingWrites > 0 ? "blue" : "green", to: monitoringLink("writes") },
-          { label: "Repository errors", value: String(counts.repositoriesWithErrors), tone: counts.repositoriesWithErrors > 0 ? "red" : counts.repositoriesNotReady > 0 ? "orange" : "green", to: monitoringLink("repositories") },
+          {
+            label: "Repository errors",
+            value: String(counts.repositoriesWithErrors),
+            tone: counts.repositoriesWithErrors > 0 ? "red" : counts.repositoriesNotReady > 0 ? "orange" : "green",
+            to: monitoringLink("repositories"),
+            ...(unlinkedErrors > 0 ? { note: `${unlinkedErrors} not linked to a project` } : {}),
+            title: `Of the ${counts.repositories} registered repositories, linked to a project or not (${counts.repositoriesUnlinked} not linked)`,
+          },
           { label: "Pending gates", value: String(counts.pendingGates), tone: counts.pendingGates > 0 ? "orange" : "green", to: governanceLink("gates", "pending") },
         ];
   return (
     <nav aria-label="Operations" className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl bg-surface px-4 py-2.5 shadow-border-medium">
       <span className="text-[10px] tracking-wide text-text-muted uppercase">Operations</span>
       {items.map((item) => (
-        <Link key={item.label} to={item.to} className="flex items-center gap-1.5 rounded-[6px] text-[12.5px] text-text-secondary hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
+        <Link key={item.label} to={item.to} title={item.title} className="flex items-center gap-1.5 rounded-[6px] text-[12.5px] text-text-secondary hover:text-text focus-visible:outline-none focus-visible:[box-shadow:var(--ds-focus-ring)]">
           <StatusDot tone={item.tone} busy={item.busy} className="size-2" />
           <span className="font-medium text-text tabular-nums">{item.value}</span>
           {item.label}
+          {item.note === undefined ? null : <span className="text-text-muted">({item.note})</span>}
         </Link>
       ))}
       <Link to="/monitoring" className="ml-auto text-[12px] text-accent hover:underline">

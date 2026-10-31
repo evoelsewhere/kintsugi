@@ -145,6 +145,9 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
       failedWrites24h: 1,
       repositories: 5,
       repositoriesWithErrors: 1,
+      // broken and fresh are registered and linked to no project.
+      repositoriesUnlinked: 2,
+      repositoriesWithErrorsUnlinked: 1,
       repositoriesNotReady: 1,
       pendingGates: 1,
     });

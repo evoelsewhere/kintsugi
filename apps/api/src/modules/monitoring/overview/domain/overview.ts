@@ -30,8 +30,13 @@ export interface OverviewCounts {
   /** Writes that opened a pull request in the last 7 days. */
   pullRequests7d: number;
   failedWrites24h: number;
+  /** Every registered repository (Settings -> Git), linked to a project or not. */
   repositories: number;
   repositoriesWithErrors: number;
+  /** Registered repositories no project links. */
+  repositoriesUnlinked: number;
+  /** Of repositoriesWithErrors, those no project links. */
+  repositoriesWithErrorsUnlinked: number;
   /** Repositories still pending or cloning. */
   repositoriesNotReady: number;
   /** Gates waiting for a decision. */

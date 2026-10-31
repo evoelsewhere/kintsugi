@@ -20,6 +20,10 @@ export interface OverviewCounts {
   failedWrites24h: number;
   repositories: number;
   repositoriesWithErrors: number;
+  /** Registered repositories no project links. */
+  repositoriesUnlinked: number;
+  /** Of repositoriesWithErrors, those no project links. */
+  repositoriesWithErrorsUnlinked: number;
   repositoriesNotReady: number;
   /** Gates waiting for a decision. */
   pendingGates: number;

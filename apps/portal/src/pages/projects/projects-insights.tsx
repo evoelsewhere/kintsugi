@@ -23,8 +23,12 @@ const repositoriesOf = (project: ProjectDetail): Array<{ repositoryId: string; s
   ...project.applications.flatMap((application) => [...application.asIs.legacy, ...application.asIs.legacyData, ...(application.toBe.document === null ? [] : [application.toBe.document]), ...application.toBe.targets]),
 ];
 
-/** The installation-wide picture above the project list. */
-export function ProjectsInsights({ projects }: { projects: ProjectView[] }): React.JSX.Element | null {
+/**
+ * The installation-wide picture above the project list. Repository figures count the repositories the
+ * projects link; `registered` (when known) also names those registered in Settings → Git and linked nowhere,
+ * which the Overview's repository errors include.
+ */
+export function ProjectsInsights({ projects, registered }: { projects: ProjectView[]; registered?: string[] | undefined }): React.JSX.Element | null {
   const key = projects.map((project) => project.id).join(",");
   const details = useLoader(`projects-insight-details/${key}`, () => Promise.all(projects.map((project) => projectsApi.get(project.id))));
   const runs = useLoader("projects-insight-runs", async () => (await jobRunsApi.listAll({ limit: 200 })).items, { live: ["job-runs"] });
@@ -34,12 +38,15 @@ export function ProjectsInsights({ projects }: { projects: ProjectView[] }): Rea
   const repositories = [...new Map(list.flatMap(repositoriesOf).map((repository) => [repository.repositoryId, repository])).values()];
   const top = (runs.data ?? []).filter((run) => run.kind === "stage");
   const notReady = repositories.filter((repository) => repository.syncStatus !== "ready").length;
+  const linkedIds = new Set(repositories.map((repository) => repository.repositoryId));
+  const unlinked = registered === undefined ? 0 : registered.filter((id) => !linkedIds.has(id)).length;
+  const syncHint = notReady === 0 ? "all linked ones in sync" : `${notReady} linked not ready`;
   return (
     <div className="flex flex-col gap-4">
       <KpiRow>
         <Kpi label="Projects" value={projects.length} hint={`${list.filter((project) => project.documentRepository !== null).length} with a document repo`} />
         <Kpi label="Applications" value={applications.length} hint={`${applications.filter((application) => application.asIs.legacy.length === 0).length} without a legacy repo`} />
-        <Kpi label="Repositories linked" value={repositories.length} hint={notReady === 0 ? "all in sync" : `${notReady} not ready`} tone={notReady > 0 ? "orange" : "green"} />
+        <Kpi label="Repositories linked" value={repositories.length} hint={unlinked === 0 ? syncHint : `${syncHint} · ${unlinked} registered, not linked`} tone={notReady > 0 ? "orange" : "green"} />
         <Kpi label="Active runs" value={top.filter((run) => isActiveStatus(run.status)).length} tone={top.some((run) => isActiveStatus(run.status)) ? "blue" : undefined} hint="across the projects" />
         <Kpi label="Success rate" value={undefined} display={percent(successRate(top))} hint={`of ${top.length} sampled runs`} />
         <Kpi label="Failed runs" value={top.filter((run) => run.status === "failed").length} tone={top.some((run) => run.status === "failed") ? "red" : "green"} higherIsWorse hint="in the sample" />

@@ -99,6 +99,8 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
       failed_writes_24h: number;
       repositories: number;
       repositories_with_errors: number;
+      repositories_unlinked: number;
+      repositories_with_errors_unlinked: number;
       repositories_not_ready: number;
       pending_gates: number;
     }>(`
@@ -107,7 +109,7 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
              (select count(*)::int from governance.gate where status = 'pending') as pending_gates,
              runs.queued_runs, runs.running_runs, runs.failed_runs_24h, runs.succeeded_runs_24h,
              writes.pending_writes, writes.pull_requests_7d, writes.failed_writes_24h,
-             repos.repositories, repos.repositories_with_errors, repos.repositories_not_ready
+             repos.repositories, repos.repositories_with_errors, repos.repositories_unlinked, repos.repositories_with_errors_unlinked, repos.repositories_not_ready
         from (select count(*) filter (where status = 'queued')::int as queued_runs,
                      count(*) filter (where status = 'running')::int as running_runs,
                      count(*) filter (where status = 'failed' and coalesce(finished_at, created_at) >= now() - interval '24 hours')::int as failed_runs_24h,
@@ -119,8 +121,11 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
                 from workflow.document_write) writes,
              (select count(*)::int as repositories,
                      count(*) filter (where sync_status = 'error')::int as repositories_with_errors,
+                     count(*) filter (where not linked)::int as repositories_unlinked,
+                     count(*) filter (where sync_status = 'error' and not linked)::int as repositories_with_errors_unlinked,
                      count(*) filter (where sync_status in ('pending', 'cloning'))::int as repositories_not_ready
-                from admin.git_repository) repos`);
+                from (select g.sync_status, exists (select 1 from admin.project_repository l where l.repository_id = g.id) as linked
+                        from admin.git_repository g) registered) repos`);
     const row = result.rows[0]!;
     return {
       projects: row.projects,
@@ -135,6 +140,8 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
       failedWrites24h: row.failed_writes_24h,
       repositories: row.repositories,
       repositoriesWithErrors: row.repositories_with_errors,
+      repositoriesUnlinked: row.repositories_unlinked,
+      repositoriesWithErrorsUnlinked: row.repositories_with_errors_unlinked,
       repositoriesNotReady: row.repositories_not_ready,
       pendingGates: row.pending_gates,
     };
