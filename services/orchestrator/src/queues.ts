@@ -29,6 +29,12 @@ export const JOB_RUN_QUEUE = "job-run";
  */
 export const WORKSPACE_CLEANUP_QUEUE = "workspace-cleanup";
 
+/**
+ * Builds a project's Brain, the tree index of one branch of its document repo (ADR-0091); singletonKey = project id.
+ * The `stately` policy keeps one build running and one queued per project: a request during a build is not lost.
+ */
+export const BRAIN_INDEX_QUEUE = "brain-index";
+
 type QueueOptions = NonNullable<Parameters<PgBoss["createQueue"]>[1]>;
 
 export const DOCUMENT_WRITE_QUEUE_OPTIONS: QueueOptions = {
@@ -50,6 +56,18 @@ export const WORKSPACE_CLEANUP_QUEUE_OPTIONS: QueueOptions = {
   retryLimit: 0,
   expireInSeconds: 30 * 60,
 };
+
+export const BRAIN_INDEX_QUEUE_OPTIONS: QueueOptions = {
+  policy: "stately",
+  retryLimit: 1,
+  retryDelay: 60,
+  expireInSeconds: 30 * 60,
+};
+
+/** Payload of a brain-index job. */
+export interface BrainIndexRequest {
+  projectId: string;
+}
 
 /** Payload of a workspace-cleanup job. */
 export interface WorkspaceCleanupRequest {
@@ -129,4 +147,14 @@ export async function ensureWorkspaceCleanupQueue(boss: PgBoss): Promise<void> {
 /** Asks the worker to remove one job workspace. */
 export async function sendWorkspaceCleanup(boss: PgBoss, request: WorkspaceCleanupRequest): Promise<void> {
   await boss.send(WORKSPACE_CLEANUP_QUEUE, request);
+}
+
+/** Creates the brain-index queue if missing; safe on every start, from any process. */
+export async function ensureBrainIndexQueue(boss: PgBoss): Promise<void> {
+  await boss.createQueue(BRAIN_INDEX_QUEUE, BRAIN_INDEX_QUEUE_OPTIONS);
+}
+
+/** Asks for a build of the project's Brain; deduplicated per project. */
+export async function sendBrainIndex(boss: PgBoss, request: BrainIndexRequest): Promise<void> {
+  await boss.send(BRAIN_INDEX_QUEUE, request, { singletonKey: request.projectId });
 }

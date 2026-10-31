@@ -5,7 +5,7 @@
 import { access } from "node:fs/promises";
 import { Injectable } from "@nestjs/common";
 import { CheckoutStorage, GitError, dataDirFromEnv, runGit } from "@kintsugi/git";
-import type { DocumentRepo, FileRead, MirrorBranch, TreeEntry } from "../domain/document.js";
+import type { DocumentRepo, FileRead, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 
 const TIMEOUT_MS = 30_000;
@@ -90,6 +90,33 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
     const content = await this.git(repo, ["cat-file", "blob", `${commit}:${path}`]);
     if (content.includes("\0")) return { status: "binary", size };
     return { status: "ok", size, content };
+  }
+
+  async grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
+    // Fixed strings over the Markdown files only: their blobs are in the mirror, and a pattern cannot backtrack.
+    // Several terms must all be on the same line.
+    const under = options.under ?? "";
+    const pathspec = under === "" ? "**/*.md" : under.toLowerCase().endsWith(".md") ? under : `${under}/**/*.md`;
+    const patterns = terms.flatMap((term, index) => [...(index === 0 ? [] : ["--and"]), "-e", term]);
+    const args = ["grep", "-z", "-n", "-I", "-F", "--full-name", ...(options.ignoreCase ? ["-i"] : []), ...patterns, commit, "--", `:(glob)${pathspec}`];
+    const out = await this.git(repo, args).catch((error: unknown) => {
+      // Exit status 1 is "no match".
+      if (error instanceof GitError && error.exitCode === 1) return "";
+      throw error;
+    });
+    const matches: GrepLine[] = [];
+    let truncated = false;
+    for (const record of out.split("\n")) {
+      if (record === "") continue;
+      const [location, line, ...rest] = record.split("\0");
+      if (location === undefined || line === undefined) continue;
+      if (matches.length === options.limit) {
+        truncated = true;
+        break;
+      }
+      matches.push({ path: location.slice(commit.length + 1), line: Number(line), text: rest.join("\0") });
+    }
+    return { matches, truncated };
   }
 
   private async objectType(repo: DocumentRepo, commit: string, path: string): Promise<string | undefined> {

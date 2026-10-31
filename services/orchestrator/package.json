@@ -29,6 +29,10 @@
     "./web-search": {
       "types": "./dist/web-search/index.d.ts",
       "import": "./dist/web-search/index.js"
+    },
+    "./brain": {
+      "types": "./dist/brain/index.d.ts",
+      "import": "./dist/brain/index.js"
     }
   },
   "engines": {

@@ -10,6 +10,15 @@ import {
   assertSafeHooks,
   type ActivityInput,
   type ActivityReceipt,
+  type BrainGrep,
+  type BrainGrepQuery,
+  type BrainLookup,
+  type BrainLookupQuery,
+  type BrainRead,
+  type BrainReadQuery,
+  type BrainTree,
+  type BrainTreeQuery,
+  type MemberBrainNode,
   type DocumentFile,
   type DocumentTree,
   type ListResult,
@@ -17,11 +26,12 @@ import {
   type PluginSummary,
   type ProjectSummary,
 } from "@kintsugi/harness-sdk";
-import { PROJECT_ID_PATTERN } from "@kintsugi/domain";
+import { type BrainNode, PROJECT_ID_PATTERN } from "@kintsugi/domain";
 import { PluginAccessService } from "#modules/admin/plugin-access/index.js";
 import { PluginsService } from "#modules/admin/plugins/index.js";
 import { ProjectAccessService } from "#modules/admin/project-access/index.js";
 import type { MemberPrincipal } from "#modules/core/auth/index.js";
+import { BrainService } from "#modules/delivery/brain/index.js";
 import { DocumentsService } from "#modules/delivery/documents/index.js";
 import { MemberActivityService } from "#modules/monitoring/member-activity/index.js";
 
@@ -38,7 +48,13 @@ const BUNDLE_PATH = /^(?:skills\/[^/]+\/.+|agents\/[^/]+\.md|commands\/[^/]+\.md
 const BUNDLE_TEXT = /\.(?:md|txt|json|ya?ml|csv)$/i;
 
 /** Kinds Kintsugi writes itself from what it observes; a plugin cannot claim them. */
-const RESERVED_KIND = /^(?:plugin|document)\./;
+const RESERVED_KIND = /^(?:plugin|document|brain)\./;
+/** What one Brain read hands a member's agent: enough to reason on, small enough for a tool result. */
+const BRAIN_READ_CHARS = 24_000;
+const BRAIN_READ_CHILDREN = 30;
+
+/** A Brain node as the member contract shows it: its place in the tree is the breadcrumb. */
+const memberNode = <T extends BrainNode>({ parentId: _parent, ordinal: _ordinal, depth: _depth, ...node }: T): Omit<T, "parentId" | "ordinal" | "depth"> => node;
 
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
 
@@ -50,6 +66,7 @@ export class MemberApiService {
     private readonly plugins: PluginsService,
     private readonly pluginAccess: PluginAccessService,
     private readonly activity: MemberActivityService,
+    private readonly brain: BrainService,
   ) {}
 
   async listProjects(principal: MemberPrincipal, query: { limit?: number; cursor?: string }): Promise<ListResult<ProjectSummary>> {
@@ -82,6 +99,49 @@ export class MemberApiService {
     const file = await this.documents.file(projectId, ref, path);
     await this.activity.observe({ userId, projectId, kind: "document.read", summary: file.path, detail: { ref: file.ref, size: file.size } });
     return { schemaVersion: MEMBER_SCHEMA_VERSION, projectId, ...file };
+  }
+
+  /** One level of the project's Brain with summaries (ADR-0091). */
+  async brainTree(query: BrainTreeQuery): Promise<BrainTree> {
+    const view = await this.brain.tree(query.projectId, { node: query.node, depth: query.depth === 2 ? 2 : 1, offset: query.offset ?? 0, limit: query.limit ?? 50 });
+    return {
+      schemaVersion: MEMBER_SCHEMA_VERSION,
+      ...view,
+      node: memberNode(view.node),
+      children: view.children.map(({ nodes, ...child }) => ({ ...memberNode(child), ...(nodes === undefined ? {} : { nodes: nodes.map((node) => memberNode(node)) }) })),
+    };
+  }
+
+  /** A node's text with its citation; recorded as a read of the project's knowledge. */
+  async brainRead(userId: string, query: BrainReadQuery): Promise<BrainRead> {
+    const view = await this.brain.read(query.projectId, { node: query.node, scope: query.scope ?? "auto", fromLine: query.fromLine, maxChars: BRAIN_READ_CHARS, lineNumbers: true });
+    if (view.citation !== null) {
+      await this.activity.observe({
+        userId,
+        projectId: query.projectId,
+        kind: "brain.read",
+        summary: view.node.id.slice(0, 500),
+        detail: { commit: view.commit, lines: `${view.citation.lineStart}-${view.citation.lineEnd}`, truncated: view.truncated },
+      });
+    }
+    return {
+      schemaVersion: MEMBER_SCHEMA_VERSION,
+      ...view,
+      node: memberNode(view.node),
+      children: view.children.slice(0, BRAIN_READ_CHILDREN).map((node) => memberNode(node)),
+      outgoing: view.outgoing.map((node) => memberNode(node)),
+      incoming: view.incoming.map((node) => memberNode(node)),
+    };
+  }
+
+  async brainLookup(query: BrainLookupQuery): Promise<BrainLookup> {
+    const view = await this.brain.lookup(query.projectId, query.query);
+    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, matches: view.matches.map((node) => memberNode(node)) };
+  }
+
+  async brainGrep(query: BrainGrepQuery): Promise<BrainGrep> {
+    const view = await this.brain.grep(query.projectId, { text: query.text, under: query.under, ignoreCase: query.ignoreCase ?? true });
+    return { schemaVersion: MEMBER_SCHEMA_VERSION, ...view, matches: view.matches.map((match) => ({ ...match, node: memberNode(match.node) satisfies MemberBrainNode })) };
   }
 
   /** The member plugins the user may use in the project. */
@@ -121,7 +181,7 @@ export class MemberApiService {
 
   /** A plugin's write-back: a named, bounded fact about the member's own work. */
   async recordActivity(userId: string, input: ActivityInput): Promise<ActivityReceipt> {
-    if (RESERVED_KIND.test(input.kind)) throw new BadRequestException("kinds starting with plugin. or document. are set by Kintsugi");
+    if (RESERVED_KIND.test(input.kind)) throw new BadRequestException("kinds starting with plugin., document. or brain. are set by Kintsugi");
     if (input.pluginName !== undefined && !(await this.pluginAccess.pluginsFor(userId, input.projectId)).includes(input.pluginName)) {
       throw new ForbiddenException("This plugin is not available to you in this project");
     }

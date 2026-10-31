@@ -35,7 +35,7 @@ describe("member stdio MCP process", () => {
     const listed = await client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
 
-    expect(names).toEqual(["activity_record", "document_get", "document_tree", "plugin_list", "project_list"]);
+    expect(names).toEqual(["activity_record", "brain_grep", "brain_lookup", "brain_read", "brain_tree", "document_get", "document_tree", "plugin_list", "project_list"]);
     expect(listed.tools.filter((tool) => tool.annotations?.readOnlyHint !== true).map((tool) => tool.name)).toEqual(["activity_record"]);
 
     const documentTool = listed.tools.find((tool) => tool.name === "document_get");
@@ -50,6 +50,17 @@ describe("member stdio MCP process", () => {
 
     const second = await client.callTool({ name: "document_get", arguments: { projectId: "other", path: "00-project/b.md" } });
     expect(second.structuredContent).toMatchObject({ projectId: "other", content: "other:00-project/b.md" });
+  });
+
+  it("serves the Brain's tree and a node's text with its citation", async () => {
+    const client = await connect("legacy");
+    const tree = await client.callTool({ name: "brain_tree", arguments: { projectId: "shop" } });
+    expect(tree.isError).not.toBe(true);
+    expect(tree.structuredContent).toMatchObject({ node: { id: "/" }, children: [{ id: "01-standards/", summary: "Conventions and review rules." }] });
+    const read = await client.callTool({ name: "brain_read", arguments: { projectId: "shop", node: "01-standards/README.md" } });
+    expect(read.structuredContent).toMatchObject({ text: "1\t# Standards", lineNumbers: true, citation: { path: "01-standards/README.md", lineStart: 1, lineEnd: 1 } });
+    const invalid = await client.callTool({ name: "brain_grep", arguments: { projectId: "shop", text: "x" } });
+    expect(invalid.isError).toBe(true);
   });
 
   it("records activity through the write tool and validates its input", async () => {

@@ -24,6 +24,8 @@ export const AUDIT_ACTIONS = {
   projectMemoryForget: "project-memory.forget",
   projectMemoryRestore: "project-memory.restore",
   projectMemoryReview: "project-memory.review",
+  brainConfigure: "brain.configure",
+  brainRebuild: "brain.rebuild",
   projectCreate: "project.create",
   projectUpdate: "project.update",
   projectDelete: "project.delete",

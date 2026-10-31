@@ -57,6 +57,7 @@ Start with [Your first modernization project](guides/first-project.md) for a wal
 - [Manifest schema](reference/document-repo-manifest.md): `kintsugi.yaml`
 - [Runtime web search and fetch](reference/web-search.md): optional public-web tools, outbound permissions, guarded page retrieval and shared budgets
 - [Project memory](reference/project-memory.md): live learned/reviewed notes, daily logs, scratchpads and recovery shared by project agents
+- [The Brain](reference/brain.md): the vectorless tree index of a document repository branch that members' agents reason over and cite
 - [Document identifiers](reference/document-identifiers.md): compact stable RULE, SEC and GAP references, scope allocation and ledgers
 - [Item catalog](reference/document-repo-item-catalog.md): catalog items, stable IDs, and the units they become
 - [Document write path](reference/document-repo-write-path.md): job outputs, branches and pull requests
@@ -84,6 +85,7 @@ Start with [Your first modernization project](guides/first-project.md) for a wal
 - [Member client capabilities](reference/member-client-capabilities.md): what Claude Code, Codex and GitHub Copilot support for plugins, hooks and transcripts
 - [Plugin workflow audit](development/plugin-workflow-audit.md): readiness, drafts, in-place question resolution and verification limits
 - [Known-answer eval](development/known-answer-eval.md): measure what a model writes with the built-in plugins on a fixture whose facts are known (ADR-0084)
+- [Brain eval](development/brain-eval.md): measure how a member's agent answers from a project's documents with the Brain and without it (ADR-0091)
 - [Implementation and verification record](development/implementation-delivery-record.md): the deployment work, its status and evidence; remaining release work
 
 ## Conventions

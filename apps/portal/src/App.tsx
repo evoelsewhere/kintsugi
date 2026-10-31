@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import { AgentPage } from "./pages/agents/agent-page";
 import { AgentsPage } from "./pages/agents/agents-page";
 import { SkillPage } from "./pages/agents/skill-page";
+import { BrainPage } from "./pages/brain/brain-page";
 import { PluginPage } from "./pages/plugins/plugin-page";
 import { PluginsPage } from "./pages/plugins/plugins-page";
 import { DeliveryOverviewPage } from "./pages/delivery/delivery-overview-page";
@@ -54,6 +55,7 @@ export function App(): React.JSX.Element {
             {/* One page per pipeline stage; unknown ids (former per-workstream paths) go back to the overview. */}
             <Route path="delivery/:stage" element={<DeliveryStagePage />} />
             <Route path="delivery/*" element={<Navigate to="/delivery" replace />} />
+            <Route path="brain" element={<BrainPage />} />
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="governance" element={<GovernancePage />} />
             <Route path="projects" element={<ProjectsPage />} />

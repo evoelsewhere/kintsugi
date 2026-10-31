@@ -3,14 +3,18 @@
 
 export { GIT_SYNC_QUEUE, QUEUE_SCHEMA, startWorker, type Worker, type WorkerOptions } from "./worker.js";
 export {
+  BRAIN_INDEX_QUEUE,
   DOCUMENT_WRITE_QUEUE,
   DOCUMENT_WRITE_QUEUE_OPTIONS,
   JOB_RUN_QUEUE,
   JOB_RUN_QUEUE_OPTIONS,
+  ensureBrainIndexQueue,
   ensureDocumentWriteQueue,
   ensureJobRunQueue,
+  sendBrainIndex,
   sendDocumentWrite,
   sendJobRun,
+  type BrainIndexRequest,
   type DocumentWriteFile,
   type DocumentWriteRequest,
   type JobRunRequest,

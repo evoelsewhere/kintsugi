@@ -7,7 +7,7 @@ import { type Change, ChangeFeed } from "#common/realtime/change-feed.js";
 /** Changes that come in a burst leave as one event this long after the first. */
 const FLUSH_MS = 400;
 /** Topics the portal follows. `job-events` (one per log line) is not one of them: a run's own stream carries those. */
-const TOPICS: ReadonlySet<string> = new Set(["job-runs", "document-writes", "repositories", "workers", "gates", "audit", "telemetry"]);
+const TOPICS: ReadonlySet<string> = new Set(["job-runs", "document-writes", "repositories", "workers", "gates", "audit", "telemetry", "brain"]);
 
 @ApiTags("system")
 @Controller("events")

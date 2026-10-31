@@ -16,7 +16,7 @@ Kintsugi has two agent execution worlds with separate ownership ([ADR-0023](../.
 The CLI and the MCP bridge are a base that every member plugin shares ([member CLI reference](../../reference/member-cli.md)):
 
 - **Auth.** Project-scoped browser authorization with PKCE: a five-minute access token in memory, a rotating refresh credential in the operating system credential store, an administrator-set maximum connection age and revocation in the portal.
-- **Get resource.** `/api/member/v1` returns the projects the connection covers and the project's document repository (tree and file at a branch or commit). The server checks the token's project scope, `member.read` and explicit Project Access on every request.
+- **Get resource.** `/api/member/v1` returns the projects the connection covers, the project's document repository (tree and file at a branch or commit) and its [Brain](../../reference/brain.md): a tree index of one branch that the member's agent reasons over and cites by line and commit ([ADR-0091](../../decisions/0091-brain-vectorless-tree-index.md)). The server checks the token's project scope, `member.read` and explicit Project Access on every request.
 - **Receive plugins.** The member API serves the member plugins a member may use in a project as text bundles with hashes; the CLI installs them into the client's Kintsugi package, and removes them again.
 - **Update information.** One bounded write: a plugin records a short, named fact about its work (`activity_record`). Other writes are added only with a security review.
 

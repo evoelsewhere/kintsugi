@@ -7,6 +7,7 @@ import type { PluginAccessService } from "../../src/modules/admin/plugin-access/
 import type { PluginsService } from "../../src/modules/admin/plugins/index.js";
 import type { ProjectAccessService } from "../../src/modules/admin/project-access/index.js";
 import type { MemberPrincipal } from "../../src/modules/core/auth/index.js";
+import type { BrainService } from "../../src/modules/delivery/brain/index.js";
 import type { DocumentsService } from "../../src/modules/delivery/documents/index.js";
 import { MemberApiService } from "../../src/modules/delivery/member-api/application/member-api.service.js";
 import type { MemberActivityService } from "../../src/modules/monitoring/member-activity/index.js";
@@ -30,7 +31,7 @@ function service(fakes: Fakes = {}) {
     file: vi.fn(async (_name: string, path: string) => ({ path, content: fakes.contents?.[path] ?? "" })),
   } as unknown as PluginsService;
   const activity = { observe: vi.fn(async () => undefined), record: vi.fn(async () => "act-1") } as unknown as MemberActivityService;
-  return { member: new MemberApiService(access, (fakes.documents ?? {}) as DocumentsService, plugins, pluginAccess, activity), activity, pluginAccess };
+  return { member: new MemberApiService(access, (fakes.documents ?? {}) as DocumentsService, plugins, pluginAccess, activity, {} as BrainService), activity, pluginAccess };
 }
 
 describe("MemberApiService.listProjects", () => {

@@ -4,6 +4,7 @@ import {
   Activity,
   Blocks,
   BookOpenText,
+  Brain,
   FolderKanban,
   Gauge,
   type LucideIcon,
@@ -59,6 +60,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "overview", label: "Overview", icon: Gauge, to: "/", end: true },
       { id: "delivery", label: "Delivery", icon: Package, to: "/delivery", childrenFrom: "delivery-stages" },
+      { id: "brain", label: "Brain", icon: Brain, to: "/brain" },
       { id: "monitoring", label: "Monitoring", icon: Activity, to: "/monitoring" },
       { id: "governance", label: "Governance", icon: ShieldCheck, to: "/governance" },
     ],

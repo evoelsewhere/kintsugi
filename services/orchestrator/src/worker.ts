@@ -28,8 +28,11 @@ import { JobCancelled } from "./jobs/model.js";
 import { PgJobStore } from "./jobs/store.js";
 import { EmptyRepositoryError, onDefaultTipMove, pruneMirrors, syncRepository } from "./git-sync/sync.js";
 import { triggerRebuilds } from "./aggregates.js";
+import { dueBrainBuilds, indexBrain } from "./brain/index.js";
 import { dispatchOutbox, PostgresOutboxStore } from "./outbox/index.js";
 import {
+  BRAIN_INDEX_QUEUE,
+  type BrainIndexRequest,
   DOCUMENT_WRITE_QUEUE,
   type DocumentWriteRequest,
   GIT_SYNC_QUEUE,
@@ -38,9 +41,11 @@ import {
   QUEUE_SCHEMA,
   WORKSPACE_CLEANUP_QUEUE,
   type WorkspaceCleanupRequest,
+  ensureBrainIndexQueue,
   ensureDocumentWriteQueue,
   ensureJobRunQueue,
   ensureWorkspaceCleanupQueue,
+  sendBrainIndex,
   sendDocumentWrite,
   sendJobRun,
 } from "./queues.js";
@@ -72,6 +77,8 @@ export interface WorkerOptions {
   outboxScanSeconds?: number;
   /** Seconds between checks for cancel requests of the runs this worker runs (default 2). */
   cancelPollSeconds?: number;
+  /** Seconds between looks for Brain indexes whose branch moved (ADR-0091, default 60). */
+  brainCheckSeconds?: number;
   /** Seconds between heartbeats in workflow.worker_heartbeat (ADR-0030, default 15). */
   heartbeatSeconds?: number;
   /** Runtime jobs (queue `job-run`); omitted = this worker runs no jobs. */
@@ -228,6 +235,23 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     const outcome = await removeWorkspaceOnRequest({ storage: options.storage, store: jobStore, jobId: job.data.jobId });
     log(`workspace ${job.data.jobId}: ${outcome}${job.data.actor === undefined ? "" : ` (asked by ${job.data.actor})`}`);
   }));
+  // The Brain (ADR-0091): one build per project at a time; a build reads a commit, so it never waits for the mirror.
+  const brainDeps = { pool: options.pool, repositories: store, storage: options.storage, log };
+  await ensureBrainIndexQueue(boss);
+  await boss.work<BrainIndexRequest>(BRAIN_INDEX_QUEUE, { localConcurrency: 1 }, counted(async ([job]) => {
+    if (job === undefined) return;
+    await indexBrain(brainDeps, job.data.projectId);
+  }));
+  const requestBrainBuilds = async (repositoryId?: string): Promise<void> => {
+    for (const projectId of await dueBrainBuilds(brainDeps, repositoryId)) await sendBrainIndex(boss, { projectId });
+  };
+  // A sync that moved a default branch: the listener runs under the mirror's lock, so it only looks and enqueues.
+  const stopBrainFollow = onDefaultTipMove(async (move) => {
+    await requestBrainBuilds(move.repositoryId).catch((error: unknown) =>
+      log(`brain check of ${move.repositoryId} failed: ${error instanceof Error ? error.message : String(error)}`),
+    );
+  });
+
   const watchCancels = async (): Promise<void> => {
     if (active.size === 0) return;
     for (const id of await jobStore.cancelRequested([...active.keys()])) active.get(id)?.abort(new JobCancelled());
@@ -277,6 +301,8 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     if (outcome.merged.length + outcome.closed.length > 0) log(`review watch: ${outcome.merged.length} merged, ${outcome.closed.length} closed`);
   });
   const checkCancels = tick("cancel check", watchCancels);
+  // Other branches, builds lost with a stopped worker and a newer builder are found here.
+  const checkBrains = tick("brain check", () => requestBrainBuilds());
   const followJobConcurrency = tick("job concurrency", () => syncJobConcurrency());
   const outboxStore = new PostgresOutboxStore(options.pool);
   const outboxWorkerId = randomUUID();
@@ -318,6 +344,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
     setInterval(() => void checkCancels(), (options.cancelPollSeconds ?? 2) * 1000),
     setInterval(() => void followJobConcurrency(), 10 * 1000),
     setInterval(() => void dispatchWorkflowOutbox(), (options.outboxScanSeconds ?? 1) * 1000),
+    setInterval(() => void checkBrains(), (options.brainCheckSeconds ?? 60) * 1000),
   ];
   void pollAll();
   void pruneJobs();
@@ -326,7 +353,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
 
   const heartbeat = await startHeartbeat({
     pool: options.pool,
-    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, WORKSPACE_CLEANUP_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
+    queues: [GIT_SYNC_QUEUE, DOCUMENT_WRITE_QUEUE, WORKSPACE_CLEANUP_QUEUE, BRAIN_INDEX_QUEUE, ...(options.jobs === undefined ? [] : [JOB_RUN_QUEUE])],
     activeJobs: () => busy,
     ...(options.heartbeatSeconds === undefined ? {} : { intervalSeconds: options.heartbeatSeconds }),
     log,
@@ -342,6 +369,7 @@ export async function startWorker(options: WorkerOptions): Promise<Worker> {
       if (stopResult !== undefined) return stopResult;
       stopped = true;
       stopRebuilds();
+      stopBrainFollow();
       stopping.abort();
       for (const timer of timers) clearInterval(timer);
       stopResult = (async () => {

@@ -9,7 +9,7 @@ import { assertSafeRepoPath, GitError } from "@kintsugi/git";
 import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
 import { type ProjectDetail, ProjectsService } from "#modules/admin/projects/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
-import { type DocumentFile, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, MAX_DOCUMENT_BYTES, type MirrorBranch } from "../domain/document.js";
+import { type DocumentFile, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type GrepLine, MAX_DOCUMENT_BYTES, type MirrorBranch } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 
 /** A project's document repo, ready to read: the mirror and its default branch. */
@@ -166,6 +166,13 @@ export class DocumentsService {
   async readText(context: DocumentContext, commit: string, path: string, maxBytes = MAX_DOCUMENT_BYTES): Promise<string | undefined> {
     const read = await this.reader.read(context.repo, commit, servablePath(path, false), maxBytes);
     return read.status === "ok" ? read.content : undefined;
+  }
+
+  /** Lines of the Markdown files at a commit that contain every one of `terms`, never under `restricted/`. */
+  async grep(context: DocumentContext, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }> {
+    const under = options.under === undefined || options.under === "" ? undefined : servablePath(options.under, false);
+    const found = await this.reader.grep(context.repo, commit, terms, { ...options, ...(under === undefined ? {} : { under }) });
+    return { matches: found.matches.filter((match) => isServable(match.path)), truncated: found.truncated };
   }
 
   /** True only when both immutable commits are available in this project's document mirror. */

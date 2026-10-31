@@ -602,3 +602,53 @@ export function transformationNotesPath(app: string, module: string): string {
 export function taskPackPath(unitKey: string): string {
   return `${modernDir(DOCUMENT_PATH_TOKENS.app)}/${unitKey}/task.md`;
 }
+
+// ---------------------------------------------------------------------------
+// What a folder of the layout holds, in words (the Brain index, ADR-0091)
+// ---------------------------------------------------------------------------
+
+const ROOT_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  [PROJECT_ROOT]: "The project: charter, RACI, risks, AI strategy and policy, KPI baseline, glossary and portfolio.",
+  [STANDARDS_ROOT]: "Standards: conventions, mappings, review rules and the design sets designs are written from.",
+  [DESIGN_SETS_ROOT]: "Design sets: the templates and profiles each design is written from.",
+  [ARCHITECTURE_ROOT]: "Architecture: the blueprint, the overall design, architecture decisions and the common components.",
+  [`${ARCHITECTURE_ROOT}/adr`]: "Architecture decision records of the target system.",
+  [`${ARCHITECTURE_ROOT}/common`]: "Common components shared by the applications, one document per COM id.",
+  [TRANSITION_ROOT]: "Transition: coexistence of the old and new systems, data migration and shared data.",
+  [APPLICATIONS_ROOT]: "The applications, each with its old system (01-legacy) and its new system (02-modern).",
+};
+
+/**
+ * What a folder of the document repo holds, from the layout alone, or undefined for a folder the layout does
+ * not name. A summary for readers that have nothing better, such as a folder without a README.
+ */
+export function describeDocumentFolder(path: string): string | undefined {
+  const known = ROOT_DESCRIPTIONS[path];
+  if (known !== undefined) return known;
+  const [root, app, half, module, unit, part, ...rest] = path.split("/");
+  if (root !== APPLICATIONS_ROOT || app === undefined || !isUnitSegment(app)) return undefined;
+  if (half === undefined) return `Application ${app}: what people attached, its old system, its new system and the read models.`;
+  if (half === INPUTS) return module === undefined ? `What people attached to ${app}: intent, graphs, telemetry.` : undefined;
+  if (half === GENERATED) return module === undefined ? `Read models of ${app} rebuilt after a merge: business rules, data objects, security findings, traceability.` : undefined;
+  if (half !== LEGACY && half !== MODERN) return undefined;
+  const legacy = half === LEGACY;
+  if (module === undefined) {
+    return legacy
+      ? `The old system of ${app}: its assessment (inventory, topology), the item catalog, the plan and what is known about each unit.`
+      : `The new system of ${app}: requirements, the application's design and each unit's card, design sets, task and review.`;
+  }
+  if (module === "_catalog" && unit === undefined) return `The item catalog of ${app}: its modules and the items of each.`;
+  if (module === "_design" && unit === undefined) return `The design sets of ${app} as a whole.`;
+  if (!isUnitSegment(module)) return undefined;
+  if (unit === undefined) return `Module ${module} of the ${legacy ? "old" : "new"} system of ${app}.`;
+  if (!isUnitSegment(unit)) return undefined;
+  if (part === undefined) {
+    return legacy
+      ? `What is known about unit ${module}/${unit}: its specification, business rules, data objects, findings, topology and trace.`
+      : `Unit ${module}/${unit} in the new system: its card, design sets, task and build review.`;
+  }
+  if (rest.length > 0) return undefined;
+  if (legacy && part === "rules") return `The business rules of unit ${module}/${unit}, one document per rule.`;
+  if (!legacy && part === "_build") return `What the build left for unit ${module}/${unit}: the independent review of its merge request.`;
+  return undefined;
+}

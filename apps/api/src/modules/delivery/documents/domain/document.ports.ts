@@ -1,7 +1,7 @@
 // Port of document repo reads: the mirror Kintsugi keeps of a project's document repository
 // (ADR-0025), read-only. Implemented over the git CLI (packages/git).
 
-import type { DocumentRepo, FileRead, MirrorBranch, TreeEntry } from "./document.js";
+import type { DocumentRepo, FileRead, GrepLine, MirrorBranch, TreeEntry } from "./document.js";
 
 export abstract class DocumentRepoReader {
   /** Whether the mirror exists (the worker clones it on the first sync). */
@@ -23,4 +23,9 @@ export abstract class DocumentRepoReader {
    * listing of its directory at the same commit) saves looking the file up first.
    */
   abstract read(repo: DocumentRepo, commit: string, path: string, maxBytes: number, knownSize?: number): Promise<FileRead>;
+  /**
+   * The lines of the Markdown files at a commit that contain every one of `terms` (fixed strings, not patterns),
+   * under `under` when given; at most `limit` lines, and whether more matched.
+   */
+  abstract grep(repo: DocumentRepo, commit: string, terms: readonly string[], options: { ignoreCase: boolean; under?: string; limit: number }): Promise<{ matches: GrepLine[]; truncated: boolean }>;
 }

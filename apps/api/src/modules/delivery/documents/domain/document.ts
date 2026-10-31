@@ -263,3 +263,10 @@ export interface StageHeadline {
   headline: string[];
   ref?: ResultRef;
 }
+
+/** One line of a document that matched a search. */
+export interface GrepLine {
+  path: string;
+  line: number;
+  text: string;
+}

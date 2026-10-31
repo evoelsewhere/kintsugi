@@ -6,6 +6,10 @@ import { Body, Controller, createParamDecorator, type ExecutionContext, Get, Htt
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   activityInputSchema,
+  brainGrepQuerySchema,
+  brainLookupQuerySchema,
+  brainReadQuerySchema,
+  brainTreeQuerySchema,
   documentFileQuerySchema,
   documentTreeQuerySchema,
   pluginBundleQuerySchema,
@@ -50,6 +54,38 @@ export class MemberApiController {
   @ApiOperation({ summary: "Read a Markdown file of an authorized project's document repository" })
   file(@CurrentActor() actor: Actor, @Query({ schema: documentFileQuerySchema }) query: z.infer<typeof documentFileQuerySchema>) {
     return this.member.documentFile(actor.id, query.projectId, query.ref, query.path);
+  }
+
+  @Get("brain/tree")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "One level of an authorized project's Brain (the tree index of its documents), with summaries" })
+  brainTree(@Query({ schema: brainTreeQuerySchema }) query: z.infer<typeof brainTreeQuerySchema>) {
+    return this.member.brainTree(query);
+  }
+
+  @Get("brain/read")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "A Brain node's text at the indexed commit, with its citation, children and links" })
+  brainRead(@CurrentActor() actor: Actor, @Query({ schema: brainReadQuerySchema }) query: z.infer<typeof brainReadQuerySchema>) {
+    return this.member.brainRead(actor.id, query);
+  }
+
+  @Get("brain/lookup")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "The Brain nodes a reference id, node id or repository path names" })
+  brainLookup(@Query({ schema: brainLookupQuerySchema }) query: z.infer<typeof brainLookupQuerySchema>) {
+    return this.member.brainLookup(query);
+  }
+
+  @Get("brain/grep")
+  @RequirePermission("member.read")
+  @AllowMemberRead({ projectIdFrom: "query" })
+  @ApiOperation({ summary: "The Brain nodes whose text holds a fixed string" })
+  brainGrep(@Query({ schema: brainGrepQuerySchema }) query: z.infer<typeof brainGrepQuerySchema>) {
+    return this.member.brainGrep(query);
   }
 
   @Get("plugins")

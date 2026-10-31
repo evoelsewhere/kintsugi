@@ -3,7 +3,8 @@
 | Term | Meaning |
 |---|---|
 | **Access role** | Installation-wide permission bundle, such as `admin`, `contribute`, `user`, or an admin-defined access sub-role; managed in Admin → Members & Permissions |
-| **AS-IS / TO-BE KB** | Knowledge base of the current / target system. Sources are in Git; the index (vector + graph) is in Postgres |
+| **AS-IS / TO-BE KB** | Knowledge base of the current / target system: the documents of the document repository. Members' agents reach it through the Brain |
+| **Brain** | The tree index of one branch of a project's document repository: folders, documents, sections and cards with a summary each, no vectors. Agents reason over it and cite path, lines and commit ([reference](brain.md), ADR-0091) |
 | **Code repo** | Umbrella term for source and target repos. A project usually has many, possibly on different Git servers |
 | **Common component** | Something every unit reuses, designed once by the foundation team: a document `02-architecture/common/COM-<AREA>-<NN>.md`; unit designs refer to it by id ([ADR-0044](../decisions/0044-design-phase-common-basic-detail.md)) |
 | **Design set** | A group of design documents written together for a unit (for example the basic design and the detail design), defined by the project as templates with checks in `01-standards/templates/<set>/` ([design templates](design-templates.md), [ADR-0045](../decisions/0045-design-templates-are-project-data.md)) |

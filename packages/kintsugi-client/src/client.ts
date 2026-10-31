@@ -1,6 +1,14 @@
 import {
   activityInputSchema,
   activityReceiptSchema,
+  brainGrepQuerySchema,
+  brainGrepSchema,
+  brainLookupQuerySchema,
+  brainLookupSchema,
+  brainReadQuerySchema,
+  brainReadSchema,
+  brainTreeQuerySchema,
+  brainTreeSchema,
   documentFileSchema,
   documentFileQuerySchema,
   documentTreeQuerySchema,
@@ -15,6 +23,14 @@ import {
 import type {
   ActivityInput,
   ActivityReceipt,
+  BrainGrep,
+  BrainGrepQuery,
+  BrainLookup,
+  BrainLookupQuery,
+  BrainRead,
+  BrainReadQuery,
+  BrainTree,
+  BrainTreeQuery,
   DocumentFile,
   DocumentFileQuery,
   DocumentTree,
@@ -248,5 +264,9 @@ export function createMemberClient(options: MemberClientOptions): MemberPort {
       const parsed = activityInputSchema.parse(input);
       return request("activity", {}, activityReceiptSchema, undefined, parsed);
     },
+    brainTree: (query: BrainTreeQuery): Promise<BrainTree> => request("brain/tree", brainTreeQuerySchema.parse(query), brainTreeSchema),
+    brainRead: (query: BrainReadQuery): Promise<BrainRead> => request("brain/read", brainReadQuerySchema.parse(query), brainReadSchema),
+    brainLookup: (query: BrainLookupQuery): Promise<BrainLookup> => request("brain/lookup", brainLookupQuerySchema.parse(query), brainLookupSchema),
+    brainGrep: (query: BrainGrepQuery): Promise<BrainGrep> => request("brain/grep", brainGrepQuerySchema.parse(query), brainGrepSchema),
   };
 }

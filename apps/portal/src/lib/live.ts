@@ -4,7 +4,7 @@
 // `MIN_GAP_MS`. While the tab is hidden nothing is read: a view that changed is read when the tab shows again, and
 // so is every view after the stream reconnected (changes may have been missed meanwhile).
 
-export type LiveTopic = "job-runs" | "document-writes" | "repositories" | "workers" | "gates" | "audit" | "telemetry";
+export type LiveTopic = "job-runs" | "document-writes" | "repositories" | "workers" | "gates" | "audit" | "telemetry" | "brain";
 
 /** A topic, or `topic:scope` for the changes of one scope only (a project id). */
 export type LiveSpec = LiveTopic | `${LiveTopic}:${string}`;

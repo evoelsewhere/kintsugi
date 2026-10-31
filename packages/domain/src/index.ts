@@ -273,6 +273,7 @@ export * from "./design-template.js";
 export * from "./traceability.js";
 export * from "./mcp.js";
 export * from "./project-memory.js";
+export * from "./brain.js";
 export * from "./web-search.js";
 export * from "./model-binding.js";
 export { DEFAULT_GAP_SETTLER, GAP_SETTLERS, GAP_STATUSES, type GapSettler, type GapStatus, gapIsResolved, isGapSettler, isMeaningfulGapText } from "./gap.js";

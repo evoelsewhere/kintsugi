@@ -29,6 +29,34 @@ const member = {
   async pluginBundle() {
     throw new Error("not served over MCP");
   },
+  async brainTree(query) {
+    const node = (id, kind, title, summary, children) => ({
+      id, kind, title, summary, summarySource: "readme", path: id.replace(/\/$/, ""), anchor: null,
+      lineStart: null, lineEnd: null, subtreeEnd: null, tokens: 0, subtreeTokens: 10, children, ids: [],
+    });
+    return {
+      schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"),
+      node: node("/", "root", "Shop · main", "", 1), breadcrumb: [],
+      children: [node("01-standards/", "folder", "01-standards", "Conventions and review rules.", 1)], total: 1, offset: 0,
+    };
+  },
+  async brainRead(query) {
+    const node = {
+      id: query.node, kind: "document", title: "Standards", summary: "", summarySource: "none", path: query.node, anchor: null,
+      lineStart: 1, lineEnd: 1, subtreeEnd: 1, tokens: 3, subtreeTokens: 3, children: 0, ids: [],
+    };
+    return {
+      schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), node, breadcrumb: [], scope: "subtree",
+      text: "1\t# Standards", lineNumbers: true, citation: { nodeId: query.node, path: query.node, lineStart: 1, lineEnd: 1, commit: sha("a") },
+      truncated: false, nextLine: null, children: [], outgoing: [], incoming: [], outgoingTotal: 0, incomingTotal: 0,
+    };
+  },
+  async brainLookup(query) {
+    return { schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), query: query.query, matches: [] };
+  },
+  async brainGrep(query) {
+    return { schemaVersion: "1", projectId: query.projectId, branch: "main", commit: sha("a"), text: query.text, under: null, matches: [], truncated: false };
+  },
   async recordActivity(input) {
     return { schemaVersion: "1", id: "act-" + input.kind };
   },
