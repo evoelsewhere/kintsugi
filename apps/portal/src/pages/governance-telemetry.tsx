@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Chips } from "@/components/ui/tabs";
+import { jobRunsApi } from "@/lib/api/job-runs";
 import { telemetryApi, type TelemetryRun, type TelemetrySummary, type Trace, type TraceSpan } from "@/lib/api/telemetry";
 import { formatDateTime } from "@/lib/format";
 import { deliveryLink } from "@/lib/links";
@@ -99,6 +100,12 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
     live: ["telemetry"],
   });
   const runs = useLoader(`telemetry/runs/${windowId}/${projectId}`, async () => (await telemetryApi.runs({ ...range(), limit: RUN_SAMPLE })).items, { live: ["telemetry"] });
+  // Spans are written when a job finishes, so a running job has none yet: say so instead of "no jobs".
+  const running = useLoader(
+    `telemetry/running/${projectId}`,
+    async () => (await jobRunsApi.listAll({ status: ["running"], ...(projectId === "" ? {} : { projectId }), limit: 1 }).catch(() => ({ total: 0 }))).total,
+    { live: ["job-runs"] },
+  );
 
   const agentOptions = useMemo(() => {
     const names = [...new Set([...(runs.data ?? []).map((run) => run.agent), ...(agent === "" ? [] : [agent])])].sort();
@@ -158,7 +165,15 @@ export function TelemetryView({ projectOptions }: { projectOptions: { value: str
       <Loaded loader={summary} rows={4}>
         {(data) =>
           data.totals.jobs === 0 ? (
-            <EmptyState icon={Activity} title="No agent jobs in this window" description="Spans appear here as runtime jobs run, and are kept for 30 days. Widen the window or pick another project." />
+            (running.data ?? 0) > 0 ? (
+              <EmptyState
+                icon={Activity}
+                title="No finished agent job in this window yet"
+                description={`Spans of running jobs appear when they finish (${running.data} run${running.data === 1 ? "" : "s"} running now). Spans are kept for 30 days.`}
+              />
+            ) : (
+              <EmptyState icon={Activity} title="No agent jobs in this window" description="Spans appear here when runtime jobs finish, and are kept for 30 days. Widen the window or pick another project." />
+            )
           ) : (
             <SummaryView summary={data} previous={previous.data ?? undefined} metric={metric} onMetric={(next) => update({ metric: next === "cost" ? undefined : next })} onAgent={(key) => update({ agent: key })} onAttention={showAttention} />
           )
