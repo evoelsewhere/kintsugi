@@ -1,7 +1,7 @@
 // Domain of the sandbox view (ADR-0058): the job workspaces on the worker's data volume and what the database says about
 // the run behind each. Pure types and the removal rule — no framework, no I/O.
 
-/** `running`: an attempt is running. `parked`: the job failed and can be retried. `published`: only its output is still needed. */
+/** `running`: an attempt is running. `parked`: the job failed or was cancelled and can be retried. `published`: only its output is still needed. */
 export type WorkspaceLifecycle = "running" | "parked" | "published";
 
 /** What the disk says about one workspace (its manifest, when it has a readable one). */

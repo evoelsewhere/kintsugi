@@ -120,8 +120,8 @@ export function SandboxView(): React.JSX.Element {
         onClose={() => setAsked(null)}
       >
         <p>
-          The worker deletes the whole folder: the checkouts, what the steps wrote and the state a retry reuses. A failed job can still be retried, but it begins from nothing again.
-          {asked?.run?.status === "failed" || asked?.lifecycle === "parked" ? "" : " Its results are lost if their document write has not landed."}
+          The worker deletes the whole folder: the checkouts, what the steps wrote and the state a retry reuses. A failed or cancelled job can still be retried, but it begins from nothing again.
+          {asked?.run?.status === "failed" || asked?.run?.status === "cancelled" || asked?.lifecycle === "parked" ? "" : " Its results are lost if their document write has not landed."}
         </p>
       </ConfirmDialog>
     </div>

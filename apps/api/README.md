@@ -8,7 +8,7 @@ Member API: versioned read-only `/api/member/v1` endpoints (projects, document t
 Responsibilities beyond the feature modules below:
 
 - Auth: local username/password sessions (httpOnly cookie) and personal project-scoped
-  Coding Agent Workflow read tokens. Token management uses session permissions; read tokens
+  member read tokens (the Kintsugi CLI and its local bridge). Token management uses session permissions; read tokens
   cannot access unmarked legacy routes. Entra ID remains planned (ADRs 0008, 0042).
 - Admin → LLM Providers: runtime provider registry (ADR-0009).
 - Admin → Agents: the Agent Builder (ADR-0026): built-in agents from `packages/agents/builtin`

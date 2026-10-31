@@ -76,7 +76,7 @@ const GROUPS: GroupSpec[] = [
   {
     id: "retention",
     title: "Workspace retention",
-    description: "How long a failed job keeps what it can be retried from.",
+    description: "How long a failed or cancelled job keeps what it can be retried from.",
     icon: Gauge,
     fields: [
       { id: "checkoutHours", label: "Keep checkouts", unit: "hours", min: 1, hint: "A retry makes them again from the pinned commits, so this only saves it the time. Disk is freed after it." },
