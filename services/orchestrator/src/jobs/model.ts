@@ -28,7 +28,7 @@ export interface JobRun {
   /** Stage id, script file, agent id or workflow id. */
   name: string;
   status: JobStatus;
-  /** 1 for the first attempt; a retry of a failed stage run runs the same run again as the next attempt (ADR-0055). */
+  /** 1 for the first attempt; a retry of a failed or cancelled stage run runs the same run again as the next attempt (ADR-0055, ADR-0090). */
   attempt: number;
   failureReason?: string;
   /** The first legacy repository and its commit; `sources` lists every one the run reads (ADR-0052). */
@@ -123,8 +123,8 @@ export interface JobStore {
   succeed(id: string, summary: Record<string, unknown>): Promise<void>;
   /** The attempt ends badly; `reason` must be redacted already. */
   fail(id: string, reason: string, summary?: Record<string, unknown>): Promise<void>;
-  /** Records the run as cancelled (a person asked for it). */
-  cancel(id: string): Promise<void>;
+  /** Records the run as cancelled (a person asked for it), with what a stage recorded so far. */
+  cancel(id: string, summary?: Record<string, unknown>): Promise<void>;
   /** Of the given runs, those a person asked to cancel. */
   cancelRequested(ids: readonly string[]): Promise<string[]>;
   /** Appends an event to a run's live record; must not throw for a failing write (best effort). */

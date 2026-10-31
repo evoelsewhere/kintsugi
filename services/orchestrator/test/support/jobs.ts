@@ -46,9 +46,9 @@ export class MemoryJobStore implements JobStore {
     run.status = "running";
     return true;
   }
-  async cancel(id: string): Promise<void> {
+  async cancel(id: string, summary?: Record<string, unknown>): Promise<void> {
     const run = this.runs.get(id)!;
-    if (run.status === "queued" || run.status === "running") run.status = "cancelled";
+    if (run.status === "queued" || run.status === "running") Object.assign(run, { status: "cancelled", ...(summary === undefined ? {} : { outputSummary: summary }) });
   }
   async cancelRequested(ids: readonly string[]): Promise<string[]> {
     return ids.filter((id) => this.cancelRequests.has(id));

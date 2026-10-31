@@ -1,11 +1,12 @@
-// Job workspace cleanup (ADR-0029, ADR-0055). A job workspace outlives its attempts. What can be made again from
-// the pins in its manifest (the checkouts of the repositories, the documents) goes first: when an attempt ends well
-// or is cancelled at once, and for a job that failed after `KINTSUGI_JOB_CHECKOUT_HOURS` (dropExpiredCheckouts). What
-// cannot (out/, work/, .state/) stays for the retries of a failed job and for the document repo writer: out/ is
-// deleted as soon as the write of that output reaches a final state (committed, pr-opened, merged, closed,
-// unchanged). Outputs of failed or cancelled runs and of failed writes stay for a retention period
-// (KINTSUGI_JOB_RETENTION_DAYS, default 7) so they can be inspected, the job retried or the write retried; a
-// periodic sweep of the worker removes them afterwards, along with workspaces no run refers to.
+// Job workspace cleanup (ADR-0029, ADR-0055, ADR-0090). A job workspace outlives its attempts. What can be made again
+// from the pins in its manifest (the checkouts of the repositories, the documents) and the unfinished output of a
+// step (steps/) go first: at once when an attempt ends well, and after `KINTSUGI_JOB_CHECKOUT_HOURS` for a job that
+// failed or was cancelled (dropExpiredCheckouts). What cannot (out/, work/, .state/) stays for the retries of a failed
+// or cancelled job and for the document repo writer: out/ is deleted as soon as the write of that output reaches a
+// final state (committed, pr-opened, merged, closed, unchanged). Outputs of failed or cancelled runs and of failed
+// writes stay for a retention period (KINTSUGI_JOB_RETENTION_DAYS, default 7) so they can be inspected, the job
+// retried or the write retried; a periodic sweep of the worker removes them afterwards, along with workspaces no run
+// refers to.
 
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";

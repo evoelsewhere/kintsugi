@@ -459,12 +459,13 @@ export class StagePlanExecutor {
           }),
         ),
       );
-      this.#checkAborted();
       const failed = results.flatMap((result, index) => (result.ok ? [] : [{ step: enabled[index]!.step.id, reason: result.reason }]));
-      if (failed.length > 0 && !tolerateFailures) {
+      if (this.#stageAborted() || (failed.length > 0 && !tolerateFailures)) {
         // What the members that succeeded wrote is kept: the next attempt of the job skips them.
         await copyTree(dirs.out, this.#deps.dirs.out);
         await copyTree(dirs.work, this.#deps.dirs.work);
+        // A cancelled stage keeps them too (ADR-0090).
+        this.#checkAborted();
         const first = firstFailure ?? failed[0]!;
         throw new JobFailure(`Step ${id} failed: ${first.step}: ${first.reason}${failed.length > 1 ? ` (and ${failed.length - 1} more)` : ""}`);
       }

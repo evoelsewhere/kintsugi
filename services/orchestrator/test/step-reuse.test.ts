@@ -30,13 +30,19 @@ interface Attempt {
 }
 
 /** One attempt of a job: the agents "write" a file named after their task; `failOn` makes a step fail. */
-async function attempt(ledger: Ledger, plan: StagePlan, options: { failOn?: string; write?: boolean } = {}): Promise<Attempt> {
+async function attempt(ledger: Ledger, plan: StagePlan, options: { failOn?: string; cancelOn?: string; write?: boolean } = {}): Promise<Attempt> {
   const ran: string[] = [];
   const reused: string[] = [];
+  const cancel = new AbortController();
   const runLeaf = async (spec: LeafRun, placement: LeafPlacement): Promise<LeafResult> => {
     const task = String(spec.inputs["task"] ?? spec.inputs["args"]);
     ran.push(placement.key ?? task);
     if (options.failOn !== undefined && (placement.key === options.failOn || task === options.failOn)) return { id: "x", ok: false, reason: "boom" };
+    if (options.cancelOn !== undefined && placement.key === options.cancelOn) {
+      // A person cancels the run while this step runs.
+      cancel.abort(new Error("cancelled"));
+      return { id: "x", ok: false, reason: "cancelled" };
+    }
     const path = `${(placement.key ?? task).replace(/[^a-z0-9]+/gi, "-")}.md`;
     if (options.write !== false && spec.kind === "agent") await writeFile(join(placement.out, path), `# ${task}\n`);
     return { id: "x", ok: true, summary: {}, agents: spec.kind === "agent" ? 1 : 0, outputs: spec.kind === "agent" ? [{ path, zone: "out" }] : [], digest: filesDigest([{ path, sha256: digestOf(task) }]) };
@@ -59,6 +65,7 @@ async function attempt(ledger: Ledger, plan: StagePlan, options: { failOn?: stri
     limits: { maxAgents: 50, concurrency: 3 },
     gates: { decide: async (request: { default: string }) => ({ choice: request.default, defaulted: false, by: "test-user" }) } as never,
     runLeaf,
+    signal: cancel.signal,
     reuse,
     gateChoices: ledger.gates(),
     onGate: (id, choice) => ledger.recordGate(id, choice),
@@ -129,6 +136,17 @@ describe("reusing the steps of an earlier attempt", () => {
     expect(second.ran).not.toContain("one");
     expect(second.ran).not.toContain("two");
     expect(second.ran).not.toContain("unit#u1");
+  });
+
+  it("picks up where a cancellation stopped it: what finished before it, in the group too, is kept and reused (ADR-0090)", async () => {
+    const ledger = await Ledger.open(join(root, "state", "ledger.json"));
+    const groupPlan = planOf([agent("one"), { id: "both", kind: "parallel", steps: [agent("left"), agent("right")] }, agent("last")]);
+    const first = await attempt(ledger, groupPlan, { cancelOn: "right" });
+    expect(first.error).toBeDefined();
+    expect(await exists(join(root, "out", "left.md"))).toBe(true);
+    const second = await attempt(ledger, groupPlan);
+    expect(second.error).toBeUndefined();
+    expect(second.ran).toEqual(["right", "last"]);
   });
 
   it("runs a step again when what it wrote is gone", async () => {

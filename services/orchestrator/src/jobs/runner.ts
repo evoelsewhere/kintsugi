@@ -374,14 +374,14 @@ export class JobRunner {
     } catch (error) {
       if (isCancelled(signal)) {
         ended = "cancelled";
-        await store.cancel(id).catch(() => undefined);
+        // A cancelled stage keeps its steps like a failed one: a retry skips the ones that finished (ADR-0090).
+        await store.cancel(id, this.#stageSummary(ws, error)).catch(() => undefined);
         await this.#event(ws, undefined, "status", "cancelled", { status: "cancelled" });
         this.#log(`${run.kind} ${run.name} (${id}) cancelled`);
       } else {
         const reason = reasonOf(error);
         // A failed stage keeps its steps, so a retry can skip them (the ledger has the details, ADR-0055).
-        const summary = error instanceof StageFailure ? { ...error.outcome, ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }) } : undefined;
-        await store.fail(id, reason, summary).catch(() => undefined);
+        await store.fail(id, reason, this.#stageSummary(ws, error)).catch(() => undefined);
         await this.#event(ws, undefined, "status", `failed: ${reason}`, { status: "failed" });
         this.#log(`${run.kind} ${run.name} (${id}) failed: ${reason}`);
         if (error instanceof ScriptFailure) this.#log(`${id.slice(0, 8)} script output:\n${error.detail}`);
@@ -391,14 +391,21 @@ export class JobRunner {
       await removeTree(paths.tmp).catch(() => undefined);
       if (manifest !== undefined) {
         const settled = { ...manifest, state: ended === "succeeded" ? ("published" as const) : ("parked" as const) };
-        // A job that failed keeps its checkouts for a retry (the sweep drops them later); any other end drops them now.
-        if (ended === "failed") await writeManifest(paths.manifest, withoutStamp(settled)).catch(() => undefined);
+        // A job that failed or was cancelled keeps its checkouts and steps for a retry (the sweep drops them later,
+        // ADR-0090); a job that succeeded drops them now.
+        if (ended !== "succeeded") await writeManifest(paths.manifest, withoutStamp(settled)).catch(() => undefined);
         else await dropCheckouts(checkouts, paths, settled).catch(() => undefined);
       } else {
         await removeTree(paths.steps).catch(() => undefined);
       }
     }
     return store.get(id);
+  }
+
+  /** What a stage that stopped recorded so far (its steps, and the documents it read), for the run's summary. */
+  #stageSummary(ws: StepWorkspace, error: unknown): Record<string, unknown> | undefined {
+    if (!(error instanceof StageFailure)) return undefined;
+    return { ...error.outcome, attempt: ws.attempt, ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }) };
   }
 
   /**
@@ -1107,46 +1114,41 @@ export class JobRunner {
             },
             record: (key, entry) => ledger.record(key, { ...entry, attempt: ws.attempt, finishedAt: new Date().toISOString() }),
           };
-    try {
-      const executor = new StagePlanExecutor({
-        plan,
-        run: { id: run.id, projectId: run.projectId, applicationId: run.applicationId },
-        values: { app: run.applicationId, sources: sourceSpec(legacy) },
-        // Group members stage their outputs under steps/, beside the folders of the steps.
-        dirs: { root: paths.steps, in: ws.in, work, out: ws.out },
-        limits: ws.defaults.stage,
-        gates: this.#deps.gates,
-        runLeaf,
-        log: (line, data) => {
-          this.#log(`stage ${run.name} (${run.id}): ${line}`);
-          return this.#event(ws, undefined, "log", line, data);
-        },
-        ...(signal === undefined ? {} : { signal }),
-        ...(scope === undefined ? {} : { scope }),
-        ...(typeof run.inputs["resumeOf"] === "string" ? { resumeOf: run.inputs["resumeOf"] } : {}),
-        ...(reuse === undefined || ledger === undefined ? {} : { reuse, gateChoices: ledger.gates(), onGate: (id: string, choice: string) => ledger.recordGate(id, choice) }),
-      });
-      const outcome = await executor.run();
-      const description = await this.#description(plan, run.applicationId, work);
-      const report = await this.#report(plan, run.applicationId, work);
-      // work/ goes only when the stage succeeds: a failed job keeps it beside out/ for its next attempt
-      // (same retention, cleanup.ts).
-      await removeTree(work).catch(() => undefined);
-      return {
-        summary: {
-          ...outcome,
-          attempt: ws.attempt,
-          ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }),
-          ...(report === undefined ? {} : { report }),
-        },
-        ...(agent === undefined ? {} : { agent }),
-        ...(description === undefined ? {} : { description }),
-        provenance,
-      };
-    } catch (error) {
-      if (isCancelled(signal)) await removeTree(work).catch(() => undefined);
-      throw error;
-    }
+    const executor = new StagePlanExecutor({
+      plan,
+      run: { id: run.id, projectId: run.projectId, applicationId: run.applicationId },
+      values: { app: run.applicationId, sources: sourceSpec(legacy) },
+      // Group members stage their outputs under steps/, beside the folders of the steps.
+      dirs: { root: paths.steps, in: ws.in, work, out: ws.out },
+      limits: ws.defaults.stage,
+      gates: this.#deps.gates,
+      runLeaf,
+      log: (line, data) => {
+        this.#log(`stage ${run.name} (${run.id}): ${line}`);
+        return this.#event(ws, undefined, "log", line, data);
+      },
+      ...(signal === undefined ? {} : { signal }),
+      ...(scope === undefined ? {} : { scope }),
+      ...(typeof run.inputs["resumeOf"] === "string" ? { resumeOf: run.inputs["resumeOf"] } : {}),
+      ...(reuse === undefined || ledger === undefined ? {} : { reuse, gateChoices: ledger.gates(), onGate: (id: string, choice: string) => ledger.recordGate(id, choice) }),
+    });
+    const outcome = await executor.run();
+    const description = await this.#description(plan, run.applicationId, work);
+    const report = await this.#report(plan, run.applicationId, work);
+    // work/ goes only when the stage succeeds: a failed or cancelled job keeps it beside out/ for its next attempt
+    // (same retention, cleanup.ts).
+    await removeTree(work).catch(() => undefined);
+    return {
+      summary: {
+        ...outcome,
+        attempt: ws.attempt,
+        ...(ws.documentsCommit === undefined ? {} : { documentsCommit: ws.documentsCommit }),
+        ...(report === undefined ? {} : { report }),
+      },
+      ...(agent === undefined ? {} : { agent }),
+      ...(description === undefined ? {} : { description }),
+      provenance,
+    };
   }
 
   /**

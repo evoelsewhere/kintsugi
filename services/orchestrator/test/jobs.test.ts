@@ -693,5 +693,12 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     for (const agent of agents) expect(agent).toEqual(["agent", "cancelled"]);
     expect(writes).toHaveLength(0);
     expect(store.events.at(-1)).toMatchObject({ runId: id, kind: "status", data: { status: "cancelled" } });
+    // Like a failed run, a cancelled one keeps what it did for a retry (ADR-0090): its steps in the summary, and its
+    // workspace (the manifest parked, the ledger of the finished steps, the checkouts until the sweep drops them).
+    expect((run?.outputSummary?.["steps"] as Array<{ id: string; status: string }> | undefined)?.[0]).toMatchObject({ status: "succeeded" });
+    const paths = storage.job(id);
+    expect(JSON.parse(readFileSync(paths.manifest, "utf8"))).toMatchObject({ state: "parked" });
+    expect(existsSync(paths.ledger)).toBe(true);
+    expect(existsSync(paths.asIs)).toBe(true);
   }, 60_000);
 });

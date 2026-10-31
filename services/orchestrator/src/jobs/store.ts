@@ -138,10 +138,10 @@ export class PgJobStore implements JobStore, WorkspaceStates {
     );
   }
 
-  async cancel(id: string): Promise<void> {
+  async cancel(id: string, summary?: Record<string, unknown>): Promise<void> {
     await this.pool.query(
-      `update workflow.job_run set status = 'cancelled', finished_at = now(), attempts = ${attemptsWith("cancelled", false)} where id = $1 and status in ('queued', 'running')`,
-      [id],
+      `update workflow.job_run set status = 'cancelled', output_summary = coalesce($2, output_summary), finished_at = now(), attempts = ${attemptsWith("cancelled", false)} where id = $1 and status in ('queued', 'running')`,
+      [id, summary === undefined ? null : JSON.stringify(summary)],
     );
   }
 
