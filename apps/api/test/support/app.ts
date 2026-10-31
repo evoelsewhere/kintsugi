@@ -62,6 +62,8 @@ async function bootTestApp(
     const nest = await NestFactory.create<import("@nestjs/platform-express").NestExpressApplication>(TestRootModule, { logger: false, bodyParser: false });
     const { configureApiBodyParser } = await import("../../src/common/interface/body-parser.js");
     configureApiBodyParser(nest);
+    const { configureSecurityHeaders } = await import("../../src/common/interface/security-headers.js");
+    configureSecurityHeaders(nest);
     app = nest;
     await ensureSchema();
     app.setGlobalPrefix("api");
