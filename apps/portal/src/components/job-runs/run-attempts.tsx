@@ -1,4 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
+import { explainFailure } from "@kintsugi/domain";
 import { RunStatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import type { JobRunDetail, JobRunStatus } from "@/lib/api/job-runs";
@@ -34,7 +35,7 @@ export function RunAttempts({ run, onConsole }: { run: JobRunDetail; onConsole: 
                 {attempt.startedAt === undefined ? "Waiting for a worker" : formatDateTime(attempt.startedAt)}
               </p>
               {attempt.reason === undefined ? null : (
-                <p className="mt-3 whitespace-pre-wrap break-words text-[13px] leading-6 text-text">{attempt.reason}</p>
+                <p className="mt-3 whitespace-pre-wrap break-words text-[13px] leading-6 text-text">{explainFailure(attempt.reason)}</p>
               )}
             </li>
           ))}

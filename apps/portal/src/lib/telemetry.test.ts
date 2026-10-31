@@ -14,6 +14,7 @@ import {
   formatRate,
   formatTokens,
   isRunFilter,
+  jobError,
   matchesRunFilter,
   pickRun,
   problemKeys,
@@ -141,6 +142,16 @@ describe("buildTrace", () => {
     expect(spanDetail(by("s3"))).toBe("nested calls 2");
     expect(spanDetail(by("s5"))).toBe("timeout");
     expect(spanDetail(by("s6"))).toBe("90K → 20K tokens");
+  });
+
+  it("says a limit the job reached in plain words, and any other job error as it is", () => {
+    const job = (outcome: string, error: string): TraceSpan => span({ spanId: "j", name: "kintsugi.job", status: "error", error, attributes: { turns: 80, outcome } });
+    expect(spanDetail(job("max-turns", "stopped after 80 turn(s)"))).toBe(
+      "turns 80 · The agent stopped at the turn limit of 80 turns per job before it finished; raise Turns per job in Settings → Sandbox & Agent, or narrow the task. Detail: max-turns: stopped after 80 turn(s)",
+    );
+    expect(spanDetail(job("error", "boom"))).toBe("turns 80 · boom");
+    expect(jobError("timeout", "timed out after 900s")).toMatch(/^The agent stopped at the time limit of 15 min per job/);
+    expect(jobError("timeout", "stalled: no activity from the model for 300s")).toBe("stalled: no activity from the model for 300s");
   });
 });
 

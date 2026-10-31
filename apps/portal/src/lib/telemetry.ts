@@ -1,6 +1,7 @@
 // Aggregation and formatting for the telemetry views (Governance → Telemetry, ADR-0048): pure
 // functions, tested in telemetry.test.ts (the portal has no component tests).
 
+import { explainFailure } from "@kintsugi/domain";
 import type { SpanAttributes, TelemetryDay, TraceSpan } from "./api/telemetry";
 
 export const WINDOWS = [
@@ -205,8 +206,15 @@ export function spanDetail(span: TraceSpan): string {
     default:
       break;
   }
-  if (span.status === "error" && span.error !== null) parts.push(span.error);
+  if (span.status === "error" && span.error !== null) parts.push(span.name === "kintsugi.job" && typeof a["outcome"] === "string" ? jobError(a["outcome"], span.error) : span.error);
   return parts.join(" · ");
+}
+
+/** The error of an agent job in plain words when it is a limit the job reached (`outcome` is its stop reason), else as it is. */
+export function jobError(outcome: string, error: string): string {
+  const reasoned = `${outcome}: ${error}`;
+  const plain = explainFailure(reasoned);
+  return plain === reasoned ? error : plain;
 }
 
 // ---------------------------------------------------------------------------
