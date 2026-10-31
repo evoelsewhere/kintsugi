@@ -6,10 +6,11 @@
 import { THINKING_LEVELS, type ThinkingLevel } from "@kintsugi/domain";
 import type { AgentModelBinding } from "@kintsugi/runtime-sdk";
 import { z } from "zod";
-import { idSchema } from "#common/interface/dto.js";
+import { idSchema, notReserved } from "#common/interface/dto.js";
 import type { RegisterLlmProvider } from "../domain/llm-provider.js";
 
-const providerIdSchema = idSchema;
+/** `GET admin/llm-providers/supported` and `…/model-bindings` are routes of their own. */
+const providerIdSchema = notReserved(idSchema, ["supported", "model-bindings"]);
 
 export const customModelSchema = z.object({
   id: z.string().min(1).max(200),

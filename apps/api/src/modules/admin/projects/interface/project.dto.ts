@@ -3,7 +3,7 @@
 
 import { APPLICATION_REPOSITORY_ROLES } from "@kintsugi/domain";
 import { z } from "zod";
-import { idSchema, stringField } from "#common/interface/dto.js";
+import { idSchema, notReserved, stringField } from "#common/interface/dto.js";
 import type { CreateApplication, CreateProject, LinkRepository, UpdateApplication, UpdateProject } from "../domain/project.js";
 
 const description = z.string().trim().max(2000);
@@ -12,7 +12,7 @@ const description = z.string().trim().max(2000);
 const RESERVED_PROJECT_IDS = ["repository-links"];
 
 export const createProjectSchema = z.object({
-  id: idSchema.refine((id) => !RESERVED_PROJECT_IDS.includes(id), { message: "This id is reserved; choose another" }),
+  id: notReserved(idSchema, RESERVED_PROJECT_IDS),
   name: stringField(false),
   description: description.optional(),
   /** Registered Git repository (Settings -> Git) holding everything except code. */
