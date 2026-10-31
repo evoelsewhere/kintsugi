@@ -45,7 +45,7 @@ export class ReleasesService {
 
   async #latestManifest(): Promise<ReleaseManifest> {
     const manifest = await this.store.latest();
-    if (manifest === undefined) throw new NotFoundException("This installation has no CLI release; it is built with the image (npm run release:cli)");
+    if (manifest === undefined) throw new NotFoundException("This installation has no CLI release; it is built with the image (pnpm release:cli)");
     return manifest;
   }
 }

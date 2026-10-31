@@ -15,6 +15,8 @@ export interface GuideContext {
   /** The latest release, when this installation has one. */
   version: string | undefined;
   assets: ReleaseAsset[];
+  /** Whether the installation has a CLI release: false when it has none, undefined until known. */
+  released: boolean | undefined;
 }
 
 export interface GuidePage {
@@ -36,8 +38,24 @@ function installTabs(context: GuideContext): Array<{ id: string; label: string; 
   ];
 }
 
+/** Said instead of the install commands when the installation has no CLI release to install. */
+function NoRelease(): React.JSX.Element {
+  return (
+    <Callout>
+      This installation has no CLI release yet; an administrator builds it with <Code>pnpm release:cli</Code>.
+    </Callout>
+  );
+}
+
+/** The one-line installers, or a notice when there is no release they could install. */
+function InstallCommands({ context }: { context: GuideContext }): React.JSX.Element {
+  if (context.released === false) return <NoRelease />;
+  return <CodeTabs label="Install the CLI" tabs={installTabs(context)} />;
+}
+
 /** The packages of the latest release with their SHA-256, for a manual install. */
 function PackageList({ context }: { context: GuideContext }): React.JSX.Element {
+  if (context.released === false) return <NoRelease />;
   if (context.assets.length === 0) return <P>This installation has no CLI release yet; an administrator builds it with the image.</P>;
   return (
     <>
@@ -65,7 +83,7 @@ const overview: GuidePage = {
       <div className="mt-2">
         <Step number={1} eyebrow="~3 min · install" title="Install the Kintsugi CLI">
           <P>One command, no administrator rights. It needs Node.js {context.minNode} or newer, which the installer checks.</P>
-          <CodeTabs label="Install the CLI" tabs={installTabs(context)} />
+          <InstallCommands context={context} />
           <Callout>Windows or running into errors? <Link className="text-[var(--ds-accent)] hover:underline" to="/guideline/install-the-cli">Full installation guide →</Link></Callout>
         </Step>
         <Step number={2} eyebrow="~3 min · sign in and set up" title="Sign in, then set up your AI clients">
@@ -104,7 +122,7 @@ const install: GuidePage = {
         <li>Linux stores your sign-in in the Secret Service: install <Code>libsecret-tools</Code> and a keyring such as GNOME Keyring. macOS and Windows use their own credential stores.</li>
       </List>
       <H2>Install</H2>
-      <CodeTabs label="Install the CLI" tabs={installTabs(context)} />
+      <InstallCommands context={context} />
       <P>The installer downloads the package for your platform from this installation, checks it against a SHA-256 that came with the installer, and unpacks it into <Code>~/.kintsugi</Code> (<Code>%LOCALAPPDATA%\Kintsugi</Code> on Windows). It changes nothing else, except that on Windows it adds its <Code>bin</Code> folder to your user PATH. On macOS and Linux it prints the line to add to your shell profile instead of editing it.</P>
       <CodeBlock label="Verify" code={"# Open a new terminal, then:\nkintsugi --version"} />
       <H2>Manual download</H2>

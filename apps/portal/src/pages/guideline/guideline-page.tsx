@@ -18,6 +18,8 @@ function useGuideContext(): GuideContext {
     minNode: release.data?.minNode ?? "22.19.0",
     version: release.data?.version,
     assets: release.data?.assets ?? [],
+    // Known only once the API answered: null means it has no release; an error leaves it unknown.
+    released: release.data === undefined ? undefined : release.data !== null,
   };
 }
 
