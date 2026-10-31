@@ -185,7 +185,7 @@ export function DesignStage({ project, application, stage }: { project: ProjectD
         <Loaded loader={overview} rows={8}>
           {(view) =>
             tab === "overview" ? (
-              <DesignOverviewTab overview={view} activity={activity.data?.items ?? []} runDisabled={runDisabled} onGenerate={requestGenerate} onOpenUnits={openUnits} onOpenUnit={(key) => open(key)} onOpenSets={() => update({ tab: "sets" })} />
+              <DesignOverviewTab overview={view} activity={activity.data?.items ?? []} runDisabled={runDisabled} onGenerate={requestGenerate} onOpenUnits={openUnits} onOpenUnit={(key) => open(key)} onOpenSets={() => update({ tab: "sets" })} understandLink={deliveryLink({ projectId: project.id, applicationId: application.id, stage: "understand" })} />
             ) : tab === "units" ? (
               <DesignUnitsTab
                 overview={view}

@@ -3,6 +3,7 @@
 
 import { FolderKanban } from "lucide-react";
 import { Select } from "@/components/ui/select";
+import { StatusDot } from "@/components/ui/status-dot";
 import type { ProjectView } from "@/lib/api/projects";
 
 export function ProjectSelector({ projects, value, onChange }: { projects: ProjectView[]; value: string | undefined; onChange: (id: string) => void }): React.JSX.Element {
@@ -15,5 +16,17 @@ export function ProjectSelector({ projects, value, onChange }: { projects: Proje
         onChange={onChange}
       />
     </div>
+  );
+}
+
+/** Says that the project a link asked for is not one the person can see, and which project is shown instead. */
+export function ProjectNotFound({ requested, shown }: { requested: string; shown: string | undefined }): React.JSX.Element {
+  return (
+    <p role="status" className="flex items-start gap-2 rounded-[var(--geist-radius)] bg-recessed px-3 py-2 text-[13px] text-text">
+      <StatusDot tone="orange" className="mt-1.5 size-2 shrink-0" />
+      <span>
+        Project &ldquo;{requested}&rdquo; was not found, or you have no access to it{shown === undefined ? "." : `: showing ${shown} instead.`}
+      </span>
+    </p>
   );
 }

@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import { formatRelative } from "@/lib/format";
 import { useHealth } from "@/lib/use-health";
-import { workerVerdict } from "@/lib/worker-health";
+import { activeJobsOnLiveWorkers, workerVerdict } from "@/lib/worker-health";
 
 interface Row {
   label: string;
@@ -36,8 +36,7 @@ function RowList({ rows }: { rows: Row[] }): React.JSX.Element {
 /** The worker rows: its state, last heartbeat, the jobs it runs and the depth of its queues. */
 function workerRows(worker: WorkerHealth, workers: WorkerStatus[]): Row[] {
   const verdict = workerVerdict(worker);
-  const running = workers.filter((entry) => entry.state === "up");
-  const activeJobs = running.reduce((total, entry) => total + entry.activeJobs, 0);
+  const activeJobs = activeJobsOnLiveWorkers(workers);
   const queued = worker.queues === null ? undefined : worker.queues.reduce((total, queue) => total + queue.queued, 0);
   return [
     { label: "Worker", value: verdict.label, tone: verdict.tone },

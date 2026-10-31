@@ -10,7 +10,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Loaded } from "@/components/loaded";
-import { ProjectSelector } from "@/components/project-selector";
+import { ProjectNotFound, ProjectSelector } from "@/components/project-selector";
 import { DocumentLinksProvider } from "@/components/results/document-links";
 import { StatusBadge } from "@/components/status-badges";
 import { StickyHeader } from "@/components/sticky-header";
@@ -39,7 +39,7 @@ const count = (value: number, noun: string): string => `${value.toLocaleString()
 
 export function BrainPage(): React.JSX.Element {
   const projects = useLoader("projects", projectsApi.list);
-  const { projectId, select } = useProjectSelection(projects.data?.map((project) => project.id));
+  const { projectId, select, notFound } = useProjectSelection(projects.data?.map((project) => project.id));
   const current = projects.data?.find((project) => project.id === projectId);
 
   return (
@@ -62,6 +62,7 @@ export function BrainPage(): React.JSX.Element {
           </div>
         )}
       </StickyHeader>
+      {notFound === undefined ? null : <ProjectNotFound requested={notFound} shown={current?.name} />}
       <Loaded loader={projects} rows={4}>
         {(list) =>
           list.length === 0 || projectId === undefined ? (

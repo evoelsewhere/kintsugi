@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UnitDesignRow, UnitSetSummary } from "./api/design";
-import { attentionShort, designHeadline } from "./design-headline";
+import { attentionLabel, attentionShort, designHeadline } from "./design-headline";
 
 const summary = (state: UnitSetSummary["state"]): UnitSetSummary => ({ set: "x", version: 1, state, files: { total: 1, conformant: 0, problems: 0, missing: 0, stale: 0, waived: 0 }, ready: false });
 const unit = (key: string, kind: string, sets: Record<string, UnitSetSummary["state"]>): UnitDesignRow => ({
@@ -35,5 +35,15 @@ describe("designHeadline", () => {
     ]);
     expect(attentionShort({ kind: "unresolved-component", count: 3 })).toBe("3 unknown common components");
     expect(attentionShort({ kind: "uncovered-rules", count: 1 })).toBe("1 unit with uncovered rules");
+  });
+});
+
+describe("attentionLabel", () => {
+  it("says one and many in the right number", () => {
+    expect(attentionLabel({ kind: "template-error", count: 1 })).toBe("1 problem in the design templates");
+    expect(attentionLabel({ kind: "template-error", count: 3 })).toBe("3 problems in the design templates");
+    expect(attentionLabel({ kind: "unresolved-component", count: 1 })).toBe("1 common component named by a design and not defined");
+    expect(attentionLabel({ kind: "uncovered-rules", count: 2 })).toBe("2 units with rules no design covers");
+    expect(attentionLabel({ kind: "stale", count: 1 })).toBe("1 unit with a design written against an older version of its set");
   });
 });

@@ -23,6 +23,20 @@ export function attentionShort(entry: Pick<DesignAttention, "kind" | "count">): 
   }
 }
 
+/** What one kind of attention is, in a sentence of the Overview's "Needs attention". */
+export function attentionLabel(entry: Pick<DesignAttention, "kind" | "count">): string {
+  switch (entry.kind) {
+    case "template-error":
+      return `${plural(entry.count, "problem")} in the design templates`;
+    case "unresolved-component":
+      return `${plural(entry.count, "common component")} named by a design and not defined`;
+    case "uncovered-rules":
+      return `${plural(entry.count, "unit")} with rules no design covers`;
+    case "stale":
+      return `${plural(entry.count, "unit")} with a design written against an older version of its set`;
+  }
+}
+
 /** `<kind> <designed>/<units>` for every declared kind (then any undeclared kind a unit has), followed by the attention. */
 export function designHeadline(overview: Pick<DesignOverview, "unitKinds" | "units" | "attention">): string[] {
   const kinds = [...overview.unitKinds, ...new Set(overview.units.map((unit) => unit.kind).filter((kind) => !overview.unitKinds.includes(kind)))];

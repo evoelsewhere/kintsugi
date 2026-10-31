@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { citationText, formatTokens, linkedNodeIds, searchIntent } from "./brain";
+import { citationText, formatTokens, linkedNodeIds, searchIntent, searchProblem } from "./brain";
 
 describe("brain helpers", () => {
   it("writes a citation the way an agent cites", () => {
@@ -26,5 +26,19 @@ describe("brain helpers", () => {
   it("follows a link to its section first, then its document", () => {
     expect(linkedNodeIds("a/b.md", "x")).toEqual(["a/b.md#x", "a/b.md"]);
     expect(linkedNodeIds("a/b.md", undefined)).toEqual(["a/b.md"]);
+  });
+});
+
+describe("searchProblem", () => {
+  it("asks for 2 characters before a search, and sends any text the API takes", () => {
+    expect(searchProblem("a")).toBe("Type at least 2 characters to search the Brain.");
+    expect(searchProblem(" a ")).toBe("Type at least 2 characters to search the Brain.");
+    expect(searchProblem("ab")).toBeUndefined();
+    expect(searchProblem("x".repeat(200))).toBeUndefined();
+  });
+
+  it("refuses a text over 200 characters, but not a long path to look up", () => {
+    expect(searchProblem("word ".repeat(50))).toBe("Search for at most 200 characters: shorten the text.");
+    expect(searchProblem(`10-applications/${"a".repeat(200)}/README.md`)).toBeUndefined();
   });
 });

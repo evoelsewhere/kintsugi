@@ -17,7 +17,7 @@ import { stageLabel } from "@/lib/stages";
 import { OVERVIEW_TOPICS, WORKER_AGES } from "@/lib/live";
 import { useLoader } from "@/lib/use-loader";
 import { useNow } from "@/lib/use-now";
-import { splitWorkers, workerVerdict } from "@/lib/worker-health";
+import { activeJobsOnLiveWorkers, splitWorkers, workerVerdict } from "@/lib/worker-health";
 import { MiniRunBars } from "./delivery/overview-parts";
 import { countBy, formatCount, segmentsOf } from "./delivery/results/results-format";
 import { Kpi, KpiRow, Section } from "./delivery/results/results-parts";
@@ -212,12 +212,13 @@ function WorkerInsights(): React.JSX.Element | null {
   const queues = worker.queues ?? [];
   const list = workers.data ?? [];
   const totals = queues.reduce((sum, queue) => ({ queued: sum.queued + queue.queued, active: sum.active + queue.active, deferred: sum.deferred + queue.deferred }), { queued: 0, active: 0, deferred: 0 });
+  const active = activeJobsOnLiveWorkers(list);
   return (
     <div className="flex flex-col gap-4">
       <KpiRow>
         <Kpi label="Worker" value={undefined} display={verdict.label} hint={verdict.detail} tone={verdict.tone} />
         <Kpi label="Processes up" value={worker.workersUp} hint={`${splitWorkers(list).current.length} seen in the last day`} />
-        <Kpi label="Active jobs" value={list.reduce((sum, entry) => sum + entry.activeJobs, 0)} hint="across the workers, all queues" tone={totals.active > 0 ? "blue" : undefined} />
+        <Kpi label="Active jobs" value={active} hint="on the workers that are up, all queues" tone={active > 0 ? "blue" : undefined} />
         <Kpi label="Queued jobs" value={worker.queues === null ? undefined : totals.queued} hint={totals.deferred > 0 ? `all queues · ${totals.deferred} deferred` : "all queues, waiting for a worker"} tone={totals.queued > 0 ? "orange" : undefined} />
         <Kpi label="Oldest queued stage run" value={undefined} display={worker.oldestQueuedRunAt === undefined ? "None" : formatRelative(worker.oldestQueuedRunAt)} hint="stage and agent runs only" />
         <Kpi label="Last repository sync" value={undefined} display={worker.lastGitSyncAt === undefined ? "Never" : formatRelative(worker.lastGitSyncAt)} />
