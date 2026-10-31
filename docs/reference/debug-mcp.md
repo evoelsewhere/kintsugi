@@ -39,6 +39,6 @@ All read; each answer is JSON text, cut at 60 000 characters.
 ## Limits
 
 - The workspace tools read only under `<data>/jobs/<job id>/`; a path that leaves it, by name or through a link, is refused.
-- `db.query` refuses anything but one select or with statement, the tables that hold secrets, sessions and encrypted credentials, and the functions that read the server's files. It is as safe as the read-only transaction: use a development database.
+- `db.query` refuses anything but one select or with statement, names of the tables that hold secrets, sessions, encrypted credentials and password or token hashes (and the catalog views that show role passwords or sampled column values), Unicode-escaped names (`U&"…"`), and the functions that run SQL text, read or list the server's files, reach another server or change the server's state. **This is a best-effort filter over the statement's text, not a security boundary**: the statement runs as the API's database role (a superuser in the Compose package) inside a read-only transaction, and a filter over text can be talked around. Use the debug server only on a development installation whose database holds no real secrets.
 - Restricted records are not on disk and not offered.
 - The logs are captured from the standard output and error of the API and the worker (redacted of credentials), kept one day and 200 000 lines in `monitoring.debug_log`. Not covered: the output of the agent child processes (a run's events and spans have it), and the host's and the containers' own logs.
