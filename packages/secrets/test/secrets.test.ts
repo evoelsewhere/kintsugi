@@ -35,6 +35,18 @@ describe("secret encryption (AES-256-GCM)", () => {
     expect(() => decryptSecret({ ...encrypted, authTag: flip(encrypted.authTag) })).toThrow();
   });
 
+  it("accepts only a 16-byte auth tag and a 12-byte IV", () => {
+    const encrypted = encryptSecret("sk-live-abc123");
+    const tag = Buffer.from(encrypted.authTag, "base64");
+    // GCM verifies a truncated tag as far as it goes: a 4-byte prefix of the real one would pass without the check.
+    for (const length of [4, 8, 12, 15]) {
+      expect(() => decryptSecret({ ...encrypted, authTag: tag.subarray(0, length).toString("base64") }), `${length} bytes`).toThrow(/auth tag must be 16 bytes/);
+    }
+    const iv = Buffer.from(encrypted.iv, "base64");
+    expect(() => decryptSecret({ ...encrypted, iv: Buffer.concat([iv, Buffer.alloc(4)]).toString("base64") })).toThrow(/IV must be 12 bytes/);
+    expect(decryptSecret(encrypted)).toBe("sk-live-abc123");
+  });
+
   it("fails with another master key", () => {
     const encrypted = encryptSecret("sk-live-abc123");
     process.env["KINTSUGI_SECRET_KEY"] = randomBytes(32).toString("base64");

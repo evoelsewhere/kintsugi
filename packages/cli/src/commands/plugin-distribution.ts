@@ -23,6 +23,7 @@ import {
 } from "@kintsugi/harness-hub";
 import type { PluginBundle } from "@kintsugi/harness-sdk";
 import type { CliDeps } from "../cli.js";
+import { clientUnavailable } from "../client-version.js";
 import { CliError } from "../profile.js";
 import { HARNESS_TARGETS, artifactRootFor, assertWorkspace, clientPluginVersion, initializedHarnesses, normalizeHarness, readHarnessScope, runInstallSteps, type HarnessScope } from "./plugin-native.js";
 import { apiFor, emit, projectId, selectedProfile, type CommandOptions } from "./shared.js";
@@ -66,8 +67,8 @@ async function prepare(deps: CliDeps, profileId: string, harness: HarnessName): 
   let clientVersion: string;
   try {
     clientVersion = await deps.getClientVersion(target);
-  } catch {
-    throw new CliError("PLUGIN_CLIENT_UNAVAILABLE", `Could not read the ${target} CLI version; install it or make it available on PATH`);
+  } catch (error) {
+    throw clientUnavailable(target, error);
   }
   if (clientVersionStatus(target, clientVersion) === "untested") deps.stderr.write(`Note: ${LABELS[harness]} ${clientVersion} has not been tested with this Kintsugi release; continuing.\n`);
   const artifactRoot = artifactRootFor(deps, profileId, harness);

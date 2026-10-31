@@ -47,6 +47,40 @@ describe.skipIf(!hasDatabase)("identity (integration)", () => {
       const grant = await client.request("PUT", "/admin/roles/sneaky/permissions", { body: { permissions: ["providers.manage"] } });
       expect(grant.status).toBe(403);
     });
+
+    it("a role manager cannot take away permissions they do not hold, from admin or any other role", async () => {
+      await subRole(admin, "role-editor-strip", ["roles.manage"]);
+      await subRole(admin, "auditors", ["audit.read", "restricted.read"]);
+      const { client } = await memberClient(app, admin, "role-editor-2", ["user", "role-editor-strip"]);
+      const before = (await admin.get<{ permissions: string[] }>("/admin/roles/admin")).body.data!.permissions;
+
+      const strip = await client.request("PUT", "/admin/roles/admin/permissions", { body: { permissions: ["members.manage", "roles.manage"] } });
+      expect(strip.status).toBe(403);
+      expect(strip.raw).toContain("providers.manage");
+      const emptied = await client.request("PUT", "/admin/roles/auditors/permissions", { body: { permissions: [] } });
+      expect(emptied.status).toBe(403);
+      expect(emptied.raw).toContain("audit.read");
+      expect((await admin.get<{ permissions: string[] }>("/admin/roles/admin")).body.data!.permissions).toEqual(before);
+
+      // A change that touches only what the role manager holds still goes through.
+      expect((await client.request("PUT", "/admin/roles/auditors/permissions", { body: { permissions: ["audit.read", "restricted.read", "roles.manage"] } })).status).toBe(200);
+      expect((await client.request("PUT", "/admin/roles/auditors/permissions", { body: { permissions: ["audit.read", "restricted.read"] } })).status).toBe(200);
+      // And an admin still edits every role.
+      expect((await admin.request("PUT", "/admin/roles/auditors/permissions", { body: { permissions: ["audit.read"] } })).status).toBe(200);
+    });
+
+    it("a role manager cannot delete a sub-role that grants permissions they do not hold", async () => {
+      await subRole(admin, "role-editor-delete", ["roles.manage"]);
+      await subRole(admin, "watchers", ["audit.read"]);
+      await subRole(admin, "managers", ["roles.manage"]);
+      const { client } = await memberClient(app, admin, "role-editor-3", ["user", "role-editor-delete"]);
+      const refused = await client.request("DELETE", "/admin/roles/watchers");
+      expect(refused.status).toBe(403);
+      expect(refused.raw).toContain("audit.read");
+      expect((await admin.get("/admin/roles/watchers")).status).toBe(200);
+      expect((await client.request("DELETE", "/admin/roles/managers")).status).toBe(204);
+      expect((await admin.request("DELETE", "/admin/roles/watchers")).status).toBe(204);
+    });
   });
 
   describe("last admin", () => {
