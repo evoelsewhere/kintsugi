@@ -175,7 +175,7 @@ describe.skipIf(!hasDatabase)("units members build and the review of their merge
     expect(started.status, JSON.stringify(started.body)).toBe(202);
     expect(started.body.data).toMatchObject({ name: "review", status: "queued" });
     const stored = await app.db.query<{ inputs: { scope: unknown; documentsCommit: string }; sources: Array<{ repositoryId: string; role?: string; commit?: string }> }>("select inputs, sources from workflow.job_run where id = $1", [started.body.data!.id]);
-    expect(stored.rows[0]?.inputs.scope).toEqual({ items: ["billing/tax"], files: [], target: "web-ui", mr: { url: PR_TAX, commit: C2, branch: "feature/tax" } });
+    expect(stored.rows[0]?.inputs.scope).toEqual({ items: ["billing/tax"], files: [], target: "web-ui", mr: { url: PR_TAX, commit: C2, branch: "feature/tax", tests: { cases: 5, failed: 1, canary: "survived" } } });
     expect(stored.rows[0]?.inputs.documentsCommit).toMatch(/^[0-9a-f]{40}$/);
     // The target repository is read at the head commit of the merge request, the legacy one at its current commit.
     expect(stored.rows[0]?.sources.find((source) => source.repositoryId === "web-ui")).toMatchObject({ role: "target", commit: C2 });

@@ -11,6 +11,7 @@ import { CheckoutStorage, cloneMirror } from "@kintsugi/git";
 import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
+import { catalogDocuments } from "../support/documents.js";
 import { adminClient, Client, memberClient, startTestApp, type TestApp } from "../support/app.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/", import.meta.url));
@@ -44,9 +45,14 @@ describe.skipIf(!hasDatabase)("design sets of the application (integration)", ()
     await put("02-architecture/common/COM-LOG-01.md", "# COM-LOG-01\n");
     await put("02-architecture/common/COM-AUTH-01.md", "# COM-AUTH-01\n");
     await put("10-applications/web/02-modern/requirements.md", "## REQ-01: Pay\n");
+    // Design is offered only for units active in the merged catalog.
+    const items = [{ id: "billing/invoice", kind: "screen" }, { id: "customers/lookup", kind: "screen" }];
+    for (const [path, text] of Object.entries(catalogDocuments("web", [{ id: "billing", name: "Billing" }, { id: "customers", name: "Customers" }], items.map((item) => ({ ...item, files: ["legacy/main.c"] }))))) await put(path, text);
     for (const [module, unit] of [["billing", "invoice"], ["customers", "lookup"]] as const) {
       await put(modernPath(module, unit, "README.md"), unitFile(module, unit));
       await put(legacyPath(module, unit, "rules.md"), RULES);
+      await put(legacyPath(module, unit, "understanding.md"), `---\nstatus: understood\ndigest: sha256:${unit}\n---\n`);
+      await put(legacyPath(module, unit, "spec.md"), "# Specification\n\n## Gaps and questions\n\nNone.\n");
     }
     // A design run's branch: the architecture of the application is written there (and so is the data of lookup, against it).
     await put(ARCH, fixture("designs", "arch-ok.md"), "kintsugi/designer/run-arch");
@@ -145,7 +151,7 @@ describe.skipIf(!hasDatabase)("design sets of the application (integration)", ()
     // dbunit needs arch, which is not on the default branch yet.
     const needs = await admin.request<Failure>("POST", RUNS, { body: { set: "dbunit", units: ["billing/invoice"] } });
     expect(needs.status).toBe(409);
-    expect((needs.body as unknown as Failure).details?.conflicts).toEqual([{ unit: "billing/invoice", state: "needs", needs: ["arch"] }]);
+    expect((needs.body as unknown as Failure).details?.conflicts).toEqual([{ unit: "billing/invoice", state: "not-ready", reasons: ["Needs the merged, conformant arch design first."] }]);
 
     const started = await admin.request<{ id: string; name: string; scope?: { items: string[]; set?: string } }>("POST", RUNS, { body: { set: "arch", units: ["@app"] } });
     expect(started.status, JSON.stringify(started.body)).toBe(202);
