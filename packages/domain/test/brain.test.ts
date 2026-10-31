@@ -313,3 +313,20 @@ describe("ATX headings (T3-011)", () => {
     expect(document).toBeDefined();
   });
 });
+
+describe("links (T3-016)", () => {
+  it("reads a document of 2 MB of link starts in linear time", () => {
+    for (const text of ["[".repeat(2_000_000), "[a](".repeat(500_000), `${"[a](".repeat(1_000)}\n`.repeat(500), "[a](<".repeat(400_000)]) {
+      const started = performance.now();
+      buildBrainDocument("10-applications/a/01-legacy/x.md", text);
+      expect(performance.now() - started, text.slice(0, 10)).toBeLessThan(500);
+    }
+  });
+
+  it("still finds real links: plain, in angle brackets with a title, in a table cell", () => {
+    const text = "# A\n\nSee [design](../x/README.md) and [t](<sp ace.md> \"title\").\n\n| a | b |\n|---|---|\n| [cell](../y/README.md#part) | x |\n";
+    const { links } = buildBrainDocument("10-applications/billing/02-modern/a/README.md", text);
+    const paths = links.flatMap((link) => ("path" in link ? [`${link.path}${link.anchor === undefined ? "" : `#${link.anchor}`}`] : []));
+    expect(paths).toEqual(["10-applications/billing/02-modern/x/README.md", "10-applications/billing/02-modern/a/sp ace.md", "10-applications/billing/02-modern/y/README.md#part"]);
+  });
+});
