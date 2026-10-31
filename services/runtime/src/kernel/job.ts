@@ -73,10 +73,16 @@ export function resultPreview(result: unknown): string | undefined {
 export const LOOP_REPEATS = 12;
 
 /**
- * The characters of thinking, text and tool-call arguments one turn may stream without a tool call completing; past
- * them the turn is a loop (QA-R1: one turn of ~190k characters of thinking over 20 minutes, 191k of text).
+ * The characters of thinking and text one turn may stream without a tool call completing; past them the turn is a loop
+ * (QA-R1: one turn of ~190k characters of thinking over 20 minutes, 191k of text).
  */
 export const RUNAWAY_TURN_CHARS = 150_000;
+
+/**
+ * The characters of tool-call arguments one turn may stream without a tool call completing: more room than for prose,
+ * since one `write` of a large document is a single call (QA-R1: 600k characters of arguments in one turn).
+ */
+export const RUNAWAY_TOOL_ARGS_CHARS = 400_000;
 
 /** JSON with the keys of every object sorted, so arguments that differ only in key order are the same call. */
 export function canonicalJson(value: unknown): string {
@@ -246,7 +252,8 @@ export class KernelJob implements JobHandle {
 
   /**
    * Counts streamed characters, reports them at most every 15 s as a progress event, and halts the job as a `loop`
-   * when one turn streams more than `RUNAWAY_TURN_CHARS` without a tool call completing.
+   * when one turn streams more than `RUNAWAY_TURN_CHARS` of thinking and text, or `RUNAWAY_TOOL_ARGS_CHARS` of
+   * tool-call arguments, without a tool call completing.
    */
   #track(update: { type: string; delta?: unknown }): void {
     const size = typeof update.delta === "string" ? update.delta.length : 0;
@@ -255,10 +262,16 @@ export class KernelJob implements JobHandle {
       this.#streamed[kind] += size;
       this.#runaway[kind] += size;
       const { thinking, toolArgs, text } = this.#runaway;
-      const total = thinking + toolArgs + text;
-      if (total > RUNAWAY_TURN_CHARS) {
-        const most = thinking >= toolArgs && thinking >= text ? "thinking" : text >= toolArgs ? "text" : "tool-call arguments";
-        void this.#halt("loop", `stopped: one turn produced ${Math.round(total / 1000)}k characters of ${most} without a tool call`);
+      const stop = (chars: number, what: string): void =>
+        void this.#halt("loop", `stopped: one turn produced ${Math.round(chars / 1000)}k characters of ${what} without a tool call`);
+      if (thinking + text > RUNAWAY_TURN_CHARS) {
+        // Named by what it was: one kind, or both when the smaller is a tenth of it or more.
+        const what = Math.min(thinking, text) * 10 >= thinking + text ? "thinking and text" : thinking > text ? "thinking" : "text";
+        stop(thinking + text, what);
+        return;
+      }
+      if (toolArgs > RUNAWAY_TOOL_ARGS_CHARS) {
+        stop(toolArgs, "tool-call arguments");
         return;
       }
     }
