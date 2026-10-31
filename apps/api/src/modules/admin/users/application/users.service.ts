@@ -68,11 +68,13 @@ export class UsersService {
 
     const updated = await this.users.update(id, input);
     if (updated === undefined) throw new NotFoundException(`User ${id} not found`);
-    if (disabling) await this.users.revokeSessions(id);
+    // A disabled member keeps no credential: sessions, member tokens and AI-client connections end.
+    const revoked = disabling ? await this.users.revokeCredentials(id, actor.id) : undefined;
     await this.audit.recordChange(
       auditRecord(actor, AUDIT_ACTIONS.userUpdate, {
         subject: id,
         detail: {
+          ...(revoked === undefined ? {} : { revoked }),
           member: target.username,
           fields: changedFields(input),
           ...(input.enabled === undefined || input.enabled === target.enabled ? {} : { enabled: input.enabled }),
@@ -92,9 +94,10 @@ export class UsersService {
     const target = await this.get(id);
     await this.#assertCanManage(target, actor);
     await this.users.setPassword(id, await hashPassword(password));
-    await this.users.revokeSessions(id);
-    // Who reset whose password and when; never the password.
-    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.userPasswordReset, { subject: id, detail: { member: target.username } }));
+    // A reset answers a compromised account: whoever knew the old password keeps no session, token or client connection.
+    const revoked = await this.users.revokeCredentials(id, actor.id);
+    // Who reset whose password and when, and what it ended; never the password.
+    await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.userPasswordReset, { subject: id, detail: { member: target.username, revoked } }));
   }
 
   async remove(id: string, actor: Actor): Promise<void> {

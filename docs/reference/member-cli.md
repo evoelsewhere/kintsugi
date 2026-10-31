@@ -63,7 +63,7 @@ kintsugi document tree 01-standards
 kintsugi document get 01-standards/conventions/typescript.md --ref refs/heads/main
 ```
 
-`--project` selects one command's project; otherwise the profile default from `project use` applies. Every request is authorized again by the API: the token's project scope, the member's `member.read` permission and explicit Project Access. Documents come from the project's document repository mirror ([ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md)), read-only, at a branch or commit (default branch when `--ref` is omitted); `restricted/` and `.git` are never served and files over 2 MiB are refused. Lists use cursor pagination (`--cursor`, `--limit` 1–100). Output supports `--format text|json|markdown`; `--json` is an alias. Results go to stdout, errors to stderr, and `--no-input` disables prompts.
+`--project` selects one command's project; otherwise the profile default from `project use` applies. Every request is authorized again by the API: the token's project scope, the member's `member.read` permission and explicit Project Access. Documents come from the project's document repository mirror ([ADR-0028](../decisions/0028-remove-rulebook-single-document-repo.md)), read-only, at a branch or commit (default branch when `--ref` is omitted); `restricted/` and `.git` are never served and files over 2 MiB are refused. `project list` pages with `--cursor` and `--limit` (1–100) and shows each project as `name (id)`; the other lists come whole. Output supports `--format text|json|markdown`; `--json` is an alias. Results go to stdout, errors to stderr, and `--no-input` disables prompts.
 
 ## Install member plugins
 
@@ -88,7 +88,7 @@ The built-in `modernize` plugin is a plugin of **both** audiences ([ADR-0071](..
 kintsugi activity record result --plugin modernize --summary "Reviewed the standards" --detail documents=3
 ```
 
-This is the only write of the base. It adds one record to the project's monitoring (Monitoring → Members): a `kind` (not `plugin.*`, `document.*` or `brain.*`, which Kintsugi sets itself), the plugin it belongs to (one you may use), a summary of at most 500 characters and up to 20 scalar details. Never put document content, credentials or personal data in it. At most 600 records an hour per member; the worker deletes records after `KINTSUGI_TELEMETRY_RETENTION_DAYS` (30 by default). The request is sent once and never retried, so a lost response cannot record twice. Kintsugi also records, without the plugin asking, each plugin download, each document read and each Brain read; those records do not count toward the 600.
+This is the only write of the base. It adds one record to the project's monitoring (Monitoring → Members): a `kind` (not `plugin.*`, `document.*` or `brain.*`, which Kintsugi sets itself), the plugin it belongs to (one you may use), a summary of at most 500 characters and up to 20 scalar details (a text value at most 500 characters). Never put document content, credentials or personal data in it. At most 600 records an hour per member; the worker deletes records after `KINTSUGI_TELEMETRY_RETENTION_DAYS` (30 by default). The request is sent once and never retried, so a lost response cannot record twice. Kintsugi also records, without the plugin asking, each plugin download, each document read and each Brain read; those records do not count toward the 600.
 
 ### The activity hook of a command
 
@@ -103,7 +103,7 @@ This is the only write of the base. It adds one record to the project's monitori
 ## Serve the local MCP bridge
 
 ```sh
-kintsugi mcp serve --profile work
+kintsugi mcp serve --profile <profile>   # the per-project profile login and init use, e.g. kintsugi-<hash>
 ```
 
 The bridge has no inbound listener. It uses the selected profile and refreshes credentials as needed, so the installation can revoke access between tool calls; without a credential it opens browser sign-in. Stdin and stdout carry only MCP messages (`--token-stdin` is rejected for that reason) and diagnostics go to stderr. Each tool call names its project; `mcp serve --project` is rejected so a connection holds no hidden project context.

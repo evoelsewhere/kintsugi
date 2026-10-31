@@ -129,8 +129,20 @@ export class PgUserRepository extends UserRepository {
     return result.rows[0]?.count ?? 0;
   }
 
-  async revokeSessions(id: string): Promise<void> {
-    await this.#pool.query("delete from core.session where user_id = $1", [id]);
+  async revokeCredentials(id: string, actorId: string): Promise<{ tokens: number; connections: number }> {
+    return withTransaction(async (client) => {
+      await client.query("delete from core.session where user_id = $1", [id]);
+      const connections = await client.query(
+        "update core.member_connection set revoked_at = now(), revoked_by = $2 where user_id = $1 and revoked_at is null",
+        [id, actorId],
+      );
+      await client.query(
+        "update core.member_connection_refresh_token set consumed_at = coalesce(consumed_at, now()) where connection_id in (select id from core.member_connection where user_id = $1)",
+        [id],
+      );
+      const tokens = await client.query("update core.member_token set revoked_at = now() where user_id = $1 and revoked_at is null", [id]);
+      return { tokens: tokens.rowCount ?? 0, connections: connections.rowCount ?? 0 };
+    });
   }
 
   async #replaceRoles(db: Queryable, userId: string, roleIds: string[]): Promise<void> {
