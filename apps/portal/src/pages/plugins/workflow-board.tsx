@@ -5,6 +5,7 @@
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FlowNode, PluginFlow, PluginFlowStep, PluginLink } from "@/lib/api/plugins";
+import { stageCommand } from "@/lib/stage-command";
 import { cn } from "@/lib/utils";
 import { applicationDir, assessmentDir, DOCUMENT_PATH_TOKENS } from "@kintsugi/domain";
 import { type FlowSize, packRows, rowHeight, rowLink } from "./flow-layout";
@@ -274,7 +275,25 @@ function Board({ children }: { children: React.ReactNode }): React.JSX.Element {
 }
 
 /** The plugin's commands in order, each with what it feeds; the selected one is ringed. */
-export function PipelineBoard({ flows, pipeline, selected, onSelect }: { flows: readonly PluginFlow[]; pipeline: readonly PluginLink[]; selected: string; onSelect: (command: string) => void }): React.JSX.Element {
+export function PipelineBoard({
+  flows,
+  pipeline,
+  selected,
+  onSelect,
+  plugin,
+}: {
+  flows: readonly PluginFlow[];
+  pipeline: readonly PluginLink[];
+  selected: string;
+  onSelect: (command: string) => void;
+  /** The plugin's name: a member command is typed as `/<plugin>:<command>`. */
+  plugin?: string;
+}): React.JSX.Element {
+  /** A command as a person types it: a member's with the plugin's name, a runtime one by its name. */
+  const typed = (command: string): string => {
+    const flow = flows.find((entry) => entry.command === command);
+    return `/${flow === undefined ? command : stageCommand({ audience: flow.audience, command, plugin })}`;
+  };
   const feeds = useMemo(() => new Map(flows.map((flow) => [flow.command, pipeline.filter((link) => link.from === flow.command)])), [flows, pipeline]);
   const runtime = flows.filter((flow) => flow.audience === "runtime");
   const rest = flows.filter((flow) => flow.audience !== "runtime");
@@ -292,14 +311,14 @@ export function PipelineBoard({ flows, pipeline, selected, onSelect }: { flows: 
               node: (
                 <Box
                   kind="command"
-                  title={`/${flow.command}`}
+                  title={typed(flow.command)}
                   selected={flow.command === selected}
                   onOpen={() => onSelect(flow.command)}
                   className="min-w-36"
                   subtitle={
                     <>
                       {flow.gates.length === 0 ? flow.audience : `${flow.audience} · ${flow.gates.length} decision${flow.gates.length === 1 ? "" : "s"}`}
-                      {next.length === 0 ? null : <span className="mt-1 block text-[10px] italic">feeds {next.map((link) => `/${link.to}`).join(", ")}</span>}
+                      {next.length === 0 ? null : <span className="mt-1 block text-[10px] italic">feeds {next.map((link) => typed(link.to)).join(", ")}</span>}
                     </>
                   }
                 />
@@ -397,7 +416,7 @@ function FlowItem({ node, flow, onOpenFile }: { node: FlowNode; flow: PluginFlow
 }
 
 /** One command end to end: who starts it, what it reads, what runs, what it writes, where a person decides. */
-export function CommandBoard({ flow, onOpenFile }: { flow: PluginFlow; onOpenFile: (path: string) => void }): React.JSX.Element {
+export function CommandBoard({ flow, onOpenFile, plugin }: { flow: PluginFlow; onOpenFile: (path: string) => void; plugin?: string }): React.JSX.Element {
   const work = useMemo(() => flow.steps.filter((step) => step.kind !== "agent"), [flow]);
   const loose = flow.flow === undefined ? flow.steps.filter((step) => step.kind === "agent") : [];
   const who = flow.audience === "runtime" ? "A person starts it in the portal; Kintsugi runs it as jobs, read-only" : "A member runs it in their own harness; Kintsugi supplies context and ingests the result";
@@ -406,7 +425,7 @@ export function CommandBoard({ flow, onOpenFile }: { flow: PluginFlow; onOpenFil
       <div className={cn("grid gap-4", flow.gates.length > 0 && "lg:grid-cols-[minmax(0,1fr)_14rem]")}>
         <div className="flex min-w-0 flex-col">
           <div style={tint("command")} className={cn(BOX, "text-center")}>
-            <span className="font-medium">/{flow.command}</span>
+            <span className="font-medium">/{stageCommand({ audience: flow.audience, command: flow.command, plugin })}</span>
             <span className="ml-2 text-text-secondary">· {who}</span>
           </div>
           <ArrowDown />

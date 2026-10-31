@@ -63,3 +63,19 @@ describe("the pipeline of a plugin", () => {
     expect(html).toContain("feeds /plan-understand");
   });
 });
+
+describe("the commands of a plugin", () => {
+  const DESIGN: PluginFlow = { ...BUILD, command: "design", audience: "runtime", flow: undefined };
+
+  it("shows a member command as the member types it, and a runtime command by its name", () => {
+    const html = renderToStaticMarkup(<PipelineBoard flows={[DESIGN, BUILD]} pipeline={[{ from: "design", to: "build", via: ["10-applications/<app>/02-modern/"] }]} selected="build" onSelect={() => undefined} plugin="modernize" />);
+    expect(html).toContain("/modernize:build");
+    expect(html).toContain("/design");
+    expect(html).not.toContain("/modernize:design");
+    expect(html).toContain("feeds /modernize:build");
+  });
+
+  it("heads a member command's board with the command the member types", () => {
+    expect(renderToStaticMarkup(<CommandBoard flow={BUILD} onOpenFile={() => undefined} plugin="modernize" />)).toContain("/modernize:build");
+  });
+});
