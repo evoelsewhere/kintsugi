@@ -13,6 +13,8 @@ export interface EncryptedSecret {
 }
 
 const ALGORITHM = "aes-256-gcm";
+const IV_BYTES = 12;
+const AUTH_TAG_BYTES = 16;
 
 function masterKey(): Buffer {
   const raw = process.env["KINTSUGI_SECRET_KEY"];
@@ -25,8 +27,8 @@ function masterKey(): Buffer {
 }
 
 export function encryptSecret(plaintext: string): EncryptedSecret {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv(ALGORITHM, masterKey(), iv);
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGORITHM, masterKey(), iv, { authTagLength: AUTH_TAG_BYTES });
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   return {
     ciphertext: ciphertext.toString("base64"),
@@ -36,7 +38,12 @@ export function encryptSecret(plaintext: string): EncryptedSecret {
 }
 
 export function decryptSecret(secret: EncryptedSecret): string {
-  const decipher = createDecipheriv(ALGORITHM, masterKey(), Buffer.from(secret.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(secret.authTag, "base64"));
+  const iv = Buffer.from(secret.iv, "base64");
+  const authTag = Buffer.from(secret.authTag, "base64");
+  // GCM accepts a truncated tag and checks only the bytes it is given: every stored tag is the full 16 bytes.
+  if (iv.length !== IV_BYTES) throw new Error(`Encrypted secret is malformed: the IV must be ${IV_BYTES} bytes`);
+  if (authTag.length !== AUTH_TAG_BYTES) throw new Error(`Encrypted secret is malformed: the auth tag must be ${AUTH_TAG_BYTES} bytes`);
+  const decipher = createDecipheriv(ALGORITHM, masterKey(), iv, { authTagLength: AUTH_TAG_BYTES });
+  decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(Buffer.from(secret.ciphertext, "base64")), decipher.final()]).toString("utf8");
 }
