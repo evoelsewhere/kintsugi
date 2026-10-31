@@ -718,6 +718,9 @@ export class JobRunner {
       ...(signal === undefined ? {} : { signal }),
     });
     await this.#deps.store.update(run.id, { scriptHash: result.sha256 });
+    if (result.outlived === true) {
+      await this.#event(ws, run.id === ws.rootId ? undefined : run.id, "log", `script ${run.name}: a process it started was still running when it ended; its output was cut there and that process may still be running`);
+    }
     if (result.failure !== undefined) {
       const output = [result.stderr, result.stdout].map((text) => text.trim()).filter((text) => text !== "");
       const detail = redactText(output.join("\n").split(/\r?\n/).slice(-MAX_DETAIL_LINES).join("\n")).slice(-4000);

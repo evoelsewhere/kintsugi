@@ -156,6 +156,7 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
       else if (result.stopped === "output-limit") notices.push("git output exceeded the capture limit");
       else if (result.exitCode !== 0) notices.push(`git exited with code ${result.exitCode}`);
       if (result.truncated) notices.push("output truncated");
+      if (result.outlived === true) notices.push("A process it started was still running when it ended; its output was cut there");
       if (notices.length > 0) text = `${text}\n\n[${notices.join(". ")}]`;
       return { details: undefined, content: [{ type: "text", text }] };
     },
