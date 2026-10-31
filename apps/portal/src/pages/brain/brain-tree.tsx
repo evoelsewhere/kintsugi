@@ -4,7 +4,7 @@
 import type { BrainNode } from "@kintsugi/domain";
 import { BRAIN_ROOT_ID } from "@kintsugi/domain";
 import { Brain, ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Hash, Tag } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { brainApi } from "@/lib/api/brain";
 import { formatTokens } from "@/lib/brain";
 import { errorText, formatRelative } from "@/lib/format";
@@ -106,6 +106,22 @@ export function BrainTree({ projectId, root, selected, reveal, showSummaries, on
     });
   };
 
+  // One Tab stop for the whole tree (roving tabindex): the row last focused, else the selected one, else the root,
+  // whichever is shown; the arrow keys move between the rows.
+  const [focused, setFocused] = useState<string | undefined>(undefined);
+  const shown = useMemo(() => {
+    const ids = new Set([root.id]);
+    const walk = (parentId: string): void => {
+      for (const node of levels.get(parentId)?.items ?? []) {
+        ids.add(node.id);
+        if (open.has(node.id)) walk(node.id);
+      }
+    };
+    walk(root.id);
+    return ids;
+  }, [levels, open, root.id]);
+  const tabStop = focused !== undefined && shown.has(focused) ? focused : shown.has(selected) ? selected : root.id;
+
   const onKeyDown = (event: React.KeyboardEvent<HTMLUListElement>): void => {
     const rows = [...(list.current?.querySelectorAll<HTMLButtonElement>("button[role=treeitem]") ?? [])];
     const index = rows.findIndex((row) => row === document.activeElement);
@@ -163,6 +179,8 @@ export function BrainTree({ projectId, root, selected, reveal, showSummaries, on
                 <button
                   type="button"
                   role="treeitem"
+                  tabIndex={node.id === tabStop ? 0 : -1}
+                  onFocus={() => setFocused(node.id)}
                   aria-selected={active}
                   aria-expanded={expandable ? isOpen : undefined}
                   data-node-id={node.id}
@@ -218,6 +236,8 @@ export function BrainTree({ projectId, root, selected, reveal, showSummaries, on
         <button
           type="button"
           role="treeitem"
+          tabIndex={root.id === tabStop ? 0 : -1}
+          onFocus={() => setFocused(root.id)}
           aria-selected={selected === root.id}
           aria-expanded
           data-node-id={root.id}

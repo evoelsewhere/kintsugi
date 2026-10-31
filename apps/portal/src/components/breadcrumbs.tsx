@@ -7,6 +7,7 @@
 import { ChevronRight, Gauge } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
+import { pageTitle } from "@/lib/page-title";
 import { usePublishBreadcrumbs } from "./detail-context";
 
 export type Crumb = string | { label: string; to?: string | undefined; onSelect?: (() => void) | undefined };
@@ -21,6 +22,14 @@ const LINK = "rounded-sm text-text-secondary hover:text-text hover:underline foc
 /** The trail of a page; a detail page opened over it extends it. */
 export function Breadcrumbs({ items }: BreadcrumbsProps): React.JSX.Element {
   usePublishBreadcrumbs(items);
+  // The tab, the history and a screen reader name the page by its trail, the page first: "Runs · Monitoring · Kintsugi".
+  const title = pageTitle(items.map((entry) => (typeof entry === "string" ? entry : entry.label)));
+  React.useEffect(() => {
+    document.title = title;
+    return () => {
+      document.title = "Kintsugi";
+    };
+  }, [title]);
   return <BreadcrumbTrail items={items} />;
 }
 
