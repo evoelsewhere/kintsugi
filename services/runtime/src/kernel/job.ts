@@ -177,10 +177,12 @@ export class KernelJob implements JobHandle {
    * When the session last showed any sign of work: every session event, including thinking and
    * tool-call argument deltas that produce no JobEvent. The agent child turns it into liveness
    * lines for the launcher's idle watchdog. A compaction is one long model call with no events
-   * while it runs, so the job counts as working for as long as it lasts.
+   * while it runs, and a tool call of the model (a build in `shell`, say) sends none until it ends,
+   * so the job counts as working for as long as either lasts (T3-013): each tool has a timeout of
+   * its own, and the job's timeout stays the backstop.
    */
   get lastActivityAt(): number {
-    return this.#compacting ? Date.now() : this.#lastEventAt;
+    return this.#compacting || this.#openCalls.size > 0 ? Date.now() : this.#lastEventAt;
   }
 
   /** Runs the task on the session; resolves when the job has ended. */
