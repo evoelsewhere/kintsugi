@@ -4,10 +4,12 @@
 
 import { AlertTriangle, Play } from "lucide-react";
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { DesignOverview, DesignState, UnitSetActivity } from "@/lib/api/design";
+import { attentionLabel } from "@/lib/design-headline";
 import { applicationEligibility, eligibility } from "@/lib/design-run";
 import { APPLICATION_UNIT_KEY } from "@kintsugi/domain";
 import { CountChip, Kpi, KpiRow, MoreLink, Section, Signal, SignalList } from "../results/results-parts";
@@ -34,6 +36,7 @@ export function DesignOverviewTab({
   onOpenUnits,
   onOpenUnit,
   onOpenSets,
+  understandLink,
 }: {
   overview: DesignOverview;
   /** The units a run is generating or a pull request carries, per set. */
@@ -45,6 +48,8 @@ export function DesignOverviewTab({
   onOpenUnits: (set: string, state: DesignState | "") => void;
   onOpenUnit: (key: string) => void;
   onOpenSets: () => void;
+  /** AS-IS Understanding of the application, where its units come from. */
+  understandLink: string;
 }): React.JSX.Element {
   const { sets, units, counts, rules, attention } = overview;
   const ready = useMemo(
@@ -74,6 +79,22 @@ export function DesignOverviewTab({
     );
   }
 
+  if (units.length === 0 && ready.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          title="No unit is understood yet"
+          description="Units come from AS-IS Understanding: run understand on items of the catalog and merge its pull request. Their designs are generated here after that."
+          action={
+            <Link to={understandLink} className="text-[13px] text-accent hover:underline">
+              Open AS-IS Understanding
+            </Link>
+          }
+        />
+      </Card>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <KpiRow>
@@ -82,7 +103,7 @@ export function DesignOverviewTab({
           const here = counts[set.id] ?? {};
           const total = Object.values(here).reduce((sum, value) => sum + (value ?? 0), 0);
           const done = (here.conformant ?? 0) + (here.waived ?? 0) + (here.stale ?? 0);
-          return <Kpi key={set.id} label={set.title} value={done} display={`${done}/${total}`} hint={`${setLabel(set)} written`} tone={done === total && total > 0 ? "green" : "muted"} />;
+          return <Kpi key={set.id} label={set.title} value={done} display={total === 0 ? "—" : `${done}/${total}`} hint={total === 0 ? "nothing it applies to yet" : `${setLabel(set)} written`} tone={done === total && total > 0 ? "green" : "muted"} />;
         })}
         <Kpi label="Stale" value={stale} hint="older version of a set" tone={stale > 0 ? "orange" : "muted"} />
         <Kpi label="Rules covered" value={covered} display={covered === undefined ? "—" : `${covered}%`} hint={rules.units === 0 ? "no design lists rules yet" : `${rules.units} unit(s) with a design`} tone={rules.uncovered > 0 ? "orange" : covered === undefined ? "muted" : "green"} />
@@ -126,7 +147,7 @@ export function DesignOverviewTab({
               {attention.map((entry) => (
                 <li key={entry.kind} className="flex items-start gap-2 text-text-secondary">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[var(--ds-status-orange)]" strokeWidth={1.75} />
-                  <span className="min-w-0 flex-1">{entry.label}</span>
+                  <span className="min-w-0 flex-1">{attentionLabel(entry)}</span>
                   {entry.kind === "template-error" ? <MoreLink label="Sets" onClick={onOpenSets} /> : null}
                   {entry.kind === "uncovered-rules" ? <MoreLink label="Coverage" onClick={() => onOpenUnits("", "")} /> : null}
                 </li>
