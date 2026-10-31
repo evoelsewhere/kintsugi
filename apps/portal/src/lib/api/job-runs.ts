@@ -78,6 +78,8 @@ export const isActive = (run: Pick<JobRunView, "status">): boolean => run.status
 export interface StageView {
   id: string;
   command: string;
+  /** The built-in plugin that carries the command; a member runs a member command as `/<plugin>:<command>` (lib/stage-command.ts). */
+  plugin?: string;
   description: string;
   /** runtime = Kintsugi jobs; member = members' harnesses; portal = a portal screen. */
   audience: "runtime" | "member" | "portal";

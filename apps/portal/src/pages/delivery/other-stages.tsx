@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { agentsApi } from "@/lib/api/agents";
 import type { StageView } from "@/lib/api/job-runs";
 import { type ApplicationView, type DocumentWriteView, type ProjectDetail, projectsApi } from "@/lib/api/projects";
+import { stageCommand } from "@/lib/stage-command";
 import { fileName, stageLabel } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { ApplicationFacts } from "./delivery-shell";
@@ -24,7 +25,7 @@ function StageSummary({ stage, badge, icon: Icon, children }: { stage: StageView
       <div className="flex flex-wrap items-center gap-2">
         <Icon className="size-4 text-text-muted" strokeWidth={1.75} />
         <p className="text-[15px] font-medium text-text">{stageLabel(stage.id)}</p>
-        <span className="font-mono text-[11px] text-text-muted">/{stage.command}</span>
+        <span className="font-mono text-[11px] text-text-muted">/{stageCommand(stage)}</span>
         {badge}
       </div>
       <p className="mt-1 text-[13px] text-text-secondary">{stage.description}</p>
@@ -49,7 +50,7 @@ export function MemberStage({ project, application, stage }: { project: ProjectD
     <div className="flex flex-col gap-5">
       <StageSummary stage={stage} icon={Laptop} badge={<StatusBadge tone="muted" label="Run by members" />}>
         <p>
-          Members run <span className="font-mono">/{stage.command}</span> in their own harness (Claude Code, Copilot or Codex) with the Kintsugi plugin. Kintsugi supplies the context and ingests
+          Members run <span className="font-mono">/{stageCommand(stage)}</span> in their own harness (Claude Code, Copilot or Codex) with the Kintsugi plugin. Kintsugi supplies the context and ingests
           the results; it does not start or drive this stage. Document outputs go to the document repo; code changes, when the stage makes them, go to the application's target repos.
         </p>
         <div className="mt-3 [box-shadow:0_-1px_0_rgba(0,0,0,0.06)] pt-3">

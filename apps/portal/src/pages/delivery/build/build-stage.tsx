@@ -17,6 +17,7 @@ import { jobRunsApi, type StageView } from "@/lib/api/job-runs";
 import type { ApplicationView, ProjectDetail } from "@/lib/api/projects";
 import { useAuth } from "@/lib/auth";
 import { isActiveStatus } from "@/lib/status";
+import { stageCommand } from "@/lib/stage-command";
 import { agentProblems, runBlocker, runsOfStage, stageLabel } from "@/lib/stages";
 import { useLoader } from "@/lib/use-loader";
 import { CompactFacts, StageHeader } from "../delivery-shell";
@@ -103,7 +104,7 @@ export function BuildStage({ project, application, stage }: { project: ProjectDe
     <div className="flex flex-col gap-4">
       <StageHeader
         title={stageLabel(stage.id)}
-        command={stage.command}
+        command={stageCommand(stage)}
         application={application}
         description="After the design, a member implements and tests each unit on their machine with their own AI client; Kintsugi collects which unit and which merge request, and the runtime reviews it."
         facts={<CompactFacts project={project} application={application} />}

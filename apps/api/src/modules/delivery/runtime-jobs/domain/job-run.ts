@@ -167,6 +167,8 @@ export interface StageDefinition {
   id: string;
   /** The command it comes from, e.g. `assess`. */
   command: string;
+  /** The built-in plugin that carries the command, e.g. `modernize`: a member runs a member command as `/<plugin>:<command>` (ADR-0072). */
+  plugin: string;
   description: string;
   audience: StageAudience;
   agents: string[];
