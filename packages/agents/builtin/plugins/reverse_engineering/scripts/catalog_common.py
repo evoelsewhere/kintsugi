@@ -33,9 +33,9 @@ import topology_units as tu  # noqa: E402
 import reference_ids as refs  # noqa: E402
 
 SEGMENT = r'[a-z0-9][a-z0-9-]{0,62}'
-SEGMENT_RE = re.compile(rf'^{SEGMENT}$')
-ITEM_ID_RE = re.compile(rf'^{SEGMENT}/{SEGMENT}$')
-APP_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
+SEGMENT_RE = re.compile(rf'^{SEGMENT}\Z')
+ITEM_ID_RE = re.compile(rf'^{SEGMENT}/{SEGMENT}\Z')
+APP_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}\Z')
 STATUSES = ('active', 'retired')
 COMPLEXITY_BANDS = ('low', 'medium', 'high')
 # Summed cyclomatic complexity of an item's files: up to LOW is low, up to MEDIUM is medium.

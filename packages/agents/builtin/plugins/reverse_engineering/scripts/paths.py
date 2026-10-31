@@ -24,15 +24,15 @@ LEGACY = '01-legacy'
 MODERN = '02-modern'
 GENERATED = '_generated'
 UNIT_CARD = 'README.md'
-_SEGMENT = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
+_SEGMENT = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}\Z')
 
 
 # ---------------------------------------------------------------------------
 # The legacy repositories of a run (ADR-0052), mirroring packages/domain/src/source.ts
 # ---------------------------------------------------------------------------
 
-_SOURCE_FOLDER = re.compile(r'^[a-z0-9][a-z0-9._-]{0,127}$', re.IGNORECASE)
-_COMMIT = re.compile(r'^[0-9a-f]{40}([0-9a-f]{24})?$')
+_SOURCE_FOLDER = re.compile(r'^[a-z0-9][a-z0-9._-]{0,127}\Z', re.IGNORECASE)
+_COMMIT = re.compile(r'^[0-9a-f]{40}([0-9a-f]{24})?\Z')
 
 
 def is_source_folder(name):

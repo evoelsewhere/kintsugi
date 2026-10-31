@@ -4,7 +4,7 @@
 // (a link to Governance, never their content). Older documents lack confidence, review coverage
 // and the carry-over: those parts are left out.
 
-import { AlertTriangle, CheckCircle2, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HelpCircle, Lock, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CitationChip, InlineText } from "@/components/results/inline-text";
@@ -18,6 +18,7 @@ import { Select } from "@/components/ui/select";
 import type { CarryOverItem, Finding, HardenResults, Severity } from "@/lib/api/documents";
 import { idOfAnchor } from "@/lib/document-links";
 import { useAuth } from "@/lib/auth";
+import { coverageSignal, injectionSignal } from "@/lib/security-signals";
 import { cn } from "@/lib/utils";
 import { HardenOverview } from "./harden-overview";
 import { SEVERITY_RANK, SEVERITY_TONE } from "./results-format";
@@ -117,14 +118,19 @@ function StatusStrip({ results }: { results: HardenResults }): React.JSX.Element
   const { can } = useAuth();
   const report = results.report;
   if (report === null) return null;
-  const injection = report.injectionFlags !== undefined && !/^none\b/i.test(report.injectionFlags);
+  const coverage = coverageSignal(report);
+  const injection = injectionSignal(report);
   const items: Array<{ icon: typeof ShieldCheck; tone: string; text: React.ReactNode }> = [
-    report.coverageComplete || report.coverageGaps.length === 0
+    coverage === "complete"
       ? { icon: CheckCircle2, tone: "var(--ds-status-green)", text: "Every finder class returned and every finding was judged." }
-      : { icon: AlertTriangle, tone: "var(--ds-status-orange)", text: `${report.coverageGaps.length} coverage gap${report.coverageGaps.length === 1 ? "" : "s"}: the counts cover judged findings only.` },
-    injection
+      : coverage === "gaps"
+        ? { icon: AlertTriangle, tone: "var(--ds-status-orange)", text: `${report.coverageGaps.length} coverage gap${report.coverageGaps.length === 1 ? "" : "s"}: the counts cover judged findings only.` }
+        : { icon: HelpCircle, tone: "var(--ds-text-muted)", text: "Coverage was not reported by this run." },
+    injection === "found"
       ? { icon: AlertTriangle, tone: "var(--ds-status-red)", text: "Instruction-shaped text was found in the source: see Coverage & tools." }
-      : { icon: ShieldCheck, tone: "var(--ds-status-green)", text: "No instruction-shaped text in the source." },
+      : injection === "none"
+        ? { icon: ShieldCheck, tone: "var(--ds-status-green)", text: "No instruction-shaped text in the source." }
+        : { icon: HelpCircle, tone: "var(--ds-text-muted)", text: "The run did not report an injection check." },
     {
       icon: Lock,
       tone: "var(--ds-text-muted)",

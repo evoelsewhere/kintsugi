@@ -47,7 +47,7 @@ export interface StatusDotProps {
 export function StatusDot({ tone, className, busy }: StatusDotProps): React.JSX.Element {
   // A spinner needs more room than a dot to read as motion: it is a ring one step larger than the dot it replaces.
   if (busy === "spin") {
-    return <span aria-hidden className={cn("inline-block size-2.5 animate-spin rounded-full border-2 border-solid border-r-transparent", className, "size-3")} style={{ borderColor: TONE_COLOR[tone], borderRightColor: "transparent" }} />;
+    return <span aria-hidden className={cn("inline-block size-2.5 animate-spin rounded-full border-2 border-solid border-r-transparent", className, "size-3")} style={{ borderTopColor: TONE_COLOR[tone], borderBottomColor: TONE_COLOR[tone], borderLeftColor: TONE_COLOR[tone], borderRightColor: "transparent" }} />;
   }
   return <span aria-hidden className={cn("inline-block size-2.5 rounded-full", busy === "pulse" && "animate-pulse", className)} style={{ backgroundColor: TONE_COLOR[tone] }} />;
 }

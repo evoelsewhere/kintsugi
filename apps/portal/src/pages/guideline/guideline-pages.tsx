@@ -130,7 +130,7 @@ const install: GuidePage = {
       <H2>Update</H2>
       <P>Run the same installer again. It replaces the CLI in place, so the plugins you generated for your AI client keep working. Set <Code>KINTSUGI_HOME</Code> before running it to install somewhere else.</P>
       <H2>Remove</H2>
-      <P>Take Kintsugi out of each AI client first: the plugins you installed, then the Kintsugi connector and its marketplace, which <Code>kintsugi remove</Code> leaves in place. Their names end in your profile: <Code>kintsugi plugins setup --harness &lt;client&gt; --url &lt;url&gt; --verbose</Code> prints the exact commands under &ldquo;Rollback commands&rdquo;.</P>
+      <P>Take Kintsugi out of each AI client first: the plugins you installed, then the Kintsugi connector and its marketplace, which <Code>kintsugi remove</Code> leaves in place. Your client lists them: <Code>claude plugin list</Code> (or the plugin list of Codex or Copilot) shows each <Code>kintsugi@kintsugi-…</Code> entry, and the part after the <Code>@</Code> is its marketplace.</P>
       <CodeBlock
         label="Remove"
         code={
