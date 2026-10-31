@@ -24,7 +24,7 @@ The overview of the `{{app}}` application and the map of its folders. Fill the o
 | --- | --- |
 | `00-inputs/` | what people attach: the intent, graphs, telemetry |
 | `01-legacy/` | the old system: the assessment, the catalog, the understanding plan, and per unit what is known about it |
-| `02-modern/` | the new system: the requirements, the application's design, and per unit its card, its design and its task pack |
+| `02-modern/` | the new system: the requirements, the application's design, and per unit its card and its design |
 | `_generated/` | the read models rebuilt from the units after a merge |
 
 ## Where to start

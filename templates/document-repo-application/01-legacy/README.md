@@ -26,7 +26,7 @@ Below it, one folder per understood unit, `<module>/<unit>/`:
 | `rules-review.md` | the human verdicts on the rules (a table, written by people) |
 | `data-objects.md`, `findings.md`, `topology.md`, `trace.md` | data objects, security findings, the unit's topology, its traceability |
 
-The unit's card, its design and its task pack are on the same `<module>/<unit>/` path in `../02-modern/`.
+The unit's card and its design are on the same `<module>/<unit>/` path in `../02-modern/`.
 The per-file inventory and the raw topology are scratch of a run and are never committed.
 
 `_example.example/` holds format samples of a unit's files; it is not loaded and not seeded.

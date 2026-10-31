@@ -4,7 +4,7 @@
 - Serves: P3; the plugins members' harnesses run
 - Auto-commit: no — changes arrive as pull requests
 
-Agent plugins for members' harnesses, in the **Claude Code plugin format** (one directory per plugin):
+Project plugins for members' AI clients, in the **Claude Code plugin format** (one directory per plugin):
 
 ```
 <plugin>/
@@ -12,12 +12,8 @@ Agent plugins for members' harnesses, in the **Claude Code plugin format** (one 
   skills/<name>/SKILL.md       # stack-specific methods: convert a unit kind, write a test, ...
   agents/*.md                  # optional specialist subagents (e.g. a reviewer for this stack)
   commands/*.md                # optional
-  hooks/hooks.json             # optional, e.g. run the target formatter after edits
-  .mcp.json                    # optional extra MCP servers
 ```
 
-**Publishing:**
-- Kintsugi validates every plugin in this folder and publishes it to the project marketplace, whose files it generates in this repo.
-- The built-in `kintsugi` plugin (task workflow, MCP server, guardrail hooks) is always published alongside.
+**Distribution:** not yet. Kintsugi distributes only its built-in member plugins today (`kintsugi install plugin`); the plugins written here are not published to members. When they are, only skills, agents and commands reach members, and a command may carry at most the one activity hook of its front matter: hook files, scripts and MCP server files are not distributed, so write plugins that need none of them.
 
 **Samples:** `_example.example/` teaches the plugin format: it is not loaded and not seeded. Copy it to a real name and adapt it.
