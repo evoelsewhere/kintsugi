@@ -4,6 +4,7 @@
 
 import { CheckCircle2, CircleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { explainFailure } from "@kintsugi/domain";
 import { CHART_COLOR } from "@/components/results/chart-colors";
 import { StackedColumns } from "@/components/results/charts";
 import { RunStatusBadge } from "@/components/status-badges";
@@ -106,7 +107,7 @@ export function NeedsAttention({ projectId, health, hasRuns }: { projectId: stri
                     {styleOf(RUN_STATUS, run.status).label} {formatRelative(run.finishedAt ?? run.createdAt)}
                   </span>
                 </span>
-                {run.failureReason === undefined ? null : <span className="line-clamp-2 pl-6 text-[12px] text-text-secondary">{run.failureReason}</span>}
+                {run.failureReason === undefined ? null : <span className="line-clamp-2 pl-6 text-[12px] text-text-secondary" title={run.failureReason}>{explainFailure(run.failureReason)}</span>}
               </button>
             </li>
           ))}
@@ -128,7 +129,7 @@ export function RecentRuns({ projectId, applications, runs }: { projectId: strin
     { id: "started", header: "Started", cell: (run) => <span title={formatDateTime(run.createdAt)}>{formatRelative(run.createdAt)}</span>, sort: (run) => run.createdAt },
     { id: "duration", header: "Duration", cell: (run) => <span className="tabular-nums">{run.startedAt === undefined ? "—" : formatDuration(run.startedAt, run.finishedAt)}</span>, sort: (run) => durationMs(run), align: "right" },
     { id: "files", header: "Output files", cell: (run) => (run.outputSummary?.files === undefined ? "—" : String(run.outputSummary.files)), sort: (run) => run.outputSummary?.files, align: "right" },
-    { id: "note", header: "Note", cell: (run) => <span className="line-clamp-1 text-text-secondary" title={run.failureReason}>{run.failureReason ?? ""}</span> },
+    { id: "note", header: "Note", cell: (run) => <span className="line-clamp-1 text-text-secondary" title={run.failureReason}>{run.failureReason === undefined ? "" : explainFailure(run.failureReason)}</span> },
   ];
   return (
     <Section title="Recent runs" description="The newest stage runs of every application in the project; open one for its steps and live log.">

@@ -1,6 +1,7 @@
 // The console navigator: selection filters events; disclosure loads nested jobs on demand.
 import { Bot, ChevronDown, ChevronRight, FileCode2, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
+import { explainFailure } from "@kintsugi/domain";
 import { Loaded } from "@/components/loaded";
 import { StatusDot } from "@/components/ui/status-dot";
 import { jobRunsApi, type JobRunView } from "@/lib/api/job-runs";
@@ -103,7 +104,7 @@ function StepRow({
           </span>
           {step.failureReason === undefined ? null : (
             <span className="mt-1 block truncate pl-4 text-[11px] text-text-secondary" title={step.failureReason}>
-              {step.failureReason}
+              {explainFailure(step.failureReason)}
             </span>
           )}
           {step.status === "running" && stats?.progress !== undefined ? (

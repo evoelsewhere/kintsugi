@@ -6,6 +6,7 @@
 
 import { AlertTriangle, CircleCheck, Clock, FolderKanban, FolderGit2, GitPullRequestArrow, Play, PowerOff, RefreshCw, ShieldQuestion } from "lucide-react";
 import { Link } from "react-router-dom";
+import { explainFailure } from "@kintsugi/domain";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
 import { RunStatusBadge, WriteStatusBadge } from "@/components/status-badges";
@@ -151,7 +152,7 @@ function AttentionList({ items }: { items: AttentionItem[] }): React.JSX.Element
                   </span>
                   <span className="min-w-0 truncate font-medium">{item.title}</span>
                 </p>
-                {item.detail === undefined ? null : <p className="mt-0.5 line-clamp-2 break-words text-[12px] text-text-secondary">{item.detail}</p>}
+                {item.detail === undefined ? null : <p className="mt-0.5 line-clamp-2 break-words text-[12px] text-text-secondary" title={item.detail}>{explainFailure(item.detail)}</p>}
                 <p className="mt-0.5 text-[11px] text-text-muted" title={formatDateTime(item.at)}>
                   {formatRelative(item.at)}
                   {item.projectId === undefined ? "" : ` · ${item.projectId}`}

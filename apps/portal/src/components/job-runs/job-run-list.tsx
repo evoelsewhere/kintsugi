@@ -2,6 +2,7 @@
 import { ArrowUpRight, Clock3 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { explainFailure } from "@kintsugi/domain";
 import { DetailPage } from "@/components/detail-page";
 import { RunStatusBadge, WriteStatusBadge } from "@/components/status-badges";
 import type { JobRunView } from "@/lib/api/job-runs";
@@ -116,7 +117,7 @@ export function JobRunList({
                       </span>
                       {run.failureReason === undefined ? null : (
                         <span className="mt-1.5 line-clamp-1 text-[12px] text-text-secondary" title={run.failureReason}>
-                          {run.failureReason}
+                          {explainFailure(run.failureReason)}
                         </span>
                       )}
                     </span>

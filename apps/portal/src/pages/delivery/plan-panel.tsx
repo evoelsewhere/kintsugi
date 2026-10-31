@@ -5,6 +5,7 @@
 
 import { CircleAlert, GitFork, Sparkles } from "lucide-react";
 import { useMemo } from "react";
+import { explainFailure } from "@kintsugi/domain";
 import { StatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -106,7 +107,7 @@ export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, b
           </p>
         ) : null}
         {problems.length === 0 ? null : <p className="mt-2 text-[12px] text-text-secondary">Before planning: {problems.join("; ")}. Bind a model to the agent in Settings → Providers → Agent model bindings.</p>}
-        {failure === undefined ? null : <p className="mt-2 text-[12px] text-[var(--ds-status-red)]">The last planning run failed: {failure}</p>}
+        {failure === undefined ? null : <p className="mt-2 text-[12px] text-[var(--ds-status-red)]">The last planning run failed: {explainFailure(failure)}</p>}
       </Card>
     );
   }
@@ -131,7 +132,7 @@ export function PlanPanel({ projectId, applicationId, items, planRuns, canRun, b
           {planButton("Regenerate Plan")}
         </div>
       </CardHeader>
-      {failure === undefined ? null : <p className="mt-2 text-[12px] text-[var(--ds-status-red)]">The last planning run failed: {failure}</p>}
+      {failure === undefined ? null : <p className="mt-2 text-[12px] text-[var(--ds-status-red)]">The last planning run failed: {explainFailure(failure)}</p>}
       {problems.length === 0 ? null : <p className="mt-2 text-[12px] text-text-secondary">To plan again: {problems.join("; ")}. Bind a model to the agent in Settings → Providers → Agent model bindings.</p>}
       <ol className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
         {current.batches.map((batch) => (

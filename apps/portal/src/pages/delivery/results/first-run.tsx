@@ -3,6 +3,7 @@
 // path from "nothing yet" to "items to choose" is visible before the first click.
 
 import { Play, X } from "lucide-react";
+import { explainFailure } from "@kintsugi/domain";
 import { RunStatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -70,7 +71,7 @@ export function FirstRun({ stage, applicationName, latest, blocked, onRun, onOpe
               {latest.failureReason === undefined ? null : (
                 <span className="flex min-w-0 flex-1 basis-60 items-start gap-1.5 text-[11.5px] leading-[1.45] text-[var(--ds-status-red)]" title={latest.failureReason}>
                   <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-[var(--ds-status-red)]" aria-hidden />
-                  <span className="line-clamp-2 break-words">{latest.failureReason}</span>
+                  <span className="line-clamp-2 break-words">{explainFailure(latest.failureReason)}</span>
                 </span>
               )}
             </div>
