@@ -14,7 +14,7 @@
 //
 // Only plan.md (01-legacy/plan.md, ADR-0051) is published, and it is an auto-commit path: advice every
 // run replaces, not a proposal a person reviews. The graph and the draft are scratch JSON (intermediate). The plugin's command
-// (commands/modernize-plan-understand.md) declares the same flow; test/flow-sync.test.ts keeps them equal.
+// (commands/plan-understand.md) declares the same flow; test/flow-sync.test.ts keeps them equal.
 
 import type { StagePlan } from "../plan.js";
 import {

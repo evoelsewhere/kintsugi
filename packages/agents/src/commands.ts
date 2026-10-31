@@ -16,9 +16,9 @@ export type CommandAudience = "runtime" | "member" | "portal";
 export const COMMAND_AUDIENCES: readonly CommandAudience[] = ["runtime", "member", "portal"];
 
 export interface BuiltinCommand {
-  /** Stage id: the command without the `modernize-` prefix (`assess`, `extract-rules`; `modernize` for the entry point). */
+  /** Stage id: the command's name (`assess`, `plan-understand`, `build`); a member runs it as `/<plugin>:<command>` (ADR-0072, ADR-0089). */
   id: string;
-  /** The command: its file name without `.md` (`modernize-assess`). */
+  /** The command: its file name without `.md` (`assess`). */
   command: string;
   /** The plugin that carries it. */
   plugin: string;
@@ -47,8 +47,6 @@ export const COMMAND_ORDER: readonly string[] = [
   "build",
   "review",
 ];
-
-const PREFIX = "modernize-";
 
 const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((entry) => typeof entry === "string");
 
@@ -84,7 +82,7 @@ function parseCommand(text: string, command: string, problems: string[]): Omit<B
   const flow = metadata["flow"] === undefined ? undefined : parseFlow(metadata["flow"], `${file}: metadata.flow`, problems);
   if (problems.length > before) return undefined;
   return {
-    id: command.startsWith(PREFIX) ? command.slice(PREFIX.length) : command,
+    id: command,
     command,
     description: (description as string).trim(),
     audience: audience as CommandAudience,

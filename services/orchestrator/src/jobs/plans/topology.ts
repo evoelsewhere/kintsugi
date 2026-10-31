@@ -1,4 +1,4 @@
-// The topology extraction shared by the plans (commands/modernize-understand.md, ADR-0033): a
+// The topology extraction shared by the plans (commands/understand.md, ADR-0033): a
 // legacy-analyst job writes extract_topology.py and a script step runs it in the standard script
 // environment (model-written, no review gate; on failure the job gets the error once to fix it). The raw
 // topology (every leaf and edge) is scratch JSON of the run; render_topology.py checks it and publishes the

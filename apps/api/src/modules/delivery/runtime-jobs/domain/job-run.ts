@@ -165,7 +165,7 @@ export type StageAudience = "runtime" | "member" | "portal";
 export interface StageDefinition {
   /** Stage id, e.g. `assess`, `extract-rules`. */
   id: string;
-  /** The command it comes from, e.g. `modernize-assess`. */
+  /** The command it comes from, e.g. `assess`. */
   command: string;
   description: string;
   audience: StageAudience;

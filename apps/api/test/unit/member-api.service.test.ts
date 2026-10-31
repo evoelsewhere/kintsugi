@@ -93,7 +93,7 @@ const CATALOG = [
   { name: "analysis", title: "Analysis", version: "1.0.0", description: "d", audience: "runtime" as const, files: [{ path: "agents/legacy.md", size: 1 }], memberFiles: [] },
   // A plugin of both (ADR-0071): the runtime command and agent are in the folder, a member receives only its own part.
   { name: "build", title: "Build", version: "3.0.0", description: "d", audience: "both" as const, files: [
-    { path: "commands/modernize-review.md", size: 1 },
+    { path: "commands/review.md", size: 1 },
     { path: "commands/build.md", size: 1 },
     { path: "agents/code-reviewer.md", size: 1 },
     { path: "skills/build-method/SKILL.md", size: 1 },
@@ -117,7 +117,7 @@ describe("MemberApiService plugins", () => {
   });
 
   it("sends only the member part of a plugin of both", async () => {
-    const { member } = service({ catalog: CATALOG, granted: ["build"], contents: { "commands/build.md": "c", "skills/build-method/SKILL.md": "s", "commands/modernize-review.md": "runtime", "agents/code-reviewer.md": "runtime", "scripts/prepare_review.py": "code" } });
+    const { member } = service({ catalog: CATALOG, granted: ["build"], contents: { "commands/build.md": "c", "skills/build-method/SKILL.md": "s", "commands/review.md": "runtime", "agents/code-reviewer.md": "runtime", "scripts/prepare_review.py": "code" } });
     const bundle = await member.pluginBundle("u1", "shop", "build");
     expect(bundle.files.map((file) => file.path)).toEqual(["commands/build.md", "skills/build-method/SKILL.md"]);
   });

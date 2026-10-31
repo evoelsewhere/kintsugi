@@ -1,4 +1,4 @@
-// The `understand` stage (commands/modernize-understand.md, ADR-0033, ADR-0042): runs on a selection of
+// The `understand` stage (commands/understand.md, ADR-0033, ADR-0042): runs on a selection of
 // catalog items (inputs.scope, resolved by the API through assessmentCatalogPath). One run is
 // one pull request that touches only the paths of its own items, so concurrent runs never conflict. The
 // documents of an item are Markdown in its folder on the legacy side (01-legacy/<module>/<item>/), its card on the modern side; what the steps pass to each other is scratch

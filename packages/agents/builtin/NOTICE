@@ -8,7 +8,7 @@ Copyright Anthropic. Licensed under the Apache License, Version 2.0; see LICENSE
 Changes from the upstream content:
 
 - Deleted: upstream assets and presentation templates; Claude Code plugin metadata; host hook registration and APIs; terminal pane, review deck, X-ray and other host UI; telemetry; and tests/fixtures used only by the plugin host or pane.
-- Added: the server-side JobOutput Python hook and specification, including credential scanning, artifact-shape validation, redacted JSON findings, bounded/fail-closed input handling, and Python tests; Kintsugi reader-layout helpers and Vitest coverage; the Kintsugi `understand` command (modernize-understand.md) and its scripts (units_from_topology.py, merge_traceability.py, write_work_items.py) with Python tests, which have no upstream counterpart.
+- Added: the server-side JobOutput Python hook and specification, including credential scanning, artifact-shape validation, redacted JSON findings, bounded/fail-closed input handling, and Python tests; Kintsugi reader-layout helpers and Vitest coverage; the Kintsugi `understand` command (understand.md) and its scripts (units_from_topology.py, merge_traceability.py, write_work_items.py) with Python tests, which have no upstream counterpart.
 - Adapted: agent, command, workflow, script, hook-reader, and documentation content to Kintsugi's split between runtime jobs, member harnesses, and the portal; workspace artifact paths and commit boundaries; and the package's test/lint/typecheck setup. The reader functions remain pure and are intended for future portal progress presentation.
 
 The complete Kintsugi adaptation history is recorded in the repository. No Claude Code plugin or plugin marketplace is shipped.

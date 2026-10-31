@@ -38,7 +38,7 @@ describe("built-in plugins", () => {
     for (const path of modernize.memberFiles) {
       expect(path, path).toMatch(/^(commands\/build\.md|skills\/(build-method|unit-testing)\/.+)$/);
     }
-    expect(modernize.memberFiles.some((path) => path.startsWith("scripts/") || path.startsWith("workflows/") || path.includes("modernize-review"))).toBe(false);
+    expect(modernize.memberFiles.some((path) => path.startsWith("scripts/") || path.startsWith("workflows/") || path === "commands/review.md")).toBe(false);
   });
 
   it("covers every agent, command and workflow exactly once", async () => {
@@ -66,11 +66,11 @@ describe("built-in plugins", () => {
 
   it("reads plugin.json from the plugin folder and reads files only from the plugin", async () => {
     const plugins = await loadBuiltinPlugins();
-    expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "2.4.0" });
+    expect(JSON.parse((await readBuiltinPluginFile(plugins, "reverse_engineering", PLUGIN_MANIFEST_FILE))!)).toMatchObject({ name: "reverse-engineering", version: "2.5.0" });
     expect(JSON.parse((await readBuiltinPluginFile(plugins, "modernize", "kintsugi.json"))!)).toMatchObject({ audience: "both", requires: ["reverse_engineering"] });
-    expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/modernize-design.md")).toBeUndefined();
+    expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "commands/design.md")).toBeUndefined();
     expect(await readBuiltinPluginFile(plugins, "reverse_engineering", "../package.json")).toBeUndefined();
-    expect(await readBuiltinPluginFile(plugins, "modernize", "commands/modernize-design.md")).toContain("design");
+    expect(await readBuiltinPluginFile(plugins, "modernize", "commands/design.md")).toContain("design");
   });
 });
 

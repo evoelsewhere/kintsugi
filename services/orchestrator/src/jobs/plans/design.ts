@@ -1,4 +1,4 @@
-// The `design` stage (commands/modernize-design.md, ADR-0049, ADR-0083): generates one design set (the project's own,
+// The `design` stage (commands/design.md, ADR-0049, ADR-0083): generates one design set (the project's own,
 // ADR-0045) for a selection of understood units, or, for a set of scope `application` (ADR-0050), for the application
 // itself (the one pseudo-unit `@app`). A run is one set × many units (inputs.scope: the unit keys and the set) and one
 // pull request that touches only the `<set>/` folders of its units on the modern side (or `_design/<set>/` of the application).

@@ -233,7 +233,7 @@ describe("built-in catalog", () => {
 });
 
 /** Commands written for Kintsugi, not adapted from the upstream plugin. */
-const KINTSUGI_COMMANDS = new Set(["modernize-understand.md", "modernize-plan-understand.md", "modernize-design.md", "modernize-review.md", "build.md"]);
+const KINTSUGI_COMMANDS = new Set(["understand.md", "plan-understand.md", "design.md", "review.md", "build.md"]);
 
 describe("built-in commands", () => {
   it("declare who runs them and name only agents of the catalog", async () => {
@@ -256,8 +256,8 @@ describe("built-in commands", () => {
       };
       const { metadata } = frontmatter;
       expect(["runtime", "member", "portal"], name).toContain(metadata.audience);
-      // Commands adapted from upstream name their source; Kintsugi's own commands name none.
-      expect(metadata.upstream ?? null, name).toBe(KINTSUGI_COMMANDS.has(name) ? null : `commands/${name}`);
+      // Commands adapted from upstream name their source (upstream's `modernize-` name, ADR-0089); Kintsugi's own commands name none.
+      expect(metadata.upstream ?? null, name).toBe(KINTSUGI_COMMANDS.has(name) ? null : `commands/modernize-${name}`);
       expect(frontmatter.arguments, name).not.toMatch(/\bsystem\b/);
       for (const agent of metadata.agents) {
         expect(audienceOf.has(agent), `${name} names unknown agent ${agent}`).toBe(true);
@@ -278,12 +278,12 @@ describe("built-in commands", () => {
   it("load in pipeline order with their stage ids", async () => {
     const commands = await loadBuiltinCommands();
     expect(commands).toHaveLength(6);
-    expect(commands[0]).toMatchObject({ id: "assess", command: "modernize-assess", audience: "runtime" });
+    expect(commands[0]).toMatchObject({ id: "assess", command: "assess", audience: "runtime" });
     expect(commands.filter((command) => command.audience === "runtime").map((command) => command.id)).toEqual(["assess", "understand", "plan-understand", "design", "review"]);
     expect(commands.filter((command) => command.audience === "member").map((command) => command.id)).toEqual(["build"]);
     expect(commands.filter((command) => command.skills.includes("mermaid-diagrams")).map((command) => command.id)).toEqual(["assess", "understand", "design"]);
     expect(commands.find((command) => command.id === "understand")).toMatchObject({
-      command: "modernize-understand",
+      command: "understand",
       audience: "runtime",
       agents: ["legacy-analyst", "security-auditor", "business-rules-extractor"],
       writes: expect.arrayContaining(["10-applications/<app>/01-legacy/<module>/<unit>/spec.md", "10-applications/<app>/01-legacy/<module>/<unit>/understanding.md", "10-applications/<app>/02-modern/<module>/<unit>/README.md"]),

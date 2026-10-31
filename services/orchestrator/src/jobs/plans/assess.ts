@@ -1,4 +1,4 @@
-// The `assess` stage, single-application mode (commands/modernize-assess.md, ADR-0033, ADR-0042): the
+// The `assess` stage, single-application mode (commands/assess.md, ADR-0033, ADR-0042): the
 // inventory script step; three analysis jobs in parallel (legacy-analyst structure, legacy-analyst
 // debt, security-auditor scan); the topology extraction (a legacy-analyst job writes
 // tools/extract_topology.py, a script step runs it, with the repair loop, and render_topology.py
