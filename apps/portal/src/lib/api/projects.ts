@@ -46,6 +46,16 @@ export interface ProjectInput {
   documentRepositoryId: string;
 }
 
+/** One link of a registered repository to a project. */
+export interface RepositoryLinkView {
+  repositoryId: string;
+  projectId: string;
+  role: RepositoryRole;
+  /** null for the document repo, which belongs to the project. */
+  applicationId: string | null;
+  component?: string;
+}
+
 export interface ApplicationInput {
   name: string;
   pipeline?: string | null;
@@ -81,6 +91,8 @@ const application = (projectId: string, id: string): string => `${PROJECTS}/${pr
 
 export const projectsApi = {
   list: () => apiGetAll<ProjectView>(PROJECTS),
+  /** Where every registered repository is linked, to mark the repositories in use. */
+  repositoryLinks: () => apiGet<RepositoryLinkView[]>(`${PROJECTS}/repository-links`),
   get: (id: string) => apiGet<ProjectDetail>(`${PROJECTS}/${id}`),
   create: (input: ProjectInput & { id: string }) => apiSend<ProjectView>(PROJECTS, "POST", input),
   update: (id: string, input: Partial<ProjectInput>) => apiSend<ProjectView>(`${PROJECTS}/${id}`, "PATCH", input),

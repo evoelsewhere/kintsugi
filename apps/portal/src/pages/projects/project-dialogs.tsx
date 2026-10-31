@@ -1,6 +1,8 @@
 // Project dialogs (ADR-0028): create/edit a project with its document repo, add/edit an
 // application, and link a registered repository to an application as legacy, legacy-data
-// or target (with its component). Repositories come from Settings -> Git.
+// or target (with its component). Repositories come from Settings -> Git: the project dialog
+// reads them when it opens and after Settings closes, offers to register one, and shows the
+// repositories another project uses as in use.
 
 import type { ApplicationRepositoryRole } from "@kintsugi/domain";
 import { useState } from "react";
@@ -10,9 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { GitRepositoryView } from "@/lib/api/git";
+import { gitApi, type GitRepositoryView } from "@/lib/api/git";
 import { uniqueId } from "@/lib/ids";
-import type { ApplicationInput, ApplicationView, LinkInput, ProjectInput, ProjectView } from "@/lib/api/projects";
+import { type ApplicationInput, type ApplicationView, type LinkInput, type ProjectInput, projectsApi, type ProjectView, type RepositoryLinkView } from "@/lib/api/projects";
+import { useAuth } from "@/lib/auth";
+import { documentRepositoryOptions } from "@/lib/repository-options";
+import { useShell } from "@/lib/shell";
+import { useLoader } from "@/lib/use-loader";
 
 const message = (failure: unknown): string => (failure instanceof Error ? failure.message : String(failure));
 
@@ -69,7 +75,6 @@ export interface ProjectDialogProps {
   open: boolean;
   /** null creates a project. */
   project: ProjectView | null;
-  repositories: GitRepositoryView[];
   existingIds: string[];
   onClose: () => void;
   onSubmit: (id: string, input: ProjectInput) => Promise<void>;
@@ -79,11 +84,22 @@ export function ProjectDialog(props: ProjectDialogProps): React.JSX.Element | nu
   return props.open ? <ProjectForm {...props} /> : null;
 }
 
-function ProjectForm({ project, repositories, existingIds, onClose, onSubmit }: ProjectDialogProps): React.JSX.Element {
+/** The registered repositories and where they are linked, read when the dialog opens and again after Settings → Git closes. */
+async function loadRepositoryChoices(): Promise<{ repositories: GitRepositoryView[]; links: RepositoryLinkView[] }> {
+  const [repositories, links] = await Promise.all([gitApi.listRepositories(), projectsApi.repositoryLinks()]);
+  return { repositories, links };
+}
+
+function ProjectForm({ project, existingIds, onClose, onSubmit }: ProjectDialogProps): React.JSX.Element {
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
   const [documentRepositoryId, setDocumentRepositoryId] = useState(project?.documentRepositoryId ?? "");
   const { saving, error, setError, run } = useSubmit(onClose);
+  const { can } = useAuth();
+  const { openSettings } = useShell();
+  const choices = useLoader("project-dialog/repositories", loadRepositoryChoices, { live: ["repositories"] });
+  const options = choices.data === undefined ? [] : documentRepositoryOptions(choices.data.repositories, choices.data.links, project?.id ?? null);
+  const available = options.filter((option) => option.disabled !== true).length;
 
   function submit(): void {
     if (name.trim() === "") return setError("Enter a name.");
@@ -110,9 +126,25 @@ function ProjectForm({ project, repositories, existingIds, onClose, onSubmit }: 
         <Field label="Description">
           <Textarea value={description} rows={3} onChange={(event) => setDescription(event.target.value)} />
         </Field>
-        <Field label="Document repository" hint="kintsugi.yaml, assessment, knowledge, units, standards and plugins live here.">
-          <Select value={documentRepositoryId} placeholder="Pick a registered repository" options={repositoryOptions(repositories)} onChange={setDocumentRepositoryId} />
+        <Field label="Document repository" hint="kintsugi.yaml, assessment, knowledge, units, standards and plugins live here. A repository another project uses cannot be chosen.">
+          <Select
+            value={documentRepositoryId}
+            placeholder={choices.data === undefined ? "Loading repositories…" : available === 0 ? "No repository is free: register one" : "Pick a registered repository"}
+            options={options}
+            onChange={setDocumentRepositoryId}
+          />
         </Field>
+        <div className="-mt-2 flex flex-wrap items-center gap-x-2 text-[12px] text-text-muted">
+          {choices.error === null ? null : <span className="text-[var(--ds-status-red)]">{choices.error}</span>}
+          <span>Not in the list?</span>
+          {can("git.manage") ? (
+            <Button size="small" variant="link" className="h-auto px-0 text-[12px]" onClick={() => openSettings("git", () => void choices.reload())}>
+              Register a repository in Settings → Git
+            </Button>
+          ) : (
+            <span>Ask an administrator to register it in Settings → Git.</span>
+          )}
+        </div>
         <FormError error={error} />
       </div>
     </Modal>

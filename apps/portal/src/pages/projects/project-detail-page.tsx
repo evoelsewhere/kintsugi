@@ -278,7 +278,6 @@ export function ProjectDetailPage(): React.JSX.Element {
       <ProjectDialog
         open={editProject}
         project={project}
-        repositories={repositories.filter((repository) => repository.id === project.documentRepositoryId || !linked.has(repository.id))}
         existingIds={[]}
         onClose={() => setEditProject(false)}
         onSubmit={async (_id, input) => {

@@ -57,7 +57,7 @@ export function ProjectsPage(): React.JSX.Element {
             <CardDescription>Each project has one document repo and, per application, AS-IS (legacy) and TO-BE (target) repositories.</CardDescription>
           </div>
           {canManage ? (
-            <Button size="small" variant="solid" disabled={repositories.length === 0} onClick={() => setDialogOpen(true)}>
+            <Button size="small" variant="solid" onClick={() => setDialogOpen(true)}>
               <Plus className="size-4" />
               New project
             </Button>
@@ -94,7 +94,6 @@ export function ProjectsPage(): React.JSX.Element {
       <ProjectDialog
         open={dialogOpen}
         project={null}
-        repositories={repositories}
         existingIds={projects.map((project) => project.id)}
         onClose={() => setDialogOpen(false)}
         onSubmit={async (id, input) => {

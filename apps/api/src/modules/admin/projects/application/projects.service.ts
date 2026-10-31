@@ -76,6 +76,13 @@ export class ProjectsService {
     };
   }
 
+  /** Every link of a registered repository to a project, so a picker can mark the repositories in use. */
+  async repositoryLinks(): Promise<ProjectRepositoryLink[]> {
+    const repositories = await this.git.listRepositories();
+    const links = await this.store.linksOfRepositories(repositories.map((repository) => repository.id));
+    return links.sort((a, b) => a.repositoryId.localeCompare(b.repositoryId) || a.projectId.localeCompare(b.projectId));
+  }
+
   async createProject(input: CreateProject, actor: Actor): Promise<ProjectRecord> {
     if ((await this.store.getProject(input.id)) !== undefined) throw new ConflictException(`Project ${input.id} already exists`);
     await this.#mustBeRegistered(input.documentRepositoryId);

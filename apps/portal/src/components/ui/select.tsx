@@ -19,6 +19,8 @@ export interface SelectOption {
   label: string;
   hint?: string;
   icon?: React.ReactNode;
+  /** Shown but not selectable; the hint says why. */
+  disabled?: boolean;
 }
 
 export interface SelectProps {
@@ -116,6 +118,8 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
                       type="button"
                       role="option"
                       aria-selected={active}
+                      aria-disabled={option.disabled === true ? true : undefined}
+                      disabled={option.disabled === true}
                       onClick={() => {
                         onChange(option.value);
                         setOpen(false);
@@ -123,6 +127,7 @@ export function Select({ value, options, onChange, placeholder = "Select…", di
                       className={cn(
                         "flex w-full items-center gap-2 rounded-[var(--geist-radius)] px-2.5 py-2 text-left text-[14px] text-text-secondary hover:bg-hover hover:text-text",
                         active && "text-text",
+                        option.disabled === true && "cursor-not-allowed text-text-muted hover:bg-transparent hover:text-text-muted",
                       )}
                     >
                       <Check className={cn("size-3.5 shrink-0", active ? "opacity-100" : "opacity-0")} strokeWidth={2} />

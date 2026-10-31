@@ -8,8 +8,11 @@ import type { CreateApplication, CreateProject, LinkRepository, UpdateApplicatio
 
 const description = z.string().trim().max(2000);
 
+/** Ids the projects routes use for themselves (`GET admin/projects/repository-links`). */
+const RESERVED_PROJECT_IDS = ["repository-links"];
+
 export const createProjectSchema = z.object({
-  id: idSchema,
+  id: idSchema.refine((id) => !RESERVED_PROJECT_IDS.includes(id), { message: "This id is reserved; choose another" }),
   name: stringField(false),
   description: description.optional(),
   /** Registered Git repository (Settings -> Git) holding everything except code. */

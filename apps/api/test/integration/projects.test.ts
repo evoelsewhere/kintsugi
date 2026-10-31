@@ -106,6 +106,17 @@ describe.skipIf(!hasDatabase)("projects (integration)", () => {
     expect(web.asIs.legacyData.map((repo) => repo.repositoryId)).toEqual(["web-db"]);
     expect(web.toBe.document?.repositoryId).toBe("billing-docs");
     expect(web.toBe.targets).toMatchObject([{ repositoryId: "web-api", component: "api", path: "Billing/_git/web-api" }]);
+
+    // Where each registered repository is linked, for the pickers that mark repositories in use.
+    const links = await admin.get<Array<{ repositoryId: string; projectId: string; role: string; applicationId: string | null }>>("/admin/projects/repository-links");
+    expect(links.status).toBe(200);
+    expect(links.body.data!.map((link) => [link.repositoryId, link.projectId, link.role, link.applicationId])).toEqual([
+      ["billing-docs", "billing", "document", null],
+      ["web-api", "billing", "target", "billing-web"],
+      ["web-db", "billing", "legacy-data", "billing-web"],
+      ["web-legacy", "billing", "legacy", "billing-web"],
+    ]);
+    expect((await admin.request("POST", "/admin/projects", { body: { id: "repository-links", name: "x", documentRepositoryId: "payroll-docs" } })).status).toBe(400);
   });
 
   it("enforces the repository rules with clear messages", async () => {

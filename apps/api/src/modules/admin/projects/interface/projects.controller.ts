@@ -2,6 +2,7 @@
 // validates input, maps DTOs to application commands, delegates to the use cases.
 // Reads need a session; every write needs projects.manage.
 
+import type { ProjectRepositoryLink } from "@kintsugi/domain";
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Page, PageQuery } from "#common/application/pagination.js";
@@ -37,6 +38,14 @@ export class ProjectsController {
   @ApiOkResponse({ description: "Projects with their document repository id." })
   list(@Query({ schema: pageQuerySchema }) query: PageQuery): Promise<Page<ProjectRecord>> {
     return this.projects.listProjects(query);
+  }
+
+  // Declared before `:id`, so it is never read as a project id (the id is reserved).
+  @Get("repository-links")
+  @ApiOperation({ summary: "List where the registered repositories are linked: project, role and application" })
+  @ApiOkResponse({ description: "One entry per link; a repository linked nowhere has none. Pickers use it to mark repositories in use." })
+  repositoryLinks(): Promise<ProjectRepositoryLink[]> {
+    return this.projects.repositoryLinks();
   }
 
   @Get(":id")
