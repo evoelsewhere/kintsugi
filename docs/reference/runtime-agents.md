@@ -71,7 +71,7 @@ Further tools (for example knowledge-base search) are added to the kernel tool r
 | `job.completed` | Summary |
 | `job.failed` | `reason` and error message |
 
-`job.failed` reasons: `error` (LLM or kernel error, empty response, output token limit), `timeout` (`timeoutSec` exceeded), `max-turns`, `budget` (`maxCostUsd` exceeded, compaction summaries included), `context-overflow` (the conversation outgrew the model's window and compacting did not recover it), `aborted`. LLM errors, aborts, timeouts and exceeded limits never end as `job.completed`.
+`job.failed` reasons: `error` (LLM or kernel error, empty response, output token limit), `timeout` (`timeoutSec` exceeded), `max-turns`, `budget` (`maxCostUsd` exceeded, compaction summaries included), `context-overflow` (the conversation outgrew the model's window and compacting did not recover it), `loop` (the model called a tool with the same arguments and got the same answer 12 times in the job: "stopped: glob was called with the same arguments 12 times"; calls a codemode script makes are not counted, blocked calls are), `aborted`. LLM errors, aborts, timeouts and exceeded limits never end as `job.completed`.
 
 ## Agent Builder
 

@@ -10,7 +10,7 @@
   - outputs
   - usage (tokens, cache tokens, cost, compactions, context peak)
   - spans (job, turn, tool call, compaction, retry)
-  - completed / failed (failure reason: `error`, `timeout`, `max-turns`, `budget`, `context-overflow` or `aborted`)
+  - completed / failed (failure reason: `error`, `timeout`, `max-turns`, `budget`, `context-overflow`, `loop` or `aborted`)
 - **Storage and live view**: events are stored in Postgres and pushed to the portal over SSE (`LISTEN/NOTIFY`).
 - **Spans** ([ADR-0048](../../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)): pi 1.3.0 ships the `pi-telemetry` contract but emits no spans, so the kernel builds them from the session events (`kernel/telemetry.ts`, an adapter that passes pi's conformance suite) and the worker stores them in `monitoring.telemetry_span` (30 days by default, `KINTSUGI_TELEMETRY_RETENTION_DAYS`). They carry counts, sizes and names, never prompts or tool output.
 - **Usage and cost**: recorded per job, agent, model and project from pi's `usage` (cache read and write tokens and the cost of compaction summaries included), shown in **Governance → Telemetry** (`telemetry.view`): tokens, cache hit rate (`cacheRead / (input + cacheRead + cacheWrite)`), cost, compactions, tool latency, and a trace per attempt. Monitoring → job runs shows the usage of one run.
