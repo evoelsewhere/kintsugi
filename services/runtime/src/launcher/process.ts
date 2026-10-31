@@ -37,9 +37,21 @@ export interface ProcessResult {
   /** True when stdout or stderr exceeded the capture size. */
   truncated: boolean;
   durationMs: number;
+  /**
+   * Set when the process had ended but a process it started still held its output open after `DRAIN_GRACE_MS`: the
+   * output was cut there, and that process may still be running (it escaped the tree kill).
+   */
+  outlived?: true;
 }
 
 const DEFAULT_CAPTURE = 64 * 1024;
+
+/**
+ * How long the output may stay open once the process has exited. A process it started inherits the pipes, and one
+ * that left its tree (an orphan, a new session) is not reached by the kill, so waiting for the pipes to close alone
+ * would hold the step, its timeout and its cancel for as long as that process lives (T3-001).
+ */
+export const DRAIN_GRACE_MS = 2000;
 
 /** Kills a process and every process it started. */
 export function killProcessTree(pid: number): void {
@@ -125,10 +137,17 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
 
     let stopped: ProcessStop | undefined;
+    /** The exit code once the process itself has exited, while its output may still be open. */
+    let exited: { code: number | null } | undefined;
+    let drain: NodeJS.Timeout | undefined;
+    let settled = false;
     const stop = (reason: ProcessStop): void => {
       if (stopped !== undefined || child.pid === undefined) return;
       stopped = reason;
-      killProcessTree(child.pid);
+      // Once the process has exited, only what it started holds the output: cut it now. Its pid may already belong
+      // to another process, so it is not killed again (on POSIX its process group still is, see `cut`).
+      if (exited !== undefined) cut();
+      else killProcessTree(child.pid);
     };
     // timeoutMs <= 0 means no wall-clock limit.
     const timer = options.timeoutMs > 0 ? setTimeout(() => stop("timeout"), options.timeoutMs) : undefined;
@@ -152,15 +171,14 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
           }, options.watch.intervalMs ?? 1000);
 
     const finish = (): void => {
+      settled = true;
       clearTimeout(timer);
+      clearTimeout(drain);
       if (watcher !== undefined) clearInterval(watcher);
       options.signal?.removeEventListener("abort", onAbort);
     };
-    child.on("error", (error) => {
-      finish();
-      reject(error);
-    });
-    child.on("close", (code) => {
+    const settle = (code: number | null, outlived: boolean): void => {
+      if (settled) return;
       finish();
       resolve({
         exitCode: code,
@@ -169,7 +187,28 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
         stderr: stderr.text(),
         truncated: stdout.truncated || stderr.truncated,
         durationMs: Date.now() - started,
+        ...(outlived ? { outlived: true as const } : {}),
       });
+    };
+    /** Ends the run without waiting for the processes that still hold the output: what was read so far is kept. */
+    function cut(): void {
+      if (settled || exited === undefined) return;
+      // On POSIX the process group outlives its leader, so what stayed in it is still reached; a process that made a
+      // session of its own, or (on Windows) left the tree, is not.
+      if (process.platform !== "win32" && child.pid !== undefined) killProcessTree(child.pid);
+      child.stdout.destroy();
+      child.stderr.destroy();
+      settle(exited.code, true);
+    }
+    child.on("error", (error) => {
+      if (settled) return;
+      finish();
+      reject(error);
     });
+    child.on("exit", (code) => {
+      exited = { code };
+      drain = setTimeout(cut, DRAIN_GRACE_MS);
+    });
+    child.on("close", (code) => settle(code, false));
   });
 }

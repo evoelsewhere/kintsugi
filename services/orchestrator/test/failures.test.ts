@@ -50,6 +50,9 @@ describe("transient provider failures", () => {
 
   it("are not a limit the job hit or a known failure of the settings", () => {
     expect(isTransientFailure("Agent x failed (turns): the job reached its turn limit")).toBe(false);
+    // A loop is never tried again, also when the tool it names reads like a provider failure.
+    expect(isTransientFailure("Agent x failed (loop): stopped: mcp__provider-docs__search was called with the same arguments 12 times")).toBe(false);
+    expect(isTransientFailure("Agent provider-mapper failed (max-turns): stopped after 150 turn(s)")).toBe(false);
     expect(isTransientFailure(explainFailure(BYTE_STRING))).toBe(false);
     expect(isTransientFailure(BYTE_STRING)).toBe(false);
   });

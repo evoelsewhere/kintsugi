@@ -6,6 +6,7 @@
 import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { TOOL_RESULT_PREVIEW_CHARS, type JobEvent, type JobFailureReason, type JobHandle, type JobSpan, type JobSpec } from "@kintsugi/runtime-sdk";
+import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, sep } from "node:path";
 import { EventStream } from "../event-stream.js";
@@ -44,21 +45,55 @@ interface Usage {
 const isAssistant = (message: unknown): message is AssistantLike =>
   typeof message === "object" && message !== null && (message as { role?: unknown }).role === "assistant";
 
+/** What a tool gave the model back: its text parts, whitespace folded. */
+function resultText(result: unknown): string {
+  const content = typeof result === "object" && result !== null ? (result as { content?: unknown }).content : undefined;
+  const parts = typeof result === "string" ? [result] : Array.isArray(content) ? content : [];
+  return parts
+    .map((part: unknown) => (typeof part === "string" ? part : typeof part === "object" && part !== null && (part as { type?: unknown }).type === "text" ? String((part as { text?: unknown }).text ?? "") : ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * The start of what a tool gave the model back: its text parts, whitespace folded, at most
  * `TOOL_RESULT_PREVIEW_CHARS`. Undefined when it gave no text. The worker redacts it before it keeps it.
  */
 export function resultPreview(result: unknown): string | undefined {
-  const content = typeof result === "object" && result !== null ? (result as { content?: unknown }).content : undefined;
-  const parts = typeof result === "string" ? [result] : Array.isArray(content) ? content : [];
-  const text = parts
-    .map((part: unknown) => (typeof part === "string" ? part : typeof part === "object" && part !== null && (part as { type?: unknown }).type === "text" ? String((part as { text?: unknown }).text ?? "") : ""))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const text = resultText(result);
   if (text === "") return undefined;
   return text.length > TOOL_RESULT_PREVIEW_CHARS ? `${text.slice(0, TOOL_RESULT_PREVIEW_CHARS - 1)}…` : text;
 }
+
+/**
+ * The call that halts a job as a `loop`: a model that asks a tool the same thing this many times and gets the same
+ * answer each time is not going to find something new (QA-R1: one `glob` 449 times, `grep` of the same files 26 times).
+ */
+export const LOOP_REPEATS = 12;
+
+/**
+ * The characters of thinking, text and tool-call arguments one turn may stream without a tool call completing; past
+ * them the turn is a loop (QA-R1: one turn of ~190k characters of thinking over 20 minutes, 191k of text).
+ */
+export const RUNAWAY_TURN_CHARS = 150_000;
+
+/** JSON with the keys of every object sorted, so arguments that differ only in key order are the same call. */
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  if (typeof value === "object" && value !== null) {
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record).filter((key) => record[key] !== undefined).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+const digest = (text: string): string => createHash("sha256").update(text).digest("base64");
+
+/** The call that made a nested call (codemode runs other tools), by pi's parent id or the `outer/inner` call id. */
+const outerCall = (callId: string, parentCallId: string | undefined): string | undefined =>
+  parentCallId ?? (callId.includes("/") ? callId.slice(0, callId.lastIndexOf("/")) : undefined);
 
 export class KernelJob implements JobHandle {
   readonly events = new EventStream<JobEvent>();
@@ -100,7 +135,13 @@ export class KernelJob implements JobHandle {
   #compactionSpan: LiveSpan | undefined;
   #retrySpan: LiveSpan | undefined;
   #streamed = { thinking: 0, toolArgs: 0, text: 0 };
+  /** What streamed since the turn started or a tool call last completed. */
+  #runaway = { thinking: 0, toolArgs: 0, text: 0 };
   #progressAt = 0;
+  /** The model's own calls (not codemode's nested ones) while they run: the digest of tool and arguments. */
+  readonly #openCalls = new Map<string, { tool: string; key: string }>();
+  /** Per tool and arguments: the digest of the last answer and how many calls in a row of the job got it. */
+  readonly #repeats = new Map<string, { answer: string; count: number }>();
 
   constructor(
     readonly jobId: string,
@@ -203,12 +244,24 @@ export class KernelJob implements JobHandle {
     await this.#aborting;
   }
 
-  /** Counts streamed characters and reports them at most every 15 s as a progress event. */
+  /**
+   * Counts streamed characters, reports them at most every 15 s as a progress event, and halts the job as a `loop`
+   * when one turn streams more than `RUNAWAY_TURN_CHARS` without a tool call completing.
+   */
   #track(update: { type: string; delta?: unknown }): void {
     const size = typeof update.delta === "string" ? update.delta.length : 0;
-    if (update.type === "thinking_delta") this.#streamed.thinking += size;
-    else if (update.type === "toolcall_delta") this.#streamed.toolArgs += size;
-    else if (update.type === "text_delta") this.#streamed.text += size;
+    const kind = update.type === "thinking_delta" ? "thinking" : update.type === "toolcall_delta" ? "toolArgs" : update.type === "text_delta" ? "text" : undefined;
+    if (kind !== undefined) {
+      this.#streamed[kind] += size;
+      this.#runaway[kind] += size;
+      const { thinking, toolArgs, text } = this.#runaway;
+      const total = thinking + toolArgs + text;
+      if (total > RUNAWAY_TURN_CHARS) {
+        const most = thinking >= toolArgs && thinking >= text ? "thinking" : text >= toolArgs ? "text" : "tool-call arguments";
+        void this.#halt("loop", `stopped: one turn produced ${Math.round(total / 1000)}k characters of ${most} without a tool call`);
+        return;
+      }
+    }
     const at = Date.now();
     if (at - this.#progressAt < 15_000) return;
     this.#progressAt = at;
@@ -225,10 +278,14 @@ export class KernelJob implements JobHandle {
   #onEvent(event: AgentSessionEvent): void {
     if (this.#ended) return;
     this.#lastEventAt = Date.now();
-    if (event.type === "message_update") this.#track(event.assistantMessageEvent);
+    if (event.type === "message_update") {
+      this.#track(event.assistantMessageEvent);
+      if (this.#ended) return;
+    }
     switch (event.type) {
       case "turn_start": {
         this.#turns += 1;
+        this.#runaway = { thinking: 0, toolArgs: 0, text: 0 };
         this.#endTurn();
         this.#turnUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, stopReason: "" };
         this.#turnSpan = beginSpan(this.#root.span, "kintsugi.turn", { turn: this.#turns });
@@ -244,12 +301,17 @@ export class KernelJob implements JobHandle {
       case "turn_end":
         this.#endTurn();
         return;
-      case "tool_execution_start":
-        this.#beginTool(event.toolCallId, event.toolName, (event as { parentToolCallId?: string }).parentToolCallId);
+      case "tool_execution_start": {
+        const outer = outerCall(event.toolCallId, (event as { parentToolCallId?: string }).parentToolCallId);
+        this.#beginTool(event.toolCallId, event.toolName, outer);
+        if (outer === undefined) this.#openCalls.set(event.toolCallId, { tool: event.toolName, key: digest(`${event.toolName} ${canonicalJson(event.args)}`) });
         this.events.push({ type: "tool.call", jobId: this.jobId, callId: event.toolCallId, tool: event.toolName, input: event.args, decision: "allowed" });
         return;
+      }
       case "tool_execution_end":
         this.#endTool(event.toolCallId, !event.isError, event.durationMs);
+        this.#runaway = { thinking: 0, toolArgs: 0, text: 0 };
+        this.#watchRepeats(event.toolCallId, event.result, event.isError);
         {
           const preview = resultPreview(event.result);
           this.events.push({
@@ -386,9 +448,24 @@ export class KernelJob implements JobHandle {
     }
   }
 
+  /**
+   * Counts a call the model made that got the same answer as its last identical call, and halts the job as a `loop`
+   * at the `LOOP_REPEATS`th. A different answer starts the count again: a checklist listed again after an item was
+   * done, or a search after a memory write, repeats its arguments but not its answer. Blocked calls count too.
+   */
+  #watchRepeats(callId: string, result: unknown, isError: boolean): void {
+    const call = this.#openCalls.get(callId);
+    if (call === undefined) return;
+    this.#openCalls.delete(callId);
+    const answer = digest(`${isError ? "error" : "ok"} ${resultText(result)}`);
+    const seen = this.#repeats.get(call.key);
+    const count = seen?.answer === answer ? seen.count + 1 : 1;
+    this.#repeats.set(call.key, { answer, count });
+    if (count >= LOOP_REPEATS) void this.#halt("loop", `stopped: ${call.tool} was called with the same arguments ${count} times`);
+  }
+
   /** A tool call is a span under its turn, or under the call that made it (codemode runs other tools). */
-  #beginTool(callId: string, tool: string, parentCallId: string | undefined): void {
-    const outer = parentCallId ?? (callId.includes("/") ? callId.slice(0, callId.lastIndexOf("/")) : undefined);
+  #beginTool(callId: string, tool: string, outer: string | undefined): void {
     if (outer !== undefined) this.#nestedCalls.set(outer, (this.#nestedCalls.get(outer) ?? 0) + 1);
     const parent = (outer === undefined ? undefined : this.#toolSpans.get(outer)) ?? this.#turnSpan ?? this.#root;
     const mcp = tool.startsWith("mcp__");
