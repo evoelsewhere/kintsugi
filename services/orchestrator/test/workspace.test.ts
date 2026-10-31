@@ -304,7 +304,9 @@ describe("the sandbox settings reach the job", () => {
     const { spec } = await runWith({ agentTimeoutSec: 1800, agentIdleTimeoutSec: 120, maxTurns: 40, maxCostUsd: 3 });
     expect(spec.limits).toEqual({ timeoutSec: 1800, idleTimeoutSec: 120, maxTurns: 40, maxCostUsd: 3 });
     const defaults = (await runWith({})).spec;
-    expect(defaults.limits).toEqual({ timeoutSec: 0, idleTimeoutSec: 300 });
+    expect(defaults.limits).toEqual({ timeoutSec: 2700, idleTimeoutSec: 300, maxTurns: 150, maxCostUsd: 10 });
+    const unlimited = (await runWith({ agentTimeoutSec: 0, maxTurns: 0, maxCostUsd: 0 })).spec;
+    expect(unlimited.limits).toEqual({ timeoutSec: 0, idleTimeoutSec: 300 });
   });
 
   it("marks the checkout read-only unless the settings say not to", async () => {
