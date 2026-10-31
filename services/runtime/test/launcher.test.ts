@@ -45,7 +45,7 @@ describe("job environment", () => {
   });
 
   it("redacts credential-shaped text in failure reasons", () => {
-    expect(redactText("password = hunter2hunter2")).toBe("[redacted]");
+    expect(redactText("password = hunter2hunter2")).toBe("password [redacted]");
     expect(redactText("postgres://alice:s3cret@db/app")).toBe("[redacted]db/app");
     expect(redactText("token ghp_0123456789abcdefghijABCDEFGHIJ0123")).toContain("[redacted]");
     expect(lastLine("line one\ninventory.py: cannot read source file x\n\n")).toBe("inventory.py: cannot read source file x");
@@ -111,7 +111,7 @@ describe("script steps", () => {
     const script = join(ws.scripts, "fail.py");
     writeFileSync(script, "import sys\nsys.stderr.write('boom password=hunter2hunter2\\n')\nsys.exit(3)\n");
     const result = await runScript(spec(ws, script, []));
-    expect(result.failure).toBe("exited with code 3: boom [redacted]");
+    expect(result.failure).toBe("exited with code 3: boom password [redacted]");
   });
 
   it("kills the whole process tree on timeout", async () => {
@@ -240,5 +240,28 @@ describe("script steps", () => {
     const script = join(ws.scripts, "run.sh");
     writeFileSync(script, "echo hi");
     await expect(runScript(spec(ws, script, []))).rejects.toThrow(/unsupported script type/);
+  });
+});
+
+describe("credential lines (T2-027)", () => {
+  const secret = "Sup3r-Secret!";
+  it("masks the value after a credential name in any language, and keeps the name", () => {
+    const shapes: Array<[string, string]> = [
+      [`cobol/CUSTVAL.cbl:11: 01 WS-DB-PASSWORD PIC X(14) VALUE '${secret}'.`, "cobol/CUSTVAL.cbl:11: 01 WS-DB-PASSWORD [redacted]"],
+      [`props.put("password", "${secret}");`, 'props.put("password" [redacted]'],
+      [`db.password = ${secret}`, "db.password [redacted]"],
+      [`CREATE USER billadm IDENTIFIED BY ${secret};`, "CREATE USER billadm IDENTIFIED BY [redacted]"],
+      [`grep as-is/legacy-billing "BILLADM|${secret}|password|PASSWORD"`, "grep as-is/legacy-billing [redacted]"],
+    ];
+    for (const [line, expected] of shapes) {
+      expect(redactText(line), line).toBe(expected);
+      expect(redactText(`ok\n${line}\nnext`)).toBe(`ok\n${expected}\nnext`);
+    }
+  });
+
+  it("leaves lines without a credential name as they are, and the detector mode as it was", () => {
+    for (const line of ["read as-is/src/Main.java", "model working: turn 3, thinking 1.2k chars", "grep as-is \"CALL '|EXEC PGM=\" → ok: 4 lines"]) expect(redactText(line)).toBe(line);
+    expect(redactText("how do refresh tokens work", { opaqueTokens: false })).toBe("how do refresh tokens work");
+    expect(redactText("password = hunter2", { opaqueTokens: false })).toBe("[redacted]");
   });
 });
