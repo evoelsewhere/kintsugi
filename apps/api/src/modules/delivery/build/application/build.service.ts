@@ -15,8 +15,10 @@ import type { BuildOverviewView, BuildTargetView, MemberBuild, MergeRequestView,
 
 const READ_AT_ONCE = 8;
 const RECENT_RUNS = 200;
+/** The newest records of each build kind that are read: one per unit and build is the common case. */
 const RECENT_ACTIVITY = 500;
 const MEMBER_PLUGIN = "modernize";
+const BUILD_KINDS = ["build.mr", "build.test"] as const;
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const HTTP_URL = /^https?:\/\/[^\s<>"']{1,480}$/i;
 
@@ -98,11 +100,12 @@ export class BuildService {
 
   /** The newest `build.*` record of a member for each unit (the summary of a record is the unit key), the merge request one first. */
   async memberBuilds(projectId: string, withUser: boolean, scope: { applicationId: string; allowLegacy: boolean }): Promise<Map<string, MemberBuild>> {
-    const page = await this.activity.list({ projectId, pluginName: MEMBER_PLUGIN, limit: RECENT_ACTIVITY, offset: 0 });
+    // By kind: the plugin also writes a record per turn of a session (`command.run`) and per download, which must not
+    // push a unit's merge request out of the window.
+    const pages = await Promise.all(BUILD_KINDS.map((kind) => this.activity.list({ projectId, pluginName: MEMBER_PLUGIN, kind, limit: RECENT_ACTIVITY, offset: 0 })));
     const latest = new Map<string, MemberBuild>();
     const tests = new Map<string, MemberBuild>();
-    for (const record of page.items) {
-      if (!record.kind.startsWith("build.")) continue;
+    for (const record of pages.flatMap((page) => page.items)) {
       const application = record.detail["application"];
       if (application === undefined ? !scope.allowLegacy : application !== scope.applicationId) continue;
       const build = memberBuildOf(record, withUser);

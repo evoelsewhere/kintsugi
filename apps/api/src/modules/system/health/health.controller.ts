@@ -9,7 +9,6 @@ export interface HealthResponse {
   at: string;
   uptimeSeconds: number;
   build: BuildInfo;
-  node: string;
 }
 
 const BUILD = readBuildInfo();
@@ -28,7 +27,6 @@ export class HealthController {
       at: new Date().toISOString(),
       uptimeSeconds: Math.round(process.uptime()),
       build: BUILD,
-      node: process.version,
     };
   }
 }
