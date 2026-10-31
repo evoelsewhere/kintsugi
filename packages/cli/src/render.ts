@@ -10,7 +10,9 @@ function escapeJsonDisplayControls(value: string): string {
 function itemLines(item: unknown, markdown: boolean): string[] {
   if (item === null || typeof item !== "object") return [`- ${String(item)}`];
   const record = item as Record<string, unknown>;
-  const title = record.name ?? record.title ?? record.projectId ?? record.path ?? "Result";
+  const name = record.name ?? record.title ?? record.projectId ?? record.path ?? "Result";
+  // The id is what commands take (`login <project>`, `--project`): shown beside a name that differs from it.
+  const title = typeof record.id === "string" && record.id !== name ? `${String(name)} (${record.id})` : name;
   const detail = [record.kind, record.role, record.status].filter((entry) => typeof entry === "string").join(" · ");
   return [markdown ? `- **${String(title)}**${detail ? ` \u2014 ${detail}` : ""}` : `- ${String(title)}${detail ? ` \u2014 ${detail}` : ""}`];
 }
