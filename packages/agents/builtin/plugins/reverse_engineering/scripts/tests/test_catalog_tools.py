@@ -424,5 +424,17 @@ class InventoryHashTests(unittest.TestCase):
             self.assertEqual(files['job.jcl']['sha256'], hashlib.sha256(b'//JOB\n').hexdigest())
 
 
+class TrailingNewlineTest(unittest.TestCase):
+    """Python's $ also matches before a final newline; the validators refuse it, as their TypeScript twins do."""
+
+    def test_ids_with_a_trailing_newline_are_refused(self):
+        import paths
+        for valid, regex in [('core', cc.SEGMENT_RE), ('core/invoice', cc.ITEM_ID_RE), ('billing', cc.APP_RE)]:
+            self.assertTrue(regex.match(valid), valid)
+            self.assertIsNone(regex.match(valid + '\n'), valid)
+        self.assertTrue(paths.is_unit_segment('invoice'))
+        self.assertFalse(paths.is_unit_segment('invoice' + '\n'))
+
+
 if __name__ == '__main__':
     unittest.main()

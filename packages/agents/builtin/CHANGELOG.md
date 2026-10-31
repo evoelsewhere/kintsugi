@@ -4,6 +4,8 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
+- Ids with a trailing newline are refused. `reverse_engineering` 2.5.0 and `modernize` 5.3.0: the id and path validators of both plugins' identical `paths.py` (unit segment, source folder, commit) and of `catalog_common.py` (module, item id, application) match to the true end of the text, so `core/invoice` followed by a newline is refused at validation, as the TypeScript twins refuse it, instead of failing the run's document write. No agent or skill changes.
+
 - The design sets named are the starter's. `modernize` 5.3.0: the `design` command's description gives the screen or the API design as examples (the starter ships api, batch-job, report, screen and test, no basic or detail design), and its rule on sets that need another says to generate and merge that set first, without naming sets. No agent or skill changes.
 
 - Masked previews show no character of a credential, and security citations name their repository. `reverse_engineering` 2.5.0: `security-auditor` 1.2.0 cites every location as `<repository id>/<path>:<line>` (never a note that paths are relative to a repository) and masks a credential to its kind and length (`password ***** (8 chars)`), never its first characters; `legacy-analyst` 1.5.0, `business-rules-extractor` 1.4.0, the commands `assess` and `understand` and the workflows `harden-scan`, `extract-rules` and `portfolio-assess` mask the same way; `split_findings.py` replaces a partly masked value (`AKIA****`) in a finding's evidence with `*****`. `modernize` 5.3.0: `architecture-critic` 1.3.0 and `code-reviewer` 2.1.0 mask the same way.
