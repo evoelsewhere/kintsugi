@@ -175,6 +175,15 @@ export class PgLlmProviderRepository extends LlmProviderRepository implements On
     });
   }
 
+  async unknownProjects(projectIds: readonly string[]): Promise<string[]> {
+    if (projectIds.length === 0) return [];
+    const result = await this.#pool.query<{ id: string }>(
+      "select id from unnest($1::text[]) as wanted(id) where not exists (select 1 from admin.project p where p.id = wanted.id) order by id",
+      [[...new Set(projectIds)]],
+    );
+    return result.rows.map((row) => row.id);
+  }
+
   async resolveApiKey(providerId: string): Promise<string | undefined> {
     return this.resolveSecret(apiKeySecretId(providerId));
   }
