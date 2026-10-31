@@ -1,9 +1,10 @@
-// The loop guard (QA-R1): a model that asks a tool the same thing and gets the same answer is halted as a `loop`.
+// The loop guard (QA-R1): a model that asks a tool the same thing and gets the same answer, or streams a turn that
+// never comes to a tool call, is halted as a `loop`.
 
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { afterAll, describe, expect, it } from "vitest";
-import { canonicalJson, KernelJob, LOOP_REPEATS } from "../src/kernel/job.js";
+import { canonicalJson, KernelJob, LOOP_REPEATS, RUNAWAY_TURN_CHARS } from "../src/kernel/job.js";
 import { agent, createWorkspace, fauxRuntime, jobSpec, runJob } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -98,5 +99,76 @@ describe("loop guard on a scripted session", () => {
     expect(await run(nested)).toMatchObject({ type: "job.completed" });
     const outer = Array.from({ length: LOOP_REPEATS }, () => ({ tool: "codemode", args: { code: "await read('a.txt')" }, answer: "a" }));
     expect(await run(outer)).toMatchObject({ type: "job.failed", reason: "loop" });
+  });
+});
+
+describe("runaway turn", () => {
+  type Step = { turn: true } | { delta: "thinking_delta" | "text_delta" | "toolcall_delta"; chars: number } | { tool: string };
+
+  /** Runs a session that streams the given turns, deltas (in chunks of 10k characters) and completed tool calls. */
+  async function stream(steps: Step[]) {
+    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    let aborted = false;
+    const session = {
+      subscribe: (next: (event: AgentSessionEvent) => void) => {
+        listener = next;
+        return () => undefined;
+      },
+      prompt: async () => {
+        for (const [index, step] of steps.entries()) {
+          if (aborted) return;
+          if ("turn" in step) listener?.({ type: "turn_start" } as AgentSessionEvent);
+          else if ("tool" in step) {
+            const toolCallId = `call-${index}`;
+            listener?.({ type: "tool_execution_start", toolCallId, toolName: step.tool, args: { index } } as AgentSessionEvent);
+            listener?.({ type: "tool_execution_end", toolCallId, toolName: step.tool, result: { content: [{ type: "text", text: "ok" }] }, isError: false } as unknown as AgentSessionEvent);
+          } else {
+            for (let sent = 0; sent < step.chars && !aborted; sent += 10_000) {
+              const delta = "x".repeat(Math.min(10_000, step.chars - sent));
+              listener?.({ type: "message_update", assistantMessageEvent: { type: step.delta, delta } } as unknown as AgentSessionEvent);
+            }
+          }
+        }
+        listener?.({ type: "message_end", message: { role: "assistant", stopReason: "stop" } } as unknown as AgentSessionEvent);
+      },
+      abort: async () => {
+        aborted = true;
+      },
+      getContextUsage: () => undefined,
+      dispose: () => undefined,
+    } as unknown as AgentSession;
+    const job = new KernelJob("job-1", jobSpec(workspace, agent([])), "0.0.0");
+    const events: unknown[] = [];
+    void (async () => {
+      for await (const event of job.events) events.push(event);
+    })();
+    await job.run(session, () => undefined);
+    return { end: await job.done, events };
+  }
+
+  it("halts a turn that streams more than 150k characters without a tool call, naming the size and what it was", async () => {
+    expect(RUNAWAY_TURN_CHARS).toBe(150_000);
+    const thinking = await stream([{ turn: true }, { delta: "thinking_delta", chars: 190_000 }]);
+    expect(thinking.end).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: one turn produced 160k characters of thinking without a tool call" });
+    const text = await stream([{ turn: true }, { delta: "thinking_delta", chars: 40_000 }, { delta: "text_delta", chars: 120_000 }]);
+    expect(text.end).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: one turn produced 160k characters of text without a tool call" });
+    const args = await stream([{ turn: true }, { delta: "toolcall_delta", chars: 600_000 }]);
+    expect(args.end).toMatchObject({ type: "job.failed", reason: "loop", error: "stopped: one turn produced 160k characters of tool-call arguments without a tool call" });
+  });
+
+  it("counts again at each turn and after each completed tool call, so a long job of normal turns is not a loop", async () => {
+    const report = await stream([{ turn: true }, { delta: "thinking_delta", chars: 30_000 }, { delta: "toolcall_delta", chars: 60_000 }, { tool: "write" }, { delta: "text_delta", chars: 100_000 }]);
+    expect(report.end).toMatchObject({ type: "job.completed" });
+    const turns = await stream(Array.from({ length: 5 }, (): Step[] => [{ turn: true }, { delta: "thinking_delta", chars: 100_000 }]).flat());
+    expect(turns.end).toMatchObject({ type: "job.completed" });
+  });
+
+  it("halts a real session whose answer runs away, and stops sending its text", async () => {
+    const runtime = await fauxRuntime([fauxAssistantMessage("word ".repeat(40_000))]);
+    const { done: end, events } = await runJob(runtime, jobSpec(workspace, agent([])));
+    expect(end).toMatchObject({ type: "job.failed", reason: "loop" });
+    expect((end as { error: string }).error).toMatch(/^stopped: one turn produced \d+k characters of text without a tool call$/);
+    const sent = events.flatMap((event) => (event.type === "message.delta" ? [event.text.length] : [])).reduce((sum, size) => sum + size, 0);
+    expect(sent).toBeLessThanOrEqual(RUNAWAY_TURN_CHARS);
   });
 });

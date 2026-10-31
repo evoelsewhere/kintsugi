@@ -72,6 +72,12 @@ export function resultPreview(result: unknown): string | undefined {
  */
 export const LOOP_REPEATS = 12;
 
+/**
+ * The characters of thinking, text and tool-call arguments one turn may stream without a tool call completing; past
+ * them the turn is a loop (QA-R1: one turn of ~190k characters of thinking over 20 minutes, 191k of text).
+ */
+export const RUNAWAY_TURN_CHARS = 150_000;
+
 /** JSON with the keys of every object sorted, so arguments that differ only in key order are the same call. */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
@@ -129,6 +135,8 @@ export class KernelJob implements JobHandle {
   #compactionSpan: LiveSpan | undefined;
   #retrySpan: LiveSpan | undefined;
   #streamed = { thinking: 0, toolArgs: 0, text: 0 };
+  /** What streamed since the turn started or a tool call last completed. */
+  #runaway = { thinking: 0, toolArgs: 0, text: 0 };
   #progressAt = 0;
   /** The model's own calls (not codemode's nested ones) while they run: the digest of tool and arguments. */
   readonly #openCalls = new Map<string, { tool: string; key: string }>();
@@ -236,12 +244,24 @@ export class KernelJob implements JobHandle {
     await this.#aborting;
   }
 
-  /** Counts streamed characters and reports them at most every 15 s as a progress event. */
+  /**
+   * Counts streamed characters, reports them at most every 15 s as a progress event, and halts the job as a `loop`
+   * when one turn streams more than `RUNAWAY_TURN_CHARS` without a tool call completing.
+   */
   #track(update: { type: string; delta?: unknown }): void {
     const size = typeof update.delta === "string" ? update.delta.length : 0;
-    if (update.type === "thinking_delta") this.#streamed.thinking += size;
-    else if (update.type === "toolcall_delta") this.#streamed.toolArgs += size;
-    else if (update.type === "text_delta") this.#streamed.text += size;
+    const kind = update.type === "thinking_delta" ? "thinking" : update.type === "toolcall_delta" ? "toolArgs" : update.type === "text_delta" ? "text" : undefined;
+    if (kind !== undefined) {
+      this.#streamed[kind] += size;
+      this.#runaway[kind] += size;
+      const { thinking, toolArgs, text } = this.#runaway;
+      const total = thinking + toolArgs + text;
+      if (total > RUNAWAY_TURN_CHARS) {
+        const most = thinking >= toolArgs && thinking >= text ? "thinking" : text >= toolArgs ? "text" : "tool-call arguments";
+        void this.#halt("loop", `stopped: one turn produced ${Math.round(total / 1000)}k characters of ${most} without a tool call`);
+        return;
+      }
+    }
     const at = Date.now();
     if (at - this.#progressAt < 15_000) return;
     this.#progressAt = at;
@@ -258,10 +278,14 @@ export class KernelJob implements JobHandle {
   #onEvent(event: AgentSessionEvent): void {
     if (this.#ended) return;
     this.#lastEventAt = Date.now();
-    if (event.type === "message_update") this.#track(event.assistantMessageEvent);
+    if (event.type === "message_update") {
+      this.#track(event.assistantMessageEvent);
+      if (this.#ended) return;
+    }
     switch (event.type) {
       case "turn_start": {
         this.#turns += 1;
+        this.#runaway = { thinking: 0, toolArgs: 0, text: 0 };
         this.#endTurn();
         this.#turnUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, stopReason: "" };
         this.#turnSpan = beginSpan(this.#root.span, "kintsugi.turn", { turn: this.#turns });
@@ -286,6 +310,7 @@ export class KernelJob implements JobHandle {
       }
       case "tool_execution_end":
         this.#endTool(event.toolCallId, !event.isError, event.durationMs);
+        this.#runaway = { thinking: 0, toolArgs: 0, text: 0 };
         this.#watchRepeats(event.toolCallId, event.result, event.isError);
         {
           const preview = resultPreview(event.result);
