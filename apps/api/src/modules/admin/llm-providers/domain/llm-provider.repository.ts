@@ -12,6 +12,8 @@ export abstract class LlmProviderRepository {
   abstract remove(id: string): Promise<boolean>;
   abstract listBindings(): Promise<AgentModelBinding[]>;
   abstract replaceBindings(bindings: AgentModelBinding[]): Promise<void>;
+  /** The ids among `projectIds` that name no project (a project binding needs its project). */
+  abstract unknownProjects(projectIds: readonly string[]): Promise<string[]>;
   /** Resolves the stored API key — connectivity checks and the runtime launcher only. */
   abstract resolveApiKey(providerId: string): Promise<string | undefined>;
   /** Resolves a stored { secretId } (e.g. a custom header value) — same callers only. */
