@@ -102,3 +102,63 @@ export function retryNotice(run: Pick<RetriedRunView, "rerunsWebAgents">, fresh:
   if (web.length === 0) return base;
   return `${base} Steps of ${web.map(humanize).join(", ")} run again: ${web.length === 1 ? "it looks" : "they look"} things up on the web, and what ${web.length === 1 ? "it finds" : "they find"} may have changed.`;
 }
+
+/** How far the steps of an attempt got: only steps that succeeded (or were reused from an earlier attempt) finished. */
+export interface StepCounts {
+  finished: number;
+  reused: number;
+  running: number;
+  failed: number;
+  cancelled: number;
+  /** The run succeeded, so every step of its plan is counted; while it runs or after it stopped, more were planned. */
+  complete: boolean;
+}
+
+/**
+ * The step counts of the run's current attempt: its steps (child runs) by status, plus the steps an earlier attempt
+ * had done (they have no child run), from the run's summary when it is this attempt's, else from the live events.
+ */
+export function stepCounts(
+  run: Pick<JobRunView, "status" | "attempt" | "outputSummary">,
+  steps: readonly Pick<JobRunView, "status">[],
+  events: readonly JobRunEvent[],
+): StepCounts {
+  const summary = run.outputSummary;
+  const recorded = summary?.["attempt"] === run.attempt && Array.isArray(summary["steps"]) ? (summary["steps"] as unknown[]) : undefined;
+  const reused =
+    recorded !== undefined
+      ? recorded.filter((step) => typeof step === "object" && step !== null && (step as { reused?: unknown }).reused === true).length
+      : events.filter(
+          (event) =>
+            event.kind === "log" &&
+            event.stepRunId === undefined &&
+            event.data["reused"] === true &&
+            (event.attempt === undefined || event.attempt === run.attempt),
+        ).length;
+  const count = (status: JobRunStatus): number => steps.filter((step) => step.status === status).length;
+  return {
+    finished: count("succeeded") + reused,
+    reused,
+    running: count("running") + count("queued"),
+    failed: count("failed"),
+    cancelled: count("cancelled"),
+    complete: run.status === "succeeded",
+  };
+}
+
+/** The "Steps finished" figure and the line under it: "4" and "1 running · more to come". */
+export function describeStepCounts(counts: StepCounts, run: Pick<JobRunView, "status" | "attempt">): { value: string; hint: string } {
+  const parts = [
+    ...(counts.reused === 0 ? [] : [`${counts.reused} reused`]),
+    ...(counts.running === 0 ? [] : [`${counts.running} running`]),
+    ...(counts.failed === 0 ? [] : [`${counts.failed} failed`]),
+    ...(counts.cancelled === 0 ? [] : [`${counts.cancelled} cancelled`]),
+  ];
+  const tail =
+    run.status === "queued" || run.status === "running"
+      ? "more to come"
+      : run.status === "succeeded"
+        ? `all steps of attempt ${run.attempt}`
+        : `attempt ${run.attempt} stopped before the end`;
+  return { value: counts.complete ? `${counts.finished} / ${counts.finished}` : String(counts.finished), hint: [...parts, tail].join(" · ") };
+}

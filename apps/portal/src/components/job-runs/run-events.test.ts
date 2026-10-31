@@ -5,7 +5,7 @@ vi.hoisted(() => {
   (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
 });
 
-import { describeGroup, feedGroups, humanize, isProblem, tidyPath, timelineOf } from "./run-events";
+import { describeGroup, feedGroups, humanize, isProblem, statsByStep, stuckReason, tidyPath, timelineOf } from "./run-events";
 
 let counter = 0;
 const tool = (message: string, over: Partial<JobRunEvent> & { tool?: string; decision?: string } = {}): JobRunEvent => ({
@@ -79,5 +79,32 @@ describe("timeline of steps", () => {
 
   it("has no axis while nothing has started", () => {
     expect(timelineOf([step("a", "queued")], 0)).toMatchObject({ totalMs: 0, started: 0 });
+  });
+});
+
+describe("a step that looks stuck", () => {
+  const at = (minute: number): string => new Date(Date.UTC(2026, 9, 31, 7, minute)).toISOString();
+  const call = (minute: number, message = "glob in/**/topology.py"): JobRunEvent => ({ id: `t${minute}`, at: at(minute), kind: "tool", message, stepRunId: "s1", data: { tool: "glob", decision: "allowed" } });
+  const turn = (minute: number, n: number): JobRunEvent => ({ id: `m${minute}`, at: at(minute), kind: "log", message: `model working: turn ${n}`, stepRunId: "s1", data: { turn: n, thinkingChars: 10, toolArgsChars: 0, textChars: 0 } });
+
+  it("is flagged when its last ten tool calls are the same call", () => {
+    const events = Array.from({ length: 10 }, (_, minute) => call(minute));
+    expect(stuckReason(statsByStep(events).get("s1"), Date.parse(at(10)))).toMatch(/same call 10 times.*topology\.py/);
+    expect(stuckReason(statsByStep([...events, call(11, "read in/a.md")]).get("s1"), Date.parse(at(12)))).toBeUndefined();
+    expect(stuckReason(statsByStep(events.slice(1)).get("s1"), Date.parse(at(10)))).toBeUndefined();
+  });
+
+  it("is flagged when the model has been in one turn for more than five minutes without a tool call", () => {
+    const events = [call(0, "read a.md"), turn(1, 7), turn(3, 7), turn(5, 7)];
+    expect(stuckReason(statsByStep(events).get("s1"), Date.parse(at(5)))).toBeUndefined();
+    expect(stuckReason(statsByStep(events).get("s1"), Date.parse(at(7)))).toBe("In turn 7 for 6 minutes without calling a tool");
+    // A tool call in the turn, or the next turn, clears it.
+    expect(stuckReason(statsByStep([...events, call(6, "read b.md")]).get("s1"), Date.parse(at(9)))).toBeUndefined();
+    expect(stuckReason(statsByStep([...events, turn(6, 8)]).get("s1"), Date.parse(at(9)))).toBeUndefined();
+  });
+
+  it("is never flagged once it finished", () => {
+    const events = [...Array.from({ length: 10 }, (_, minute) => call(minute)), { id: "f", at: at(10), kind: "step.finished" as const, message: "agent x failed", stepRunId: "s1", data: { status: "failed" } }];
+    expect(stuckReason(statsByStep(events).get("s1"), Date.parse(at(11)))).toBeUndefined();
   });
 });

@@ -141,8 +141,32 @@ export interface StepStats {
   /** The newest tool call, as the log line says it, and when. */
   last?: string;
   lastAt?: string;
+  /** The newest tool calls, as the log lines say them, oldest first (at most `STUCK_REPEATS`). */
+  recent: string[];
+  /** When the model first reported the turn it is in now. */
+  turnStartedAt?: string;
   /** The step has finished (a `step.finished` event was seen). */
   finished: boolean;
+}
+
+/** The same tool call this many times in a row looks like a loop. */
+export const STUCK_REPEATS = 10;
+/** A model turn this long without a tool call looks stuck. */
+export const STUCK_TURN_MS = 5 * 60_000;
+
+/**
+ * Why a running step looks stuck, from its events alone: its last `STUCK_REPEATS` tool calls were the same call, or
+ * the model has been in one turn for more than `STUCK_TURN_MS` without calling a tool. Undefined when it does not.
+ */
+export function stuckReason(stats: StepStats | undefined, now: number): string | undefined {
+  if (stats === undefined || stats.finished) return undefined;
+  const repeated = stats.recent.length >= STUCK_REPEATS && stats.recent.every((line) => line === stats.recent[0]);
+  if (repeated) return `Made the same call ${STUCK_REPEATS} times in a row: ${stats.recent[0]}`;
+  if (stats.turnStartedAt === undefined || stats.progress === undefined) return undefined;
+  const turnStart = Date.parse(stats.turnStartedAt);
+  if (stats.lastAt !== undefined && Date.parse(stats.lastAt) >= turnStart) return undefined;
+  const minutes = Math.floor((now - turnStart) / 60_000);
+  return now - turnStart > STUCK_TURN_MS ? `In turn ${stats.progress.turn} for ${minutes} minutes without calling a tool` : undefined;
 }
 
 /** Progress report of a "model working" event, when it is one. */
@@ -169,7 +193,7 @@ export function statsByStep(events: readonly JobRunEvent[]): Map<string, StepSta
   const stats = new Map<string, StepStats>();
   for (const event of events) {
     const key = event.stepRunId ?? "";
-    const entry = stats.get(key) ?? { tools: {}, total: 0, blocked: 0, finished: false };
+    const entry = stats.get(key) ?? { tools: {}, total: 0, blocked: 0, recent: [], finished: false };
     const category = categoryOf(event);
     if (category === "tool") {
       const tool = toolOf(event) ?? "tool";
@@ -178,9 +202,11 @@ export function statsByStep(events: readonly JobRunEvent[]): Map<string, StepSta
       if (event.data["decision"] === "blocked") entry.blocked += 1;
       entry.last = event.message;
       entry.lastAt = event.at;
+      entry.recent = [...entry.recent, event.message].slice(-STUCK_REPEATS);
     } else if (category === "model") {
       const progress = progressOf(event);
       if (progress !== undefined) {
+        if (progress.turn !== entry.turn) entry.turnStartedAt = event.at;
         entry.turn = progress.turn;
         entry.progress = progress;
       }

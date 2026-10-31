@@ -3,7 +3,7 @@ import type { JobRunEvent, JobRunView } from "@/lib/api/job-runs";
 vi.hoisted(() => {
   (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
 });
-import { eventStepLabels, filterJobRuns, filterRunEvents, retryNotice, stepsForAttempt } from "./run-model";
+import { describeStepCounts, eventStepLabels, filterJobRuns, filterRunEvents, retryNotice, stepCounts, stepsForAttempt } from "./run-model";
 import { timelineOf } from "./run-events";
 
 const job = (id: string, createdAt: string, extra: Partial<JobRunView> = {}): JobRunView => ({
@@ -110,6 +110,31 @@ describe("nested console labels", () => {
       event("2", { stepRunId: "nested", message: "read file" }),
     ];
     expect(eventStepLabels(events).get("nested")).toBe("Security auditor");
+  });
+});
+
+describe("steps finished", () => {
+  const reusedEvent = event("r", { kind: "log", stepRunId: undefined, message: "step one succeeded in an earlier attempt", data: { step: "one", reused: true } });
+
+  it("counts only the steps that succeeded or were reused, and says more are to come while the run is running", () => {
+    const run = { status: "running" as const, attempt: 2 };
+    const counts = stepCounts(run, [{ status: "succeeded" }, { status: "running" }, { status: "failed" }], [reusedEvent]);
+    expect(counts).toMatchObject({ finished: 2, reused: 1, running: 1, failed: 1, cancelled: 0, complete: false });
+    expect(describeStepCounts(counts, run)).toEqual({ value: "2", hint: "1 reused · 1 running · 1 failed · more to come" });
+  });
+
+  it("shows a cancelled run's cancelled steps apart from the finished ones", () => {
+    const run = { status: "cancelled" as const, attempt: 1 };
+    const counts = stepCounts(run, [{ status: "succeeded" }, ...Array.from({ length: 4 }, () => ({ status: "cancelled" as const }))], []);
+    expect(describeStepCounts(counts, run)).toEqual({ value: "1", hint: "4 cancelled · attempt 1 stopped before the end" });
+  });
+
+  it("reads the reused steps from the summary of this attempt, and gives the total of a run that succeeded", () => {
+    const run = { status: "succeeded" as const, attempt: 2, outputSummary: { attempt: 2, steps: [{ id: "one", reused: true }, { id: "two" }] } };
+    const counts = stepCounts(run, [{ status: "succeeded" }], []);
+    expect(describeStepCounts(counts, run)).toEqual({ value: "2 / 2", hint: "1 reused · all steps of attempt 2" });
+    // A summary of an earlier attempt does not count.
+    expect(stepCounts({ ...run, status: "running", outputSummary: { attempt: 1, steps: [{ reused: true }] } }, [], []).reused).toBe(0);
   });
 });
 

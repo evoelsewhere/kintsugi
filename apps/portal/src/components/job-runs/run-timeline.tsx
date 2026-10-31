@@ -1,17 +1,31 @@
 import { ArrowUpRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { StatusDot } from "@/components/ui/status-dot";
 import type { JobRunView } from "@/lib/api/job-runs";
 import { formatDuration } from "@/lib/format";
 import { RUN_STATUS, styleOf } from "@/lib/status";
 import { humanize, timelineOf } from "./run-events";
 
+/** A running step whose events look like a loop or a hung model turn; the reason is its title. */
+export function PossiblyStuck({ reason }: { reason: string }): React.JSX.Element {
+  return (
+    <Badge title={reason}>
+      <StatusDot tone="orange" className="size-1.5" />
+      Possibly stuck
+    </Badge>
+  );
+}
+
 export function StepTimeline({
   steps,
   now,
+  stuck,
   onSelect,
 }: {
   steps: readonly JobRunView[];
   now: number;
+  /** Why a running step looks stuck, by step id. */
+  stuck?: ReadonlyMap<string, string>;
   onSelect: (id: string) => void;
 }): React.JSX.Element {
   const { rows } = timelineOf(steps, now);
@@ -35,7 +49,10 @@ export function StepTimeline({
                 <StatusDot tone={styleOf(RUN_STATUS, step.status).tone} className="size-2 shrink-0" />
                 <span className="min-w-0">
                   <span className="block truncate text-[13px] text-text">{label}</span>
-                  <span className="mt-0.5 block text-[11px] text-text-secondary">{styleOf(RUN_STATUS, step.status).label}</span>
+                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-text-secondary">
+                    {styleOf(RUN_STATUS, step.status).label}
+                    {stuck?.get(step.id) === undefined ? null : <PossiblyStuck reason={stuck.get(step.id)!} />}
+                  </span>
                 </span>
               </span>
               <span className="relative hidden h-1.5 overflow-hidden rounded-full bg-recessed sm:block">

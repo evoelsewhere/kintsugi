@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import type { JobRunDetail, JobRunEvent } from "@/lib/api/job-runs";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { RunDesignLoop } from "./run-design-loop";
-import { humanize } from "./run-events";
-import { stepsForAttempt } from "./run-model";
-import { StepTimeline } from "./run-timeline";
+import { humanize, statsByStep, stuckReason } from "./run-events";
+import { describeStepCounts, stepCounts, stepsForAttempt } from "./run-model";
+import { PossiblyStuck, StepTimeline } from "./run-timeline";
 import { RunUsage } from "./run-usage";
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
@@ -33,8 +33,16 @@ export function RunOverview({
   onConsole: () => void;
 }): React.JSX.Element {
   const steps = stepsForAttempt(run, run.attempt);
-  const finished = steps.filter((step) => ["succeeded", "failed", "cancelled"].includes(step.status)).length;
+  const counts = describeStepCounts(stepCounts(run, steps, events), run);
   const current = steps.filter((step) => step.status === "running");
+  const stats = statsByStep(events);
+  // A running step that repeats one call or sits in one model turn for long is flagged, from its events alone.
+  const stuck = new Map(
+    current.flatMap((step) => {
+      const reason = stuckReason(stats.get(step.id), now);
+      return reason === undefined ? [] : [[step.id, reason] as const];
+    }),
+  );
   const activity = events
     .filter((event) => event.kind === "status" || event.kind === "step.started" || event.kind === "step.finished")
     .slice(-6)
@@ -48,7 +56,7 @@ export function RunOverview({
             value: formatDuration(run.startedAt, run.finishedAt, now),
             hint: run.startedAt === undefined ? "Waiting for worker" : run.finishedAt === undefined ? "Elapsed time" : "Finished",
           },
-          { label: "Steps finished", value: `${finished} / ${steps.length}`, hint: `Recorded in attempt ${run.attempt}` },
+          { label: "Steps finished", value: counts.value, hint: counts.hint },
           {
             label: "Scope",
             value: run.scope === undefined ? "All" : String(run.scope.items.length),
@@ -65,9 +73,15 @@ export function RunOverview({
         ))}
       </dl>
       {current.length === 0 ? null : (
-        <p className="rounded-lg bg-recessed/50 px-4 py-3 text-[13px] text-text">
-          Working on {current.map((step) => humanize(step.name)).join(", ")}
-        </p>
+        <div className="rounded-lg bg-recessed/50 px-4 py-3 text-[13px] text-text">
+          <p>Working on {current.map((step) => humanize(step.name)).join(", ")}</p>
+          {[...stuck.entries()].map(([id, reason]) => (
+            <p key={id} className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
+              <PossiblyStuck reason={reason} />
+              {humanize(current.find((step) => step.id === id)?.name ?? "")}: {reason}
+            </p>
+          ))}
+        </div>
       )}
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(250px,1fr)]">
         <section className="min-w-0 rounded-xl bg-surface p-4 shadow-border sm:p-5">
@@ -83,7 +97,7 @@ export function RunOverview({
           {steps.length === 0 ? (
             <p className="py-8 text-center text-[13px] text-text-secondary">No steps recorded in this attempt yet.</p>
           ) : (
-            <StepTimeline steps={steps} now={now} onSelect={onInspectStep} />
+            <StepTimeline steps={steps} now={now} stuck={stuck} onSelect={onInspectStep} />
           )}
         </section>
         <section className="rounded-xl bg-recessed/40 p-4 sm:p-5">

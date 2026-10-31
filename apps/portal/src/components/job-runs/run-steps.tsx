@@ -8,7 +8,8 @@ import { formatDuration } from "@/lib/format";
 import { RUN_STATUS, styleOf } from "@/lib/status";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
-import { describeProgress, humanize, type StepStats } from "./run-events";
+import { describeProgress, humanize, stuckReason, type StepStats } from "./run-events";
+import { PossiblyStuck } from "./run-timeline";
 
 export interface StepsContext {
   projectId: string;
@@ -61,6 +62,7 @@ function StepRow({
   const selected = context.selected === step.id;
   const expanded = open || expandAll || (nested && selected);
   const stats = context.stats.get(step.id);
+  const stuck = step.status === "running" ? stuckReason(stats, context.now) : undefined;
   const Icon = icons[step.kind];
   return (
     <li className="min-w-0">
@@ -106,6 +108,11 @@ function StepRow({
           )}
           {step.status === "running" && stats?.progress !== undefined ? (
             <span className="mt-1 block pl-4 text-[11px] text-text-secondary">{describeProgress(stats.progress)}</span>
+          ) : null}
+          {step.status === "running" && stuck !== undefined ? (
+            <span className="mt-1 block pl-4">
+              <PossiblyStuck reason={stuck} />
+            </span>
           ) : null}
         </button>
       </div>
