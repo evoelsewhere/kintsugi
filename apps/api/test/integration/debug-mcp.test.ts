@@ -318,7 +318,9 @@ describe.skipIf(!hasDatabase)("debug MCP server (integration)", () => {
         ["with x as (delete from workflow.job_run returning 1) select * from x", "keyword that changes things"],
         ["select * from governance.restricted_record", "holds secrets"],
         ["select * from core.user_session", "holds secrets"],
-        ["select pg_read_file('/etc/passwd')", "reads files"],
+        ["select pg_read_file('/etc/passwd')", "reads the server's files"],
+        ["select * from core.app_user", "password and token hashes"],
+        ['select length(U&"pg\\005fread_file"(\'PG_VERSION\'))', "Unicode-escaped"],
         ["explain select 1", "Only select and with"],
       ] as const) {
         const refused = await call("db.query", { sql });
