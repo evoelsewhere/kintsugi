@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const fixture = fileURLToPath(new URL("./fixtures/stdio-server.mjs", import.meta.url));
 const clients: Client[] = [];
 
-async function connect(mode: "legacy" | "auto", fail = false): Promise<Client> {
+async function connect(mode: "legacy" | "auto", fail = false, refusal?: { status: number; message: string }): Promise<Client> {
   const client = new Client(
     { name: "kintsugi-test-client", version: "1.0.0" },
     { versionNegotiation: { mode } },
@@ -16,7 +16,11 @@ async function connect(mode: "legacy" | "auto", fail = false): Promise<Client> {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [fixture],
-    env: { ...process.env, ...(fail ? { KINTSUGI_TEST_FAILURE: "1", KINTSUGI_TEST_ERROR_MESSAGE: "TEST-private-token" } : {}) },
+    env: {
+      ...process.env,
+      ...(fail ? { KINTSUGI_TEST_FAILURE: "1", KINTSUGI_TEST_ERROR_MESSAGE: "TEST-private-token" } : {}),
+      ...(refusal === undefined ? {} : { KINTSUGI_TEST_STATUS: String(refusal.status), KINTSUGI_TEST_ERROR_MESSAGE: refusal.message }),
+    },
   });
   await client.connect(transport);
   clients.push(client);
@@ -91,6 +95,17 @@ describe("member stdio MCP process", () => {
     const text = result.content.filter((part) => part.type === "text").map((part) => part.type === "text" ? part.text : "").join("\n");
     expect(text).toContain("TOKEN_EXPIRED");
     expect(JSON.stringify(result)).not.toContain("TEST-private-token");
+  });
+
+  it("passes a refusal of the member API on to the agent, on one line", async () => {
+    const text = async (status: number, message: string): Promise<string> => {
+      const result = await (await connect("legacy", false, { status, message })).callTool({ name: "project_list", arguments: {} });
+      expect(result.isError).toBe(true);
+      return result.content.filter((part) => part.type === "text").map((part) => (part.type === "text" ? part.text : "")).join("\n");
+    };
+    expect(await text(404, "No node nosuch.md in the Brain;\nstart from the root or look the id up.")).toBe("Kintsugi request failed (NOT_FOUND): No node nosuch.md in the Brain; start from the root or look the id up.");
+    expect((await text(409, "x".repeat(400))).length).toBeLessThanOrEqual("Kintsugi request failed (NOT_FOUND): ".length + 300);
+    expect(await text(503, "upstream detail")).toBe("Kintsugi request failed (NOT_FOUND).");
   });
 
   it("exits cleanly when stdin reaches EOF before initialization", async () => {

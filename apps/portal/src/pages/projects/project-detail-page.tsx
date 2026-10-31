@@ -291,6 +291,7 @@ export function ProjectDetailPage(): React.JSX.Element {
         open={applicationDialog.open}
         application={applicationDialog.application}
         existingIds={project.applications.map((application) => application.id)}
+        existingNames={project.applications.filter((application) => application.id !== applicationDialog.application?.id).map((application) => application.name)}
         onClose={() => setApplicationDialog({ open: false, application: null })}
         onSubmit={async (id, input) => {
           if (applicationDialog.application === null) await projectsApi.createApplication(projectId, { id, ...input });

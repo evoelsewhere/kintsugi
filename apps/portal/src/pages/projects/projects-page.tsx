@@ -88,6 +88,7 @@ export function ProjectsPage(): React.JSX.Element {
         open={dialogOpen}
         project={null}
         existingIds={(projects.data ?? []).map((project) => project.id)}
+        existingNames={(projects.data ?? []).map((project) => project.name)}
         onClose={() => setDialogOpen(false)}
         onSubmit={async (id, input) => {
           await projectsApi.create({ id, ...input });

@@ -68,7 +68,7 @@ export function DesignOverviewTab({
       <Card>
         <EmptyState
           title="No design sets yet"
-          description="A design set defines what one design document of a unit contains. Define the project's sets in 01-standards/templates/ of the document repo: the starter has a basic, a detail, an API and a test design to copy and change."
+          description="A design set defines what one design document of a unit contains. Define the project's sets in 01-standards/templates/ of the document repo: copy one of the starter's sets and change it."
           action={
             <button type="button" onClick={onOpenSets} className="text-[13px] text-accent hover:underline">
               Open the Sets tab
