@@ -16,7 +16,8 @@ import type { JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
 import { DEFAULT_GATE_DECIDER, JobCancelled } from "../src/jobs/model.js";
-import { JobRunner, summarizeToolCall } from "../src/jobs/runner.js";
+import { JobRunner, type JobRunnerDeps, summarizeToolCall } from "../src/jobs/runner.js";
+import type { ProjectMemory } from "../src/project-memory/index.js";
 import type { DocumentWriteRequest } from "../src/queues.js";
 import { type AgentFiles, LocalCheckouts, MemoryJobStore, fixtureRepository, writingAgentRuntime } from "./support/jobs.js";
 
@@ -49,7 +50,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     await removeTree(dataDir);
   });
 
-  function setup(files: AgentFiles, mockOutputs?: boolean): { store: MemoryJobStore; runner: JobRunner; writes: Array<{ repository: string; request: DocumentWriteRequest }>; agents: ReturnType<typeof writingAgentRuntime>; checkouts: LocalCheckouts } {
+  function setup(files: AgentFiles, mockOutputs?: boolean, extra: Partial<JobRunnerDeps> = {}): { store: MemoryJobStore; runner: JobRunner; writes: Array<{ repository: string; request: DocumentWriteRequest }>; agents: ReturnType<typeof writingAgentRuntime>; checkouts: LocalCheckouts } {
     const store = new MemoryJobStore();
     const writes: Array<{ repository: string; request: DocumentWriteRequest }> = [];
     const agents = writingAgentRuntime(files);
@@ -67,6 +68,7 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
         writes.push({ repository, request });
       },
       log: () => undefined,
+      ...extra,
     });
     return { store, runner, writes, agents, checkouts };
   }
@@ -292,6 +294,32 @@ describe("job runs in job workspaces (mock agent, fixture repositories)", () => 
     expect(writes).toHaveLength(1);
     // The events carry the attempt they belong to.
     expect(store.events.filter((event) => event.kind === "status").map((event) => event.attempt)).toEqual(expect.arrayContaining([1, 2]));
+  }, 120_000);
+
+  it("with project memory on, reuses the steps on a retry while the memory is unchanged, and runs them again when it changed (ADR-0090)", async () => {
+    let fail = true;
+    let revision = "r1";
+    const memory = { status: async () => ({ enabled: true, epoch: 1, available: 0 }), revision: async () => revision } as unknown as ProjectMemory;
+    const { store, runner } = setup({ "legacy-analyst": (spec): Record<string, string> => (synthesis(spec) && fail ? BAD_TOPOLOGY : {}) }, undefined, { projectMemory: memory });
+    const agentSteps = (id: string, from: number): unknown[] => store.children(id).slice(from).filter((child) => child.kind === "agent").map((child) => child.inputs["label"]);
+
+    const unchanged = await assess(store);
+    expect((await runner.run(unchanged))?.status).toBe("failed");
+    fail = false;
+    let before = store.children(unchanged).length;
+    store.requeue(unchanged);
+    expect((await runner.run(unchanged))?.status).toBe("succeeded");
+    expect(agentSteps(unchanged, before)).toEqual(["synthesis"]);
+
+    fail = true;
+    const changed = await assess(store);
+    expect((await runner.run(changed))?.status).toBe("failed");
+    fail = false;
+    revision = "r2";
+    before = store.children(changed).length;
+    store.requeue(changed);
+    expect((await runner.run(changed))?.status).toBe("succeeded");
+    expect(agentSteps(changed, before)).toEqual(expect.arrayContaining(["structure", "debt", "topology", "catalog-curate", "synthesis"]));
   }, 120_000);
 
   it("runs the steps again when the job is retried from scratch", async () => {

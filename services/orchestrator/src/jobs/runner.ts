@@ -1097,13 +1097,22 @@ export class JobRunner {
         ...(child.outcome.stdout === undefined ? {} : { stdout: child.outcome.stdout }),
       };
     };
+    // The fingerprints of the steps that can look things up on the web: never reused, and the run's log says why.
+    const liveWeb = new Set<string>();
     const reuse: StepReuse | undefined =
       ledger === undefined
         ? undefined
         : {
-            fingerprint: (spec, upstream) => this.#fingerprint(ws, spec, upstream, run),
+            fingerprint: async (spec, upstream) => {
+              const { digest, liveWeb: live } = await this.#fingerprint(ws, spec, upstream, run);
+              if (live) liveWeb.add(digest);
+              return digest;
+            },
             settled: async (key, fingerprint) => {
               const entry = ledger.get(key);
+              if (entry?.status === "succeeded" && entry.fingerprint !== fingerprint && liveWeb.has(fingerprint)) {
+                await this.#event(ws, undefined, "log", `step ${key} runs again: its agent can look things up on the web, and what it finds may have changed since attempt ${entry.attempt}`, { step: key, rerun: "live-web" });
+              }
               if (entry === undefined || entry.status !== "succeeded" || entry.fingerprint !== fingerprint) return undefined;
               // What it wrote must still be there: a group that failed before its outputs were merged left nothing.
               for (const output of entry.outputs) {
@@ -1154,8 +1163,10 @@ export class JobRunner {
   /**
    * What a step would run with (ledger.ts): its definition by content, its task as the stage filled it, the pinned
    * sources and documents, and the chain of what came before it. A script is not reused, so its definition is not read.
+   * A step that reads project memory adds the memory's revision (ADR-0090); one that can look things up on the web
+   * adds the attempt, so it runs again on every retry (`liveWeb`).
    */
-  async #fingerprint(ws: StepWorkspace, spec: LeafRun, upstream: string, root: JobRun): Promise<string> {
+  async #fingerprint(ws: StepWorkspace, spec: LeafRun, upstream: string, root: JobRun): Promise<{ digest: string; liveWeb: boolean }> {
     const { budget: _budget, ...inputs } = spec.inputs;
     let definition = "script";
     let memoryCapable = false;
@@ -1177,11 +1188,15 @@ export class JobRunner {
     const pins = { sources: (ws.sources ?? []).map((source) => [sourceRole(source), source.repositoryId, source.commit]), documents: ws.documentsCommit ?? null };
     const context = this.#memoryContext({ ...root, kind: spec.kind === "workflow" ? "agent" : spec.kind, name: spec.name }, ws);
     const liveMemory = memoryCapable && context !== undefined && (await this.#deps.projectMemory!.status(context,false)).enabled;
+    // Memory changes only when someone writes, forgets or reviews an entry: its revision (without what this run itself
+    // changed) is an input like the pinned commits, so an unchanged memory keeps the step reusable.
+    const memory = liveMemory ? await this.#deps.projectMemory!.revision(context!).catch(() => `unknown:${ws.attempt}`) : undefined;
     const webSettings = spec.kind === "workflow" ? await this.#deps.webSearch?.view(root.projectId) : undefined;
     const liveWeb = spec.kind === "workflow" ? webSettings?.enabled === true && webSettings.agents.length > 0
       : webCapable && await this.#deps.webSearch?.allowed(root.projectId, spec.name) === true;
-    // Live lookups are mutable inputs: re-execute participating steps on retry instead of pretending they are cached inputs.
-    return digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream, ...(liveMemory ? { liveMemory: ["memory-v2", ws.attempt] } : {}), ...(liveWeb ? { liveWeb: ["web-tools-v2", ws.attempt] } : {}) });
+    // Web lookups have no revision: what a search or a page returns can change at any time, so such a step runs again on every retry.
+    const digest = digestOf({ kind: spec.kind, name: spec.name, definition, inputs, pins, upstream, ...(memory === undefined ? {} : { liveMemory: ["memory-v3", memory] }), ...(liveWeb ? { liveWeb: ["web-tools-v2", ws.attempt] } : {}) });
+    return { digest, liveWeb };
   }
 
   /**

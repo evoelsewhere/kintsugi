@@ -19,6 +19,11 @@ export type VerifiedMemoryWrite = MemoryWrite & { evidence?: NonNullable<Project
 export interface ScratchpadPage { items: ScratchpadItem[]; total: number; itemId?: string }
 export interface ProjectMemory {
   status(context: MemoryContext, includeCount?: boolean): Promise<ProjectMemoryStatus>;
+  /**
+   * A digest of the memory this context can see, leaving out what its own run changed (ADR-0090): the same while
+   * nobody else writes, forgets, restores or reviews an entry, so a retry can reuse a step that read memory.
+   */
+  revision(context: MemoryContext): Promise<string>;
   search(context: MemoryContext, query: string | undefined, filter: MemoryFilter, offset: number, limit: number): Promise<MemoryPage>;
   read(context: MemoryContext, id: string): Promise<ProjectMemoryEntry | undefined>;
   recoveries(context: MemoryContext, offset: number, limit: number): Promise<MemoryPage>;
@@ -107,6 +112,19 @@ export class PgProjectMemory implements ProjectMemory {
        where a.project_id=$1 and a.id=$2`, [...scope(context),includeCount]);
     const row = result.rows[0];
     return row === undefined ? { enabled: false, epoch: 0, available: 0 } : { ...row, available: Number(row.available) };
+  }
+  async revision(context: MemoryContext): Promise<string> {
+    // What the run itself wrote, and what it forgot, belong to the steps that did it: a reused step's output already
+    // reflects them. Anything another run or a person changed shows here.
+    const result = await this.db.query<{ epoch: number; entries: string }>(
+      `select coalesce(setting.epoch,0) epoch,
+         (select coalesce(string_agg(e.id || ':' || e.state, ',' order by e.id), '') ${SCOPED}
+            and e.source_run_id is distinct from $5 and e.state <> 'rejected'
+            and (e.deleted_at is null or exists(select 1 from knowledge.project_memory_recovery r where r.id = e.recovery_id and r.created_by_run_id = $5))) entries
+       from admin.application a left join knowledge.project_memory_setting setting on setting.project_id=a.project_id
+       where a.project_id=$1 and a.id=$2`, scope(context));
+    const row = result.rows[0];
+    return digestOf(["memory", row?.epoch ?? 0, row?.entries ?? ""]);
   }
   async search(context: MemoryContext, query: string | undefined, filter: MemoryFilter, offset: number, limit: number): Promise<MemoryPage> {
     const vector = "to_tsvector('simple',e.summary || ' ' || e.content || ' ' || e.tags::text)";
