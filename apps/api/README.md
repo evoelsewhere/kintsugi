@@ -222,9 +222,9 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
   (required, at least 8 characters — there is no default; startup fails without it).
   Change the password after first sign-in.
 - **Guard rails** (members & access-role use cases):
-  - you can only assign access roles, grant permissions, and manage members whose permissions
-    you hold yourself — `members.manage` / `roles.manage` do not allow self-escalation or
-    taking over a stronger account;
+  - you can only assign access roles, grant or take away permissions, delete access sub-roles and
+    manage members whose permissions you hold yourself — `members.manage` / `roles.manage` do not
+    allow self-escalation, taking over a stronger account or stripping a stronger role;
   - the installation keeps at least one enabled `admin` access role, which keeps
     `members.manage` and `roles.manage`, and nobody removes or disables themselves;
   - a member holds exactly one primary access role;

@@ -43,6 +43,8 @@ export class RolesService {
   async removeSubRole(id: string, actor: Actor): Promise<void> {
     const role = await this.get(id);
     if (role.kind !== "sub") throw new ConflictException(`Primary role ${id} cannot be removed`);
+    const notHeld = role.permissions.filter((code) => !actor.permissions.includes(code));
+    if (notHeld.length > 0) throw new ForbiddenException(`Cannot remove a role that grants permissions you do not hold: ${notHeld.sort().join(", ")}`);
     await this.roles.removeSubRole(id);
     await this.audit.recordChange(auditRecord(actor, AUDIT_ACTIONS.roleDelete, { subject: id, detail: { name: role.name } }));
   }
@@ -52,8 +54,13 @@ export class RolesService {
     const catalog = new Set((await this.roles.listPermissions()).map((permission) => permission.code));
     const unknown = codes.filter((code) => !catalog.has(code));
     if (unknown.length > 0) throw new BadRequestException(`Unknown permission codes: ${unknown.join(", ")}`);
-    const notHeld = codes.filter((code) => !role.permissions.includes(code) && !actor.permissions.includes(code));
-    if (notHeld.length > 0) throw new ForbiddenException(`Cannot grant permissions you do not hold: ${notHeld.join(", ")}`);
+    // A change needs every permission it touches, given or taken away: a role manager cannot strip a stronger role.
+    const added = codes.filter((code) => !role.permissions.includes(code));
+    const removed = role.permissions.filter((code) => !codes.includes(code));
+    const notGranted = added.filter((code) => !actor.permissions.includes(code));
+    if (notGranted.length > 0) throw new ForbiddenException(`Cannot grant permissions you do not hold: ${notGranted.join(", ")}`);
+    const notRemoved = removed.filter((code) => !actor.permissions.includes(code));
+    if (notRemoved.length > 0) throw new ForbiddenException(`Cannot take away permissions you do not hold: ${notRemoved.sort().join(", ")}`);
     if (role.id === ADMIN_ROLE_ID) {
       const removed = ADMIN_LOCKED_PERMISSIONS.filter((code) => !codes.includes(code));
       if (removed.length > 0) throw new ConflictException(`The admin role must keep: ${removed.join(", ")}`);
@@ -63,10 +70,7 @@ export class RolesService {
     await this.audit.recordChange(
       auditRecord(actor, AUDIT_ACTIONS.rolePermissionsUpdate, {
         subject: role.id,
-        detail: {
-          added: codes.filter((code) => !role.permissions.includes(code)).sort(),
-          removed: role.permissions.filter((code) => !codes.includes(code)).sort(),
-        },
+        detail: { added: [...added].sort(), removed: [...removed].sort() },
       }),
     );
     return updated;
