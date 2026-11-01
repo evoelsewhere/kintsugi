@@ -1,19 +1,21 @@
-// Interface layer: runtime job runs of a project (ADR-0027, ADR-0029). Starting and cancelling
-// need jobs.run; reading runs and following their live events needs a session; restricted
-// records need restricted.read.
+// Interface layer: runtime job runs of a project (ADR-0027, ADR-0029). Every route needs Project
+// Access on the project (ADR-0099 decision 4); starting and cancelling need jobs.run too, restricted records
+// restricted.read.
 
-import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import type { Page } from "#common/application/pagination.js";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import { openEventStream } from "#common/interface/sse.js";
+import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import { JobRunsService } from "../application/job-runs.service.js";
 import type { JobRunDetail, JobRunView, RestrictedRecordView, RetriedRunView } from "../domain/job-run.js";
 import { type JobRunEventsQuery, type ListJobRunsQuery, type RetryBody, eventIdSchema, jobRunEventsQuerySchema, listJobRunsQuerySchema, retryBodySchema } from "./job-run.dto.js";
 
 @ApiTags("delivery · runtime jobs")
 @Controller("projects/:id")
+@UseGuards(ProjectAccessGuard)
 export class JobRunsController {
   constructor(private readonly runs: JobRunsService) {}
 

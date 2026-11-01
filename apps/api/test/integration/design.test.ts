@@ -13,7 +13,7 @@ import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { catalogDocuments } from "../support/documents.js";
 import { hasDatabase } from "../support/database.js";
-import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { Client, adminClient, memberClient, startTestApp, type TestApp, currentUserId, grantProjectAccess } from "../support/app.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/", import.meta.url));
 const fixture = (...parts: string[]): string => readFileSync(join(FIXTURES, ...parts), "utf8");
@@ -112,6 +112,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('local', 'plain-git', 'Local', $1, 'none')", [remote.baseUrl]);
     await app.db.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('docs', 'local', $1, 'main'), ('legacy', 'local', $2, 'main')", [`${remote.baseUrl}/docs.git`, `${remote.baseUrl}/legacy.git`]);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "shop", name: "Shop", documentRepositoryId: "docs" } })).status).toBe(201);
+    await grantProjectAccess(admin, "shop", await currentUserId(admin));
     expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications/web/repositories", { body: { repositoryId: "legacy", role: "legacy" } })).status).toBe(201);
     await app.db.query("insert into workflow.document_write (id, project_id, kind, message, status, branch, pr_url) values ('w-dopen', 'shop', 'job-output', 'Design web: detail of tax', 'pr-opened', 'kintsugi/designer/run-dopen', 'https://git.example/pr/7')");
@@ -147,7 +148,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
   };
 
   it("serves the sets in the order they are written, with the contract of every section and the stage that produces each", async () => {
-    const { client } = await memberClient(app, admin, "design-reader", ["user"]);
+    const { client } = await memberClient(app, admin, "design-reader", ["user"], ["shop"]);
     const response = await client.get<SetsView>("/projects/shop/design/sets");
     expect(response.status).toBe(200);
     const view = response.body.data!;
@@ -293,7 +294,7 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
   const RUNS = "/projects/shop/applications/web/design/runs";
 
   it("refuses a design run that cannot start: no permission, no body, an unknown set or unit, a unit that has the set, lacks one it needs or is in a pull request, too many units", async () => {
-    const { client } = await memberClient(app, admin, "design-viewer", ["user"]);
+    const { client } = await memberClient(app, admin, "design-viewer", ["user"], ["shop"]);
     expect((await client.request("POST", RUNS, { body: { set: "basic", units: ["customers/lookup"] } })).status).toBe(403);
     expect((await admin.request("POST", "/projects/shop/applications/web/stages/design/run")).status).toBe(400);
     expect((await admin.request("POST", RUNS, { body: {} })).status).toBe(400);
@@ -377,10 +378,10 @@ describe.skipIf(!hasDatabase)("design sets and unit designs (integration)", () =
     expect((await admin.request("POST", RUNS, { body: { resumeOf: "run-assess" } })).status).toBe(400);
   });
 
-  it("needs a session and a good ref", async () => {
+  it("needs Project Access and a good ref", async () => {
     expect((await new Client(app).get("/projects/shop/design/sets")).status).toBe(401);
     expect((await admin.get("/projects/shop/design/sets?ref=main")).status).toBe(400);
     expect((await admin.get(`/projects/shop/design/sets?ref=${"0".repeat(40)}`)).status).toBe(404);
-    expect((await admin.get("/projects/nope/design/sets")).status).toBe(404);
+    expect((await admin.get("/projects/nope/design/sets")).status).toBe(403); // no grant can exist on a project that does not
   });
 });

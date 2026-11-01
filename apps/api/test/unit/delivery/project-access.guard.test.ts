@@ -4,9 +4,7 @@
 import { ForbiddenException, UnauthorizedException, type ExecutionContext } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { ProjectAccessGuard, type ProjectAccessService } from "../../../src/modules/admin/project-access/index.js";
-import { BrainController } from "../../../src/modules/delivery/brain/interface/brain.controller.js";
-import { DocumentsController } from "../../../src/modules/delivery/documents/interface/documents.controller.js";
-import { controllerRoutes } from "../../support/controller-routes.js";
+import { controllerRoutes, projectScopedControllers } from "../../support/controller-routes.js";
 
 function context(request: Record<string, unknown>): ExecutionContext {
   return { switchToHttp: () => ({ getRequest: () => request }) } as unknown as ExecutionContext;
@@ -36,11 +34,16 @@ describe("ProjectAccessGuard", () => {
   });
 });
 
-describe("portal project routes", () => {
-  const routes = [...controllerRoutes(DocumentsController), ...controllerRoutes(BrainController)];
+const controllers = await projectScopedControllers();
+const routes = controllers.flatMap((controller) => controllerRoutes(controller));
 
-  it("enumerates the routes of both controllers", () => {
-    expect(routes.length).toBeGreaterThanOrEqual(15);
+describe("portal project routes", () => {
+  it("finds every controller whose routes start with projects/:id", () => {
+    // The documents, Brain, build, item catalog, design and job-run controllers; a new one is found by the scan.
+    expect(controllers.map((controller) => controller.name).sort()).toEqual(
+      expect.arrayContaining(["BrainController", "BuildController", "CatalogController", "DesignController", "DocumentsController", "JobRunsController"]),
+    );
+    expect(routes.length).toBeGreaterThanOrEqual(35);
     expect(routes.every((route) => route.path.startsWith("projects/:id"))).toBe(true);
   });
 

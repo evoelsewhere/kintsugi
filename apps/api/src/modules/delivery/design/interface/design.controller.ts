@@ -1,9 +1,10 @@
 // Interface layer: the design of a project (ADR-0044, ADR-0045): its design sets and how each unit's
-// design documents stand against them. Reading needs a session, like the documents it comes from.
+// design documents stand against them. Every route needs Project Access on the project, like the documents it comes from (ADR-0099 decision 4).
 
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
+import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
 import type { JobRunView } from "#modules/delivery/runtime-jobs/index.js";
 import { DesignRunsService } from "../application/design-runs.service.js";
 import { DesignService } from "../application/design.service.js";
@@ -12,6 +13,7 @@ import { type DesignQuery, type DesignRunBody, type DesignSetsQuery, designQuery
 
 @ApiTags("delivery · design")
 @Controller("projects/:id")
+@UseGuards(ProjectAccessGuard)
 export class DesignController {
   constructor(
     private readonly design: DesignService,

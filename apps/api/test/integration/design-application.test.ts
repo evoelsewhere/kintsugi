@@ -12,7 +12,7 @@ import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { catalogDocuments } from "../support/documents.js";
-import { adminClient, Client, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { adminClient, Client, memberClient, startTestApp, type TestApp, currentUserId, grantProjectAccess } from "../support/app.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/", import.meta.url));
 const fixture = (...parts: string[]): string => readFileSync(join(FIXTURES, ...parts), "utf8");
@@ -64,6 +64,7 @@ describe.skipIf(!hasDatabase)("design sets of the application (integration)", ()
     await app.db.query("insert into admin.git_server (id, kind, name, base_url, auth_type) values ('local', 'plain-git', 'Local', $1, 'none')", [remote.baseUrl]);
     await app.db.query("insert into admin.git_repository (id, server_id, url, default_branch) values ('docs', 'local', $1, 'main'), ('legacy', 'local', $2, 'main')", [`${remote.baseUrl}/docs.git`, `${remote.baseUrl}/legacy.git`]);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "shop", name: "Shop", documentRepositoryId: "docs" } })).status).toBe(201);
+    await grantProjectAccess(admin, "shop", await currentUserId(admin));
     expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications/web/repositories", { body: { repositoryId: "legacy", role: "legacy" } })).status).toBe(201);
     await app.db.query("insert into workflow.job_run (id, project_id, application_id, kind, name, status, inputs, created_at) values ('run-assess', 'shop', 'web', 'stage', 'assess', 'succeeded', '{}', now() - interval '6 hours')");
@@ -137,7 +138,7 @@ describe.skipIf(!hasDatabase)("design sets of the application (integration)", ()
   });
 
   it("generates the set of the application for @app only, and a set of units never for @app", async () => {
-    const { client } = await memberClient(app, admin, "app-design-viewer", ["user"]);
+    const { client } = await memberClient(app, admin, "app-design-viewer", ["user"], ["shop"]);
     expect((await client.request("POST", RUNS, { body: { set: "arch", units: ["@app"] } })).status).toBe(403);
 
     const units = await admin.request<Failure>("POST", RUNS, { body: { set: "arch", units: ["customers/lookup"] } });

@@ -2,6 +2,7 @@
 // item status derived from understand runs. Documents and runs come from their modules.
 
 import { Module } from "@nestjs/common";
+import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { RuntimeJobsModule } from "#modules/delivery/runtime-jobs/index.js";
 import { CatalogService } from "./application/catalog.service.js";
@@ -10,7 +11,7 @@ import { CatalogController } from "./interface/catalog.controller.js";
 
 /** delivery · item catalog (ADR-0033). */
 @Module({
-  imports: [DocumentsModule, RuntimeJobsModule],
+  imports: [ProjectAccessModule, DocumentsModule, RuntimeJobsModule],
   controllers: [CatalogController],
   providers: [CatalogService, UnderstandRunsService],
   exports: [CatalogService],

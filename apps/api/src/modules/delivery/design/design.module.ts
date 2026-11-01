@@ -2,6 +2,7 @@
 // unit's design documents, read from the document repo. Documents come from their module.
 
 import { Module } from "@nestjs/common";
+import { ProjectAccessModule } from "#modules/admin/project-access/index.js";
 import { CatalogModule } from "#modules/delivery/catalog/index.js";
 import { DocumentsModule } from "#modules/delivery/documents/index.js";
 import { RuntimeJobsModule } from "#modules/delivery/runtime-jobs/index.js";
@@ -11,7 +12,7 @@ import { DesignController } from "./interface/design.controller.js";
 
 /** delivery · design sets, unit designs and the runs that generate them (ADR-0049). */
 @Module({
-  imports: [DocumentsModule, RuntimeJobsModule, CatalogModule],
+  imports: [ProjectAccessModule, DocumentsModule, RuntimeJobsModule, CatalogModule],
   controllers: [DesignController],
   providers: [DesignService, DesignRunsService],
   exports: [DesignService],
