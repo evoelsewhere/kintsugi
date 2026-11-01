@@ -1,0 +1,398 @@
+{
+  "fixture": "fixture/wiki-docs",
+  "note": "The deterministic wiki eval of the Brain (ADR-0097 decision 10): no model is called. Each question names the pages that answer it; wiki-eval.ts asks the Brain's own builder and the grep read how well they reach them.",
+  "questions": [
+    {
+      "id": "W01",
+      "kind": "label",
+      "question": "Which pages carry the label sev1?",
+      "label": "sev1",
+      "expect": [
+        "20-spaces/eng/runbooks/db-failover.md",
+        "20-spaces/eng/runbooks/payment-outage.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/runbooks/db-failover.md",
+          "match": "labels: [runbook, sev1, database]"
+        },
+        {
+          "file": "20-spaces/eng/runbooks/payment-outage.md",
+          "match": "labels: [runbook, sev1, payments]"
+        }
+      ]
+    },
+    {
+      "id": "W02",
+      "kind": "label",
+      "question": "Which pages carry the label benefits?",
+      "label": "benefits",
+      "expect": [
+        "20-spaces/hr/benefits/README.md",
+        "20-spaces/hr/benefits/health.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/hr/benefits/README.md",
+          "match": "labels: [policy, benefits]"
+        },
+        {
+          "file": "20-spaces/hr/benefits/health.md",
+          "match": "labels: [policy, benefits, health]"
+        }
+      ]
+    },
+    {
+      "id": "W03",
+      "kind": "label",
+      "question": "Which pages carry the label payments?",
+      "label": "payments",
+      "expect": [
+        "20-spaces/eng/runbooks/payment-outage.md",
+        "20-spaces/ops/services/checkout.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/runbooks/payment-outage.md",
+          "match": "labels: [runbook, sev1, payments]"
+        },
+        {
+          "file": "20-spaces/ops/services/checkout.md",
+          "match": "labels: [inventory, payments]"
+        }
+      ]
+    },
+    {
+      "id": "W04",
+      "kind": "space",
+      "question": "Which pages are in the space ENG?",
+      "space": "ENG",
+      "folder": "20-spaces/eng",
+      "evidence": [
+        {
+          "file": "20-spaces/eng/README.md",
+          "match": "key: ENG"
+        }
+      ]
+    },
+    {
+      "id": "W05",
+      "kind": "space",
+      "question": "Which pages are in the space HR?",
+      "space": "HR",
+      "folder": "20-spaces/hr",
+      "evidence": [
+        {
+          "file": "20-spaces/hr/README.md",
+          "match": "key: HR"
+        }
+      ]
+    },
+    {
+      "id": "W06",
+      "kind": "order",
+      "question": "In which order does the space ENG list its entries?",
+      "folder": "20-spaces/eng",
+      "first": [
+        "onboarding/",
+        "runbooks/",
+        "decisions/",
+        "_templates/"
+      ],
+      "note": "the listed entries come first, in list order; the rest keep their place (ADR-0097 decision 2)",
+      "evidence": [
+        {
+          "file": "20-spaces/eng/README.md",
+          "match": "order: [onboarding, runbooks, decisions, _templates]"
+        }
+      ]
+    },
+    {
+      "id": "W07",
+      "kind": "order",
+      "question": "In which order does the Onboarding page list its children?",
+      "folder": "20-spaces/eng/onboarding",
+      "first": [
+        "first-week.md",
+        "laptop-setup.md",
+        "access-requests.md"
+      ],
+      "note": "the listed entries come first, in list order; the rest keep their place (ADR-0097 decision 2)",
+      "evidence": [
+        {
+          "file": "20-spaces/eng/onboarding/README.md",
+          "match": "order: [first-week, laptop-setup, access-requests]"
+        }
+      ]
+    },
+    {
+      "id": "W08",
+      "kind": "order",
+      "question": "In which order does the space HR list its entries?",
+      "folder": "20-spaces/hr",
+      "first": [
+        "leave-policy.md",
+        "remote-work.md",
+        "benefits/"
+      ],
+      "note": "the listed entries come first, in list order; the rest keep their place (ADR-0097 decision 2)",
+      "evidence": [
+        {
+          "file": "20-spaces/hr/README.md",
+          "match": "order: [leave-policy, remote-work, benefits]"
+        }
+      ]
+    },
+    {
+      "id": "W09",
+      "kind": "retired",
+      "question": "Which pages are archived and must not be taken for the current word?",
+      "expect": [
+        "20-spaces/eng/decisions/0001-use-postgres.md",
+        "20-spaces/hr/2019-expenses.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/decisions/0001-use-postgres.md",
+          "match": "status: archived"
+        },
+        {
+          "file": "20-spaces/hr/2019-expenses.md",
+          "match": "status: archived"
+        }
+      ]
+    },
+    {
+      "id": "W10",
+      "kind": "template",
+      "question": "Which pages are templates?",
+      "expect": [
+        "20-spaces/eng/_templates/decision-record.md",
+        "20-spaces/eng/_templates/incident-report.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/_templates/decision-record.md",
+          "match": "type: template"
+        },
+        {
+          "file": "20-spaces/eng/_templates/incident-report.md",
+          "match": "type: template"
+        }
+      ]
+    },
+    {
+      "id": "W11",
+      "kind": "anchor",
+      "question": "A page repeats a heading: which anchors name its two Overview sections?",
+      "path": "20-spaces/eng/onboarding/first-week.md",
+      "expect": [
+        "overview",
+        "overview-1"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/onboarding/first-week.md",
+          "match": "You meet your buddy on day one"
+        },
+        {
+          "file": "20-spaces/eng/onboarding/first-week.md",
+          "match": "The second overview of this page"
+        }
+      ]
+    },
+    {
+      "id": "W12",
+      "kind": "heading-link",
+      "question": "Where does the link to the request list of the access requests page lead?",
+      "from": "20-spaces/eng/onboarding/first-week.md",
+      "to": "20-spaces/eng/onboarding/access-requests.md#request-list",
+      "evidence": [
+        {
+          "file": "20-spaces/eng/onboarding/first-week.md",
+          "match": "access-requests.md#request-list"
+        }
+      ]
+    },
+    {
+      "id": "W13",
+      "kind": "heading-link",
+      "question": "Where does the link to the carry-over rule lead?",
+      "from": "20-spaces/hr/remote-work.md",
+      "to": "20-spaces/hr/leave-policy.md#carry-over",
+      "evidence": [
+        {
+          "file": "20-spaces/hr/remote-work.md",
+          "match": "leave-policy.md#carry-over"
+        }
+      ]
+    },
+    {
+      "id": "W14",
+      "kind": "backlinks",
+      "question": "Which pages link to the payment outage runbook?",
+      "target": "20-spaces/eng/runbooks/payment-outage.md",
+      "expect": [
+        "20-spaces/ops/README.md",
+        "20-spaces/ops/services/checkout.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/ops/README.md",
+          "match": "payment-outage.md"
+        },
+        {
+          "file": "20-spaces/ops/services/checkout.md",
+          "match": "payment-outage.md"
+        }
+      ]
+    },
+    {
+      "id": "W15",
+      "kind": "backlinks",
+      "question": "Which pages link to the incident report template?",
+      "target": "20-spaces/eng/_templates/incident-report.md",
+      "expect": [
+        "20-spaces/eng/runbooks/db-failover.md",
+        "20-spaces/eng/runbooks/payment-outage.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/runbooks/payment-outage.md",
+          "match": "incident-report.md"
+        },
+        {
+          "file": "20-spaces/eng/runbooks/db-failover.md",
+          "match": "incident-report.md"
+        }
+      ]
+    },
+    {
+      "id": "W16",
+      "kind": "backlinks",
+      "question": "Which pages link to the loose notes page?",
+      "target": "20-spaces/ops/services/orphan-notes.md",
+      "expect": [],
+      "evidence": [
+        {
+          "file": "20-spaces/ops/services/orphan-notes.md",
+          "match": "Nothing links here."
+        }
+      ]
+    },
+    {
+      "id": "W17",
+      "kind": "broken",
+      "question": "Which links point at a page that does not exist?",
+      "expect": [
+        {
+          "from": "20-spaces/eng/onboarding/laptop-setup.md",
+          "target": "vpn-guide.md"
+        }
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/onboarding/laptop-setup.md",
+          "match": "[VPN guide](vpn-guide.md)"
+        }
+      ]
+    },
+    {
+      "id": "W18",
+      "kind": "search",
+      "question": "Which page says the cache holds quokka-grade copies of the catalogue?",
+      "terms": "quokka-grade",
+      "expect": [
+        "20-spaces/eng/runbooks/cache-flush.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/runbooks/cache-flush.md",
+          "match": "quokka-grade"
+        }
+      ]
+    },
+    {
+      "id": "W19",
+      "kind": "search",
+      "question": "Which page names the gateway-switch command?",
+      "terms": "gateway-switch",
+      "expect": [
+        "20-spaces/eng/runbooks/payment-outage.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/runbooks/payment-outage.md",
+          "match": "gateway-switch"
+        }
+      ]
+    },
+    {
+      "id": "W20",
+      "kind": "search",
+      "question": "Which pages mention the on-call lead?",
+      "terms": "on-call lead",
+      "expect": [
+        "20-spaces/eng/onboarding/access-requests.md",
+        "20-spaces/eng/onboarding/first-week.md",
+        "20-spaces/eng/runbooks/README.md",
+        "20-spaces/ops/on-call.md"
+      ],
+      "evidence": [
+        {
+          "file": "20-spaces/eng/onboarding/access-requests.md",
+          "match": "| Pager | On-call lead | 1 day |"
+        },
+        {
+          "file": "20-spaces/eng/onboarding/first-week.md",
+          "match": "the on-call lead and the security champion"
+        },
+        {
+          "file": "20-spaces/eng/runbooks/README.md",
+          "match": "Page the on-call lead"
+        },
+        {
+          "file": "20-spaces/ops/on-call.md",
+          "match": "The on-call lead hands over"
+        }
+      ]
+    },
+    {
+      "id": "W21",
+      "kind": "descend",
+      "question": "How long does Pager access take to be granted?",
+      "path": "20-spaces/eng/onboarding/access-requests.md",
+      "evidence": [
+        {
+          "file": "20-spaces/eng/onboarding/access-requests.md",
+          "match": "| Pager | On-call lead | 1 day |"
+        }
+      ]
+    },
+    {
+      "id": "W22",
+      "kind": "descend",
+      "question": "How many unused days of leave carry over?",
+      "path": "20-spaces/hr/leave-policy.md",
+      "evidence": [
+        {
+          "file": "20-spaces/hr/leave-policy.md",
+          "match": "Up to five unused days"
+        }
+      ]
+    },
+    {
+      "id": "W23",
+      "kind": "moved",
+      "question": "Where did the cache purge page move to?",
+      "from": "20-spaces/ops/cache-purge.md",
+      "to": "20-spaces/eng/runbooks/cache-flush.md",
+      "evidence": [
+        {
+          "file": "20-spaces/ops/cache-purge.md",
+          "match": "This page moved to"
+        }
+      ]
+    }
+  ]
+}
