@@ -91,7 +91,7 @@
 | AUT-50 | Anchors in links | Heading ids (AUT-28) | Q12 | S |
 | AUT-51 | none | Links to `_attachments/` resolved by the raw route | Q3 | S |
 | AUT-52 | `knowledge.brain_link`, the Brain node view's links | The same panel on a page of the wiki | none | S |
-| AUT-53 | Brain drops links it cannot follow (`brain.md:19`) | A list of dropped links per document, shown as broken links | ADR-0091 | M |
+| AUT-53 | Brain drops links it cannot follow (`brain.md:19`) | A list of unresolved links per document, shown as broken links. The Brain architect's proposal keeps every reference, resolved or not (`knowledge.brain_ref` in `40-architecture/brain-integration.md`), which would feed it | ADR-0091 | M |
 | AUT-54 | ADR-0075 for cards | Page ids, inbound-link rewrite in the same write, a scan of the mirror to confirm | Q5, Q8 | L |
 | AUT-55 | none | A print stylesheet for the page view | Q7 | S |
 | AUT-56 | none | Deferred with server PDF | Q7 | L |
