@@ -34,10 +34,18 @@ export interface GitRunOptions {
   timeoutMs?: number;
   /** Written to git's stdin. */
   input?: string;
+  /** The most output bytes the call may produce before it is stopped; default 64 MiB. */
+  maxOutputBytes?: number;
 }
 
 export interface GitResult {
   stdout: string;
+  stderr: string;
+}
+
+/** What a call produced, before its output is read as text. */
+interface RawGitResult {
+  stdout: Buffer;
   stderr: string;
 }
 
@@ -109,6 +117,19 @@ const isUnsafeInherited = (name: string): boolean => /^(GIT_|SSH_|GCM_)/i.test(n
  * and git never prompts.
  */
 export async function runGit(args: readonly string[], options: GitRunOptions = {}): Promise<GitResult> {
+  const raw = await execGit(args, options);
+  return { stdout: raw.stdout.toString("utf8"), stderr: raw.stderr };
+}
+
+/**
+ * Runs `git <args>` like `runGit`, with the same isolation, and resolves with the bytes it wrote to stdout: for a
+ * file that is not text (`cat-file blob`), which reading as text would change. Use `maxOutputBytes` to bound it.
+ */
+export async function runGitBytes(args: readonly string[], options: GitRunOptions = {}): Promise<Buffer> {
+  return (await execGit(args, options)).stdout;
+}
+
+async function execGit(args: readonly string[], options: GitRunOptions): Promise<RawGitResult> {
   const box = await gitSandbox();
   const credential = options.credential ?? { kind: "none" };
   const secrets: string[] = [];
@@ -176,7 +197,7 @@ function spawnGit(
   options: GitRunOptions,
   clean: (text: string) => string,
   shownArgs: readonly string[],
-): Promise<GitResult> {
+): Promise<RawGitResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", fullArgs, { cwd: options.cwd, env, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     const stdout: Buffer[] = [];
@@ -186,7 +207,7 @@ function spawnGit(
 
     const collect = (sink: Buffer[]) => (chunk: Buffer) => {
       size += chunk.length;
-      if (size > MAX_OUTPUT_BYTES) {
+      if (size > (options.maxOutputBytes ?? MAX_OUTPUT_BYTES)) {
         failure ??= "output limit exceeded";
         child.kill();
         return;
@@ -207,7 +228,7 @@ function spawnGit(
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      const out = Buffer.concat(stdout).toString("utf8");
+      const out = Buffer.concat(stdout);
       const err = clean(Buffer.concat(stderr).toString("utf8"));
       const command = clean(`git ${shownArgs.join(" ")}`);
       if (failure !== undefined) {

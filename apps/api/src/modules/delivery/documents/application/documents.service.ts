@@ -6,11 +6,12 @@
 
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, PayloadTooLargeException, UnsupportedMediaTypeException } from "@nestjs/common";
 import { assertSafeRepoPath, GitError } from "@kintsugi/git";
+import { isAttachmentName, isAttachmentType, pageAttachmentsDir, pageFolder } from "@kintsugi/domain";
 import { DocumentWritesService } from "#modules/admin/document-writes/index.js";
 import { InstallationSettingsService } from "#modules/admin/settings/index.js";
 import { type ProjectDetail, ProjectsService } from "#modules/admin/projects/index.js";
 import { JobRunsService, type JobRunView } from "#modules/delivery/runtime-jobs/index.js";
-import { type DocumentDiff, type DocumentFile, type DocumentHistory, type FileVersion, type HistoryEntry, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type GrepLine, MAX_DOCUMENT_BYTES, type MirrorBranch, diffFileWithin } from "../domain/document.js";
+import { ATTACHMENT_MEDIA_TYPES, type DocumentAttachment, type DocumentDiff, type DocumentFile, type DocumentHistory, type DocumentRef, type DocumentRefs, type DocumentRepo, type DocumentTree, type FileVersion, type GrepLine, type HistoryEntry, MAX_ATTACHMENT_BYTES, MAX_DOCUMENT_BYTES, type MirrorBranch, diffFileWithin } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 import { parseUnifiedDiff } from "../domain/unified-diff.js";
 import type { DocumentCompare } from "../domain/document.js";
@@ -53,6 +54,15 @@ export function servablePath(path: string, allowRoot: boolean): string {
     throw new ForbiddenException("Restricted records are never served from the document repo; read them under Governance → Restricted records.");
   }
   return path;
+}
+
+/** Whether `folder` is the `_attachments/` folder of a page folder of the wiki, as the layout builds it. */
+function isBesideAPage(folder: string): boolean {
+  try {
+    return pageAttachmentsDir(pageFolder(folder)) === folder;
+  } catch {
+    return false;
+  }
 }
 
 const isServable = (path: string): boolean => !path.split("/").some((segment) => segment.toLowerCase() === "restricted" || segment.toLowerCase() === ".git");
@@ -202,6 +212,33 @@ export class DocumentsService {
   private async statusOf(context: DocumentContext, tip: MirrorBranch, defaultTip: MirrorBranch | undefined): Promise<"merged" | "open"> {
     if (defaultTip === undefined) return "open";
     return (await this.reader.isAncestor(context.repo, tip.commit, defaultTip.commit)) ? "merged" : "open";
+  }
+
+  /**
+   * A page attachment at a ref: a file of an allowed type (`isAttachmentType`) directly in an `_attachments/` folder
+   * (`pageAttachmentsDir`), at most MAX_ATTACHMENT_BYTES. 400 for any other place, 415 for any other type (SVG and
+   * HTML included), 413 when larger; its content type comes from its extension, never from its bytes.
+   */
+  async attachment(projectId: string, ref: string | undefined, path: string): Promise<DocumentAttachment> {
+    const file = servablePath(path, false);
+    const folder = pageFolder(file);
+    const name = file.slice(folder === "" ? 0 : folder.length + 1);
+    if (!isAttachmentName(name) || !isBesideAPage(folder)) throw new BadRequestException(`${file} is not in an _attachments folder of a page`);
+    const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+    const contentType = ATTACHMENT_MEDIA_TYPES[extension];
+    if (!isAttachmentType(name) || contentType === undefined) throw new UnsupportedMediaTypeException(`${file} is not an attachment type the documents API serves (png, jpg, jpeg, gif, webp, pdf)`);
+    const context = await this.context(projectId);
+    const resolved = await this.resolve(context, ref);
+    const read = await this.reader.readBytes(context.repo, resolved.commit, file, MAX_ATTACHMENT_BYTES);
+    switch (read.status) {
+      case "missing":
+        throw new NotFoundException(`${file} does not exist at ${resolved.ref}`);
+      case "not-a-file":
+        throw new BadRequestException(`${file} is a directory at ${resolved.ref}`);
+      case "too-large":
+        throw new PayloadTooLargeException(`${file} is ${read.size} bytes; the documents API serves attachments up to ${MAX_ATTACHMENT_BYTES} bytes`);
+    }
+    return { ...resolved, path: file, contentType, disposition: extension === "pdf" ? "attachment" : "inline", bytes: read.bytes };
   }
 
   /** The entries of a directory at a ref, without `restricted/` and `.git`. */

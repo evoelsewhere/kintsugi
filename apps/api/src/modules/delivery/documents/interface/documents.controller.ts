@@ -3,8 +3,9 @@
 // and no permission: the documents are what the project shares; restricted records are never committed and never
 // served here. The bounded answer route needs documents.resolve too and proposes its correction through the writer.
 
-import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from "@nestjs/common";
-import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { type Actor, CurrentActor, RequirePermission } from "#common/auth/decorators.js";
 import type { DocumentWriteRecord } from "#modules/admin/document-writes/index.js";
 import { ProjectAccessGuard } from "#modules/admin/project-access/index.js";
@@ -57,6 +58,24 @@ export class DocumentsController {
   @ApiOkResponse({ description: "The resolved commit and the entries (directories first)." })
   tree(@Param("id") id: string, @Query({ schema: treeQuerySchema }) query: TreeQuery): Promise<DocumentTree> {
     return this.documents.tree(id, query.ref, query.path);
+  }
+
+  @Get("documents/attachment")
+  @ApiProduces("image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf")
+  @ApiOperation({
+    summary: "Serve a page attachment of the document repo at a ref: a png, jpg, jpeg, gif, webp or pdf file in an _attachments/ folder, up to 5 MiB",
+    description: "The content type comes from the extension and is never sniffed (X-Content-Type-Options: nosniff); images are inline, a PDF is a download; the Content-Security-Policy forbids scripts. 400 outside an _attachments/ folder, 415 for any other type (SVG and HTML included), 413 over 5 MiB, 403 under restricted/.",
+  })
+  @ApiOkResponse({ description: "The file's bytes." })
+  async attachment(@Param("id") id: string, @Query({ schema: fileQuerySchema }) query: FileQuery, @Res() response: Response): Promise<void> {
+    const attachment = await this.documents.attachment(id, query.ref, query.path);
+    response.setHeader("Content-Type", attachment.contentType);
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Content-Disposition", `${attachment.disposition}; filename="${attachment.path.slice(attachment.path.lastIndexOf("/") + 1)}"`);
+    response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    response.setHeader("Cache-Control", "private, no-cache");
+    response.send(attachment.bytes);
   }
 
   @Get("documents/file")

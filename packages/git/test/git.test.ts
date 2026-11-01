@@ -23,6 +23,7 @@ import {
   isAncestor,
   resolveCommit,
   runGit,
+  runGitBytes,
   stepFolder,
   worktreeIsAt,
 } from "../src/index.js";
@@ -187,6 +188,53 @@ describe("mirror and job worktrees", () => {
     await addWorktree(mirror, job.asIs, await resolveCommit(mirror, "main"), local);
     expect(existsSync(marker)).toBe(false);
     await removeWorktree(mirror, job.asIs);
+  });
+});
+
+describe("reading bytes", () => {
+  const everyByte = Buffer.from(Array.from({ length: 1024 }, (_, at) => at % 256));
+
+  async function repositoryWithBlob(name: string): Promise<{ gitDir: string; blob: string }> {
+    const work = join(root, `${name}-work`);
+    await mkdir(work);
+    fixtureGit(work, "init", "-q", "-b", "main");
+    await writeFile(join(work, "all-bytes.bin"), everyByte);
+    fixtureGit(work, "add", "all-bytes.bin");
+    fixtureGit(work, "commit", "-q", "-m", "bytes");
+    return { gitDir: join(work, ".git"), blob: "HEAD:all-bytes.bin" };
+  }
+
+  it("returns a file's bytes as they are, which the text of runGit would change", async () => {
+    const { gitDir, blob } = await repositoryWithBlob("bytes");
+    const bytes = await runGitBytes(["--git-dir", gitDir, "cat-file", "blob", blob]);
+    expect(Buffer.isBuffer(bytes)).toBe(true);
+    expect(bytes.equals(everyByte)).toBe(true);
+    const text = (await runGit(["--git-dir", gitDir, "cat-file", "blob", blob])).stdout;
+    expect(Buffer.from(text, "utf8").equals(everyByte)).toBe(false);
+  });
+
+  it("stops a call whose output is larger than maxOutputBytes", async () => {
+    const { gitDir, blob } = await repositoryWithBlob("bounded");
+    await expect(runGitBytes(["--git-dir", gitDir, "cat-file", "blob", blob], { maxOutputBytes: 100 })).rejects.toThrow(/output limit exceeded/);
+    expect((await runGitBytes(["--git-dir", gitDir, "cat-file", "blob", blob], { maxOutputBytes: everyByte.length })).length).toBe(everyByte.length);
+  });
+
+  it("runs in the same isolated environment: a GIT_ variable of the process does not redirect it", async () => {
+    const { gitDir, blob } = await repositoryWithBlob("isolated");
+    const previous = process.env["GIT_DIR"];
+    process.env["GIT_DIR"] = join(root, "not-a-repository");
+    try {
+      expect((await runGitBytes(["--git-dir", gitDir, "cat-file", "blob", blob])).equals(everyByte)).toBe(true);
+      expect((await runGitBytes(["--git-dir", gitDir, "rev-parse", "HEAD"])).toString("utf8")).toMatch(/^[0-9a-f]{40}\n$/);
+    } finally {
+      if (previous === undefined) delete process.env["GIT_DIR"];
+      else process.env["GIT_DIR"] = previous;
+    }
+  });
+
+  it("fails with a GitError for a blob that is not there", async () => {
+    const { gitDir } = await repositoryWithBlob("missing");
+    await expect(runGitBytes(["--git-dir", gitDir, "cat-file", "blob", "HEAD:nothing.bin"])).rejects.toThrow(GitError);
   });
 });
 

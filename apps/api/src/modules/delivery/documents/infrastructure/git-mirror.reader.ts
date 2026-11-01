@@ -4,8 +4,8 @@
 
 import { access } from "node:fs/promises";
 import { Injectable } from "@nestjs/common";
-import { CheckoutStorage, GitError, dataDirFromEnv, runGit } from "@kintsugi/git";
-import type { DiffFile, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
+import { CheckoutStorage, GitError, dataDirFromEnv, runGit, runGitBytes } from "@kintsugi/git";
+import type { BytesRead, DiffFile, DocumentDiff, DocumentRepo, FileRead, FileVersion, GrepLine, MirrorBranch, TreeEntry } from "../domain/document.js";
 import { DocumentRepoReader } from "../domain/document.ports.js";
 
 const TIMEOUT_MS = 30_000;
@@ -78,6 +78,17 @@ export class GitMirrorDocumentReader extends DocumentRepoReader {
       entries.push({ path: path === "" ? name : `${path}/${name}`, name, kind, ...(kind === "file" ? { size: Number(match[3]) } : {}) });
     }
     return entries;
+  }
+
+  async readBytes(repo: DocumentRepo, commit: string, path: string, maxBytes: number): Promise<BytesRead> {
+    const type = await this.objectType(repo, commit, path);
+    if (type === undefined) return { status: "missing" };
+    if (type !== "blob") return { status: "not-a-file" };
+    const size = Number((await this.git(repo, ["cat-file", "-s", `${commit}:${path}`])).trim());
+    if (size > maxBytes) return { status: "too-large", size };
+    // The blob's bytes, never decoded as text; the output is bounded by the size just read.
+    const bytes = await runGitBytes(["--git-dir", this.storage.mirror(repo.serverId, repo.repositoryId), "cat-file", "blob", `${commit}:${path}`], { timeoutMs: TIMEOUT_MS, maxOutputBytes: size + 1024 });
+    return { status: "ok", size, bytes };
   }
 
   async read(repo: DocumentRepo, commit: string, path: string, maxBytes: number, knownSize?: number): Promise<FileRead> {
