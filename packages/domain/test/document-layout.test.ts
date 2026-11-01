@@ -275,7 +275,8 @@ describe("ADR-0096 wiki layout", () => {
 
   it("accepts only PAGE-<KEY>-<nnnn> as a page id", () => {
     for (const id of ["PAGE-ONB-0001", "PAGE-AB-9999", "PAGE-ONB-123456789"]) expect(isPageId(id), id).toBe(true);
-    const invalid = ["PAGE-ONB-001", "PAGE-ONB-1234567890", "page-onb-0001", "PAGE-onb-0001", "PAGE--0001", "PAGE-O-0001", "PAGE-ABCDEFGHIJK-0001", "PAGE-ONB-0001\n", "PAGE-ONB-0001/../x", "PAGE-ON-B-0001", "RULE-ONB-0001", "ONB-0001", ""];
+    // `pageId` never writes the number 0 or a leading zero beyond four digits, so neither reads back as an id
+    const invalid = ["PAGE-ONB-0000", "PAGE-ONB-00001", "PAGE-ONB-099999", "PAGE-ONB-001", "PAGE-ONB-1234567890", "page-onb-0001", "PAGE-onb-0001", "PAGE--0001", "PAGE-O-0001", "PAGE-ABCDEFGHIJK-0001", "PAGE-ONB-0001\n", "PAGE-ONB-0001/../x", "PAGE-ON-B-0001", "RULE-ONB-0001", "ONB-0001", ""];
     for (const id of invalid) {
       expect(isPageId(id), id).toBe(false);
       expect(parsePageId(id), id).toBeUndefined();
@@ -297,6 +298,11 @@ describe("ADR-0096 wiki layout", () => {
 
   it("refuses an attachment folder or name that could leave the page's folder", () => {
     for (const pageDir of ["", "..", "a/../b", "/a", "a//b", ".hidden/a", "a\\b"]) expect(() => pageAttachmentsDir(pageDir), pageDir).toThrow();
+    // a page folder is never an attachment folder, and never under an excluded root or folder, in any letter case
+    for (const pageDir of ["a/_attachments", "_attachments", "scratch/x", "Scratch/x", "Plugins/a", "restricted/a", "a/Restricted", "a/identifiers", "a/_generated", "a/_Generated/b"]) {
+      expect(() => pageAttachmentsDir(pageDir), pageDir).toThrow();
+    }
+    expect(pageAttachmentsDir("20-spaces/onb/plugins")).toBe("20-spaces/onb/plugins/_attachments");
     for (const file of ["", ".", "..", ".png", "a/b.png", "../a.png", "a\\b.png", "a b.png", "a\n.png", `${"a".repeat(128)}.png`]) {
       expect(() => pageAttachmentPath("02-architecture", file), file).toThrow();
     }
@@ -346,6 +352,8 @@ describe("ADR-0096 wiki layout", () => {
       "restricted/secret.md",
       "20-spaces/onb/Restricted/secret.md",
       "plugins/my-plugin/README.md",
+      "Plugins/x.md",
+      "SCRATCH/a/x.md",
       "scratch/billing/note.md",
       "20-spaces/onb/identifiers/x.md",
       "10-applications/billing/01-legacy/invoicing/entry/identifiers/rules-ids.md",

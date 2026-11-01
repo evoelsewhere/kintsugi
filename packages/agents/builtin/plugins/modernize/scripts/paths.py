@@ -249,7 +249,8 @@ def understand_plan_path(app):
 
 # The scope of page ids: an uppercase short name of a space, written in its home page's `key` (2 to 10 characters).
 _PAGE_KEY = re.compile(r'^[A-Z][A-Z0-9]{1,9}\Z')
-_PAGE_ID = re.compile(r'^PAGE-([A-Z][A-Z0-9]{1,9})-([0-9]{4,9})\Z')
+# The number is what `page_id` writes: from 1, padded to four digits, no leading zero beyond that.
+_PAGE_ID = re.compile(r'^PAGE-([A-Z][A-Z0-9]{1,9})-((?!0000\Z)[0-9]{4}|[1-9][0-9]{4,8})\Z')
 _PAGE_NUMBER_MAX = 999_999_999
 _ATTACHMENT_NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z')
 
@@ -265,6 +266,14 @@ DOCUMENT_EXCLUDED_FOLDERS = ('restricted', 'identifiers')
 def _is_plain_folder(path):
     """Whether every segment of a repository-relative folder path is plain: not empty, not `.`, `..` or hidden."""
     return path != '' and '\\' not in path and all(part != '' and not part.startswith('.') for part in path.split('/'))
+
+
+def _is_excluded_folder(parts):
+    """Whether a folder segment path leaves the wiki's pages: it starts in an excluded root (a checkout on Windows
+    or macOS is case-insensitive, so `Plugins/` is `plugins/`), holds an excluded folder, or is `_generated/`."""
+    if parts[0].lower() in DOCUMENT_EXCLUDED_ROOTS:
+        return True
+    return any(part.lower() in DOCUMENT_EXCLUDED_FOLDERS or part.lower() == GENERATED for part in parts)
 
 
 def _require_space(space):
@@ -337,8 +346,11 @@ def is_attachment_type(file):
 
 
 def page_attachments_dir(page_dir):
-    """The folder of the files that belong to the pages of `page_dir` (files beside the page)."""
-    if not _is_plain_folder(page_dir):
+    """The folder of the files that belong to the pages of `page_dir` (files beside the page). Callers pass the
+    folder of a page (`page_folder`), which is a plain folder of the wiki: never an `_attachments/` folder, and
+    never under an excluded root or folder."""
+    if (not _is_plain_folder(page_dir) or _is_excluded_folder(page_dir.split('/'))
+            or ATTACHMENTS in page_dir.split('/')):
         raise ValueError(f'"{page_dir}" cannot hold attachments')
     return f'{page_dir}/{ATTACHMENTS}'
 
@@ -367,9 +379,7 @@ def is_wiki_editable_path(path):
         return False
     if '\\' in path or any(part == '' or part.startswith('.') for part in parts):
         return False
-    if parts[0] in DOCUMENT_EXCLUDED_ROOTS:
-        return False
-    if any(part.lower() in DOCUMENT_EXCLUDED_FOLDERS or part.lower() == GENERATED for part in parts):
+    if _is_excluded_folder(parts):
         return False
     return not is_stage_written_path(path)
 
