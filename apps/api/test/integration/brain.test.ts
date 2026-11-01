@@ -59,6 +59,9 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
       { path: "01-standards/README.md", content: "# Standards\n\nHow this project names and reviews code.\n" },
       { path: "10-applications/web/01-legacy/billing/tax/spec.md", content: SPEC },
       { path: "10-applications/web/01-legacy/billing/tax/data-objects.md", content: "## Invoice line\n\nAmounts round half up.\n" },
+      { path: "20-spaces/team/README.md", content: "---\nkey: TEAM\nlabels: [team]\n---\n\n# Team\n\nThe team's space.\n" },
+      { path: "20-spaces/team/db.md", content: "---\nlabels:\n  - Runbook\n  - sev1\n---\n\n# Database\n\nFail over the database.\n" },
+      { path: "20-spaces/team/cache.md", content: "---\nlabels: [runbook]\n---\n\n# Cache\n\nFlush the cache.\n" },
     ]);
     secondCommit = await remote.commit("docs", "10-applications/web/01-legacy/billing/tax/data-objects.md", "## Invoice line\n\nAmounts round half up.\nTotals round once per line.\n");
     await remote.commit("docs", "01-standards/README.md", "# Standards (next)\n", "release");
@@ -103,15 +106,15 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     const configured = await admin.request<BrainStatusView>("PUT", "/projects/shop/brain", { body: { enabled: true } });
     expect(configured.status).toBe(200);
     expect(configured.body.data).toMatchObject({ configured: true, enabled: true, state: "queued" });
-    expect(await build()).toMatchObject({ status: "built", documents: 4 });
+    expect(await build()).toMatchObject({ status: "built", documents: 7 });
 
     const status = (await admin.get<BrainStatusView>("/projects/shop/brain")).body.data!;
-    expect(status).toMatchObject({ state: "ready", documents: 4, identifiers: 1 });
+    expect(status).toMatchObject({ state: "ready", documents: 7, identifiers: 1 });
     expect(status.commit).toBe(status.tip);
 
     const root = (await admin.get<BrainTreeView>("/projects/shop/brain/tree?depth=2")).body.data!;
     expect(root.node).toMatchObject({ id: "/", kind: "root", title: "Shop · main" });
-    expect(root.children.map((child) => child.id)).toEqual(["01-standards/", "10-applications/", "README.md"]);
+    expect(root.children.map((child) => child.id)).toEqual(["01-standards/", "10-applications/", "20-spaces/", "README.md"]);
     expect(root.children[0]).toMatchObject({ summary: "How this project names and reviews code.", summarySource: "readme" });
     expect(root.children[1]?.nodes?.map((node) => node.id)).toEqual(["10-applications/web/"]);
   });
@@ -141,6 +144,20 @@ describe.skipIf(!hasDatabase)("brain (integration)", () => {
     expect(lookup.matches.map((node) => [node.id, node.kind])).toEqual([["10-applications/web/01-legacy/billing/tax/spec.md#RULE-INV01-0001", "card"]]);
     const byPath = (await admin.get<BrainLookupView>("/projects/shop/brain/lookup?q=01-standards")).body.data!;
     expect(byPath.matches.map((node) => node.id)).toEqual(["01-standards/"]);
+
+    // The pages that carry a label or are in a space, by path; an unknown one is an empty list and a malformed one a 400.
+    const byLabel = (await admin.get<BrainLookupView>("/projects/shop/brain/lookup?q=label:Runbook")).body.data!;
+    expect(byLabel.matches.map((node) => node.id)).toEqual(["20-spaces/team/cache.md", "20-spaces/team/db.md"]);
+    expect(byLabel.matches[0]?.breadcrumb.at(-1)?.title).toBe("team");
+    const bySpace = (await admin.get<BrainLookupView>("/projects/shop/brain/lookup?q=space:team")).body.data!;
+    expect(bySpace.matches.map((node) => node.id)).toEqual(["20-spaces/team/README.md", "20-spaces/team/cache.md", "20-spaces/team/db.md"]);
+    expect((await admin.get<BrainLookupView>("/projects/shop/brain/lookup?q=label:nothing")).body.data?.matches).toEqual([]);
+    expect((await admin.get("/projects/shop/brain/lookup?q=label:")).status).toBe(400);
+    expect((await admin.get(`/projects/shop/brain/lookup?q=label:${"x".repeat(65)}`)).status).toBe(400);
+    expect((await admin.get("/projects/shop/brain/lookup?q=label:!!")).status).toBe(400);
+    const memberLabel = await new Client(app).request<BrainLookupView>("GET", "/member/v1/brain/lookup?projectId=shop&query=label:sev1", bearer(token));
+    expect(memberLabel.body.data?.matches.map((node) => node.id)).toEqual(["20-spaces/team/db.md"]);
+    expect(memberLabel.body.data?.matches[0]).not.toHaveProperty("labels");
 
     const grep = await new Client(app).request<BrainGrepView>("GET", "/member/v1/brain/grep?projectId=shop&text=late%20FEE", bearer(token));
     expect(grep.status).toBe(200);

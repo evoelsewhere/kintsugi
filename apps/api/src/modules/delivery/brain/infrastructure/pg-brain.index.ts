@@ -48,6 +48,14 @@ export class PgBrainIndex extends BrainIndex {
     return this.store.byPath(projectId, path, limit);
   }
 
+  byLabel(projectId: string, label: string, limit: number): Promise<BrainNode[]> {
+    return this.store.byLabel(projectId, label, limit);
+  }
+
+  bySpace(projectId: string, space: string, limit: number): Promise<BrainNode[]> {
+    return this.store.bySpace(projectId, space, limit);
+  }
+
   links(projectId: string, id: string, limit: number): Promise<BrainLinks> {
     return this.store.links(projectId, id, limit);
   }

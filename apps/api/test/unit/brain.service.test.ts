@@ -33,6 +33,9 @@ const FILES: Record<string, string> = {
   "10-applications/billing/01-legacy/invoice/data-objects.md": "## Invoice line\n\nSee RULE-INV01-0001.\n",
 };
 
+/** Postgres' `order by path collate "C"`. */
+const byPath = (a: BrainNode, b: BrainNode): number => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+
 class MemoryIndex extends BrainIndex {
   nodes: BrainNode[];
   links_: BrainLink[];
@@ -81,6 +84,12 @@ class MemoryIndex extends BrainIndex {
   }
   async lookup(_projectId: string, id: string, limit: number) {
     return this.nodes.filter((node) => node.ids.includes(id)).slice(0, limit);
+  }
+  async byLabel(_projectId: string, label: string, limit: number) {
+    return this.nodes.filter((node) => node.kind === "document" && node.labels.includes(label)).sort(byPath).slice(0, limit);
+  }
+  async bySpace(_projectId: string, space: string, limit: number) {
+    return this.nodes.filter((node) => node.kind === "document" && node.space === space).sort(byPath).slice(0, limit);
   }
   async byPath(_projectId: string, path: string, limit: number) {
     return this.nodes.filter((node) => (node.kind === "folder" || node.kind === "document") && (node.path === path || node.id === path)).slice(0, limit);
@@ -436,6 +445,31 @@ describe("BrainService reads", () => {
     expect((await brain.lookup("shop", `${SPEC_PATH}#notes`)).matches.map((node) => node.id)).toEqual([`${SPEC_PATH}#notes`]);
     expect((await brain.lookup("shop", "/01-standards/")).matches.map((node) => node.id)).toEqual(["01-standards/"]);
     expect((await brain.lookup("shop", "RULE-NONE-0001")).matches).toEqual([]);
+  });
+});
+
+describe("BrainService.lookup by label and space", () => {
+  it("finds the pages with a label or in a space, and refuses a malformed one", async () => {
+    const { brain, index } = setup();
+    index.nodes = buildBrainTree(
+      [
+        { path: "20-spaces/team/README.md", text: "---\nkey: TEAM\n---\n\n# Team\n\nThe team's space.\n" },
+        { path: "20-spaces/team/db.md", text: "---\nlabels: [runbook, sev1]\n---\n\n# Database\n\nFail over.\n" },
+      ],
+      "shop-docs",
+    ).nodes;
+    const byLabel = vi.spyOn(index, "byLabel");
+    const bySpace = vi.spyOn(index, "bySpace");
+    const labelled = await brain.lookup("shop", "label:SEV1");
+    expect(byLabel).toHaveBeenCalledWith("shop", "sev1", 20);
+    expect(labelled).toMatchObject({ query: "label:SEV1", commit: COMMIT });
+    expect(labelled.matches.map((node) => node.id)).toEqual(["20-spaces/team/db.md"]);
+    expect((await brain.lookup("shop", " `space:team` ")).matches.map((node) => node.id)).toEqual(["20-spaces/team/README.md", "20-spaces/team/db.md"]);
+    expect(bySpace).toHaveBeenCalledWith("shop", "TEAM", 20);
+    expect((await brain.lookup("shop", "label:unknown")).matches).toEqual([]);
+    for (const query of ["label:", "label:   ", `label:${"x".repeat(65)}`, "label:!!", "space:", `space:${"X".repeat(65)}`]) {
+      await expect(brain.lookup("shop", query), query).rejects.toThrow(/label|space|characters/i);
+    }
   });
 });
 
