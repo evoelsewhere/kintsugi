@@ -11,8 +11,10 @@ function itemLines(item: unknown, markdown: boolean): string[] {
   if (item === null || typeof item !== "object") return [`- ${String(item)}`];
   const record = item as Record<string, unknown>;
   const name = record.name ?? record.title ?? record.projectId ?? record.path ?? "Result";
-  // The id is what commands take (`login <project>`, `--project`): shown beside a name that differs from it.
-  const title = typeof record.id === "string" && record.id !== name ? `${String(name)} (${record.id})` : name;
+  // The id is what commands take (`login <project>`, `--project`): shown beside a name that differs from it. The member
+  // API names a project's id `projectId`.
+  const id = typeof record.id === "string" ? record.id : typeof record.projectId === "string" ? record.projectId : undefined;
+  const title = id !== undefined && id !== name ? `${String(name)} (${id})` : name;
   const detail = [record.kind, record.role, record.status].filter((entry) => typeof entry === "string").join(" · ");
   return [markdown ? `- **${String(title)}**${detail ? ` \u2014 ${detail}` : ""}` : `- ${String(title)}${detail ? ` \u2014 ${detail}` : ""}`];
 }

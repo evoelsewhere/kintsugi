@@ -21,7 +21,9 @@ function registerLogin(parent: Command, deps: CliDeps): void {
       const baseUrl = validateInstallationUrl(url);
       // The same profile `init` and `connect` use for this project, so signing in and setting up a client meet in one place.
       const named = projectArgument ?? options.project;
-      const id = options.profile ?? (named === undefined ? config.activeProfile ?? "work" : stableProjectProfileId(baseUrl, named));
+      // Without a project, the active profile is signed in again; with none, the project names the profile.
+      const id = options.profile ?? (named === undefined ? config.activeProfile : stableProjectProfileId(baseUrl, named));
+      if (id === undefined) throw new CliError("PROJECT_REQUIRED", "Name the project to sign in to: kintsugi login <project-id>");
       if (!isProfileId(id)) throw new CliError("PROFILE_ID_INVALID", "Profile name may contain letters, numbers, dot, underscore, and dash");
       const prior = config.profiles[id];
       if (prior !== undefined && prior.baseUrl !== baseUrl) throw new CliError("PROFILE_INSTALLATION_MISMATCH", "This profile belongs to a different Kintsugi installation; use a new profile name");

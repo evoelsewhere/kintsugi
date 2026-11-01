@@ -277,14 +277,14 @@ const record: GuidePage = {
       <P>Plugins do this for you through the <Code>activity_record</Code> tool; you rarely type it yourself.</P>
       <H2>Limits</H2>
       <List>
-        <li>A kind such as <Code>result</Code>, <Code>note</Code> or <Code>run</Code>. Kinds starting with <Code>plugin.</Code> or <Code>document.</Code> are Kintsugi&apos;s own.</li>
+        <li>A kind such as <Code>result</Code>, <Code>note</Code> or <Code>run</Code>. Kinds starting with <Code>plugin.</Code>, <Code>document.</Code> or <Code>brain.</Code> are Kintsugi&apos;s own.</li>
         <li>A summary of at most 500 characters and up to 20 scalar details. Never put document content, credentials or personal data in them.</li>
         <li>The plugin must be one you may use in the project. At most 600 notes an hour per member. The note is sent once and never retried.</li>
       </List>
       <H2>The activity hook of a command</H2>
       <P>A plugin command can declare one hook that runs <Code>kintsugi activity hook</Code> when its turn ends. It reads the session file your AI client keeps on your machine, counts what the command used (tokens, turns, time) and sends that as a <Code>command.run</Code> note. It sends numbers and names only, uses your own sign-in, and never stops your session if it cannot report. Kintsugi refuses to distribute a plugin whose hook runs anything else.</P>
       <H2>What Kintsugi records itself</H2>
-      <P>Each plugin download and each document read, with the member, project, plugin and time. Administrators see this per member in <strong>Monitoring → Members</strong>; records are deleted after 30 days by default.</P>
+      <P>Each plugin download, each document read and each Brain read (<Code>brain.read</Code>), with the member, project, plugin and time. Administrators see this per member in <strong>Monitoring → Members</strong>; records are deleted after 30 days by default.</P>
     </>
   ),
 };
