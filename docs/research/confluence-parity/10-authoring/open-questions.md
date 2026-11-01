@@ -50,7 +50,7 @@ Each question has its options, the analyst's default and the decision with the b
 ### Q5: How does a page keep its identity when it moves?
 
 - **Options:** (a) a stable id in front matter with a link form `[[id]]`; (b) rewrite relative links on move; (c) accept broken links.
-- **Decision: front matter id plus rewritten links.** A page has `id: PAGE-<SPACE>-0001` in its front matter (the Brain already treats such ids as reference ids). Links in the file stay standard relative Markdown links, because Git viewers and the Brain follow only those; `[[` is only an editor autocomplete that inserts a relative link. A move or rename is one write that renames the file and rewrites the inbound links, found from the Brain's links and confirmed by a scan of the mirror. Portal addresses use the id, so an old path still resolves.
+- **Decision: front matter id plus rewritten links.** A page has `id: PAGE-<KEY>-0001` in its front matter (the Brain already treats such ids as reference ids). Links in the file stay standard relative Markdown links, because Git viewers and the Brain follow only those; `[[` is only an editor autocomplete that inserts a relative link. A move or rename is one write that renames the file and rewrites the inbound links, found from the Brain's links and confirmed by a scan of the mirror. Portal addresses use the id, so an old path still resolves.
 - **Source:** same thread, both posts.
 
 ### Q6: What is a space?
