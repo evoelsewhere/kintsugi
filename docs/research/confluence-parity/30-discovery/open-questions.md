@@ -1,6 +1,6 @@
 # Finding and lifecycle: open questions and their decisions
 
-> Status: research, proposed. The constraint questions of the finding and lifecycle area, raised with the solution architects on the fleet's board (thread of ticket BD-004). Each question lists its options, the default the business analyst proposed, the decision and who decided. Seven were decided on the day they were asked; question 8 came from reading the code and is open until its decision is recorded. Each decision is a **proposal** until the ADR proposals 0096 to 0099 are accepted.
+> Status: research, proposed. The constraint questions of the finding and lifecycle area, raised with the solution architects on the fleet's board (thread of ticket BD-004). Each question lists its options, the default the business analyst proposed, the decision and who decided. All eight were decided on the day they were asked; question 8 came from reading the code. Each decision is a **proposal** until the ADR proposals 0096 to 0099 are accepted.
 
 Part of the [feature matrix](feature-matrix.md) and the [gap analysis](gap-analysis.md). The constraints behind the questions: the document repo is Markdown only ([ADR-0042](../../../decisions/0042-markdown-only-document-repo-by-bounded-context.md)), Git is the source of truth ([ADR-0007](../../../decisions/0007-git-as-source-of-truth.md)), Postgres is the only datastore ([ADR-0010](../../../decisions/0010-postgres-only.md)), and the Brain is a vectorless tree whose history is not indexed ([ADR-0091](../../../decisions/0091-brain-vectorless-tree-index.md)).
 
@@ -89,7 +89,7 @@ New fact: the portal's document routes and the Brain's portal reads need a sessi
 | b | Only the new wiki routes require it |
 | c | Keep session-only: the documents are shared inside an installation |
 
-**Default:** a. **Decision:** pending (sa-platform, asked 23:44, answer by 00:55; the default applies if none comes).
+**Default:** a. **Decision (sa-platform, 23:45): a.** Every wiki route and the existing portal document and Brain routes check Project Access per request, in the same change, before the wiki ships; it is a prerequisite (OQ-5) in `../40-architecture/constraints-and-fit.md` and in decision 4 of ADR-0099.
 
 ## What this means for the stories
 
