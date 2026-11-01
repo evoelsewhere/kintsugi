@@ -159,7 +159,7 @@ Comments, mentions, watches, reactions, favourites and view counts live in Postg
 - They have no commit, so they cannot be cited as `path:lines@commit`, and they change without the branch moving, so they would break the rule that a tree is the state of one commit.
 - Mixing them into `brain_read` would make a page read return text that is not in the page.
 
-Agents that need the discussion of a page call `wiki_comments` (below) with the page's node id or page id. It returns the threads with their status, authors, dates and, for an inline comment, its quote and the node it anchors to, so the agent can relate a comment to a passage it read. A comment is cited by its id and the commit its anchor was made on, never as page lines. Open comment counts may be shown next to a page in the portal by a join at read time; they are never written into `brain_node`.
+Agents that need the discussion of a page call `comments_list` (below) with the page's node id or page id. It returns the threads with their status, authors, dates and, for an inline comment, its quote and the node it anchors to, so the agent can relate a comment to a passage it read. A comment is cited by its id and the commit its anchor was made on, never as page lines. Open comment counts may be shown next to a page in the portal by a join at read time; they are never written into `brain_node`.
 
 ## Tools and tables
 
@@ -173,7 +173,7 @@ Agents that need the discussion of a page call `wiki_comments` (below) with the 
 | `brain_grep` | Extended | Archived pages and templates left out unless `includeArchived=true`; otherwise unchanged |
 | `brain_changes` | Unchanged | A page publish is a change like any other; it already reports renames |
 | `brain_search` | **New** | `GET /api/member/v1/brain/search?projectId&query&under&labels&offset`, portal `GET …/brain/search`: ranked full-text hits as nodes with breadcrumbs, the first matching line and the citation |
-| `wiki_comments` | **New, outside the Brain** | `GET /api/member/v1/wiki/comments?projectId&page&status`: the comment threads of one page, with each inline comment's quote and its node, never mixed into `brain_read`; recorded as member activity `wiki.comments.read`; defined with the collaboration proposal (ADR-0099) |
+| `comments_list` | **New, outside the Brain** | `GET /api/member/v1/comments?projectId&node`: the comment threads of one page or node, with each inline comment's quote, its anchor node and commit; read-only, text marked as project data; never mixed into `brain_read` and not recorded as `brain.read`; defined with the collaboration proposal (ADR-0099) |
 
 Each read stays recorded as member activity (`brain.read` today); `brain_search` adds `brain.search` with the query's length and hit count, not its text.
 
