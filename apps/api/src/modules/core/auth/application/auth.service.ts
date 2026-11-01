@@ -3,6 +3,7 @@
 
 import { HttpException, HttpStatus, Injectable, Logger, OnApplicationBootstrap, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { loadBootstrapAdmin } from "#common/config/env.js";
+import { isDatabaseUnavailable } from "#common/db/errors.js";
 import type { UserRecord } from "#modules/admin/users/index.js";
 import { UsersService } from "#modules/admin/users/index.js";
 import { RolesService } from "#modules/admin/roles/index.js";
@@ -51,7 +52,9 @@ export class AuthService implements OnApplicationBootstrap {
       user = await this.users.validateCredentials(username, password);
       checked = true;
     } catch (error) {
-      // A store that failed is not a wrong password: the attempt is not counted, and the person is told to try again.
+      // A check that did not finish is not a wrong password: the attempt is not counted. A database out of reach answers
+      // 503 so the person tries again; anything else (input the database refuses: 400) keeps its own answer.
+      if (!isDatabaseUnavailable(error)) throw error;
       this.#logger.warn(`sign-in check failed: ${error instanceof Error ? error.message : String(error)}`);
       throw new ServiceUnavailableException("Sign-in is unavailable right now; try again in a moment");
     } finally {
