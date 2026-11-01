@@ -12,6 +12,23 @@ afterAll(() => workspace.remove());
 
 const readTurn = () => fauxAssistantMessage([fauxToolCall("read", { path: "hello.txt" })], { stopReason: "toolUse" });
 
+describe("a call the agent policy denies (T3-005)", () => {
+  it("is reported once, as blocked, with the real call id", async () => {
+    const runtime = await fauxRuntime([
+      () => fauxAssistantMessage([fauxToolCall("shell", { command: "curl http://example.invalid" })], { stopReason: "toolUse" }),
+      () => fauxAssistantMessage("done"),
+    ]);
+    const { events, done } = await runJob(runtime, jobSpec(workspace, agent(["shell"], { denyCommandPatterns: ["curl"] })));
+    expect(done.type).toBe("job.completed");
+    const calls = events.filter((event) => event.type === "tool.call");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ tool: "shell", decision: "blocked", reason: "command denied by agent policy (/curl/)" });
+    const result = events.find((event) => event.type === "tool.result");
+    expect(result).toMatchObject({ callId: calls[0]!.type === "tool.call" ? calls[0]!.callId : "", ok: false });
+    expect(done.type === "job.completed" ? done.summary : "").toContain("1 blocked call(s)");
+  });
+});
+
 describe("job outcome", () => {
   it("fails with reason max-turns when the agent keeps going", async () => {
     const runtime = await fauxRuntime(Array.from({ length: 6 }, () => readTurn));
@@ -128,6 +145,47 @@ describe("activity", () => {
     expect(await job.done).toMatchObject({ type: "job.completed" });
     expect(seen.during).toBeLessThan(100);
     expect(seen.after).toBeGreaterThanOrEqual(350);
+  });
+
+  it("counts the job as working while any of several tool calls is open, until the last one ends (review of 484457c6)", async () => {
+    let clock = 1_000_000;
+    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      let listener: ((event: AgentSessionEvent) => void) | undefined;
+      const seen: number[] = [];
+      const job = new KernelJob("job-1", jobSpec(workspace, agent([])), "0.0.0");
+      const end = (id: string): AgentSessionEvent =>
+        ({ type: "tool_execution_end", toolCallId: id, toolName: "shell", result: { content: [{ type: "text", text: "ok" }] }, isError: false }) as unknown as AgentSessionEvent;
+      const session = {
+        subscribe: (next: (event: AgentSessionEvent) => void) => {
+          listener = next;
+          return () => undefined;
+        },
+        prompt: async () => {
+          listener?.({ type: "tool_execution_start", toolCallId: "call-1", toolName: "shell", args: { command: "make" } } as AgentSessionEvent);
+          listener?.({ type: "tool_execution_start", toolCallId: "call-2", toolName: "shell", args: { command: "make test" } } as AgentSessionEvent);
+          clock += 300_000;
+          listener?.(end("call-1"));
+          // One call ended five minutes ago; the other still runs: working now.
+          clock += 300_000;
+          seen.push(clock - job.lastActivityAt);
+          listener?.(end("call-2"));
+          const ended = clock;
+          // None open: idle since the last one ended.
+          clock += 300_000;
+          seen.push(ended - job.lastActivityAt);
+          listener?.({ type: "message_end", message: { role: "assistant", stopReason: "stop" } } as unknown as AgentSessionEvent);
+        },
+        abort: async () => undefined,
+        getContextUsage: () => undefined,
+        dispose: () => undefined,
+      } as unknown as AgentSession;
+      await job.run(session, () => undefined);
+      expect(await job.done).toMatchObject({ type: "job.completed" });
+      expect(seen).toEqual([0, 0]);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("stops counting a tool call that is still open past OPEN_CALL_ACTIVE_MS, so the idle watchdog can stop a hung job", async () => {

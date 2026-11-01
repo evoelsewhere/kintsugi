@@ -53,8 +53,10 @@ This page has two parts:
 | [0032](0032-mermaid-diagrams-skill.md) | Mermaid for every diagram, drawn by a built-in skill and checked by a lint | Accepted (§2 skill content superseded by 0036) |
 | [0033](0033-assess-catalog-understand-selection.md) | Two runtime stages: assess builds the item catalog; understand runs on a selection | Accepted (layout statements amended by 0038) |
 | [0034](0034-understand-command-merges-map-rules-harden.md) | One understand command; map, extract-rules and harden are parts of it | Accepted |
+| [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0061) |
+| [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
 | [0037](0037-kernel-write-and-edit-tools-from-pi.md) | The kernel writes with pi's `write` and `edit`, not a custom `outputs_write` | Accepted (amends 0023) |
-| [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted (tree superseded by 0042 and 0051; task context and evidence-bound continuation amended by 0061–0062) |
+| [0038](0038-document-repo-layout-by-subject-and-sdlc-phase.md) | Document repository layout by subject and SDLC phase | Accepted (tree superseded by 0042 and 0051; task context and evidence-bound continuation amended by 0062, 0063) |
 | [0039](0039-github-actions-ghcr-deployment.md) | Build and deploy the self-hosted package with GitHub Actions | Accepted |
 | [0040](0040-kernel-shell-and-git-tools.md) | The kernel gets `shell` and `git` tools and an `ls` tree mode | Accepted (supersedes 0037 D4 and 0029's no-shell statements) |
 | [0041](0041-ai-plan-for-understanding-order.md) | An AI plan for what to understand next, from the relationships between catalog items | Accepted (paths amended by 0042) |
@@ -86,15 +88,17 @@ This page has two parts:
 | [0067](0067-remove-access-and-review-plugins.md) | Remove the Coding Agent Workflow, keep the common member base | Accepted (supersedes 0063 and the task part of 0062; amends 0015, 0035, 0061 and 0064) |
 | [0068](0068-design-generation-in-the-modernize-plugin.md) | Generate the design in the modernize plugin | Accepted (amends 0035 and 0049) |
 | [0069](0069-common-member-base-and-plugin-distribution.md) | Common member base and plugin distribution | Accepted (amends 0015, 0035 and 0061) |
+| [0070](0070-cli-distributed-by-the-installation.md) | The CLI is distributed by the installation | Accepted (amends 0069) |
+| [0071](0071-members-build-runtime-reviews.md) | Members build, the runtime reviews | Accepted (amends 0068, 0069) |
+| [0072](0072-init-install-and-plugins-as-plugins.md) | One way in — login, init, install — and plugins as plugins of their own | Accepted (amends 0069, 0070, 0071) |
 | [0073](0073-structured-results-through-a-kernel-tool.md) | A job reports its structured result through a kernel tool, not a file it writes by hand | Accepted (amends 0023) |
 | [0074](0074-optional-otlp-export-of-job-spans.md) | Job spans can be exported over OTLP by the worker, off by default | Accepted (builds on 0048) |
 | [0075](0075-compact-stable-document-reference-ids.md) | Compact stable RULE, SEC and GAP IDs with catalog scopes and Markdown ledgers | Accepted (amends 0038, 0057) |
 | [0076](0076-project-memory-for-understand.md) | Project memory supplies reviewed source navigation hints to Understand | Accepted (amended by 0077, 0078) |
 | [0077](0077-agent-directed-live-memory.md) | Agents access current project memory through tools | Accepted (learning lifecycle amended by 0078) |
 | [0078](0078-agent-memory-learning-lifecycle.md) | Give project agents an immediate memory learning lifecycle | Accepted |
-| [0070](0070-cli-distributed-by-the-installation.md) | The CLI is distributed by the installation | Accepted (amends 0069) |
-| [0036](0036-mermaid-skill-from-wh-2099.md) | The `mermaid-diagrams` skill is the WH-2099 mermaid skill | Accepted (amends 0032) |
-| [0035](0035-kintsugi-plugins-marketplace.md) | Kintsugi plugins: one marketplace of plugins in the Claude plugin format replaces the agent catalog | Accepted (amended by 0061) |
+| [0079](0079-duckduckgo-agent-web-search.md) | Opt-in DuckDuckGo search through a worker-bound tool | Accepted |
+| [0080](0080-public-web-fetch-and-expanded-research.md) | Add guarded public-page retrieval and expand web research | Accepted |
 | [0081](0081-regenerate-an-existing-design.md) | Regenerate an existing design | Accepted (amended by 0082) |
 | [0082](0082-design-readiness-drafts-and-in-place-gap-answers.md) | Check design readiness, distinguish drafts and resolve questions in place | Accepted (amends 0057, 0081) |
 | [0083](0083-design-verify-loop-and-contracts.md) | Design in dependency order and verify until a round finds nothing open | Accepted (amends 0054) |
@@ -106,6 +110,10 @@ This page has two parts:
 | [0089](0089-command-names-without-plugin-prefix.md) | Name the built-in commands without a plugin prefix | Accepted |
 | [0090](0090-retry-cancelled-runs-and-memory-revision.md) | Retry cancelled runs, and pin project memory to a revision | Accepted (amends 0055) |
 | [0091](0091-brain-vectorless-tree-index.md) | The Brain, a vectorless tree index of the document repository that agents reason over | Accepted (supersedes the KB of 0014 decision 1; amends 0069) |
+| [0092](0092-least-privilege-for-built-in-agents.md) | Built-in agents list their tools, and none gets `shell` or `codemode` | Accepted (amends 0040) |
+| [0093](0093-job-processes-run-as-a-separate-user.md) | Job processes run as an OS user of their own, and provider credentials stay out of spawn environments | Accepted (amends 0029) |
+| [0094](0094-one-open-correction-per-specification.md) | One open correction per specification, shown on its gaps | Accepted (amends 0019, 0087) |
+| [0095](0095-remove-skeleton-modules.md) | Remove the API modules that kept their writes in memory | Accepted |
 
 ## Decision register
 
@@ -122,11 +130,11 @@ This page has two parts:
 | D09 | Sign-in | 🔴 | Username/password + PATs; Entra ID later behind `AuthProvider` | M0 | ✅ [0008](0008-authentication.md) |
 | D10 | API | 🟠 | REST + OpenAPI; NestJS 12 (ESM, Standard Schema validation) | M0 | ✅ [0016](0016-nestjs-api-framework.md) |
 | D11 | Portal | 🟢 | React SPA (Vite) + shadcn/ui, static build served by `kintsugi-app` | M0 | ✅ [0017](0017-portal-vite-react-shadcn.md) |
-| D12 | Vector store | — | pgvector | — | ✅ [0010](0010-postgres-only.md) |
+| D12 | Vector store | — | pgvector; unused: the Brain has no embeddings ([0091](0091-brain-vectorless-tree-index.md)) | — | ✅ [0010](0010-postgres-only.md), superseded by [0091](0091-brain-vectorless-tree-index.md) |
 | D13 | Graph store | — | None: no code / KB graph | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
-| D14 | Source-code analysis | — | None: agents read source files directly; KB is text chunks + embeddings | — | ✅ [0014](0014-no-code-graph-no-agent-config.md) |
+| D14 | Source-code analysis | — | None: agents read source files directly; the project knowledge is the Brain, a vectorless tree index, not text chunks + embeddings ([0091](0091-brain-vectorless-tree-index.md)) | — | ✅ [0014](0014-no-code-graph-no-agent-config.md), amended by [0091](0091-brain-vectorless-tree-index.md) |
 | D15 | Document conversion (xlsx/docx → md, multilingual) | 🟠 | Python sidecar (docling / markitdown + Excel → Markdown); adds one container | M1 | ⬜ |
-| D16 | Embedding model | 🟠 | Configured like LLM providers; must offer a local option | M1 | ⬜ |
+| D16 | Embedding model | 🟠 | Not needed: the Brain uses no embedding model ([0091](0091-brain-vectorless-tree-index.md)) | M1 | ✅ superseded by [0091](0091-brain-vectorless-tree-index.md) |
 | D17 | MCP transport + auth | 🟠 | Remote Streamable HTTP on `kintsugi-app`, PAT auth; OAuth with Entra ID | M2 | 🟡 |
 | D18 | Priority member harness + license tier | 🟠 | Copilot first, Claude Code second | M2 | ⬜ |
 | D19 | Asset distribution to harnesses | 🟠 | Canonical Claude Code plugin assets are rendered into tested target packages; marketplaces are generated in the document repo and fallback rendering serves harnesses without plugin support | M2 | ✅ [0015](0015-member-assets-as-agent-plugins.md), [0064](0064-portable-agent-plugin-layouts.md) |
@@ -213,6 +221,10 @@ This page has two parts:
 | D103 | Built-in command names | 🟢 | A built-in command is named for what it does, without a plugin prefix (`assess`, `plan-understand`, `understand`, `design`, `review`, `build`); its stage id is its name, and the portal shows a member command as `/<plugin>:<command>` | M2 | ✅ [0089](0089-command-names-without-plugin-prefix.md) |
 | D104 | Retrying cancelled runs; memory revision | 🟠 | A cancelled stage run keeps its finished steps and workspace like a failed one and can be retried; a step that reads project memory is fingerprinted with a digest of the memory it can see (without its own run's changes) instead of the attempt; steps with web lookups still run again and the retry says which; a failed or stopped agent attempt keeps its last 20 tool calls with redacted result previews in the run's events; known raw failures are said plainly and a dropped provider connection gets one more try | M2 | ✅ [0090](0090-retry-cancelled-runs-and-memory-revision.md) |
 | D105 | Project knowledge for members: the Brain | 🟠 | A tree of one document-repo branch (folders, documents, sections, cards with ids) with a summary per node from the documents themselves, built by the worker without a model or embeddings; members' agents reason over it with `brain_tree`, `brain_read`, `brain_lookup` and `brain_grep` and cite path, lines and commit; accuracy is measured before it is claimed | M2 | ✅ [0091](0091-brain-vectorless-tree-index.md) |
+| D106 | Tools of the built-in agents | 🟠 | Every built-in agent lists its tools: the file tools (`read`, `ls`, `grep`, `find`, `write`, `edit`) and `git` for the code review only; none gets `shell` or `codemode`; agents of the Agent Builder keep the tools an administrator chooses | M2 | ✅ [0092](0092-least-privilege-for-built-in-agents.md) |
+| D107 | Secrets out of reach of job processes | 🔴 | With `KINTSUGI_JOB_UID`/`KINTSUGI_JOB_GID` set, script steps, hooks and agent jobs run as a user of their own that cannot read the worker's environment; their output and scratch are handed to it per job; provider credentials reach the agent child on stdin only; unset, the worker warns; the Compose default and a non-superuser database role are follow-ups | M2 | ✅ [0093](0093-job-processes-run-as-a-separate-user.md) |
+| D108 | Several answers on one specification | 🟢 | A gap answer records the specification and gap it answers; while one correction of a specification is open, the next answer is refused naming its pull request; the Gaps view shows *Answer proposed · PR #n* and *View pull request*; the pull request body carries the answer and its evidence | M2 | ✅ [0094](0094-one-open-correction-per-specification.md) |
+| D109 | API modules without a store | 🟢 | The fifteen skeleton modules that kept writes in memory and that nothing called are removed with the two permissions only they checked (`setup.manage`, `governance.manage`); a module stores its data in Postgres from its first commit | M2 | ✅ [0095](0095-remove-skeleton-modules.md) |
 | D56 | Container build and deployment | 🔴 | GitHub Actions builds SHA-tagged app/worker images, publishes them to configurable GHCR by default, and deploys the Compose stack over pinned-host-key SSH | M0 | ✅ [0039](0039-github-actions-ghcr-deployment.md) |
 | D49 | Worker liveness | 🟠 | Each worker upserts `workflow.worker_heartbeat` every 15 s and marks itself stopped on shutdown; up = seen < 45 s ago (database clock); no HTTP probe, no pg-boss internals | M0 | ✅ [0030](0030-worker-heartbeat-in-postgres.md) |
 | D33 | Minimum host requirements | 🟢 | Linux, Docker 24+ (26+ for volume subpaths), Compose v2, 4 vCPU / 16 GB / 100 GB | M0 | 🟡 |

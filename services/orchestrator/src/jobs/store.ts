@@ -49,8 +49,9 @@ function sourcesOf(row: RunRow): SourceRepo[] | undefined {
  * The run's history with the attempt that just ended added (top-level runs only): its number, when it started and
  * ended, how, and, for a failure, why (the statement's second parameter).
  */
-const attemptsWith = (status: string, withReason: boolean): string =>
-  `case when parent_id is null then attempts || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('n', attempt, 'startedAt', started_at, 'finishedAt', now(), 'status', '${status}', 'reason', ${withReason ? "left($2, 500)" : "null"}))) else attempts end`;
+/** The run's attempts with the one that ends now added (top-level runs only); `reason` is the SQL parameter of its reason. */
+export const attemptsWith = (status: string, reason: string | null): string =>
+  `case when parent_id is null then attempts || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('n', attempt, 'startedAt', started_at, 'finishedAt', now(), 'status', '${status}', 'reason', ${reason === null ? "null" : `left(${reason}, 500)`}))) else attempts end`;
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
@@ -126,21 +127,21 @@ export class PgJobStore implements JobStore, WorkspaceStates {
 
   async succeed(id: string, summary: Record<string, unknown>): Promise<void> {
     await this.pool.query(
-      `update workflow.job_run set status = 'succeeded', failure_reason = null, output_summary = $2, finished_at = now(), attempts = ${attemptsWith("succeeded", false)} where id = $1`,
+      `update workflow.job_run set status = 'succeeded', failure_reason = null, output_summary = $2, finished_at = now(), attempts = ${attemptsWith("succeeded", null)} where id = $1`,
       [id, JSON.stringify(summary)],
     );
   }
 
   async fail(id: string, reason: string, summary?: Record<string, unknown>): Promise<void> {
     await this.pool.query(
-      `update workflow.job_run set status = 'failed', failure_reason = $2, output_summary = coalesce($3, output_summary), finished_at = now(), attempts = ${attemptsWith("failed", true)} where id = $1`,
+      `update workflow.job_run set status = 'failed', failure_reason = $2, output_summary = coalesce($3, output_summary), finished_at = now(), attempts = ${attemptsWith("failed", "$2")} where id = $1`,
       [id, reason.slice(0, MAX_REASON), summary === undefined ? null : JSON.stringify(summary)],
     );
   }
 
   async cancel(id: string, summary?: Record<string, unknown>): Promise<void> {
     await this.pool.query(
-      `update workflow.job_run set status = 'cancelled', output_summary = coalesce($2, output_summary), finished_at = now(), attempts = ${attemptsWith("cancelled", false)} where id = $1 and status in ('queued', 'running')`,
+      `update workflow.job_run set status = 'cancelled', output_summary = coalesce($2, output_summary), finished_at = now(), attempts = ${attemptsWith("cancelled", null)} where id = $1 and status in ('queued', 'running')`,
       [id, summary === undefined ? null : JSON.stringify(summary)],
     );
   }

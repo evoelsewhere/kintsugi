@@ -200,9 +200,18 @@ export interface HardenResults extends StageResultsBase {
  * The gaps of the legacy understanding (ADR-0057): the application's `GAPS.md` (the units' `Gaps and questions` tables
  * joined), or one unit's own table. Not a stage: a view of the understand stage's documents.
  */
+/** The open correction that answers a gap (ADR-0094): its document write and pull request. */
+export interface GapOpenWrite {
+  id: string;
+  status: string;
+  prUrl?: string;
+  prNumber?: number;
+}
+
 export interface GapsResults extends StageResultsBase {
   stage: "gaps";
-  gaps: Gap[];
+  /** Each gap; `openWrite` when an answer to it waits for review. */
+  gaps: Array<Gap & { openWrite?: GapOpenWrite }>;
   gapCounts: GapCounts;
   /** One unit's view: its specification has no `Gaps and questions` section (written before ADR-0057). */
   noSection?: boolean;

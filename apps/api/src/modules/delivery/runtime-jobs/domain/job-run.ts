@@ -90,6 +90,8 @@ export interface JobRunView {
   attempts?: JobAttemptView[];
   scriptHash?: string;
   agent?: string;
+  /** The plan step an agent step runs (`inputs.label`, e.g. `structure`, `catalog-curate`); absent on older runs. */
+  label?: string;
   actor?: string;
   outputSummary?: Record<string, unknown>;
   documentWrite?: JobRunDocumentWrite;

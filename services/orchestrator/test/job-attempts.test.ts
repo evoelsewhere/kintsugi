@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_SANDBOX } from "@kintsugi/domain";
 import { PgJobStore } from "../src/jobs/store.js";
+import { INTERRUPTED, failOrphanedRuns } from "../src/orphans.js";
 import { limitsWith, pgSandbox } from "../src/sandbox.js";
 import { createTestDatabase, hasDatabase, type TestDatabase } from "./support/database.js";
 
@@ -20,6 +21,20 @@ describe.skipIf(!hasDatabase)("job attempts and reads per repository (integratio
   });
   afterAll(async () => {
     await db?.drop();
+  });
+
+  it("keeps the attempt a stopped worker left running in the history when the start-up sweep fails it (T2-012)", async () => {
+    const id = randomUUID();
+    await store.create({ id, projectId: "demo", applicationId: "web", kind: "stage", name: "assess" });
+    expect(await store.start(id)).toBe(true);
+    // No worker beats in this database: the sweep fails what is running.
+    expect(await failOrphanedRuns(db.pool, () => undefined)).toBeGreaterThanOrEqual(1);
+    const row = (await db.pool.query<{ status: string; attempts: Array<{ n: number; status: string; reason?: string; startedAt?: string; finishedAt?: string }> }>("select status, attempts from workflow.job_run where id = $1", [id])).rows[0]!;
+    expect(row.status).toBe("failed");
+    expect(row.attempts).toHaveLength(1);
+    expect(row.attempts[0]).toMatchObject({ n: 1, status: "failed", reason: INTERRUPTED });
+    expect(row.attempts[0]?.startedAt).toBeDefined();
+    expect(row.attempts[0]?.finishedAt).toBeDefined();
   });
 
   it("adds each attempt that ends to the history of the run, and a retry is the same run with the next attempt", async () => {

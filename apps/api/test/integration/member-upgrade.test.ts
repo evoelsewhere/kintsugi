@@ -23,7 +23,7 @@ describe.skipIf(!hasDatabase)("Kintsugi member existing-installation upgrade", (
     }
     await database.query("insert into admin.project(id,name) values('existing-project','Existing Project')");
     app = await startTestAppWithDatabase(database);
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await app?.close();

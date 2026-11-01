@@ -1,7 +1,10 @@
 // Ports of document writes — the DI tokens of this module: where writes are recorded
 // (Postgres, workflow.document_write) and how they reach the worker (the job queue).
 
-import type { DocumentWriteFile, DocumentWriteFilter, DocumentWriteRecord, NewDocumentWrite } from "./document-write.js";
+import type { DocumentWriteCorrection, DocumentWriteFile, DocumentWriteFilter, DocumentWriteRecord, NewDocumentWrite } from "./document-write.js";
+
+/** What recording a correction did: recorded it, or found the open correction of the same document. */
+export type CorrectionOutcome = { created: DocumentWriteRecord } | { open: DocumentWriteRecord };
 
 export abstract class DocumentWriteStore {
   /** Records the write as `queued`. */
@@ -10,6 +13,13 @@ export abstract class DocumentWriteStore {
   abstract listForProject(projectId: string, limit: number, offset: number): Promise<{ items: DocumentWriteRecord[]; total: number }>;
   /** Writes across projects, newest first, with the total count. */
   abstract list(filter: DocumentWriteFilter, limit: number, offset: number): Promise<{ items: DocumentWriteRecord[]; total: number }>;
+  /**
+   * Records a correction as `queued` unless an open correction of the same document exists; serialized per document,
+   * so two answers sent at once cannot both pass.
+   */
+  abstract createCorrection(write: NewDocumentWrite & { correction: DocumentWriteCorrection }): Promise<CorrectionOutcome>;
+  /** The project's open corrections (ADR-0094), newest first. */
+  abstract openCorrections(projectId: string): Promise<DocumentWriteRecord[]>;
   /** Marks a write failed before it reached the worker. */
   abstract markFailed(id: string, error: string): Promise<void>;
 }

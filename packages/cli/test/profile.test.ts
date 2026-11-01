@@ -34,4 +34,16 @@ describe("local profile configuration", () => {
     try { await symlink(target, path); } catch { return; }
     await expect(new FileProfileStore(path).load()).rejects.toMatchObject({ code: "PROFILE_PATH_UNSAFE" });
   });
+
+  it("names the profile file when it cannot read it, and drops an active profile the file no longer has", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "kintsugi-profile-broken-"));
+    const path = join(folder, "config.json");
+    await writeFile(path, "{ truncated", "utf8");
+    await expect(new FileProfileStore(path).load()).rejects.toMatchObject({ code: "PROFILE_CONFIG_INVALID", message: expect.stringContaining(path) });
+    await writeFile(path, JSON.stringify({ schemaVersion: "1", activeProfile: "gone", profiles: { kept: { id: "kept", baseUrl: "https://kintsugi.example" } } }), "utf8");
+    const config = await new FileProfileStore(path).load();
+    expect(config.activeProfile).toBeUndefined();
+    expect(Object.keys(config.profiles)).toEqual(["kept"]);
+  });
 });
+

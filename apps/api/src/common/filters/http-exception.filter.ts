@@ -1,17 +1,9 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, HttpStatus, Logger } from "@nestjs/common";
 import type { Request, Response } from "express";
+import { sqlStateOf } from "../db/errors.js";
 import type { ApiFailure } from "../interface/response.js";
 
 const MEBIBYTE = 1024 * 1024;
-
-/** The SQLSTATE of a Postgres error, also when another error wraps it; undefined for anything else (a Node `code` is not one). */
-function sqlStateOf(exception: unknown): string | undefined {
-  for (let error = exception, depth = 0; typeof error === "object" && error !== null && depth < 3; error = (error as { cause?: unknown }).cause, depth++) {
-    const { code, severity } = error as { code?: unknown; severity?: unknown };
-    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code) && typeof severity === "string") return code;
-  }
-  return undefined;
-}
 
 /**
  * Errors that are the client's fault though no HttpException says so, with a message that never echoes the input:

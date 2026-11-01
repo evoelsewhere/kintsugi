@@ -87,7 +87,7 @@ const overview: GuidePage = {
           <Callout>Windows or running into errors? <Link className="text-[var(--ds-accent)] hover:underline" to="/guideline/install-the-cli">Full installation guide →</Link></Callout>
         </Step>
         <Step number={2} eyebrow="~3 min · sign in and set up" title="Sign in, then set up your AI clients">
-          <P>Sign in to your project in the browser. Then <Code>init</Code> lists the AI clients it finds on your machine (Claude Code, Codex), asks which to set up, and whether for all your workspaces or only the current one. The installer already told the CLI which Kintsugi to talk to.</P>
+          <P>Sign in to your project in the browser. Then <Code>init</Code> lists the AI clients it finds on your machine (Claude Code, Codex, GitHub Copilot), asks which to set up, and whether for all your workspaces or only the current one. The installer already told the CLI which Kintsugi to talk to.</P>
           <CodeBlock label="Sign in and set up" code={"kintsugi login my-project\nkintsugi init"} />
           <P>Restart the client. Nothing else to configure: the connection is ready.</P>
         </Step>
@@ -95,7 +95,7 @@ const overview: GuidePage = {
           <P>Plugins are the flows your project offers to its members. See what you may install, then install one into every client you set up.</P>
           <CodeBlock label="Install a plugin" code={"# What does my project offer?\nkintsugi plugins list\n\n# Install it into every client you set up\nkintsugi install plugin modernize --all\n\n# Later: bring it up to date\nkintsugi update modernize"} />
           <H3>Use it in your AI tool</H3>
-          <P>Start a new session in Claude Code or Codex. A plugin command is named after the plugin: for example <Code>/modernize:build billing/invoice my-project</Code> builds a unit (see <Link className="text-[var(--ds-accent)] hover:underline" to="/guideline/build-a-unit">Build a unit</Link>).</P>
+          <P>Start a new session in Claude Code, Codex or GitHub Copilot. A plugin command is named after the plugin: for example <Code>/modernize:build billing/invoice my-project</Code> builds a unit (see <Link className="text-[var(--ds-accent)] hover:underline" to="/guideline/build-a-unit">Build a unit</Link>).</P>
         </Step>
       </div>
       <H2>What to read next</H2>
@@ -277,14 +277,14 @@ const record: GuidePage = {
       <P>Plugins do this for you through the <Code>activity_record</Code> tool; you rarely type it yourself.</P>
       <H2>Limits</H2>
       <List>
-        <li>A kind such as <Code>result</Code>, <Code>note</Code> or <Code>run</Code>. Kinds starting with <Code>plugin.</Code> or <Code>document.</Code> are Kintsugi&apos;s own.</li>
+        <li>A kind such as <Code>result</Code>, <Code>note</Code> or <Code>run</Code>. Kinds starting with <Code>plugin.</Code>, <Code>document.</Code> or <Code>brain.</Code> are Kintsugi&apos;s own.</li>
         <li>A summary of at most 500 characters and up to 20 scalar details. Never put document content, credentials or personal data in them.</li>
         <li>The plugin must be one you may use in the project. At most 600 notes an hour per member. The note is sent once and never retried.</li>
       </List>
       <H2>The activity hook of a command</H2>
       <P>A plugin command can declare one hook that runs <Code>kintsugi activity hook</Code> when its turn ends. It reads the session file your AI client keeps on your machine, counts what the command used (tokens, turns, time) and sends that as a <Code>command.run</Code> note. It sends numbers and names only, uses your own sign-in, and never stops your session if it cannot report. Kintsugi refuses to distribute a plugin whose hook runs anything else.</P>
       <H2>What Kintsugi records itself</H2>
-      <P>Each plugin download and each document read, with the member, project, plugin and time. Administrators see this per member in <strong>Monitoring → Members</strong>; records are deleted after 30 days by default.</P>
+      <P>Each plugin download, each document read and each Brain read (<Code>brain.read</Code>), with the member, project, plugin and time. Administrators see this per member in <strong>Monitoring → Members</strong>; records are deleted after 30 days by default.</P>
     </>
   ),
 };

@@ -191,7 +191,27 @@ Improve the catalog where it helps a person choose what to analyse, and only the
   unassigned;
 - list the main functions or sections of large items as parts (add-parts, "file" as path:line of one of its files).
 Cite only paths of the inventory. Prefer few, certain edits: an edit that breaks a rule above is rejected on its own.
-Return the edits in order as your structured result; return {"edits": []} when the proposal is right as it is.
+
+Your reading budget is about 15 tool calls, and read, grep, ls, find, glob and memory_search all count. Read
+{in}/${DRAFT}/proposed.json once, whole, with read, and never search it afterwards: its module and item ids are what your edits
+name. Read structure.md and kintsugi.yaml once each, and a source file only to name an item its paths do not name. Search
+memory at most twice. Do not search for how to express edits, for earlier curations or for the scripts that apply them:
+the format is below, and the inputs above are all there is.
+
+Each edit is one object ("item" and the entries of "items" are item ids of proposed.json, "module" is a module id, every
+edit may add "reason"):
+- {"op": "rename", "item": "<id>", "name": "<business name>"}
+- {"op": "describe", "item": "<id>", "summary": "<one sentence>"}, or "module": "<id>" instead of "item"
+- {"op": "rename-module", "module": "<id>", "name": "<business name>"}
+- {"op": "set-kind", "item": "<id>", "kind": "<one of unitKinds>"}
+- {"op": "move-item", "item": "<id>", "module": "<id>"}, with "moduleName" to create that module
+- {"op": "merge", "items": ["<id kept>", "<id>"], "name": "<business name>"}
+- {"op": "split", "item": "<id>", "into": [{"name": "<name>", "files": ["<path>"]}, {"name": "<name>", "files": ["<path>"]}]}
+- {"op": "move-files", "files": ["<path>"], "to": "<item id>"} and {"op": "unassign-files", "files": ["<path>"]}
+- {"op": "add-parts", "item": "<id>", "parts": [{"name": "<name>", "kind": "<kind>", "file": "<path>:<line>"}]}
+
+Call submit_result with {"edits": [...]}, the edits in order, before your 15th tool call. An empty edit list is a valid
+answer: submit {"edits": []} when the proposal is right as it is, or when your budget is spent before you are sure of an edit.
 
 ${CREDENTIALS}
 ${UNTRUSTED}`;

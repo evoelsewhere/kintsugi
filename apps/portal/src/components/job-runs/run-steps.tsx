@@ -9,7 +9,8 @@ import { formatDuration } from "@/lib/format";
 import { RUN_STATUS, styleOf } from "@/lib/status";
 import { useLoader } from "@/lib/use-loader";
 import { cn } from "@/lib/utils";
-import { describeProgress, humanize, stuckReason, type StepStats } from "./run-events";
+import { describeProgress, stuckReason, type StepStats } from "./run-events";
+import { stepNames } from "./run-model";
 import { PossiblyStuck } from "./run-timeline";
 
 export interface StepsContext {
@@ -33,13 +34,11 @@ export function StepList({
   depth?: number;
   expandAll?: boolean;
 }): React.JSX.Element {
-  const seen = new Map<string, number>();
+  const names = stepNames(steps);
   return (
     <ol className="flex flex-col gap-1" aria-label={depth === 0 ? "Run steps" : "Nested steps"}>
       {steps.map((step) => {
-        const n = (seen.get(step.name) ?? 0) + 1;
-        seen.set(step.name, n);
-        const name = humanize(step.name) + (steps.filter((s) => s.name === step.name).length > 1 ? ` #${n}` : "");
+        const name = names.get(step.id) ?? "";
         return <StepRow key={step.id} step={step} label={name} context={context} depth={depth} expandAll={expandAll} />;
       })}
     </ol>

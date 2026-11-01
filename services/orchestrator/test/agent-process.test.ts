@@ -1,13 +1,13 @@
 // Agent jobs as child processes of the worker (ADR-0029): the mock backend and pi run in a
 // child started in the job directory with a cleared environment and Node's permission model;
-// the provider's API key arrives on stdin and its environment credentials in that child's
-// environment only; aborts and timeouts kill the process tree.
+// the provider's API key and its environment credentials arrive on stdin, never in the child's
+// spawn environment (ADR-0093); aborts and timeouts kill the process tree.
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createChildAgentRuntime } from "@kintsugi/runtime/launcher";
+import { bashCommand, createChildAgentRuntime } from "@kintsugi/runtime/launcher";
 import type { AgentDefinition, JobEvent, JobSpec } from "@kintsugi/runtime-sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { builtinAgents } from "../src/jobs/agents.js";
@@ -55,7 +55,7 @@ describe("agent jobs in child processes", () => {
     const events = await collect(handle.events);
     const done = await handle.done;
     expect(done).toMatchObject({ type: "job.completed" });
-    expect(events[0]).toMatchObject({ type: "job.started", agent: "legacy-analyst@1.5.0" });
+    expect(events[0]).toMatchObject({ type: "job.started", agent: "legacy-analyst@1.6.0" });
     expect(events.some((event) => event.type === "tool.call")).toBe(true);
     expect(events.at(-1)).toEqual(done);
   });
@@ -92,7 +92,7 @@ describe("agent jobs in child processes", () => {
     }
   }, 90_000);
 
-  it("passes the API key on stdin and provider variables in the child's environment only", async () => {
+  it("passes the API key and the provider variables on stdin, never in the child's spawn environment (ADR-0093)", async () => {
     process.env["KINTSUGI_TEST_WORKER_ONLY"] = "worker-secret";
     const entry = fixture(
       "report.mjs",
@@ -101,7 +101,7 @@ process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => (input += chunk));
 process.stdin.on("end", () => {
   const parsed = JSON.parse(input);
-  const report = { apiKey: parsed.provider.apiKey, region: process.env.KINTSUGI_TEST_REGION ?? null, leaked: process.env.KINTSUGI_TEST_WORKER_ONLY ?? null, database: process.env.DATABASE_URL ?? null, cwd: process.cwd() };
+  const report = { apiKey: parsed.provider.apiKey, region: parsed.provider.env?.KINTSUGI_TEST_REGION ?? null, spawnRegion: process.env.KINTSUGI_TEST_REGION ?? null, bash: process.env.KINTSUGI_BASH ?? null, leaked: process.env.KINTSUGI_TEST_WORKER_ONLY ?? null, database: process.env.DATABASE_URL ?? null, cwd: process.cwd() };
   process.stdout.write(JSON.stringify({ type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: JSON.stringify(report) }) + "\\n");
 });
 `,
@@ -119,7 +119,9 @@ process.stdin.on("end", () => {
     const done = await handle.done;
     expect(done.type).toBe("job.completed");
     const report = JSON.parse(done.type === "job.completed" ? done.summary : "{}") as Record<string, string | null>;
-    expect(report).toMatchObject({ apiKey: "sk-test-key", region: "eu-test-1", leaked: null, database: null });
+    expect(report).toMatchObject({ apiKey: "sk-test-key", region: "eu-test-1", spawnRegion: null, leaked: null, database: null });
+    // The child cannot look through the PATH folders under its permission model: the launcher tells it which bash to run.
+    expect(report["bash"]).toBe(bashCommand() ?? "");
     expect(report["cwd"]?.toLowerCase()).toBe(paths.job.toLowerCase());
     expect(process.env["KINTSUGI_TEST_REGION"]).toBeUndefined();
     delete process.env["KINTSUGI_TEST_WORKER_ONLY"];
@@ -217,18 +219,48 @@ process.stdin.on("end", async () => {
     expect(done).toMatchObject({ type: "job.failed", reason: "timeout" });
     expect(done.type === "job.failed" ? done.error : "").toMatch(/stalled: no activity from the model for 1s/);
 
+    // A child that reports at once and then every 400 ms, for 3.2 s: longer than its 2 s idle limit, never silent for it.
+    // (A 1 s limit failed under load: the watchdog starts at spawn, and a loaded machine can take a second to start Node.)
     const chatty = fixture(
       "chatty.mjs",
       `let n = 0;
-const tick = setInterval(() => {
+const report = () => {
   n += 1;
-  const event = n < 6 ? { type: "message.delta", jobId: "x", text: "." } : { type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: "done" };
+  const event = n < 8 ? { type: "message.delta", jobId: "x", text: "." } : { type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: "done" };
   process.stdout.write(JSON.stringify(event) + "\\n");
-  if (n >= 6) { clearInterval(tick); setTimeout(() => process.exit(0), 50); }
-}, 400);
+  if (n >= 8) { clearInterval(tick); setTimeout(() => process.exit(0), 50); }
+};
+const tick = setInterval(report, 400);
+report();
 `,
     );
-    const busy = await createChildAgentRuntime({ mode: "mock", entry: chatty, idleTimeoutSec: 1 }).startJob(spec(dirs()));
+    const busy = await createChildAgentRuntime({ mode: "mock", entry: chatty, idleTimeoutSec: 2 }).startJob(spec(dirs()));
     expect(await busy.done).toMatchObject({ type: "job.completed", summary: "done" });
+  }, 30_000);
+
+  it("stops a job that writes more than the output limit to its output and scratch, and keeps what it wrote (T3-006)", async () => {
+    // What a shell call such as "head -c 20G /dev/zero > out/x" does, from the child: the output grows until the launcher stops it.
+    const filler = fixture(
+      "filler.mjs",
+      `import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", () => {
+  const out = JSON.parse(input).spec.workspace.outDir;
+  setInterval(() => {
+    appendFileSync(join(out, "big.bin"), Buffer.alloc(100_000));
+    process.stdout.write(JSON.stringify({ type: "message.delta", jobId: "x", text: "." }) + "\\n");
+  }, 100);
+});
+`,
+    );
+    const paths = dirs();
+    const handle = await createChildAgentRuntime({ mode: "mock", entry: filler }).startJob({ ...spec(paths), limits: { timeoutSec: 60, maxOutputBytes: 300_000 } });
+    const done = await handle.done;
+    expect(done).toMatchObject({ type: "job.failed", reason: "output-limit" });
+    expect(done.type === "job.failed" ? done.error : "").toContain("output limit of 300000 bytes");
+    expect(existsSync(join(paths.out, "big.bin"))).toBe(true);
   }, 30_000);
 });

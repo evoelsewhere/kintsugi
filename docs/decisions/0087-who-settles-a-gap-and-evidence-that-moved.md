@@ -1,6 +1,6 @@
 # ADR-0087: Say who settles a gap, and tell which cited lines moved
 
-- Status: Accepted
+- Status: Accepted. Amended by [ADR-0094](0094-one-open-correction-per-specification.md): the Gaps view shows an answer waiting for review, and one correction per specification is open at a time.
 - Date: 2026-10-29
 - Decision register: D101
 - Amends: [ADR-0057](0057-evidence-marks-and-gaps.md) (the gaps table and its view)

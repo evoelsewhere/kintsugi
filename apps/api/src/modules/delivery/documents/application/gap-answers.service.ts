@@ -28,6 +28,18 @@ export class GapAnswersService {
     } catch (error) {
       throw new BadRequestException(error instanceof Error ? error.message : "Invalid gap answer");
     }
-    return this.writes.proposeCorrection(projectId, `${answer.status === "resolved" ? "Resolve" : "Reopen"} ${answer.gap} in ${applicationId}/${answer.item}`, [{ path, content, expectedHash: createHash("sha256").update(now).digest("hex") }], actor);
+    // One open correction per specification (ADR-0094): a second answer is refused while the first waits for review.
+    return this.writes.proposeCorrection(
+      projectId,
+      `${answer.status === "resolved" ? "Resolve" : "Reopen"} ${answer.gap} in ${applicationId}/${answer.item}`,
+      [{ path, content, expectedHash: createHash("sha256").update(now).digest("hex") }],
+      actor,
+      { correction: { path, gap: answer.gap }, description: answerDescription(answer) },
+    );
   }
+}
+
+/** The pull request description of an answer: reviewers read the answer and its evidence without opening the diff. */
+export function answerDescription(answer: Pick<GapAnswer, "gap" | "status" | "answer" | "evidence">): string {
+  return [`Answers (${answer.status}):`, "", `- **${answer.gap}**: ${answer.answer}`, `  Evidence: ${answer.evidence}`].join("\n");
 }

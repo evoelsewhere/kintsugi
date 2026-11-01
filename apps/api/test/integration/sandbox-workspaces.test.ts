@@ -60,7 +60,7 @@ describe.skipIf(!hasDatabase)("sandbox workspaces (integration)", () => {
     workspace("run-pending-write", { attempt: 1, state: "published", checkoutsDroppedAt: new Date().toISOString() }, 10);
     workspace("run-written", { attempt: 1, state: "published" }, 10);
     workspace("orphan", undefined, 10);
-  }, 120_000);
+  });
   afterAll(async () => {
     await app?.close();
     await rm(dataDir, { recursive: true, force: true });

@@ -10,6 +10,7 @@
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { bashCommand } from "../launcher/bash.js";
 import { runProcess } from "../launcher/process.js";
 import { jobEnvironment } from "../launcher/script.js";
 import { boundOutput } from "./output.js";
@@ -21,6 +22,11 @@ const parameters = Type.Object({
   command: Type.String({ description: "The command to run, executed with `bash -c`." }),
   timeout: Type.Optional(Type.Number({ description: `Timeout in seconds (default ${DEFAULT_TIMEOUT_SEC}, max ${MAX_TIMEOUT_SEC}).` })),
 });
+
+/** The agent's tools without `shell` when this host has no bash to run it. */
+export function withAvailableShell(tools: readonly string[], hasBash: boolean = bashCommand() !== undefined): string[] {
+  return hasBash ? [...tools] : tools.filter((tool) => tool !== "shell");
+}
 
 function clampTimeoutSec(timeout: number | undefined): number {
   if (timeout === undefined || Number.isNaN(timeout)) return DEFAULT_TIMEOUT_SEC;
@@ -36,7 +42,7 @@ export function createKernelShellTool(cwd: string, tmp: string): ToolDefinition 
     execute: async (_toolCallId, params, signal) => {
       const timeoutSec = clampTimeoutSec(params.timeout);
       const result = await runProcess({
-        command: "bash",
+        command: bashCommand() ?? "bash",
         args: ["-c", params.command],
         cwd,
         env: jobEnvironment(tmp),

@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createKernelGitTool } from "../src/kernel/git.js";
+import { createKernelGitTool, findUnlistedOption } from "../src/kernel/git.js";
 import { createTools } from "../src/kernel/tools.js";
 import { PathGuard } from "../src/kernel/paths.js";
 import { createWorkspace } from "./helpers.js";
@@ -121,23 +121,53 @@ describe("kernel git diff", () => {
     const marker = join(workspace.root, "driver-ran.txt").replaceAll("\\", "/");
     execFileSync("git", ["config", "diff.external", `echo ran >'${marker}'; true`], { cwd: repo });
     execFileSync("git", ["config", "diff.probe.textconv", `echo ran >'${marker}'; cat`], { cwd: repo });
+    execFileSync("git", ["config", "diff.probe.command", `echo ran >'${marker}'; true`], { cwd: repo });
     writeFileSync(join(repo, ".gitattributes"), "*.txt diff=probe\n");
     try {
       // Plain git does run them: the probe is real.
       execFileSync("git", ["diff", "HEAD~1", "HEAD"], { cwd: repo, stdio: "ignore" });
       expect(existsSync(marker)).toBe(true);
       rmSync(marker);
+      execFileSync("git", ["blame", "a.txt"], { cwd: repo, stdio: "ignore" });
+      expect(existsSync(marker), "plain blame runs the converter").toBe(true);
+      rmSync(marker);
       for (const args of [["diff", "HEAD~1", "HEAD"], ["log", "-p", "-1"], ["show", "HEAD"]]) {
         const { text, error } = await git({ args, cwd: repo });
         expect(error, `${args.join(" ")}: ${text}`).toBe(false);
         expect(text).toContain("+two");
       }
+      const blame = await git({ args: ["blame", "a.txt"], cwd: repo });
+      expect(blame.error, blame.text).toBe(false);
+      expect(blame.text).toContain("two");
       expect(existsSync(marker)).toBe(false);
     } finally {
       execFileSync("git", ["config", "--unset", "diff.external"], { cwd: repo });
       execFileSync("git", ["config", "--unset", "diff.probe.textconv"], { cwd: repo });
+      execFileSync("git", ["config", "--unset", "diff.probe.command"], { cwd: repo });
       rmSync(join(repo, ".gitattributes"));
     }
+  });
+
+  it("refuses submodule recursion, files read into a blame or a message, and patches applied outside the tree (P-004)", async () => {
+    const secret = join(workspace.outside, "token.txt");
+    const cases: string[][] = [
+      ["clone", "--recurse-submodules", repo, join(workspace.out, "sub")],
+      ["fetch", "--recurse-submodules=yes"],
+      ["blame", "--contents", secret, "a.txt"],
+      ["commit", "-F", secret],
+      ["commit", "-qF", secret],
+      ["commit", `--file=${secret}`],
+      ["tag", "-F", secret, "t1"],
+      ["merge", "-F", secret, "HEAD"],
+      ["apply", "--unsafe-paths", "p.diff"],
+    ];
+    for (const args of cases) {
+      const { text } = await git({ args, cwd: repo });
+      expect(text, args.join(" ")).toContain("is not allowed");
+      expect(text, args.join(" ")).not.toContain("TOP_SECRET_VALUE");
+    }
+    // A message given inline still works.
+    expect((await git({ args: ["tag", "-m", "release", "t2"], cwd: repo })).error).toBe(false);
   });
 
   it("refuses to compare files outside a repository, with --no-index or with a path outside the workspace", async () => {
@@ -277,5 +307,60 @@ describe("kernel git transports (T3-012)", () => {
   it("leaves remotes over the network alone", async () => {
     expect((await git({ args: ["remote", "add", "upstream", "https://example.invalid/team/repo.git"], cwd: work })).error).toBe(false);
     expect((await git({ args: ["remote", "set-url", "upstream", "git@example.invalid:team/repo.git"], cwd: work })).error).toBe(false);
+  });
+});
+
+describe("kernel git option allowlist (P-031)", () => {
+  const repo = join(workspace.out, "allowlist");
+
+  beforeAll(() => {
+    mkdirSync(tmp, { recursive: true });
+    mkdirSync(repo, { recursive: true });
+    execFileSync("git", ["init", "-q"], { cwd: repo });
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+    execFileSync("git", ["add", "a.txt"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-q", "-m", "one"], { cwd: repo });
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\nthree\n");
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-q", "-am", "two"], { cwd: repo });
+  });
+
+  it("runs what the code-reviewer reads a merge request with", async () => {
+    for (const args of [
+      ["diff", "--stat", "HEAD~1", "HEAD"],
+      ["diff", "--name-only", "HEAD~1"],
+      ["log", "--oneline", "-5"],
+      ["log", "-n", "1", "--format=%H %s"],
+      ["show", "--stat", "HEAD"],
+      ["blame", "-L", "1,2", "a.txt"],
+      ["status", "--short"],
+    ]) {
+      const { text, error } = await git({ args, cwd: repo });
+      expect(error, `${args.join(" ")}: ${text}`).toBe(false);
+    }
+  });
+
+  it("refuses an option its subcommand does not list, naming it and the allowed ones", async () => {
+    const { text } = await git({ args: ["log", "--output-indicator-new=x"], cwd: repo });
+    expect(text).toContain('git option "--output-indicator-new=x" is not allowed for "git log" here');
+    expect(text).toContain("allowed: -p, --patch");
+    for (const args of [["status", "--find-renames"], ["blame", "-q", "a.txt"], ["commit", "-qz", "-m", "x"], ["tag", "--cleanup=verbatim", "t"]]) {
+      expect((await git({ args, cwd: repo })).text, args.join(" ")).toMatch(/is not allowed for "git \w+" here/);
+    }
+  });
+
+  it("reads an option's value as a value, and the paths after -- as paths", () => {
+    expect(findUnlistedOption("log", ["-n", "5", "--format", "%s", "-3"])).toBeUndefined();
+    expect(findUnlistedOption("commit", ["-qm", "-x is a message", "--author", "A <a@b>"])).toBeUndefined();
+    expect(findUnlistedOption("diff", ["HEAD", "--", "--not-an-option"])).toBeUndefined();
+    expect(findUnlistedOption("branch", ["-vv"])).toBeUndefined();
+    expect(findUnlistedOption("worktree", ["add", "-q", "x"])).toBeUndefined();
+    expect(findUnlistedOption("log", ["--follow", "--exec=x"])).toBe("--exec=x");
+    expect(findUnlistedOption("pwn", ["-x"])).toBe("-x");
+  });
+
+  it("keeps the patch apply reads in the workspace", async () => {
+    const { text } = await git({ args: ["apply", "--check", join(workspace.outside, "token.txt")], cwd: repo });
+    expect(text).toContain("outside the job workspace");
+    expect(text).not.toContain("TOP_SECRET_VALUE");
   });
 });

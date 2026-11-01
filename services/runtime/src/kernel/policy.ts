@@ -88,7 +88,19 @@ export function composeSystemPrompt(agent: AgentDefinition, workspace?: JobSpec[
   return parts.join("\n\n");
 }
 
-export type BlockedCallSink = (tool: string, reason: string, input: unknown) => void;
+export type BlockedCallSink = (tool: string, reason: string, input: unknown, callId?: string) => void;
+
+/**
+ * Why a tool call's `command` input is denied by one of the patterns, or undefined when it is not. The job asks the
+ * same question when the call starts (pi announces a call before its hooks run), so a denied call is reported once,
+ * as blocked (T3-005).
+ */
+export function commandDenial(deny: readonly RegExp[], input: unknown): string | undefined {
+  const command = typeof input === "object" && input !== null ? (input as { command?: unknown }).command : undefined;
+  if (typeof command !== "string") return undefined;
+  const match = deny.find((expression) => expression.test(command));
+  return match === undefined ? undefined : `command denied by agent policy (/${match.source}/)`;
+}
 
 /** Blocks any tool call whose `command` input matches a deny pattern. */
 export function createCommandPolicyExtension(patterns: readonly string[], onBlocked: BlockedCallSink): ExtensionFactory {
@@ -96,12 +108,9 @@ export function createCommandPolicyExtension(patterns: readonly string[], onBloc
   return (pi: ExtensionAPI): void => {
     if (deny.length === 0) return;
     pi.on("tool_call", (event) => {
-      const command = (event.input as { command?: unknown }).command;
-      if (typeof command !== "string") return undefined;
-      const match = deny.find((expression) => expression.test(command));
-      if (match === undefined) return undefined;
-      const reason = `command denied by agent policy (/${match.source}/)`;
-      onBlocked(event.toolName, reason, event.input);
+      const reason = commandDenial(deny, event.input);
+      if (reason === undefined) return undefined;
+      onBlocked(event.toolName, reason, event.input, event.toolCallId);
       return { block: true, reason };
     });
   };

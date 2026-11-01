@@ -53,6 +53,7 @@ interface RunRow {
   scope_set: string | null;
   scope_regenerate: string | null;
   scope_draft: string | null;
+  label: string | null;
   abandoned_at: Date | null;
   write_id: string | null;
   write_status: string | null;
@@ -66,7 +67,7 @@ const SELECT = `
   select r.id, r.project_id, r.application_id, r.parent_id, r.kind, r.name, r.status, r.attempt, r.attempts, r.failure_reason,
          r.source_repository_id, r.source_commit, r.sources, r.script_hash, r.agent, r.actor, r.output_summary,
          r.started_at, r.finished_at, r.created_at, r.cancel_requested_at,
-         r.inputs->'scope'->'items' as scope_items, r.inputs->'scope'->>'set' as scope_set, r.inputs->'scope'->>'regenerate' as scope_regenerate, r.inputs->'scope'->>'draft' as scope_draft, r.abandoned_at,
+         r.inputs->'scope'->'items' as scope_items, r.inputs->'scope'->>'set' as scope_set, r.inputs->'scope'->>'regenerate' as scope_regenerate, r.inputs->'scope'->>'draft' as scope_draft, r.inputs->>'label' as label, r.abandoned_at,
          w.id as write_id, w.status as write_status, w.branch as write_branch, w.pr_url as write_pr_url, w.error as write_error,
          (select count(*)::int from governance.restricted_record x where x.job_run_id = r.id) as restricted_records
     from workflow.job_run r
@@ -120,6 +121,7 @@ function toView(row: RunRow, withReport = false): JobRunView {
     ...optional("sources", sourcesOf(row) ?? null),
     ...optional("scriptHash", row.script_hash),
     ...optional("agent", row.agent),
+    ...optional("label", row.label),
     ...optional("actor", row.actor),
     ...optional("outputSummary", summaryOf(row.output_summary, withReport)),
     ...(row.write_id === null

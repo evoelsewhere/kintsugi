@@ -7,7 +7,7 @@
 | Self-hosted package, Docker Compose on a single host, no Kubernetes | [ADR-0006](../decisions/0006-self-hosted-package.md) |
 | One installation = one organization, no multi-tenancy | [ADR-0006](../decisions/0006-self-hosted-package.md) |
 | Git is the source of truth for code, documents, deliverables and assets | [ADR-0007](../decisions/0007-git-as-source-of-truth.md) |
-| PostgreSQL (with pgvector) is the only datastore; no broker, no separate vector or graph DB | [ADR-0010](../decisions/0010-postgres-only.md) |
+| PostgreSQL is the only datastore; no broker, no vector store and no graph DB. The Compose image ships the pgvector extension, but nothing uses it: the Brain is a vectorless tree index ([ADR-0091](../decisions/0091-brain-vectorless-tree-index.md)) | [ADR-0010](../decisions/0010-postgres-only.md) |
 | Orchestration on pg-boss (Postgres) | [ADR-0003](../decisions/0003-postgres-job-queue.md) |
 | TypeScript on Node ≥ 22; the runner follows pi's requirement (Node ≥ 22.19) | [ADR-0002](../decisions/0002-typescript-monorepo.md) |
 | pi is pinned to an exact version; only its MIT core packages are used | [ADR-0001](../decisions/0001-pi-as-kintsugi-runtime.md) |

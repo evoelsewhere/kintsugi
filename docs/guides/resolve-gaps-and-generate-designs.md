@@ -49,7 +49,10 @@ open. `TODO`, `TBD`, empty answers and an unsupported status do not resolve a bl
 
 Use **Reopen / edit** when an answer is withdrawn; explain why and cite the new evidence in the same row. When the
 specification has changed since it was read, reload before proposing the correction: the API and writer protect the
-newer content. A second correction based on an older pending PR may conflict; merge the first, reload and propose again.
+newer content. One correction per specification is open at a time ([ADR-0094](../decisions/0094-one-open-correction-per-specification.md)):
+a gap whose answer waits for review shows **Answer proposed · PR #n** and **View pull request**, its pull request
+carries the answer and evidence, and another answer on the same specification is refused, naming that pull request,
+until it is merged or closed; then reload and answer the next gap.
 
 For older specifications with no gaps section, run Understand again or repair the original specification through a
 reviewed PR. A missing register is not proof of no gaps. An explicit empty register is `None.`.

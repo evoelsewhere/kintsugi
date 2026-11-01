@@ -17,7 +17,8 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_SECRET_KEY` | yes | — | Master key encrypting secrets in Postgres (`openssl rand -base64 32`) |
 | `KINTSUGI_BOOTSTRAP_ADMIN_USER` | yes (first start) | `admin` | First admin account |
 | `KINTSUGI_BOOTSTRAP_ADMIN_PASSWORD` | yes (first start) | — | First admin password; the deploy workflow accepts letters, digits, dots, underscores, and hyphens (minimum 8 characters). Change it after first sign-in |
-| `POSTGRES_PASSWORD` | yes | — | Hexadecimal password of the `kintsugi` database user (minimum 32 characters in the deploy workflow) |
+| `POSTGRES_PASSWORD` | yes | — | Hexadecimal password of `kintsugi`, the Postgres bootstrap superuser (minimum 32 characters in the deploy workflow). Only the `db-roles` step and maintenance use it; the app and the worker never receive it |
+| `POSTGRES_APP_PASSWORD` | yes | — | Hexadecimal password of `kintsugi_app`, the role the app and the worker connect as: no superuser, no `CREATEDB` or `CREATEROLE`, owner of the `kintsugi` database. The deploy workflow generates it when `.env` has none; the `db-roles` step sets it on every start |
 | `KINTSUGI_DATA_DIR` | yes | `<deployment directory>/data` in the first Compose deployment | Host directory for Git mirrors, document repo clones and per-job checkouts ([ADR-0025](../decisions/0025-git-core-and-checkout-storage.md)); size it for every registered repository plus running jobs. Without Docker (development) it defaults to `./.kintsugi/data`. The API reads the document repo mirrors here (read-only), so it needs the same value as the worker |
 | `KINTSUGI_GIT_POLL_INTERVAL` | no | `180` | Seconds between full Git re-syncs of every repository (minimum 30); new repositories are cloned within seconds |
 | `KINTSUGI_TELEMETRY_RETENTION_DAYS` | no | `30` | Days the spans of agent jobs (`monitoring.telemetry_span`) are kept ([ADR-0048](../decisions/0048-runtime-telemetry-compaction-and-prompt-cache.md)) |
@@ -27,6 +28,7 @@ Installation-level settings come from `.env` ([`deploy/compose/.env.example`](..
 | `KINTSUGI_RUNTIME_MODE` | no | `pi` | `pi` runs agent jobs with the configured LLM providers; `mock` runs them without an LLM (development and demos) |
 | `KINTSUGI_PYTHON` | no | `python3` (`python` on Windows) | Python 3.12 interpreter for script steps and hooks |
 | `KINTSUGI_NODE` | no | the worker's Node | Node 22+ interpreter for `.js` script steps |
+| `KINTSUGI_JOB_UID`, `KINTSUGI_JOB_GID` | no | unset | Worker only, Linux: numeric user and group (never 0) that script steps, hooks and agent jobs run as, so they cannot read the worker's environment; the image has `kintsugi-job` (10002). Set both or neither: a half or malformed setting stops the worker; refused on Windows. Unset, jobs run as the worker's user and the worker logs a warning ([ADR-0093](../decisions/0093-job-processes-run-as-a-separate-user.md)). The Compose override `docker-compose.isolated.yml` sets both; `probe-job-isolation.sh` checks the boundary on the host |
 
 Runtime jobs run in job workspaces under `KINTSUGI_DATA_DIR/jobs/` without an OS-level sandbox ([ADR-0029](../decisions/0029-job-workspaces-instead-of-os-sandboxes.md)): run the worker as an unprivileged user (never root) whose only writable location is its data directory. Memory and CPU are bounded by the worker container, not per job.
 
@@ -41,7 +43,7 @@ The settings of the environment jobs run in are set by an administrator in **Set
 | Script timeout (minutes) | `10` | Wall-clock limit of a script step; the process tree is killed when it is exceeded. 10 seconds to 24 hours |
 | Agent job timeout (minutes) | `45` | Wall-clock limit of an agent job; `0` = no limit |
 | Agent idle limit (minutes) | `5` | No sign of life from the model (text, thinking, tool-call arguments, tool calls) for this long and the job is stopped as stalled and tried once more; `0` turns the watchdog off. A tool call that is still running counts as a sign of life for at most 11 minutes (longer than any kernel tool's own timeout), so a hung call is stopped too |
-| Output limit (MB) | `50` | What a step may write to its output folder; a script that exceeds it is killed. 1 MB to 10 GB |
+| Output limit (MB) | `50` | What a step may write to its output and scratch folders together; a script step or an agent step that exceeds it is stopped (failure: output limit). 1 MB to 10 GB |
 | Turns per agent job | `150` | Assistant turns; `0` = no limit |
 | Cost per agent job (USD) | `10` | Model cost of the job, compaction summaries included; counted only for models whose prices are known. `0` = no limit |
 | Mark checkouts and inputs read-only on disk | on | A second line of defence beside the kernel's path guard; switch it off where changing the permissions of thousands of files is slow |
@@ -52,4 +54,4 @@ Harness renderers and transformer plugins are configured in the portal (Admin �
 
 | Variable | Container | Description |
 |---|---|---|
-| `DATABASE_URL` | app, worker | Postgres connection string |
+| `DATABASE_URL` | app, worker | Postgres connection string, as `kintsugi_app` |

@@ -131,4 +131,34 @@ describe.skipIf(!hasDatabase)("auth (integration)", () => {
       expect(parallel.map((response) => response.status)).toEqual(Array.from({ length: 8 }, () => 200));
     });
   });
+
+  describe("API documentation", () => {
+    it("serves the OpenAPI document and Swagger UI to a signed-in session only", async () => {
+      for (const path of ["/docs", "/docs-json", "/docs/"]) {
+        const anonymous = await fetch(`${app.baseUrl}${path}`);
+        expect(anonymous.status).toBe(401);
+        expect(await anonymous.json()).toMatchObject({ success: false, statusCode: 401, error: "Unauthorized", message: "Sign in to read the API documentation" });
+      }
+      expect((await fetch(`${app.baseUrl}/docs-json`, { headers: { cookie: "kintsugi_session=not-a-session" } })).status).toBe(401);
+
+      const admin = await adminClient(app);
+      const document = await fetch(`${app.baseUrl}/docs-json`, { headers: { cookie: admin.cookie! } });
+      expect(document.status).toBe(200);
+      const paths = Object.keys(((await document.json()) as { paths: Record<string, unknown> }).paths);
+      expect(paths).toContain("/api/auth/me");
+      // The fifteen skeleton modules that kept writes in memory are gone (ADR-0095): not documented, not served.
+      const removed = ["admin/connectors", "admin/harnesses", "admin/project-build", "admin/templates", "delivery/architecture", "delivery/factory", "delivery/workbench", "governance/policies", "governance/reviews", "governance/risks", "monitoring/ai-metrics", "monitoring/cost", "monitoring/dashboards", "monitoring/observability", "monitoring/target-health"];
+      expect(paths.filter((path) => removed.some((prefix) => path.startsWith(`/api/${prefix}`)))).toEqual([]);
+      for (const prefix of removed) expect((await admin.get(`/${prefix}`)).status).toBe(404);
+      const ui = await fetch(`${app.baseUrl}/docs`, { headers: { cookie: admin.cookie! }, redirect: "follow" });
+      expect(ui.status).toBe(200);
+      expect(await ui.text()).toMatch(/swagger/i);
+
+      // Signing out closes it again; other public routes are unchanged.
+      const stale = admin.cookie!;
+      await admin.request("POST", "/auth/logout");
+      expect((await fetch(`${app.baseUrl}/docs-json`, { headers: { cookie: stale } })).status).toBe(401);
+      expect((await fetch(`${app.baseUrl}/health`)).status).not.toBe(401);
+    });
+  });
 });

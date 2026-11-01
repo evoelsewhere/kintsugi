@@ -157,6 +157,23 @@ describe.skipIf(!hasDatabase)("monitoring and cross-project reads (integration)"
     });
   });
 
+  it("counts a repository whose sync error is Git's own 'no HEAD' as empty, like the repository view shows it", async () => {
+    await app.db.query(
+      "insert into admin.git_repository (id, server_id, url, sync_status, last_error) values ('empty-old', 'github', 'https://github.example.invalid/org/empty-old.git', 'error', $1)",
+      ["git rev-parse --verify --end-of-options HEAD^{commit} failed (exit 128): fatal: Needed a single revision"],
+    );
+    try {
+      const overview = (await admin.get<Overview>("/monitoring/overview")).body.data!;
+      expect(overview.counts).toMatchObject({ repositories: 7, repositoriesWithErrors: 1, repositoriesEmpty: 2, repositoriesWithErrorsUnlinked: 1 });
+      const repositories = (await admin.get<Array<{ id: string; syncStatus: string }>>("/monitoring/repositories")).body.data!;
+      expect(repositories.find((repository) => repository.id === "empty-old")?.syncStatus).toBe("empty");
+      expect(repositories.filter((repository) => repository.syncStatus === "error").map((repository) => repository.id)).toEqual(["broken"]);
+      expect(JSON.stringify(overview)).not.toContain("empty-old");
+    } finally {
+      await app.db.query("delete from admin.git_repository where id = 'empty-old'");
+    }
+  });
+
   it("the overview lists what needs attention and the recent activity, newest first", async () => {
     const overview = (await admin.get<Overview>("/monitoring/overview")).body.data!;
     expect(isNewestFirst(overview.attention)).toBe(true);

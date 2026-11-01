@@ -12,6 +12,14 @@ export interface DocumentWriteFilter {
   projectId?: string;
 }
 
+/** The document and gap a correction answers (ADR-0094). */
+export interface DocumentWriteCorrection {
+  /** The specification, relative to the document repo root. */
+  path: string;
+  /** The gap id the answer settles or reopens. */
+  gap: string;
+}
+
 /** What produced the files. */
 export type DocumentWriteKind = "manifest" | "job-output" | "state-change";
 
@@ -33,6 +41,8 @@ export interface DocumentWriteRecord {
   actor?: string;
   jobId?: string;
   agent?: string;
+  /** Set on a gap answer: the specification and gap it answers. */
+  correction?: DocumentWriteCorrection;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,4 +69,17 @@ export interface NewDocumentWrite {
   /** Every file goes to one pull request, auto-commit paths included. */
   reviewAll?: boolean;
   actor?: string;
+  /** Markdown for the pull request description, between the message and the file list. */
+  description?: string;
+  correction?: DocumentWriteCorrection;
+}
+
+/** A correction is open until its pull request is merged or closed: queued, or on its review branch. */
+export const isOpenCorrection = (write: Pick<DocumentWriteRecord, "status" | "branch" | "correction">): boolean =>
+  write.correction !== undefined && (write.status === "queued" || (write.branch !== undefined && (write.status === "committed" || write.status === "pr-opened")));
+
+/** The number of a pull request (or merge request) from its web URL, when the URL carries one. */
+export function pullRequestNumber(url: string | undefined): number | undefined {
+  const match = url === undefined ? null : /\/(?:pull|pulls|merge_requests|pull-requests)\/(\d+)(?:[/?#]|$)/.exec(url);
+  return match?.[1] === undefined ? undefined : Number(match[1]);
 }

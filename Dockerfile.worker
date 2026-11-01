@@ -14,8 +14,11 @@ ENV NODE_ENV=production \
     KINTSUGI_PYTHON=/usr/local/bin/python3.12 \
     KINTSUGI_NODE=/usr/local/bin/node
 
+# kintsugi runs the worker; kintsugi-job is the user job processes run as when KINTSUGI_JOB_UID/GID name it (ADR-0093).
 RUN groupadd --system --gid 10001 kintsugi \
     && useradd --system --uid 10001 --gid 10001 --home-dir /app --no-create-home kintsugi \
+    && groupadd --system --gid 10002 kintsugi-job \
+    && useradd --system --uid 10002 --gid 10002 --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin kintsugi-job \
     && apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*

@@ -2,10 +2,11 @@
 // run in their own Node process (bin/agent-job.js), started like a script step — cwd = the
 // job directory, a cleared environment, a wall-clock timeout and a process-tree kill — plus
 // Node's permission model (reads: the runtime's own code and the job's workspace; writes:
-// out and tmp; no child processes). The JobSpec and the provider's API key and inline
-// secrets go to the child on stdin; provider environment credentials (cloud regions, keys
-// read from variables) go into that child's environment only. Nothing is written to disk,
-// and nothing is shared between concurrent jobs. JobEvents come back as JSON lines.
+// out and tmp; no child processes). The JobSpec and the provider's API key, inline secrets and
+// environment credentials (cloud regions, keys read from variables) go to the child on stdin:
+// never into its spawn environment, which `/proc/<pid>/environ` shows to every process of the
+// same user (ADR-0093). With a job user set, the child runs as that user. Nothing is written to
+// disk, and nothing is shared between concurrent jobs. JobEvents come back as JSON lines.
 
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
@@ -18,15 +19,17 @@ import { createJobServiceHost } from "./job-service-host.js";
 import { EventStream } from "../event-stream.js";
 import { PI_ENGINE_ID, RUNTIME_VERSION } from "../version.js";
 import type { StoredProviderConfig } from "./model-runtime.js";
-import { type ProcessResult, runProcess } from "./process.js";
+import { type JobUser, MAX_TIMER_MS, type ProcessResult, jobUser, runProcess } from "./process.js";
 import type { LoadedProvider } from "./provider-registry.js";
 import { jobEnvironment, redactText } from "./script.js";
+import { BASH_ENV, bashCommand } from "./bash.js";
+import { grantToUser } from "./workspace.js";
 
 /** What the launcher writes to the child's stdin (one JSON document). */
 export interface AgentChildInput {
   mode: "pi" | "mock";
   spec: JobSpec;
-  provider?: { config: StoredProviderConfig; apiKey?: string; secrets?: Record<string, string> };
+  provider?: { config: StoredProviderConfig; apiKey?: string; secrets?: Record<string, string>; env?: Record<string, string> };
 }
 
 export interface ChildAgentRuntimeOptions {
@@ -52,6 +55,17 @@ export interface ChildAgentRuntimeOptions {
   permissionModel?: boolean;
   /** The worker's environment, for PATH (tests). */
   hostEnv?: NodeJS.ProcessEnv;
+  /** The user agent jobs run as; defaults to `jobUser()` of the worker's environment (ADR-0093). */
+  runAs?: JobUser;
+}
+
+/**
+ * Puts the provider's environment credentials into the agent child's own environment after it started (bin/agent-job.ts):
+ * SDKs read cloud regions and keys from the environment of the process that calls the provider, and a variable set at
+ * run time is not in the environment the process was started with, which `/proc/<pid>/environ` shows (ADR-0093).
+ */
+export function applyProviderEnvironment(provider: AgentChildInput["provider"], target: NodeJS.ProcessEnv = process.env): void {
+  for (const [name, value] of Object.entries(provider?.env ?? {})) target[name] = value;
 }
 
 type JobEnd = Extract<JobEvent, { type: "job.completed" | "job.failed" }>;
@@ -129,6 +143,7 @@ class ChildAgentJob implements JobHandle {
   constructor(
     readonly jobId: string,
     private readonly idleTimeoutSec: number,
+    readonly maxOutputBytes?: number,
   ) {
     this.done = new Promise<JobEnd>((resolve) => {
       this.#resolveDone = resolve;
@@ -143,7 +158,7 @@ class ChildAgentJob implements JobHandle {
     this.#idle = setTimeout(() => {
       this.#stalledAfterSec = this.idleTimeoutSec;
       this.#abort.abort();
-    }, this.idleTimeoutSec * 1000);
+    }, Math.min(this.idleTimeoutSec * 1000, MAX_TIMER_MS));
     this.#idle.unref();
   }
 
@@ -176,6 +191,7 @@ class ChildAgentJob implements JobHandle {
     else if (this.#stalledAfterSec !== undefined) fail("timeout", `stalled: no activity from the model for ${this.#stalledAfterSec}s (the provider stopped responding)`);
     else if (result?.stopped === "aborted") fail("aborted", this.#abortReason);
     else if (result?.stopped === "timeout") fail("timeout", `timed out after ${timeoutSec}s`);
+    else if (result?.stopped === "output-limit") fail("output-limit", `wrote more than the output limit of ${this.maxOutputBytes ?? 0} bytes to its output and scratch folders`);
     else {
       const detail = redactText((result?.stderr ?? "").trim().split(/\r?\n/).slice(-15).join("\n"));
       fail("error", `the agent process exited with code ${result?.exitCode ?? "?"} without a result${detail === "" ? "" : `: ${detail}`}`);
@@ -207,7 +223,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
       await mkdir(tmp, { recursive: true });
 
       const input: AgentChildInput = { mode: options.mode, spec };
-      let providerEnv: Record<string, string> = {};
+      let cacheEnv: Record<string, string> = {};
       if (options.mode === "pi") {
         if (options.loadProvider === undefined) throw new Error("the pi agent runtime needs loadProvider");
         const { config, credentials } = await options.loadProvider(spec.model.provider);
@@ -215,10 +231,14 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
           config,
           ...(credentials.apiKey === undefined ? {} : { apiKey: credentials.apiKey }),
           ...(credentials.secrets === undefined ? {} : { secrets: credentials.secrets }),
+          // The child puts these into its own process.env after it starts (bin/agent-job.ts).
+          ...(credentials.env === undefined || Object.keys(credentials.env).length === 0 ? {} : { env: credentials.env }),
         };
-        // pi reads the cache lifetime from the environment of the process that calls the provider.
-        providerEnv = { ...(config.cacheRetention === "long" ? { PI_CACHE_RETENTION: "long" } : {}), ...(credentials.env ?? {}) };
+        // pi reads the cache lifetime from the environment of the process that calls the provider; it is no secret.
+        cacheEnv = config.cacheRetention === "long" ? { PI_CACHE_RETENTION: "long" } : {};
       }
+      const runAs = options.runAs ?? jobUser();
+      if (runAs !== undefined) await grantToUser([spec.workspace.outDir, tmp], runAs);
 
       const entry = options.entry ?? AGENT_CHILD_ENTRY;
       const permission =
@@ -237,20 +257,25 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Agen
               ...[...(await childCodeRoots()), entry, spec.workspace.root, jobDir, ...spec.workspace.readOnly].map((path) => `--allow-fs-read=${path}`),
               ...[spec.workspace.outDir, tmp].map((path) => `--allow-fs-write=${path}`),
             ];
-      const job = new ChildAgentJob(randomUUID(), spec.limits.idleTimeoutSec ?? idleTimeoutSec);
+      const maxOutputBytes = spec.limits.maxOutputBytes;
+      const job = new ChildAgentJob(randomUUID(), spec.limits.idleTimeoutSec ?? idleTimeoutSec, maxOutputBytes);
       const timeoutSec = spec.limits.timeoutSec;
       void runProcess({
         command: options.node ?? process.execPath,
         args: [...permission, entry],
         cwd: jobDir,
-        // The job environment plus this provider's variables — in this child only.
-        env: { ...jobEnvironment(tmp, options.hostEnv), ...providerEnv },
+        // The job environment, the provider's cache setting and the bash the kernel's shell runs (found here: the child's
+        // permission model keeps it out of the PATH folders); credentials go on stdin.
+        env: { ...jobEnvironment(tmp, options.hostEnv), ...cacheEnv, [BASH_ENV]: bashCommand() ?? "" },
         // timeoutSec 0 = no wall-clock limit; the idle watchdog still catches a stalled provider.
         timeoutMs: timeoutSec > 0 ? (timeoutSec + grace) * 1000 : 0,
         input: JSON.stringify(input),
         onLine: (line) => job.onLine(line),
         ...(spec.memory === undefined && spec.webSearch !== true && spec.webFetch !== true ? {} : { onMessage: createJobServiceHost(spec, services, job.signal) }),
         signal: job.signal,
+        ...(runAs === undefined ? {} : { runAs }),
+        // What a `shell` call or a write puts in the output and the scratch, together (T3-006).
+        ...(maxOutputBytes === undefined ? {} : { watch: { dirs: [spec.workspace.outDir, tmp], maxBytes: maxOutputBytes } }),
       }).then(
         (result) => job.exited(result, timeoutSec),
         (error: unknown) => job.exited(undefined, timeoutSec, error),

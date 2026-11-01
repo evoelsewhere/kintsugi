@@ -172,7 +172,8 @@ items. It is built without parsers, from a topology the model-written extraction
 
 ## Step 4 — Production runtime overlay (optional)
 
-Runtime jobs have no network and no MCP servers, so telemetry reaches this stage only as exports a person
+Runtime jobs reach no production system: their only network is the public web search and pages a project may grant
+(ADR-0079, ADR-0080) and the MCP servers an administrator registers, so telemetry reaches this stage only as exports a person
 supplied (APM exports, batch logs) in the document repository under `10-applications/$app/01-legacy/telemetry/`, attached
 through the portal. If they exist, the synthesis job gathers p50/p95/p99 for the key jobs or routes, tags each
 domain with its wall-clock cost and p99/p50 variance, and calls out the highest-variance domain as

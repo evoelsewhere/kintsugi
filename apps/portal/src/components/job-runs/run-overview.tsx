@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import type { JobRunDetail, JobRunEvent } from "@/lib/api/job-runs";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { RunDesignLoop } from "./run-design-loop";
-import { humanize, statsByStep, stuckReason } from "./run-events";
-import { describeStepCounts, stepCounts, stepsForAttempt } from "./run-model";
+import { statsByStep, stuckReason } from "./run-events";
+import { describeStepCounts, stepCounts, stepNames, stepsForAttempt } from "./run-model";
 import { PossiblyStuck, StepTimeline } from "./run-timeline";
 import { RunUsage } from "./run-usage";
 
@@ -35,6 +35,7 @@ export function RunOverview({
   const steps = stepsForAttempt(run, run.attempt);
   const counts = describeStepCounts(stepCounts(run, steps, events), run);
   const current = steps.filter((step) => step.status === "running");
+  const names = stepNames(steps);
   const stats = statsByStep(events);
   // A running step that repeats one call or sits in one model turn for long is flagged, from its events alone.
   const stuck = new Map(
@@ -74,11 +75,11 @@ export function RunOverview({
       </dl>
       {current.length === 0 ? null : (
         <div className="rounded-lg bg-recessed/50 px-4 py-3 text-[13px] text-text">
-          <p>Working on {current.map((step) => humanize(step.name)).join(", ")}</p>
+          <p>Working on {current.map((step) => names.get(step.id)).join(", ")}</p>
           {[...stuck.entries()].map(([id, reason]) => (
             <p key={id} className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
               <PossiblyStuck reason={reason} />
-              {humanize(current.find((step) => step.id === id)?.name ?? "")}: {reason}
+              {names.get(id)}: {reason}
             </p>
           ))}
         </div>

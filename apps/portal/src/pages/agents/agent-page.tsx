@@ -5,7 +5,7 @@
 // edit".
 
 import { isMcpToolEntry, type ThinkingLevel } from "@kintsugi/domain";
-import { ArrowLeft, Copy, Download, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Plus, RotateCcw, Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/page-header";
@@ -29,6 +29,7 @@ import {
 } from "@/lib/api/agents";
 import { type McpServerChoice, mcpServersApi } from "@/lib/api/mcp-servers";
 import { type AgentModelBindingInput, providersApi, type ProviderView, type SupportedProviders } from "@/lib/api/providers";
+import { toolWarnings } from "@/lib/agent-tools";
 import { useAuth } from "@/lib/auth";
 import { modelOptions, modelThinkingLevels, thinkingLabel, thinkingOptions } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
@@ -378,6 +379,12 @@ function AgentForm({ draft, context, mcpServers, readOnly, nameLocked, update }:
             Read tools are confined to the read-only workspace; write and edit work in the job&apos;s output directory. codemode lets the model write a short script that reads many files and calls read-only tools, so only its output
             reaches the context.
           </span>
+          {toolWarnings(draft.tools).map((warning) => (
+            <p key={warning.tool} role="note" className="flex items-start gap-1.5 text-[12px] text-text">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-[var(--ds-status-orange)]" strokeWidth={1.75} />
+              {warning.text}
+            </p>
+          ))}
           {mcpChoices.length === 0 ? null : (
             <>
               <span className="mt-1 text-[14px] text-text">MCP servers</span>

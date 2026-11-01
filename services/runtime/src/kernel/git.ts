@@ -6,9 +6,8 @@
 // the job only reads — clone or init the repository there first. The environment is the job's
 // cleared one plus git hardening: no system or global configuration, no prompts, no pager,
 // neutral commit identity, hooks and fsmonitor pointed at nothing, and only network protocols
-// that cannot start a command. Repository configuration can still name a textconv driver; that
-// runs inside the same account with no secrets in the environment (ADR-0029), so it is residual
-// risk shared with the shell tool, not a new boundary.
+// that cannot start a command. The subcommands that render diffs or blame run with the
+// repository's external diff drivers and converters switched off (they are commands).
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -48,14 +47,21 @@ const FORBIDDEN_OPTIONS = [
   "--upload-pack", "--receive-pack", "--ext-diff", "--textconv", "--output", "--exec",
   // Another repository or a template from anywhere on disk, a git directory outside, a command that opens files (T3-003).
   "--reference", "--reference-if-able", "--separate-git-dir", "--template", "--open-files-in-pager",
+  // Submodules whose URLs the repository names (anywhere on disk, or a transport of its choosing); a file read from
+  // anywhere into a blame (`--contents`) or a message (`commit`, `tag`, `merge` `--file`); a patch that writes outside
+  // the working tree (`apply --unsafe-paths`) (P-004).
+  "--recurse-submodules", "--contents", "--unsafe-paths",
 ];
+
+/** Subcommands whose `--file` (`-F`, see below) reads a message from a file anywhere on disk (P-004). */
+const MESSAGE_FILE_SUBCOMMANDS = new Set(["commit", "tag", "merge"]);
 
 /**
  * Short options that start a command, by subcommand. git also takes them bundled (`-qu <cmd>`) or with the value
  * attached (`-u<cmd>`), so any single-dash argument that holds the letter before a value starts is refused. Long
  * options cannot be abbreviated (`--upload=<cmd>`): the environment tells git to refuse abbreviations.
  */
-const COMMAND_SHORT_OPTIONS: Readonly<Record<string, string>> = { clone: "u", rebase: "x", grep: "O" };
+const COMMAND_SHORT_OPTIONS: Readonly<Record<string, string>> = { clone: "u", rebase: "x", grep: "O", commit: "F", tag: "F", merge: "F" };
 
 /** `git config` only reads: one of these forms, and no file of its own choosing. */
 const CONFIG_READS = new Set(["--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"]);
@@ -70,7 +76,10 @@ const CLONE_VALUE_OPTIONS = new Set(["--depth", "--branch", "-b", "--origin", "-
 /** Subcommands that accept `--no-ext-diff` and `--no-textconv`, to keep repository-configured diff drivers and
  * converters (which are commands) out of diff rendering. An empty GIT_EXTERNAL_DIFF or `diff.external` does not
  * switch them off: git takes it as an external diff command named "" and every patch fails (T3-002). */
-const TEXTCONV_SUBCOMMANDS = new Set(["diff", "log", "show"]);
+const TEXTCONV_SUBCOMMANDS = new Set(["diff", "log", "show", "whatchanged"]);
+
+/** Subcommands that run a converter but take no `--no-ext-diff`: they get `--no-textconv` alone (P-004). */
+const TEXTCONV_ONLY_SUBCOMMANDS = new Set(["blame"]);
 
 const parameters = Type.Object({
   args: Type.Array(Type.String(), {
@@ -104,11 +113,131 @@ function findForbiddenOption(subcommand: string, args: readonly string[]): strin
   const short = COMMAND_SHORT_OPTIONS[subcommand];
   for (const arg of args) {
     const name = arg.includes("=") ? arg.slice(0, arg.indexOf("=")) : arg;
-    if (FORBIDDEN_OPTIONS.includes(name)) return arg;
+    if (FORBIDDEN_OPTIONS.includes(name) || (name === "--file" && MESSAGE_FILE_SUBCOMMANDS.has(subcommand))) return arg;
     if (short === undefined || !/^-[^-]/.test(arg)) continue;
     for (const letter of arg.slice(1)) {
       if (letter === short) return arg;
       if (!/[A-Za-z]/.test(letter)) break;
+    }
+  }
+  return undefined;
+}
+
+/*
+ * The options each subcommand accepts (P-031): every other one is refused, so an option git adds, or one nobody thought
+ * of, cannot read or write outside the workspace; the blocklist above stays as a second line. An entry ending in "="
+ * takes a value: after "=" (long), attached (short) or as the next argument. In real use: the code-reviewer reads a
+ * merge request with diff, log, show and blame; no prompt, workflow or script of the built-in plugins tells an agent to
+ * run any other git command (the plugin scripts call git themselves, outside this tool).
+ */
+const DIFF_OPTIONS = [
+  "-p", "--patch", "-s", "--no-patch", "-U=", "--unified=", "--stat", "--stat=", "--shortstat", "--numstat", "--name-only", "--name-status",
+  "--summary", "--raw", "--no-color", "--color=", "--word-diff", "--word-diff=", "--color-words", "-w", "--ignore-all-space", "-b",
+  "--ignore-space-change", "--ignore-blank-lines", "--ignore-cr-at-eol", "-M", "--find-renames", "--find-renames=", "--no-renames",
+  "--diff-filter=", "--relative", "--relative=", "-R", "--minimal", "--patience", "--histogram", "--abbrev", "--abbrev=", "--full-index",
+  "--binary", "-z", "--exit-code", "--quiet", "--check", "-a", "--text", "--function-context", "-W", "-S=", "-G=", "--pickaxe-all",
+  "--no-ext-diff", "--no-textconv",
+];
+const LOG_OPTIONS = [
+  ...DIFF_OPTIONS, "--oneline", "--format=", "--pretty", "--pretty=", "--graph", "--decorate", "--decorate=", "--no-decorate", "--all",
+  "--branches", "--tags", "--remotes", "--reverse", "--follow", "--since=", "--until=", "--after=", "--before=", "--author=",
+  "--committer=", "--grep=", "-i", "--regexp-ignore-case", "-E", "--extended-regexp", "-F", "--fixed-strings", "-n=", "--max-count=",
+  "--skip=", "--no-merges", "--merges", "--first-parent", "--date=", "--abbrev-commit", "--no-abbrev-commit", "-L=", "--full-history",
+  "--simplify-by-decoration", "--topo-order", "--date-order", "--author-date-order", "--left-right", "--cherry-pick", "--cherry-mark",
+  "--boundary", "--ancestry-path", "--no-walk", "-m", "--cc", "-c", "--parents", "--children", "--source",
+];
+
+export const GIT_ALLOWED_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  // Read-only subcommands.
+  blame: ["-L=", "-w", "-M", "--porcelain", "--line-porcelain", "--incremental", "-e", "--show-email", "-s", "-l", "-t", "-f", "--show-name", "-n", "--show-number", "--root", "--reverse", "--date=", "--abbrev=", "--first-parent", "--minimal", "--no-textconv"],
+  "cat-file": ["-t", "-s", "-p", "-e"],
+  cherry: ["-v", "--abbrev", "--abbrev="],
+  "count-objects": ["-v", "--verbose", "-H", "--human-readable"],
+  describe: ["--tags", "--all", "--always", "--long", "--abbrev=", "--contains", "--exact-match", "--dirty", "--first-parent", "--candidates=", "--match=", "--exclude="],
+  diff: [...DIFF_OPTIONS, "--cached", "--staged", "--merge-base"],
+  grep: ["-n", "--line-number", "-i", "--ignore-case", "-w", "--word-regexp", "-v", "--invert-match", "-l", "--files-with-matches", "-L", "--files-without-match", "-c", "--count", "-e=", "-E", "--extended-regexp", "-F", "--fixed-strings", "-P", "--perl-regexp", "-G", "--basic-regexp", "-h", "-H", "--heading", "--break", "-A=", "-B=", "--context=", "--cached", "--untracked", "-o", "--only-matching", "-q", "--quiet", "--max-depth=", "--and", "--or", "--not", "-I", "--all-match", "--full-name", "-z", "--column", "--function-context", "-W"],
+  log: LOG_OPTIONS,
+  "ls-files": ["-c", "--cached", "-m", "--modified", "-o", "--others", "-d", "--deleted", "-s", "--stage", "--unmerged", "--exclude-standard", "-z", "--full-name", "--error-unmatch", "--directory", "--no-empty-directory", "-t", "--eol", "--deduplicate"],
+  "ls-tree": ["-r", "-d", "-t", "-l", "--long", "--name-only", "--name-status", "--object-only", "--full-name", "--full-tree", "-z", "--abbrev", "--abbrev=", "--format="],
+  "merge-base": ["--is-ancestor", "--all", "-a", "--octopus", "--fork-point", "--independent"],
+  "name-rev": ["--name-only", "--tags", "--refs=", "--exclude=", "--all", "--always", "--no-undefined"],
+  "range-diff": [...DIFF_OPTIONS, "--creation-factor=", "--no-dual-color", "--left-only", "--right-only"],
+  "rev-parse": ["--verify", "-q", "--quiet", "--short", "--short=", "--abbrev-ref", "--abbrev-ref=", "--symbolic", "--symbolic-full-name", "--show-toplevel", "--show-prefix", "--show-cdup", "--is-inside-work-tree", "--is-bare-repository", "--is-shallow-repository", "--all", "--branches", "--tags", "--default="],
+  shortlog: [...LOG_OPTIONS, "-s", "--summary", "-e", "--email", "--group="],
+  show: LOG_OPTIONS,
+  "show-ref": ["--heads", "--tags", "--head", "-s", "--hash", "--hash=", "--verify", "-q", "--quiet", "-d", "--dereference", "--abbrev", "--abbrev=", "--exists"],
+  status: ["-s", "--short", "-b", "--branch", "--porcelain", "--porcelain=", "--long", "-v", "--verbose", "--untracked-files=", "--ignored", "--ignored=", "-z", "--ahead-behind", "--no-ahead-behind", "--renames", "--no-renames", "--show-stash"],
+  version: ["--build-options"],
+  whatchanged: [...LOG_OPTIONS, "--i-still-use-this"],
+  // Mutating subcommands: they run only where the job may write.
+  add: ["-A", "--all", "--update", "-N", "--intent-to-add", "-f", "--force", "-n", "--dry-run", "-v", "--verbose", "--ignore-errors", "--renormalize", "--chmod="],
+  am: ["--abort", "--continue", "--skip", "--quit", "-3", "--3way", "-q", "--quiet", "-s", "--signoff", "--keep-cr", "--no-keep-cr"],
+  apply: ["--check", "--stat", "--numstat", "--summary", "--cached", "--index", "-R", "--reverse", "-3", "--3way", "-p=", "--whitespace=", "--ignore-whitespace", "--ignore-space-change", "-v", "--verbose", "--recount", "--allow-empty"],
+  branch: ["-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "--list", "-l", "-d", "-D", "--delete", "-m", "-M", "--move", "-c", "--copy", "--show-current", "--contains", "--no-contains", "--merged", "--no-merged", "-f", "--force", "--format=", "--sort=", "--points-at=", "-t", "--track", "--no-track"],
+  checkout: ["-b=", "-B=", "--detach", "-f", "--force", "-q", "--quiet", "--orphan=", "--ours", "--theirs", "-m", "--merge", "--no-track", "-t", "--track"],
+  "cherry-pick": ["-n", "--no-commit", "-x", "--abort", "--continue", "--skip", "--quit", "-m=", "--mainline=", "--ff", "--allow-empty", "--keep-redundant-commits", "-s", "--signoff", "-e", "--edit", "--no-edit"],
+  clean: ["-n", "--dry-run", "-f", "--force", "-d", "-x", "-X", "-q", "--quiet", "-e="],
+  clone: ["-q", "--quiet", "-v", "--verbose", "--origin=", "-o=", "--branch=", "-b=", "--depth=", "--single-branch", "--no-single-branch", "--no-checkout", "-n", "--bare", "--mirror", "--no-tags", "--filter=", "--shallow-since=", "--shallow-exclude=", "--no-hardlinks", "-l", "--local", "--sparse", "--jobs=", "-j=", "--revision="],
+  commit: ["-m=", "--message=", "-q", "--quiet", "-a", "--all", "--amend", "--no-edit", "--allow-empty", "--allow-empty-message", "--author=", "--date=", "-s", "--signoff", "--no-verify", "--fixup=", "--squash=", "-v", "--verbose", "--dry-run", "--short", "--porcelain"],
+  config: ["--get", "--get-all", "--get-regexp", "--list", "-l", "--local", "--null", "-z", "--name-only", "--show-origin", "--show-scope", "--type=", "--default=", "--bool", "--int", "--path"],
+  fetch: ["-q", "--quiet", "-v", "--verbose", "--all", "--prune", "-p", "--tags", "-t", "--no-tags", "--depth=", "--deepen=", "--unshallow", "--shallow-since=", "--force", "-f", "--dry-run", "--atomic", "--filter=", "--no-recurse-submodules"],
+  gc: ["--auto", "-q", "--quiet", "--prune=", "--aggressive"],
+  init: ["-q", "--quiet", "--bare", "-b=", "--initial-branch=", "--object-format="],
+  merge: ["--no-ff", "--ff", "--ff-only", "--squash", "--no-squash", "-m=", "--no-edit", "--abort", "--continue", "--quit", "-q", "--quiet", "-v", "--no-commit", "--commit", "-s=", "--strategy=", "-X=", "--strategy-option=", "--allow-unrelated-histories", "--stat", "--no-stat", "-n", "--log", "--no-log", "--signoff"],
+  mv: ["-f", "--force", "-k", "-n", "--dry-run", "-v", "--verbose"],
+  pull: ["-q", "--quiet", "-v", "--verbose", "--ff", "--ff-only", "--no-ff", "--rebase", "--rebase=", "--no-rebase", "--depth=", "--unshallow", "--tags", "--no-tags", "--prune", "-p", "--all", "--no-recurse-submodules"],
+  push: ["--repo=", "-q", "--quiet", "-v", "--verbose", "-f", "--force", "--force-with-lease", "--force-with-lease=", "--set-upstream", "--tags", "--delete", "-d", "--all", "--dry-run", "-n", "--atomic", "--follow-tags", "--no-verify", "--porcelain", "--prune"],
+  rebase: ["--onto=", "--abort", "--continue", "--skip", "--quit", "-q", "--quiet", "-v", "--root", "--autosquash", "--no-autosquash", "--keep-empty", "--empty=", "-f", "--force-rebase", "--committer-date-is-author-date", "--update-refs", "--no-update-refs", "-m", "--merge", "-s=", "--strategy=", "-X=", "--strategy-option=", "--autostash", "--no-autostash"],
+  reflog: ["-n=", "--max-count=", "--date=", "--all", "--oneline", "--format=", "--pretty="],
+  remote: ["-v", "--verbose", "-f", "--tags", "--no-tags", "-t=", "-m=", "--mirror=", "--push", "--add", "--delete", "--all", "-n", "--dry-run"],
+  reset: ["--hard", "--soft", "--mixed", "--keep", "--merge", "-q", "--quiet", "-N", "--intent-to-add"],
+  restore: ["--staged", "-S", "--worktree", "-W", "-s=", "--source=", "-q", "--quiet", "--ours", "--theirs", "-m", "--merge"],
+  revert: ["-n", "--no-commit", "--abort", "--continue", "--skip", "--quit", "-m=", "--mainline=", "-e", "--edit", "--no-edit", "-s", "--signoff"],
+  rm: ["-r", "-f", "--force", "--cached", "-q", "--quiet", "-n", "--dry-run", "--ignore-unmatch"],
+  stash: ["-m=", "--message=", "--include-untracked", "-k", "--keep-index", "--no-keep-index", "-q", "--quiet", "-a", "--all", "--index", "--staged", "-S"],
+  submodule: ["-q", "--quiet", "--init", "--depth=", "--cached", "--no-fetch", "-N", "--checkout", "--force", "-f"],
+  switch: ["-c=", "--create=", "--force-create=", "--detach", "-d", "-f", "--force", "--discard-changes", "-q", "--quiet", "--orphan=", "-m", "--merge", "-t", "--track", "--no-track", "--guess", "--no-guess"],
+  tag: ["-a", "--annotate", "-m=", "--message=", "-d", "--delete", "-l", "--list", "-f", "--force", "-n", "--sort=", "--contains", "--no-contains", "--points-at=", "--merged", "--no-merged", "--format=", "-v", "--verify"],
+  worktree: ["-b=", "-B=", "--detach", "-d", "-f", "--force", "-q", "--quiet", "--lock", "--no-checkout", "--checkout", "--expire=", "-n", "--dry-run", "-v", "--verbose", "--porcelain", "-z"],
+};
+
+/** Why an option is refused, with the options the subcommand allows. */
+function unlistedMessage(subcommand: string, option: string): string {
+  const allowed = GIT_ALLOWED_OPTIONS[subcommand] ?? [];
+  const name = option.split("=")[0]!;
+  // git expands an unambiguous prefix of a long option; the tool never does (and the environment tells git not to).
+  const abbreviated = name.startsWith("--") && [...FORBIDDEN_OPTIONS, ...allowed].some((known) => known.startsWith(name) && known.replace(/=$/, "") !== name);
+  return (
+    `git option "${option}" is not allowed for "git ${subcommand}" here${abbreviated ? " (abbreviated options are refused: write the option in full)" : ""}; ` +
+    `allowed: ${allowed.map((entry) => entry.replace(/=$/, " <value>")).join(", ") || "none"}`
+  );
+}
+
+/** Subcommands of the log family that take a commit count as `-<n>`. */
+const COUNT_SHORTHAND = new Set(["log", "show", "whatchanged", "shortlog", "reflog"]);
+
+/** The first option of `args` that is not on the subcommand's allowlist, or undefined (P-031). */
+export function findUnlistedOption(subcommand: string, args: readonly string[]): string | undefined {
+  const allowed = new Set(GIT_ALLOWED_OPTIONS[subcommand] ?? []);
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (arg === "--") return undefined;
+    if (!arg.startsWith("-") || arg === "-" || allowed.has(arg)) continue;
+    if (arg.startsWith("--")) {
+      const equals = arg.indexOf("=");
+      const name = equals === -1 ? arg : arg.slice(0, equals);
+      if (!allowed.has(`${name}=`)) return arg;
+      if (equals === -1) index += 1;
+      continue;
+    }
+    if (COUNT_SHORTHAND.has(subcommand) && /^-\d+$/.test(arg)) continue;
+    // Short options, bundled (`-qa`): every letter must be allowed; one that takes a value ends the bundle.
+    for (let at = 1; at < arg.length; at++) {
+      const letter = `-${arg[at]}`;
+      if (allowed.has(letter)) continue;
+      if (!allowed.has(`${letter}=`)) return arg;
+      if (at === arg.length - 1) index += 1;
+      break;
     }
   }
   return undefined;
@@ -235,8 +364,12 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
       if (subcommand === "submodule" && rest[0] === "foreach") {
         throw new Error('git "submodule foreach" is not allowed: it runs a shell command');
       }
+      const unlisted = findUnlistedOption(subcommand, rest);
+      if (unlisted !== undefined) throw new Error(unlistedMessage(subcommand, unlisted));
       const dir = params.cwd === undefined ? cwd : guard.check(params.cwd);
       if (subcommand === "diff") checkDiffPaths(rest, dir, guard);
+      // The patches apply and am read are files: they stay in the workspace like the paths of diff (P-031).
+      if (subcommand === "apply" || subcommand === "am") checkDiffPaths(rest, dir, guard);
       checkRepositoryPaths(subcommand, rest, dir, guard, writeGuard);
       if (!READ_ONLY_SUBCOMMANDS.has(subcommand)) {
         try {
@@ -282,7 +415,11 @@ export function createKernelGitTool(cwd: string, guard: PathGuard, writeGuard: P
       const timeoutSec = clampTimeoutSec(params.timeout);
       const result = await runProcess({
         command: "git",
-        args: TEXTCONV_SUBCOMMANDS.has(subcommand) ? [subcommand, "--no-ext-diff", "--no-textconv", ...rest] : params.args,
+        args: TEXTCONV_SUBCOMMANDS.has(subcommand)
+          ? [subcommand, "--no-ext-diff", "--no-textconv", ...rest]
+          : TEXTCONV_ONLY_SUBCOMMANDS.has(subcommand)
+            ? [subcommand, "--no-textconv", ...rest]
+            : params.args,
         cwd: dir,
         env,
         timeoutMs: timeoutSec * 1000,

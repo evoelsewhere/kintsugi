@@ -8,7 +8,7 @@ import { Injectable } from "@nestjs/common";
 import { describeSyncError } from "@kintsugi/domain";
 import type { Pool } from "pg";
 import { getPool } from "#common/db/pool.js";
-import { EMPTY_REPOSITORY_ERROR, shownSyncStatus } from "#common/domain/repository-sync.js";
+import { EMPTY_REPOSITORY_ERROR, emptyRepositorySql, shownSyncStatus } from "#common/domain/repository-sync.js";
 import type {
   MonitoredRepository,
   OverviewCounts,
@@ -51,7 +51,7 @@ interface WriteRow {
 /** A recorded sync error in plain words for the known Git failures (an empty repository). */
 const syncError = (raw: string | null): string | null => (raw === null ? null : describeSyncError(raw));
 /** SQL: a sync error that is not an empty repository (the worker records the plain message, ADR-0025). */
-const REAL_SYNC_ERROR = "sync_status = 'error' and last_error is distinct from $1";
+const REAL_SYNC_ERROR = `sync_status = 'error' and not ${emptyRepositorySql("$1")}`;
 
 const optional = <K extends string, V>(key: K, value: V | null): { [P in K]?: V } => (value === null ? {} : ({ [key]: value } as { [P in K]?: V }));
 
@@ -133,7 +133,7 @@ export class PgMonitoringReadModel extends MonitoringReadModel {
                      count(*) filter (where not linked)::int as repositories_unlinked,
                      count(*) filter (where ${REAL_SYNC_ERROR} and not linked)::int as repositories_with_errors_unlinked,
                      count(*) filter (where sync_status in ('pending', 'cloning'))::int as repositories_not_ready,
-                     count(*) filter (where sync_status = 'error' and last_error = $1)::int as repositories_empty
+                     count(*) filter (where sync_status = 'error' and ${emptyRepositorySql("$1")})::int as repositories_empty
                 from (select g.sync_status, g.last_error, exists (select 1 from admin.project_repository l where l.repository_id = g.id) as linked
                         from admin.git_repository g) registered) repos`, [EMPTY_REPOSITORY_ERROR]);
     const row = result.rows[0]!;

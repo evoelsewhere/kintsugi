@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, sep } from "node:path";
 import { EventStream } from "../event-stream.js";
+import { commandDenial } from "./policy.js";
 import type { SourceRead } from "./tools.js";
 import { beginSpan, JobTelemetry, type LiveSpan } from "./telemetry.js";
 
@@ -124,6 +125,9 @@ export class KernelJob implements JobHandle {
   #stop: { reason: JobFailureReason; error: string } | undefined;
   #turns = 0;
   #blocked = 0;
+  /** The agent's deny patterns, and the calls they denied when the call started (reported there, once). */
+  readonly #deny: RegExp[];
+  readonly #deniedCalls = new Set<string>();
   /** The workspace root as given and as its real path, for the paths of source.read. */
   #roots: string[] | undefined;
   #inputTokens = 0;
@@ -167,6 +171,14 @@ export class KernelJob implements JobHandle {
     private readonly spec: JobSpec,
     runtimeVersion: string,
   ) {
+    // validateJobSpec refuses a pattern that does not compile; one that slips through denies nothing here.
+    this.#deny = (spec.agent.denyCommandPatterns ?? []).flatMap((pattern) => {
+      try {
+        return [new RegExp(pattern)];
+      } catch {
+        return [];
+      }
+    });
     this.done = new Promise<JobEnd>((resolve) => {
       this.#resolveDone = resolve;
     });
@@ -229,9 +241,9 @@ export class KernelJob implements JobHandle {
     await this.#halt("aborted", reason);
   }
 
-  /** Called by the command policy when it blocks a tool call. */
-  blocked(tool: string, reason: string, input: unknown): void {
-    if (this.#ended) return;
+  /** Called by the command policy when it blocks a tool call; a call the job reported as denied when it started is not reported again. */
+  blocked(tool: string, reason: string, input: unknown, callId?: string): void {
+    if (this.#ended || (callId !== undefined && this.#deniedCalls.has(callId))) return;
     this.#blocked += 1;
     this.events.push({ type: "tool.call", jobId: this.jobId, callId: `blocked-${this.#blocked}`, tool, input, decision: "blocked", reason });
   }
@@ -338,6 +350,14 @@ export class KernelJob implements JobHandle {
         const outer = outerCall(event.toolCallId, (event as { parentToolCallId?: string }).parentToolCallId);
         this.#beginTool(event.toolCallId, event.toolName, outer);
         if (outer === undefined) this.#openCalls.set(event.toolCallId, { tool: event.toolName, key: digest(`${event.toolName} ${canonicalJson(event.args)}`), startedAt: Date.now() });
+        // pi announces a call before the command policy's hook refuses it: a denied call is reported here, once, as blocked.
+        const denied = commandDenial(this.#deny, event.args);
+        if (denied !== undefined) {
+          this.#deniedCalls.add(event.toolCallId);
+          this.#blocked += 1;
+          this.events.push({ type: "tool.call", jobId: this.jobId, callId: event.toolCallId, tool: event.toolName, input: event.args, decision: "blocked", reason: denied });
+          return;
+        }
         this.events.push({ type: "tool.call", jobId: this.jobId, callId: event.toolCallId, tool: event.toolName, input: event.args, decision: "allowed" });
         return;
       }

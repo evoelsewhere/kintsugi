@@ -72,6 +72,27 @@ export function filterRunEvents(
   });
 }
 
+/** Plan step ids whose humanized form reads badly. */
+const STEP_TITLES: Readonly<Record<string, string>> = { "catalog-curate": "Catalog curation" };
+
+/**
+ * What each of a run's sibling steps is called: the plan step it runs and its agent ("Topology (legacy-analyst)")
+ * when the worker recorded the plan step, else the agent alone; siblings that would share a name are numbered ("Legacy analyst #2").
+ */
+export function stepNames(steps: readonly Pick<JobRunView, "id" | "name" | "label">[]): Map<string, string> {
+  const base = (step: Pick<JobRunView, "name" | "label">): string =>
+    step.label === undefined || step.label === "" ? humanize(step.name) : `${STEP_TITLES[step.label] ?? humanize(step.label)} (${step.name})`;
+  const names = new Map<string, string>();
+  const seen = new Map<string, number>();
+  for (const step of steps) {
+    const name = base(step);
+    const n = (seen.get(name) ?? 0) + 1;
+    seen.set(name, n);
+    names.set(step.id, name + (steps.filter((candidate) => base(candidate) === name).length > 1 ? ` #${n}` : ""));
+  }
+  return names;
+}
+
 /** Child jobs have their own attempt counter. The parent's attempt is identified by its recorded time window. */
 export function stepsForAttempt(run: JobRunView & { steps: JobRunView[] }, attempt: number): JobRunView[] {
   const record = run.attempts?.find((entry) => entry.n === attempt);

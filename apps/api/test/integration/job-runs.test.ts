@@ -17,6 +17,7 @@ interface RunView {
   status: string;
   sourceRepositoryId?: string;
   actor?: string;
+  label?: string;
   restrictedRecords: number;
   documentWrite?: { id: string; status: string; prUrl?: string };
   steps?: RunView[];
@@ -90,6 +91,8 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
 
     const detail = (await admin.get<RunView>(`/projects/billing/job-runs/${runId}`)).body.data!;
     expect(detail.steps?.map((step) => [step.name, step.status, step.restrictedRecords])).toEqual([["legacy-analyst", "succeeded", 1]]);
+    // A step of an older run has no plan step id: the view leaves the label out.
+    expect(detail.steps?.[0]).not.toHaveProperty("label");
     expect(detail.artifacts).toEqual([{ path: "10-applications/web/01-legacy/assessment.md", sha256: "abc", size: 12, provenance: { origin: "runtime-agent" } }]);
     expect(JSON.stringify(detail)).not.toContain("hu**");
     expect((await admin.get("/projects/billing/job-runs/missing")).status).toBe(404);
@@ -106,6 +109,14 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     expect(understand.status).toBe(400);
     expect(understand.body.message).toMatch(/understand\/runs/);
     expect((await admin.request("POST", "/projects/billing/applications/web/stages/map/run")).status).toBe(400);
+  });
+
+  it("shows the plan step an agent step runs as its label", async () => {
+    await app.db.query("insert into workflow.job_run (id, project_id, application_id, parent_id, kind, name, status, inputs) values ('step-label', 'billing', 'web', $1, 'agent', 'legacy-analyst', 'succeeded', $2)", [runId, JSON.stringify({ task: "t", label: "catalog-curate" })]);
+    const detail = (await admin.get<RunView & { steps: RunView[] }>(`/projects/billing/job-runs/${runId}`)).body.data!;
+    expect(detail.steps.find((step) => step.id === "step-label")?.label).toBe("catalog-curate");
+    expect(detail).not.toHaveProperty("label");
+    await app.db.query("delete from workflow.job_run where id = 'step-label'");
   });
 
   it("restricted records need restricted.read", async () => {

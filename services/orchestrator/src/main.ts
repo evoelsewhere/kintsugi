@@ -8,7 +8,7 @@
 import { existsSync } from "node:fs";
 import { captureLogs, pgDebugLogSink } from "@kintsugi/domain";
 import { CheckoutStorage, checkGitVersion, dataDirFromEnv } from "@kintsugi/git";
-import { createChildAgentRuntime, interpretersFromEnv, loadProvider } from "@kintsugi/runtime/launcher";
+import { createChildAgentRuntime, interpretersFromEnv, jobIsolationWarning, jobUser, loadProvider } from "@kintsugi/runtime/launcher";
 import type { AgentRuntime } from "@kintsugi/runtime-sdk";
 import { Pool } from "pg";
 import { DEFAULT_JOB_LIMITS, type JobDefaults } from "./jobs/runner.js";
@@ -61,6 +61,8 @@ async function main(): Promise<void> {
   const pollIntervalSeconds = Number(process.env["KINTSUGI_GIT_POLL_INTERVAL"] ?? 180);
   if (!Number.isFinite(pollIntervalSeconds) || pollIntervalSeconds < 30) throw new Error("KINTSUGI_GIT_POLL_INTERVAL must be at least 30 seconds");
 
+  // A half or malformed job user stops the worker here, before it runs a job as itself (ADR-0093).
+  const runAs = jobUser();
   const gitVersion = await checkGitVersion();
   const storage = new CheckoutStorage(dataDirFromEnv());
   const pool = new Pool({ connectionString: databaseUrl, max: 5 });
@@ -79,6 +81,9 @@ async function main(): Promise<void> {
   });
   console.log(`[worker] git ${gitVersion}, data ${storage.root}, polling every ${pollIntervalSeconds}s; commit identity from the portal (Settings → Git)`);
   console.log(`[worker] runtime ${agents.engine}, python ${interpreters.python}, node ${interpreters.node}; jobs run in job workspaces without an OS sandbox, agent jobs as child processes (ADR-0029)`);
+  if (runAs !== undefined) console.log(`[worker] job processes run as uid ${runAs.uid}, gid ${runAs.gid} (ADR-0093)`);
+  const isolation = jobIsolationWarning();
+  if (isolation !== undefined) console.warn(`[worker] warning: ${isolation}`);
 
   const shutdown = async (): Promise<void> => {
     await worker.stop();
