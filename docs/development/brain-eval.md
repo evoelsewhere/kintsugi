@@ -132,13 +132,13 @@ Every question also names the lines that answer it by their text. The score `evi
 - every answer is in a node, with a citation that resolves to lines of its file;
 - the Brain falls below no score of the baseline.
 
-**The baseline.** Builder version 5, on `kcp-integration` b1d59f1c with the eval added by P2-007 (no builder change is part of that commit). Produced by:
+**The baseline.** Builder version 5, on `kcp-integration` a20bb69a (re-recorded by P2-016; the first recording, on b1d59f1c, predates the folder descriptions of the `20-spaces/` layout that P2-003 added to the summaries, so its two descend costs were 258 and 174). Produced by:
 
 ```bash
-BRAIN_WIKI_BASELINE=1 BRAIN_WIKI_RECORDED="kcp-integration b1d59f1c" pnpm --filter @kintsugi/agents exec vitest run test/brain-eval.test.ts
+BRAIN_WIKI_BASELINE=1 BRAIN_WIKI_RECORDED="kcp-integration a20bb69a" pnpm --filter @kintsugi/agents exec vitest run test/brain-eval.test.ts
 ```
 
-It writes `packages/agents/evals/brain/wiki-baseline.json`. Without the variable the same test compares the builder with that file: no score may be lower, and no cost more than a fifth higher.
+It writes `packages/agents/evals/brain/wiki-baseline.json`. Without the variable the same test compares the builder with that file: no score may be lower, and no cost more than a twentieth higher. The costs are counts of a deterministic build, so a cost that moves means a builder change: the descend costs add up the title and summary of every sibling on the way down, so any change to a folder or document summary moves them. Re-record the baseline in the commit that changes the summaries, and name that commit here.
 
 | Measure | Builder 5 |
 | --- | --- |
@@ -159,7 +159,7 @@ It writes `packages/agents/evals/brain/wiki-baseline.json`. Without the variable
 | W14-W16 backlinks | 100% from the stored links | Kept; decision 8 pages through them beyond 20 |
 | W17 broken links | 0%: a link that resolves to nothing is dropped | `knowledge.brain_ref` keeps them (decision 6) |
 | W18-W20 search | W18 and W19: 100% in one line each. W20 (the words "on-call lead"): recall 100%, precision 80%, because `owner: on-call-lead` lines match too | `brain_search` ranks them (decision 7) |
-| W21-W22 descend | Every step has a summary; 4 and 3 levels, 258 and 174 tokens of titles and summaries to the answer | The cost builder 6 must not raise by more than a fifth |
+| W21-W22 descend | Every step has a summary; 4 and 3 levels, 286 and 193 tokens of titles and summaries to the answer | The cost builder 6 must not raise by more than a twentieth |
 
 **What builder 6 must show.** No score below this table, and a gain on the questions that read 0: labels and spaces as node attributes (W01-W05), the listed order first (W06-W08), archived pages and templates told apart (W09, W10), the broken link listed (W17). The harness reads the new attributes from the node when they exist (`labels`, `space`, `status`, `template`) and `broken` from the tree, so the builder's change shows as a rise of the scores that now read 0, with no change to the questions.
 
