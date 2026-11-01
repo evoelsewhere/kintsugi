@@ -9,6 +9,7 @@
   },
   "scripts": {
     "site:build": "node scripts/build-site.mjs",
+    "docs:links": "node --test scripts/doc-links.test.mjs && node scripts/check-doc-links.mjs",
     "build": "turbo run build",
     "dev": "node scripts/dev.mjs",
     "lint": "turbo run lint",

@@ -66,6 +66,13 @@ describe.skipIf(!hasDatabase)("live updates (integration)", () => {
       });
       expect(ended).toContain("event: ready");
 
+      // An administrator's password reset ends the member's sessions, and with them the open stream.
+      const reset = await memberClient(app, admin, "sse-reset", ["user"]);
+      const afterReset = await readUntil(`${app.baseUrl}/events`, reset.client.cookie!, () => false, 5000, async () => {
+        expect((await admin.request("POST", `/admin/users/${reset.id}/password`, { body: { password: "a-new-password-1" } })).status).toBeLessThan(300);
+      });
+      expect(afterReset).toContain("event: ready");
+
       const leaving = await memberClient(app, admin, "sse-leaving", ["user"]);
       const cookie = leaving.client.cookie!;
       await readUntil(`${app.baseUrl}/events`, cookie, () => false, 5000, async () => {
