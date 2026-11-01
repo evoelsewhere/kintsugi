@@ -2,7 +2,7 @@
 
 > Status: research, proposed. What a Confluence-like wiki offers to find content and to manage its life (search, labels, templates, history, archive, analytics, personal lists), what Kintsugi has today, and a MoSCoW proposal for each. The product owner decides the final priority in [scope and priorities](../00-scope-and-priorities.md).
 
-Part of the Confluence parity research (`../README.md`). Companion pages: [user stories](user-stories.md), [gap analysis](gap-analysis.md), [open questions](open-questions.md).
+Part of the [Confluence parity research](../README.md). Companion pages: [user stories](user-stories.md), [gap analysis](gap-analysis.md), [open questions](open-questions.md).
 
 ## How to read it
 

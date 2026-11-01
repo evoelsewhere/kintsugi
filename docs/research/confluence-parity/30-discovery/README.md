@@ -1,6 +1,6 @@
 # Finding and lifecycle: research pages
 
-> Status: research, proposed. How Kintsugi would offer what a Confluence-like wiki offers to find content and to manage its life: search, labels, templates and blueprints, version history with compare and restore, archive, page analytics, starred and recent pages. Part of the Confluence parity research (`../README.md`).
+> Status: research, proposed. How Kintsugi would offer what a Confluence-like wiki offers to find content and to manage its life: search, labels, templates and blueprints, version history with compare and restore, archive, page analytics, starred and recent pages. Part of the [Confluence parity research](../README.md).
 
 | Page | What it holds |
 |---|---|
