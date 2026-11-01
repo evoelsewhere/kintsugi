@@ -45,16 +45,13 @@ export class LoginThrottle {
     }
   }
 
-  /**
-   * Ends an attempt `begin` reserved: a failure is recorded, a success clears the account's failures, and a check that
-   * did not finish (`undefined`: the database failed) records nothing.
-   */
-  end(username: string, succeeded: boolean | undefined, now = Date.now()): void {
+  /** Ends an attempt `begin` reserved: a failure is recorded, a success clears the account's failures. */
+  end(username: string, succeeded: boolean, now = Date.now()): void {
     const pending = (this.#pending.get(key(username)) ?? 1) - 1;
     if (pending > 0) this.#pending.set(key(username), pending);
     else this.#pending.delete(key(username));
-    if (succeeded === true) this.recordSuccess(username);
-    else if (succeeded === false) this.recordFailure(username, now);
+    if (succeeded) this.recordSuccess(username);
+    else this.recordFailure(username, now);
     // The waiting attempts look again.
     const waiting = this.#waiting.get(key(username)) ?? [];
     this.#waiting.delete(key(username));
