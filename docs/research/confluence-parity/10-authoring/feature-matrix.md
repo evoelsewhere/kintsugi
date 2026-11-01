@@ -126,6 +126,10 @@ The constraints that shape the proposals are ADR-0042 (Markdown only), ADR-0007 
 
 A row counts once, by its first priority letter.
 
+## Boundaries with the other areas
+
+Agreed with the discovery track (message of 23:43): this area owns the page actions (create, delete, restore from deleted, the listing macros of AUT-41) and the editor; discovery owns the archived state, the page history and search. Where a feature needs the other's, the row says so, and the pages are read together: discovery's history features (`DIS-40` to `DIS-45`, `DIS-60` to `DIS-63`) and its label macro (`DIS-23`) sit next to AUT-17, AUT-18 and AUT-41. Collaboration owns comments, mentions, notifications and permissions; an authoring row that names a permission (`wiki.publish`) only names it.
+
 ## Source index
 
 All pages are public. Where the Cloud help centre did not state a detail, older Server or Data Center documentation is named and marked.
