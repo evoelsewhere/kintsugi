@@ -19,6 +19,9 @@ function duration(seconds: number): string {
 
 const usd = (value: string | undefined): string => `$${Number(value).toFixed(2)}`;
 
+/** "50 MB" (the setting is entered in MB), or the bytes when that is not whole. */
+const megabytes = (bytes: number): string => (bytes % (1024 * 1024) === 0 ? `${bytes / (1024 * 1024)} MB` : `${bytes} bytes`);
+
 const KNOWN: readonly KnownFailure[] = [
   {
     // Node's fetch refuses a header value outside Latin-1: a typographic quote or a non-ASCII character in an API key,
@@ -50,6 +53,12 @@ const KNOWN: readonly KnownFailure[] = [
     match: /budget\)?: cost (\d+(?:\.\d+)?) USD exceeded (\d+(?:\.\d+)?) USD/,
     plain: (found) =>
       `The agent stopped at the cost limit of ${usd(found[2])} per job after spending ${usd(found[1])}; raise Cost per job in Settings → Sandbox & Agent, or bind a cheaper model.`,
+  },
+  {
+    // An agent job (`output-limit): wrote more than …`) or a script step (`… exceeded the output limit of N bytes`).
+    match: /output limit of (\d+) bytes/,
+    plain: (found) =>
+      `The step wrote more than the output limit of ${megabytes(Number(found[1]))} to its output and scratch folders, so it was stopped; raise Output limit in Settings → Sandbox & Agent, or narrow the task.`,
   },
   {
     match: /\(loop\): |^loop: /m,
@@ -86,6 +95,7 @@ const STOP_REASON_LABEL: Record<string, string> = {
   "max-turns": "Turn limit",
   timeout: "Time limit",
   budget: "Cost limit",
+  "output-limit": "Output limit",
   loop: "Repeated itself",
   "context-overflow": "Ran out of context",
   aborted: "Stopped",

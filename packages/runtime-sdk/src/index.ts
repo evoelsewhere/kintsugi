@@ -44,6 +44,8 @@ export interface JobLimits {
   /** Maximum assistant turns (one LLM response plus its tool calls). */
   maxTurns?: number;
   maxCostUsd?: number;
+  /** Bytes the job may write to its output and scratch folders together; absent = no limit (T3-006). */
+  maxOutputBytes?: number;
 }
 
 /**
@@ -116,7 +118,7 @@ export interface JobSpec {
  * `context-overflow`: the conversation outgrew the model's window and compaction could not recover it.
  * `loop`: the model kept repeating itself (the same tool call with the same answer), so the kernel stopped it.
  */
-export type JobFailureReason = "error" | "timeout" | "max-turns" | "budget" | "aborted" | "context-overflow" | "loop";
+export type JobFailureReason = "error" | "timeout" | "max-turns" | "budget" | "aborted" | "context-overflow" | "loop" | "output-limit";
 
 /**
  * One settled unit of work inside a job (ADR-0048), shaped by the `pi-telemetry` contract:

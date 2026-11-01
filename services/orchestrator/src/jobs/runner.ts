@@ -812,6 +812,7 @@ export class JobRunner {
         idleTimeoutSec: ws.sandbox.agentIdleTimeoutSec,
         ...(limits.maxTurns === undefined ? {} : { maxTurns: limits.maxTurns }),
         ...(limits.maxCostUsd === undefined ? {} : { maxCostUsd: limits.maxCostUsd }),
+        ...(limits.maxOutputBytes === undefined ? {} : { maxOutputBytes: limits.maxOutputBytes }),
       },
       ...(mcp === undefined ? {} : { mcp }),
       metadata: { jobRunId: run.id, projectId: run.projectId, ...(run.applicationId === undefined ? {} : { applicationId: run.applicationId }) },

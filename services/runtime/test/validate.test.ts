@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { validateJobSpec } from "../src/kernel/validate.js";
+import { MAX_TIMER_SEC, validateJobSpec } from "../src/kernel/validate.js";
 import { agent, createWorkspace, jobSpec } from "./helpers.js";
 
 const workspace = createWorkspace();
@@ -60,5 +60,10 @@ describe("validateJobSpec", () => {
     const spec = jobSpec(workspace, agent([], { instructions: " " }), { timeoutSec: -1, maxTurns: 0, maxCostUsd: -1 });
     spec.task = "";
     expect(() => validateJobSpec(spec)).toThrow(/instructions is empty.*task is empty.*timeoutSec.*maxTurns.*maxCostUsd/);
+    // A timer Node cannot keep would fire at once and fail the job as timed out (T3-014); turns are whole.
+    for (const limits of [{ timeoutSec: Infinity }, { timeoutSec: 3_000_000 }, { timeoutSec: 60, idleTimeoutSec: 3_000_000 }, { timeoutSec: 60, maxTurns: 1.5 }, { timeoutSec: 60, maxOutputBytes: 0.5 }]) {
+      expect(() => validateJobSpec(jobSpec(workspace, agent([]), limits)), JSON.stringify(limits)).toThrow(/invalid job: limits\./);
+    }
+    expect(() => validateJobSpec(jobSpec(workspace, agent([]), { timeoutSec: MAX_TIMER_SEC, idleTimeoutSec: 0, maxTurns: 3 }))).not.toThrow();
   });
 });

@@ -40,6 +40,31 @@ def kind_of(unit, entry_points, kinds):
     return unit['kind']
 
 
+def resolve_leaf_files(leaves, inventory):
+    """Leaf files given without their repository folder, put in front when exactly one folder makes them a path of the inventory.
+
+    The inventory names every file as <repository id>/<path>; an extraction script that walked into a repository and wrote
+    paths relative to it (cobol/X.cbl) would otherwise claim nothing, and the catalog would fail with no item at all.
+    Returns notes for the ambiguity list."""
+    known = set(inventory)
+    for rel in inventory:
+        parts = rel.split('/')
+        known.update('/'.join(parts[:end]) for end in range(1, len(parts)))
+    folders = sorted({rel.split('/', 1)[0] for rel in inventory if '/' in rel})
+    notes = []
+    for leaf in leaves:
+        rel = leaf['file']
+        if rel is None or rel.rstrip('/') in known:
+            continue
+        found = [f'{folder}/{rel}' for folder in folders if f'{folder}/{rel}'.rstrip('/') in known]
+        if len(found) == 1:
+            leaf['file'] = found[0]
+            notes.append(f'leaf {leaf["id"]} names {rel} without its repository folder: read as {found[0]}')
+        elif found:
+            notes.append(f'leaf {leaf["id"]} names {rel}, which is in several repositories ({", ".join(found)}): left out')
+    return notes
+
+
 def claims(units, inventory):
     """{file: unit key}: exact file claims first, then the deepest claimed directory."""
     exact, directories, ambiguities = {}, [], []
@@ -66,9 +91,10 @@ def claims(units, inventory):
 
 def build(app, topology, inventory, sources, kinds, max_items):
     leaves = tu.walk_topology(topology)
+    resolved = resolve_leaf_files(leaves, inventory)
     sizes = {rel: entry['codeLines'] for rel, entry in inventory.items() if entry['codeLines'] is not None}
     units, ambiguities = tu.build_units(leaves, sizes, kinds, max_items)
-    ambiguities = tu.find_ambiguities(leaves, units) + ambiguities
+    ambiguities = resolved + tu.find_ambiguities(leaves, units) + ambiguities
     owner, conflicts = claims(units, inventory)
     ambiguities += conflicts
     entry_points = {leaf for leaf in topology.get('entryPoints', []) if isinstance(leaf, str)}

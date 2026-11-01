@@ -8,6 +8,9 @@ import { isKernelToolName, isMemoryToolName, KERNEL_TOOL_NAMES } from "./tool-na
 
 const SKILL_NAME = /^[a-z][a-z0-9-]*$/;
 
+/** The longest timer Node keeps (2^31-1 ms, about 24.8 days), in seconds: a longer one fires at once (T3-014). */
+export const MAX_TIMER_SEC = Math.floor((2 ** 31 - 1) / 1000);
+
 /** Throws with every problem found; returns nothing when the job is runnable. */
 export function validateJobSpec(spec: JobSpec): void {
   const problems: string[] = [];
@@ -61,9 +64,10 @@ export function validateJobSpec(spec: JobSpec): void {
     if (!exists(entry)) problems.push(`does not exist: ${entry}`);
   }
 
-  if (!(limits.timeoutSec >= 0)) problems.push("limits.timeoutSec must be zero (no limit) or positive");
-  if (limits.idleTimeoutSec !== undefined && !(limits.idleTimeoutSec >= 0)) problems.push("limits.idleTimeoutSec must be zero (off) or positive");
-  if (limits.maxTurns !== undefined && !(limits.maxTurns >= 1)) problems.push("limits.maxTurns must be at least 1");
+  if (!(limits.timeoutSec >= 0 && limits.timeoutSec <= MAX_TIMER_SEC)) problems.push(`limits.timeoutSec must be zero (no limit) or positive, at most ${MAX_TIMER_SEC}`);
+  if (limits.idleTimeoutSec !== undefined && !(limits.idleTimeoutSec >= 0 && limits.idleTimeoutSec <= MAX_TIMER_SEC)) problems.push(`limits.idleTimeoutSec must be zero (off) or positive, at most ${MAX_TIMER_SEC}`);
+  if (limits.maxTurns !== undefined && !(Number.isInteger(limits.maxTurns) && limits.maxTurns >= 1)) problems.push("limits.maxTurns must be a whole number, at least 1");
+  if (limits.maxOutputBytes !== undefined && !(Number.isInteger(limits.maxOutputBytes) && limits.maxOutputBytes > 0)) problems.push("limits.maxOutputBytes must be a positive whole number");
   if (limits.maxCostUsd !== undefined && !(limits.maxCostUsd > 0)) problems.push("limits.maxCostUsd must be positive");
 
   if (problems.length > 0) throw new Error(`invalid job: ${problems.join("; ")}`);

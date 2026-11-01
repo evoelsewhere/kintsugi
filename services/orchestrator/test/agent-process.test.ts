@@ -3,7 +3,7 @@
 // the provider's API key and its environment credentials arrive on stdin, never in the child's
 // spawn environment (ADR-0093); aborts and timeouts kill the process tree.
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -230,5 +230,31 @@ const tick = setInterval(() => {
     );
     const busy = await createChildAgentRuntime({ mode: "mock", entry: chatty, idleTimeoutSec: 1 }).startJob(spec(dirs()));
     expect(await busy.done).toMatchObject({ type: "job.completed", summary: "done" });
+  }, 30_000);
+
+  it("stops a job that writes more than the output limit to its output and scratch, and keeps what it wrote (T3-006)", async () => {
+    // What a shell call such as "head -c 20G /dev/zero > out/x" does, from the child: the output grows until the launcher stops it.
+    const filler = fixture(
+      "filler.mjs",
+      `import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", () => {
+  const out = JSON.parse(input).spec.workspace.outDir;
+  setInterval(() => {
+    appendFileSync(join(out, "big.bin"), Buffer.alloc(100_000));
+    process.stdout.write(JSON.stringify({ type: "message.delta", jobId: "x", text: "." }) + "\\n");
+  }, 100);
+});
+`,
+    );
+    const paths = dirs();
+    const handle = await createChildAgentRuntime({ mode: "mock", entry: filler }).startJob({ ...spec(paths), limits: { timeoutSec: 60, maxOutputBytes: 300_000 } });
+    const done = await handle.done;
+    expect(done).toMatchObject({ type: "job.failed", reason: "output-limit" });
+    expect(done.type === "job.failed" ? done.error : "").toContain("output limit of 300000 bytes");
+    expect(existsSync(join(paths.out, "big.bin"))).toBe(true);
   }, 30_000);
 });

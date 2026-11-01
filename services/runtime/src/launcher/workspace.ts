@@ -65,6 +65,21 @@ export interface TreeSize {
   bytes: number;
 }
 
+/** The bytes of the regular files under all of `roots` together; a root that does not exist counts as empty. */
+export async function treesSize(roots: readonly string[]): Promise<number> {
+  let bytes = 0;
+  for (const root of roots) {
+    bytes += await treeSize(root).then(
+      (size) => size.bytes,
+      (error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+        throw error;
+      },
+    );
+  }
+  return bytes;
+}
+
 /** Regular files and their total size under `root` (symbolic links are not followed). */
 export async function treeSize(root: string): Promise<TreeSize> {
   const size: TreeSize = { files: 0, bytes: 0 };

@@ -31,6 +31,14 @@ describe("agent limits in plain words", () => {
     }
   });
 
+  it("names the output limit in MB, for an agent job and a script step (T3-006)", () => {
+    const agent = "Agent legacy-analyst failed (output-limit): wrote more than the output limit of 52428800 bytes to its output and scratch folders";
+    expect(explainFailure(agent)).toBe(
+      `The step wrote more than the output limit of 50 MB to its output and scratch folders, so it was stopped; raise Output limit in Settings → Sandbox & Agent, or narrow the task. Detail: ${agent}`,
+    );
+    expect(explainFailure("Step extract failed: output and scratch exceeded the output limit of 1000 bytes")).toMatch(/^The step wrote more than the output limit of 1000 bytes/);
+  });
+
   it("reads a reason and its message on their own, as telemetry keeps them", () => {
     expect(explainFailure("max-turns: stopped after 80 turn(s)")).toMatch(/^The agent stopped at the turn limit of 80 turns per job/);
     expect(explainFailure("loop: stopped: glob was called with the same arguments 12 times")).toMatch(/^The model repeated itself/);
@@ -67,6 +75,7 @@ describe("stopReasonLabel", () => {
     expect(stopReasonLabel("timeout")).toBe("Time limit");
     expect(stopReasonLabel("budget")).toBe("Cost limit");
     expect(stopReasonLabel("loop")).toBe("Repeated itself");
+    expect(stopReasonLabel("output-limit")).toBe("Output limit");
     expect(stopReasonLabel("something-new")).toBe("something-new");
   });
 });

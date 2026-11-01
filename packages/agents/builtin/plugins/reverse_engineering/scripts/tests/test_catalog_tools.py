@@ -139,6 +139,27 @@ class CatalogTests(unittest.TestCase):
         # Deterministic.
         self.assertEqual(load(self.propose('again.json')), catalog)
 
+    def test_leaf_files_without_their_repository_folder_are_resolved_once(self):
+        # A script that wrote paths relative to the repository (DC-001): one folder makes them inventory paths, so they
+        # claim those files; a path two repositories hold is not guessed.
+        leaf = lambda node_id, file: {'id': node_id, 'name': node_id, 'kind': 'module', 'file': file}
+        write(os.path.join(self.assessment, 'topology.json'), {
+            'system': 'billing',
+            'root': {'id': 'sys', 'name': 'billing', 'kind': 'system', 'children': [
+                {'id': 'dom:billing', 'name': 'Billing', 'kind': 'domain', 'children': [
+                    leaf('CALC', 'cobol/CALC.cbl'), leaf('PRT', 'cobol/PRT.cbl'), leaf('JOBS', 'jcl/'), leaf('SHARED', 'common/X.cpy')]}]},
+            'edges': [], 'entryPoints': [], 'deadEnds': [], 'observations': [], 'flows': []})
+        files = ['legacy-billing/cobol/CALC.cbl', 'legacy-billing/cobol/PRT.cbl', 'legacy-billing/jcl/RUN.jcl',
+                 'legacy-billing/common/X.cpy', 'legacy-data/common/X.cpy']
+        write(self.inventory, {'app': 'billing', 'sources': ['legacy-billing@' + 'a' * 40, 'legacy-data@' + 'b' * 40],
+                               'files': [{'path': rel, 'codeLines': 10, 'cyclomaticComplexity': 1, 'sha256': 'c' * 64} for rel in files]})
+        catalog = load(self.propose())
+        claimed = sorted(rel for item in catalog['items'] for rel in item['files'])
+        self.assertEqual(claimed, ['legacy-billing/cobol/CALC.cbl', 'legacy-billing/cobol/PRT.cbl', 'legacy-billing/jcl/RUN.jcl'])
+        self.assertEqual(sorted(catalog['unassigned']), ['legacy-billing/common/X.cpy', 'legacy-data/common/X.cpy'])
+        self.assertTrue(any('cobol/CALC.cbl without its repository folder: read as legacy-billing/cobol/CALC.cbl' in line for line in catalog['ambiguities']))
+        self.assertTrue(any('common/X.cpy, which is in several repositories' in line for line in catalog['ambiguities']))
+
     def test_digest_follows_file_content(self):
         before = {item['id']: item['digest'] for item in load(self.propose())['items']}
         changed = json.loads(json.dumps(INVENTORY))

@@ -12,6 +12,23 @@ afterAll(() => workspace.remove());
 
 const readTurn = () => fauxAssistantMessage([fauxToolCall("read", { path: "hello.txt" })], { stopReason: "toolUse" });
 
+describe("a call the agent policy denies (T3-005)", () => {
+  it("is reported once, as blocked, with the real call id", async () => {
+    const runtime = await fauxRuntime([
+      () => fauxAssistantMessage([fauxToolCall("shell", { command: "curl http://example.invalid" })], { stopReason: "toolUse" }),
+      () => fauxAssistantMessage("done"),
+    ]);
+    const { events, done } = await runJob(runtime, jobSpec(workspace, agent(["shell"], { denyCommandPatterns: ["curl"] })));
+    expect(done.type).toBe("job.completed");
+    const calls = events.filter((event) => event.type === "tool.call");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ tool: "shell", decision: "blocked", reason: "command denied by agent policy (/curl/)" });
+    const result = events.find((event) => event.type === "tool.result");
+    expect(result).toMatchObject({ callId: calls[0]!.type === "tool.call" ? calls[0]!.callId : "", ok: false });
+    expect(done.type === "job.completed" ? done.summary : "").toContain("1 blocked call(s)");
+  });
+});
+
 describe("job outcome", () => {
   it("fails with reason max-turns when the agent keeps going", async () => {
     const runtime = await fauxRuntime(Array.from({ length: 6 }, () => readTurn));

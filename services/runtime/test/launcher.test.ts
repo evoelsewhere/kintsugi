@@ -210,7 +210,24 @@ describe("script steps", () => {
     writeFileSync(script, "import sys, os\nopen(os.path.join(sys.argv[1], 'big.bin'), 'wb').write(b'x' * 300000)\n");
     const result = await runScript(spec(ws, script, [ws.out], { timeoutSec: 30, maxOutputBytes: 100_000 }));
     expect(result.stopped).toBe("output-limit");
-    expect(result.failure).toBe("output exceeded 100000 bytes");
+    expect(result.failure).toBe("output and scratch exceeded the output limit of 100000 bytes");
+  });
+
+  it("counts the scratch with the output: HOME and TEMP are no way around the limit (T3-006)", async () => {
+    const ws = workspace("scratch");
+    const script = join(ws.scripts, "scratch.py");
+    // 60 kB in the output and 60 kB under HOME and TEMP: each under the limit, together over it.
+    writeFileSync(
+      script,
+      "import sys, os, tempfile\nopen(os.path.join(sys.argv[1], 'a.bin'), 'wb').write(b'x' * 60000)\n" +
+        "open(os.path.join(os.path.expanduser('~'), 'b.bin'), 'wb').write(b'x' * 30000)\n" +
+        "open(os.path.join(tempfile.gettempdir(), 'c.bin'), 'wb').write(b'x' * 30000)\n",
+    );
+    const result = await runScript(spec(ws, script, [ws.out], { timeoutSec: 30, maxOutputBytes: 100_000 }));
+    expect(result.stopped).toBe("output-limit");
+    expect(result.failure).toContain("output limit of 100000 bytes");
+    // What it wrote stays for inspection.
+    expect(existsSync(join(ws.out, "a.bin"))).toBe(true);
   });
 
   it("confines a Node script to the workspace with Node's permission model", async () => {
