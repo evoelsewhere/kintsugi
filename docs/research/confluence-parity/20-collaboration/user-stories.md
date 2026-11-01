@@ -1,6 +1,6 @@
 # Collaboration and access: user stories
 
-> Research pack, area 20-collaboration (ticket BC-002). User stories with Given/When/Then criteria for every Must and Should row of the [feature matrix](feature-matrix.md). Personas are the contract's: `member`, `manager`, `admin`, `viewer`, `agent` (a member's agent reading through the Brain). The criteria respect the decisions in [open questions](open-questions.md): reviewed page text in Git, comments, watches, notifications and restrictions in Postgres, no per-page view restriction on Git content, grants to users and access roles only. Where a story depends on a question that is still open, it says so.
+> Research pack, area 20-collaboration (ticket BC-002). User stories with Given/When/Then criteria for every Must and Should row of the [feature matrix](feature-matrix.md). Personas are the contract's: `member`, `manager`, `admin`, `viewer`, `agent` (a member's agent reading through the Brain). The criteria respect the decisions in [open questions](open-questions.md): reviewed page text in Git, comments, watches, notifications and restrictions in Postgres, no per-page view restriction on Git content, rules naming users and access roles only. Where a story depends on a question that is still open, it says so.
 
 Conventions: a **page** is a Markdown document in the project's document repo; a **space** is a folder of it. "Has Project Access" means a row in `admin.project_access` for the user ([ADR-0062](../../../decisions/0062-coding-agent-context-and-project-access.md)). An **access role** is a Kintsugi role such as `contribute` or `ba`, never a RACI project role ([ADR-0024](../../../decisions/0024-access-roles-vs-project-roles.md)). Priorities repeat the matrix row.
 
@@ -99,24 +99,25 @@ As a `member`, I want to share a page with a colleague with a note, so that they
 ### COL-US-22 One rule for who may do what (COL-22, M)
 As an `admin`, I want a stated order of checks, so that I can predict what any user can do.
 - Given a user, When they ask to read a page, Then the check is Project Access first; with none, the answer is 403 whatever role they hold.
-- Given a user with Project Access, When they ask to comment, edit or manage, Then the checks are the access role's permission code and then, if the space has grants or restrictions, the grant.
+- Given a user with Project Access, When they ask to comment, write or manage, Then the checks are the access role's permission code and then, for writing, the space rules that cover the path.
 - Given a user's project role (RACI) is `architect`, When the system decides whether they may edit a space, Then the project role is not consulted (ADR-0024).
 
-### COL-US-23 A space with its own people (COL-23, M)
+### COL-US-23 A space with its own writers (COL-23, M)
 As a `manager`, I want a space where only named people publish, so that the standards are not changed by everyone.
-- Given I hold `wiki.manage`, When I grant the access role `ba` the level `edit` and the user Dana the level `comment` on the space `01-standards/`, Then the grants are stored and one audit entry per grant (`wiki.space.grant`) names me, the subject and the level.
-- Given Dana holds only `comment` on that space, When she tries to publish a change there, Then she is refused (403) and no draft is published.
-- Given a user holds a grant on the space but has no Project Access to the project, When they open the space, Then they get 403: a grant never widens Project Access.
-- Given I try to grant the project role `pm` as a subject, Then the request is refused: only users and access roles are subjects.
+- Given I hold `wiki.manage`, When I set a rule that lets only the access role `ba` and the user Dana write under `01-standards/`, Then the rule is stored and one audit entry (`wiki.rule.set`) names me, the path and the subjects.
+- Given Sam holds `wiki.write` but is neither in the `ba` role nor Dana, When Sam tries to save or publish a change under `01-standards/`, Then Sam is refused (403) and nothing is written to the document repo.
+- Given Sam holds `wiki.comment` only, When Sam comments on a page under `01-standards/`, Then the comment is accepted: a rule limits who writes, not who comments.
+- Given a user is named in a rule but has no Project Access to the project, When they open the space, Then they get 403: a rule never widens Project Access.
+- Given I try to name the project role `pm` as a subject of a rule, Then the request is refused: only users and access roles are subjects.
 
-### COL-US-24 Separate who may comment from who may edit (COL-24, S)
+### COL-US-24 Separate who may comment, write and manage (COL-24, S)
 As an `admin`, I want separate permissions for commenting, editing and managing (which includes moderating), so that I can give a reviewer comment rights only.
-- Given the catalog, When I open Members and permissions, Then `wiki.comment`, `wiki.edit` and `wiki.manage` are listed in their own group with a description, added by migration.
-- Given an access role holds `wiki.comment` but not `wiki.edit`, When a user of that role opens the editor on a page, Then Save and Publish are not offered and the API refuses a publish.
+- Given the catalog, When I open Members and permissions, Then `wiki.comment`, `wiki.write`, `wiki.publish` and `wiki.manage` are listed in their own group with a description, added by migration.
+- Given an access role holds `wiki.comment` but not `wiki.write`, When a user of that role opens the editor on a page, Then Save and Publish are not offered and the API refuses a draft save and a publish.
 
 ### COL-US-25 Only the owners may change a rule (COL-25, M; open question Q10)
 As a `manager`, I want an edit restriction on a folder, so that only its owners can publish there.
-- Given I hold `wiki.manage`, When I restrict editing of `02-architecture/` to the users Lee and Sam, Then a restriction row for the path prefix and one audit entry (`wiki.restriction.set`) are stored.
+- Given I hold `wiki.manage`, When I restrict editing of `02-architecture/` to the users Lee and Sam, Then a restriction row for the path prefix and one audit entry (`wiki.rule.set`) are stored.
 - Given the restriction, When a user who is not listed starts a publish of a page below that path, Then the API refuses it (403) at publish and nothing is written to the document repo.
 - Given the restriction, When a listed user publishes, Then the normal write path runs (a pull request unless the path auto-commits).
 - Given the restriction covers the folder, When a user tries to publish a page in a subfolder, Then they are refused as well (assumed answer to Q10: it covers the subtree).
@@ -131,21 +132,21 @@ As a `manager`, I want to keep a page from part of the project, so that sensitiv
 
 ### COL-US-28 A restriction can only narrow (COL-28, M)
 As an `admin`, I want the system to refuse a restriction that contradicts the rest, so that nobody is locked in by mistake.
-- Given a space grants `edit` to the access role `ba`, When a restriction on a page lists only Lee, Then only Lee may edit the page, and `ba` members may still read and comment.
+- Given a rule on `02-architecture/` lets only the access role `ba` write and a second rule on `02-architecture/data/` lets only Lee write, When a `ba` member who is not Lee publishes under `data/`, Then they are refused: a writer must satisfy both rules, and Lee must also satisfy the first (a rule on a child adds, never removes).
 - Given a restriction would remove the reading right of a user while keeping their edit right, Then it is refused with the reason.
-- Given a restriction names a user, When the user does not hold the space level `edit`, Then the restriction does not grant it (no grant, restriction or share gives more than Project Access plus the space level).
+- Given a rule names a user, When the user does not hold `wiki.write` or has no Project Access, Then the rule does not give them either (no rule or share gives more than Project Access plus the permission codes).
 
 ### COL-US-29 Find the restrictions in force (COL-29, S)
 As a `manager`, I want a list of every restriction in a space, so that I can clear the stale ones after people leave.
 - Given restrictions exist, When I open the space settings, Then I see each path prefix, its mode, its subjects and who set it and when.
 - Given a listed user was disabled, Then the row shows them as disabled.
-- Given I hold `wiki.manage`, When I clear a restriction, Then it is removed and `wiki.restriction.clear` is audited.
+- Given I hold `wiki.manage`, When I clear a rule, Then it is removed and `wiki.rule.clear` is audited.
 
-### COL-US-31 Grant to a role instead of to each person (COL-31, S)
-As an `admin`, I want to grant a space level to an access role, so that new members inherit it.
-- Given the access role `tester` has the level `comment` on a space, When a user is given the role `tester` and has Project Access, Then they can comment there without a grant of their own.
-- Given the user also holds a role without the grant, Then the highest level among their roles applies (grants add up, as in Confluence).
-- Given the role is deleted, Then its grants are removed with it.
+### COL-US-31 Name a role instead of each person (COL-31, S)
+As an `admin`, I want to name an access role in a rule, so that new members inherit it.
+- Given a rule lists the access role `tester` for writing under a path, When a user is given the role `tester` and has Project Access and `wiki.write`, Then they can write there without a rule of their own.
+- Given the user also holds a role not named in the rule, Then being named by any one of their roles is enough (a rule names who may write; roles add up, as in Confluence).
+- Given the role is deleted, Then its entries in rules are removed with it.
 
 ## Co-editing, review and approval
 
@@ -175,8 +176,8 @@ As a `viewer`, I want to see who changed a rule and when, so that I know whom to
 ## Audit
 
 ### COL-US-37 Account for permission changes (COL-37, M)
-As an `admin`, I want an audit entry for every space grant and restriction change, so that I can answer who changed access and when.
-- Given a grant or a restriction is set, cleared or revoked, Then exactly one audit entry (`wiki.space.grant`, `wiki.space.revoke`, `wiki.restriction.set`, `wiki.restriction.clear`) is appended with the actor, project and subject, and never the text of any page.
+As an `admin`, I want an audit entry for every space rule change and moderated comment deletion, so that I can answer who changed access and when.
+- Given a rule is set or cleared, or a comment is deleted by a moderator, Then exactly one audit entry (`wiki.rule.set`, `wiki.rule.clear`, `wiki.comment.delete`) is appended with the actor, project and subject, and never the text of any page.
 - Given the audit log is listed by action, Then the new actions appear in the filter list.
 - Given I try to change or delete an audit entry, Then the database refuses (append-only).
 
