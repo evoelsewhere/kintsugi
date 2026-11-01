@@ -4,7 +4,7 @@ This changelog records the Kintsugi adaptation; it is not tied to a plugin manif
 
 ## Unreleased — Kintsugi adaptation
 
-- Decisions named as text. `modernize` 5.3.0: the `review` command names ADR-0071 and ADR-0088 as plain text instead of relative links, which pointed outside the repository's `docs/` and mean nothing where the plugin is shown out of the repository. No agent, skill or version changes.
+- Decisions named as text. `modernize`: the `review` command names ADR-0071 and ADR-0088 as plain text instead of relative links, which pointed outside the repository's `docs/` and mean nothing where the plugin is shown out of the repository. No agent, skill or version changes.
 
 - One writer of documents. `reverse_engineering` 2.5.0: `render_rules.py` keeps its check that a file stays inside `--out` and writes `BUSINESS_RULES.md`, the rule files, the identifier ledger and `DATA_OBJECTS.md` through `docmd.write_text` (LF ends, a final newline, the size limit, an atomic replace), as every other script does. No agent or skill changes.
 
