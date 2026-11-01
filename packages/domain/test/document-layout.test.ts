@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isBrainIndexedPath } from "../src/brain.js";
 import * as layout from "../src/document-layout.js";
@@ -382,5 +383,32 @@ describe("ADR-0096 wiki layout", () => {
     }
     // Whatever the wiki may edit as a page, the Brain indexes.
     for (const path of ["20-spaces/onb/a.md", "00-project/charter.md", "01-standards/conventions/naming.md"]) expect(isBrainIndexedPath(path), path).toBe(true);
+  });
+});
+
+describe("the wiki layout shared with the plugins' paths.py", () => {
+  interface WikiCase {
+    fn: string;
+    args: Array<string | number>;
+    expect: string | boolean | null | Array<string | number> | { throws: true };
+  }
+  const fixture = JSON.parse(readFileSync(new URL("./fixtures/wiki-layout.json", import.meta.url), "utf8")) as { cases: WikiCase[] };
+  const functions = layout as unknown as Record<string, (...args: Array<string | number>) => unknown>;
+
+  it("answers every case of the fixture that scripts/tests/test_wiki_paths.py holds both paths.py to", () => {
+    expect(fixture.cases.length).toBeGreaterThan(150);
+    for (const { fn, args, expect: expected } of fixture.cases) {
+      const call = functions[fn];
+      expect(call, fn).toBeTypeOf("function");
+      const label = `${fn}(${JSON.stringify(args)})`;
+      if (typeof expected === "object" && expected !== null && !Array.isArray(expected)) {
+        expect(() => call?.(...args), label).toThrow();
+        continue;
+      }
+      let actual = call?.(...args);
+      // parsePageId gives an object here and a tuple in Python; the fixture holds [key, number] or null.
+      if (fn === "parsePageId") actual = actual === undefined ? null : [(actual as { key: string }).key, (actual as { number: number }).number];
+      expect(actual, label).toEqual(expected);
+    }
   });
 });
