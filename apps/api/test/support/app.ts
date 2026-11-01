@@ -4,7 +4,7 @@
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
-import { createTestDatabase, type TestDatabase } from "./database.js";
+import { closeThenDrop, createTestDatabase, type TestDatabase } from "./database.js";
 
 export const ADMIN_USER = "admin";
 export const ADMIN_PASSWORD = `test-${randomBytes(6).toString("hex")}`;
@@ -88,11 +88,10 @@ async function bootTestApp(
     baseUrl: `http://127.0.0.1:${address.port}/api`,
     db,
     nest: started,
+    // The database is dropped even when closing the app is slow or fails: a hook that times out must not leave it.
     close: async () => {
-      await started.close();
       const { closePool } = await import("#common/db/pool.js");
-      await closePool();
-      if (dropDatabaseOnClose) await db.drop();
+      await closeThenDrop([() => started.close(), closePool], dropDatabaseOnClose ? () => db.drop() : undefined);
     },
   };
 }
