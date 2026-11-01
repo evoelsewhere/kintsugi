@@ -219,18 +219,22 @@ process.stdin.on("end", async () => {
     expect(done).toMatchObject({ type: "job.failed", reason: "timeout" });
     expect(done.type === "job.failed" ? done.error : "").toMatch(/stalled: no activity from the model for 1s/);
 
+    // A child that reports at once and then every 400 ms, for 3.2 s: longer than its 2 s idle limit, never silent for it.
+    // (A 1 s limit failed under load: the watchdog starts at spawn, and a loaded machine can take a second to start Node.)
     const chatty = fixture(
       "chatty.mjs",
       `let n = 0;
-const tick = setInterval(() => {
+const report = () => {
   n += 1;
-  const event = n < 6 ? { type: "message.delta", jobId: "x", text: "." } : { type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: "done" };
+  const event = n < 8 ? { type: "message.delta", jobId: "x", text: "." } : { type: "job.completed", jobId: "x", at: new Date().toISOString(), summary: "done" };
   process.stdout.write(JSON.stringify(event) + "\\n");
-  if (n >= 6) { clearInterval(tick); setTimeout(() => process.exit(0), 50); }
-}, 400);
+  if (n >= 8) { clearInterval(tick); setTimeout(() => process.exit(0), 50); }
+};
+const tick = setInterval(report, 400);
+report();
 `,
     );
-    const busy = await createChildAgentRuntime({ mode: "mock", entry: chatty, idleTimeoutSec: 1 }).startJob(spec(dirs()));
+    const busy = await createChildAgentRuntime({ mode: "mock", entry: chatty, idleTimeoutSec: 2 }).startJob(spec(dirs()));
     expect(await busy.done).toMatchObject({ type: "job.completed", summary: "done" });
   }, 30_000);
 

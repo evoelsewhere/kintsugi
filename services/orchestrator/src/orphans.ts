@@ -68,7 +68,9 @@ export async function failOrphanedQueueJobs(pool: Pick<Pool, "query">, boss: Pic
  * a document write a stopped worker had taken kept every write to that document repository waiting for 30 min, since
  * the queue runs one write per repository (DC-002). Called when a worker starts, before it takes any job, so no active
  * job is its own. It assumes one worker per installation: while another worker beats, its jobs may be the active ones,
- * so nothing is failed and they wait for their expiry as before. A retried write is safe: the writer pushes the same
+ * so nothing is failed and they wait for their expiry as before. Several workers would need each active job to carry a
+ * heartbeat (pg-boss `heartbeatSeconds`, refreshed while the job runs), so that a job whose heartbeat stopped could be
+ * told from a live worker's. A retried write is safe: the writer pushes the same
  * branch again and finds the pull request it opened. Returns how many.
  */
 export async function failStrandedQueueJobs(pool: Pick<Pool, "query">, boss: Pick<PgBoss, "fail">, queues: readonly string[], log: (message: string) => void): Promise<number> {
