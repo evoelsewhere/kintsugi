@@ -6,7 +6,7 @@
 import { encryptSecret } from "@kintsugi/secrets";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
-import { type Client, adminClient, memberClient, startTestApp, subRole, type TestApp } from "../support/app.js";
+import { type Client, adminClient, memberClient, startTestApp, subRole, type TestApp, currentUserId, grantProjectAccess } from "../support/app.js";
 
 interface RunView {
   id: string;
@@ -37,6 +37,7 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
       await app.db.query("insert into admin.git_repository (id, server_id, url) values ($1, 'github', $2)", [id, `https://github.example.invalid/org/${id}.git`]);
     }
     expect((await admin.request("POST", "/admin/projects", { body: { id: "billing", name: "Billing", documentRepositoryId: "billing-docs" } })).status).toBe(201);
+    await grantProjectAccess(admin, "billing", await currentUserId(admin));
     for (const id of ["web", "batch"]) {
       expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id, name: id } })).status).toBe(201);
     }
@@ -46,8 +47,8 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
     await app?.close();
   });
 
-  it("starting a stage needs jobs.run; reading runs needs a session", async () => {
-    const { client } = await memberClient(app, admin, "reader", ["user"]);
+  it("starting a stage needs jobs.run; reading runs needs Project Access", async () => {
+    const { client } = await memberClient(app, admin, "reader", ["user"], ["billing"]);
     expect((await client.request("POST", "/projects/billing/applications/web/stages/assess/run")).status).toBe(403);
     expect((await client.get("/projects/billing/job-runs")).status).toBe(200);
   });
@@ -66,7 +67,7 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
   it("refuses stages that cannot start", async () => {
     expect((await admin.request("POST", "/projects/billing/applications/web/stages/transform/run")).status).toBe(400);
     expect((await admin.request("POST", "/projects/billing/applications/missing/stages/assess/run")).status).toBe(404);
-    expect((await admin.request("POST", "/projects/missing/applications/web/stages/assess/run")).status).toBe(404);
+    expect((await admin.request("POST", "/projects/missing/applications/web/stages/assess/run")).status).toBe(403); // no grant can exist on a project that does not
     const noLegacy = await admin.request("POST", "/projects/billing/applications/batch/stages/assess/run");
     expect(noLegacy.status).toBe(409);
     expect(noLegacy.body.message).toMatch(/no legacy repository/);
@@ -120,11 +121,11 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
   });
 
   it("restricted records need restricted.read", async () => {
-    const { client } = await memberClient(app, admin, "runner", ["user"]);
+    const { client } = await memberClient(app, admin, "runner", ["user"], ["billing"]);
     expect((await client.get(`/projects/billing/job-runs/${runId}/restricted`)).status).toBe(403);
 
     await subRole(admin, "auditor", ["restricted.read"]);
-    const auditor = await memberClient(app, admin, "auditor-1", ["user", "auditor"]);
+    const auditor = await memberClient(app, admin, "auditor-1", ["user", "auditor"], ["billing"]);
     const records = await auditor.client.get<Array<{ jobRunId: string; path: string; content: string }>>(`/projects/billing/job-runs/${runId}/restricted`);
     expect(records.status).toBe(200);
     expect(records.body.data).toMatchObject([{ jobRunId: "step-2", path: "SECRETS.local.md", content: "| hu** | main.c:1 |" }]);
@@ -142,7 +143,7 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
 
   it("cancels a queued run at once and asks the worker to stop a running one; needs jobs.run", async () => {
     const queued = (await admin.request<RunView>("POST", "/projects/billing/applications/web/stages/assess/run")).body.data!;
-    const { client } = await memberClient(app, admin, "watcher", ["user"]);
+    const { client } = await memberClient(app, admin, "watcher", ["user"], ["billing"]);
     expect((await client.request("POST", `/projects/billing/job-runs/${queued.id}/cancel`)).status).toBe(403);
 
     const cancelled = await admin.request<RunView & { cancelRequestedAt?: string }>("POST", `/projects/billing/job-runs/${queued.id}/cancel`);
@@ -184,7 +185,7 @@ describe.skipIf(!hasDatabase)("runtime job runs (integration)", () => {
          ($1, null, 'status', 'succeeded', '{"status":"succeeded"}')`,
       [runId],
     );
-    const { client } = await memberClient(app, admin, "follower", ["user"]);
+    const { client } = await memberClient(app, admin, "follower", ["user"], ["billing"]);
     const read = async (headers: Record<string, string> = {}, query = ""): Promise<{ status: number; type: string | null; events: Array<{ id?: string; event: string; data: { id?: string; message?: string; status?: string } }> }> => {
       const response = await fetch(`${app.baseUrl}/projects/billing/job-runs/${runId}/events${query}`, { headers: { cookie: client.cookie!, accept: "text/event-stream", ...headers } });
       const text = await response.text();

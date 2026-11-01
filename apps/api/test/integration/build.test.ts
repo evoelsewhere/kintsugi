@@ -13,7 +13,7 @@ import { type GitHttpServer, startGitHttpServer } from "@kintsugi/git/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { catalogDocuments } from "../support/documents.js";
 import { hasDatabase } from "../support/database.js";
-import { Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { Client, adminClient, memberClient, startTestApp, type TestApp, currentUserId, grantProjectAccess } from "../support/app.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../../packages/agents/builtin/plugins/modernize/scripts/tests/fixtures/design/", import.meta.url));
 const fixture = (...parts: string[]): string => readFileSync(join(FIXTURES, ...parts), "utf8");
@@ -81,6 +81,7 @@ describe.skipIf(!hasDatabase)("units members build and the review of their merge
       `${remote.baseUrl}/web-ui.git`,
     ]);
     expect((await admin.request("POST", "/admin/projects", { body: { id: "shop", name: "Shop", documentRepositoryId: "docs" } })).status).toBe(201);
+    await grantProjectAccess(admin, "shop", await currentUserId(admin));
     expect((await admin.request("POST", "/admin/projects/shop/applications", { body: { id: "web", name: "Web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications/web/repositories", { body: { repositoryId: "legacy", role: "legacy" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/shop/applications/web/repositories", { body: { repositoryId: "web-ui", role: "target", component: "web" } })).status).toBe(201);
@@ -135,7 +136,7 @@ describe.skipIf(!hasDatabase)("units members build and the review of their merge
   });
 
   it("names the member only to a reader who may view member activity", async () => {
-    const { client } = await memberClient(app, admin, "build-reader", ["user"]);
+    const { client } = await memberClient(app, admin, "build-reader", ["user"], ["shop"]);
     const view = (await client.get<Overview>(OVERVIEW)).body.data!;
     expect(unitOf(view, "billing/invoice").member).toMatchObject({ mr: PR_INVOICE, commit: C1 });
     expect(unitOf(view, "billing/invoice").member?.username).toBeUndefined();
@@ -149,7 +150,7 @@ describe.skipIf(!hasDatabase)("units members build and the review of their merge
   });
 
   it("refuses a review that cannot start: no permission, a bad body, an unknown or undesigned unit, no merge request, several merge requests", async () => {
-    const { client } = await memberClient(app, admin, "build-viewer", ["user"]);
+    const { client } = await memberClient(app, admin, "build-viewer", ["user"], ["shop"]);
     expect((await client.request("POST", REVIEWS, { body: { units: ["billing/tax"] } })).status).toBe(403);
     expect((await admin.request("POST", REVIEWS, { body: {} })).status).toBe(400);
     expect((await admin.request("POST", REVIEWS, { body: { units: ["not a key"] } })).status).toBe(400);

@@ -1,22 +1,21 @@
-// A signed-in user without Project Access gets 403 on every document and Brain route of the portal (ADR-0099
-// decision 4), an administrator included; with a grant the routes answer as before. The routes come from the
-// controllers' own metadata, so a route added later is covered without editing this file.
+// A signed-in user without Project Access gets 403 on every project route of the portal (documents, Brain, catalog,
+// design, build, runs: ADR-0099 decision 4), an administrator included; with a grant the routes answer as before. The
+// controllers are found by scanning the sources for the prefix projects/:id and their routes come from their own
+// metadata, so a controller or route added later is covered without editing this file.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BrainController } from "../../../src/modules/delivery/brain/interface/brain.controller.js";
-import { DocumentsController } from "../../../src/modules/delivery/documents/interface/documents.controller.js";
 import { adminClient, memberClient, startTestApp, type Client, type TestApp } from "../../support/app.js";
-import { controllerRoutes } from "../../support/controller-routes.js";
+import { controllerRoutes, projectScopedControllers } from "../../support/controller-routes.js";
 import { hasDatabase } from "../../support/database.js";
 
 const PROJECT = "portal-access";
 const PARAMS: Record<string, string> = { id: PROJECT, appId: "web", stage: "assess" };
-const routes = [...controllerRoutes(DocumentsController), ...controllerRoutes(BrainController)];
+const routes = (await projectScopedControllers()).flatMap((controller) => controllerRoutes(controller));
 const pathOf = (pattern: string) => `/${pattern.replace(/:(\w+)/g, (_match, name: string) => PARAMS[name] ?? "x")}`;
 const cases = routes.map((route) => [`${route.method} ${pathOf(route.path)}`, route] as const);
 const send = (client: Client, route: (typeof routes)[number]) => client.request(route.method, pathOf(route.path), route.method === "GET" ? {} : { body: {} });
 
-describe.skipIf(!hasDatabase)("Project Access on the portal's document and Brain routes (integration)", () => {
+describe.skipIf(!hasDatabase)("Project Access on the portal's project routes (integration)", () => {
   let app: TestApp;
   let admin: Client;
   let adminId: string;
@@ -34,8 +33,8 @@ describe.skipIf(!hasDatabase)("Project Access on the portal's document and Brain
     await app?.close();
   });
 
-  it("covers every route of both controllers", () => {
-    expect(routes.length).toBeGreaterThanOrEqual(15);
+  it("covers every project route", () => {
+    expect(routes.length).toBeGreaterThanOrEqual(35);
   });
 
   it.each(cases)("%s answers 403 to a user without Project Access", async (_name, route) => {
@@ -57,6 +56,7 @@ describe.skipIf(!hasDatabase)("Project Access on the portal's document and Brain
     expect((await admin.request("PUT", `/admin/project-access/${PROJECT}/${memberId}`, { body: {} })).status).toBe(204);
     expect((await member.get(`/projects/${PROJECT}/documents/refs`)).status).not.toBe(403);
     expect((await member.get(`/projects/${PROJECT}/brain`)).status).toBe(200);
+    expect((await member.get(`/projects/${PROJECT}/job-runs`)).status).toBe(200);
     expect((await admin.request("DELETE", `/admin/project-access/${PROJECT}/${memberId}`)).status).toBe(204);
     expect((await member.get(`/projects/${PROJECT}/documents/refs`)).status).toBe(403);
     expect((await member.get(`/projects/${PROJECT}/brain`)).status).toBe(403);

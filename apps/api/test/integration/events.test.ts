@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { hasDatabase } from "../support/database.js";
 import { SSE_DEFAULTS } from "#common/interface/sse.js";
-import { type Client, adminClient, memberClient, startTestApp, type TestApp } from "../support/app.js";
+import { type Client, adminClient, memberClient, startTestApp, type TestApp, currentUserId, grantProjectAccess } from "../support/app.js";
 
 /** Reads an SSE response until `done` is satisfied by the text so far, or fails after `timeoutMs`. */
 async function readUntil(url: string, cookie: string, done: (text: string) => boolean, timeoutMs: number, onOpen?: () => Promise<void>): Promise<string> {
@@ -46,6 +46,7 @@ describe.skipIf(!hasDatabase)("live updates (integration)", () => {
       await app.db.query("insert into admin.git_repository (id, server_id, url) values ($1, 'github', $2)", [id, `https://github.example.invalid/org/${id}.git`]);
     }
     expect((await admin.request("POST", "/admin/projects", { body: { id: "billing", name: "Billing", documentRepositoryId: "billing-docs" } })).status).toBe(201);
+    await grantProjectAccess(admin, "billing", await currentUserId(admin));
     expect((await admin.request("POST", "/admin/projects/billing/applications", { body: { id: "web", name: "web" } })).status).toBe(201);
     expect((await admin.request("POST", "/admin/projects/billing/applications/web/repositories", { body: { repositoryId: "billing-legacy", role: "legacy" } })).status).toBe(201);
   });
@@ -60,20 +61,20 @@ describe.skipIf(!hasDatabase)("live updates (integration)", () => {
       const kept = await readUntil(`${app.baseUrl}/events`, admin.cookie!, (text) => text.split(": keep-alive").length > 4, 5000);
       expect(kept).toContain("event: ready");
 
-      const disabled = await memberClient(app, admin, "sse-disabled", ["user"]);
+      const disabled = await memberClient(app, admin, "sse-disabled", ["user"], ["billing"]);
       const ended = await readUntil(`${app.baseUrl}/events`, disabled.client.cookie!, () => false, 5000, async () => {
         expect((await admin.request("PATCH", `/admin/users/${disabled.id}`, { body: { enabled: false } })).status).toBe(200);
       });
       expect(ended).toContain("event: ready");
 
       // An administrator's password reset ends the member's sessions, and with them the open stream.
-      const reset = await memberClient(app, admin, "sse-reset", ["user"]);
+      const reset = await memberClient(app, admin, "sse-reset", ["user"], ["billing"]);
       const afterReset = await readUntil(`${app.baseUrl}/events`, reset.client.cookie!, () => false, 5000, async () => {
         expect((await admin.request("POST", `/admin/users/${reset.id}/password`, { body: { password: "a-new-password-1" } })).status).toBeLessThan(300);
       });
       expect(afterReset).toContain("event: ready");
 
-      const leaving = await memberClient(app, admin, "sse-leaving", ["user"]);
+      const leaving = await memberClient(app, admin, "sse-leaving", ["user"], ["billing"]);
       const cookie = leaving.client.cookie!;
       await readUntil(`${app.baseUrl}/events`, cookie, () => false, 5000, async () => {
         expect((await leaving.client.request("POST", "/auth/logout")).status).toBe(204);

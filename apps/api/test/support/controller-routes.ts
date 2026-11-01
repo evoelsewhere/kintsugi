@@ -2,6 +2,8 @@
 // anyone listing it by hand.
 
 import "reflect-metadata";
+import { readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { RequestMethod } from "@nestjs/common";
 import { GUARDS_METADATA, METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 
@@ -21,6 +23,27 @@ const METHODS: Partial<Record<RequestMethod, ControllerRoute["method"]>> = {
   [RequestMethod.PATCH]: "PATCH",
   [RequestMethod.DELETE]: "DELETE",
 };
+
+const SOURCE = resolve(import.meta.dirname, "../../src");
+const controllerFiles = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    return entry.isDirectory() ? controllerFiles(path) : entry.name.endsWith(".controller.ts") ? [path] : [];
+  });
+
+/** Every controller of the API whose routes start with `projects/:id`, found by scanning the sources. */
+export async function projectScopedControllers(): Promise<Array<abstract new (...args: never[]) => unknown>> {
+  const found: Array<abstract new (...args: never[]) => unknown> = [];
+  for (const file of controllerFiles(SOURCE)) {
+    const exports = (await import(/* @vite-ignore */ file)) as Record<string, unknown>;
+    for (const value of Object.values(exports)) {
+      if (typeof value !== "function") continue;
+      const prefix = Reflect.getMetadata(PATH_METADATA, value) as unknown;
+      if (typeof prefix === "string" && (prefix === "projects/:id" || prefix.startsWith("projects/:id/"))) found.push(value as abstract new (...args: never[]) => unknown);
+    }
+  }
+  return found;
+}
 
 export function controllerRoutes(controller: abstract new (...args: never[]) => unknown): ControllerRoute[] {
   const prefix = Reflect.getMetadata(PATH_METADATA, controller) as string;
