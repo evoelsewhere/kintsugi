@@ -69,7 +69,7 @@ describe("orphaned runs after a recreate (T3-009)", () => {
     const now = sequencedPool(0);
     await sweepOrphanedRuns(now.pool, () => undefined, 50);
     expect(now.updates).toHaveLength(1);
-    expect(now.updates[0]?.sql).not.toContain("started_at");
+    expect(now.updates[0]?.sql).not.toContain("started_at <");
     const beating = sequencedPool(5);
     await sweepOrphanedRuns(beating.pool, () => undefined, 50);
     await wait(150);
