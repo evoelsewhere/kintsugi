@@ -62,13 +62,18 @@ interface NodeRow {
   subtree_tokens: string;
   children: number;
   ids: string[];
+  labels: string[];
+  status: string | null;
+  owner: string | null;
+  template: boolean;
+  space: string | null;
   changed_commit: string | null;
   changed_at: Date | null;
   changed_subject: string | null;
 }
 
 const NODE_COLUMNS =
-  "id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end, tokens, subtree_tokens, children, ids, changed_commit, changed_at, changed_subject";
+  "id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end, tokens, subtree_tokens, children, ids, labels, status, owner, template, space, changed_commit, changed_at, changed_subject";
 /** Rows per insert statement while a tree is written. */
 const INSERT_CHUNK = 1000;
 const iso = (value: Date | null): string | null => (value === null ? null : value.toISOString());
@@ -117,6 +122,11 @@ function toNode(row: NodeRow): BrainNode {
     subtreeTokens: Number(row.subtree_tokens),
     children: row.children,
     ids: row.ids,
+    labels: row.labels,
+    status: row.status,
+    owner: row.owner,
+    template: row.template,
+    space: row.space,
     changed: row.changed_commit === null || row.changed_at === null ? null : { commit: row.changed_commit, at: row.changed_at.toISOString(), subject: row.changed_subject ?? "" },
   };
 }
@@ -375,11 +385,13 @@ async function insertNodes(client: PoolClient, projectId: string, nodes: readonl
       `insert into knowledge.brain_node (project_id, ${NODE_COLUMNS})
        select $1, id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end,
               tokens, subtree_tokens, children, case when ids = '' then '{}'::text[] else string_to_array(ids, ' ') end,
+              case when labels = '' then '{}'::text[] else string_to_array(labels, ' ') end, status, owner, template, space,
               changed_commit, changed_at, changed_subject
          from unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::int[], $11::int[],
-                     $12::int[], $13::int[], $14::int[], $15::int[], $16::bigint[], $17::int[], $18::text[], $19::text[], $20::timestamptz[], $21::text[])
+                     $12::int[], $13::int[], $14::int[], $15::int[], $16::bigint[], $17::int[], $18::text[], $19::text[], $20::text[], $21::text[], $22::boolean[], $23::text[],
+                     $24::text[], $25::timestamptz[], $26::text[])
            as t(id, parent_id, kind, path, anchor, title, summary, summary_source, ordinal, depth, line_start, line_end, subtree_end,
-                tokens, subtree_tokens, children, ids, changed_commit, changed_at, changed_subject)`,
+                tokens, subtree_tokens, children, ids, labels, status, owner, template, space, changed_commit, changed_at, changed_subject)`,
       [
         projectId,
         column((node) => node.id),
@@ -399,6 +411,12 @@ async function insertNodes(client: PoolClient, projectId: string, nodes: readonl
         column((node) => node.subtreeTokens),
         column((node) => node.children),
         column((node) => node.ids.join(" ")),
+        // Labels hold only `a-z`, `0-9` and `-` (brainLabels), so a space joins them safely, as it does the ids.
+        column((node) => node.labels.join(" ")),
+        column((node) => node.status),
+        column((node) => node.owner),
+        column((node) => node.template),
+        column((node) => node.space),
         column((node) => node.changed?.commit ?? null),
         column((node) => node.changed?.at ?? null),
         column((node) => node.changed?.subject ?? null),

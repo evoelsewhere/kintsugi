@@ -139,8 +139,12 @@ export interface MemberPort {
 // The Brain (ADR-0091)
 // ---------------------------------------------------------------------------
 
-/** A node of the Brain as a member's agent sees it (its place in the tree is the breadcrumb). */
-export type MemberBrainNode = Omit<BrainNode, "parentId" | "ordinal" | "depth">;
+/**
+ * A node of the Brain as a member's agent sees it (its place in the tree is the breadcrumb). The page attributes of
+ * builder 6 (labels, status, owner, template, space) stay off the member contract until its schema version moves
+ * with them: the installed CLIs reject a node with a field they do not know.
+ */
+export type MemberBrainNode = Omit<BrainNode, "parentId" | "ordinal" | "depth" | "labels" | "status" | "owner" | "template" | "space">;
 
 export interface BrainTreeQuery {
   schemaVersion?: MemberSchemaVersion;
