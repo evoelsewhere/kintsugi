@@ -1,6 +1,6 @@
 # Finding and lifecycle: user stories
 
-> Status: research, proposed. Stories for the Must and Should rows of the [feature matrix](feature-matrix.md), with Given/When/Then acceptance criteria and the proposed MoSCoW priority. The wording follows the vocabulary of Kintsugi: a *project* has one document repo, a *page* is a Markdown document of it, a *space* is a folder of it (the authoring track decides the exact form, [authoring](../10-authoring/feature-matrix.md)).
+> Status: research, proposed. Stories for the Must and Should rows of the [feature matrix](feature-matrix.md), with Given/When/Then acceptance criteria and the proposed MoSCoW priority. The wording follows the vocabulary of Kintsugi: a *project* has one document repo, a *page* is a Markdown document of it, a *space* is a folder of it (the authoring track decides the exact form, authoring (`../10-authoring/feature-matrix.md`)).
 
 Personas: **Member** (a person who works in the portal or through their own agent client), **Manager** (project manager or architect who curates the knowledge of a project), **Admin** (installation administrator), **Viewer** (a reader who only reads; the Auditor of the stories below, who needs to know what a page said and who changed it, and when, is a viewer), **Agent** (a member's own agent reading through the Brain tools of the member API; it cites every answer as `path:lines@commit`).
 
@@ -101,7 +101,7 @@ As a **Manager** I want to restore an earlier version, so that a wrong change is
 ### DIS-US-14: Move a page without losing its history (S; DIS-45)
 As a **Member** I want a moved or renamed page to keep its history and its inbound links, so that the history is not split in two.
 - Given a page moved to another folder, When I open its history, Then the versions before the move are shown.
-- Given another page links to the moved page, Then the link still leads there ([authoring question 5](../10-authoring/feature-matrix.md)).
+- Given another page links to the moved page, Then the link still leads there (authoring question 5 (`../10-authoring/feature-matrix.md`)).
 
 ### DIS-US-15: What changed lately (S; DIS-47)
 As a **Member** I want a list of the latest changes in a space, so that I see what my team changed since I last looked.
