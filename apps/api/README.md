@@ -84,7 +84,7 @@ src/
     queue/job-queue.ts     pg-boss producer for the worker's queues (ADR-0003)
     domain/repository.ts   generic repository port (DDD)
     application/           generic CRUD use cases over the port
-    infrastructure/        in-memory repository adapter (dev skeletons)
+    infrastructure/        in-memory repository (unit tests)
     security/password.ts   argon2id password hashing (ADR-0008)
     auth/decorators.ts     @Public() / @RequirePermission("code")
     interface/             response envelope + zod helpers (idSchema, stringField)
@@ -92,16 +92,17 @@ src/
   modules/
     system/health/         liveness endpoint
     core/auth/             sessions, global guards, bootstrap admin
-    admin/                 A1–A7: projects, users (members), access roles & permissions,
-                           connectors, llm-providers (full DDD exemplar), harnesses,
-                           templates, project-build
-    delivery/              B1–B7
-    monitoring/            C1–C5 (read-only routes)
-    governance/            D1–D6
+    admin/                 projects, users (members), access roles & permissions,
+                           llm-providers (full DDD exemplar), git, agents, plugins, settings, …
+    delivery/              documents, catalog, runtime jobs, design, build, brain, member API
+    monitoring/            overview, portfolio, member activity, telemetry (read-only routes)
+    governance/            audit, gates, stage decisions
 ```
 
-Feature modules map one-to-one onto the functional areas of
-[building block view](../../docs/architecture/05-building-block-view.md).
+Feature modules implement the functional areas of the
+[building block view](../../docs/architecture/05-building-block-view.md) that exist; an area without a module has no API
+yet. Every module stores its data in Postgres: the skeleton modules that kept writes in memory were removed
+([ADR-0095](../../docs/decisions/0095-remove-skeleton-modules.md)).
 
 ## Module anatomy (DDD)
 
@@ -116,7 +117,7 @@ Every feature module has the same layered shape:
   application/
     <plural>.service.ts                   use cases (extends CrudService; add more here)
   infrastructure/
-    in-memory-<singular>.repository.ts    dev adapter (replace with the Postgres adapter)
+    pg-<singular>.repository.ts           Postgres adapter (migration in migrations/)
   interface/
     <singular>.dto.ts                     zod request schemas + DTO→command mappers
     <plural>.controller.ts                thin HTTP adapter
@@ -132,8 +133,8 @@ Rules (enforced by review — see AGENTS.md):
   DTO→command mapping. Controllers stay thin; no business logic.
 - **`application/` owns use cases**: orchestration, validation, error semantics
   (`NotFoundException`, `ConflictException`). Storage-agnostic.
-- **`infrastructure/` owns I/O**: Postgres adapters (see `admin/llm-providers`),
-  in-memory adapters for skeletons. No HTTP types here.
+- **`infrastructure/` owns I/O**: Postgres adapters (see `admin/llm-providers`). No HTTP
+  types here.
 - **Shared vocabulary** (Phase, ProjectRole, `ThinkingLevel`, `RuntimeAgentId`, …)
   comes from `@kintsugi/domain`; provider/agent contracts from `@kintsugi/runtime-sdk`.
   Never redefine them in this app.
@@ -148,7 +149,7 @@ Import it through the `#common/*` alias (Node subpath imports in `package.json`)
 | `newId()` | `#common/domain/ids.js` | stable record ids |
 | `CrudService<T, C>` | `#common/application/crud.service.js` | base of every feature service |
 | `Page<T>`, `PageQuery`, `toPage()` | `#common/application/pagination.js` | pagination payload |
-| `InMemoryRepository<T, C>` | `#common/infrastructure/in-memory.repository.js` | dev adapter base |
+| `InMemoryRepository<T, C>` | `#common/infrastructure/in-memory.repository.js` | test double of a repository port |
 | `idSchema`, `stringField()` | `#common/interface/dto.js` | zod helpers for request schemas |
 | `pageQuerySchema`, `parsePageQuery()` | `#common/interface/pagination.js` | `?limit&offset` query schema |
 | `ok()`, `ResponseInterceptor`, `ApiSuccess<T>` | `#common/interface/response.js` | uniform response envelope |
@@ -236,14 +237,14 @@ Local username/password sessions first (Entra ID later behind `AuthProvider`):
 
 ## Adding a feature module
 
-1. Copy the closest existing module under `modules/<area>/` (a stub is enough —
-   they are uniform).
+1. Copy the closest existing module under `modules/<area>/` (`admin/llm-providers` is the
+   full exemplar).
 2. Rename the classes (`Project` → `YourEntity`, `Projects*` → `YourFeature*`).
 3. Adjust `domain/<singular>.ts` (entity + command) and the zod schemas.
 4. Expose the routes you need (read-only modules expose GET only).
-5. Register the module in `app.module.ts`, then `pnpm typecheck` and check `/api/docs`.
-6. When the data lands: add `migrations/NNN_<name>.sql` (your domain schema) and swap
-   `InMemory…Repository` for a Postgres adapter bound in the module.
+5. Add `migrations/NNN_<name>.sql` (your domain schema) and the Postgres adapter bound in
+   the module: a module never ships with an in-memory store ([ADR-0095](../../docs/decisions/0095-remove-skeleton-modules.md)).
+6. Register the module in `app.module.ts`, then `pnpm typecheck` and check `/api/docs`.
 
 ## Commands
 

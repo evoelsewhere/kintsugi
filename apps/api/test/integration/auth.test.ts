@@ -144,7 +144,12 @@ describe.skipIf(!hasDatabase)("auth (integration)", () => {
       const admin = await adminClient(app);
       const document = await fetch(`${app.baseUrl}/docs-json`, { headers: { cookie: admin.cookie! } });
       expect(document.status).toBe(200);
-      expect(Object.keys(((await document.json()) as { paths: Record<string, unknown> }).paths)).toContain("/api/auth/me");
+      const paths = Object.keys(((await document.json()) as { paths: Record<string, unknown> }).paths);
+      expect(paths).toContain("/api/auth/me");
+      // The fifteen skeleton modules that kept writes in memory are gone (ADR-0095): not documented, not served.
+      const removed = ["admin/connectors", "admin/harnesses", "admin/project-build", "admin/templates", "delivery/architecture", "delivery/factory", "delivery/workbench", "governance/policies", "governance/reviews", "governance/risks", "monitoring/ai-metrics", "monitoring/cost", "monitoring/dashboards", "monitoring/observability", "monitoring/target-health"];
+      expect(paths.filter((path) => removed.some((prefix) => path.startsWith(`/api/${prefix}`)))).toEqual([]);
+      for (const prefix of removed) expect((await admin.get(`/${prefix}`)).status).toBe(404);
       const ui = await fetch(`${app.baseUrl}/docs`, { headers: { cookie: admin.cookie! }, redirect: "follow" });
       expect(ui.status).toBe(200);
       expect(await ui.text()).toMatch(/swagger/i);
